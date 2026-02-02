@@ -12,6 +12,7 @@ import {
   resolveConfiguredModelRef,
 } from "../agents/model-selection.js";
 import { formatTokenK } from "./models/shared.js";
+import { t } from "../i18n/index.js";
 
 const KEEP_VALUE = "__keep__";
 const MANUAL_VALUE = "__manual__";
@@ -88,10 +89,10 @@ async function promptManualModel(params: {
   initialValue?: string;
 }): Promise<PromptDefaultModelResult> {
   const modelInput = await params.prompter.text({
-    message: params.allowBlank ? "Default model (blank to keep)" : "Default model",
+    message: params.allowBlank ? t('wizard.model.blank_to_keep') : t('wizard.model.default'),
     initialValue: params.initialValue,
-    placeholder: "provider/model",
-    validate: params.allowBlank ? undefined : (value) => (value?.trim() ? undefined : "Required"),
+    placeholder: t('wizard.model.placeholder'),
+    validate: params.allowBlank ? undefined : (value) => (value?.trim() ? undefined : t('wizard.model.required')),
   });
   const model = String(modelInput ?? "").trim();
   if (!model) {
@@ -161,9 +162,9 @@ export async function promptDefaultModel(
     !hasPreferredProvider && providers.length > 1 && models.length > PROVIDER_FILTER_THRESHOLD;
   if (shouldPromptProvider) {
     const selection = await params.prompter.select({
-      message: "Filter models by provider",
+      message: t('wizard.model.filter_provider'),
       options: [
-        { value: "*", label: "All providers" },
+        { value: "*", label: t('wizard.model.all_providers') },
         ...providers.map((provider) => {
           const count = models.filter((entry) => entry.provider === provider).length;
           return {
@@ -202,14 +203,14 @@ export async function promptDefaultModel(
     options.push({
       value: KEEP_VALUE,
       label: configuredRaw
-        ? `Keep current (${configuredRaw})`
-        : `Keep current (default: ${resolvedKey})`,
+        ? `${t('wizard.model.keep_current')} (${configuredRaw})`
+        : `${t('wizard.model.keep_current')} (${t('wizard.model.default')}: ${resolvedKey})`,
       hint:
-        configuredRaw && configuredRaw !== resolvedKey ? `resolves to ${resolvedKey}` : undefined,
+        configuredRaw && configuredRaw !== resolvedKey ? `${t('wizard.model.hint.resolves_to')} ${resolvedKey}` : undefined,
     });
   }
   if (includeManual) {
-    options.push({ value: MANUAL_VALUE, label: "Enter model manually" });
+    options.push({ value: MANUAL_VALUE, label: t('wizard.model.enter_manually') });
   }
 
   const seen = new Set<string>();
@@ -243,7 +244,7 @@ export async function promptDefaultModel(
       hints.push(`alias: ${aliases.join(", ")}`);
     }
     if (!hasAuth(entry.provider)) {
-      hints.push("auth missing");
+      hints.push(t('wizard.model.hint.auth_missing'));
     }
     options.push({
       value: key,
@@ -261,7 +262,7 @@ export async function promptDefaultModel(
     options.push({
       value: configuredKey,
       label: configuredKey,
-      hint: "current (not in catalog)",
+      hint: t('wizard.model.hint.current_not_in_catalog'),
     });
   }
 
@@ -279,7 +280,7 @@ export async function promptDefaultModel(
   }
 
   const selection = await params.prompter.select({
-    message: params.message ?? "Default model",
+    message: params.message ?? t('wizard.model.default'),
     options,
     initialValue,
   });
@@ -392,7 +393,7 @@ export async function promptModelAllowlist(params: {
       hints.push(`alias: ${aliases.join(", ")}`);
     }
     if (!hasAuth(entry.provider)) {
-      hints.push("auth missing");
+      hints.push(t('wizard.model.hint.auth_missing'));
     }
     options.push({
       value: key,

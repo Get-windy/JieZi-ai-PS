@@ -25,12 +25,12 @@ export async function listenGatewayHttpServer(params: {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EADDRINUSE") {
       throw new GatewayLockError(
-        `another gateway instance is already listening on ws://${bindHost}:${port}`,
+        `另一个 Gateway 实例已经在监听 ws://${bindHost}:${port}`,
         err,
       );
     }
     throw new GatewayLockError(
-      `failed to bind gateway socket on ws://${bindHost}:${port}: ${String(err)}`,
+      `在 ws://${bindHost}:${port} 上绑定 Gateway socket 失败: ${String(err)}`,
       err,
     );
   }

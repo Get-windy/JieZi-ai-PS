@@ -117,8 +117,8 @@ export async function maybeExplainGatewayServiceStop() {
   }
   defaultRuntime.error(
     loaded
-      ? `Gateway service appears ${service.loadedText}. Stop it first.`
-      : "Gateway service status unknown; if supervised, stop it first.",
+      ? `Gateway 服务显示为${service.loadedText}。请先停止它。`
+      : "Gateway 服务状态未知；如果受监管，请先停止它。",
   );
   for (const hint of renderGatewayServiceStopHints()) {
     defaultRuntime.error(hint);

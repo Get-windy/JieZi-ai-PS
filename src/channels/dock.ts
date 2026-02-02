@@ -371,6 +371,102 @@ const DOCKS: Record<ChatChannelId, ChannelDock> = {
       },
     },
   },
+  feishu: {
+    id: "feishu",
+    capabilities: {
+      chatTypes: ["direct", "group"],
+      reactions: false,
+      media: true,
+    },
+    outbound: { textChunkLimit: 4000 },
+    config: {
+      resolveAllowFrom: ({ cfg, accountId }) => {
+        const channelConfig = cfg.channels?.feishu as Record<string, unknown> | undefined;
+        const normalized = normalizeAccountId(accountId);
+        const accountConfig = (channelConfig?.accounts as Record<string, unknown> | undefined)?.[normalized] as Record<string, unknown> | undefined;
+        return ((accountConfig?.allowFrom as string[] | undefined) ?? (channelConfig?.allowFrom as string[] | undefined) ?? []).map((entry) =>
+          String(entry),
+        );
+      },
+      formatAllowFrom: ({ allowFrom }) =>
+        allowFrom
+          .map((entry) => String(entry).trim())
+          .filter(Boolean)
+          .map((entry) => entry.replace(/^feishu:/i, ""))
+          .map((entry) => entry.toLowerCase()),
+    },
+    threading: {
+      buildToolContext: ({ context, hasRepliedRef }) => ({
+        currentChannelId: context.To?.trim() || undefined,
+        currentThreadTs: context.ReplyToId,
+        hasRepliedRef,
+      }),
+    },
+  },
+  dingtalk: {
+    id: "dingtalk",
+    capabilities: {
+      chatTypes: ["direct", "group"],
+      reactions: false,
+      media: true,
+    },
+    outbound: { textChunkLimit: 4000 },
+    config: {
+      resolveAllowFrom: ({ cfg, accountId }) => {
+        const channelConfig = cfg.channels?.dingtalk as Record<string, unknown> | undefined;
+        const normalized = normalizeAccountId(accountId);
+        const accountConfig = (channelConfig?.accounts as Record<string, unknown> | undefined)?.[normalized] as Record<string, unknown> | undefined;
+        return ((accountConfig?.allowFrom as string[] | undefined) ?? (channelConfig?.allowFrom as string[] | undefined) ?? []).map((entry) =>
+          String(entry),
+        );
+      },
+      formatAllowFrom: ({ allowFrom }) =>
+        allowFrom
+          .map((entry) => String(entry).trim())
+          .filter(Boolean)
+          .map((entry) => entry.replace(/^dingtalk:/i, ""))
+          .map((entry) => entry.toLowerCase()),
+    },
+    threading: {
+      buildToolContext: ({ context, hasRepliedRef }) => ({
+        currentChannelId: context.To?.trim() || undefined,
+        currentThreadTs: context.ReplyToId,
+        hasRepliedRef,
+      }),
+    },
+  },
+  wecom: {
+    id: "wecom",
+    capabilities: {
+      chatTypes: ["direct", "group"],
+      reactions: false,
+      media: true,
+    },
+    outbound: { textChunkLimit: 4000 },
+    config: {
+      resolveAllowFrom: ({ cfg, accountId }) => {
+        const channelConfig = cfg.channels?.wecom as Record<string, unknown> | undefined;
+        const normalized = normalizeAccountId(accountId);
+        const accountConfig = (channelConfig?.accounts as Record<string, unknown> | undefined)?.[normalized] as Record<string, unknown> | undefined;
+        return ((accountConfig?.allowFrom as string[] | undefined) ?? (channelConfig?.allowFrom as string[] | undefined) ?? []).map((entry) =>
+          String(entry),
+        );
+      },
+      formatAllowFrom: ({ allowFrom }) =>
+        allowFrom
+          .map((entry) => String(entry).trim())
+          .filter(Boolean)
+          .map((entry) => entry.replace(/^wecom:/i, ""))
+          .map((entry) => entry.toLowerCase()),
+    },
+    threading: {
+      buildToolContext: ({ context, hasRepliedRef }) => ({
+        currentChannelId: context.To?.trim() || undefined,
+        currentThreadTs: context.ReplyToId,
+        hasRepliedRef,
+      }),
+    },
+  },
 };
 
 function buildDockFromPlugin(plugin: ChannelPlugin): ChannelDock {

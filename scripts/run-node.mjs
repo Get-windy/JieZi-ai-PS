@@ -8,7 +8,7 @@ const args = process.argv.slice(2);
 const env = { ...process.env };
 const cwd = process.cwd();
 const compilerOverride = env.OPENCLAW_TS_COMPILER ?? env.CLAWDBOT_TS_COMPILER;
-const compiler = compilerOverride === "tsc" ? "tsc" : "tsgo";
+const compiler = compilerOverride === "tsgo" ? "tsgo" : "tsc";
 const projectArgs = ["--project", "tsconfig.json"];
 
 const distRoot = path.join(cwd, "dist");

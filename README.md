@@ -1,5 +1,7 @@
 # 🦞 OpenClaw — Personal AI Assistant
 
+> 🇨🇳 **中文用户**: [点击查看中文快速入门指南](./README.zh-CN.md) | Chinese Quick Start Guide
+
 <p align="center">
     <picture>
         <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/openclaw/openclaw/main/docs/assets/openclaw-logo-text-dark.png">
@@ -102,6 +104,36 @@ pnpm gateway:watch
 ```
 
 Note: `pnpm openclaw ...` runs TypeScript directly (via `tsx`). `pnpm build` produces `dist/` for running via Node / the packaged `openclaw` binary.
+
+### PowerShell Compatibility / PowerShell 兼容性
+
+This fork has been modified to support building directly in Windows PowerShell without requiring bash/WSL2:
+本分支已修改为支持在 Windows PowerShell 中直接构建，无需 bash/WSL2：
+
+- ✅ **Cross-platform build script** - Replaced `scripts/bundle-a2ui.sh` with `scripts/bundle-a2ui.mjs` (pure Node.js)
+  **跨平台构建脚本** - 将 `scripts/bundle-a2ui.sh` 替换为 `scripts/bundle-a2ui.mjs`（纯 Node.js 实现）
+- ✅ **PowerShell support** - Build commands now work in PowerShell, Git Bash, and Unix shells
+  **PowerShell 支持** - 构建命令现在可在 PowerShell、Git Bash 和 Unix shell 中运行
+- ✅ **No WSL2 required** - Windows users can build natively without Windows Subsystem for Linux
+  **无需 WSL2** - Windows 用户可以在不使用 Linux 子系统的情况下原生构建
+
+### Chinese Localization / 中文本地化
+
+The onboarding wizard has been localized to support Chinese (Simplified):
+引导向导已实现中文（简体）本地化：
+
+- ✅ **i18n system** - Built-in internationalization support via `src/i18n/`
+  **国际化系统** - 通过 `src/i18n/` 提供内置国际化支持
+- ✅ **Wizard localization** - All onboarding wizard screens translated to Chinese
+  **向导本地化** - 所有引导向导界面已翻译为中文
+- ✅ **Language switching** - Automatically detects system locale or can be manually configured
+  **语言切换** - 自动检测系统语言或可手动配置
+
+**Localized files / 本地化文件:**
+- `src/i18n/index.ts` - Translation system core / 翻译系统核心
+- `src/i18n/types.ts` - Translation key types / 翻译键类型定义
+- `src/i18n/translations.ts` - Chinese & English translations / 中英文翻译内容
+- `src/wizard/onboarding.ts` - Localized onboarding wizard / 本地化引导向导
 
 ## Security defaults (DM access)
 

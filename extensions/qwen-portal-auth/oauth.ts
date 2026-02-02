@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { t } from "../../src/i18n/index.js";
 
 const QWEN_OAUTH_BASE_URL = "https://chat.qwen.ai";
 const QWEN_OAUTH_DEVICE_CODE_ENDPOINT = `${QWEN_OAUTH_BASE_URL}/api/v1/oauth2/device/code`;
@@ -148,10 +149,10 @@ export async function loginQwenPortalOAuth(params: {
 
   await params.note(
     [
-      `Open ${verificationUrl} to approve access.`,
-      `If prompted, enter the code ${device.user_code}.`,
+      t('wizard.oauth.qwen.prompt.line1').replace('{url}', verificationUrl),
+      t('wizard.oauth.qwen.prompt.line2').replace('{code}', device.user_code),
     ].join("\n"),
-    "Qwen OAuth",
+    t('wizard.oauth.qwen.title'),
   );
 
   try {
@@ -165,7 +166,7 @@ export async function loginQwenPortalOAuth(params: {
   const timeoutMs = device.expires_in * 1000;
 
   while (Date.now() - start < timeoutMs) {
-    params.progress.update("Waiting for Qwen OAuth approval…");
+    params.progress.update(t('wizard.oauth.qwen.waiting'));
     const result = await pollDeviceToken({
       deviceCode: device.device_code,
       verifier,

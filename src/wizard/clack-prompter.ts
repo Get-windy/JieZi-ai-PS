@@ -12,6 +12,7 @@ import {
 } from "@clack/prompts";
 import type { WizardProgress, WizardPrompter } from "./prompts.js";
 import { createCliProgress } from "../cli/progress.js";
+import { t } from "../i18n/index.js";
 import { note as emitNote } from "../terminal/note.js";
 import { stylePromptHint, stylePromptMessage, stylePromptTitle } from "../terminal/prompt-style.js";
 import { theme } from "../terminal/theme.js";
@@ -74,6 +75,8 @@ export function createClackPrompter(): WizardPrompter {
         await confirm({
           message: stylePromptMessage(params.message),
           initialValue: params.initialValue,
+          active: t('wizard.common.yes'),
+          inactive: t('wizard.common.no'),
         }),
       ),
     progress: (label: string): WizardProgress => {

@@ -117,6 +117,16 @@ export const ZAI_DEFAULT_MODEL_REF = "zai/glm-4.7";
 export const XIAOMI_DEFAULT_MODEL_REF = "xiaomi/mimo-v2-flash";
 export const OPENROUTER_DEFAULT_MODEL_REF = "openrouter/auto";
 export const VERCEL_AI_GATEWAY_DEFAULT_MODEL_REF = "vercel-ai-gateway/anthropic/claude-opus-4.5";
+// 国内模型默认引用
+export const DEEPSEEK_DEFAULT_MODEL_REF = "deepseek/deepseek-chat";
+export const BAIDU_QIANFAN_DEFAULT_MODEL_REF = "baidu/ernie-4.0-turbo-8k";
+export const DOUBAO_DEFAULT_MODEL_REF = "doubao/doubao-pro-32k";
+export const TENCENT_HUNYUAN_DEFAULT_MODEL_REF = "tencent/hunyuan-turbo";
+export const XINGHUO_DEFAULT_MODEL_REF = "xinghuo/spark-pro";
+// 国际免费模型默认引用
+export const SILICONFLOW_DEFAULT_MODEL_REF = "siliconflow/qwen-2.5-7b-instruct";
+export const GROQ_DEFAULT_MODEL_REF = "groq/llama-3.3-70b-versatile";
+export const TOGETHER_AI_DEFAULT_MODEL_REF = "together-ai/meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo";
 
 export async function setZaiApiKey(key: string, agentDir?: string) {
   // Write to resolved agent dir so gateway finds credentials on startup.
@@ -173,6 +183,102 @@ export async function setOpencodeZenApiKey(key: string, agentDir?: string) {
     credential: {
       type: "api_key",
       provider: "opencode",
+      key,
+    },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
+
+export async function setDeepseekApiKey(key: string, agentDir?: string) {
+  upsertAuthProfile({
+    profileId: "deepseek:default",
+    credential: {
+      type: "api_key",
+      provider: "deepseek",
+      key,
+    },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
+
+export async function setBaiduQianfanApiKey(key: string, agentDir?: string) {
+  upsertAuthProfile({
+    profileId: "baidu:default",
+    credential: {
+      type: "api_key",
+      provider: "baidu",
+      key,
+    },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
+
+export async function setDoubaoApiKey(key: string, agentDir?: string) {
+  upsertAuthProfile({
+    profileId: "doubao:default",
+    credential: {
+      type: "api_key",
+      provider: "doubao",
+      key,
+    },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
+
+export async function setTencentHunyuanApiKey(key: string, agentDir?: string) {
+  upsertAuthProfile({
+    profileId: "tencent:default",
+    credential: {
+      type: "api_key",
+      provider: "tencent",
+      key,
+    },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
+
+export async function setXinghuoApiKey(key: string, agentDir?: string) {
+  upsertAuthProfile({
+    profileId: "xinghuo:default",
+    credential: {
+      type: "api_key",
+      provider: "xinghuo",
+      key,
+    },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
+
+export async function setSiliconflowApiKey(key: string, agentDir?: string) {
+  upsertAuthProfile({
+    profileId: "siliconflow:default",
+    credential: {
+      type: "api_key",
+      provider: "siliconflow",
+      key,
+    },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
+
+export async function setGroqApiKey(key: string, agentDir?: string) {
+  upsertAuthProfile({
+    profileId: "groq:default",
+    credential: {
+      type: "api_key",
+      provider: "groq",
+      key,
+    },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
+
+export async function setTogetherAiApiKey(key: string, agentDir?: string) {
+  upsertAuthProfile({
+    profileId: "together-ai:default",
+    credential: {
+      type: "api_key",
+      provider: "together-ai",
       key,
     },
     agentDir: resolveAuthAgentDir(agentDir),

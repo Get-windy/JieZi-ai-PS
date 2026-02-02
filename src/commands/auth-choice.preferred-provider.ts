@@ -30,6 +30,16 @@ const PREFERRED_PROVIDER_BY_AUTH_CHOICE: Partial<Record<AuthChoice, string>> = {
   "opencode-zen": "opencode",
   "qwen-portal": "qwen-portal",
   "minimax-portal": "minimax-portal",
+  // 国内模型提供商
+  "deepseek-api-key": "deepseek",
+  "baidu-qianfan-api-key": "baidu",
+  "doubao-api-key": "doubao",
+  "tencent-hunyuan-api-key": "tencent",
+  "xinghuo-api-key": "xinghuo",
+  // 国际免费模型
+  "siliconflow-api-key": "siliconflow",
+  "groq-api-key": "groq",
+  "together-ai-api-key": "together-ai",
 };
 
 export function resolvePreferredProviderForAuthChoice(choice: AuthChoice): string | undefined {

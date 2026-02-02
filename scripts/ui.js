@@ -51,8 +51,12 @@ function resolveRunner() {
 }
 
 function run(cmd, args) {
+  // 对于 pnpm run 命令，直接在 ui 目录执行以使用正确的 PATH
+  const isRunCommand = args[0] === "run";
+  const cwd = isRunCommand ? uiDir : uiDir;
+  
   const child = spawn(cmd, args, {
-    cwd: uiDir,
+    cwd: cwd,
     stdio: "inherit",
     env: process.env,
     shell: process.platform === "win32",
@@ -133,5 +137,6 @@ if (action === "install") {
     const installArgs = action === "build" ? ["install", "--prod"] : ["install"];
     runSync(runner.cmd, installArgs, installEnv);
   }
-  run(runner.cmd, ["run", script, ...rest]);
+  // 使用 pnpm exec 来确保能找到 node_modules/.bin 中的命令
+  run(runner.cmd, ["--dir", uiDir, "run", script, ...rest]);
 }

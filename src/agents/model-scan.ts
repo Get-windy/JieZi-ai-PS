@@ -16,11 +16,11 @@ const DEFAULT_CONCURRENCY = 3;
 const BASE_IMAGE_PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X3mIAAAAASUVORK5CYII=";
 
-const TOOL_PING: Tool = {
+const TOOL_PING = {
   name: "ping",
   description: "Return OK.",
-  parameters: Type.Object({}),
-};
+  parameters: Type.Object({}, { additionalProperties: false }) as any,
+} as const;
 
 type OpenRouterModelMeta = {
   id: string;
@@ -274,7 +274,7 @@ async function probeTool(
         timestamp: Date.now(),
       },
     ],
-    tools: [TOOL_PING],
+    tools: [TOOL_PING as any],
   };
   const startedAt = Date.now();
   try {

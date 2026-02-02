@@ -111,11 +111,11 @@ export async function ensureControlUiAssetsBuilt(
     return {
       ok: false,
       built: false,
-      message: `Control UI assets missing but ${uiScript} is unavailable.`,
+      message: `Control UI 资源缺失，但 ${uiScript} 不可用。`,
     };
   }
 
-  runtime.log("Control UI assets missing; building (ui:build, auto-installs UI deps)…");
+  runtime.log("Control UI 资源缺失；正在构建 (ui:build, 自动安装 UI 依赖)…");
 
   const build = await runCommandWithTimeout([process.execPath, uiScript, "build"], {
     cwd: repoRoot,
@@ -125,7 +125,7 @@ export async function ensureControlUiAssetsBuilt(
     return {
       ok: false,
       built: false,
-      message: `Control UI build failed: ${summarizeCommandOutput(build.stderr) ?? `exit ${build.code}`}`,
+      message: `Control UI 构建失败: ${summarizeCommandOutput(build.stderr) ?? `exit ${build.code}`}`,
     };
   }
 
@@ -133,7 +133,7 @@ export async function ensureControlUiAssetsBuilt(
     return {
       ok: false,
       built: true,
-      message: `Control UI build completed but ${indexPath} is still missing.`,
+      message: `Control UI 构建完成，但 ${indexPath} 仍然缺失。`,
     };
   }
 

@@ -1,0 +1,593 @@
+# 🦞 OpenClaw 中文快速入门指南
+
+> 这是 JieZi-ai-PS 项目的中文使用文档，帮助中文用户快速上手。
+
+## 📋 目录
+
+- [系统要求](#系统要求)
+- [安装依赖](#安装依赖)
+- [项目打包](#项目打包)
+- [初始化配置](#初始化配置)
+- [启动项目](#启动项目)
+- [常见问题](#常见问题)
+
+---
+
+## 系统要求
+
+- **Node.js**: ≥ 22.12.0
+- **包管理器**: pnpm (推荐) / npm / bun
+- **操作系统**: Windows (PowerShell) / macOS / Linux
+- **特别说明**: 
+  - ✅ Windows 用户可直接在 PowerShell 中构建和运行，**无需安装 bash 或 WSL2**
+  - ✅ 项目已完全改造为跨平台构建脚本（纯 Node.js 实现）
+
+---
+
+## 安装依赖
+
+### 1. 克隆项目
+
+```bash
+git clone https://gitee.com/CozyNook/JieZi-ai-PS.git
+cd JieZi-ai-PS
+```
+
+### 2. 安装 pnpm（如果还没安装）
+
+```bash
+npm install -g pnpm
+```
+
+### 3. 安装项目依赖
+
+```bash
+pnpm install
+```
+
+**注意**: 首次安装可能需要较长时间，请耐心等待。
+
+---
+
+## 项目打包
+
+### 构建用户界面
+
+```bash
+pnpm ui:build
+```
+
+### 编译 TypeScript 代码
+
+```bash
+pnpm build
+```
+
+**完整构建命令**（推荐）：
+
+```bash
+pnpm install
+pnpm ui:build
+pnpm build
+```
+
+---
+
+## 初始化配置
+
+### 运行引导向导（推荐）
+
+引导向导会帮助你完成所有初始配置，包括网关设置、模型配置、通道设置等：
+
+```bash
+pnpm openclaw onboard
+```
+
+**向导步骤说明：**
+
+1. **安全提示**: 阅读并确认安全警告
+2. **选择模式**: 
+   - **快速开始** - 使用默认配置快速启动（推荐新手）
+   - **手动配置** - 自定义详细配置
+3. **处理已有配置**（如果存在）:
+   - **保持不变（跳过配置步骤）** - 使用现有配置
+   - **修改配置（更新部分设置）** - 更新某些配置
+   - **重置（清空重新配置）** - 完全重新配置
+4. **模型选择**: 选择 AI 模型提供商
+   - **国内模型**（推荐）:
+     - DeepSeek（深度求索）- OpenAI 兼容，高性能
+     - Qwen（通义千问）- 免费 OAuth 额度
+     - 百度文心一言（ERNIE）- 千帆大模型平台
+     - 腾讯混元（Hunyuan）- 腾讯云大模型
+     - 字节豆包（Doubao）- 火山引擎大模型
+     - 讯飞星火（Spark）- 科大讯飞认知大模型
+   - **国际免费模型**（强烈推荐，节省算力）:
+     - SiliconFlow（硅基流动）- ⭐ 注册送2000万Tokens
+     - Groq - ⭐ 超快推理速度，免费访问
+     - Together AI - 免费模型访问
+   - **其他模型**: Anthropic/OpenAI/Google Gemini 等
+5. **网关配置**:
+   - **网关端口**: 默认 18789
+   - **网关绑定**: 本地网址 (127.0.0.1) / 局域网 / 自定义
+   - **网关认证**: 令牌（推荐）/ 密码
+   - **Tailscale 暴露**: 关闭 / Serve / Funnel
+6. **通道配置**: 选择要启用的聊天通道
+   - **国际通道**: WhatsApp, Telegram, Discord, Slack, Signal 等
+   - **国内通道**（已集成）:
+     - 飞书（Feishu/Lark）- 企业协作平台
+     - 钉钉（DingTalk）- Stream 模式，无需公网 IP
+     - 企业微信（WeCom）- 企业级通讯平台
+7. **技能配置**: 选择要启用的 AI 技能
+
+### 手动配置（可选）
+
+如果不使用引导向导，可以手动创建配置文件：
+
+创建 `~/.openclaw/openclaw.json` 文件：
+
+```json5
+{
+  "agent": {
+    "model": "anthropic/claude-opus-4-5"
+  },
+  "gateway": {
+    "port": 18789,
+    "bind": "loopback",
+    "mode": "local",
+    "auth": {
+      "mode": "token",
+      "token": "your-token-here"
+    }
+  }
+}
+```
+
+---
+
+## 启动项目
+
+### 方式一：启动网关服务
+
+```bash
+pnpm openclaw gateway
+```
+
+或指定端口和详细日志：
+
+```bash
+pnpm openclaw gateway --port 18789 --verbose
+```
+
+### 方式二：安装为系统服务（推荐）
+
+引导向导会询问是否安装为系统服务，也可以手动安装：
+
+```bash
+pnpm openclaw onboard --install-daemon
+```
+
+安装后，网关会在后台持续运行（使用 launchd/systemd）。
+
+### 方式三：开发模式（自动重载）
+
+适合开发调试：
+
+```bash
+pnpm gateway:watch
+```
+
+---
+
+## 验证启动
+
+### 检查网关状态
+
+```bash
+pnpm openclaw doctor
+```
+
+### 发送测试消息
+
+```bash
+pnpm openclaw message send --to +1234567890 --message "你好，OpenClaw"
+```
+
+### 与 AI 助手对话
+
+```bash
+pnpm openclaw agent --message "写一个快速排序算法" --thinking high
+```
+
+---
+
+## 常见问题
+
+### 1. 提示 `tsgo` 命令找不到
+
+**解决方案**: 项目已配置为默认使用 `tsc` 编译器，直接运行 `pnpm build` 即可。
+
+### 2. 启动时提示 "set gateway.mode=local"
+
+**解决方案**: 运行引导向导完成配置：
+
+```bash
+pnpm openclaw onboard
+```
+
+### 3. PowerShell 中构建失败
+
+**解决方案**: 本项目已完全支持 PowerShell，无需 bash 或 WSL2。确保使用 PowerShell 7+ 或直接在 Windows 原生环境运行：
+
+```powershell
+# 检查 PowerShell 版本
+$PSVersionTable.PSVersion
+
+# 如果版本较旧，建议升级到 PowerShell 7+
+# 下载地址: https://github.com/PowerShell/PowerShell/releases
+```
+
+### 4. 端口被占用
+
+**解决方案**: 修改配置文件中的端口号，或停止占用端口的程序：
+
+```bash
+# Windows
+netstat -ano | findstr :18789
+
+# macOS/Linux
+lsof -i :18789
+```
+
+### 5. 编译时类型错误
+
+**解决方案**: 确保所有依赖都已正确安装：
+
+```bash
+pnpm install
+pnpm build
+```
+
+### 6. 中文显示异常
+
+**解决方案**: 系统会自动检测语言环境，也可以手动设置：
+
+```bash
+# 设置环境变量
+export OPENCLAW_LANGUAGE=zh-CN
+
+# Windows PowerShell
+$env:OPENCLAW_LANGUAGE="zh-CN"
+```
+
+---
+
+## 项目特色
+
+### ✅ 丰富的模型支持（含多个免费选项）
+
+项目支持 **8个国内外模型提供商**，包括多个**完全免费**的选项：
+
+#### 🇨🇳 **国内模型提供商（5个）**
+1. **DeepSeek（深度求索）**
+   - OpenAI 兼容接口，高性能、低成本
+   - 环境变量：`DEEPSEEK_API_KEY`
+   - 默认模型：`deepseek-chat`
+
+2. **百度文心一言（ERNIE）**
+   - 千帆大模型平台，中文能力强
+   - 环境变量：`QIANFAN_ACCESS_KEY`
+   - 默认模型：`ernie-4.0-turbo-8k`
+   - 免费模型：`ernie-speed-128k`
+
+3. **字节豆包（Doubao）**
+   - 火山引擎大模型，字节跳动官方
+   - 环境变量：`ARK_API_KEY`
+   - 默认模型：`doubao-pro-32k`
+
+4. **腾讯混元（Hunyuan）**
+   - 腾讯云大模型，OpenAI 兼容
+   - 环境变量：`HUNYUAN_API_KEY`
+   - 默认模型：`hunyuan-turbo`
+   - 免费模型：`hunyuan-lite`
+
+5. **讯飞星火（Spark）**
+   - 科大讯飞认知大模型，语音处理优势
+   - 环境变量：`SPARK_API_KEY`
+   - 默认模型：`spark-pro`
+   - 免费模型：`spark-lite`
+
+#### 🌍 **国际免费模型提供商（3个）** ⭐ **强烈推荐，节省算力！**
+
+6. **SiliconFlow（硅基流动）** ⭐⭐⭐
+   - **注册即送2000万Tokens**，多个模型完全免费
+   - 环境变量：`SILICONFLOW_API_KEY`
+   - 免费模型：
+     - `qwen-2.5-7b-instruct` - Qwen 2.5 7B
+     - `deepseek-v3` - DeepSeek V3（推理模型）
+     - `glm-4-9b-chat` - GLM-4 9B
+     - `internlm-2.5-7b-chat` - InternLM 2.5 7B
+   - 注册链接：https://cloud.siliconflow.cn
+
+7. **Groq** ⭐⭐
+   - **超快推理速度**（比其他快3-10倍），免费访问
+   - 环境变量：`GROQ_API_KEY`
+   - 免费模型：
+     - `llama-3.3-70b-versatile` - Llama 3.3 70B
+     - `llama-3.1-8b-instant` - Llama 3.1 8B Instant
+     - `deepseek-r1-distill-llama-70b` - DeepSeek R1 Distill
+     - `mixtral-8x7b-32768` - Mixtral 8x7B
+   - 注册链接：https://console.groq.com
+
+8. **Together AI** ⭐
+   - 免费模型访问
+   - 环境变量：`TOGETHER_AI_API_KEY`
+   - 免费模型：
+     - `meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo`
+     - `meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo`
+     - `mistralai/Mixtral-8x7B-Instruct-v0.1`
+   - 注册链接：https://api.together.xyz
+
+#### 💰 **算力节省策略**
+
+通过使用以上免费模型提供商，**OpenClaw 的算力成本可以降低到接近零**！
+
+**推荐组合**：
+- **主力模型**: SiliconFlow（注册送2000万Tokens）
+- **高速推理**: Groq（推理速度最快）
+- **大模型备用**: Together AI（Llama 3.1 70B 免费）
+
+**配置示例**：
+
+```bash
+# 方式1：设置环境变量
+# Windows PowerShell
+$env:SILICONFLOW_API_KEY="sk-..."
+$env:GROQ_API_KEY="gsk_..."
+$env:TOGETHER_AI_API_KEY="..."
+
+# macOS/Linux
+export SILICONFLOW_API_KEY="sk-..."
+export GROQ_API_KEY="gsk_..."
+export TOGETHER_AI_API_KEY="..."
+
+# 方式2：使用引导向导
+pnpm openclaw onboard
+# 选择 "SiliconFlow API key（硅基流动）" 或其他免费提供商
+```
+
+### ✅ PowerShell 原生支持（无需 bash）
+
+本项目已经完成跨平台改造，**Windows 用户可以直接使用 PowerShell 进行所有操作**：
+
+- ✅ **无需 bash**: 不再依赖 bash 脚本
+- ✅ **无需 WSL2**: Windows 用户可以原生运行
+- ✅ **纯 Node.js 实现**: 所有构建脚本使用 JavaScript/TypeScript
+- ✅ **PowerShell 兼容**: 所有命令在 PowerShell 7+ 中完美运行
+
+**改造内容**:
+- 将 `scripts/bundle-a2ui.sh` 替换为 `scripts/bundle-a2ui.mjs`
+- 将默认 TypeScript 编译器从 `tsgo` 改为 `tsc`
+- 所有构建步骤均已适配 PowerShell 环境
+
+### ✅ 国内通讯渠道集成（飞书、钉钉、企业微信）
+
+本项目已将**飞书、钉钉、企业微信**三大国内主流通讯平台集成到核心中，用户无需单独安装插件：
+
+#### 📱 **飞书（Feishu/Lark）**
+- **依赖包**: `@m1heng-clawd/feishu@^0.1.6`
+- **支持功能**: 机器人 API、事件订阅、Markdown 消息
+- **配置参数**:
+  - App ID（应用 ID）
+  - App Secret（应用密钥）
+  - Verification Token（验证令牌，可选）
+  - Encrypt Key（加密密钥，可选）
+- **使用方式**: 在引导向导中选择 "Feishu/Lark (飞书)"
+
+#### 📱 **钉钉（DingTalk）**
+- **依赖包**: `github:soimy/openclaw-channel-dingtalk`
+- **支持功能**: 
+  - Stream 模式（WebSocket 长连接，无需公网 IP）
+  - 私聊和群聊支持
+  - 多种消息类型（文本、图片、语音、视频、文件）
+  - Markdown 回复
+  - 交互式卡片
+- **配置参数**:
+  - AppKey（应用 Key）
+  - AppSecret（应用密钥）
+- **使用方式**: 在引导向导中选择 "DingTalk (钉钉)"
+- **特色**: Stream 模式可在防火墙内网环境运行，无需反向代理
+
+#### 📱 **企业微信（WeCom）**
+- **依赖包**: `@william.qian/simple-wecom@^1.0.2`
+- **支持功能**: 企业级通讯、机器人 API
+- **配置参数**:
+  - Corp ID（企业 ID）
+  - Agent ID（应用 ID）
+  - Secret（应用密钥）
+  - Token（接收消息令牌，可选）
+  - EncodingAESKey（消息加密密钥，可选）
+- **使用方式**: 在引导向导中选择 "WeCom (企业微信)"
+
+#### 🔧 **配置示例**
+
+**方式1：使用引导向导（推荐）**
+```bash
+pnpm openclaw onboard
+# 在通道选择步骤中选择对应的国内通道
+```
+
+**方式2：手动配置文件**
+
+在 `~/.openclaw/openclaw.json` 中添加通道配置：
+
+```json5
+{
+  "channels": {
+    // 飞书配置
+    "feishu": {
+      "accounts": {
+        "default": {
+          "enabled": true,
+          "name": "飞书机器人",
+          "appId": "cli_xxxxxxxx",
+          "appSecret": "your-app-secret",
+          "verificationToken": "your-token",  // 可选
+          "encryptKey": "your-key",          // 可选
+          "dmPolicy": "pairing",
+          "allowFrom": []
+        }
+      }
+    },
+    
+    // 钉钉配置
+    "dingtalk": {
+      "accounts": {
+        "default": {
+          "enabled": true,
+          "name": "钉钉机器人",
+          "appKey": "dingxxxxxxxx",
+          "appSecret": "your-app-secret",
+          "dmPolicy": "pairing",
+          "allowFrom": []
+        }
+      }
+    },
+    
+    // 企业微信配置
+    "wecom": {
+      "accounts": {
+        "default": {
+          "enabled": true,
+          "name": "企业微信机器人",
+          "corpId": "wwxxxxxxxx",
+          "agentId": "1000002",
+          "secret": "your-secret",
+          "token": "your-token",              // 可选
+          "encodingAESKey": "your-aes-key",   // 可选
+          "dmPolicy": "pairing",
+          "allowFrom": []
+        }
+      }
+    }
+  }
+}
+```
+
+**方式3：环境变量**
+
+虽然这些通道主要通过配置文件设置，但也可以通过环境变量传递凭证：
+
+```bash
+# Windows PowerShell
+$env:FEISHU_APP_ID="cli_xxxxxxxx"
+$env:FEISHU_APP_SECRET="your-secret"
+$env:DINGTALK_APP_KEY="dingxxxxxxxx"
+$env:DINGTALK_APP_SECRET="your-secret"
+$env:WECOM_CORP_ID="wwxxxxxxxx"
+$env:WECOM_AGENT_ID="1000002"
+$env:WECOM_SECRET="your-secret"
+
+# macOS/Linux
+export FEISHU_APP_ID="cli_xxxxxxxx"
+export FEISHU_APP_SECRET="your-secret"
+export DINGTALK_APP_KEY="dingxxxxxxxx"
+export DINGTALK_APP_SECRET="your-secret"
+export WECOM_CORP_ID="wwxxxxxxxx"
+export WECOM_AGENT_ID="1000002"
+export WECOM_SECRET="your-secret"
+```
+
+#### 📚 **获取凭证的方法**
+
+**飞书开放平台**:
+1. 访问 https://open.feishu.cn/app
+2. 创建企业自建应用
+3. 获取 App ID 和 App Secret
+4. 配置机器人能力和事件订阅
+
+**钉钉开放平台**:
+1. 访问 https://open-dev.dingtalk.com
+2. 创建企业内部应用
+3. 获取 AppKey 和 AppSecret
+4. 开启 Stream 模式推送
+
+**企业微信管理后台**:
+1. 访问 https://work.weixin.qq.com/wework_admin/frame#apps
+2. 创建自建应用
+3. 获取 Corp ID、Agent ID 和 Secret
+4. 配置可信域名和回调地址
+
+#### ✅ **集成优势**
+
+- **开箱即用**: 无需单独安装插件，直接在引导向导中选择即可
+- **统一管理**: 与其他通道（Telegram、Discord 等）使用相同的配置方式
+- **网络友好**: 钉钉 Stream 模式特别适合国内网络环境
+- **企业场景**: 适合企业内部使用，数据安全可控
+
+---
+
+### ✅ 中文本地化
+
+- 完整的中文引导向导
+- 自动检测系统语言
+- 支持手动切换语言
+- 国内通道配置全中文提示
+
+**本地化文件位置**:
+- `src/i18n/index.ts` - 翻译系统核心
+- `src/i18n/types.ts` - 翻译键类型定义
+- `src/i18n/translations.ts` - 中英文翻译内容
+- `src/wizard/onboarding.ts` - 本地化引导向导
+- `src/commands/onboard-channels.ts` - 通道选择界面本地化
+
+---
+
+## 更多资源
+
+- [英文完整文档](./README.md)
+- [在线文档](https://docs.openclaw.ai)
+- [Gitee 仓库](https://gitee.com/CozyNook/JieZi-ai-PS) (中文汉化版)
+- [GitHub 原项目](https://github.com/openclaw/openclaw) (OpenClaw 官方)
+- [Discord 社区](https://discord.gg/clawd)
+
+---
+
+## 快速命令参考
+
+```bash
+# 安装依赖
+pnpm install
+
+# 构建项目
+pnpm build
+
+# 运行引导向导
+pnpm openclaw onboard
+
+# 启动网关
+pnpm openclaw gateway
+
+# 检查状态
+pnpm openclaw doctor
+
+# 发送消息
+pnpm openclaw message send --to <号码> --message "内容"
+
+# AI 对话
+pnpm openclaw agent --message "你的问题"
+
+# 更新项目
+pnpm openclaw update
+
+# 查看版本
+pnpm openclaw --version
+
+# 查看帮助
+pnpm openclaw --help
+```
+
+---
+
+**祝你使用愉快！** 🦞
+
+如有问题，请在 [Gitee Issues](https://gitee.com/CozyNook/JieZi-ai-PS/issues) 提交反馈。

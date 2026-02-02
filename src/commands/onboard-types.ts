@@ -33,6 +33,16 @@ export type AuthChoice =
   | "github-copilot"
   | "copilot-proxy"
   | "qwen-portal"
+  // 国内新增提供商
+  | "deepseek-api-key"
+  | "baidu-qianfan-api-key"
+  | "tencent-hunyuan-api-key"
+  | "doubao-api-key"
+  | "xinghuo-api-key"
+  // 国际免费模型
+  | "siliconflow-api-key"
+  | "groq-api-key"
+  | "together-ai-api-key"
   | "skip";
 export type GatewayAuthChoice = "token" | "password";
 export type ResetScope = "config" | "config+creds+sessions" | "full";
@@ -74,6 +84,16 @@ export type OnboardOptions = {
   syntheticApiKey?: string;
   veniceApiKey?: string;
   opencodeZenApiKey?: string;
+  // 国内新增提供商 API Keys
+  deepseekApiKey?: string;
+  baiduQianfanApiKey?: string;
+  tencentHunyuanApiKey?: string;
+  doubaoApiKey?: string;
+  xinghuoApiKey?: string;
+  // 国际免费模型 API Keys
+  siliconflowApiKey?: string;
+  groqApiKey?: string;
+  togetherAiApiKey?: string;
   gatewayPort?: number;
   gatewayBind?: GatewayBind;
   gatewayAuth?: GatewayAuthChoice;

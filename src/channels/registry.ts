@@ -12,6 +12,9 @@ export const CHAT_CHANNEL_ORDER = [
   "slack",
   "signal",
   "imessage",
+  "feishu",
+  "dingtalk",
+  "wecom",
 ] as const;
 
 export type ChatChannelId = (typeof CHAT_CHANNEL_ORDER)[number];
@@ -97,6 +100,36 @@ const CHAT_CHANNEL_META: Record<ChatChannelId, ChannelMeta> = {
     docsLabel: "imessage",
     blurb: "this is still a work in progress.",
     systemImage: "message.fill",
+  },
+  feishu: {
+    id: "feishu",
+    label: "Feishu",
+    selectionLabel: "Feishu/Lark (飞书)",
+    detailLabel: "Feishu Bot",
+    docsPath: "/channels/feishu",
+    docsLabel: "feishu",
+    blurb: "飞书/Lark企业协作平台，支持机器人API。Feishu/Lark enterprise collaboration platform with Bot API.",
+    systemImage: "message",
+  },
+  dingtalk: {
+    id: "dingtalk",
+    label: "DingTalk",
+    selectionLabel: "DingTalk (钉钉)",
+    detailLabel: "DingTalk Bot",
+    docsPath: "/channels/dingtalk",
+    docsLabel: "dingtalk",
+    blurb: "钉钉企业协作平台，支持Stream模式。DingTalk enterprise collaboration platform with Stream Mode.",
+    systemImage: "message",
+  },
+  wecom: {
+    id: "wecom",
+    label: "WeCom",
+    selectionLabel: "WeCom (企业微信)",
+    detailLabel: "WeCom Bot",
+    docsPath: "/channels/wecom",
+    docsLabel: "wecom",
+    blurb: "企业微信通讯平台，支持机器人API。WeCom (WeChat Work) communication platform with Bot API.",
+    systemImage: "message",
   },
 };
 

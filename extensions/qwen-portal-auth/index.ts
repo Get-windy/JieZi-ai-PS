@@ -1,5 +1,6 @@
 import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { loginQwenPortalOAuth } from "./oauth.js";
+import { t } from "../../src/i18n/index.js";
 
 const PROVIDER_ID = "qwen-portal";
 const PROVIDER_LABEL = "Qwen";
@@ -49,7 +50,7 @@ const qwenPortalPlugin = {
           hint: "Device code login",
           kind: "device_code",
           run: async (ctx) => {
-            const progress = ctx.prompter.progress("Starting Qwen OAuth…");
+            const progress = ctx.prompter.progress(t('wizard.oauth.qwen.starting'));
             try {
               const result = await loginQwenPortalOAuth({
                 openUrl: ctx.openUrl,
@@ -57,7 +58,7 @@ const qwenPortalPlugin = {
                 progress,
               });
 
-              progress.stop("Qwen OAuth complete");
+              progress.stop(t('wizard.oauth.qwen.complete'));
 
               const profileId = `${PROVIDER_ID}:default`;
               const baseUrl = normalizeBaseUrl(result.resourceUrl);
@@ -108,15 +109,17 @@ const qwenPortalPlugin = {
                 },
                 defaultModel: DEFAULT_MODEL,
                 notes: [
-                  "Qwen OAuth tokens auto-refresh. Re-run login if refresh fails or access is revoked.",
-                  `Base URL defaults to ${DEFAULT_BASE_URL}. Override models.providers.${PROVIDER_ID}.baseUrl if needed.`,
+                  t('wizard.oauth.qwen.tokens_refresh'),
+                  t('wizard.oauth.qwen.base_url_override')
+                    .replace('{url}', DEFAULT_BASE_URL)
+                    .replace('{provider}', PROVIDER_ID),
                 ],
               };
             } catch (err) {
-              progress.stop("Qwen OAuth failed");
+              progress.stop(t('wizard.oauth.qwen.failed'));
               await ctx.prompter.note(
                 "If OAuth fails, verify your Qwen account has portal access and try again.",
-                "Qwen OAuth",
+                t('wizard.oauth.qwen.title'),
               );
               throw err;
             }

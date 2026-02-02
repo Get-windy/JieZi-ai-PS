@@ -87,7 +87,7 @@ export async function installCompletion(shell: string, yes: boolean, binName = "
     const content = await fs.readFile(profilePath, "utf-8");
     if (content.includes(`${binName} completion`)) {
       if (!yes) {
-        console.log(`Completion already installed in ${profilePath}`);
+        console.log(`自动完成已安装在 ${profilePath}`);
       }
       return;
     }
@@ -96,13 +96,13 @@ export async function installCompletion(shell: string, yes: boolean, binName = "
       // Simple confirmation could go here if we had a prompter,
       // but for now we assume --yes or manual invocation implies consent or we print info.
       // Since we don't have a prompter passed in here easily without adding deps, we'll log.
-      console.log(`Installing completion to ${profilePath}...`);
+      console.log(`正在安装自动完成到 ${profilePath}...`);
     }
 
     await fs.appendFile(profilePath, `\n# OpenClaw Completion\n${sourceLine}\n`);
-    console.log(`Completion installed. Restart your shell or run: source ${profilePath}`);
+    console.log(`自动完成已安装。重启你的 shell 或者运行：source ${profilePath}`);
   } catch (err) {
-    console.error(`Failed to install completion: ${err as string}`);
+    console.error(`安装自动完成失败: ${err as string}`);
   }
 }
 

@@ -300,6 +300,15 @@ export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
     venice: "VENICE_API_KEY",
     mistral: "MISTRAL_API_KEY",
     opencode: "OPENCODE_API_KEY",
+    // 国内模型提供商
+    deepseek: "DEEPSEEK_API_KEY",
+    baidu: "QIANFAN_ACCESS_KEY",
+    doubao: "ARK_API_KEY",
+    tencent: "HUNYUAN_API_KEY",
+    xinghuo: "SPARK_API_KEY",
+    // 国际免费模型
+    siliconflow: "SILICONFLOW_API_KEY",
+    "together-ai": "TOGETHER_AI_API_KEY",
   };
   const envVar = envMap[normalized];
   if (!envVar) {

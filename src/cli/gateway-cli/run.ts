@@ -19,6 +19,7 @@ import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { defaultRuntime } from "../../runtime.js";
 import { formatCliCommand } from "../command-format.js";
 import { forceFreePortAndWait } from "../ports.js";
+import { dashboardCommand } from "../../commands/dashboard.js";
 import { ensureDevGatewayConfig } from "./dev.js";
 import { runGatewayLoop } from "./run-loop.js";
 import {
@@ -258,10 +259,11 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
   }
 
   try {
+    let firstStart = true;
     await runGatewayLoop({
       runtime: defaultRuntime,
-      start: async () =>
-        await startGatewayServer(port, {
+      start: async () => {
+        const server = await startGatewayServer(port, {
           bind,
           auth:
             authMode || passwordRaw || tokenRaw || authModeRaw
@@ -278,7 +280,24 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
                   resetOnExit: Boolean(opts.tailscaleResetOnExit),
                 }
               : undefined,
-        }),
+        });
+        
+        // 自动打开浏览器（仅首次启动）
+        if (firstStart && resolvedAuthMode === "token" && hasToken) {
+          firstStart = false;
+          // 延迟一下确保 Gateway 完全启动
+          setTimeout(async () => {
+            try {
+              await dashboardCommand(defaultRuntime, { noOpen: false });
+            } catch (err) {
+              // 忽略打开浏览器的错误，不影响 Gateway 运行
+              gatewayLog.debug(`Failed to auto-open dashboard: ${String(err)}`);
+            }
+          }, 1000);
+        }
+        
+        return server;
+      },
     });
   } catch (err) {
     if (
@@ -287,7 +306,7 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
     ) {
       const errMessage = describeUnknownError(err);
       defaultRuntime.error(
-        `Gateway failed to start: ${errMessage}\nIf the gateway is supervised, stop it with: ${formatCliCommand("openclaw gateway stop")}`,
+        `Gateway 启动失败: ${errMessage}\n如果 Gateway 受监管，请停止它：${formatCliCommand("openclaw gateway stop")}`,
       );
       try {
         const diagnostics = await inspectPortUsage(port);
@@ -303,7 +322,7 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
       defaultRuntime.exit(1);
       return;
     }
-    defaultRuntime.error(`Gateway failed to start: ${String(err)}`);
+    defaultRuntime.error(`Gateway 启动失败: ${String(err)}`);
     defaultRuntime.exit(1);
   }
 }
