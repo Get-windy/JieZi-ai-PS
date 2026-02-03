@@ -2,6 +2,8 @@ import { html } from "lit";
 import type { ConfigUiHints } from "../types";
 import type { ChannelsProps } from "./channels.types";
 import { analyzeConfigSchema, renderNode, schemaType, type JsonSchema } from "./config-form";
+import { translateFieldLabel } from "./config-form.shared";
+import { t } from "../i18n.js";
 
 type ChannelConfigFormProps = {
   channelId: string;
@@ -94,7 +96,7 @@ function renderExtraChannelFields(value: Record<string, unknown>) {
       ${entries.map(
         ([field, raw]) => html`
           <div>
-            <span class="label">${field}</span>
+            <span class="label">${translateFieldLabel(field)}</span>
             <span>${formatExtraValue(raw)}</span>
           </div>
         `,
@@ -108,13 +110,13 @@ export function renderChannelConfigForm(props: ChannelConfigFormProps) {
   const normalized = analysis.schema;
   if (!normalized) {
     return html`
-      <div class="callout danger">Schema unavailable. Use Raw.</div>
+      <div class="callout danger">${t("channel_config.schema_unavailable")}</div>
     `;
   }
   const node = resolveSchemaNode(normalized, ["channels", props.channelId]);
   if (!node) {
     return html`
-      <div class="callout danger">Channel config schema unavailable.</div>
+      <div class="callout danger">${t("channel_config.channel_schema_unavailable")}</div>
     `;
   }
   const configValue = props.configValue ?? {};
@@ -144,7 +146,7 @@ export function renderChannelConfigSection(params: { channelId: string; props: C
       ${
         props.configSchemaLoading
           ? html`
-              <div class="muted">Loading config schema…</div>
+              <div class="muted">${t("channel_config.loading_schema")}</div>
             `
           : renderChannelConfigForm({
               channelId,
@@ -161,14 +163,14 @@ export function renderChannelConfigSection(params: { channelId: string; props: C
           ?disabled=${disabled || !props.configFormDirty}
           @click=${() => props.onConfigSave()}
         >
-          ${props.configSaving ? "Saving…" : "Save"}
+          ${props.configSaving ? t("channel_config.button.save_saving") : t("channel_config.button.save")}
         </button>
         <button
           class="btn"
           ?disabled=${disabled}
           @click=${() => props.onConfigReload()}
         >
-          Reload
+          ${t("channel_config.button.reload")}
         </button>
       </div>
     </div>

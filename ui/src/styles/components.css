@@ -194,6 +194,7 @@
   background: var(--secondary);
   font-size: 13px;
   font-weight: 500;
+  white-space: nowrap;
   transition: border-color var(--duration-fast) ease;
 }
 

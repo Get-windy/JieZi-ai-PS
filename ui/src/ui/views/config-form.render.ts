@@ -2,7 +2,8 @@ import { html, nothing } from "lit";
 import type { ConfigUiHints } from "../types";
 import { icons } from "../icons";
 import { renderNode } from "./config-form.node";
-import { hintForPath, humanize, schemaType, type JsonSchema } from "./config-form.shared";
+import { hintForPath, humanize, translateFieldLabel, schemaType, type JsonSchema } from "./config-form.shared";
+import { t } from "../i18n.js";
 
 export type ConfigFormProps = {
   schema: JsonSchema | null;
@@ -239,39 +240,39 @@ const sectionIcons = {
 // Section metadata
 export const SECTION_META: Record<string, { label: string; description: string }> = {
   env: {
-    label: "Environment Variables",
-    description: "Environment variables passed to the gateway process",
+    label: t("config.section.env"),
+    description: t("config.section.env.description"),
   },
-  update: { label: "Updates", description: "Auto-update settings and release channel" },
-  agents: { label: "Agents", description: "Agent configurations, models, and identities" },
-  auth: { label: "Authentication", description: "API keys and authentication profiles" },
+  update: { label: t("config.section.update"), description: t("config.section.update.description") },
+  agents: { label: t("config.section.agents"), description: t("config.section.agents.description") },
+  auth: { label: t("config.section.auth"), description: t("config.section.auth.description") },
   channels: {
-    label: "Channels",
-    description: "Messaging channels (Telegram, Discord, Slack, etc.)",
+    label: t("config.section.channels"),
+    description: t("config.section.channels.description"),
   },
-  messages: { label: "Messages", description: "Message handling and routing settings" },
-  commands: { label: "Commands", description: "Custom slash commands" },
-  hooks: { label: "Hooks", description: "Webhooks and event hooks" },
-  skills: { label: "Skills", description: "Skill packs and capabilities" },
-  tools: { label: "Tools", description: "Tool configurations (browser, search, etc.)" },
-  gateway: { label: "Gateway", description: "Gateway server settings (port, auth, binding)" },
-  wizard: { label: "Setup Wizard", description: "Setup wizard state and history" },
+  messages: { label: t("config.section.messages"), description: t("config.section.messages.description") },
+  commands: { label: t("config.section.commands"), description: t("config.section.commands.description") },
+  hooks: { label: t("config.section.hooks"), description: t("config.section.hooks.description") },
+  skills: { label: t("config.section.skills"), description: t("config.section.skills.description") },
+  tools: { label: t("config.section.tools"), description: t("config.section.tools.description") },
+  gateway: { label: t("config.section.gateway"), description: t("config.section.gateway.description") },
+  wizard: { label: t("config.section.wizard"), description: t("config.section.wizard.description") },
   // Additional sections
-  meta: { label: "Metadata", description: "Gateway metadata and version information" },
-  logging: { label: "Logging", description: "Log levels and output configuration" },
-  browser: { label: "Browser", description: "Browser automation settings" },
-  ui: { label: "UI", description: "User interface preferences" },
-  models: { label: "Models", description: "AI model configurations and providers" },
-  bindings: { label: "Bindings", description: "Key bindings and shortcuts" },
-  broadcast: { label: "Broadcast", description: "Broadcast and notification settings" },
-  audio: { label: "Audio", description: "Audio input/output settings" },
-  session: { label: "Session", description: "Session management and persistence" },
-  cron: { label: "Cron", description: "Scheduled tasks and automation" },
-  web: { label: "Web", description: "Web server and API settings" },
-  discovery: { label: "Discovery", description: "Service discovery and networking" },
-  canvasHost: { label: "Canvas Host", description: "Canvas rendering and display" },
-  talk: { label: "Talk", description: "Voice and speech settings" },
-  plugins: { label: "Plugins", description: "Plugin management and extensions" },
+  meta: { label: t("config.section.meta"), description: t("config.section.meta.description") },
+  logging: { label: t("config.section.logging"), description: t("config.section.logging.description") },
+  browser: { label: t("config.section.browser"), description: t("config.section.browser.description") },
+  ui: { label: t("config.section.ui"), description: t("config.section.ui.description") },
+  models: { label: t("config.section.models"), description: t("config.section.models.description") },
+  bindings: { label: t("config.section.bindings"), description: t("config.section.bindings.description") },
+  broadcast: { label: t("config.section.broadcast"), description: t("config.section.broadcast.description") },
+  audio: { label: t("config.section.audio"), description: t("config.section.audio.description") },
+  session: { label: t("config.section.session"), description: t("config.section.session.description") },
+  cron: { label: t("config.section.cron"), description: t("config.section.cron.description") },
+  web: { label: t("config.section.web"), description: t("config.section.web.description") },
+  discovery: { label: t("config.section.discovery"), description: t("config.section.discovery.description") },
+  canvasHost: { label: t("config.section.canvasHost"), description: t("config.section.canvasHost.description") },
+  talk: { label: t("config.section.talk"), description: t("config.section.talk.description") },
+  plugins: { label: t("config.section.plugins"), description: t("config.section.plugins.description") },
 };
 
 function getSectionIcon(key: string) {
@@ -413,7 +414,7 @@ export function renderConfigForm(props: ConfigFormProps) {
       <div class="config-empty">
         <div class="config-empty__icon">${icons.search}</div>
         <div class="config-empty__text">
-          ${searchQuery ? `No settings match "${searchQuery}"` : "No settings in this section"}
+          ${searchQuery ? t("config_form.search.no_match").replace("{query}", searchQuery) : t("config_form.search.no_settings")}
         </div>
       </div>
     `;
@@ -426,7 +427,7 @@ export function renderConfigForm(props: ConfigFormProps) {
           ? (() => {
               const { sectionKey, subsectionKey, schema: node } = subsectionContext;
               const hint = hintForPath([sectionKey, subsectionKey], props.uiHints);
-              const label = hint?.label ?? node.title ?? humanize(subsectionKey);
+              const label = hint?.label ?? node.title ?? translateFieldLabel(subsectionKey);
               const description = hint?.help ?? node.description ?? "";
               const sectionValue = value[sectionKey];
               const scopedValue =
@@ -464,7 +465,7 @@ export function renderConfigForm(props: ConfigFormProps) {
             })()
           : filteredEntries.map(([key, node]) => {
               const meta = SECTION_META[key] ?? {
-                label: key.charAt(0).toUpperCase() + key.slice(1),
+                label: translateFieldLabel(key),
                 description: node.description ?? "",
               };
 

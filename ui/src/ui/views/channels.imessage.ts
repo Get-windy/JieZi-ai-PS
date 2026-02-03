@@ -3,6 +3,7 @@ import type { IMessageStatus } from "../types";
 import type { ChannelsProps } from "./channels.types";
 import { formatAgo } from "../format";
 import { renderChannelConfigSection } from "./channels.config";
+import { t } from "../i18n.js";
 
 export function renderIMessageCard(params: {
   props: ChannelsProps;
@@ -13,26 +14,26 @@ export function renderIMessageCard(params: {
 
   return html`
     <div class="card">
-      <div class="card-title">iMessage</div>
-      <div class="card-sub">macOS bridge status and channel configuration.</div>
+      <div class="card-title">${t("channel.imessage.title")}</div>
+      <div class="card-sub">${t("channel.imessage.subtitle")}</div>
       ${accountCountLabel}
 
       <div class="status-list" style="margin-top: 16px;">
         <div>
-          <span class="label">Configured</span>
-          <span>${imessage?.configured ? "Yes" : "No"}</span>
+          <span class="label">${t("channel.label.configured")}</span>
+          <span>${imessage?.configured ? t("channel.yes") : t("channel.no")}</span>
         </div>
         <div>
-          <span class="label">Running</span>
-          <span>${imessage?.running ? "Yes" : "No"}</span>
+          <span class="label">${t("channel.label.running")}</span>
+          <span>${imessage?.running ? t("channel.yes") : t("channel.no")}</span>
         </div>
         <div>
-          <span class="label">Last start</span>
-          <span>${imessage?.lastStartAt ? formatAgo(imessage.lastStartAt) : "n/a"}</span>
+          <span class="label">${t("channel.label.last_start")}</span>
+          <span>${imessage?.lastStartAt ? formatAgo(imessage.lastStartAt) : t("channel.na")}</span>
         </div>
         <div>
-          <span class="label">Last probe</span>
-          <span>${imessage?.lastProbeAt ? formatAgo(imessage.lastProbeAt) : "n/a"}</span>
+          <span class="label">${t("channel.label.last_probe")}</span>
+          <span>${imessage?.lastProbeAt ? formatAgo(imessage.lastProbeAt) : t("channel.na")}</span>
         </div>
       </div>
 
@@ -47,7 +48,7 @@ export function renderIMessageCard(params: {
       ${
         imessage?.probe
           ? html`<div class="callout" style="margin-top: 12px;">
-            Probe ${imessage.probe.ok ? "ok" : "failed"} ·
+            ${imessage.probe.ok ? t("channel.probe.ok") : t("channel.probe.failed")} ·
             ${imessage.probe.error ?? ""}
           </div>`
           : nothing
@@ -57,7 +58,7 @@ export function renderIMessageCard(params: {
 
       <div class="row" style="margin-top: 12px;">
         <button class="btn" @click=${() => props.onRefresh(true)}>
-          Probe
+          ${t("channel.button.probe")}
         </button>
       </div>
     </div>

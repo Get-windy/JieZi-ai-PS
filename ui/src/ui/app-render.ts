@@ -3,6 +3,7 @@ import type { AppViewState } from "./app-view-state";
 import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
 import { refreshChatAvatar } from "./app-chat";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers";
+import { t } from "./i18n.js";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity";
 import { loadAgentSkills } from "./controllers/agent-skills";
@@ -89,7 +90,7 @@ export function renderApp(state: AppViewState) {
   const presenceCount = state.presenceEntries.length;
   const sessionsCount = state.sessionsResult?.count ?? null;
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
-  const chatDisabledReason = state.connected ? null : "Disconnected from gateway.";
+  const chatDisabledReason = state.connected ? null : t("app.disconnected");
   const isChat = state.tab === "chat";
   const chatFocus = isChat && (state.settings.chatFocusMode || state.onboarding);
   const showThinking = state.onboarding ? false : state.settings.chatShowThinking;
@@ -114,8 +115,8 @@ export function renderApp(state: AppViewState) {
                 ...state.settings,
                 navCollapsed: !state.settings.navCollapsed,
               })}
-            title="${state.settings.navCollapsed ? "Expand sidebar" : "Collapse sidebar"}"
-            aria-label="${state.settings.navCollapsed ? "Expand sidebar" : "Collapse sidebar"}"
+            title="${state.settings.navCollapsed ? t("app.sidebar.expand") : t("app.sidebar.collapse")}"
+            aria-label="${state.settings.navCollapsed ? t("app.sidebar.expand") : t("app.sidebar.collapse")}"
           >
             <span class="nav-collapse-toggle__icon">${icons.menu}</span>
           </button>
@@ -124,16 +125,16 @@ export function renderApp(state: AppViewState) {
               <img src="/favicon.svg" alt="OpenClaw" />
             </div>
             <div class="brand-text">
-              <div class="brand-title">OPENCLAW</div>
-              <div class="brand-sub">Gateway Dashboard</div>
+              <div class="brand-title">${t("app.brand.title")}</div>
+              <div class="brand-sub">${t("app.brand.subtitle")}</div>
             </div>
           </div>
         </div>
         <div class="topbar-status">
           <div class="pill">
-            <span class="statusDot ${state.connected ? "ok" : ""}"></span>
-            <span>Health</span>
-            <span class="mono">${state.connected ? "OK" : "Offline"}</span>
+            <span class="statusDot ${state.connected ? "ok" : ""}"</span>
+            <span>${t("app.health")}</span>
+            <span class="mono">${state.connected ? t("app.status.ok") : t("app.status.offline")}</span>
           </div>
           ${renderThemeToggle(state)}
         </div>
@@ -156,7 +157,7 @@ export function renderApp(state: AppViewState) {
                 }}
                 aria-expanded=${!isGroupCollapsed}
               >
-                <span class="nav-label__text">${group.label}</span>
+                <span class="nav-label__text">${t(group.label)}</span>
                 <span class="nav-label__chevron">${isGroupCollapsed ? "+" : "−"}</span>
               </button>
               <div class="nav-group__items">
@@ -167,7 +168,7 @@ export function renderApp(state: AppViewState) {
         })}
         <div class="nav-group nav-group--links">
           <div class="nav-label nav-label--static">
-            <span class="nav-label__text">Resources</span>
+            <span class="nav-label__text">${t("nav.resources")}</span>
           </div>
           <div class="nav-group__items">
             <a
@@ -175,10 +176,10 @@ export function renderApp(state: AppViewState) {
               href="https://docs.openclaw.ai"
               target="_blank"
               rel="noreferrer"
-              title="Docs (opens in new tab)"
+              title="${t("app.docs.title")}"
             >
               <span class="nav-item__icon" aria-hidden="true">${icons.book}</span>
-              <span class="nav-item__text">Docs</span>
+              <span class="nav-item__text">${t("app.docs")}</span>
             </a>
           </div>
         </div>

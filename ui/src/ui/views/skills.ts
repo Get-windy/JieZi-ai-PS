@@ -2,6 +2,7 @@ import { html, nothing } from "lit";
 import type { SkillMessageMap } from "../controllers/skills";
 import type { SkillStatusEntry, SkillStatusReport } from "../types";
 import { clampText } from "../format";
+import { t } from "../i18n.js";
 
 type SkillGroup = {
   id: string;
@@ -9,19 +10,19 @@ type SkillGroup = {
   skills: SkillStatusEntry[];
 };
 
-const SKILL_SOURCE_GROUPS: Array<{ id: string; label: string; sources: string[] }> = [
-  { id: "workspace", label: "Workspace Skills", sources: ["openclaw-workspace"] },
-  { id: "built-in", label: "Built-in Skills", sources: ["openclaw-bundled"] },
-  { id: "installed", label: "Installed Skills", sources: ["openclaw-managed"] },
-  { id: "extra", label: "Extra Skills", sources: ["openclaw-extra"] },
+const SKILL_SOURCE_GROUPS: Array<{ id: string; label: () => string; sources: string[] }> = [
+  { id: "workspace", label: () => t("skills.group.workspace"), sources: ["openclaw-workspace"] },
+  { id: "built-in", label: () => t("skills.group.built_in"), sources: ["openclaw-bundled"] },
+  { id: "installed", label: () => t("skills.group.installed"), sources: ["openclaw-managed"] },
+  { id: "extra", label: () => t("skills.group.extra"), sources: ["openclaw-extra"] },
 ];
 
 function groupSkills(skills: SkillStatusEntry[]): SkillGroup[] {
   const groups = new Map<string, SkillGroup>();
   for (const def of SKILL_SOURCE_GROUPS) {
-    groups.set(def.id, { id: def.id, label: def.label, skills: [] });
+    groups.set(def.id, { id: def.id, label: def.label(), skills: [] });
   }
-  const other: SkillGroup = { id: "other", label: "Other Skills", skills: [] };
+  const other: SkillGroup = { id: "other", label: t("skills.group.other"), skills: [] };
   for (const skill of skills) {
     const match = SKILL_SOURCE_GROUPS.find((group) => group.sources.includes(skill.source));
     if (match) {
@@ -37,6 +38,30 @@ function groupSkills(skills: SkillStatusEntry[]): SkillGroup[] {
     ordered.push(other);
   }
   return ordered;
+}
+
+/**
+ * Translate skill description. 
+ * For built-in skills (openclaw-bundled) and installed skills (openclaw-managed), 
+ * check if translation exists.
+ * For other skills, return original description.
+ */
+function translateSkillDescription(skill: SkillStatusEntry): string {
+  // Translate built-in and installed skills
+  if (skill.source !== "openclaw-bundled" && skill.source !== "openclaw-managed") {
+    return skill.description;
+  }
+
+  const translationKey = `skill.desc.${skill.name}`;
+  const translated = t(translationKey);
+  
+  // If translation exists and is different from the key, use it
+  if (translated !== translationKey) {
+    return translated;
+  }
+  
+  // Fall back to original description
+  return skill.description;
 }
 
 export type SkillsProps = {
@@ -69,24 +94,24 @@ export function renderSkills(props: SkillsProps) {
     <section class="card">
       <div class="row" style="justify-content: space-between;">
         <div>
-          <div class="card-title">Skills</div>
-          <div class="card-sub">Bundled, managed, and workspace skills.</div>
+          <div class="card-title">${t("skills.title")}</div>
+          <div class="card-sub">${t("skills.subtitle")}</div>
         </div>
         <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
-          ${props.loading ? "Loading…" : "Refresh"}
+          ${props.loading ? t("skills.loading") : t("skills.refresh")}
         </button>
       </div>
 
       <div class="filters" style="margin-top: 14px;">
         <label class="field" style="flex: 1;">
-          <span>Filter</span>
+          <span>${t("skills.filter")}</span>
           <input
             .value=${props.filter}
             @input=${(e: Event) => props.onFilterChange((e.target as HTMLInputElement).value)}
-            placeholder="Search skills"
+            placeholder="${t("skills.filter.placeholder")}"
           />
         </label>
-        <div class="muted">${filtered.length} shown</div>
+        <div class="muted">${t("skills.shown").replace("{count}", String(filtered.length))}</div>
       </div>
 
       ${
@@ -98,7 +123,7 @@ export function renderSkills(props: SkillsProps) {
       ${
         filtered.length === 0
           ? html`
-              <div class="muted" style="margin-top: 16px">No skills found.</div>
+              <div class="muted" style="margin-top: 16px">${t("skills.no_skills")}</div>
             `
           : html`
             <div class="agent-skills-groups" style="margin-top: 16px;">
@@ -136,10 +161,10 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
   ];
   const reasons: string[] = [];
   if (skill.disabled) {
-    reasons.push("disabled");
+    reasons.push(t("skills.reason.disabled"));
   }
   if (skill.blockedByAllowlist) {
-    reasons.push("blocked by allowlist");
+    reasons.push(t("skills.reason.blocked_by_allowlist"));
   }
   return html`
     <div class="list-item">
@@ -147,16 +172,16 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
         <div class="list-title">
           ${skill.emoji ? `${skill.emoji} ` : ""}${skill.name}
         </div>
-        <div class="list-sub">${clampText(skill.description, 140)}</div>
+        <div class="list-sub">${clampText(translateSkillDescription(skill), 140)}</div>
         <div class="chip-row" style="margin-top: 6px;">
           <span class="chip">${skill.source}</span>
           <span class="chip ${skill.eligible ? "chip-ok" : "chip-warn"}">
-            ${skill.eligible ? "eligible" : "blocked"}
+            ${skill.eligible ? t("skills.status.eligible") : t("skills.status.blocked")}
           </span>
           ${
             skill.disabled
               ? html`
-                  <span class="chip chip-warn">disabled</span>
+                  <span class="chip chip-warn">${t("skills.status.disabled")}</span>
                 `
               : nothing
           }
@@ -165,7 +190,7 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
           missing.length > 0
             ? html`
               <div class="muted" style="margin-top: 6px;">
-                Missing: ${missing.join(", ")}
+                ${t("skills.missing").replace("{items}", missing.join(", "))}
               </div>
             `
             : nothing
@@ -174,7 +199,7 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
           reasons.length > 0
             ? html`
               <div class="muted" style="margin-top: 6px;">
-                Reason: ${reasons.join(", ")}
+                ${t("skills.reason").replace("{reasons}", reasons.join(", "))}
               </div>
             `
             : nothing
@@ -187,7 +212,7 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
             ?disabled=${busy}
             @click=${() => props.onToggle(skill.skillKey, skill.disabled)}
           >
-            ${skill.disabled ? "Enable" : "Disable"}
+            ${skill.disabled ? t("skills.button.enable") : t("skills.button.disable")}
           </button>
           ${
             canInstall
@@ -196,7 +221,7 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
                 ?disabled=${busy}
                 @click=${() => props.onInstall(skill.skillKey, skill.name, skill.install[0].id)}
               >
-                ${busy ? "Installing…" : skill.install[0].label}
+                ${busy ? t("skills.button.installing") : skill.install[0].label}
               </button>`
               : nothing
           }
@@ -219,7 +244,7 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
           skill.primaryEnv
             ? html`
               <div class="field" style="margin-top: 10px;">
-                <span>API key</span>
+                <span>${t("skills.api_key")}</span>
                 <input
                   type="password"
                   .value=${apiKey}
@@ -233,7 +258,7 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
                 ?disabled=${busy}
                 @click=${() => props.onSaveKey(skill.skillKey)}
               >
-                Save key
+                ${t("skills.button.save_key")}
               </button>
             `
             : nothing

@@ -1,4 +1,5 @@
 import type { ConfigUiHints } from "../types";
+import { t } from "../i18n.js";
 
 export type JsonSchema = {
   type?: string | string[];
@@ -91,6 +92,37 @@ export function humanize(raw: string) {
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/\s+/g, " ")
     .replace(/^./, (m) => m.toUpperCase());
+}
+
+export function translateFieldLabel(fieldName: string): string {
+  // Try to get translation first
+  const translationKey = `config_field.${fieldName}`;
+  const translated = t(translationKey);
+  
+  // If translation exists and is different from the key, use it
+  if (translated !== translationKey) {
+    return translated;
+  }
+  
+  // Fall back to humanize
+  return humanize(fieldName);
+}
+
+export function translateFieldHelp(path: Array<string | number>, originalHelp?: string): string | undefined {
+  if (!originalHelp) return undefined;
+  
+  // Create translation key from path (e.g., "update.channel" -> "config_help.update.channel")
+  const pathKey = path.join('.');
+  const translationKey = `config_help.${pathKey}`;
+  const translated = t(translationKey);
+  
+  // If translation exists and is different from the key, use it
+  if (translated !== translationKey) {
+    return translated;
+  }
+  
+  // Fall back to original help text
+  return originalHelp;
 }
 
 export function isSensitivePath(path: Array<string | number>): boolean {
