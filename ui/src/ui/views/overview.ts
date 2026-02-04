@@ -1,8 +1,9 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import type { GatewayHelloOk } from "../gateway.ts";
 import type { UiSettings } from "../storage.ts";
 import { formatAgo, formatDurationMs } from "../format.ts";
 import { formatNextRun } from "../presenter.ts";
+import { renderSessionStorage, type SessionStorageProps } from "./session-storage.js";
 
 export type OverviewProps = {
   connected: boolean;
@@ -20,6 +21,8 @@ export type OverviewProps = {
   onSessionKeyChange: (next: string) => void;
   onConnect: () => void;
   onRefresh: () => void;
+  // 会话存储管理
+  sessionStorage?: SessionStorageProps;
 };
 
 export function renderOverview(props: OverviewProps) {
@@ -42,8 +45,8 @@ export function renderOverview(props: OverviewProps) {
     if (!hasToken && !hasPassword) {
       return html`
         <div class="muted" style="margin-top: 8px">
-          This gateway requires auth. Add a token or password, then click Connect.
-          此 Gateway 需要认证。添加令牌或密码，然后点击连接。
+          This gateway requires auth. Add a token or password, then click Connect. 此 Gateway
+          需要认证。添加令牌或密码，然后点击连接。
           <div style="margin-top: 6px">
             <span class="mono">openclaw dashboard --no-open</span> → tokenized URL<br />
             <span class="mono">openclaw doctor --generate-gateway-token</span> → set token
@@ -63,8 +66,7 @@ export function renderOverview(props: OverviewProps) {
     }
     return html`
       <div class="muted" style="margin-top: 8px">
-        Auth failed. Re-copy a tokenized URL with
-        认证失败。使用以下命令重新复制带令牌的 URL
+        Auth failed. Re-copy a tokenized URL with 认证失败。使用以下命令重新复制带令牌的 URL
         <span class="mono">openclaw dashboard --no-open</span>, or update the token, then click Connect.
         <span class="mono">openclaw dashboard --no-open</span>，或更新令牌，然后点击连接。
         <div style="margin-top: 6px">
@@ -98,8 +100,7 @@ export function renderOverview(props: OverviewProps) {
         此页面是 HTTP，浏览器阻止设备身份验证。请使用 HTTPS (Tailscale Serve) 或在 Gateway 主机上打开
         <span class="mono">http://127.0.0.1:18789</span> on the gateway host.
         <div style="margin-top: 6px">
-          If you must stay on HTTP, set
-          如果必须使用 HTTP，请设置
+          If you must stay on HTTP, set 如果必须使用 HTTP，请设置
           <span class="mono">gateway.controlUi.allowInsecureAuth: true</span> (token-only).
         </div>
         <div style="margin-top: 6px">
@@ -243,6 +244,8 @@ export function renderOverview(props: OverviewProps) {
         <div class="muted">下次唤醒 ${formatNextRun(props.cronNext)}</div>
       </div>
     </section>
+
+    ${props.sessionStorage ? renderSessionStorage(props.sessionStorage) : nothing}
 
     <section class="card" style="margin-top: 18px;">
       <div class="card-title">注意事项</div>

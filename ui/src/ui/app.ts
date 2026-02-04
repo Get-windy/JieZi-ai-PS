@@ -198,6 +198,21 @@ export class OpenClawApp extends LitElement {
     name?: string;
     config: Record<string, unknown>;
   } | null = null;
+
+  // 会话存储管理状态
+  @state() storageCurrentPath: string | null = null;
+  @state() storageNewPath = "";
+  @state() storageLoading = false;
+  @state() storageMigrating = false;
+  @state() storageError: string | null = null;
+  @state() storageSuccess: string | null = null;
+  @state() storageShowBrowser = false;
+  @state() storageBrowserPath = "";
+  @state() storageBrowserParent: string | null = null;
+  @state() storageBrowserDirectories: { name: string; path: string }[] = [];
+  @state() storageBrowserDrives: { path: string; label: string; type: string }[] = [];
+  @state() storageBrowserLoading = false;
+  @state() storageBrowserError: string | null = null;
   @state() creatingChannelAccount = false;
   @state() deletingChannelAccount = false;
   @state() managingChannelId: string | null = null;
@@ -520,6 +535,48 @@ export class OpenClawApp extends LitElement {
     const newRatio = Math.max(0.4, Math.min(0.7, ratio));
     this.splitRatio = newRatio;
     this.applySettings({ ...this.settings, splitRatio: newRatio });
+  }
+
+  // 会话存储管理方法
+  async loadStorageCurrentPath() {
+    const { loadCurrentStoragePath } = await import("./controllers/storage.js");
+    await loadCurrentStoragePath(this, this.client);
+  }
+
+  async handleStorageBrowse() {
+    const { openStorageBrowser, loadStorageDirectories } = await import("./controllers/storage.js");
+    await openStorageBrowser(this, this.client);
+  }
+
+  handleStorageBrowserNavigate(path: string) {
+    void (async () => {
+      const { loadStorageDirectories } = await import("./controllers/storage.js");
+      await loadStorageDirectories(this, this.client, path);
+    })();
+  }
+
+  handleStorageBrowserSelect(path: string) {
+    void (async () => {
+      const { selectStorageFolder } = await import("./controllers/storage.js");
+      selectStorageFolder(this, path);
+    })();
+  }
+
+  handleStorageBrowserCancel() {
+    void (async () => {
+      const { closeStorageBrowser } = await import("./controllers/storage.js");
+      closeStorageBrowser(this);
+    })();
+  }
+
+  async handleStorageValidate() {
+    const { validateStoragePath } = await import("./controllers/storage.js");
+    await validateStoragePath(this, this.client, this.storageNewPath);
+  }
+
+  async handleStorageMigrate(moveFiles: boolean) {
+    const { migrateStorageData } = await import("./controllers/storage.js");
+    await migrateStorageData(this, this.client, this.storageNewPath, moveFiles);
   }
 
   render() {

@@ -17,6 +17,7 @@ import { nodeHandlers } from "./server-methods/nodes.js";
 import { sendHandlers } from "./server-methods/send.js";
 import { sessionsHandlers } from "./server-methods/sessions.js";
 import { skillsHandlers } from "./server-methods/skills.js";
+import { storageHandlers } from "./server-methods/storage.js";
 import { systemHandlers } from "./server-methods/system.js";
 import { talkHandlers } from "./server-methods/talk.js";
 import { ttsHandlers } from "./server-methods/tts.js";
@@ -72,6 +73,10 @@ const READ_METHODS = new Set([
   "node.list",
   "node.describe",
   "chat.history",
+  "storage.listDrives",
+  "storage.listDirectories",
+  "storage.validatePath",
+  "storage.getCurrentPath",
 ]);
 const WRITE_METHODS = new Set([
   "send",
@@ -152,7 +157,8 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
     method === "sessions.patch" ||
     method === "sessions.reset" ||
     method === "sessions.delete" ||
-    method === "sessions.compact"
+    method === "sessions.compact" ||
+    method === "storage.migrateData"
   ) {
     return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.admin");
   }
@@ -177,6 +183,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...ttsHandlers,
   ...skillsHandlers,
   ...sessionsHandlers,
+  ...storageHandlers,
   ...systemHandlers,
   ...updateHandlers,
   ...nodeHandlers,
