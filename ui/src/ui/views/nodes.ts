@@ -4,7 +4,7 @@ import type {
   DeviceTokenSummary,
   PairedDevice,
   PendingDevice,
-} from "../controllers/devices";
+} from "../controllers/devices.ts";
 import type {
   ExecApprovalsAllowlistEntry,
   ExecApprovalsFile,

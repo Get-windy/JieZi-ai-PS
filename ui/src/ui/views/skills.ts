@@ -24,7 +24,9 @@ function groupSkills(skills: SkillStatusEntry[]): SkillGroup[] {
   }
   const other: SkillGroup = { id: "other", label: t("skills.group.other"), skills: [] };
   for (const skill of skills) {
-    const match = SKILL_SOURCE_GROUPS.find((group) => group.sources.includes(skill.source));
+    const match = skill.bundled
+      ? builtInGroup
+      : SKILL_SOURCE_GROUPS.find((group) => group.sources.includes(skill.source));
     if (match) {
       groups.get(match.id)?.skills.push(skill);
     } else {
@@ -153,6 +155,7 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
   const apiKey = props.edits[skill.skillKey] ?? "";
   const message = props.messages[skill.skillKey] ?? null;
   const canInstall = skill.install.length > 0 && skill.missing.bins.length > 0;
+  const showBundledBadge = Boolean(skill.bundled && skill.source !== "openclaw-bundled");
   const missing = [
     ...skill.missing.bins.map((b) => `bin:${b}`),
     ...skill.missing.env.map((e) => `env:${e}`),
@@ -175,6 +178,13 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
         <div class="list-sub">${clampText(translateSkillDescription(skill), 140)}</div>
         <div class="chip-row" style="margin-top: 6px;">
           <span class="chip">${skill.source}</span>
+          ${
+            showBundledBadge
+              ? html`
+                  <span class="chip">bundled</span>
+                `
+              : nothing
+          }
           <span class="chip ${skill.eligible ? "chip-ok" : "chip-warn"}">
             ${skill.eligible ? t("skills.status.eligible") : t("skills.status.blocked")}
           </span>

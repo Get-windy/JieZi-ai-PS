@@ -10,13 +10,13 @@ import type {
   CronStatus,
   SkillStatusEntry,
   SkillStatusReport,
-} from "../types";
+} from "../types.ts";
 import {
   expandToolGroups,
   normalizeToolName,
   resolveToolProfilePolicy,
 } from "../../../../src/agents/tool-policy.js";
-import { formatAgo } from "../format";
+import { formatAgo } from "../format.ts";
 import {
   formatCronPayload,
   formatCronSchedule,
@@ -1736,7 +1736,9 @@ function groupSkills(skills: SkillStatusEntry[]): SkillGroup[] {
   }
   const other: SkillGroup = { id: "other", label: t("agents.skills.group.other"), skills: [] };
   for (const skill of skills) {
-    const match = SKILL_SOURCE_GROUPS.find((group) => group.sources.includes(skill.source));
+    const match = skill.bundled
+      ? builtInGroup
+      : SKILL_SOURCE_GROUPS.find((group) => group.sources.includes(skill.source));
     if (match) {
       groups.get(match.id)?.skills.push(skill);
     } else {

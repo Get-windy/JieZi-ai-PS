@@ -457,7 +457,7 @@ export async function runOnboardingWizard(
   nextConfig = applyWizardMetadata(nextConfig, { command: "onboard", mode });
   await writeConfigFile(nextConfig);
 
-  await finalizeOnboardingWizard({
+  const { launchedTui } = await finalizeOnboardingWizard({
     flow,
     opts,
     baseConfig,

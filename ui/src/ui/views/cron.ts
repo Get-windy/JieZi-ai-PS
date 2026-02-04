@@ -1,7 +1,7 @@
 import { html, nothing } from "lit";
-import type { ChannelUiMetaEntry, CronJob, CronRunLogEntry, CronStatus } from "../types";
-import type { CronFormState } from "../ui-types";
-import { formatMs } from "../format";
+import type { ChannelUiMetaEntry, CronJob, CronRunLogEntry, CronStatus } from "../types.ts";
+import type { CronFormState } from "../ui-types.ts";
+import { formatMs } from "../format.ts";
 import {
   formatCronPayload,
   formatCronSchedule,
@@ -33,7 +33,7 @@ export type CronProps = {
 
 function buildChannelOptions(props: CronProps): string[] {
   const options = ["last", ...props.channels.filter(Boolean)];
-  const current = props.form.channel?.trim();
+  const current = props.form.deliveryChannel?.trim();
   if (current && !options.includes(current)) {
     options.push(current);
   }
@@ -219,7 +219,8 @@ export function renderCron(props: CronProps) {
 	                    .value=${props.form.channel || "last"}
 	                    @change=${(e: Event) =>
                         props.onFormChange({
-                          channel: (e.target as HTMLSelectElement).value,
+                          deliveryMode: (e.target as HTMLSelectElement)
+                            .value as CronFormState["deliveryMode"],
                         })}
 	                  >
 	                    ${channelOptions.map(

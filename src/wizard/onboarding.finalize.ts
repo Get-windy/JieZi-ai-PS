@@ -21,7 +21,6 @@ import {
   detectBrowserOpenSupport,
   formatControlUiSshHint,
   openUrl,
-  openUrlInBackground,
   probeGatewayReachable,
   waitForGatewayReachable,
   resolveControlUiLinks,
@@ -29,6 +28,7 @@ import {
 import { resolveGatewayService } from "../daemon/service.js";
 import { isSystemdUserServiceAvailable } from "../daemon/systemd.js";
 import { ensureControlUiAssetsBuilt } from "../infra/control-ui-assets.js";
+import { restoreTerminalState } from "../terminal/restore.js";
 import { runTui } from "../tui/tui.js";
 import { resolveUserPath } from "../utils.js";
 
@@ -43,7 +43,9 @@ type FinalizeOnboardingOptions = {
   runtime: RuntimeEnv;
 };
 
-export async function finalizeOnboardingWizard(options: FinalizeOnboardingOptions) {
+export async function finalizeOnboardingWizard(
+  options: FinalizeOnboardingOptions,
+): Promise<{ launchedTui: boolean }> {
   const { flow, opts, baseConfig, nextConfig, settings, prompter, runtime } = options;
 
   const withWizardProgress = async <T>(
@@ -286,6 +288,7 @@ export async function finalizeOnboardingWizard(options: FinalizeOnboardingOption
   let controlUiOpenHint: string | undefined;
   let seededInBackground = false;
   let hatchChoice: "tui" | "web" | "later" | null = null;
+  let launchedTui = false;
 
   if (!opts.skipUi && gatewayProbe.ok) {
     if (hasBootstrap) {
@@ -321,6 +324,7 @@ export async function finalizeOnboardingWizard(options: FinalizeOnboardingOption
     });
 
     if (hatchChoice === "tui") {
+      restoreTerminalState("pre-onboarding tui");
       await runTui({
         url: links.wsUrl,
         token: settings.authMode === "token" ? settings.gatewayToken : undefined,
@@ -471,4 +475,6 @@ export async function finalizeOnboardingWizard(options: FinalizeOnboardingOption
         ? "配置完成。Web UI 在后台种子化；随时使用上面带 token 的链接打开。"
         : "配置完成。使用上面带 token 的 Dashboard 链接控制 OpenClaw。",
   );
+
+  return { launchedTui };
 }
