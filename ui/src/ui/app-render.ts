@@ -1,5 +1,6 @@
 import { html, nothing } from "lit";
 import type { AppViewState } from "./app-view-state";
+import type { GatewayBrowserClient } from "./gateway";
 import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
 import { refreshChatAvatar } from "./app-chat";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers";
@@ -66,9 +67,35 @@ import { renderNodes } from "./views/nodes";
 import { renderOverview } from "./views/overview";
 import { renderSessions } from "./views/sessions";
 import { renderSkills } from "./views/skills";
+import { renderBindings } from "./views/bindings";
+import { BindingsController } from "./views/bindings-controller";
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
+
+// Global bindings controller instance
+let bindingsControllerInstance: BindingsController | null = null;
+let bindingsControllerInitPromise: Promise<void> | null = null;
+
+function getBindingsController(client: GatewayBrowserClient): BindingsController | null {
+  if (!bindingsControllerInstance && client) {
+    bindingsControllerInstance = new BindingsController(
+      client,
+      () => {
+        // Trigger re-render through Lit's update mechanism
+        const app = document.querySelector('openclaw-app') as any;
+        if (app) {
+          app.requestUpdate();
+        }
+      }
+    );
+    // Initialize asynchronously
+    if (!bindingsControllerInitPromise) {
+      bindingsControllerInitPromise = bindingsControllerInstance.init();
+    }
+  }
+  return bindingsControllerInstance;
+}
 
 function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
   const list = state.agentsList?.agents ?? [];
@@ -365,6 +392,9 @@ export function renderApp(state: AppViewState) {
                 agentSkillsError: state.agentSkillsError,
                 agentSkillsAgentId: state.agentSkillsAgentId,
                 skillsFilter: state.skillsFilter,
+                editingAgent: state.editingAgent,
+                creatingAgent: state.creatingAgent,
+                deletingAgent: state.deletingAgent,
                 onRefresh: async () => {
                   await loadAgents(state);
                   const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
@@ -672,6 +702,106 @@ export function renderApp(state: AppViewState) {
                     : { fallbacks: normalized };
                   updateConfigFormValue(state, basePath, next);
                 },
+                onAddAgent: () => {
+                  state.editingAgent = { id: "", name: "", workspace: "" };
+                },
+                onEditAgent: (agentId) => {
+                  const agent = state.agentsList?.agents?.find((a) => a.id === agentId);
+                  if (agent) {
+                    state.editingAgent = {
+                      id: agent.id,
+                      name: agent.identity?.name ?? "",
+                      workspace: agent.workspace ?? "",
+                    };
+                  }
+                },
+                onDeleteAgent: async (agentId) => {
+                  if (!state.client || state.deletingAgent) {
+                    return;
+                  }
+                  state.deletingAgent = true;
+                  try {
+                    // 获取当前配置
+                    const config = await state.client.request("config.get", {});
+                    if (!config?.agents?.list) {
+                      throw new Error("No agents configuration found");
+                    }
+                    // 过滤掉要删除的 agent
+                    const list = config.agents.list.filter((a: { id: string }) => a.id !== agentId);
+                    // 更新配置
+                    await state.client.request("config.patch", {
+                      path: ["agents", "list"],
+                      value: list,
+                    });
+                    // 刷新列表
+                    await loadAgents(state);
+                    const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
+                    if (agentIds.length > 0) {
+                      void loadAgentIdentities(state, agentIds);
+                    }
+                  } catch (err) {
+                    state.agentsError = String(err);
+                  } finally {
+                    state.deletingAgent = false;
+                  }
+                },
+                onSaveAgent: async () => {
+                  if (!state.client || !state.editingAgent || state.creatingAgent) {
+                    return;
+                  }
+                  const idPattern = /^[a-z0-9][a-z0-9-]*$/;
+                  if (!idPattern.test(state.editingAgent.id)) {
+                    return;
+                  }
+                  state.creatingAgent = true;
+                  try {
+                    // 获取当前配置
+                    const config = await state.client.request("config.get", {});
+                    const list = config?.agents?.list ?? [];
+                    // 检查是否是新建还是编辑
+                    const existingIndex = list.findIndex((a: { id: string }) => a.id === state.editingAgent?.id);
+                    const newAgent = {
+                      id: state.editingAgent.id,
+                      ...(state.editingAgent.name ? { identity: { name: state.editingAgent.name } } : {}),
+                      ...(state.editingAgent.workspace ? { workspace: state.editingAgent.workspace } : {}),
+                    };
+                    let newList;
+                    if (existingIndex >= 0) {
+                      // 更新现有 agent
+                      newList = [...list];
+                      newList[existingIndex] = { ...newList[existingIndex], ...newAgent };
+                    } else {
+                      // 添加新 agent
+                      newList = [...list, newAgent];
+                    }
+                    // 更新配置
+                    await state.client.request("config.patch", {
+                      path: ["agents", "list"],
+                      value: newList,
+                    });
+                    // 刷新列表
+                    await loadAgents(state);
+                    const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
+                    if (agentIds.length > 0) {
+                      void loadAgentIdentities(state, agentIds);
+                    }
+                    // 关闭弹窗
+                    state.editingAgent = null;
+                  } catch (err) {
+                    state.agentsError = String(err);
+                  } finally {
+                    state.creatingAgent = false;
+                  }
+                },
+                onCancelEdit: () => {
+                  state.editingAgent = null;
+                },
+                onAgentFormChange: (field, value) => {
+                  if (!state.editingAgent) {
+                    return;
+                  }
+                  state.editingAgent = { ...state.editingAgent, [field]: value };
+                },
               })
             : nothing
         }
@@ -852,6 +982,18 @@ export function renderApp(state: AppViewState) {
                 assistantName: state.assistantName,
                 assistantAvatar: state.assistantAvatar,
               })
+            : nothing
+        }
+
+        ${
+          state.tab === "bindings"
+            ? (() => {
+                const controller = state.client ? getBindingsController(state.client) : null;
+                if (!controller) {
+                  return html`<div class="loading">连接中...</div>`;
+                }
+                return renderBindings(controller.getProps());
+              })()
             : nothing
         }
 

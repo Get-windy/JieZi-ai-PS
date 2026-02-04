@@ -233,6 +233,11 @@
     "@napi-rs/canvas": "^0.1.89",
     "node-llama-cpp": "3.15.1"
   },
+  "peerDependenciesMeta": {
+    "node-llama-cpp": {
+      "optional": true
+    }
+  },
   "overrides": {
     "tar": "7.5.7"
   },
@@ -259,7 +264,6 @@
       "@whiskeysockets/baileys",
       "authenticate-pam",
       "esbuild",
-      "node-llama-cpp",
       "protobufjs",
       "sharp"
     ]

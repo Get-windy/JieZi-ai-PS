@@ -191,6 +191,16 @@ export class OpenClawApp extends LitElement {
   @state() whatsappBusy = false;
   @state() nostrProfileFormState: NostrProfileFormState | null = null;
   @state() nostrProfileAccountId: string | null = null;
+  // 通道账号管理状态
+  @state() editingChannelAccount: {
+    channelId: string;
+    accountId: string;
+    name?: string;
+    config: Record<string, unknown>;
+  } | null = null;
+  @state() creatingChannelAccount = false;
+  @state() deletingChannelAccount = false;
+  @state() managingChannelId: string | null = null;
 
   @state() presenceLoading = false;
   @state() presenceEntries: PresenceEntry[] = [];
@@ -217,6 +227,9 @@ export class OpenClawApp extends LitElement {
   @state() agentSkillsError: string | null = null;
   @state() agentSkillsReport: SkillStatusReport | null = null;
   @state() agentSkillsAgentId: string | null = null;
+  @state() editingAgent: { id: string; name?: string; workspace?: string } | null = null;
+  @state() creatingAgent = false;
+  @state() deletingAgent = false;
 
   @state() sessionsLoading = false;
   @state() sessionsResult: SessionsListResult | null = null;

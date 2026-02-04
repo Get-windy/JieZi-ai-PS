@@ -3,8 +3,6 @@ export { z };
 
 const DmPolicySchema = z.enum(["open", "pairing", "allowlist"]);
 const GroupPolicySchema = z.enum(["open", "allowlist", "disabled"]);
-const FeishuDomainSchema = z.enum(["feishu", "lark"]);
-const FeishuConnectionModeSchema = z.enum(["websocket", "webhook"]);
 
 const ToolPolicySchema = z
   .object({
@@ -30,46 +28,7 @@ const MarkdownConfigSchema = z
   .strict()
   .optional();
 
-// Message render mode: auto (default) = detect markdown, raw = plain text, card = always card
-const RenderModeSchema = z.enum(["auto", "raw", "card"]).optional();
-
-const BlockStreamingCoalesceSchema = z
-  .object({
-    enabled: z.boolean().optional(),
-    minDelayMs: z.number().int().positive().optional(),
-    maxDelayMs: z.number().int().positive().optional(),
-  })
-  .strict()
-  .optional();
-
-const ChannelHeartbeatVisibilitySchema = z
-  .object({
-    visibility: z.enum(["visible", "hidden"]).optional(),
-    intervalMs: z.number().int().positive().optional(),
-  })
-  .strict()
-  .optional();
-
-/**
- * Feishu tools configuration.
- * Controls which tool categories are enabled.
- *
- * Dependencies:
- * - wiki requires doc (wiki content is edited via doc tools)
- * - perm can work independently but is typically used with drive
- */
-const FeishuToolsConfigSchema = z
-  .object({
-    doc: z.boolean().optional(), // Document operations (default: true)
-    wiki: z.boolean().optional(), // Knowledge base operations (default: true, requires doc)
-    drive: z.boolean().optional(), // Cloud storage operations (default: true)
-    perm: z.boolean().optional(), // Permission management (default: false, sensitive)
-    scopes: z.boolean().optional(), // App scopes diagnostic (default: true)
-  })
-  .strict()
-  .optional();
-
-export const FeishuGroupSchema = z
+export const DingtalkGroupSchema = z
   .object({
     requireMention: z.boolean().optional(),
     tools: ToolPolicySchema,
@@ -80,19 +39,13 @@ export const FeishuGroupSchema = z
   })
   .strict();
 
-// 单个飞书账号的配置 Schema
-export const FeishuAccountSchema = z
+// 单个钉钉账号的配置 Schema
+export const DingtalkAccountSchema = z
   .object({
     name: z.string().optional(), // 账号显示名称
     enabled: z.boolean().optional(),
-    appId: z.string().optional(),
+    appKey: z.string().optional(),
     appSecret: z.string().optional(),
-    encryptKey: z.string().optional(),
-    verificationToken: z.string().optional(),
-    domain: FeishuDomainSchema.optional(),
-    connectionMode: FeishuConnectionModeSchema.optional(),
-    webhookPath: z.string().optional(),
-    webhookPort: z.number().int().positive().optional(),
     capabilities: z.array(z.string()).optional(),
     markdown: MarkdownConfigSchema,
     configWrites: z.boolean().optional(),
@@ -101,17 +54,12 @@ export const FeishuAccountSchema = z
     groupPolicy: GroupPolicySchema.optional(),
     groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
     requireMention: z.boolean().optional(),
-    groups: z.record(z.string(), FeishuGroupSchema.optional()).optional(),
+    groups: z.record(z.string(), DingtalkGroupSchema.optional()).optional(),
     historyLimit: z.number().int().min(0).optional(),
     dmHistoryLimit: z.number().int().min(0).optional(),
     dms: z.record(z.string(), DmConfigSchema).optional(),
     textChunkLimit: z.number().int().positive().optional(),
     chunkMode: z.enum(["length", "newline"]).optional(),
-    blockStreamingCoalesce: BlockStreamingCoalesceSchema,
-    mediaMaxMb: z.number().positive().optional(),
-    heartbeat: ChannelHeartbeatVisibilitySchema,
-    renderMode: RenderModeSchema,
-    tools: FeishuToolsConfigSchema,
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -128,17 +76,11 @@ export const FeishuAccountSchema = z
     }
   });
 
-export const FeishuConfigSchema = z
+export const DingtalkConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
-    appId: z.string().optional(),
+    appKey: z.string().optional(),
     appSecret: z.string().optional(),
-    encryptKey: z.string().optional(),
-    verificationToken: z.string().optional(),
-    domain: FeishuDomainSchema.optional().default("feishu"),
-    connectionMode: FeishuConnectionModeSchema.optional().default("websocket"),
-    webhookPath: z.string().optional().default("/feishu/events"),
-    webhookPort: z.number().int().positive().optional(),
     capabilities: z.array(z.string()).optional(),
     markdown: MarkdownConfigSchema,
     configWrites: z.boolean().optional(),
@@ -147,19 +89,14 @@ export const FeishuConfigSchema = z
     groupPolicy: GroupPolicySchema.optional().default("allowlist"),
     groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
     requireMention: z.boolean().optional().default(true),
-    groups: z.record(z.string(), FeishuGroupSchema.optional()).optional(),
+    groups: z.record(z.string(), DingtalkGroupSchema.optional()).optional(),
     historyLimit: z.number().int().min(0).optional(),
     dmHistoryLimit: z.number().int().min(0).optional(),
     dms: z.record(z.string(), DmConfigSchema).optional(),
     textChunkLimit: z.number().int().positive().optional(),
     chunkMode: z.enum(["length", "newline"]).optional(),
-    blockStreamingCoalesce: BlockStreamingCoalesceSchema,
-    mediaMaxMb: z.number().positive().optional(),
-    heartbeat: ChannelHeartbeatVisibilitySchema,
-    renderMode: RenderModeSchema, // raw = plain text (default), card = interactive card with markdown
-    tools: FeishuToolsConfigSchema,
     // 多账号支持
-    accounts: z.record(z.string(), FeishuAccountSchema.optional()).optional(),
+    accounts: z.record(z.string(), DingtalkAccountSchema.optional()).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -170,7 +107,7 @@ export const FeishuConfigSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["allowFrom"],
-          message: 'channels.feishu.dmPolicy="open" requires channels.feishu.allowFrom to include "*"',
+          message: 'channels.dingtalk.dmPolicy="open" requires channels.dingtalk.allowFrom to include "*"',
         });
       }
     }

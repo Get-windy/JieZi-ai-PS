@@ -16,7 +16,7 @@ export const TAB_GROUPS = [
     tabs: ["overview", "channels", "instances", "sessions", "cron"],
   },
   { label: "nav.agent", tabs: ["agents", "skills", "nodes"] },
-  { label: "nav.settings", tabs: ["config", "debug", "logs"] },
+  { label: "nav.settings", tabs: ["bindings", "config", "debug", "logs"] },
 ] as const;
 
 export type Tab =
@@ -29,6 +29,7 @@ export type Tab =
   | "skills"
   | "nodes"
   | "chat"
+  | "bindings"
   | "config"
   | "debug"
   | "logs";
@@ -43,6 +44,7 @@ const TAB_PATHS: Record<Tab, string> = {
   skills: "/skills",
   nodes: "/nodes",
   chat: "/chat",
+  bindings: "/bindings",
   config: "/config",
   debug: "/debug",
   logs: "/logs",
@@ -149,6 +151,8 @@ export function iconForTab(tab: Tab): IconName {
       return "zap";
     case "nodes":
       return "monitor";
+    case "bindings":
+      return "git-branch";
     case "config":
       return "settings";
     case "debug":
@@ -180,6 +184,8 @@ export function titleForTab(tab: Tab) {
       return t("tab.nodes");
     case "chat":
       return t("tab.chat");
+    case "bindings":
+      return t("tab.bindings");
     case "config":
       return t("tab.config");
     case "debug":
@@ -211,6 +217,8 @@ export function subtitleForTab(tab: Tab) {
       return t("tab.nodes.subtitle");
     case "chat":
       return t("tab.chat.subtitle");
+    case "bindings":
+      return t("tab.bindings.subtitle");
     case "config":
       return t("tab.config.subtitle");
     case "debug":

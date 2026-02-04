@@ -90,8 +90,19 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
     },
   },
   config: {
-    listAccountIds: () => [DEFAULT_ACCOUNT_ID],
-    resolveAccount: (cfg) => resolveFeishuAccount({ cfg }),
+    listAccountIds: (cfg) => {
+      const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
+      const accountsConfig = feishuCfg?.accounts as Record<string, unknown> | undefined;
+      
+      // 如果配置了多账号，返回账号ID列表
+      if (accountsConfig && Object.keys(accountsConfig).length > 0) {
+        return Object.keys(accountsConfig).filter(Boolean);
+      }
+      
+      // 否则返回默认账号
+      return [DEFAULT_ACCOUNT_ID];
+    },
+    resolveAccount: (cfg, accountId) => resolveFeishuAccount({ cfg, accountId: accountId ?? null }),
     defaultAccountId: () => DEFAULT_ACCOUNT_ID,
     setAccountEnabled: ({ cfg, enabled }) => ({
       ...cfg,

@@ -8,6 +8,7 @@ import {
 } from "openclaw/plugin-sdk";
 import { dingtalkOnboardingAdapter } from "./onboarding.js";
 import { monitorDingtalkProvider, sendMessageDingtalk } from "./gateway.js";
+import { DingtalkConfigSchema } from "./config-schema.js";
 
 // 钉钉通道元数据
 const dingtalkMeta = {
@@ -89,6 +90,7 @@ export const dingtalkPlugin: ChannelPlugin<ResolvedDingtalkAccount> = {
     blockStreaming: false,
   },
   reload: { configPrefixes: ["channels.dingtalk"] },
+  configSchema: DingtalkConfigSchema,
   config: {
     listAccountIds: (cfg) => {
       const channelConfig = cfg.channels?.dingtalk as Record<string, unknown> | undefined;

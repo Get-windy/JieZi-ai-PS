@@ -60,6 +60,11 @@ export type AgentsProps = {
   agentSkillsError: string | null;
   agentSkillsAgentId: string | null;
   skillsFilter: string;
+  // 增删改查相关状态
+  editingAgent: { id: string; name?: string; workspace?: string } | null;
+  creatingAgent: boolean;
+  deletingAgent: boolean;
+  // 回调函数
   onRefresh: () => void;
   onSelectAgent: (agentId: string) => void;
   onSelectPanel: (panel: AgentsPanel) => void;
@@ -81,6 +86,13 @@ export type AgentsProps = {
   onAgentSkillToggle: (agentId: string, skillName: string, enabled: boolean) => void;
   onAgentSkillsClear: (agentId: string) => void;
   onAgentSkillsDisableAll: (agentId: string) => void;
+  // 增删改查回调
+  onAddAgent: () => void;
+  onEditAgent: (agentId: string) => void;
+  onDeleteAgent: (agentId: string) => void;
+  onSaveAgent: () => void;
+  onCancelEdit: () => void;
+  onAgentFormChange: (field: string, value: string) => void;
 };
 
 const TOOL_SECTIONS = [
@@ -551,9 +563,14 @@ export function renderAgents(props: AgentsProps) {
             <div class="card-title">${t("agents.title")}</div>
             <div class="card-sub">${t("agents.configured_count").replace("{count}", String(agents.length))}</div>
           </div>
-          <button class="btn btn--sm" ?disabled=${props.loading} @click=${props.onRefresh}>
-            ${props.loading ? t("agents.loading") : t("agents.refresh")}
-          </button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn--sm" ?disabled=${props.loading} @click=${props.onAddAgent}>
+              ${t("agents.add_agent_short")}
+            </button>
+            <button class="btn btn--sm" ?disabled=${props.loading} @click=${props.onRefresh}>
+              ${props.loading ? t("agents.loading") : t("agents.refresh")}
+            </button>
+          </div>
         </div>
         ${
           props.error
@@ -591,18 +608,23 @@ export function renderAgents(props: AgentsProps) {
       </section>
       <section class="agents-main">
         ${
-          !selectedAgent
+          !selectedAgent && !props.editingAgent
             ? html`
                 <div class="card">
                   <div class="card-title">${t("agents.select_title")}</div>
                   <div class="card-sub">${t("agents.select_subtitle")}</div>
                 </div>
               `
-            : html`
+            : props.editingAgent
+            ? renderAgentEditModal(props)
+            : selectedAgent
+            ? html`
               ${renderAgentHeader(
                 selectedAgent,
                 defaultId,
                 props.agentIdentityById[selectedAgent.id] ?? null,
+                props.onDeleteAgent,
+                props.onEditAgent,
               )}
               ${renderAgentTabs(props.activePanel, (panel) => props.onSelectPanel(panel))}
               ${
@@ -715,6 +737,7 @@ export function renderAgents(props: AgentsProps) {
                   : nothing
               }
             `
+            : nothing
         }
       </section>
     </div>
@@ -725,6 +748,8 @@ function renderAgentHeader(
   agent: AgentsListResult["agents"][number],
   defaultId: string | null,
   agentIdentity: AgentIdentityResult | null,
+  onDelete?: (agentId: string) => void,
+  onEdit?: (agentId: string) => void,
 ) {
   const badge = agentBadgeText(agent.id, defaultId);
   const displayName = normalizeAgentLabel(agent);
@@ -744,6 +769,26 @@ function renderAgentHeader(
       <div class="agent-header-meta">
         <div class="mono">${agent.id}</div>
         ${badge ? html`<span class="agent-pill">${badge}</span>` : nothing}
+        ${onEdit ? html`
+          <button 
+            class="btn btn--sm" 
+            @click=${() => onEdit(agent.id)}
+          >
+            ${t("agents.edit_agent_short")}
+          </button>
+        ` : nothing}
+        ${onDelete ? html`
+          <button 
+            class="btn btn--sm btn--danger" 
+            @click=${() => {
+              if (confirm(t("agents.delete_confirm").replace("{id}", agent.id))) {
+                onDelete(agent.id);
+              }
+            }}
+          >
+            ${t("agents.delete_agent")}
+          </button>
+        ` : nothing}
       </div>
     </section>
   `;
@@ -1952,5 +1997,71 @@ function renderAgentSkillRow(
         </label>
       </div>
     </div>
+  `;
+}
+
+function renderAgentEditModal(props: AgentsProps) {
+  const isNew = props.editingAgent?.id === "";
+  const idPattern = /^[a-z0-9][a-z0-9-]*$/;
+  const isValidId = props.editingAgent?.id && idPattern.test(props.editingAgent.id);
+
+  return html`
+    <section class="card" style="margin-bottom: 16px;">
+      <div class="card-title">${isNew ? t("agents.add_agent") : t("agents.edit_agent")}</div>
+      <div class="card-sub">${isNew ? t("agents.add_agent_subtitle") : t("agents.edit_agent_subtitle")}</div>
+      
+      <div style="margin-top: 16px;">
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label class="form-label">${t("agents.agent_id")}</label>
+          <input
+            type="text"
+            class="form-control"
+            .value=${props.editingAgent?.id || ""}
+            ?disabled=${!isNew}
+            placeholder=${t("agents.agent_id_placeholder")}
+            @input=${(e: Event) => props.onAgentFormChange("id", (e.target as HTMLInputElement).value)}
+          />
+          <small class="form-text muted">${t("agents.agent_id_help")}</small>
+          ${!isValidId && props.editingAgent?.id ? html`
+            <small class="form-text" style="color: var(--color-danger);">${t("agents.invalid_id")}</small>
+          ` : nothing}
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label class="form-label">${t("agents.agent_name")}</label>
+          <input
+            type="text"
+            class="form-control"
+            .value=${props.editingAgent?.name || ""}
+            placeholder=${t("agents.agent_name_placeholder")}
+            @input=${(e: Event) => props.onAgentFormChange("name", (e.target as HTMLInputElement).value)}
+          />
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="form-label">${t("agents.workspace_path")}</label>
+          <input
+            type="text"
+            class="form-control"
+            .value=${props.editingAgent?.workspace || ""}
+            placeholder=${t("agents.workspace_placeholder")}
+            @input=${(e: Event) => props.onAgentFormChange("workspace", (e.target as HTMLInputElement).value)}
+          />
+        </div>
+        
+        <div class="row" style="gap: 8px;">
+          <button class="btn" @click=${props.onCancelEdit}>
+            ${t("agents.cancel")}
+          </button>
+          <button 
+            class="btn btn--primary" 
+            ?disabled=${!isValidId || props.creatingAgent}
+            @click=${props.onSaveAgent}
+          >
+            ${props.creatingAgent ? t("agents.creating") : t("agents.save")}
+          </button>
+        </div>
+      </div>
+    </section>
   `;
 }

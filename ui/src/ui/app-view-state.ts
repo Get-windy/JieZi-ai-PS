@@ -100,6 +100,16 @@ export type AppViewState = {
   whatsappBusy: boolean;
   nostrProfileFormState: NostrProfileFormState | null;
   nostrProfileAccountId: string | null;
+  // 通道账号管理状态
+  editingChannelAccount: {
+    channelId: string;
+    accountId: string;
+    name?: string;
+    config: Record<string, unknown>;
+  } | null;
+  creatingChannelAccount: boolean;
+  deletingChannelAccount: boolean;
+  managingChannelId: string | null;
   configFormDirty: boolean;
   presenceLoading: boolean;
   presenceEntries: PresenceEntry[];
@@ -124,6 +134,9 @@ export type AppViewState = {
   agentSkillsError: string | null;
   agentSkillsReport: SkillStatusReport | null;
   agentSkillsAgentId: string | null;
+  editingAgent: { id: string; name?: string; workspace?: string } | null;
+  creatingAgent: boolean;
+  deletingAgent: boolean;
   sessionsLoading: boolean;
   sessionsResult: SessionsListResult | null;
   sessionsError: string | null;

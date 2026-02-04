@@ -34,6 +34,16 @@ export type ChannelsProps = {
   configFormDirty: boolean;
   nostrProfileFormState: NostrProfileFormState | null;
   nostrProfileAccountId: string | null;
+  // 账号管理状态
+  editingChannelAccount: {
+    channelId: string;
+    accountId: string;
+    name?: string;
+    config: Record<string, unknown>;
+  } | null;
+  creatingChannelAccount: boolean;
+  deletingChannelAccount: boolean;
+  managingChannelId: string | null; // 当前正在管理账号的通道ID
   onRefresh: (probe: boolean) => void;
   onWhatsAppStart: (force: boolean) => void;
   onWhatsAppWait: () => void;
@@ -47,6 +57,14 @@ export type ChannelsProps = {
   onNostrProfileSave: () => void;
   onNostrProfileImport: () => void;
   onNostrProfileToggleAdvanced: () => void;
+  // 账号管理回调
+  onManageAccounts: (channelId: string) => void;
+  onAddAccount: (channelId: string) => void;
+  onEditAccount: (channelId: string, accountId: string) => void;
+  onDeleteAccount: (channelId: string, accountId: string) => void;
+  onSaveAccount: () => void;
+  onCancelAccountEdit: () => void;
+  onAccountFormChange: (field: string, value: unknown) => void;
 };
 
 export type ChannelsChannelData = {

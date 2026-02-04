@@ -25,6 +25,11 @@ import { renderSignalCard } from "./channels.signal";
 import { renderSlackCard } from "./channels.slack";
 import { renderTelegramCard } from "./channels.telegram";
 import { renderWhatsAppCard } from "./channels.whatsapp";
+import {
+  renderAccountManageButton,
+  renderAccountManagerModal,
+  renderAccountEditModal,
+} from "./channels.account-manager";
 import { t } from "../i18n.js";
 
 export function renderChannels(props: ChannelsProps) {
@@ -87,6 +92,9 @@ export function renderChannels(props: ChannelsProps) {
 ${props.snapshot ? JSON.stringify(props.snapshot, null, 2) : t("channels.no_snapshot")}
       </pre>
     </section>
+
+    ${renderAccountManagerModal(props)}
+    ${renderAccountEditModal(props)}
   `;
 }
 
@@ -230,6 +238,8 @@ function renderGenericChannelCard(
           </div>`
           : nothing
       }
+
+      ${renderAccountManageButton({ channelId: key, accounts, props })}
 
       ${renderChannelConfigSection({ channelId: key, props })}
     </div>

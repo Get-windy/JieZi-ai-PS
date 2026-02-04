@@ -4,7 +4,8 @@
   "description": "OpenClaw DingTalk (钉钉) channel plugin",
   "type": "module",
   "dependencies": {
-    "dingtalk-stream-sdk-nodejs": "^2.0.4"
+    "dingtalk-stream-sdk-nodejs": "^2.0.4",
+    "axios": "^1.6.0"
   },
   "devDependencies": {
     "openclaw": "workspace:*"
