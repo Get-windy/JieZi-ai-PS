@@ -2,13 +2,13 @@ import { html, nothing } from "lit";
 import type { ChannelUiMetaEntry, CronJob, CronRunLogEntry, CronStatus } from "../types.ts";
 import type { CronFormState } from "../ui-types.ts";
 import { formatMs } from "../format.ts";
+import { t } from "../i18n.js";
 import {
   formatCronPayload,
   formatCronSchedule,
   formatCronState,
   formatNextRun,
-} from "../presenter";
-import { t } from "../i18n.js";
+} from "../presenter.js";
 
 export type CronProps = {
   loading: boolean;

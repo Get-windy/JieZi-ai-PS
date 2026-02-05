@@ -1,0 +1,318 @@
+src/commands/doctor-completion.ts(7,3): error TS2305: Module '"../cli/completion-cli.js"' has no exported member 'completionCacheExists'.
+src/commands/doctor-completion.ts(10,3): error TS2459: Module '"../cli/completion-cli.js"' declares 'resolveCompletionCachePath' locally, but it is not exported.
+src/commands/doctor-completion.ts(12,3): error TS2305: Module '"../cli/completion-cli.js"' has no exported member 'usesSlowDynamicCompletion'.
+src/wizard/onboarding.finalize.ts(341,36): error TS2304: Cannot find name 'openUrlInBackground'.
+ui/src/ui/app-render.helpers.ts(3,35): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './app-view-state.js'?
+ui/src/ui/app-render.helpers.ts(4,32): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './theme.js'?
+ui/src/ui/app-render.helpers.ts(5,45): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './theme-transition.js'?
+ui/src/ui/app-render.helpers.ts(6,41): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './types.js'?
+ui/src/ui/app-render.helpers.ts(7,29): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './app-chat.js'?
+ui/src/ui/app-render.helpers.ts(8,39): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './app-settings.js'?
+ui/src/ui/app-render.helpers.ts(9,33): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './controllers/chat.js'?
+ui/src/ui/app-render.helpers.ts(10,23): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './icons.js'?
+ui/src/ui/app-render.helpers.ts(11,63): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './navigation.js'?
+ui/src/ui/app-render.helpers.ts(98,34): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.helpers.ts(100,34): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.helpers.ts(101,34): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.helpers.ts(109,54): error TS2304: Cannot find name 'ChatState'.
+ui/src/ui/app-render.helpers.ts(126,32): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.helpers.ts(198,33): error TS7006: Parameter 'row' implicitly has an 'any' type.
+ui/src/ui/app-render.helpers.ts(224,68): error TS7006: Parameter 's' implicitly has an 'any' type.
+ui/src/ui/app-render.helpers.ts(225,53): error TS7006: Parameter 's' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(2,35): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './app-view-state.js'?
+ui/src/ui/app-render.ts(3,43): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './gateway.js'?
+ui/src/ui/app-render.ts(5,35): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './app-chat.js'?
+ui/src/ui/app-render.ts(6,66): error TS2307: Cannot find module './app-render.helpers' or its corresponding type declarations.
+ui/src/ui/app-render.ts(7,69): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './controllers/agent-files.js'?
+ui/src/ui/app-render.ts(8,56): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './controllers/agent-identity.js'?
+ui/src/ui/app-render.ts(9,33): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './controllers/agent-skills.js'?
+ui/src/ui/app-render.ts(10,28): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './controllers/agents.js'?
+ui/src/ui/app-render.ts(11,30): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './controllers/channels.js'?
+ui/src/ui/app-render.ts(12,33): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './controllers/chat.js'?
+ui/src/ui/app-render.ts(53,8): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './controllers/skills.js'?
+ui/src/ui/app-render.ts(55,23): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './icons.js'?
+ui/src/ui/app-render.ts(56,57): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './navigation.js'?
+ui/src/ui/app-render.ts(57,30): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/agents.js'?
+ui/src/ui/app-render.ts(58,32): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/bindings.js'?
+ui/src/ui/app-render.ts(59,36): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/bindings-controller.js'?
+ui/src/ui/app-render.ts(60,32): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/channels.js'?
+ui/src/ui/app-render.ts(61,28): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/chat.js'?
+ui/src/ui/app-render.ts(62,30): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/config.js'?
+ui/src/ui/app-render.ts(63,28): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/cron.js'?
+ui/src/ui/app-render.ts(64,29): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/debug.js'?
+ui/src/ui/app-render.ts(65,42): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/exec-approval.js'?
+ui/src/ui/app-render.ts(66,46): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/gateway-url-confirmation.js'?
+ui/src/ui/app-render.ts(67,33): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/instances.js'?
+ui/src/ui/app-render.ts(68,28): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/logs.js'?
+ui/src/ui/app-render.ts(69,29): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/nodes.js'?
+ui/src/ui/app-render.ts(70,32): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/overview.js'?
+ui/src/ui/app-render.ts(71,32): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/sessions.js'?
+ui/src/ui/app-render.ts(72,30): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './views/skills.js'?
+ui/src/ui/app-render.ts(102,28): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(124,20): error TS2304: Cannot find name 'normalizeBasePath'.
+ui/src/ui/app-render.ts(191,27): error TS7006: Parameter 'group' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(193,49): error TS7006: Parameter 'tab' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(212,35): error TS7006: Parameter 'tab' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(260,36): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(261,36): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(262,38): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(265,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(292,38): error TS7006: Parameter 'path' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(293,48): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(294,36): error TS7006: Parameter 'path' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(295,48): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(297,48): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(300,37): error TS7006: Parameter 'path' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(301,56): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(302,58): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(303,31): error TS7006: Parameter 'moveFiles' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(304,42): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(306,42): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(327,55): error TS2304: Cannot find name 'ConfigUiHints'.
+ui/src/ui/app-render.ts(332,29): error TS7006: Parameter 'probe' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(333,35): error TS7006: Parameter 'force' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(336,33): error TS7006: Parameter 'path' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(336,39): error TS7006: Parameter 'value' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(340,38): error TS7006: Parameter 'accountId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(340,49): error TS7006: Parameter 'profile' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(343,45): error TS7006: Parameter 'field' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(343,52): error TS7006: Parameter 'value' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(375,35): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(382,27): error TS7006: Parameter 'key' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(382,32): error TS7006: Parameter 'patch' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(383,28): error TS7006: Parameter 'key' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(398,61): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(404,32): error TS7006: Parameter 'patch' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(407,28): error TS7006: Parameter 'job' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(407,33): error TS7006: Parameter 'enabled' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(408,25): error TS7006: Parameter 'job' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(409,28): error TS7006: Parameter 'job' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(410,30): error TS7006: Parameter 'jobId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(455,67): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(460,33): error TS7006: Parameter 'agentId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(482,33): error TS7006: Parameter 'panel' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(506,31): error TS7006: Parameter 'agentId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(517,32): error TS7006: Parameter 'name' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(524,37): error TS7006: Parameter 'name' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(524,43): error TS7006: Parameter 'content' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(527,31): error TS7006: Parameter 'name' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(531,30): error TS7006: Parameter 'name' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(539,40): error TS7006: Parameter 'agentId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(539,49): error TS7006: Parameter 'profile' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(539,58): error TS7006: Parameter 'clearAllow' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(574,42): error TS7006: Parameter 'agentId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(574,51): error TS7006: Parameter 'alsoAllow' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(574,62): error TS7006: Parameter 'deny' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(619,40): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(625,38): error TS7006: Parameter 'agentId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(625,47): error TS7006: Parameter 'skillName' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(625,58): error TS7006: Parameter 'enabled' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(649,59): error TS7006: Parameter 'skill' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(667,38): error TS7006: Parameter 'agentId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(692,43): error TS7006: Parameter 'agentId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(716,33): error TS7006: Parameter 'agentId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(716,42): error TS7006: Parameter 'modelId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(774,42): error TS7006: Parameter 'agentId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(774,51): error TS7006: Parameter 'fallbacks' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(778,53): error TS7006: Parameter 'name' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(863,31): error TS7006: Parameter 'agentId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(864,65): error TS7006: Parameter 'a' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(873,39): error TS7006: Parameter 'agentId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(893,69): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(945,69): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(960,37): error TS7006: Parameter 'field' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(960,44): error TS7006: Parameter 'value' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(980,34): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(982,28): error TS7006: Parameter 'key' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(982,33): error TS7006: Parameter 'enabled' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(983,26): error TS7006: Parameter 'key' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(983,31): error TS7006: Parameter 'value' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(984,29): error TS7006: Parameter 'key' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(985,29): error TS7006: Parameter 'skillKey' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(985,39): error TS7006: Parameter 'name' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(985,45): error TS7006: Parameter 'installId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1016,35): error TS7006: Parameter 'requestId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1017,34): error TS7006: Parameter 'requestId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1018,34): error TS7006: Parameter 'deviceId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1018,44): error TS7006: Parameter 'role' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1018,50): error TS7006: Parameter 'scopes' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1020,34): error TS7006: Parameter 'deviceId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1020,44): error TS7006: Parameter 'role' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1029,33): error TS7006: Parameter 'nodeId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1044,31): error TS7006: Parameter 'agentIndex' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1044,43): error TS7006: Parameter 'nodeId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1053,47): error TS7006: Parameter 'kind' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1053,53): error TS7006: Parameter 'nodeId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1061,46): error TS7006: Parameter 'agentId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1064,40): error TS7006: Parameter 'path' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1064,46): error TS7006: Parameter 'value' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1066,41): error TS7006: Parameter 'path' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1082,38): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1088,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1090,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1091,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1098,60): error TS2304: Cannot find name 'ChatState'.
+ui/src/ui/app-render.ts(1099,62): error TS2304: Cannot find name 'ChatHost'.
+ui/src/ui/app-render.ts(1120,57): error TS2304: Cannot find name 'ChatState'.
+ui/src/ui/app-render.ts(1121,59): error TS2304: Cannot find name 'ChatHost'.
+ui/src/ui/app-render.ts(1133,32): error TS7006: Parameter 'event' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1133,63): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1134,33): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1136,39): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1137,52): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1139,58): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1140,33): error TS7006: Parameter 'id' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1140,61): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1142,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1146,51): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1147,54): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1148,52): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1149,50): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1151,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1152,60): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1154,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1189,49): error TS2304: Cannot find name 'ConfigUiHints'.
+ui/src/ui/app-render.ts(1193,51): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1194,53): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1195,56): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1196,31): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1199,36): error TS7006: Parameter 'mode' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1200,31): error TS7006: Parameter 'path' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1200,37): error TS7006: Parameter 'value' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1201,61): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1202,34): error TS7006: Parameter 'query' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1203,41): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1204,35): error TS7006: Parameter 'section' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1205,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1206,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1208,38): error TS7006: Parameter 'section' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1209,41): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1210,64): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1211,62): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1212,64): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1213,63): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1231,38): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1232,38): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1250,38): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1251,33): error TS7006: Parameter 'level' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1251,40): error TS7006: Parameter 'enabled' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1254,38): error TS7006: Parameter 'next' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1256,28): error TS7006: Parameter 'lines' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1256,35): error TS7006: Parameter 'label' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1257,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1258,28): error TS7006: Parameter 'event' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(1258,59): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/views/bindings.ts(2,39): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/bindings.ts(158,18): error TS7006: Parameter 'agent' implicitly has an 'any' type.
+ui/src/ui/views/bindings.ts(255,39): error TS7006: Parameter 'a' implicitly has an 'any' type.
+ui/src/ui/views/bindings.ts(306,19): error TS2345: Argument of type '{}' is not assignable to parameter of type 'string'.
+ui/src/ui/views/channels.account-manager.ts(2,45): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/channels.account-manager.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.account-manager.ts(63,33): error TS7006: Parameter 'account' implicitly has an 'any' type.
+ui/src/ui/views/channels.config.ts(2,36): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/channels.config.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.config.ts(4,78): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './config-form.js'?
+ui/src/ui/views/channels.config.ts(5,37): error TS2307: Cannot find module './config-form.shared' or its corresponding type declarations.
+ui/src/ui/views/channels.discord.ts(2,36): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/channels.discord.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.discord.ts(4,27): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../format.js'?
+ui/src/ui/views/channels.discord.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.googlechat.ts(2,39): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/channels.googlechat.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.googlechat.ts(4,27): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../format.js'?
+ui/src/ui/views/channels.googlechat.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.imessage.ts(2,37): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/channels.imessage.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.imessage.ts(4,27): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../format.js'?
+ui/src/ui/views/channels.imessage.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.signal.ts(2,35): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/channels.signal.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.signal.ts(4,27): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../format.js'?
+ui/src/ui/views/channels.signal.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.slack.ts(2,34): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/channels.slack.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.slack.ts(4,27): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../format.js'?
+ui/src/ui/views/channels.slack.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.telegram.ts(2,61): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/channels.telegram.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.telegram.ts(4,27): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../format.js'?
+ui/src/ui/views/channels.telegram.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(15,8): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/channels.ts(16,69): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(17,27): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../format.js'?
+ui/src/ui/views/channels.ts(18,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(19,35): error TS2307: Cannot find module './channels.discord' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(20,38): error TS2307: Cannot find module './channels.googlechat' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(21,36): error TS2307: Cannot find module './channels.imessage' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(22,33): error TS2307: Cannot find module './channels.nostr' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(23,59): error TS2307: Cannot find module './channels.shared' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(24,34): error TS2307: Cannot find module './channels.signal' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(25,33): error TS2307: Cannot find module './channels.slack' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(26,36): error TS2307: Cannot find module './channels.telegram' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(27,36): error TS2307: Cannot find module './channels.whatsapp' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(32,8): error TS2307: Cannot find module './channels.account-manager' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(103,38): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+ui/src/ui/views/channels.ts(255,55): error TS7006: Parameter 'entry' implicitly has an 'any' type.
+ui/src/ui/views/channels.whatsapp.ts(2,37): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/channels.whatsapp.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.whatsapp.ts(4,27): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../format.js'?
+ui/src/ui/views/channels.whatsapp.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.whatsapp.ts(6,32): error TS2307: Cannot find module './channels.shared' or its corresponding type declarations.
+ui/src/ui/views/chat.ts(11,8): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../chat/grouped-render.js'?
+ui/src/ui/views/chat.ts(12,60): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../chat/message-normalizer.js'?
+ui/src/ui/views/chat.ts(13,23): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../icons.js'?
+ui/src/ui/views/chat.ts(15,39): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './markdown-sidebar.js'?
+ui/src/ui/views/config-form.node.ts(13,8): error TS2307: Cannot find module './config-form.shared' or its corresponding type declarations.
+ui/src/ui/views/config-form.node.ts(130,8): error TS7006: Parameter 'v' implicitly has an 'any' type.
+ui/src/ui/views/config-form.node.ts(148,41): error TS7006: Parameter 'v' implicitly has an 'any' type.
+ui/src/ui/views/config-form.node.ts(159,16): error TS7006: Parameter 'lit' implicitly has an 'any' type.
+ui/src/ui/views/config-form.node.ts(187,49): error TS7006: Parameter 'variant' implicitly has an 'any' type.
+ui/src/ui/views/config-form.node.ts(224,16): error TS7006: Parameter 'opt' implicitly has an 'any' type.
+ui/src/ui/views/config-form.node.ts(634,14): error TS7006: Parameter 'item' implicitly has an 'any' type.
+ui/src/ui/views/config-form.node.ts(634,20): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+ui/src/ui/views/config-form.render.ts(2,36): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/config-form.render.ts(3,23): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../icons.js'?
+ui/src/ui/views/config-form.render.ts(4,28): error TS2307: Cannot find module './config-form.node' or its corresponding type declarations.
+ui/src/ui/views/config-form.render.ts(5,89): error TS2307: Cannot find module './config-form.shared' or its corresponding type declarations.
+ui/src/ui/views/config-form.render.ts(314,26): error TS7006: Parameter 'value' implicitly has an 'any' type.
+ui/src/ui/views/config-form.render.ts(401,21): error TS2339: Property 'properties' does not exist on type '{}'.
+ui/src/ui/views/config-form.render.ts(402,21): error TS2339: Property 'properties' does not exist on type '{}'.
+ui/src/ui/views/config-form.render.ts(407,31): error TS2339: Property 'properties' does not exist on type '{}'.
+ui/src/ui/views/config-form.render.ts(469,30): error TS18046: 'node' is of type 'unknown'.
+ui/src/ui/views/config-form.shared.ts(1,36): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/config.ts(2,36): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/config.ts(3,69): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './config-form.js'?
+ui/src/ui/views/config.ts(4,89): error TS2307: Cannot find module './config-form.shared' or its corresponding type declarations.
+ui/src/ui/views/config.ts(323,34): error TS18046: 'node' is of type 'unknown'.
+ui/src/ui/views/config.ts(324,39): error TS18046: 'node' is of type 'unknown'.
+ui/src/ui/views/cron.ts(10,8): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../presenter.js'?
+ui/src/ui/views/cron.ts(209,43): error TS2339: Property 'deliver' does not exist on type 'CronFormState'.
+ui/src/ui/views/cron.ts(212,25): error TS2353: Object literal may only specify known properties, and 'deliver' does not exist in type 'Partial<CronFormState>'.
+ui/src/ui/views/cron.ts(219,42): error TS2339: Property 'channel' does not exist on type 'CronFormState'.
+ui/src/ui/views/cron.ts(237,41): error TS2339: Property 'to' does not exist on type 'CronFormState'.
+ui/src/ui/views/cron.ts(239,44): error TS2353: Object literal may only specify known properties, and 'to' does not exist in type 'Partial<CronFormState>'.
+ui/src/ui/views/cron.ts(259,47): error TS2339: Property 'postToMainPrefix' does not exist on type 'CronFormState'.
+ui/src/ui/views/cron.ts(262,31): error TS2353: Object literal may only specify known properties, and 'postToMainPrefix' does not exist in type 'Partial<CronFormState>'.
+ui/src/ui/views/debug.ts(2,36): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../app-events.js'?
+ui/src/ui/views/debug.ts(3,36): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../presenter.js'?
+ui/src/ui/views/exec-approval.ts(2,35): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../app-view-state.js'?
+ui/src/ui/views/instances.ts(2,36): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/instances.ts(3,58): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../presenter.js'?
+ui/src/ui/views/instances.ts(73,24): error TS7006: Parameter 'role' implicitly has an 'any' type.
+ui/src/ui/views/logs.ts(2,41): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/nodes.ts(12,8): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../controllers/exec-approvals.js'?
+ui/src/ui/views/nodes.ts(13,50): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../format.js'?
+ui/src/ui/views/sessions.ts(2,60): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/sessions.ts(3,27): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../format.js'?
+ui/src/ui/views/sessions.ts(4,28): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../navigation.js'?
+ui/src/ui/views/sessions.ts(5,37): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../presenter.js'?
+ui/src/ui/views/sessions.ts(201,25): error TS7006: Parameter 'row' implicitly has an 'any' type.
+ui/src/ui/views/skills.ts(2,38): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../controllers/skills.js'?
+ui/src/ui/views/skills.ts(3,58): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../types.js'?
+ui/src/ui/views/skills.ts(4,27): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../format.js'?
+ui/src/ui/views/skills.ts(28,9): error TS2304: Cannot find name 'builtInGroup'.
+ui/src/ui/views/skills.ts(89,22): error TS7006: Parameter 'skill' implicitly has an 'any' type.
+ui/src/ui/views/skills.ts(160,32): error TS7006: Parameter 'b' implicitly has an 'any' type.
+ui/src/ui/views/skills.ts(161,31): error TS7006: Parameter 'e' implicitly has an 'any' type.
+ui/src/ui/views/skills.ts(162,34): error TS7006: Parameter 'c' implicitly has an 'any' type.
+ui/src/ui/views/skills.ts(163,30): error TS7006: Parameter 'o' implicitly has an 'any' type.

@@ -8,11 +8,11 @@ import {
   renderMessageGroup,
   renderReadingIndicatorGroup,
   renderStreamingGroup,
-} from "../chat/grouped-render";
-import { normalizeMessage, normalizeRoleForGrouping } from "../chat/message-normalizer";
-import { icons } from "../icons";
+} from "../chat/grouped-render.js";
+import { normalizeMessage, normalizeRoleForGrouping } from "../chat/message-normalizer.js";
 import { t } from "../i18n.js";
-import { renderMarkdownSidebar } from "./markdown-sidebar";
+import { icons } from "../icons.js";
+import { renderMarkdownSidebar } from "./markdown-sidebar.js";
 import "../components/resizable-divider";
 
 export type CompactionIndicatorStatus = {
@@ -324,7 +324,9 @@ export function renderChat(props: ChatProps) {
                       <div class="chat-queue__text">
                         ${
                           item.text ||
-                          (item.attachments?.length ? `${t("chat.queue.image")} (${item.attachments.length})` : "")
+                          (item.attachments?.length
+                            ? `${t("chat.queue.image")} (${item.attachments.length})`
+                            : "")
                         }
                       </div>
                       <button

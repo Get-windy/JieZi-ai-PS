@@ -1,5 +1,5 @@
 import { html, nothing } from "lit";
-import type { AppViewState } from "../app-view-state";
+import type { AppViewState } from "../app-view-state.js";
 import { t } from "../i18n.js";
 
 function formatRemaining(ms: number): string {
@@ -30,7 +30,10 @@ export function renderExecApprovalPrompt(state: AppViewState) {
   }
   const request = active.request;
   const remainingMs = active.expiresAtMs - Date.now();
-  const remaining = remainingMs > 0 ? t("exec.expires_in").replace("{time}", formatRemaining(remainingMs)) : t("exec.expired");
+  const remaining =
+    remainingMs > 0
+      ? t("exec.expires_in").replace("{time}", formatRemaining(remainingMs))
+      : t("exec.expired");
   const queueCount = state.execApprovalQueue.length;
   return html`
     <div class="exec-approval-overlay" role="dialog" aria-live="polite">

@@ -1,5 +1,5 @@
 import { html, nothing } from "lit";
-import type { ChannelAccountSnapshot } from "../types";
+import type { ChannelAccountSnapshot } from "../types.js";
 import type { ChannelsProps } from "./channels.types";
 import { t } from "../i18n.js";
 
@@ -12,12 +12,12 @@ export function renderAccountManageButton(params: {
   props: ChannelsProps;
 }) {
   const { channelId, accounts, props } = params;
-  
+
   // 如果没有配置多账号，不显示管理按钮
   if (accounts.length < 2) {
     return nothing;
   }
-  
+
   return html`
     <button 
       class="btn btn--sm" 
@@ -36,11 +36,11 @@ export function renderAccountManagerModal(props: ChannelsProps) {
   if (!props.managingChannelId) {
     return nothing;
   }
-  
+
   const channelId = props.managingChannelId;
   const accounts = props.snapshot?.channelAccounts?.[channelId] ?? [];
   const channelLabel = resolveChannelLabel(channelId);
-  
+
   return html`
     <div class="modal-overlay" @click=${() => props.onManageAccounts("")}>
       <div class="modal-content modal-content--large" @click=${(e: Event) => e.stopPropagation()}>
@@ -56,9 +56,10 @@ export function renderAccountManagerModal(props: ChannelsProps) {
             </button>
           </div>
           
-          ${accounts.length === 0 
-            ? html`<div class="muted">${t("channels.account.no_accounts")}</div>`
-            : html`
+          ${
+            accounts.length === 0
+              ? html`<div class="muted">${t("channels.account.no_accounts")}</div>`
+              : html`
               <div class="account-list">
                 ${accounts.map((account) => renderAccountCard({ account, channelId, props }))}
               </div>
@@ -86,7 +87,7 @@ function renderAccountCard(params: {
 }) {
   const { account, channelId, props } = params;
   const accountLabel = account.name || account.accountId;
-  
+
   return html`
     <div class="card" style="margin-bottom: 12px;">
       <div class="row" style="justify-content: space-between; align-items: center;">
@@ -139,21 +140,22 @@ export function renderAccountEditModal(props: ChannelsProps) {
   if (!props.editingChannelAccount) {
     return nothing;
   }
-  
+
   const { channelId, accountId, name, config } = props.editingChannelAccount;
   const isNew = !accountId;
   const channelLabel = resolveChannelLabel(channelId);
   const idPattern = /^[a-z0-9][a-z0-9-]*$/;
   const isValidId = accountId && idPattern.test(accountId);
-  
+
   return html`
     <div class="modal-overlay" @click=${props.onCancelAccountEdit}>
       <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>
-            ${isNew 
-              ? t("channels.account.add_title").replace("{channel}", channelLabel)
-              : t("channels.account.edit_title").replace("{channel}", channelLabel)
+            ${
+              isNew
+                ? t("channels.account.add_title").replace("{channel}", channelLabel)
+                : t("channels.account.edit_title").replace("{channel}", channelLabel)
             }
           </h2>
           <button class="btn-icon" @click=${props.onCancelAccountEdit}>&times;</button>
@@ -171,9 +173,13 @@ export function renderAccountEditModal(props: ChannelsProps) {
               @input=${(e: Event) => props.onAccountFormChange("accountId", (e.target as HTMLInputElement).value)}
             />
             <small class="form-text">${t("channels.account.field.account_id_help")}</small>
-            ${!isValidId && accountId ? html`
+            ${
+              !isValidId && accountId
+                ? html`
               <small class="form-text text-danger">${t("channels.account.invalid_id")}</small>
-            ` : nothing}
+            `
+                : nothing
+            }
           </div>
           
           <div class="form-group">
@@ -213,7 +219,7 @@ export function renderAccountEditModal(props: ChannelsProps) {
 function renderChannelSpecificFields(
   channelId: string,
   config: Record<string, unknown>,
-  props: ChannelsProps
+  props: ChannelsProps,
 ) {
   switch (channelId) {
     case "feishu":

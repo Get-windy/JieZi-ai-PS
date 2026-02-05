@@ -1,9 +1,15 @@
 import { html, nothing } from "lit";
-import type { ConfigUiHints } from "../types";
-import { icons } from "../icons";
-import { renderNode } from "./config-form.node";
-import { hintForPath, humanize, translateFieldLabel, schemaType, type JsonSchema } from "./config-form.shared";
+import type { ConfigUiHints } from "../types.js";
 import { t } from "../i18n.js";
+import { icons } from "../icons.js";
+import { renderNode } from "./config-form.node";
+import {
+  hintForPath,
+  humanize,
+  translateFieldLabel,
+  schemaType,
+  type JsonSchema,
+} from "./config-form.shared";
 
 export type ConfigFormProps = {
   schema: JsonSchema | null;
@@ -243,36 +249,84 @@ export const SECTION_META: Record<string, { label: string; description: string }
     label: t("config.section.env"),
     description: t("config.section.env.description"),
   },
-  update: { label: t("config.section.update"), description: t("config.section.update.description") },
-  agents: { label: t("config.section.agents"), description: t("config.section.agents.description") },
+  update: {
+    label: t("config.section.update"),
+    description: t("config.section.update.description"),
+  },
+  agents: {
+    label: t("config.section.agents"),
+    description: t("config.section.agents.description"),
+  },
   auth: { label: t("config.section.auth"), description: t("config.section.auth.description") },
   channels: {
     label: t("config.section.channels"),
     description: t("config.section.channels.description"),
   },
-  messages: { label: t("config.section.messages"), description: t("config.section.messages.description") },
-  commands: { label: t("config.section.commands"), description: t("config.section.commands.description") },
+  messages: {
+    label: t("config.section.messages"),
+    description: t("config.section.messages.description"),
+  },
+  commands: {
+    label: t("config.section.commands"),
+    description: t("config.section.commands.description"),
+  },
   hooks: { label: t("config.section.hooks"), description: t("config.section.hooks.description") },
-  skills: { label: t("config.section.skills"), description: t("config.section.skills.description") },
+  skills: {
+    label: t("config.section.skills"),
+    description: t("config.section.skills.description"),
+  },
   tools: { label: t("config.section.tools"), description: t("config.section.tools.description") },
-  gateway: { label: t("config.section.gateway"), description: t("config.section.gateway.description") },
-  wizard: { label: t("config.section.wizard"), description: t("config.section.wizard.description") },
+  gateway: {
+    label: t("config.section.gateway"),
+    description: t("config.section.gateway.description"),
+  },
+  wizard: {
+    label: t("config.section.wizard"),
+    description: t("config.section.wizard.description"),
+  },
   // Additional sections
   meta: { label: t("config.section.meta"), description: t("config.section.meta.description") },
-  logging: { label: t("config.section.logging"), description: t("config.section.logging.description") },
-  browser: { label: t("config.section.browser"), description: t("config.section.browser.description") },
+  logging: {
+    label: t("config.section.logging"),
+    description: t("config.section.logging.description"),
+  },
+  browser: {
+    label: t("config.section.browser"),
+    description: t("config.section.browser.description"),
+  },
   ui: { label: t("config.section.ui"), description: t("config.section.ui.description") },
-  models: { label: t("config.section.models"), description: t("config.section.models.description") },
-  bindings: { label: t("config.section.bindings"), description: t("config.section.bindings.description") },
-  broadcast: { label: t("config.section.broadcast"), description: t("config.section.broadcast.description") },
+  models: {
+    label: t("config.section.models"),
+    description: t("config.section.models.description"),
+  },
+  bindings: {
+    label: t("config.section.bindings"),
+    description: t("config.section.bindings.description"),
+  },
+  broadcast: {
+    label: t("config.section.broadcast"),
+    description: t("config.section.broadcast.description"),
+  },
   audio: { label: t("config.section.audio"), description: t("config.section.audio.description") },
-  session: { label: t("config.section.session"), description: t("config.section.session.description") },
+  session: {
+    label: t("config.section.session"),
+    description: t("config.section.session.description"),
+  },
   cron: { label: t("config.section.cron"), description: t("config.section.cron.description") },
   web: { label: t("config.section.web"), description: t("config.section.web.description") },
-  discovery: { label: t("config.section.discovery"), description: t("config.section.discovery.description") },
-  canvasHost: { label: t("config.section.canvasHost"), description: t("config.section.canvasHost.description") },
+  discovery: {
+    label: t("config.section.discovery"),
+    description: t("config.section.discovery.description"),
+  },
+  canvasHost: {
+    label: t("config.section.canvasHost"),
+    description: t("config.section.canvasHost.description"),
+  },
   talk: { label: t("config.section.talk"), description: t("config.section.talk.description") },
-  plugins: { label: t("config.section.plugins"), description: t("config.section.plugins.description") },
+  plugins: {
+    label: t("config.section.plugins"),
+    description: t("config.section.plugins.description"),
+  },
 };
 
 function getSectionIcon(key: string) {

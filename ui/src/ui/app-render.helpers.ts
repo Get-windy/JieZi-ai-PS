@@ -1,15 +1,15 @@
 import { html } from "lit";
 import { repeat } from "lit/directives/repeat.js";
-import type { AppViewState } from "./app-view-state";
-import type { ThemeMode } from "./theme";
-import type { ThemeTransitionContext } from "./theme-transition";
-import type { SessionsListResult } from "./types";
-import { refreshChat } from "./app-chat";
-import { syncUrlWithSessionKey } from "./app-settings";
-import { loadChatHistory } from "./controllers/chat";
-import { icons } from "./icons";
-import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation";
+import type { AppViewState } from "./app-view-state.js";
+import type { ThemeTransitionContext } from "./theme-transition.js";
+import type { ThemeMode } from "./theme.js";
+import type { SessionsListResult } from "./types.js";
+import { refreshChat } from "./app-chat.js";
+import { syncUrlWithSessionKey } from "./app-settings.js";
+import { loadChatHistory } from "./controllers/chat.js";
 import { t } from "./i18n.js";
+import { icons } from "./icons.js";
+import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.js";
 
 export function renderTab(state: AppViewState, tab: Tab) {
   const href = pathForTab(tab, state.basePath);
@@ -166,9 +166,7 @@ export function renderChatControls(state: AppViewState) {
         }}
         aria-pressed=${focusActive}
         title=${
-          disableFocusToggle
-            ? t("chat.controls.focus.disabled")
-            : t("chat.controls.focus.toggle")
+          disableFocusToggle ? t("chat.controls.focus.disabled") : t("chat.controls.focus.toggle")
         }
       >
         ${focusIcon}

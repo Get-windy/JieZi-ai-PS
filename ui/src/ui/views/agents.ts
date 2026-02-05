@@ -23,7 +23,7 @@ import {
   formatCronSchedule,
   formatCronState,
   formatNextRun,
-} from "../presenter";
+} from "../presenter.ts";
 
 export type AgentsPanel = "overview" | "files" | "tools" | "skills" | "channels" | "cron";
 
@@ -1815,6 +1815,8 @@ const SKILL_SOURCE_GROUPS: Array<{ id: string; label: () => string; sources: str
   },
   { id: "extra", label: () => t("agents.skills.group.extra"), sources: ["openclaw-extra"] },
 ];
+
+const builtInGroup = SKILL_SOURCE_GROUPS[1]; // built-in group
 
 function groupSkills(skills: SkillStatusEntry[]): SkillGroup[] {
   const groups = new Map<string, SkillGroup>();

@@ -1,7 +1,7 @@
 import { html, nothing } from "lit";
-import type { PresenceEntry } from "../types";
-import { formatPresenceAge, formatPresenceSummary } from "../presenter";
+import type { PresenceEntry } from "../types.js";
 import { t } from "../i18n.js";
+import { formatPresenceAge, formatPresenceSummary } from "../presenter.js";
 
 export type InstancesProps = {
   loading: boolean;
@@ -51,9 +51,10 @@ export function renderInstances(props: InstancesProps) {
 }
 
 function renderEntry(entry: PresenceEntry) {
-  const lastInput = entry.lastInputSeconds != null 
-    ? t("instances.ago").replace("{seconds}", String(entry.lastInputSeconds))
-    : "n/a";
+  const lastInput =
+    entry.lastInputSeconds != null
+      ? t("instances.ago").replace("{seconds}", String(entry.lastInputSeconds))
+      : "n/a";
   const mode = entry.mode ?? "unknown";
   const roles = Array.isArray(entry.roles) ? entry.roles.filter(Boolean) : [];
   const scopes = Array.isArray(entry.scopes) ? entry.scopes.filter(Boolean) : [];

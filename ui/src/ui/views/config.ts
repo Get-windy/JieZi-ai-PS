@@ -1,8 +1,14 @@
 import { html, nothing } from "lit";
-import type { ConfigUiHints } from "../types";
-import { analyzeConfigSchema, renderConfigForm, SECTION_META } from "./config-form";
-import { hintForPath, humanize, translateFieldLabel, schemaType, type JsonSchema } from "./config-form.shared";
+import type { ConfigUiHints } from "../types.js";
 import { t } from "../i18n.js";
+import { analyzeConfigSchema, renderConfigForm, SECTION_META } from "./config-form.js";
+import {
+  hintForPath,
+  humanize,
+  translateFieldLabel,
+  schemaType,
+  type JsonSchema,
+} from "./config-form.shared";
 
 export type ConfigProps = {
   raw: string;
@@ -385,7 +391,11 @@ function truncateValue(value: unknown, maxLen = 40): string {
 }
 
 export function renderConfig(props: ConfigProps) {
-  const validityMap = { valid: t("config.validity.valid"), invalid: t("config.validity.invalid"), unknown: t("config.validity.unknown") };
+  const validityMap = {
+    valid: t("config.validity.valid"),
+    invalid: t("config.validity.invalid"),
+    unknown: t("config.validity.unknown"),
+  };
   const validity = props.valid == null ? "unknown" : props.valid ? "valid" : "invalid";
   const validityText = validityMap[validity];
   const analysis = analyzeConfigSchema(props.schema);
@@ -550,7 +560,7 @@ export function renderConfig(props: ConfigProps) {
                     >${
                       props.formMode === "raw"
                         ? t("config.changes.unsaved")
-                        : diff.length !== 1 
+                        : diff.length !== 1
                           ? t("config.changes.count_plural").replace("{count}", String(diff.length))
                           : t("config.changes.count").replace("{count}", String(diff.length))
                     }</span
@@ -600,9 +610,14 @@ export function renderConfig(props: ConfigProps) {
               <details class="config-diff">
                 <summary class="config-diff__summary">
                   <span
-                    >${diff.length !== 1 
-                      ? t("config.diff.view_changes_plural").replace("{count}", String(diff.length))
-                      : t("config.diff.view_changes").replace("{count}", String(diff.length))}</span
+                    >${
+                      diff.length !== 1
+                        ? t("config.diff.view_changes_plural").replace(
+                            "{count}",
+                            String(diff.length),
+                          )
+                        : t("config.diff.view_changes").replace("{count}", String(diff.length))
+                    }</span
                   >
                   <svg
                     class="config-diff__chevron"

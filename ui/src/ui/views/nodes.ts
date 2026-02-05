@@ -9,8 +9,8 @@ import type {
   ExecApprovalsAllowlistEntry,
   ExecApprovalsFile,
   ExecApprovalsSnapshot,
-} from "../controllers/exec-approvals";
-import { clampText, formatAgo, formatList } from "../format";
+} from "../controllers/exec-approvals.js";
+import { clampText, formatAgo, formatList } from "../format.js";
 import { t } from "../i18n.js";
 
 export type NodesProps = {
@@ -132,7 +132,9 @@ function renderDevices(props: NodesProps) {
 function renderPendingDevice(req: PendingDevice, props: NodesProps) {
   const name = req.displayName?.trim() || req.deviceId;
   const age = typeof req.ts === "number" ? formatAgo(req.ts) : t("channels.status.na");
-  const role = req.role?.trim() ? t("nodes.devices.role").replace("{role}", req.role) : t("nodes.devices.role_none");
+  const role = req.role?.trim()
+    ? t("nodes.devices.role").replace("{role}", req.role)
+    : t("nodes.devices.role_none");
   const repair = req.isRepair ? t("nodes.devices.repair") : "";
   const ip = req.remoteIp ? ` · ${req.remoteIp}` : "";
   return html`
@@ -188,7 +190,9 @@ function renderPairedDevice(device: PairedDevice, props: NodesProps) {
 }
 
 function renderTokenRow(deviceId: string, token: DeviceTokenSummary, props: NodesProps) {
-  const status = token.revokedAtMs ? t("nodes.devices.token.revoked") : t("nodes.devices.token.active");
+  const status = token.revokedAtMs
+    ? t("nodes.devices.token.revoked")
+    : t("nodes.devices.token.active");
   const scopes = t("nodes.devices.scopes").replace("{list}", formatList(token.scopes));
   const when = formatAgo(token.rotatedAtMs ?? token.createdAtMs ?? token.lastUsedAtMs ?? null);
   return html`
@@ -812,7 +816,10 @@ function renderExecApprovalsPolicy(state: ExecApprovalsState) {
             ${
               isDefaults
                 ? t("nodes.exec.ask_fallback.subtitle.defaults")
-                : t("nodes.exec.ask_fallback.subtitle.agent").replace("{value}", defaults.askFallback)
+                : t("nodes.exec.ask_fallback.subtitle.agent").replace(
+                    "{value}",
+                    defaults.askFallback,
+                  )
             }
           </div>
         </div>
@@ -860,8 +867,18 @@ function renderExecApprovalsPolicy(state: ExecApprovalsState) {
               isDefaults
                 ? t("nodes.exec.auto_allow.subtitle.defaults")
                 : autoIsDefault
-                  ? t("nodes.exec.auto_allow.subtitle.agent_default").replace("{value}", defaults.autoAllowSkills ? t("nodes.exec.auto_allow.on") : t("nodes.exec.auto_allow.off"))
-                  : t("nodes.exec.auto_allow.subtitle.agent_override").replace("{value}", autoEffective ? t("nodes.exec.auto_allow.on") : t("nodes.exec.auto_allow.off"))
+                  ? t("nodes.exec.auto_allow.subtitle.agent_default").replace(
+                      "{value}",
+                      defaults.autoAllowSkills
+                        ? t("nodes.exec.auto_allow.on")
+                        : t("nodes.exec.auto_allow.off"),
+                    )
+                  : t("nodes.exec.auto_allow.subtitle.agent_override").replace(
+                      "{value}",
+                      autoEffective
+                        ? t("nodes.exec.auto_allow.on")
+                        : t("nodes.exec.auto_allow.off"),
+                    )
             }
           </div>
         </div>
@@ -932,7 +949,9 @@ function renderAllowlistEntry(
   entry: ExecApprovalsAllowlistEntry,
   index: number,
 ) {
-  const lastUsed = entry.lastUsedAt ? formatAgo(entry.lastUsedAt) : t("nodes.exec.pattern.last_used.never");
+  const lastUsed = entry.lastUsedAt
+    ? formatAgo(entry.lastUsedAt)
+    : t("nodes.exec.pattern.last_used.never");
   const lastCommand = entry.lastUsedCommand ? clampText(entry.lastUsedCommand, 120) : null;
   const lastPath = entry.lastResolvedPath ? clampText(entry.lastResolvedPath, 120) : null;
   return html`

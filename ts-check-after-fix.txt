@@ -1,0 +1,138 @@
+src/commands/doctor-completion.ts(7,3): error TS2305: Module '"../cli/completion-cli.js"' has no exported member 'completionCacheExists'.
+src/commands/doctor-completion.ts(10,3): error TS2459: Module '"../cli/completion-cli.js"' declares 'resolveCompletionCachePath' locally, but it is not exported.
+src/commands/doctor-completion.ts(12,3): error TS2305: Module '"../cli/completion-cli.js"' has no exported member 'usesSlowDynamicCompletion'.
+src/wizard/onboarding.finalize.ts(341,36): error TS2304: Cannot find name 'openUrlInBackground'.
+ui/src/ui/app-render.helpers.ts(98,34): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.helpers.ts(100,34): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.helpers.ts(101,34): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.helpers.ts(109,54): error TS2304: Cannot find name 'ChatState'.
+ui/src/ui/app-render.helpers.ts(126,32): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(6,66): error TS2307: Cannot find module './app-render.helpers' or its corresponding type declarations.
+ui/src/ui/app-render.ts(124,20): error TS2304: Cannot find name 'normalizeBasePath'.
+ui/src/ui/app-render.ts(265,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(277,38): error TS2339: Property 'storageCurrentPath' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(278,34): error TS2339: Property 'storageNewPath' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(279,34): error TS2339: Property 'storageLoading' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(280,36): error TS2339: Property 'storageMigrating' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(281,32): error TS2339: Property 'storageError' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(282,34): error TS2339: Property 'storageSuccess' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(283,38): error TS2339: Property 'storageShowBrowser' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(284,39): error TS2339: Property 'storageShowBrowser' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(286,44): error TS2339: Property 'storageBrowserPath' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(287,43): error TS2339: Property 'storageBrowserParent' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(288,44): error TS2339: Property 'storageBrowserDirectories' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(289,39): error TS2339: Property 'storageBrowserDrives' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(290,40): error TS2339: Property 'storageBrowserLoading' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(291,38): error TS2339: Property 'storageBrowserError' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(293,48): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(295,48): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(297,48): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(300,53): error TS2339: Property 'storageNewPath' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(301,56): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(302,58): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(304,42): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(306,42): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(327,55): error TS2304: Cannot find name 'ConfigUiHints'.
+ui/src/ui/app-render.ts(332,29): error TS7006: Parameter 'probe' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(333,35): error TS7006: Parameter 'force' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(336,33): error TS7006: Parameter 'path' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(336,39): error TS7006: Parameter 'value' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(340,38): error TS7006: Parameter 'accountId' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(340,49): error TS7006: Parameter 'profile' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(343,45): error TS7006: Parameter 'field' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(343,52): error TS7006: Parameter 'value' implicitly has an 'any' type.
+ui/src/ui/app-render.ts(869,40): error TS2339: Property 'workspace' does not exist on type 'GatewayAgentRow'.
+ui/src/ui/app-render.ts(881,34): error TS2339: Property 'agents' does not exist on type '{}'.
+ui/src/ui/app-render.ts(885,41): error TS2339: Property 'agents' does not exist on type '{}'.
+ui/src/ui/app-render.ts(915,42): error TS2339: Property 'agents' does not exist on type '{}'.
+ui/src/ui/app-render.ts(1088,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1090,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1091,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1098,60): error TS2304: Cannot find name 'ChatState'.
+ui/src/ui/app-render.ts(1099,62): error TS2304: Cannot find name 'ChatHost'.
+ui/src/ui/app-render.ts(1120,57): error TS2304: Cannot find name 'ChatState'.
+ui/src/ui/app-render.ts(1121,59): error TS2304: Cannot find name 'ChatHost'.
+ui/src/ui/app-render.ts(1133,63): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1137,52): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1139,58): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1140,61): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1142,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1146,51): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1147,54): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1148,52): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1149,50): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1151,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1152,60): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1154,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1189,49): error TS2304: Cannot find name 'ConfigUiHints'.
+ui/src/ui/app-render.ts(1193,51): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1194,53): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1195,56): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1201,61): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1203,41): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1205,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1206,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1209,41): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1210,64): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1211,62): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1212,64): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1213,63): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1257,40): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/app-render.ts(1258,59): error TS2304: Cannot find name 'OpenClawApp'.
+ui/src/ui/views/channels.account-manager.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.account-manager.ts(63,33): error TS7006: Parameter 'account' implicitly has an 'any' type.
+ui/src/ui/views/channels.config.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.config.ts(5,37): error TS2307: Cannot find module './config-form.shared' or its corresponding type declarations.
+ui/src/ui/views/channels.discord.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.discord.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.googlechat.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.googlechat.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.imessage.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.imessage.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.signal.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.signal.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.slack.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.slack.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.telegram.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.telegram.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(16,69): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(18,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(19,35): error TS2307: Cannot find module './channels.discord' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(20,38): error TS2307: Cannot find module './channels.googlechat' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(21,36): error TS2307: Cannot find module './channels.imessage' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(22,33): error TS2307: Cannot find module './channels.nostr' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(23,59): error TS2307: Cannot find module './channels.shared' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(24,34): error TS2307: Cannot find module './channels.signal' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(25,33): error TS2307: Cannot find module './channels.slack' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(26,36): error TS2307: Cannot find module './channels.telegram' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(27,36): error TS2307: Cannot find module './channels.whatsapp' or its corresponding type declarations.
+ui/src/ui/views/channels.ts(32,8): error TS2307: Cannot find module './channels.account-manager' or its corresponding type declarations.
+ui/src/ui/views/channels.whatsapp.ts(3,36): error TS2307: Cannot find module './channels.types' or its corresponding type declarations.
+ui/src/ui/views/channels.whatsapp.ts(5,44): error TS2307: Cannot find module './channels.config' or its corresponding type declarations.
+ui/src/ui/views/channels.whatsapp.ts(6,32): error TS2307: Cannot find module './channels.shared' or its corresponding type declarations.
+ui/src/ui/views/config-form.node.ts(13,8): error TS2307: Cannot find module './config-form.shared' or its corresponding type declarations.
+ui/src/ui/views/config-form.node.ts(130,8): error TS7006: Parameter 'v' implicitly has an 'any' type.
+ui/src/ui/views/config-form.node.ts(148,41): error TS7006: Parameter 'v' implicitly has an 'any' type.
+ui/src/ui/views/config-form.node.ts(159,16): error TS7006: Parameter 'lit' implicitly has an 'any' type.
+ui/src/ui/views/config-form.node.ts(187,49): error TS7006: Parameter 'variant' implicitly has an 'any' type.
+ui/src/ui/views/config-form.node.ts(224,16): error TS7006: Parameter 'opt' implicitly has an 'any' type.
+ui/src/ui/views/config-form.node.ts(634,14): error TS7006: Parameter 'item' implicitly has an 'any' type.
+ui/src/ui/views/config-form.node.ts(634,20): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+ui/src/ui/views/config-form.render.ts(4,28): error TS2307: Cannot find module './config-form.node' or its corresponding type declarations.
+ui/src/ui/views/config-form.render.ts(5,89): error TS2307: Cannot find module './config-form.shared' or its corresponding type declarations.
+ui/src/ui/views/config-form.render.ts(314,26): error TS7006: Parameter 'value' implicitly has an 'any' type.
+ui/src/ui/views/config-form.render.ts(401,21): error TS2339: Property 'properties' does not exist on type '{}'.
+ui/src/ui/views/config-form.render.ts(402,21): error TS2339: Property 'properties' does not exist on type '{}'.
+ui/src/ui/views/config-form.render.ts(407,31): error TS2339: Property 'properties' does not exist on type '{}'.
+ui/src/ui/views/config-form.render.ts(469,30): error TS18046: 'node' is of type 'unknown'.
+ui/src/ui/views/config.ts(4,89): error TS2307: Cannot find module './config-form.shared' or its corresponding type declarations.
+ui/src/ui/views/config.ts(323,34): error TS18046: 'node' is of type 'unknown'.
+ui/src/ui/views/config.ts(324,39): error TS18046: 'node' is of type 'unknown'.
+ui/src/ui/views/cron.ts(209,43): error TS2339: Property 'deliver' does not exist on type 'CronFormState'.
+ui/src/ui/views/cron.ts(212,25): error TS2353: Object literal may only specify known properties, and 'deliver' does not exist in type 'Partial<CronFormState>'.
+ui/src/ui/views/cron.ts(219,42): error TS2339: Property 'channel' does not exist on type 'CronFormState'.
+ui/src/ui/views/cron.ts(237,41): error TS2339: Property 'to' does not exist on type 'CronFormState'.
+ui/src/ui/views/cron.ts(239,44): error TS2353: Object literal may only specify known properties, and 'to' does not exist in type 'Partial<CronFormState>'.
+ui/src/ui/views/cron.ts(259,47): error TS2339: Property 'postToMainPrefix' does not exist on type 'CronFormState'.
+ui/src/ui/views/cron.ts(262,31): error TS2353: Object literal may only specify known properties, and 'postToMainPrefix' does not exist in type 'Partial<CronFormState>'.
+ui/src/ui/views/skills.ts(28,9): error TS2304: Cannot find name 'builtInGroup'.

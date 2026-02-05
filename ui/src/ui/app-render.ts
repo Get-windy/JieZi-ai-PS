@@ -1,15 +1,15 @@
 import { html, nothing } from "lit";
-import type { AppViewState } from "./app-view-state";
-import type { GatewayBrowserClient } from "./gateway";
+import type { AppViewState } from "./app-view-state.js";
+import type { GatewayBrowserClient } from "./gateway.js";
 import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
-import { refreshChatAvatar } from "./app-chat";
+import { refreshChatAvatar } from "./app-chat.js";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers";
-import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files";
-import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity";
-import { loadAgentSkills } from "./controllers/agent-skills";
-import { loadAgents } from "./controllers/agents";
-import { loadChannels } from "./controllers/channels";
-import { loadChatHistory } from "./controllers/chat";
+import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.js";
+import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.js";
+import { loadAgentSkills } from "./controllers/agent-skills.js";
+import { loadAgents } from "./controllers/agents.js";
+import { loadChannels } from "./controllers/channels.js";
+import { loadChatHistory } from "./controllers/chat.js";
 import {
   applyConfig,
   ConfigState,
@@ -50,26 +50,26 @@ import {
   saveSkillApiKey,
   updateSkillEdit,
   updateSkillEnabled,
-} from "./controllers/skills";
+} from "./controllers/skills.js";
 import { t } from "./i18n.js";
-import { icons } from "./icons";
-import { TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation";
-import { renderAgents } from "./views/agents";
-import { renderBindings } from "./views/bindings";
-import { BindingsController } from "./views/bindings-controller";
-import { renderChannels } from "./views/channels";
-import { renderChat } from "./views/chat";
-import { renderConfig } from "./views/config";
-import { renderCron } from "./views/cron";
-import { renderDebug } from "./views/debug";
-import { renderExecApprovalPrompt } from "./views/exec-approval";
-import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation";
-import { renderInstances } from "./views/instances";
-import { renderLogs } from "./views/logs";
-import { renderNodes } from "./views/nodes";
-import { renderOverview } from "./views/overview";
-import { renderSessions } from "./views/sessions";
-import { renderSkills } from "./views/skills";
+import { icons } from "./icons.js";
+import { TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.js";
+import { renderAgents } from "./views/agents.js";
+import { BindingsController } from "./views/bindings-controller.js";
+import { renderBindings } from "./views/bindings.js";
+import { renderChannels } from "./views/channels.js";
+import { renderChat } from "./views/chat.js";
+import { renderConfig } from "./views/config.js";
+import { renderCron } from "./views/cron.js";
+import { renderDebug } from "./views/debug.js";
+import { renderExecApprovalPrompt } from "./views/exec-approval.js";
+import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.js";
+import { renderInstances } from "./views/instances.js";
+import { renderLogs } from "./views/logs.js";
+import { renderNodes } from "./views/nodes.js";
+import { renderOverview } from "./views/overview.js";
+import { renderSessions } from "./views/sessions.js";
+import { renderSkills } from "./views/skills.js";
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;

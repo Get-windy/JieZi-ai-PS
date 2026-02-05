@@ -12,9 +12,15 @@ import type {
   SlackStatus,
   TelegramStatus,
   WhatsAppStatus,
-} from "../types";
+} from "../types.js";
 import type { ChannelKey, ChannelsChannelData, ChannelsProps } from "./channels.types";
-import { formatAgo } from "../format";
+import { formatAgo } from "../format.js";
+import { t } from "../i18n.js";
+import {
+  renderAccountManageButton,
+  renderAccountManagerModal,
+  renderAccountEditModal,
+} from "./channels.account-manager";
 import { renderChannelConfigSection } from "./channels.config";
 import { renderDiscordCard } from "./channels.discord";
 import { renderGoogleChatCard } from "./channels.googlechat";
@@ -25,12 +31,6 @@ import { renderSignalCard } from "./channels.signal";
 import { renderSlackCard } from "./channels.slack";
 import { renderTelegramCard } from "./channels.telegram";
 import { renderWhatsAppCard } from "./channels.whatsapp";
-import {
-  renderAccountManageButton,
-  renderAccountManagerModal,
-  renderAccountEditModal,
-} from "./channels.account-manager";
-import { t } from "../i18n.js";
 
 export function renderChannels(props: ChannelsProps) {
   const channels = props.snapshot?.channels as Record<string, unknown> | null;

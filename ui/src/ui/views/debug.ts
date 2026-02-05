@@ -1,7 +1,7 @@
 import { html, nothing } from "lit";
-import type { EventLogEntry } from "../app-events";
-import { formatEventPayload } from "../presenter";
+import type { EventLogEntry } from "../app-events.js";
 import { t } from "../i18n.js";
+import { formatEventPayload } from "../presenter.js";
 
 export type DebugProps = {
   loading: boolean;
@@ -31,7 +31,11 @@ export function renderDebug(props: DebugProps) {
   const info = securitySummary?.info ?? 0;
   const securityTone = critical > 0 ? "danger" : warn > 0 ? "warn" : "success";
   const securityLabel =
-    critical > 0 ? t("debug.security.critical").replace("{count}", String(critical)) : warn > 0 ? t("debug.security.warnings").replace("{count}", String(warn)) : t("debug.security.no_issues");
+    critical > 0
+      ? t("debug.security.critical").replace("{count}", String(critical))
+      : warn > 0
+        ? t("debug.security.warnings").replace("{count}", String(warn))
+        : t("debug.security.no_issues");
 
   return html`
     <section class="grid grid-cols-2">

@@ -1,9 +1,9 @@
 import { html, nothing } from "lit";
-import type { DiscordStatus } from "../types";
+import type { DiscordStatus } from "../types.js";
 import type { ChannelsProps } from "./channels.types";
-import { formatAgo } from "../format";
-import { renderChannelConfigSection } from "./channels.config";
+import { formatAgo } from "../format.js";
 import { t } from "../i18n.js";
+import { renderChannelConfigSection } from "./channels.config";
 
 export function renderDiscordCard(params: {
   props: ChannelsProps;

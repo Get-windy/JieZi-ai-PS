@@ -1,5 +1,5 @@
 import { html, nothing } from "lit";
-import type { AgentsListResult } from "../types";
+import type { AgentsListResult } from "../types.js";
 import { t } from "../i18n.js";
 
 export type BindingEntry = {
@@ -57,33 +57,40 @@ const PEER_KIND_OPTIONS = [
   { id: "channel", label: () => t("bindings.peer_kind.channel") },
 ];
 
-function renderBindingCard(binding: BindingEntry, agentName: string, onEdit: () => void, onDelete: () => void) {
+function renderBindingCard(
+  binding: BindingEntry,
+  agentName: string,
+  onEdit: () => void,
+  onDelete: () => void,
+) {
   const { match } = binding;
   const conditions: string[] = [];
 
   if (match.channel) {
-    const channelLabel = CHANNEL_OPTIONS.find(c => c.id === match.channel)?.label || match.channel;
+    const channelLabel =
+      CHANNEL_OPTIONS.find((c) => c.id === match.channel)?.label || match.channel;
     conditions.push(`${t("bindings.channel")}: ${channelLabel}`);
   }
-  
+
   if (match.accountId) {
     conditions.push(`${t("bindings.account_id")}: ${match.accountId}`);
   }
-  
+
   if (match.peer) {
     if (match.peer.kind) {
-      const kindLabel = PEER_KIND_OPTIONS.find(k => k.id === match.peer?.kind)?.label() || match.peer.kind;
+      const kindLabel =
+        PEER_KIND_OPTIONS.find((k) => k.id === match.peer?.kind)?.label() || match.peer.kind;
       conditions.push(`${t("bindings.peer_kind_label")}: ${kindLabel}`);
     }
     if (match.peer.id) {
       conditions.push(`${t("bindings.peer_id")}: ${match.peer.id}`);
     }
   }
-  
+
   if (match.guildId) {
     conditions.push(`${t("bindings.guild_id")}: ${match.guildId}`);
   }
-  
+
   if (match.teamId) {
     conditions.push(`${t("bindings.team_id")}: ${match.teamId}`);
   }
@@ -112,15 +119,17 @@ function renderBindingCard(binding: BindingEntry, agentName: string, onEdit: () 
         </div>
       </div>
       <div class="binding-conditions">
-        ${conditions.length > 0
-          ? html`
+        ${
+          conditions.length > 0
+            ? html`
               <div class="condition-list">
                 ${conditions.map(
-                  (condition) => html`<div class="condition-item">${condition}</div>`
+                  (condition) => html`<div class="condition-item">${condition}</div>`,
                 )}
               </div>
             `
-          : html`<div class="condition-empty">${t("bindings.no_conditions")}</div>`}
+            : html`<div class="condition-empty">${t("bindings.no_conditions")}</div>`
+        }
       </div>
     </div>
   `;
@@ -155,7 +164,7 @@ function renderEditForm(props: BindingsProps) {
             >
               <option value="">${t("bindings.select_agent")}</option>
               ${agents.map(
-                (agent) => html`<option value=${agent.id}>${agent.name || agent.id}</option>`
+                (agent) => html`<option value=${agent.id}>${agent.name || agent.id}</option>`,
               )}
             </select>
           </div>
@@ -168,7 +177,7 @@ function renderEditForm(props: BindingsProps) {
             >
               <option value="">${t("bindings.select_channel")}</option>
               ${CHANNEL_OPTIONS.map(
-                (channel) => html`<option value=${channel.id}>${channel.label}</option>`
+                (channel) => html`<option value=${channel.id}>${channel.label}</option>`,
               )}
             </select>
           </div>
@@ -194,7 +203,7 @@ function renderEditForm(props: BindingsProps) {
               >
                 <option value="">${t("bindings.any")}</option>
                 ${PEER_KIND_OPTIONS.map(
-                  (kind) => html`<option value=${kind.id}>${kind.label()}</option>`
+                  (kind) => html`<option value=${kind.id}>${kind.label()}</option>`,
                 )}
               </select>
             </div>
@@ -249,10 +258,21 @@ function renderEditForm(props: BindingsProps) {
 }
 
 export function renderBindings(props: BindingsProps) {
-  const { loading, saving, error, bindings, agentsList, editingId, onAdd, onEdit, onDelete, onRefresh } = props;
+  const {
+    loading,
+    saving,
+    error,
+    bindings,
+    agentsList,
+    editingId,
+    onAdd,
+    onEdit,
+    onDelete,
+    onRefresh,
+  } = props;
 
   const agents = agentsList?.agents || [];
-  const agentMap = new Map(agents.map(a => [a.id, a.name || a.id]));
+  const agentMap = new Map(agents.map((a) => [a.id, a.name || a.id]));
 
   return html`
     <div class="bindings-view">
@@ -280,10 +300,11 @@ export function renderBindings(props: BindingsProps) {
 
       ${error ? html`<div class="error-banner">${error}</div>` : nothing}
 
-      ${loading
-        ? html`<div class="loading-spinner">${t("bindings.loading")}</div>`
-        : bindings.length === 0
-        ? html`
+      ${
+        loading
+          ? html`<div class="loading-spinner">${t("bindings.loading")}</div>`
+          : bindings.length === 0
+            ? html`
             <div class="empty-state">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
@@ -298,18 +319,19 @@ export function renderBindings(props: BindingsProps) {
               </button>
             </div>
           `
-        : html`
+            : html`
             <div class="bindings-list">
               ${bindings.map((binding) =>
                 renderBindingCard(
                   binding,
                   agentMap.get(binding.agentId) || binding.agentId,
                   () => onEdit(binding.id),
-                  () => onDelete(binding.id)
-                )
+                  () => onDelete(binding.id),
+                ),
               )}
             </div>
-          `}
+          `
+      }
 
       ${editingId !== null || props.editForm ? renderEditForm(props) : nothing}
 

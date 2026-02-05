@@ -1,7 +1,7 @@
 import { html, nothing } from "lit";
-import type { SkillMessageMap } from "../controllers/skills";
-import type { SkillStatusEntry, SkillStatusReport } from "../types";
-import { clampText } from "../format";
+import type { SkillMessageMap } from "../controllers/skills.js";
+import type { SkillStatusEntry, SkillStatusReport } from "../types.js";
+import { clampText } from "../format.js";
 import { t } from "../i18n.js";
 
 type SkillGroup = {
@@ -16,6 +16,8 @@ const SKILL_SOURCE_GROUPS: Array<{ id: string; label: () => string; sources: str
   { id: "installed", label: () => t("skills.group.installed"), sources: ["openclaw-managed"] },
   { id: "extra", label: () => t("skills.group.extra"), sources: ["openclaw-extra"] },
 ];
+
+const builtInGroup = SKILL_SOURCE_GROUPS[1]; // built-in group
 
 function groupSkills(skills: SkillStatusEntry[]): SkillGroup[] {
   const groups = new Map<string, SkillGroup>();
@@ -43,8 +45,8 @@ function groupSkills(skills: SkillStatusEntry[]): SkillGroup[] {
 }
 
 /**
- * Translate skill description. 
- * For built-in skills (openclaw-bundled) and installed skills (openclaw-managed), 
+ * Translate skill description.
+ * For built-in skills (openclaw-bundled) and installed skills (openclaw-managed),
  * check if translation exists.
  * For other skills, return original description.
  */
@@ -56,12 +58,12 @@ function translateSkillDescription(skill: SkillStatusEntry): string {
 
   const translationKey = `skill.desc.${skill.name}`;
   const translated = t(translationKey);
-  
+
   // If translation exists and is different from the key, use it
   if (translated !== translationKey) {
     return translated;
   }
-  
+
   // Fall back to original description
   return skill.description;
 }

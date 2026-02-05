@@ -1,10 +1,10 @@
 import { html, nothing } from "lit";
-import type { WhatsAppStatus } from "../types";
+import type { WhatsAppStatus } from "../types.js";
 import type { ChannelsProps } from "./channels.types";
-import { formatAgo } from "../format";
+import { formatAgo } from "../format.js";
+import { t } from "../i18n.js";
 import { renderChannelConfigSection } from "./channels.config";
 import { formatDuration } from "./channels.shared";
-import { t } from "../i18n.js";
 
 export function renderWhatsAppCard(params: {
   props: ChannelsProps;
