@@ -256,10 +256,11 @@ export function renderCron(props: CronProps) {
                       <label class="field">
                         <span>${t("cron.form.post_to_main_prefix")}</span>
                         <input
-                          .value=${props.form.postToMainPrefix}
-                          @input=${(e: Event) =>
+                          type="checkbox"
+                          .checked=${props.form.postToMainPrefix}
+                          @change=${(e: Event) =>
                             props.onFormChange({
-                              postToMainPrefix: (e.target as HTMLInputElement).value,
+                              postToMainPrefix: (e.target as HTMLInputElement).checked,
                             })}
                         />
                       </label>
