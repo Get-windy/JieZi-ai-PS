@@ -10,7 +10,7 @@ import {
   normalizeChannelId,
 } from "../../channels/plugins/index.js";
 import { buildChannelAccountSnapshot } from "../../channels/plugins/status.js";
-import { loadConfig, readConfigFileSnapshot } from "../../config/config.js";
+import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../config/config.js";
 import { getChannelActivity } from "../../infra/channel-activity.js";
 import { DEFAULT_ACCOUNT_ID } from "../../routing/session-key.js";
 import { defaultRuntime } from "../../runtime.js";
@@ -285,6 +285,171 @@ export const channelsHandlers: GatewayRequestHandlers = {
         plugin,
       });
       respond(true, payload, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+    }
+  },
+
+  // 保存通道账号配置
+  "channels.account.save": async ({ params, respond }) => {
+    try {
+      const { channelId, accountId, name, config } = params as {
+        channelId: string;
+        accountId: string;
+        name?: string;
+        config: Record<string, unknown>;
+      };
+
+      if (!channelId || !accountId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "channelId and accountId are required"),
+        );
+        return;
+      }
+
+      // 验证账号ID格式
+      const idPattern = /^[a-z0-9][a-z0-9-]*$/;
+      if (!idPattern.test(accountId)) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            "accountId must contain only lowercase letters, numbers, and hyphens",
+          ),
+        );
+        return;
+      }
+
+      const snapshot = await readConfigFileSnapshot();
+      if (!snapshot.valid) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, "config file snapshot is invalid"),
+        );
+        return;
+      }
+
+      const cfg = snapshot.config ?? {};
+      let next = { ...cfg };
+
+      // 更新配置
+      const channelsConfig = (next.channels as Record<string, unknown>) || {};
+      const channelConfig = (channelsConfig[channelId] as Record<string, unknown>) || {};
+      const accountsConfig =
+        ((channelConfig as Record<string, unknown>).accounts as Record<string, unknown>) || {};
+
+      // 合并账号配置
+      const accountData: Record<string, unknown> = {
+        ...(accountsConfig[accountId] as Record<string, unknown>),
+        ...config,
+      };
+
+      // name 字段单独处理，允许空字符串
+      if (name !== undefined) {
+        accountData.name = name;
+      }
+
+      accountsConfig[accountId] = accountData;
+
+      next.channels = {
+        ...channelsConfig,
+        [channelId]: {
+          ...channelConfig,
+          accounts: accountsConfig,
+        },
+      };
+
+      await writeConfigFile(next);
+      respond(true, { success: true, channelId, accountId }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+    }
+  },
+
+  // 删除通道账号
+  "channels.account.delete": async ({ params, respond, context }) => {
+    try {
+      const { channelId, accountId } = params as {
+        channelId: string;
+        accountId: string;
+      };
+
+      if (!channelId || !accountId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "channelId and accountId are required"),
+        );
+        return;
+      }
+
+      const normalizedChannelId = normalizeChannelId(channelId);
+      if (!normalizedChannelId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `invalid channel: ${channelId}`),
+        );
+        return;
+      }
+
+      const plugin = getChannelPlugin(normalizedChannelId);
+      if (!plugin) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `unknown channel: ${channelId}`),
+        );
+        return;
+      }
+
+      const snapshot = await readConfigFileSnapshot();
+      if (!snapshot.valid) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, "config file snapshot is invalid"),
+        );
+        return;
+      }
+
+      const cfg = snapshot.config ?? {};
+
+      // 停止该账号的运行
+      await context.stopChannel(normalizedChannelId, accountId);
+
+      // 使用插件的 deleteAccount 方法删除配置
+      if (plugin.config.deleteAccount) {
+        const next = plugin.config.deleteAccount({ cfg, accountId });
+        await writeConfigFile(next);
+      } else {
+        // 如果没有 deleteAccount 方法，手动删除
+        let next = { ...cfg };
+        const channelsConfig = (next.channels as Record<string, unknown>) || {};
+        const channelConfig =
+          (channelsConfig[normalizedChannelId] as Record<string, unknown>) || {};
+        const accountsConfig =
+          ((channelConfig as Record<string, unknown>).accounts as Record<string, unknown>) || {};
+
+        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+        delete accountsConfig[accountId];
+
+        next.channels = {
+          ...channelsConfig,
+          [normalizedChannelId]: {
+            ...channelConfig,
+            accounts: accountsConfig,
+          },
+        };
+
+        await writeConfigFile(next);
+      }
+
+      respond(true, { success: true, channelId: normalizedChannelId, accountId }, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
     }

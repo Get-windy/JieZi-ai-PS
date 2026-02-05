@@ -92,3 +92,7 @@ export async function logoutWhatsApp(state: ChannelsState) {
     state.whatsappBusy = false;
   }
 }
+
+export async function loadChannelsStatus(state: ChannelsState, client: unknown, probe: boolean) {
+  await loadChannels(state, probe);
+}

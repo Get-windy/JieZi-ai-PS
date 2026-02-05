@@ -11,6 +11,74 @@ export const DEFAULT_AGENT_ID = "main";
 export const DEFAULT_MAIN_KEY = "main";
 export const DEFAULT_ACCOUNT_ID = "default";
 
+/**
+ * 生成通道账号ID
+ * 格式：通道名-时间戳 (例如: feishu-1k2m3n4p)
+ * @param channelId 通道ID
+ * @param name 可选的显示名称（如果提供，会尝试使用）
+ * @param existingIds 已存在的账号ID列表，用于避免重复
+ */
+export function generateChannelAccountId(
+  channelId: string | undefined | null,
+  name?: string | undefined | null,
+  existingIds?: string[],
+): string {
+  // 生成基于时间戳的唯一后缀（8位36进制）
+  const timestamp = Date.now().toString(36).slice(-8);
+
+  let baseId: string;
+
+  if (channelId?.trim()) {
+    // 使用通道ID作为前缀
+    baseId = `${channelId.trim()}-${timestamp}`;
+  } else if (name?.trim()) {
+    // 如果没有通道ID，使用名称生成
+    let nameId = name
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_]+/g, "-")
+      .replace(/[^a-z0-9\u4e00-\u9fa5-]/g, "")
+      .replace(/^-+|-+$/g, "");
+
+    // 处理中文
+    if (/[\u4e00-\u9fa5]/.test(nameId)) {
+      nameId = nameId.replace(/[\u4e00-\u9fa5]/g, "");
+    }
+
+    if (!nameId || nameId.length < 2) {
+      nameId = "account";
+    }
+
+    // 限制长度
+    if (nameId.length > 15) {
+      nameId = nameId.slice(0, 15);
+    }
+
+    baseId = `${nameId}-${timestamp}`;
+  } else {
+    // 完全随机
+    baseId = `account-${timestamp}`;
+  }
+
+  // 确保以字母或数字开头
+  if (!/^[a-z0-9]/.test(baseId)) {
+    baseId = `acc-${baseId}`;
+  }
+
+  // 检查重复（理论上时间戳应该不会重复，但保险起见）
+  if (existingIds && existingIds.length > 0) {
+    let finalId = baseId;
+    let counter = 1;
+    while (existingIds.includes(finalId)) {
+      finalId = `${baseId}-${counter}`;
+      counter++;
+    }
+    return finalId;
+  }
+
+  return baseId;
+}
+
 // Pre-compiled regex
 const VALID_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const INVALID_CHARS_RE = /[^a-z0-9_-]+/g;

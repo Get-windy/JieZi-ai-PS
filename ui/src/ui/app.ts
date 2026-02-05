@@ -198,6 +198,10 @@ export class OpenClawApp extends LitElement {
     name?: string;
     config: Record<string, unknown>;
   } | null = null;
+  @state() viewingChannelAccount: {
+    channelId: string;
+    accountId: string;
+  } | null = null; // 查看模式，只读
 
   // 会话存储管理状态
   @state() storageCurrentPath: string | null = null;
@@ -216,6 +220,9 @@ export class OpenClawApp extends LitElement {
   @state() creatingChannelAccount = false;
   @state() deletingChannelAccount = false;
   @state() managingChannelId: string | null = null;
+  @state() showAllChannelsModal = false; // 显示所有通道弹窗
+  @state() debuggingChannel: { channelId: string; accountId?: string } | null = null; // 调试状态
+  @state() editingChannelGlobalConfig: string | null = null; // 正在编辑全局配置的通道ID
 
   @state() presenceLoading = false;
   @state() presenceEntries: PresenceEntry[] = [];
@@ -577,6 +584,216 @@ export class OpenClawApp extends LitElement {
   async handleStorageMigrate(moveFiles: boolean) {
     const { migrateStorageData } = await import("./controllers/storage.js");
     await migrateStorageData(this, this.client, this.storageNewPath, moveFiles);
+  }
+
+  // 通道账号管理方法
+  handleManageAccounts(channelId: string) {
+    this.managingChannelId = channelId || null;
+  }
+
+  handleAddAccount(channelId: string) {
+    this.editingChannelAccount = {
+      channelId,
+      accountId: "",
+      name: "",
+      config: {},
+    };
+    this.managingChannelId = null;
+    this.viewingChannelAccount = null;
+  }
+
+  handleViewAccount(channelId: string, accountId: string) {
+    this.viewingChannelAccount = {
+      channelId,
+      accountId,
+    };
+    this.managingChannelId = null;
+    this.editingChannelAccount = null;
+  }
+
+  handleEditAccount(channelId: string, accountId: string) {
+    const accounts = this.channelsSnapshot?.channelAccounts?.[channelId] ?? [];
+    const account = accounts.find((a) => a.accountId === accountId);
+
+    this.editingChannelAccount = {
+      channelId,
+      accountId,
+      name: account?.name || "",
+      config: this.extractAccountConfig(channelId, accountId),
+    };
+    this.managingChannelId = null;
+    this.viewingChannelAccount = null;
+  }
+
+  async handleDeleteAccount(channelId: string, accountId: string) {
+    if (!this.client) return;
+
+    this.deletingChannelAccount = true;
+    try {
+      await this.client.request("channels.account.delete", {
+        channelId,
+        accountId,
+      });
+
+      // 刷新配置和通道状态
+      const { loadConfig } = await import("./controllers/config.js");
+      await loadConfig(this);
+      await this.handleChannelsRefresh(false);
+      this.managingChannelId = channelId;
+    } catch (err) {
+      console.error("Delete account failed:", err);
+      this.channelsError = String(err);
+    } finally {
+      this.deletingChannelAccount = false;
+    }
+  }
+
+  async handleSaveAccount() {
+    if (!this.client || !this.editingChannelAccount) return;
+
+    const { channelId, accountId, name, config } = this.editingChannelAccount;
+    const idPattern = /^[a-z0-9][a-z0-9-]*$/;
+
+    if (!accountId || !idPattern.test(accountId)) {
+      return;
+    }
+
+    this.creatingChannelAccount = true;
+    try {
+      await this.client.request("channels.account.save", {
+        channelId,
+        accountId,
+        name,
+        config,
+      });
+
+      // 刷新配置和通道状态
+      const { loadConfig } = await import("./controllers/config.js");
+      await loadConfig(this);
+      await this.handleChannelsRefresh(false);
+      this.editingChannelAccount = null;
+      this.managingChannelId = channelId;
+    } catch (err) {
+      console.error("Save account failed:", err);
+      this.channelsError = String(err);
+    } finally {
+      this.creatingChannelAccount = false;
+    }
+  }
+
+  handleCancelAccountEdit() {
+    const channelId = this.editingChannelAccount?.channelId;
+    this.editingChannelAccount = null;
+    if (channelId) {
+      this.managingChannelId = channelId;
+    }
+  }
+
+  handleCancelAccountView() {
+    const channelId = this.viewingChannelAccount?.channelId;
+    this.viewingChannelAccount = null;
+    if (channelId) {
+      this.managingChannelId = channelId;
+    }
+  }
+
+  handleToggleAllChannelsModal() {
+    this.showAllChannelsModal = !this.showAllChannelsModal;
+  }
+
+  handleToggleChannelVisibility(channelId: string) {
+    const hiddenChannels = this.getHiddenChannels();
+    if (hiddenChannels.includes(channelId)) {
+      // 显示通道
+      this.setHiddenChannels(hiddenChannels.filter((id) => id !== channelId));
+    } else {
+      // 隐藏通道
+      this.setHiddenChannels([...hiddenChannels, channelId]);
+    }
+    this.requestUpdate();
+  }
+
+  private getHiddenChannels(): string[] {
+    try {
+      const stored = localStorage.getItem("openclaw.hiddenChannels");
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private setHiddenChannels(channels: string[]) {
+    try {
+      localStorage.setItem("openclaw.hiddenChannels", JSON.stringify(channels));
+    } catch (err) {
+      console.error("Failed to save hidden channels:", err);
+    }
+  }
+
+  handleDebugChannel(channelId: string, accountId?: string) {
+    this.debuggingChannel = { channelId, accountId };
+    // 触发 probe
+    void this.handleChannelsRefresh(true);
+  }
+
+  handleCloseDebug() {
+    this.debuggingChannel = null;
+  }
+
+  handleEditChannelGlobalConfig(channelId: string) {
+    this.editingChannelGlobalConfig = channelId;
+  }
+
+  handleCancelChannelGlobalConfig() {
+    this.editingChannelGlobalConfig = null;
+  }
+
+  async handleSaveChannelGlobalConfig() {
+    if (!this.editingChannelGlobalConfig) return;
+
+    // 保存配置
+    const { saveConfig } = await import("./controllers/config.js");
+    await saveConfig(this);
+
+    this.editingChannelGlobalConfig = null;
+  }
+
+  handleAccountFormChange(field: string, value: unknown) {
+    if (!this.editingChannelAccount) return;
+
+    if (field.startsWith("config.")) {
+      const configField = field.substring(7);
+      this.editingChannelAccount = {
+        ...this.editingChannelAccount,
+        config: {
+          ...this.editingChannelAccount.config,
+          [configField]: value,
+        },
+      };
+    } else {
+      this.editingChannelAccount = {
+        ...this.editingChannelAccount,
+        [field]: value,
+      };
+    }
+  }
+
+  async handleChannelsRefresh(probe: boolean) {
+    const { loadChannelsStatus } = await import("./controllers/channels.js");
+    await loadChannelsStatus(this, this.client, probe);
+  }
+
+  private extractAccountConfig(channelId: string, accountId: string): Record<string, unknown> {
+    // 从当前配置中提取账号配置
+    const cfg = this.configForm;
+    if (!cfg) return {};
+
+    const channelsConfig = cfg.channels as Record<string, unknown> | undefined;
+    const channelConfig = channelsConfig?.[channelId] as Record<string, unknown> | undefined;
+    const accountsConfig = channelConfig?.accounts as Record<string, unknown> | undefined;
+    const accountConfig = accountsConfig?.[accountId] as Record<string, unknown> | undefined;
+
+    return accountConfig || {};
   }
 
   render() {

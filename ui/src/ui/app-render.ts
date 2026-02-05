@@ -350,20 +350,37 @@ export function renderApp(state: AppViewState) {
                 onNostrProfileSave: () => state.handleNostrProfileSave(),
                 onNostrProfileImport: () => state.handleNostrProfileImport(),
                 editingChannelAccount: state.editingChannelAccount,
+                viewingChannelAccount: state.viewingChannelAccount,
                 creatingChannelAccount: state.creatingChannelAccount,
                 deletingChannelAccount: state.deletingChannelAccount,
                 managingChannelId: state.managingChannelId,
+                showAllChannelsModal: state.showAllChannelsModal,
+                debuggingChannel: state.debuggingChannel,
+                editingChannelGlobalConfig: state.editingChannelGlobalConfig,
                 onManageAccounts: (channelId: string) =>
                   (state as any).handleManageAccounts(channelId),
                 onAddAccount: (channelId: string) => (state as any).handleAddAccount(channelId),
+                onViewAccount: (channelId: string, accountId: string) =>
+                  (state as any).handleViewAccount(channelId, accountId),
                 onEditAccount: (channelId: string, accountId: string) =>
                   (state as any).handleEditAccount(channelId, accountId),
                 onDeleteAccount: (channelId: string, accountId: string) =>
                   (state as any).handleDeleteAccount(channelId, accountId),
                 onSaveAccount: () => (state as any).handleSaveAccount(),
                 onCancelAccountEdit: () => (state as any).handleCancelAccountEdit(),
+                onCancelAccountView: () => (state as any).handleCancelAccountView(),
                 onAccountFormChange: (field: string, value: unknown) =>
                   (state as any).handleAccountFormChange(field, value),
+                onToggleAllChannelsModal: () => (state as any).handleToggleAllChannelsModal(),
+                onToggleChannelVisibility: (channelId: string) =>
+                  (state as any).handleToggleChannelVisibility(channelId),
+                onDebugChannel: (channelId: string, accountId?: string) =>
+                  (state as any).handleDebugChannel(channelId, accountId),
+                onCloseDebug: () => (state as any).handleCloseDebug(),
+                onEditChannelGlobalConfig: (channelId: string) =>
+                  (state as any).handleEditChannelGlobalConfig(channelId),
+                onCancelChannelGlobalConfig: () => (state as any).handleCancelChannelGlobalConfig(),
+                onSaveChannelGlobalConfig: () => (state as any).handleSaveChannelGlobalConfig(),
                 onNostrProfileToggleAdvanced: () => state.handleNostrProfileToggleAdvanced(),
               })
             : nothing

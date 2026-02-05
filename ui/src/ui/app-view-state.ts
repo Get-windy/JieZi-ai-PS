@@ -107,9 +107,16 @@ export type AppViewState = {
     name?: string;
     config: Record<string, unknown>;
   } | null;
+  viewingChannelAccount: {
+    channelId: string;
+    accountId: string;
+  } | null; // 查看模式，只读
   creatingChannelAccount: boolean;
   deletingChannelAccount: boolean;
   managingChannelId: string | null;
+  showAllChannelsModal: boolean;
+  debuggingChannel: { channelId: string; accountId?: string } | null;
+  editingChannelGlobalConfig: string | null;
   configFormDirty: boolean;
   presenceLoading: boolean;
   presenceEntries: PresenceEntry[];

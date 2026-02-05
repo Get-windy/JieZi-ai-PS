@@ -44,6 +44,7 @@ const DEFAULT_RELOAD_SETTINGS: GatewayReloadSettings = {
 };
 
 const BASE_RELOAD_RULES: ReloadRule[] = [
+  { prefix: "meta.lastTouchedAt", kind: "none" }, // 配置修改时间戳，不需要重启
   { prefix: "gateway.remote", kind: "none" },
   { prefix: "gateway.reload", kind: "none" },
   { prefix: "hooks.gmail", kind: "hot", actions: ["restart-gmail-watcher"] },
@@ -77,6 +78,7 @@ const BASE_RELOAD_RULES_TAIL: ReloadRule[] = [
   { prefix: "session", kind: "none" },
   { prefix: "talk", kind: "none" },
   { prefix: "skills", kind: "none" },
+  { prefix: "meta", kind: "none" }, // 元数据（时间戳等）不需要重启
   { prefix: "plugins", kind: "restart" },
   { prefix: "ui", kind: "none" },
   { prefix: "gateway", kind: "restart" },
