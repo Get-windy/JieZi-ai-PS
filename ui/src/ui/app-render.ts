@@ -876,7 +876,9 @@ export function renderApp(state: AppViewState) {
                   state.deletingAgent = true;
                   try {
                     // 获取当前配置
-                    const config = await state.client.request("config.get", {});
+                    const config = (await state.client.request("config.get", {})) as {
+                      agents?: { list?: any[] };
+                    } | null;
                     if (!config?.agents?.list) {
                       throw new Error("No agents configuration found");
                     }
@@ -910,7 +912,9 @@ export function renderApp(state: AppViewState) {
                   state.creatingAgent = true;
                   try {
                     // 获取当前配置
-                    const config = await state.client.request("config.get", {});
+                    const config = (await state.client.request("config.get", {})) as {
+                      agents?: { list?: any[] };
+                    } | null;
                     const list = config?.agents?.list ?? [];
                     // 检查是否是新建还是编辑
                     const existingIndex = list.findIndex(
@@ -1056,7 +1060,8 @@ export function renderApp(state: AppViewState) {
                 },
                 onExecApprovalsPatch: (path: (string | number)[], value: any) =>
                   updateExecApprovalsFormValue(state, path, value),
-                onExecApprovalsRemove: (path: string) => removeExecApprovalsFormValue(state, path),
+                onExecApprovalsRemove: (path: (string | number)[]) =>
+                  removeExecApprovalsFormValue(state, path),
                 onSaveExecApprovals: () => {
                   const target =
                     state.execApprovalsTarget === "node" && state.execApprovalsTargetNodeId

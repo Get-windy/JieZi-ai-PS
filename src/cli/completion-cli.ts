@@ -43,7 +43,7 @@ function resolveCompletionCacheDir(env: NodeJS.ProcessEnv = process.env): string
   return path.join(stateDir, "completions");
 }
 
-function resolveCompletionCachePath(shell: CompletionShell, binName: string): string {
+export function resolveCompletionCachePath(shell: CompletionShell, binName: string): string {
   const basename = sanitizeCompletionBasename(binName);
   const extension =
     shell === "powershell" ? "ps1" : shell === "fish" ? "fish" : shell === "bash" ? "bash" : "zsh";
@@ -140,8 +140,50 @@ function updateCompletionProfile(
 
   const trimmed = filtered.join("\n").trimEnd();
   const block = `# OpenClaw Completion\n${sourceLine}`;
-  const next = trimmed ? `${trimmed}\n\n${block}\n` : `${block}\n`;
+  const next = trimmed
+    ? `${trimmed}
+
+${block}
+`
+    : `${block}
+`;
   return { next, changed: next !== content, hadExisting };
+}
+
+export async function completionCacheExists(
+  shell: CompletionShell,
+  binName: string,
+): Promise<boolean> {
+  const cachePath = resolveCompletionCachePath(shell, binName);
+  return pathExists(cachePath);
+}
+
+export async function usesSlowDynamicCompletion(
+  shell: CompletionShell,
+  binName: string,
+): Promise<boolean> {
+  const home = process.env.HOME || os.homedir();
+  let profilePath = "";
+  if (shell === "zsh") {
+    profilePath = path.join(home, ".zshrc");
+  } else if (shell === "bash") {
+    profilePath = path.join(home, ".bashrc");
+    if (!(await pathExists(profilePath))) {
+      profilePath = path.join(home, ".bash_profile");
+    }
+  } else if (shell === "fish") {
+    profilePath = path.join(home, ".config", "fish", "config.fish");
+  } else {
+    return false;
+  }
+
+  if (!(await pathExists(profilePath))) {
+    return false;
+  }
+  const content = await fs.readFile(profilePath, "utf-8");
+  const lines = content.split("\n");
+  // Check if any line uses the slow dynamic pattern: source <(...)
+  return lines.some((line) => line.includes(`${binName} completion`) && line.includes("source <("));
 }
 
 export async function isCompletionInstalled(
