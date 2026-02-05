@@ -27,6 +27,7 @@ import {
   detectBrowserOpenSupport,
   formatControlUiSshHint,
   openUrl,
+  openUrlInBackground,
   probeGatewayReachable,
   waitForGatewayReachable,
   resolveControlUiLinks,
