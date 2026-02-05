@@ -1,7 +1,9 @@
 import { html, nothing } from "lit";
 import type { AppViewState } from "./app-view-state.js";
 import type { GatewayBrowserClient } from "./gateway.js";
+import type { UiSettings } from "./storage.js";
 import type { ConfigUiHints } from "./types.js";
+import type { NostrProfile } from "./views/channels.nostr-profile.js";
 import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
 import { refreshChatAvatar } from "./app-chat.js";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.js";
@@ -258,9 +260,9 @@ export function renderApp(state: AppViewState) {
                 cronEnabled: state.cronStatus?.enabled ?? null,
                 cronNext,
                 lastChannelsRefresh: state.channelsLastSuccess,
-                onSettingsChange: (next: string | boolean) => state.applySettings(next),
-                onPasswordChange: (next: string | boolean) => (state.password = next),
-                onSessionKeyChange: (next: string | boolean) => {
+                onSettingsChange: (next: UiSettings) => state.applySettings(next),
+                onPasswordChange: (next: string) => (state.password = next),
+                onSessionKeyChange: (next: string) => {
                   state.sessionKey = next;
                   state.chatMessage = "";
                   (state as any).resetToolStream();
@@ -286,7 +288,10 @@ export function renderApp(state: AppViewState) {
                     ? {
                         currentPath: state.storageBrowserPath,
                         parentPath: state.storageBrowserParent,
-                        directories: state.storageBrowserDirectories,
+                        directories: state.storageBrowserDirectories.map((dir: string) => ({
+                          name: dir,
+                          path: dir,
+                        })),
                         drives: state.storageBrowserDrives,
                         loading: state.storageBrowserLoading,
                         error: state.storageBrowserError,
@@ -330,14 +335,14 @@ export function renderApp(state: AppViewState) {
                 onWhatsAppStart: (force: boolean) => state.handleWhatsAppStart(force),
                 onWhatsAppWait: () => state.handleWhatsAppWait(),
                 onWhatsAppLogout: () => state.handleWhatsAppLogout(),
-                onConfigPatch: (path: string, value: any) =>
+                onConfigPatch: (path: (string | number)[], value: any) =>
                   updateConfigFormValue(state as any, path, value),
                 onConfigSave: () => state.handleChannelConfigSave(),
                 onConfigReload: () => state.handleChannelConfigReload(),
                 onNostrProfileEdit: (accountId: string, profile: any) =>
                   state.handleNostrProfileEdit(accountId, profile),
                 onNostrProfileCancel: () => state.handleNostrProfileCancel(),
-                onNostrProfileFieldChange: (field: string, value: any) =>
+                onNostrProfileFieldChange: (field: keyof NostrProfile, value: any) =>
                   state.handleNostrProfileFieldChange(field, value),
                 onNostrProfileSave: () => state.handleNostrProfileSave(),
                 onNostrProfileImport: () => state.handleNostrProfileImport(),
@@ -369,7 +374,12 @@ export function renderApp(state: AppViewState) {
                 includeGlobal: state.sessionsIncludeGlobal,
                 includeUnknown: state.sessionsIncludeUnknown,
                 basePath: state.basePath,
-                onFiltersChange: (next: string | boolean) => {
+                onFiltersChange: (next: {
+                  activeMinutes: string;
+                  limit: string;
+                  includeGlobal: boolean;
+                  includeUnknown: boolean;
+                }) => {
                   state.sessionsFilterActive = next.activeMinutes;
                   state.sessionsFilterLimit = next.limit;
                   state.sessionsIncludeGlobal = next.includeGlobal;
