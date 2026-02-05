@@ -623,7 +623,7 @@ export function renderApp(state: AppViewState) {
                 onConfigSave: () => saveConfig(state as any),
                 onChannelsRefresh: () => loadChannels(state, false),
                 onCronRefresh: () => state.loadCron(),
-                onSkillsFilterChange: (next: string | boolean) => (state.skillsFilter = next),
+                onSkillsFilterChange: (next: string) => (state.skillsFilter = next),
                 onSkillsRefresh: () => {
                   if (resolvedAgentId) {
                     void loadAgentSkills(state, resolvedAgentId);
@@ -976,7 +976,7 @@ export function renderApp(state: AppViewState) {
                 edits: state.skillEdits,
                 messages: state.skillMessages,
                 busyKey: state.skillsBusyKey,
-                onFilterChange: (next: string | boolean) => (state.skillsFilter = next),
+                onFilterChange: (next: string) => (state.skillsFilter = next),
                 onRefresh: () => loadSkills(state, { clearMessages: true }),
                 onToggle: (key: string, enabled: boolean) =>
                   updateSkillEnabled(state, key, enabled),
@@ -1027,14 +1027,14 @@ export function renderApp(state: AppViewState) {
                       : { kind: "gateway" as const };
                   return loadExecApprovals(state, target);
                 },
-                onBindDefault: (nodeId: string) => {
+                onBindDefault: (nodeId: string | null) => {
                   if (nodeId) {
                     updateConfigFormValue(state as any, ["tools", "exec", "node"], nodeId);
                   } else {
                     removeConfigFormValue(state as any, ["tools", "exec", "node"]);
                   }
                 },
-                onBindAgent: (agentIndex: number, nodeId: string) => {
+                onBindAgent: (agentIndex: number, nodeId: string | null) => {
                   const basePath = ["agents", "list", agentIndex, "tools", "exec", "node"];
                   if (nodeId) {
                     updateConfigFormValue(state as any, basePath, nodeId);
@@ -1043,8 +1043,8 @@ export function renderApp(state: AppViewState) {
                   }
                 },
                 onSaveBindings: () => saveConfig(state as any),
-                onExecApprovalsTargetChange: (kind: string, nodeId: string) => {
-                  state.execApprovalsTarget = kind;
+                onExecApprovalsTargetChange: (kind: "gateway" | "node", nodeId: string | null) => {
+                  state.execApprovalsTarget = kind as "gateway" | "node";
                   state.execApprovalsTargetNodeId = nodeId;
                   state.execApprovalsSnapshot = null;
                   state.execApprovalsForm = null;
@@ -1054,7 +1054,7 @@ export function renderApp(state: AppViewState) {
                 onExecApprovalsSelectAgent: (agentId: string) => {
                   state.execApprovalsSelectedAgent = agentId;
                 },
-                onExecApprovalsPatch: (path: string, value: any) =>
+                onExecApprovalsPatch: (path: (string | number)[], value: any) =>
                   updateExecApprovalsFormValue(state, path, value),
                 onExecApprovalsRemove: (path: string) => removeExecApprovalsFormValue(state, path),
                 onSaveExecApprovals: () => {
