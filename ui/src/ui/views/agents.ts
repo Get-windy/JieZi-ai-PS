@@ -17,13 +17,13 @@ import {
   resolveToolProfilePolicy,
 } from "../../../../src/agents/tool-policy.js";
 import { formatAgo } from "../format.ts";
+import { t } from "../i18n.js";
 import {
   formatCronPayload,
   formatCronSchedule,
   formatCronState,
   formatNextRun,
 } from "../presenter";
-import { t } from "../i18n.js";
 
 export type AgentsPanel = "overview" | "files" | "tools" | "skills" | "channels" | "cron";
 
@@ -103,7 +103,11 @@ const TOOL_SECTIONS = [
       { id: "read", label: "read", description: () => t("agents.tools.tool.read") },
       { id: "write", label: "write", description: () => t("agents.tools.tool.write") },
       { id: "edit", label: "edit", description: () => t("agents.tools.tool.edit") },
-      { id: "apply_patch", label: "apply_patch", description: () => t("agents.tools.tool.apply_patch") },
+      {
+        id: "apply_patch",
+        label: "apply_patch",
+        description: () => t("agents.tools.tool.apply_patch"),
+      },
     ],
   },
   {
@@ -118,7 +122,11 @@ const TOOL_SECTIONS = [
     id: "web",
     label: () => t("agents.tools.section.web"),
     tools: [
-      { id: "web_search", label: "web_search", description: () => t("agents.tools.tool.web_search") },
+      {
+        id: "web_search",
+        label: "web_search",
+        description: () => t("agents.tools.tool.web_search"),
+      },
       { id: "web_fetch", label: "web_fetch", description: () => t("agents.tools.tool.web_fetch") },
     ],
   },
@@ -126,19 +134,47 @@ const TOOL_SECTIONS = [
     id: "memory",
     label: () => t("agents.tools.section.memory"),
     tools: [
-      { id: "memory_search", label: "memory_search", description: () => t("agents.tools.tool.memory_search") },
-      { id: "memory_get", label: "memory_get", description: () => t("agents.tools.tool.memory_get") },
+      {
+        id: "memory_search",
+        label: "memory_search",
+        description: () => t("agents.tools.tool.memory_search"),
+      },
+      {
+        id: "memory_get",
+        label: "memory_get",
+        description: () => t("agents.tools.tool.memory_get"),
+      },
     ],
   },
   {
     id: "sessions",
     label: () => t("agents.tools.section.sessions"),
     tools: [
-      { id: "sessions_list", label: "sessions_list", description: () => t("agents.tools.tool.sessions_list") },
-      { id: "sessions_history", label: "sessions_history", description: () => t("agents.tools.tool.sessions_history") },
-      { id: "sessions_send", label: "sessions_send", description: () => t("agents.tools.tool.sessions_send") },
-      { id: "sessions_spawn", label: "sessions_spawn", description: () => t("agents.tools.tool.sessions_spawn") },
-      { id: "session_status", label: "session_status", description: () => t("agents.tools.tool.session_status") },
+      {
+        id: "sessions_list",
+        label: "sessions_list",
+        description: () => t("agents.tools.tool.sessions_list"),
+      },
+      {
+        id: "sessions_history",
+        label: "sessions_history",
+        description: () => t("agents.tools.tool.sessions_history"),
+      },
+      {
+        id: "sessions_send",
+        label: "sessions_send",
+        description: () => t("agents.tools.tool.sessions_send"),
+      },
+      {
+        id: "sessions_spawn",
+        label: "sessions_spawn",
+        description: () => t("agents.tools.tool.sessions_spawn"),
+      },
+      {
+        id: "session_status",
+        label: "session_status",
+        description: () => t("agents.tools.tool.session_status"),
+      },
     ],
   },
   {
@@ -170,7 +206,13 @@ const TOOL_SECTIONS = [
   {
     id: "agents",
     label: () => t("agents.tools.section.agents"),
-    tools: [{ id: "agents_list", label: "agents_list", description: () => t("agents.tools.tool.agents_list") }],
+    tools: [
+      {
+        id: "agents_list",
+        label: "agents_list",
+        description: () => t("agents.tools.tool.agents_list"),
+      },
+    ],
   },
   {
     id: "media",
@@ -340,7 +382,9 @@ function buildAgentContext(
     model: modelLabel,
     identityName,
     identityEmoji,
-    skillsLabel: skillFilter ? t("agents.overview.selected_skills").replace("{count}", String(skillCount)) : t("agents.overview.all_skills"),
+    skillsLabel: skillFilter
+      ? t("agents.overview.selected_skills").replace("{count}", String(skillCount))
+      : t("agents.overview.all_skills"),
     isDefault: Boolean(defaultId && agent.id === defaultId),
   };
 }
@@ -454,7 +498,10 @@ function buildModelOptions(configForm: Record<string, unknown> | null, current?:
   const options = resolveConfiguredModels(configForm);
   const hasCurrent = current ? options.some((option) => option.value === current) : false;
   if (current && !hasCurrent) {
-    options.unshift({ value: current, label: t("agents.overview.current_model").replace("{model}", current) });
+    options.unshift({
+      value: current,
+      label: t("agents.overview.current_model").replace("{model}", current),
+    });
   }
   if (options.length === 0) {
     return html`
@@ -616,9 +663,9 @@ export function renderAgents(props: AgentsProps) {
                 </div>
               `
             : props.editingAgent
-            ? renderAgentEditModal(props)
-            : selectedAgent
-            ? html`
+              ? renderAgentEditModal(props)
+              : selectedAgent
+                ? html`
               ${renderAgentHeader(
                 selectedAgent,
                 defaultId,
@@ -737,7 +784,7 @@ export function renderAgents(props: AgentsProps) {
                   : nothing
               }
             `
-            : nothing
+                : nothing
         }
       </section>
     </div>
@@ -769,15 +816,21 @@ function renderAgentHeader(
       <div class="agent-header-meta">
         <div class="mono">${agent.id}</div>
         ${badge ? html`<span class="agent-pill">${badge}</span>` : nothing}
-        ${onEdit ? html`
+        ${
+          onEdit
+            ? html`
           <button 
             class="btn btn--sm" 
             @click=${() => onEdit(agent.id)}
           >
             ${t("agents.edit_agent_short")}
           </button>
-        ` : nothing}
-        ${onDelete ? html`
+        `
+            : nothing
+        }
+        ${
+          onDelete
+            ? html`
           <button 
             class="btn btn--sm btn--danger" 
             @click=${() => {
@@ -788,7 +841,9 @@ function renderAgentHeader(
           >
             ${t("agents.delete_agent")}
           </button>
-        ` : nothing}
+        `
+            : nothing
+        }
       </div>
     </section>
   `;
@@ -921,16 +976,34 @@ function renderAgentOverview(params: {
         <div class="label">${t("agents.overview.model_selection")}</div>
         <div class="row" style="gap: 12px; flex-wrap: wrap;">
           <label class="field" style="min-width: 260px; flex: 1;">
+<<<<<<< HEAD
             <span>${t("agents.overview.primary_model_label")}</span>
+=======
+            <span>Primary model${isDefault ? " (default)" : ""}</span>
+>>>>>>> upstream/main
             <select
               .value=${effectivePrimary ?? ""}
               ?disabled=${!configForm || configLoading || configSaving}
               @change=${(e: Event) =>
                 onModelChange(agent.id, (e.target as HTMLSelectElement).value || null)}
             >
+<<<<<<< HEAD
               <option value="">
                 ${defaultPrimary ? t("agents.overview.inherit_default_with").replace("{model}", defaultPrimary) : t("agents.overview.inherit_default")}
               </option>
+=======
+              ${
+                isDefault
+                  ? nothing
+                  : html`
+                      <option value="">
+                        ${
+                          defaultPrimary ? `Inherit default (${defaultPrimary})` : "Inherit default"
+                        }
+                      </option>
+                    `
+              }
+>>>>>>> upstream/main
               ${buildModelOptions(configForm, effectivePrimary ?? undefined)}
             </select>
           </label>
@@ -1155,7 +1228,9 @@ function renderAgentChannels(params: {
     params.agentIdentity,
   );
   const entries = resolveChannelEntries(params.snapshot);
-  const lastSuccessLabel = params.lastSuccess ? formatAgo(params.lastSuccess) : t("agents.channels.never");
+  const lastSuccessLabel = params.lastSuccess
+    ? formatAgo(params.lastSuccess)
+    : t("agents.channels.never");
   return html`
     <section class="grid grid-cols-2">
       ${renderAgentContextCard(context, t("agents.context.subtitle_channels"))}
@@ -1194,12 +1269,16 @@ function renderAgentChannels(params: {
                 ${entries.map((entry) => {
                   const summary = summarizeChannelAccounts(entry.accounts);
                   const status = summary.total
-                    ? t("agents.channels.connected").replace("{connected}", String(summary.connected)).replace("{total}", String(summary.total))
+                    ? t("agents.channels.connected")
+                        .replace("{connected}", String(summary.connected))
+                        .replace("{total}", String(summary.total))
                     : t("agents.channels.no_accounts");
                   const config = summary.configured
                     ? t("agents.channels.configured").replace("{count}", String(summary.configured))
                     : t("agents.channels.not_configured");
-                  const enabled = summary.total ? t("agents.channels.enabled").replace("{count}", String(summary.enabled)) : t("agents.channels.disabled");
+                  const enabled = summary.total
+                    ? t("agents.channels.enabled").replace("{count}", String(summary.enabled))
+                    : t("agents.channels.disabled");
                   const extras = resolveChannelExtras(params.configForm, entry.id);
                   return html`
                     <div class="list-item">
@@ -1723,9 +1802,17 @@ type SkillGroup = {
 };
 
 const SKILL_SOURCE_GROUPS: Array<{ id: string; label: () => string; sources: string[] }> = [
-  { id: "workspace", label: () => t("agents.skills.group.workspace"), sources: ["openclaw-workspace"] },
+  {
+    id: "workspace",
+    label: () => t("agents.skills.group.workspace"),
+    sources: ["openclaw-workspace"],
+  },
   { id: "built-in", label: () => t("agents.skills.group.builtin"), sources: ["openclaw-bundled"] },
-  { id: "installed", label: () => t("agents.skills.group.installed"), sources: ["openclaw-managed"] },
+  {
+    id: "installed",
+    label: () => t("agents.skills.group.installed"),
+    sources: ["openclaw-managed"],
+  },
   { id: "extra", label: () => t("agents.skills.group.extra"), sources: ["openclaw-extra"] },
 ];
 
@@ -2024,9 +2111,13 @@ function renderAgentEditModal(props: AgentsProps) {
             @input=${(e: Event) => props.onAgentFormChange("id", (e.target as HTMLInputElement).value)}
           />
           <small class="form-text muted">${t("agents.agent_id_help")}</small>
-          ${!isValidId && props.editingAgent?.id ? html`
+          ${
+            !isValidId && props.editingAgent?.id
+              ? html`
             <small class="form-text" style="color: var(--color-danger);">${t("agents.invalid_id")}</small>
-          ` : nothing}
+          `
+              : nothing
+          }
         </div>
         
         <div class="form-group" style="margin-bottom: 12px;">

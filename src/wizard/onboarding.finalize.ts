@@ -6,7 +6,9 @@ import type { RuntimeEnv } from "../runtime.js";
 import type { GatewayWizardSettings, WizardFlow } from "./onboarding.types.js";
 import type { WizardPrompter } from "./prompts.js";
 import { DEFAULT_BOOTSTRAP_FILENAME } from "../agents/workspace.js";
+import { resolveCliName } from "../cli/cli-name.js";
 import { formatCliCommand } from "../cli/command-format.js";
+import { installCompletion } from "../cli/completion-cli.js";
 import {
   buildGatewayInstallPlan,
   gatewayInstallErrorHint,
@@ -15,6 +17,10 @@ import {
   DEFAULT_GATEWAY_DAEMON_RUNTIME,
   GATEWAY_DAEMON_RUNTIME_OPTIONS,
 } from "../commands/daemon-runtime.js";
+import {
+  checkShellCompletionStatus,
+  ensureCompletionCacheExists,
+} from "../commands/doctor-completion.js";
 import { formatHealthCheckFailure } from "../commands/health-format.js";
 import { healthCommand } from "../commands/health.js";
 import {
@@ -183,9 +189,7 @@ export async function finalizeOnboardingWizard(
       } catch (err) {
         installError = err instanceof Error ? err.message : String(err);
       } finally {
-        progress.stop(
-          installError ? "Gateway 服务安装失败。" : "Gateway 服务已安装。",
-        );
+        progress.stop(installError ? "Gateway 服务安装失败。" : "Gateway 服务已安装。");
       }
       if (installError) {
         await prompter.note(`Gateway service install failed: ${installError}`, "Gateway");
@@ -297,7 +301,7 @@ export async function finalizeOnboardingWizard(
           "这是让你的代理成为你的关键行动。",
           "请慢慢来。",
           "你告诉它的越多，体验就会越好。",
-          '我们将发送：“醒醒，我的朋友！”',
+          "我们将发送：“醒醒，我的朋友！”",
         ].join("\n"),
         "启动 TUI（最佳选项！）",
       );
@@ -338,9 +342,7 @@ export async function finalizeOnboardingWizard(
       }
       if (seededInBackground) {
         await prompter.note(
-          `Web UI 在后台种子化。稍后打开：${formatCliCommand(
-            "openclaw dashboard --no-open",
-          )}`,
+          `Web UI 在后台种子化。稍后打开：${formatCliCommand("openclaw dashboard --no-open")}`,
           "Web UI",
         );
       }
@@ -385,10 +387,7 @@ export async function finalizeOnboardingWizard(
   }
 
   await prompter.note(
-    [
-      "备份你的代理工作区。",
-      "文档：https://docs.openclaw.ai/concepts/agent-workspace",
-    ].join("\n"),
+    ["备份你的代理工作区。", "文档：https://docs.openclaw.ai/concepts/agent-workspace"].join("\n"),
     "工作区备份",
   );
 
@@ -396,6 +395,51 @@ export async function finalizeOnboardingWizard(
     "在你的计算机上运行代理是有风险的 — 加固你的设置：https://docs.openclaw.ai/security",
     "安全",
   );
+
+  // Shell completion setup
+  const cliName = resolveCliName();
+  const completionStatus = await checkShellCompletionStatus(cliName);
+
+  if (completionStatus.usesSlowPattern) {
+    // Case 1: Profile uses slow dynamic pattern - silently upgrade to cached version
+    const cacheGenerated = await ensureCompletionCacheExists(cliName);
+    if (cacheGenerated) {
+      await installCompletion(completionStatus.shell, true, cliName);
+    }
+  } else if (completionStatus.profileInstalled && !completionStatus.cacheExists) {
+    // Case 2: Profile has completion but no cache - auto-fix silently
+    await ensureCompletionCacheExists(cliName);
+  } else if (!completionStatus.profileInstalled) {
+    // Case 3: No completion at all - prompt to install
+    const installShellCompletion = await prompter.confirm({
+      message: `Enable ${completionStatus.shell} shell completion for ${cliName}?`,
+      initialValue: true,
+    });
+    if (installShellCompletion) {
+      // Generate cache first (required for fast shell startup)
+      const cacheGenerated = await ensureCompletionCacheExists(cliName);
+      if (cacheGenerated) {
+        // Install to shell profile
+        await installCompletion(completionStatus.shell, true, cliName);
+        const profileHint =
+          completionStatus.shell === "zsh"
+            ? "~/.zshrc"
+            : completionStatus.shell === "bash"
+              ? "~/.bashrc"
+              : "~/.config/fish/config.fish";
+        await prompter.note(
+          `Shell completion installed. Restart your shell or run: source ${profileHint}`,
+          "Shell completion",
+        );
+      } else {
+        await prompter.note(
+          `Failed to generate completion cache. Run \`${cliName} completion --install\` later.`,
+          "Shell completion",
+        );
+      }
+    }
+  }
+  // Case 4: Both profile and cache exist (using cached version) - all good, nothing to do
 
   const shouldOpenControlUi =
     !opts.skipUi &&
@@ -464,7 +508,7 @@ export async function finalizeOnboardingWizard(
   );
 
   await prompter.note(
-    '接下来做什么：https://openclaw.ai/showcase（“人们在构建什么”）。',
+    "接下来做什么：https://openclaw.ai/showcase（“人们在构建什么”）。",
     "接下来做什么",
   );
 

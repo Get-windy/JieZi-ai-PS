@@ -107,8 +107,11 @@ export const FeishuAccountSchema = z
     dms: z.record(z.string(), DmConfigSchema).optional(),
     textChunkLimit: z.number().int().positive().optional(),
     chunkMode: z.enum(["length", "newline"]).optional(),
+    blockStreaming: z.boolean().optional(),
+    streaming: z.boolean().optional(),
     blockStreamingCoalesce: BlockStreamingCoalesceSchema,
     mediaMaxMb: z.number().positive().optional(),
+    responsePrefix: z.string().optional(),
     heartbeat: ChannelHeartbeatVisibilitySchema,
     renderMode: RenderModeSchema,
     tools: FeishuToolsConfigSchema,
@@ -153,8 +156,11 @@ export const FeishuConfigSchema = z
     dms: z.record(z.string(), DmConfigSchema).optional(),
     textChunkLimit: z.number().int().positive().optional(),
     chunkMode: z.enum(["length", "newline"]).optional(),
+    blockStreaming: z.boolean().optional(),
+    streaming: z.boolean().optional(),
     blockStreamingCoalesce: BlockStreamingCoalesceSchema,
     mediaMaxMb: z.number().positive().optional(),
+    responsePrefix: z.string().optional(),
     heartbeat: ChannelHeartbeatVisibilitySchema,
     renderMode: RenderModeSchema, // raw = plain text (default), card = interactive card with markdown
     tools: FeishuToolsConfigSchema,
@@ -170,7 +176,8 @@ export const FeishuConfigSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["allowFrom"],
-          message: 'channels.feishu.dmPolicy="open" requires channels.feishu.allowFrom to include "*"',
+          message:
+            'channels.feishu.dmPolicy="open" requires channels.feishu.allowFrom to include "*"',
         });
       }
     }
