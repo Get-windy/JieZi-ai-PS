@@ -1,6 +1,118 @@
 @import "./chat.css";
 
 /* ===========================================
+   Modal Overlay - Full screen modals
+   =========================================== */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fade-in 0.2s var(--ease-out);
+}
+
+.modal-content {
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  animation: slide-up 0.3s var(--ease-out);
+  border: 1px solid var(--border);
+}
+
+.modal-content--large {
+  max-width: 900px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.modal-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.02em;
+  color: var(--text-strong);
+}
+
+.modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 24px;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: all var(--duration-fast) ease;
+  line-height: 1;
+  padding: 0;
+}
+
+.btn-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===========================================
    Cards - Refined with depth
    =========================================== */
 
@@ -24,6 +136,27 @@
   box-shadow:
     var(--shadow-md),
     inset 0 1px 0 var(--card-highlight);
+}
+
+/* 可点击卡片样式 */
+.card--clickable {
+  cursor: pointer;
+  transition:
+    border-color var(--duration-normal) var(--ease-out),
+    box-shadow var(--duration-normal) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.card--clickable:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow:
+    var(--shadow-lg),
+    inset 0 1px 0 var(--card-highlight);
+}
+
+.card--clickable:active {
+  transform: translateY(0);
 }
 
 .card-title {
@@ -172,6 +305,93 @@
   margin-top: 8px;
   color: var(--danger);
   font-size: 12px;
+}
+
+/* ===========================================
+   Status Indicator - 状态灯
+   =========================================== */
+
+.status-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--bg);
+  transition: all var(--duration-fast) ease;
+}
+
+.status-indicator--green {
+  background: #10b981;
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 8px rgba(16, 185, 129, 0.4);
+}
+
+.status-indicator--yellow {
+  background: #f59e0b;
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 8px rgba(245, 158, 11, 0.4);
+}
+
+.status-indicator--red {
+  background: #ef4444;
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 8px rgba(239, 68, 68, 0.4);
+}
+
+.status-indicator--gray {
+  background: #6b7280;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+/* 状态指示器组 */
+.channel-status-indicators {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.channels-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+  padding: 0 4px;
+}
+
+.status-indicator-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-indicator-count {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  min-width: 16px;
+}
+
+/* 状态列表 */
+.status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.status-list > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.status-list .label {
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 /* ===========================================
