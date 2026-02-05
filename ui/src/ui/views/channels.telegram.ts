@@ -1,9 +1,9 @@
 import { html, nothing } from "lit";
 import type { ChannelAccountSnapshot, TelegramStatus } from "../types.js";
-import type { ChannelsProps } from "./channels.types";
+import type { ChannelsProps } from "./channels.types.ts";
 import { formatAgo } from "../format.js";
 import { t } from "../i18n.js";
-import { renderChannelConfigSection } from "./channels.config";
+import { renderChannelConfigSection } from "./channels.config.ts";
 
 export function renderTelegramCard(params: {
   props: ChannelsProps;

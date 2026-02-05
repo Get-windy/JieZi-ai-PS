@@ -1,9 +1,9 @@
 import { html } from "lit";
 import type { ConfigUiHints } from "../types.js";
-import type { ChannelsProps } from "./channels.types";
+import type { ChannelsProps } from "./channels.types.ts";
 import { t } from "../i18n.js";
 import { analyzeConfigSchema, renderNode, schemaType, type JsonSchema } from "./config-form.js";
-import { translateFieldLabel } from "./config-form.shared";
+import { translateFieldLabel } from "./config-form.shared.ts";
 
 type ChannelConfigFormProps = {
   channelId: string;

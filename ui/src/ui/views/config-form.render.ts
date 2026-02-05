@@ -2,7 +2,7 @@ import { html, nothing } from "lit";
 import type { ConfigUiHints } from "../types.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { renderNode } from "./config-form.node";
+import { renderNode } from "./config-form.node.ts";
 import {
   hintForPath,
   humanize,

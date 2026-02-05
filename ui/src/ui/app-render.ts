@@ -3,7 +3,7 @@ import type { AppViewState } from "./app-view-state.js";
 import type { GatewayBrowserClient } from "./gateway.js";
 import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
 import { refreshChatAvatar } from "./app-chat.js";
-import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers";
+import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.js";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.js";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.js";
 import { loadAgentSkills } from "./controllers/agent-skills.js";

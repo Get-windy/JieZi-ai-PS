@@ -1,6 +1,6 @@
 import { html, nothing } from "lit";
 import type { ChannelAccountSnapshot } from "../types.js";
-import type { ChannelsProps } from "./channels.types";
+import type { ChannelsProps } from "./channels.types.ts";
 import { t } from "../i18n.js";
 
 /**
