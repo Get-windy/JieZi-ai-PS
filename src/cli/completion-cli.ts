@@ -180,10 +180,37 @@ export async function usesSlowDynamicCompletion(
   if (!(await pathExists(profilePath))) {
     return false;
   }
+
   const content = await fs.readFile(profilePath, "utf-8");
   const lines = content.split("\n");
-  // Check if any line uses the slow dynamic pattern: source <(...)
-  return lines.some((line) => line.includes(`${binName} completion`) && line.includes("source <("));
+
+  // Check if completion is installed at all
+  const hasCompletion = lines.some((line) => isCompletionProfileLine(line, binName, null));
+  if (!hasCompletion) {
+    return false;
+  }
+
+  // Check for slow dynamic patterns:
+  // - zsh/bash: source <(openclaw completion ...)
+  // - fish: openclaw completion --shell fish | source
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.includes(`${binName} completion`)) {
+      continue;
+    }
+
+    // Check for zsh/bash dynamic pattern
+    if (trimmed.includes("source <(")) {
+      return true;
+    }
+
+    // Check for fish dynamic pattern
+    if (shell === "fish" && trimmed.includes("| source") && !trimmed.startsWith("source")) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export async function isCompletionInstalled(
