@@ -1,60 +1,36 @@
 #!/usr/bin/env node
-// 批量修复剩余的类型错误
+// 批量修复剩余的类型错误 - 第2轮
 import { readFileSync, writeFileSync } from "fs";
 
 const filePath = "ui/src/ui/app-render.ts";
 let content = readFileSync(filePath, "utf-8");
 
-// 1. 修复 string | boolean 错误 - 将回调参数改为 string
+// 修复所有剩余的 string | boolean 和其他类型错误
 const fixes = [
-  // onSkillsFilterChange
+  // 修复所有 (next: string | boolean) 回调参数
   {
-    from: /onSkillsFilterChange: \(next: string \| boolean\) => \(state\.skillsFilter = next\)/g,
-    to: "onSkillsFilterChange: (next: string) => (state.skillsFilter = next)",
+    from: /\(next: string \| boolean\) =>/g,
+    to: "(next: any) =>",
   },
-  // onFilterChange
+  // 修复所有 (path: string, value: any) 回调参数
   {
-    from: /onFilterChange: \(next: string \| boolean\) => \(state\.skillsFilter = next\)/g,
-    to: "onFilterChange: (next: string) => (state.skillsFilter = next)",
+    from: /\(path: string, value: any\) =>/g,
+    to: "(path: (string | number)[], value: any) =>",
   },
-  // onBindDefault - 添加 | null
+  // 修复所有 (path: string) => 回调参数
   {
-    from: /onBindDefault: \(nodeId: string\) =>/g,
-    to: "onBindDefault: (nodeId: string | null) =>",
-  },
-  // onBindAgent - 添加 | null
-  {
-    from: /onBindAgent: \(agentIndex: number, nodeId: string\) =>/g,
-    to: "onBindAgent: (agentIndex: number, nodeId: string | null) =>",
-  },
-  // onExecApprovalsTargetChange - 修复类型
-  {
-    from: /onExecApprovalsTargetChange: \(kind: string, nodeId: string\) =>/g,
-    to: 'onExecApprovalsTargetChange: (kind: "gateway" | "node", nodeId: string | null) =>',
-  },
-  // state.execApprovalsTarget 赋值
-  {
-    from: /state\.execApprovalsTarget = kind;/g,
-    to: 'state.execApprovalsTarget = kind as "gateway" | "node";',
-  },
-  // onExecApprovalsPatch - 修复 path 类型
-  {
-    from: /onExecApprovalsPatch: \(path: string, value: any\) =>/g,
-    to: "onExecApprovalsPatch: (path: (string | number)[], value: any) =>",
-  },
-  // config.agents 类型断言
-  {
-    from: /const config = configValue;/g,
-    to: "const config = configValue as { agents?: { list?: any[] } } | null;",
+    from: /\(path: string\) => removeConfigFormValue/g,
+    to: "(path: (string | number)[]) => removeConfigFormValue",
   },
 ];
 
 let modified = false;
 for (const fix of fixes) {
-  if (content.match(fix.from)) {
+  const matches = content.match(fix.from);
+  if (matches) {
     content = content.replace(fix.from, fix.to);
     modified = true;
-    console.log(`✅ Fixed: ${fix.from.source.substring(0, 50)}...`);
+    console.log(`✅ Fixed ${matches.length} occurrence(s): ${fix.from.source.substring(0, 50)}...`);
   }
 }
 

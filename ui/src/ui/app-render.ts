@@ -1072,7 +1072,7 @@ export function renderApp(state: AppViewState) {
           state.tab === "chat"
             ? renderChat({
                 sessionKey: state.sessionKey,
-                onSessionKeyChange: (next: string | boolean) => {
+                onSessionKeyChange: (next: any) => {
                   state.sessionKey = next;
                   state.chatMessage = "";
                   state.chatAttachments = [];
@@ -1124,9 +1124,9 @@ export function renderApp(state: AppViewState) {
                   });
                 },
                 onChatScroll: (event: any) => (state as any).handleChatScroll(event),
-                onDraftChange: (next: string | boolean) => (state.chatMessage = next),
+                onDraftChange: (next: any) => (state.chatMessage = next),
                 attachments: state.chatAttachments,
-                onAttachmentsChange: (next: string | boolean) => (state.chatAttachments = next),
+                onAttachmentsChange: (next: any) => (state.chatAttachments = next),
                 onSend: () => (state as any).handleSendChat(),
                 canAbort: Boolean(state.chatRunId),
                 onAbort: () => void (state as any).handleAbortChat(),
@@ -1183,11 +1183,11 @@ export function renderApp(state: AppViewState) {
                 searchQuery: (state as any).configSearchQuery,
                 activeSection: (state as any).configActiveSection,
                 activeSubsection: (state as any).configActiveSubsection,
-                onRawChange: (next: string | boolean) => {
+                onRawChange: (next: any) => {
                   state.configRaw = next;
                 },
                 onFormModeChange: (mode: any) => (state.configFormMode = mode),
-                onFormPatch: (path: string, value: any) =>
+                onFormPatch: (path: (string | number)[], value: any) =>
                   updateConfigFormValue(state as any, path, value),
                 onSearchChange: (query: any) => ((state as any).configSearchQuery = query),
                 onSectionChange: (section: any) => {
@@ -1217,8 +1217,8 @@ export function renderApp(state: AppViewState) {
                 callParams: state.debugCallParams,
                 callResult: state.debugCallResult,
                 callError: state.debugCallError,
-                onCallMethodChange: (next: string | boolean) => (state.debugCallMethod = next),
-                onCallParamsChange: (next: string | boolean) => (state.debugCallParams = next),
+                onCallMethodChange: (next: any) => (state.debugCallMethod = next),
+                onCallParamsChange: (next: any) => (state.debugCallParams = next),
                 onRefresh: () => loadDebug(state),
                 onCall: () => callDebugMethod(state),
               })
@@ -1236,11 +1236,11 @@ export function renderApp(state: AppViewState) {
                 levelFilters: state.logsLevelFilters,
                 autoFollow: state.logsAutoFollow,
                 truncated: state.logsTruncated,
-                onFilterTextChange: (next: string | boolean) => (state.logsFilterText = next),
+                onFilterTextChange: (next: any) => (state.logsFilterText = next),
                 onLevelToggle: (level: any, enabled: boolean) => {
                   state.logsLevelFilters = { ...state.logsLevelFilters, [level]: enabled };
                 },
-                onToggleAutoFollow: (next: string | boolean) => (state.logsAutoFollow = next),
+                onToggleAutoFollow: (next: any) => (state.logsAutoFollow = next),
                 onRefresh: () => loadLogs(state as unknown as LogsState, { reset: true }),
                 onExport: (lines: any, label: any) => (state as any).exportLogs(lines, label),
                 onScroll: (event: any) => (state as any).handleLogsScroll(event),

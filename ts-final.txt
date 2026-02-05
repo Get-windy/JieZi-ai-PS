@@ -1,0 +1,11 @@
+src/commands/doctor-completion.ts(7,3): error TS2305: Module '"../cli/completion-cli.js"' has no exported member 'completionCacheExists'.
+src/commands/doctor-completion.ts(10,3): error TS2459: Module '"../cli/completion-cli.js"' declares 'resolveCompletionCachePath' locally, but it is not exported.
+src/commands/doctor-completion.ts(12,3): error TS2305: Module '"../cli/completion-cli.js"' has no exported member 'usesSlowDynamicCompletion'.
+ui/src/ui/app-render.ts(880,34): error TS2339: Property 'agents' does not exist on type '{}'.
+ui/src/ui/app-render.ts(884,41): error TS2339: Property 'agents' does not exist on type '{}'.
+ui/src/ui/app-render.ts(914,42): error TS2339: Property 'agents' does not exist on type '{}'.
+ui/src/ui/app-render.ts(1059,17): error TS2322: Type '(path: string) => void' is not assignable to type '(path: (string | number)[]) => void'.
+  Types of parameters 'path' and 'path' are incompatible.
+    Type '(string | number)[]' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1059,94): error TS2345: Argument of type 'string' is not assignable to parameter of type '(string | number)[]'.
+ui/src/ui/views/cron.ts(262,31): error TS2322: Type 'string' is not assignable to type 'boolean | undefined'.
