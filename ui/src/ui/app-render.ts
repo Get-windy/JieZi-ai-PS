@@ -353,18 +353,17 @@ export function renderApp(state: AppViewState) {
                 creatingChannelAccount: state.creatingChannelAccount,
                 deletingChannelAccount: state.deletingChannelAccount,
                 managingChannelId: state.managingChannelId,
-                onChannelAccountEdit: (channelId: string, accountId: string) =>
-                  (state as any).handleChannelAccountEdit(channelId, accountId),
-                onChannelAccountCreate: (channelId: string) =>
-                  (state as any).handleChannelAccountCreate(channelId),
-                onChannelAccountDelete: (channelId: string, accountId: string) =>
-                  (state as any).handleChannelAccountDelete(channelId, accountId),
-                onChannelAccountSave: () => (state as any).handleChannelAccountSave(),
-                onChannelAccountCancel: () => (state as any).handleChannelAccountCancel(),
-                onChannelAccountFieldChange: (field: string, value: any) =>
-                  (state as any).handleChannelAccountFieldChange(field, value),
-                onChannelManage: (channelId: string | null) =>
-                  (state as any).handleChannelManage(channelId),
+                onManageAccounts: (channelId: string) =>
+                  (state as any).handleManageAccounts(channelId),
+                onAddAccount: (channelId: string) => (state as any).handleAddAccount(channelId),
+                onEditAccount: (channelId: string, accountId: string) =>
+                  (state as any).handleEditAccount(channelId, accountId),
+                onDeleteAccount: (channelId: string, accountId: string) =>
+                  (state as any).handleDeleteAccount(channelId, accountId),
+                onSaveAccount: () => (state as any).handleSaveAccount(),
+                onCancelAccountEdit: () => (state as any).handleCancelAccountEdit(),
+                onAccountFormChange: (field: string, value: unknown) =>
+                  (state as any).handleAccountFormChange(field, value),
                 onNostrProfileToggleAdvanced: () => state.handleNostrProfileToggleAdvanced(),
               })
             : nothing

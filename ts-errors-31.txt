@@ -1,0 +1,60 @@
+src/commands/doctor-completion.ts(7,3): error TS2305: Module '"../cli/completion-cli.js"' has no exported member 'completionCacheExists'.
+src/commands/doctor-completion.ts(10,3): error TS2459: Module '"../cli/completion-cli.js"' declares 'resolveCompletionCachePath' locally, but it is not exported.
+src/commands/doctor-completion.ts(12,3): error TS2305: Module '"../cli/completion-cli.js"' has no exported member 'usesSlowDynamicCompletion'.
+ui/src/ui/app-render.ts(356,17): error TS2561: Object literal may only specify known properties, but 'onChannelAccountEdit' does not exist in type 'ChannelsProps'. Did you mean to write 'onCancelAccountEdit'?
+ui/src/ui/app-render.ts(627,68): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(881,34): error TS2339: Property 'agents' does not exist on type '{}'.
+ui/src/ui/app-render.ts(885,41): error TS2339: Property 'agents' does not exist on type '{}'.
+ui/src/ui/app-render.ts(915,42): error TS2339: Property 'agents' does not exist on type '{}'.
+ui/src/ui/app-render.ts(980,62): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1031,17): error TS2322: Type '(nodeId: string) => void' is not assignable to type '(nodeId: string | null) => void'.
+  Types of parameters 'nodeId' and 'nodeId' are incompatible.
+    Type 'string | null' is not assignable to type 'string'.
+      Type 'null' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1038,17): error TS2322: Type '(agentIndex: number, nodeId: string) => void' is not assignable to type '(agentIndex: number, nodeId: string | null) => void'.
+  Types of parameters 'nodeId' and 'nodeId' are incompatible.
+    Type 'string | null' is not assignable to type 'string'.
+      Type 'null' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1047,17): error TS2322: Type '(kind: string, nodeId: string) => void' is not assignable to type '(kind: "gateway" | "node", nodeId: string | null) => void'.
+  Types of parameters 'nodeId' and 'nodeId' are incompatible.
+    Type 'string | null' is not assignable to type 'string'.
+      Type 'null' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1048,19): error TS2322: Type 'string' is not assignable to type '"gateway" | "node"'.
+ui/src/ui/app-render.ts(1058,17): error TS2322: Type '(path: string, value: any) => void' is not assignable to type '(path: (string | number)[], value: unknown) => void'.
+  Types of parameters 'path' and 'path' are incompatible.
+    Type '(string | number)[]' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1059,55): error TS2345: Argument of type 'string' is not assignable to parameter of type '(string | number)[]'.
+ui/src/ui/app-render.ts(1060,17): error TS2322: Type '(path: string) => void' is not assignable to type '(path: (string | number)[]) => void'.
+  Types of parameters 'path' and 'path' are incompatible.
+    Type '(string | number)[]' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1060,94): error TS2345: Argument of type 'string' is not assignable to parameter of type '(string | number)[]'.
+ui/src/ui/app-render.ts(1077,19): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1088,21): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1089,21): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1128,61): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1130,17): error TS2322: Type '(next: string | boolean) => string | boolean' is not assignable to type '(attachments: ChatAttachment[]) => void'.
+  Types of parameters 'next' and 'attachments' are incompatible.
+    Type 'ChatAttachment[]' is not assignable to type 'string | boolean'.
+ui/src/ui/app-render.ts(1130,67): error TS2322: Type 'string | boolean' is not assignable to type 'ChatAttachment[]'.
+  Type 'string' is not assignable to type 'ChatAttachment[]'.
+ui/src/ui/app-render.ts(1188,19): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1191,17): error TS2322: Type '(path: string, value: any) => void' is not assignable to type '(path: (string | number)[], value: unknown) => void'.
+  Types of parameters 'path' and 'path' are incompatible.
+    Type '(string | number)[]' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1192,55): error TS2345: Argument of type 'string' is not assignable to parameter of type '(string | number)[]'.
+ui/src/ui/app-render.ts(1221,66): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1222,66): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1240,66): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1244,66): error TS2322: Type 'string | boolean' is not assignable to type 'boolean'.
+  Type 'string' is not assignable to type 'boolean'.
+ui/src/ui/views/cron.ts(262,31): error TS2322: Type 'string' is not assignable to type 'boolean | undefined'.
