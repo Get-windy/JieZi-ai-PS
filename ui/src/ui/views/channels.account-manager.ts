@@ -61,7 +61,7 @@ export function renderAccountManagerModal(props: ChannelsProps) {
               ? html`<div class="muted">${t("channels.account.no_accounts")}</div>`
               : html`
               <div class="account-list">
-                ${accounts.map((account) => renderAccountCard({ account, channelId, props }))}
+                ${accounts.map((account: any) => renderAccountCard({ account, channelId, props }))}
               </div>
             `
           }

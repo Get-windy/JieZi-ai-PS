@@ -1,5 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { ConfigUiHints } from "../types.ts";
+import { t } from "../i18n.js";
 import {
   defaultValue,
   hintForPath,
@@ -11,7 +12,6 @@ import {
   schemaType,
   type JsonSchema,
 } from "./config-form.shared";
-import { t } from "../i18n.js";
 
 const META_KEYS = new Set(["title", "description", "default", "nullable"]);
 
@@ -127,7 +127,7 @@ export function renderNode(params: {
   if (schema.anyOf || schema.oneOf) {
     const variants = schema.anyOf ?? schema.oneOf ?? [];
     const nonNull = variants.filter(
-      (v) => !(v.type === "null" || (Array.isArray(v.type) && v.type.includes("null"))),
+      (v: any) => !(v.type === "null" || (Array.isArray(v.type) && v.type.includes("null"))),
     );
 
     if (nonNull.length === 1) {
@@ -145,7 +145,7 @@ export function renderNode(params: {
       return undefined;
     };
     const literals = nonNull.map(extractLiteral);
-    const allLiterals = literals.every((v) => v !== undefined);
+    const allLiterals = literals.every((v: any) => v !== undefined);
 
     if (allLiterals && literals.length > 0 && literals.length <= 5) {
       // Use segmented control for small sets
@@ -156,7 +156,7 @@ export function renderNode(params: {
           ${help ? html`<div class="cfg-field__help">${help}</div>` : nothing}
           <div class="cfg-segmented">
             ${literals.map(
-              (lit) => html`
+              (lit: any) => html`
               <button
                 type="button"
                 class="cfg-segmented__btn ${
@@ -184,7 +184,9 @@ export function renderNode(params: {
     }
 
     // Handle mixed primitive types
-    const primitiveTypes = new Set(nonNull.map((variant) => schemaType(variant)).filter(Boolean));
+    const primitiveTypes = new Set(
+      nonNull.map((variant: any) => schemaType(variant)).filter(Boolean),
+    );
     const normalizedTypes = new Set(
       [...primitiveTypes].map((v) => (v === "integer" ? "number" : v)),
     );
@@ -221,7 +223,7 @@ export function renderNode(params: {
           ${help ? html`<div class="cfg-field__help">${help}</div>` : nothing}
           <div class="cfg-segmented">
             ${options.map(
-              (opt) => html`
+              (opt: any) => html`
               <button
                 type="button"
                 class="cfg-segmented__btn ${opt === resolvedValue || String(opt) === String(resolvedValue) ? "active" : ""}"
@@ -631,7 +633,7 @@ function renderArray(params: {
           : html`
         <div class="cfg-array__items">
           ${arr.map(
-            (item, idx) => html`
+            (item: any, idx: any) => html`
             <div class="cfg-array__item">
               <div class="cfg-array__item-header">
                 <span class="cfg-array__item-index">#${idx + 1}</span>

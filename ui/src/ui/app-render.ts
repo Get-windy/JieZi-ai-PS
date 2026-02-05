@@ -99,7 +99,7 @@ function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
   const list = state.agentsList?.agents ?? [];
   const parsed = parseAgentSessionKey(state.sessionKey);
   const agentId = parsed?.agentId ?? state.agentsList?.defaultId ?? "main";
-  const agent = list.find((entry) => entry.id === agentId);
+  const agent = list.find((entry: any) => entry.id === agentId);
   const identity = agent?.identity;
   const candidate = identity?.avatarUrl ?? identity?.avatar;
   if (!candidate) {
@@ -188,9 +188,9 @@ export function renderApp(state: AppViewState) {
         </div>
       </header>
       <aside class="nav ${state.settings.navCollapsed ? "nav--collapsed" : ""}">
-        ${TAB_GROUPS.map((group) => {
+        ${TAB_GROUPS.map((group: any) => {
           const isGroupCollapsed = state.settings.navGroupsCollapsed[group.label] ?? false;
-          const hasActiveTab = group.tabs.some((tab) => tab === state.tab);
+          const hasActiveTab = group.tabs.some((tab: any) => tab === state.tab);
           return html`
             <div class="nav-group ${isGroupCollapsed && !hasActiveTab ? "nav-group--collapsed" : ""}">
               <button
@@ -209,7 +209,7 @@ export function renderApp(state: AppViewState) {
                 <span class="nav-label__chevron">${isGroupCollapsed ? "+" : "−"}</span>
               </button>
               <div class="nav-group__items">
-                ${group.tabs.map((tab) => renderTab(state, tab))}
+                ${group.tabs.map((tab: any) => renderTab(state, tab))}
               </div>
             </div>
           `;
@@ -257,9 +257,9 @@ export function renderApp(state: AppViewState) {
                 cronEnabled: state.cronStatus?.enabled ?? null,
                 cronNext,
                 lastChannelsRefresh: state.channelsLastSuccess,
-                onSettingsChange: (next) => state.applySettings(next),
-                onPasswordChange: (next) => (state.password = next),
-                onSessionKeyChange: (next) => {
+                onSettingsChange: (next: string | boolean) => state.applySettings(next),
+                onPasswordChange: (next: string | boolean) => (state.password = next),
+                onSessionKeyChange: (next: string | boolean) => {
                   state.sessionKey = next;
                   state.chatMessage = "";
                   (state as unknown as OpenClawApp).resetToolStream();
@@ -289,18 +289,18 @@ export function renderApp(state: AppViewState) {
                         drives: state.storageBrowserDrives,
                         loading: state.storageBrowserLoading,
                         error: state.storageBrowserError,
-                        onNavigate: (path) =>
+                        onNavigate: (path: string) =>
                           (state as unknown as OpenClawApp).handleStorageBrowserNavigate(path),
-                        onSelect: (path) =>
+                        onSelect: (path: string) =>
                           (state as unknown as OpenClawApp).handleStorageBrowserSelect(path),
                         onCancel: () =>
                           (state as unknown as OpenClawApp).handleStorageBrowserCancel(),
                       }
                     : null,
-                  onNewPathChange: (path) => (state.storageNewPath = path),
+                  onNewPathChange: (path: string) => (state.storageNewPath = path),
                   onBrowse: () => (state as unknown as OpenClawApp).handleStorageBrowse(),
                   onValidate: () => (state as unknown as OpenClawApp).handleStorageValidate(),
-                  onMigrate: (moveFiles) =>
+                  onMigrate: (moveFiles: boolean) =>
                     (state as unknown as OpenClawApp).handleStorageMigrate(moveFiles),
                   onRefreshCurrentPath: () =>
                     (state as unknown as OpenClawApp).loadStorageCurrentPath(),
@@ -329,18 +329,18 @@ export function renderApp(state: AppViewState) {
                 configFormDirty: state.configFormDirty,
                 nostrProfileFormState: state.nostrProfileFormState,
                 nostrProfileAccountId: state.nostrProfileAccountId,
-                onRefresh: (probe) => loadChannels(state, probe),
-                onWhatsAppStart: (force) => state.handleWhatsAppStart(force),
+                onRefresh: (probe: any) => loadChannels(state, probe),
+                onWhatsAppStart: (force: boolean) => state.handleWhatsAppStart(force),
                 onWhatsAppWait: () => state.handleWhatsAppWait(),
                 onWhatsAppLogout: () => state.handleWhatsAppLogout(),
-                onConfigPatch: (path, value) =>
+                onConfigPatch: (path: string, value: any) =>
                   updateConfigFormValue(state as unknown as ConfigState, path, value),
                 onConfigSave: () => state.handleChannelConfigSave(),
                 onConfigReload: () => state.handleChannelConfigReload(),
-                onNostrProfileEdit: (accountId, profile) =>
+                onNostrProfileEdit: (accountId: string, profile: any) =>
                   state.handleNostrProfileEdit(accountId, profile),
                 onNostrProfileCancel: () => state.handleNostrProfileCancel(),
-                onNostrProfileFieldChange: (field, value) =>
+                onNostrProfileFieldChange: (field: string, value: any) =>
                   state.handleNostrProfileFieldChange(field, value),
                 onNostrProfileSave: () => state.handleNostrProfileSave(),
                 onNostrProfileImport: () => state.handleNostrProfileImport(),
@@ -372,15 +372,15 @@ export function renderApp(state: AppViewState) {
                 includeGlobal: state.sessionsIncludeGlobal,
                 includeUnknown: state.sessionsIncludeUnknown,
                 basePath: state.basePath,
-                onFiltersChange: (next) => {
+                onFiltersChange: (next: string | boolean) => {
                   state.sessionsFilterActive = next.activeMinutes;
                   state.sessionsFilterLimit = next.limit;
                   state.sessionsIncludeGlobal = next.includeGlobal;
                   state.sessionsIncludeUnknown = next.includeUnknown;
                 },
                 onRefresh: () => loadSessions(state),
-                onPatch: (key, patch) => patchSession(state, key, patch),
-                onDelete: (key) => deleteSession(state, key),
+                onPatch: (key: string, patch: any) => patchSession(state, key, patch),
+                onDelete: (key: string) => deleteSession(state, key),
               })
             : nothing
         }
@@ -395,19 +395,19 @@ export function renderApp(state: AppViewState) {
                 busy: state.cronBusy,
                 form: state.cronForm,
                 channels: state.channelsSnapshot?.channelMeta?.length
-                  ? state.channelsSnapshot.channelMeta.map((entry) => entry.id)
+                  ? state.channelsSnapshot.channelMeta.map((entry: any) => entry.id)
                   : (state.channelsSnapshot?.channelOrder ?? []),
                 channelLabels: state.channelsSnapshot?.channelLabels ?? {},
                 channelMeta: state.channelsSnapshot?.channelMeta ?? [],
                 runsJobId: state.cronRunsJobId,
                 runs: state.cronRuns,
-                onFormChange: (patch) => (state.cronForm = { ...state.cronForm, ...patch }),
+                onFormChange: (patch: any) => (state.cronForm = { ...state.cronForm, ...patch }),
                 onRefresh: () => state.loadCron(),
                 onAdd: () => addCronJob(state),
-                onToggle: (job, enabled) => toggleCronJob(state, job, enabled),
-                onRun: (job) => runCronJob(state, job),
-                onRemove: (job) => removeCronJob(state, job),
-                onLoadRuns: (jobId) => loadCronRuns(state, jobId),
+                onToggle: (job: any, enabled: boolean) => toggleCronJob(state, job, enabled),
+                onRun: (job: any) => runCronJob(state, job),
+                onRemove: (job: any) => removeCronJob(state, job),
+                onLoadRuns: (jobId: any) => loadCronRuns(state, jobId),
               })
             : nothing
         }
@@ -452,12 +452,12 @@ export function renderApp(state: AppViewState) {
                 deletingAgent: state.deletingAgent,
                 onRefresh: async () => {
                   await loadAgents(state);
-                  const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
+                  const agentIds = state.agentsList?.agents?.map((entry: any) => entry.id) ?? [];
                   if (agentIds.length > 0) {
                     void loadAgentIdentities(state, agentIds);
                   }
                 },
-                onSelectAgent: (agentId) => {
+                onSelectAgent: (agentId: string) => {
                   if (state.agentsSelectedId === agentId) {
                     return;
                   }
@@ -479,7 +479,7 @@ export function renderApp(state: AppViewState) {
                     void loadAgentSkills(state, agentId);
                   }
                 },
-                onSelectPanel: (panel) => {
+                onSelectPanel: (panel: any) => {
                   state.agentsPanel = panel;
                   if (panel === "files" && resolvedAgentId) {
                     if (state.agentFilesList?.agentId !== resolvedAgentId) {
@@ -503,7 +503,7 @@ export function renderApp(state: AppViewState) {
                     void state.loadCron();
                   }
                 },
-                onLoadFiles: (agentId) => {
+                onLoadFiles: (agentId: string) => {
                   void (async () => {
                     await loadAgentFiles(state, agentId);
                     if (state.agentFileActive) {
@@ -514,21 +514,21 @@ export function renderApp(state: AppViewState) {
                     }
                   })();
                 },
-                onSelectFile: (name) => {
+                onSelectFile: (name: any) => {
                   state.agentFileActive = name;
                   if (!resolvedAgentId) {
                     return;
                   }
                   void loadAgentFileContent(state, resolvedAgentId, name);
                 },
-                onFileDraftChange: (name, content) => {
+                onFileDraftChange: (name: any, content: any) => {
                   state.agentFileDrafts = { ...state.agentFileDrafts, [name]: content };
                 },
-                onFileReset: (name) => {
+                onFileReset: (name: any) => {
                   const base = state.agentFileContents[name] ?? "";
                   state.agentFileDrafts = { ...state.agentFileDrafts, [name]: base };
                 },
-                onFileSave: (name) => {
+                onFileSave: (name: any) => {
                   if (!resolvedAgentId) {
                     return;
                   }
@@ -536,7 +536,7 @@ export function renderApp(state: AppViewState) {
                     state.agentFileDrafts[name] ?? state.agentFileContents[name] ?? "";
                   void saveAgentFile(state, resolvedAgentId, name, content);
                 },
-                onToolsProfileChange: (agentId, profile, clearAllow) => {
+                onToolsProfileChange: (agentId: string, profile, clearAllow: any) => {
                   if (!configValue) {
                     return;
                   }
@@ -571,7 +571,7 @@ export function renderApp(state: AppViewState) {
                     removeConfigFormValue(state as unknown as ConfigState, [...basePath, "allow"]);
                   }
                 },
-                onToolsOverridesChange: (agentId, alsoAllow, deny) => {
+                onToolsOverridesChange: (agentId: string, alsoAllow, deny: any) => {
                   if (!configValue) {
                     return;
                   }
@@ -616,13 +616,13 @@ export function renderApp(state: AppViewState) {
                 onConfigSave: () => saveConfig(state as unknown as ConfigState),
                 onChannelsRefresh: () => loadChannels(state, false),
                 onCronRefresh: () => state.loadCron(),
-                onSkillsFilterChange: (next) => (state.skillsFilter = next),
+                onSkillsFilterChange: (next: string | boolean) => (state.skillsFilter = next),
                 onSkillsRefresh: () => {
                   if (resolvedAgentId) {
                     void loadAgentSkills(state, resolvedAgentId);
                   }
                 },
-                onAgentSkillToggle: (agentId, skillName, enabled) => {
+                onAgentSkillToggle: (agentId: string, skillName, enabled: boolean) => {
                   if (!configValue) {
                     return;
                   }
@@ -646,8 +646,9 @@ export function renderApp(state: AppViewState) {
                     return;
                   }
                   const allSkills =
-                    state.agentSkillsReport?.skills?.map((skill) => skill.name).filter(Boolean) ??
-                    [];
+                    state.agentSkillsReport?.skills
+                      ?.map((skill: any) => skill.name)
+                      .filter(Boolean) ?? [];
                   const existing = Array.isArray(entry.skills)
                     ? entry.skills.map((name) => String(name).trim()).filter(Boolean)
                     : undefined;
@@ -664,7 +665,7 @@ export function renderApp(state: AppViewState) {
                     [...next],
                   );
                 },
-                onAgentSkillsClear: (agentId) => {
+                onAgentSkillsClear: (agentId: string) => {
                   if (!configValue) {
                     return;
                   }
@@ -689,7 +690,7 @@ export function renderApp(state: AppViewState) {
                     "skills",
                   ]);
                 },
-                onAgentSkillsDisableAll: (agentId) => {
+                onAgentSkillsDisableAll: (agentId: string) => {
                   if (!configValue) {
                     return;
                   }
@@ -713,7 +714,7 @@ export function renderApp(state: AppViewState) {
                     [],
                   );
                 },
-                onModelChange: (agentId, modelId) => {
+                onModelChange: (agentId: string, modelId: any) => {
                   if (!configValue) {
                     return;
                   }
@@ -771,11 +772,11 @@ export function renderApp(state: AppViewState) {
                     updateConfigFormValue(state as unknown as ConfigState, basePath, modelId);
                   }
                 },
-                onModelFallbacksChange: (agentId, fallbacks) => {
+                onModelFallbacksChange: (agentId: string, fallbacks: any) => {
                   if (!configValue) {
                     return;
                   }
-                  const normalized = fallbacks.map((name) => name.trim()).filter(Boolean);
+                  const normalized = fallbacks.map((name: any) => name.trim()).filter(Boolean);
                   const defaultId = state.agentsList?.defaultId ?? null;
                   if (defaultId && agentId === defaultId) {
                     const basePath = ["agents", "defaults", "model"];
@@ -860,8 +861,8 @@ export function renderApp(state: AppViewState) {
                 onAddAgent: () => {
                   state.editingAgent = { id: "", name: "", workspace: "" };
                 },
-                onEditAgent: (agentId) => {
-                  const agent = state.agentsList?.agents?.find((a) => a.id === agentId);
+                onEditAgent: (agentId: string) => {
+                  const agent = state.agentsList?.agents?.find((a: any) => a.id === agentId);
                   if (agent) {
                     state.editingAgent = {
                       id: agent.id,
@@ -870,7 +871,7 @@ export function renderApp(state: AppViewState) {
                     };
                   }
                 },
-                onDeleteAgent: async (agentId) => {
+                onDeleteAgent: async (agentId: string) => {
                   if (!state.client || state.deletingAgent) {
                     return;
                   }
@@ -890,7 +891,7 @@ export function renderApp(state: AppViewState) {
                     });
                     // 刷新列表
                     await loadAgents(state);
-                    const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
+                    const agentIds = state.agentsList?.agents?.map((entry: any) => entry.id) ?? [];
                     if (agentIds.length > 0) {
                       void loadAgentIdentities(state, agentIds);
                     }
@@ -942,7 +943,7 @@ export function renderApp(state: AppViewState) {
                     });
                     // 刷新列表
                     await loadAgents(state);
-                    const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
+                    const agentIds = state.agentsList?.agents?.map((entry: any) => entry.id) ?? [];
                     if (agentIds.length > 0) {
                       void loadAgentIdentities(state, agentIds);
                     }
@@ -957,7 +958,7 @@ export function renderApp(state: AppViewState) {
                 onCancelEdit: () => {
                   state.editingAgent = null;
                 },
-                onAgentFormChange: (field, value) => {
+                onAgentFormChange: (field: string, value: any) => {
                   if (!state.editingAgent) {
                     return;
                   }
@@ -977,12 +978,13 @@ export function renderApp(state: AppViewState) {
                 edits: state.skillEdits,
                 messages: state.skillMessages,
                 busyKey: state.skillsBusyKey,
-                onFilterChange: (next) => (state.skillsFilter = next),
+                onFilterChange: (next: string | boolean) => (state.skillsFilter = next),
                 onRefresh: () => loadSkills(state, { clearMessages: true }),
-                onToggle: (key, enabled) => updateSkillEnabled(state, key, enabled),
-                onEdit: (key, value) => updateSkillEdit(state, key, value),
-                onSaveKey: (key) => saveSkillApiKey(state, key),
-                onInstall: (skillKey, name, installId) =>
+                onToggle: (key: string, enabled: boolean) =>
+                  updateSkillEnabled(state, key, enabled),
+                onEdit: (key: string, value: any) => updateSkillEdit(state, key, value),
+                onSaveKey: (key: string) => saveSkillApiKey(state, key),
+                onInstall: (skillKey: any, name, installId: any) =>
                   installSkill(state, skillKey, name, installId),
               })
             : nothing
@@ -1013,11 +1015,12 @@ export function renderApp(state: AppViewState) {
                 execApprovalsTargetNodeId: state.execApprovalsTargetNodeId,
                 onRefresh: () => loadNodes(state),
                 onDevicesRefresh: () => loadDevices(state),
-                onDeviceApprove: (requestId) => approveDevicePairing(state, requestId),
-                onDeviceReject: (requestId) => rejectDevicePairing(state, requestId),
-                onDeviceRotate: (deviceId, role, scopes) =>
+                onDeviceApprove: (requestId: any) => approveDevicePairing(state, requestId),
+                onDeviceReject: (requestId: any) => rejectDevicePairing(state, requestId),
+                onDeviceRotate: (deviceId: any, role, scopes: any) =>
                   rotateDeviceToken(state, { deviceId, role, scopes }),
-                onDeviceRevoke: (deviceId, role) => revokeDeviceToken(state, { deviceId, role }),
+                onDeviceRevoke: (deviceId: any, role: string) =>
+                  revokeDeviceToken(state, { deviceId, role }),
                 onLoadConfig: () => loadConfig(state as unknown as ConfigState),
                 onLoadExecApprovals: () => {
                   const target =
@@ -1026,7 +1029,7 @@ export function renderApp(state: AppViewState) {
                       : { kind: "gateway" as const };
                   return loadExecApprovals(state, target);
                 },
-                onBindDefault: (nodeId) => {
+                onBindDefault: (nodeId: string) => {
                   if (nodeId) {
                     updateConfigFormValue(
                       state as unknown as ConfigState,
@@ -1041,7 +1044,7 @@ export function renderApp(state: AppViewState) {
                     ]);
                   }
                 },
-                onBindAgent: (agentIndex, nodeId) => {
+                onBindAgent: (agentIndex: number, nodeId: string) => {
                   const basePath = ["agents", "list", agentIndex, "tools", "exec", "node"];
                   if (nodeId) {
                     updateConfigFormValue(state as unknown as ConfigState, basePath, nodeId);
@@ -1050,7 +1053,7 @@ export function renderApp(state: AppViewState) {
                   }
                 },
                 onSaveBindings: () => saveConfig(state as unknown as ConfigState),
-                onExecApprovalsTargetChange: (kind, nodeId) => {
+                onExecApprovalsTargetChange: (kind: string, nodeId: string) => {
                   state.execApprovalsTarget = kind;
                   state.execApprovalsTargetNodeId = nodeId;
                   state.execApprovalsSnapshot = null;
@@ -1058,12 +1061,12 @@ export function renderApp(state: AppViewState) {
                   state.execApprovalsDirty = false;
                   state.execApprovalsSelectedAgent = null;
                 },
-                onExecApprovalsSelectAgent: (agentId) => {
+                onExecApprovalsSelectAgent: (agentId: string) => {
                   state.execApprovalsSelectedAgent = agentId;
                 },
-                onExecApprovalsPatch: (path, value) =>
+                onExecApprovalsPatch: (path: string, value: any) =>
                   updateExecApprovalsFormValue(state, path, value),
-                onExecApprovalsRemove: (path) => removeExecApprovalsFormValue(state, path),
+                onExecApprovalsRemove: (path: string) => removeExecApprovalsFormValue(state, path),
                 onSaveExecApprovals: () => {
                   const target =
                     state.execApprovalsTarget === "node" && state.execApprovalsTargetNodeId
@@ -1079,7 +1082,7 @@ export function renderApp(state: AppViewState) {
           state.tab === "chat"
             ? renderChat({
                 sessionKey: state.sessionKey,
-                onSessionKeyChange: (next) => {
+                onSessionKeyChange: (next: string | boolean) => {
                   state.sessionKey = next;
                   state.chatMessage = "";
                   state.chatAttachments = [];
@@ -1130,14 +1133,16 @@ export function renderApp(state: AppViewState) {
                     chatFocusMode: !state.settings.chatFocusMode,
                   });
                 },
-                onChatScroll: (event) => (state as unknown as OpenClawApp).handleChatScroll(event),
-                onDraftChange: (next) => (state.chatMessage = next),
+                onChatScroll: (event: any) =>
+                  (state as unknown as OpenClawApp).handleChatScroll(event),
+                onDraftChange: (next: string | boolean) => (state.chatMessage = next),
                 attachments: state.chatAttachments,
-                onAttachmentsChange: (next) => (state.chatAttachments = next),
+                onAttachmentsChange: (next: string | boolean) => (state.chatAttachments = next),
                 onSend: () => (state as unknown as OpenClawApp).handleSendChat(),
                 canAbort: Boolean(state.chatRunId),
                 onAbort: () => void (state as unknown as OpenClawApp).handleAbortChat(),
-                onQueueRemove: (id) => (state as unknown as OpenClawApp).removeQueuedMessage(id),
+                onQueueRemove: (id: any) =>
+                  (state as unknown as OpenClawApp).removeQueuedMessage(id),
                 onNewSession: () =>
                   (state as unknown as OpenClawApp).handleSendChat("/new", { restoreDraft: true }),
                 showNewMessages: state.chatNewMessagesBelow,
@@ -1193,19 +1198,19 @@ export function renderApp(state: AppViewState) {
                 searchQuery: (state as unknown as OpenClawApp).configSearchQuery,
                 activeSection: (state as unknown as OpenClawApp).configActiveSection,
                 activeSubsection: (state as unknown as OpenClawApp).configActiveSubsection,
-                onRawChange: (next) => {
+                onRawChange: (next: string | boolean) => {
                   state.configRaw = next;
                 },
-                onFormModeChange: (mode) => (state.configFormMode = mode),
-                onFormPatch: (path, value) =>
+                onFormModeChange: (mode: any) => (state.configFormMode = mode),
+                onFormPatch: (path: string, value: any) =>
                   updateConfigFormValue(state as unknown as OpenClawApp, path, value),
-                onSearchChange: (query) =>
+                onSearchChange: (query: any) =>
                   ((state as unknown as OpenClawApp).configSearchQuery = query),
-                onSectionChange: (section) => {
+                onSectionChange: (section: any) => {
                   (state as unknown as OpenClawApp).configActiveSection = section;
                   (state as unknown as OpenClawApp).configActiveSubsection = null;
                 },
-                onSubsectionChange: (section) =>
+                onSubsectionChange: (section: any) =>
                   ((state as unknown as OpenClawApp).configActiveSubsection = section),
                 onReload: () => loadConfig(state as unknown as OpenClawApp),
                 onSave: () => saveConfig(state as unknown as OpenClawApp),
@@ -1228,8 +1233,8 @@ export function renderApp(state: AppViewState) {
                 callParams: state.debugCallParams,
                 callResult: state.debugCallResult,
                 callError: state.debugCallError,
-                onCallMethodChange: (next) => (state.debugCallMethod = next),
-                onCallParamsChange: (next) => (state.debugCallParams = next),
+                onCallMethodChange: (next: string | boolean) => (state.debugCallMethod = next),
+                onCallParamsChange: (next: string | boolean) => (state.debugCallParams = next),
                 onRefresh: () => loadDebug(state),
                 onCall: () => callDebugMethod(state),
               })
@@ -1247,15 +1252,15 @@ export function renderApp(state: AppViewState) {
                 levelFilters: state.logsLevelFilters,
                 autoFollow: state.logsAutoFollow,
                 truncated: state.logsTruncated,
-                onFilterTextChange: (next) => (state.logsFilterText = next),
-                onLevelToggle: (level, enabled) => {
+                onFilterTextChange: (next: string | boolean) => (state.logsFilterText = next),
+                onLevelToggle: (level: any, enabled: boolean) => {
                   state.logsLevelFilters = { ...state.logsLevelFilters, [level]: enabled };
                 },
-                onToggleAutoFollow: (next) => (state.logsAutoFollow = next),
+                onToggleAutoFollow: (next: string | boolean) => (state.logsAutoFollow = next),
                 onRefresh: () => loadLogs(state as unknown as LogsState, { reset: true }),
-                onExport: (lines, label) =>
+                onExport: (lines: any, label: any) =>
                   (state as unknown as OpenClawApp).exportLogs(lines, label),
-                onScroll: (event) => (state as unknown as OpenClawApp).handleLogsScroll(event),
+                onScroll: (event: any) => (state as unknown as OpenClawApp).handleLogsScroll(event),
               })
             : nothing
         }

@@ -71,7 +71,7 @@ function renderEntry(entry: PresenceEntry) {
         <div class="list-sub">${formatPresenceSummary(entry)}</div>
         <div class="chip-row">
           <span class="chip">${mode}</span>
-          ${roles.map((role) => html`<span class="chip">${role}</span>`)}
+          ${roles.map((role: any) => html`<span class="chip">${role}</span>`)}
           ${scopesLabel ? html`<span class="chip">${scopesLabel}</span>` : nothing}
           ${entry.platform ? html`<span class="chip">${entry.platform}</span>` : nothing}
           ${entry.deviceFamily ? html`<span class="chip">${entry.deviceFamily}</span>` : nothing}

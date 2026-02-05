@@ -365,7 +365,7 @@ function schemaMatches(schema: JsonSchema, query: string): boolean {
   if (schema.description?.toLowerCase().includes(query)) {
     return true;
   }
-  if (schema.enum?.some((value) => String(value).toLowerCase().includes(query))) {
+  if (schema.enum?.some((value: any) => String(value).toLowerCase().includes(query))) {
     return true;
   }
 

@@ -88,7 +88,7 @@ export function renderSkills(props: SkillsProps) {
   const skills = props.report?.skills ?? [];
   const filter = props.filter.trim().toLowerCase();
   const filtered = filter
-    ? skills.filter((skill) =>
+    ? skills.filter((skill: any) =>
         [skill.name, skill.description, skill.source].join(" ").toLowerCase().includes(filter),
       )
     : skills;
@@ -159,10 +159,10 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
   const canInstall = skill.install.length > 0 && skill.missing.bins.length > 0;
   const showBundledBadge = Boolean(skill.bundled && skill.source !== "openclaw-bundled");
   const missing = [
-    ...skill.missing.bins.map((b) => `bin:${b}`),
-    ...skill.missing.env.map((e) => `env:${e}`),
-    ...skill.missing.config.map((c) => `config:${c}`),
-    ...skill.missing.os.map((o) => `os:${o}`),
+    ...skill.missing.bins.map((b: string) => `bin:${b}`),
+    ...skill.missing.env.map((e: string) => `env:${e}`),
+    ...skill.missing.config.map((c: string) => `config:${c}`),
+    ...skill.missing.os.map((o: string) => `os:${o}`),
   ];
   const reasons: string[] = [];
   if (skill.disabled) {

@@ -164,7 +164,7 @@ function renderEditForm(props: BindingsProps) {
             >
               <option value="">${t("bindings.select_agent")}</option>
               ${agents.map(
-                (agent) => html`<option value=${agent.id}>${agent.name || agent.id}</option>`,
+                (agent: any) => html`<option value=${agent.id}>${agent.name || agent.id}</option>`,
               )}
             </select>
           </div>
@@ -272,7 +272,7 @@ export function renderBindings(props: BindingsProps) {
   } = props;
 
   const agents = agentsList?.agents || [];
-  const agentMap = new Map(agents.map((a) => [a.id, a.name || a.id]));
+  const agentMap = new Map(agents.map((a: any) => [a.id, a.name || a.id]));
 
   return html`
     <div class="bindings-view">

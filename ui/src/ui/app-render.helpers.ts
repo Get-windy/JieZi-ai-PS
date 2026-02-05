@@ -95,10 +95,10 @@ export function renderChatControls(state: AppViewState) {
             state.sessionKey = next;
             state.chatMessage = "";
             state.chatStream = null;
-            (state as unknown as OpenClawApp).chatStreamStartedAt = null;
+            (state as any).chatStreamStartedAt = null;
             state.chatRunId = null;
-            (state as unknown as OpenClawApp).resetToolStream();
-            (state as unknown as OpenClawApp).resetChatScroll();
+            (state as any).resetToolStream();
+            (state as any).resetChatScroll();
             state.applySettings({
               ...state.settings,
               sessionKey: next,
@@ -106,7 +106,7 @@ export function renderChatControls(state: AppViewState) {
             });
             void state.loadAssistantIdentity();
             syncUrlWithSessionKey(next, true);
-            void loadChatHistory(state as unknown as ChatState);
+            void loadChatHistory(state as any);
           }}
         >
           ${repeat(
@@ -123,8 +123,8 @@ export function renderChatControls(state: AppViewState) {
         class="btn btn--sm btn--icon"
         ?disabled=${state.chatLoading || !state.connected}
         @click=${() => {
-          (state as unknown as OpenClawApp).resetToolStream();
-          void refreshChat(state as unknown as Parameters<typeof refreshChat>[0]);
+          (state as any).resetToolStream();
+          void refreshChat(state as any);
         }}
         title="${t("chat.controls.refresh")}"
       >
@@ -193,7 +193,9 @@ function resolveMainSessionKey(
   if (mainKey) {
     return mainKey;
   }
-  if (sessions?.sessions?.some((row) => row.key === "main")) {
+  if (
+    sessions?.sessions?.some((row: SessionsListResult["sessions"][number]) => row.key === "main")
+  ) {
     return "main";
   }
   return null;
@@ -219,8 +221,14 @@ function resolveSessionOptions(
   const seen = new Set<string>();
   const options: Array<{ key: string; displayName?: string }> = [];
 
-  const resolvedMain = mainSessionKey && sessions?.sessions?.find((s) => s.key === mainSessionKey);
-  const resolvedCurrent = sessions?.sessions?.find((s) => s.key === sessionKey);
+  const resolvedMain =
+    mainSessionKey &&
+    sessions?.sessions?.find(
+      (s: SessionsListResult["sessions"][number]) => s.key === mainSessionKey,
+    );
+  const resolvedCurrent = sessions?.sessions?.find(
+    (s: SessionsListResult["sessions"][number]) => s.key === sessionKey,
+  );
 
   // Add main session key first
   if (mainSessionKey) {

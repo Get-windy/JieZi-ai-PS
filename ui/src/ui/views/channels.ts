@@ -100,7 +100,7 @@ ${props.snapshot ? JSON.stringify(props.snapshot, null, 2) : t("channels.no_snap
 
 function resolveChannelOrder(snapshot: ChannelsStatusSnapshot | null): ChannelKey[] {
   if (snapshot?.channelMeta?.length) {
-    return snapshot.channelMeta.map((entry) => entry.id);
+    return snapshot.channelMeta.map((entry: any) => entry.id);
   }
   if (snapshot?.channelOrder?.length) {
     return snapshot.channelOrder;
@@ -252,7 +252,7 @@ function resolveChannelMetaMap(
   if (!snapshot?.channelMeta?.length) {
     return {};
   }
-  return Object.fromEntries(snapshot.channelMeta.map((entry) => [entry.id, entry]));
+  return Object.fromEntries(snapshot.channelMeta.map((entry: any) => [entry.id, entry]));
 }
 
 function resolveChannelLabel(snapshot: ChannelsStatusSnapshot | null, key: string): string {

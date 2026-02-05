@@ -198,7 +198,7 @@ export function renderSessions(props: SessionsProps) {
             ? html`
                 <div class="muted">${t("sessions.no_sessions")}</div>
               `
-            : rows.map((row) =>
+            : rows.map((row: any) =>
                 renderRow(row, props.basePath, props.onPatch, props.onDelete, props.loading),
               )
         }
