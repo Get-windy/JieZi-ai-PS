@@ -326,6 +326,7 @@ export type GatewaySessionsDefaults = {
 export type GatewayAgentRow = {
   id: string;
   name?: string;
+  workspace?: string;
   identity?: {
     name?: string;
     theme?: string;

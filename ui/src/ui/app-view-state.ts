@@ -176,6 +176,20 @@ export type AppViewState = {
   logsLevelFilters: Record<LogLevel, boolean>;
   logsAutoFollow: boolean;
   logsTruncated: boolean;
+  // 会话存储状态
+  storageCurrentPath: string | null;
+  storageNewPath: string;
+  storageLoading: boolean;
+  storageMigrating: boolean;
+  storageError: string | null;
+  storageSuccess: string | null;
+  storageShowBrowser: boolean;
+  storageBrowserPath: string;
+  storageBrowserParent: string | null;
+  storageBrowserDirectories: string[];
+  storageBrowserDrives: string[];
+  storageBrowserLoading: boolean;
+  storageBrowserError: string | null;
   client: GatewayBrowserClient | null;
   connect: () => void;
   setTab: (tab: Tab) => void;

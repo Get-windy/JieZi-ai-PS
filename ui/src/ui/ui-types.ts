@@ -33,4 +33,9 @@ export type CronFormState = {
   deliveryChannel: string;
   deliveryTo: string;
   timeoutSeconds: string;
+  // 别名属性（为了兼容）
+  deliver?: boolean;
+  channel?: string;
+  to?: string;
+  postToMainPrefix?: boolean;
 };

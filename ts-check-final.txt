@@ -1,0 +1,110 @@
+src/commands/doctor-completion.ts(7,3): error TS2305: Module '"../cli/completion-cli.js"' has no exported member 'completionCacheExists'.
+src/commands/doctor-completion.ts(10,3): error TS2459: Module '"../cli/completion-cli.js"' declares 'resolveCompletionCachePath' locally, but it is not exported.
+src/commands/doctor-completion.ts(12,3): error TS2305: Module '"../cli/completion-cli.js"' has no exported member 'usesSlowDynamicCompletion'.
+ui/src/ui/app-render.ts(261,17): error TS2322: Type '(next: string | boolean) => void' is not assignable to type '(next: UiSettings) => void'.
+  Types of parameters 'next' and 'next' are incompatible.
+    Type 'UiSettings' is not assignable to type 'string | boolean'.
+ui/src/ui/app-render.ts(261,83): error TS2345: Argument of type 'string | boolean' is not assignable to parameter of type 'UiSettings'.
+  Type 'string' is not assignable to type 'UiSettings'.
+ui/src/ui/app-render.ts(262,64): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(264,19): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(269,21): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(270,21): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(278,38): error TS2339: Property 'storageCurrentPath' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(279,34): error TS2339: Property 'storageNewPath' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(280,34): error TS2339: Property 'storageLoading' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(281,36): error TS2339: Property 'storageMigrating' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(282,32): error TS2339: Property 'storageError' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(283,34): error TS2339: Property 'storageSuccess' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(284,38): error TS2339: Property 'storageShowBrowser' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(285,39): error TS2339: Property 'storageShowBrowser' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(287,44): error TS2339: Property 'storageBrowserPath' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(288,43): error TS2339: Property 'storageBrowserParent' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(289,44): error TS2339: Property 'storageBrowserDirectories' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(290,39): error TS2339: Property 'storageBrowserDrives' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(291,40): error TS2339: Property 'storageBrowserLoading' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(292,38): error TS2339: Property 'storageBrowserError' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(299,61): error TS2339: Property 'storageNewPath' does not exist on type 'AppViewState'.
+ui/src/ui/app-render.ts(333,17): error TS2322: Type '(path: string, value: any) => void' is not assignable to type '(path: (string | number)[], value: unknown) => void'.
+  Types of parameters 'path' and 'path' are incompatible.
+    Type '(string | number)[]' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(334,55): error TS2345: Argument of type 'string' is not assignable to parameter of type '(string | number)[]'.
+ui/src/ui/app-render.ts(341,55): error TS2345: Argument of type 'string' is not assignable to parameter of type 'keyof NostrProfile'.
+ui/src/ui/app-render.ts(372,17): error TS2322: Type '(next: string | boolean) => void' is not assignable to type '(next: { activeMinutes: string; limit: string; includeGlobal: boolean; includeUnknown: boolean; }) => void'.
+  Types of parameters 'next' and 'next' are incompatible.
+    Type '{ activeMinutes: string; limit: string; includeGlobal: boolean; includeUnknown: boolean; }' is not assignable to type 'string | boolean'.
+ui/src/ui/app-render.ts(373,53): error TS2339: Property 'activeMinutes' does not exist on type 'string | boolean'.
+  Property 'activeMinutes' does not exist on type 'string'.
+ui/src/ui/app-render.ts(374,52): error TS2339: Property 'limit' does not exist on type 'string | boolean'.
+  Property 'limit' does not exist on type 'string'.
+ui/src/ui/app-render.ts(375,54): error TS2339: Property 'includeGlobal' does not exist on type 'string | boolean'.
+  Property 'includeGlobal' does not exist on type 'string'.
+ui/src/ui/app-render.ts(376,55): error TS2339: Property 'includeUnknown' does not exist on type 'string | boolean'.
+  Property 'includeUnknown' does not exist on type 'string'.
+ui/src/ui/app-render.ts(598,68): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(840,40): error TS2339: Property 'workspace' does not exist on type 'GatewayAgentRow'.
+ui/src/ui/app-render.ts(852,34): error TS2339: Property 'agents' does not exist on type '{}'.
+ui/src/ui/app-render.ts(856,41): error TS2339: Property 'agents' does not exist on type '{}'.
+ui/src/ui/app-render.ts(886,42): error TS2339: Property 'agents' does not exist on type '{}'.
+ui/src/ui/app-render.ts(951,62): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1002,17): error TS2322: Type '(nodeId: string) => void' is not assignable to type '(nodeId: string | null) => void'.
+  Types of parameters 'nodeId' and 'nodeId' are incompatible.
+    Type 'string | null' is not assignable to type 'string'.
+      Type 'null' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1009,17): error TS2322: Type '(agentIndex: number, nodeId: string) => void' is not assignable to type '(agentIndex: number, nodeId: string | null) => void'.
+  Types of parameters 'nodeId' and 'nodeId' are incompatible.
+    Type 'string | null' is not assignable to type 'string'.
+      Type 'null' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1018,17): error TS2322: Type '(kind: string, nodeId: string) => void' is not assignable to type '(kind: "gateway" | "node", nodeId: string | null) => void'.
+  Types of parameters 'nodeId' and 'nodeId' are incompatible.
+    Type 'string | null' is not assignable to type 'string'.
+      Type 'null' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1019,19): error TS2322: Type 'string' is not assignable to type '"gateway" | "node"'.
+ui/src/ui/app-render.ts(1029,17): error TS2322: Type '(path: string, value: any) => void' is not assignable to type '(path: (string | number)[], value: unknown) => void'.
+  Types of parameters 'path' and 'path' are incompatible.
+    Type '(string | number)[]' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1030,55): error TS2345: Argument of type 'string' is not assignable to parameter of type '(string | number)[]'.
+ui/src/ui/app-render.ts(1031,17): error TS2322: Type '(path: string) => void' is not assignable to type '(path: (string | number)[]) => void'.
+  Types of parameters 'path' and 'path' are incompatible.
+    Type '(string | number)[]' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1031,94): error TS2345: Argument of type 'string' is not assignable to parameter of type '(string | number)[]'.
+ui/src/ui/app-render.ts(1048,19): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1059,21): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1060,21): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1099,61): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1101,17): error TS2322: Type '(next: string | boolean) => string | boolean' is not assignable to type '(attachments: ChatAttachment[]) => void'.
+  Types of parameters 'next' and 'attachments' are incompatible.
+    Type 'ChatAttachment[]' is not assignable to type 'string | boolean'.
+ui/src/ui/app-render.ts(1101,67): error TS2322: Type 'string | boolean' is not assignable to type 'ChatAttachment[]'.
+  Type 'string' is not assignable to type 'ChatAttachment[]'.
+ui/src/ui/app-render.ts(1159,19): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1162,17): error TS2322: Type '(path: string, value: any) => void' is not assignable to type '(path: (string | number)[], value: unknown) => void'.
+  Types of parameters 'path' and 'path' are incompatible.
+    Type '(string | number)[]' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1163,55): error TS2345: Argument of type 'string' is not assignable to parameter of type '(string | number)[]'.
+ui/src/ui/app-render.ts(1192,66): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1193,66): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1211,66): error TS2322: Type 'string | boolean' is not assignable to type 'string'.
+  Type 'boolean' is not assignable to type 'string'.
+ui/src/ui/app-render.ts(1215,66): error TS2322: Type 'string | boolean' is not assignable to type 'boolean'.
+  Type 'string' is not assignable to type 'boolean'.
+ui/src/ui/views/cron.ts(209,43): error TS2339: Property 'deliver' does not exist on type 'CronFormState'.
+ui/src/ui/views/cron.ts(212,25): error TS2353: Object literal may only specify known properties, and 'deliver' does not exist in type 'Partial<CronFormState>'.
+ui/src/ui/views/cron.ts(219,42): error TS2339: Property 'channel' does not exist on type 'CronFormState'.
+ui/src/ui/views/cron.ts(237,41): error TS2339: Property 'to' does not exist on type 'CronFormState'.
+ui/src/ui/views/cron.ts(239,44): error TS2353: Object literal may only specify known properties, and 'to' does not exist in type 'Partial<CronFormState>'.
+ui/src/ui/views/cron.ts(259,47): error TS2339: Property 'postToMainPrefix' does not exist on type 'CronFormState'.
+ui/src/ui/views/cron.ts(262,31): error TS2353: Object literal may only specify known properties, and 'postToMainPrefix' does not exist in type 'Partial<CronFormState>'.
