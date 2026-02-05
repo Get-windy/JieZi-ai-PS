@@ -291,7 +291,11 @@ export function renderApp(state: AppViewState) {
                           name: dir,
                           path: dir,
                         })),
-                        drives: state.storageBrowserDrives,
+                        drives: state.storageBrowserDrives.map((drive: string) => ({
+                          path: drive,
+                          label: drive,
+                          type: "drive",
+                        })),
                         loading: state.storageBrowserLoading,
                         error: state.storageBrowserError,
                         onNavigate: (path: string) =>
@@ -345,6 +349,22 @@ export function renderApp(state: AppViewState) {
                   state.handleNostrProfileFieldChange(field, value),
                 onNostrProfileSave: () => state.handleNostrProfileSave(),
                 onNostrProfileImport: () => state.handleNostrProfileImport(),
+                editingChannelAccount: state.editingChannelAccount,
+                creatingChannelAccount: state.creatingChannelAccount,
+                deletingChannelAccount: state.deletingChannelAccount,
+                managingChannelId: state.managingChannelId,
+                onChannelAccountEdit: (channelId: string, accountId: string) =>
+                  (state as any).handleChannelAccountEdit(channelId, accountId),
+                onChannelAccountCreate: (channelId: string) =>
+                  (state as any).handleChannelAccountCreate(channelId),
+                onChannelAccountDelete: (channelId: string, accountId: string) =>
+                  (state as any).handleChannelAccountDelete(channelId, accountId),
+                onChannelAccountSave: () => (state as any).handleChannelAccountSave(),
+                onChannelAccountCancel: () => (state as any).handleChannelAccountCancel(),
+                onChannelAccountFieldChange: (field: string, value: any) =>
+                  (state as any).handleChannelAccountFieldChange(field, value),
+                onChannelManage: (channelId: string | null) =>
+                  (state as any).handleChannelManage(channelId),
                 onNostrProfileToggleAdvanced: () => state.handleNostrProfileToggleAdvanced(),
               })
             : nothing
