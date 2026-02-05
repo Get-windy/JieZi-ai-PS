@@ -1,6 +1,7 @@
 import { html, nothing } from "lit";
 import type { AppViewState } from "./app-view-state.js";
 import type { GatewayBrowserClient } from "./gateway.js";
+import type { ConfigUiHints } from "./types.js";
 import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
 import { refreshChatAvatar } from "./app-chat.js";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.js";
