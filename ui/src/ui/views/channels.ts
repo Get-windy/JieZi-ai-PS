@@ -20,7 +20,7 @@ import {
   renderAccountManageButton,
   renderAccountManagerModal,
   renderAccountEditModal,
-} from "./channels.account-manager";
+} from "./channels.account-manager.ts";
 import { renderChannelConfigSection } from "./channels.config.ts";
 import { renderDiscordCard } from "./channels.discord.ts";
 import { renderGoogleChatCard } from "./channels.googlechat.ts";

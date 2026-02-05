@@ -8,7 +8,7 @@ import {
   translateFieldLabel,
   schemaType,
   type JsonSchema,
-} from "./config-form.shared";
+} from "./config-form.shared.ts";
 
 export type ConfigProps = {
   raw: string;
