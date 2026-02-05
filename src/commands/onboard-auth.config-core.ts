@@ -1,4 +1,8 @@
 import type { OpenClawConfig } from "../config/config.js";
+import {
+  buildCloudflareAiGatewayModelDefinition,
+  resolveCloudflareAiGatewayBaseUrl,
+} from "../agents/cloudflare-ai-gateway.js";
 import { buildXiaomiProvider, XIAOMI_DEFAULT_MODEL_ID } from "../agents/models-config.providers.js";
 import {
   buildSyntheticModelDefinition,
@@ -13,6 +17,7 @@ import {
   VENICE_MODEL_CATALOG,
 } from "../agents/venice-models.js";
 import {
+  CLOUDFLARE_AI_GATEWAY_DEFAULT_MODEL_REF,
   OPENROUTER_DEFAULT_MODEL_REF,
   VERCEL_AI_GATEWAY_DEFAULT_MODEL_REF,
   XIAOMI_DEFAULT_MODEL_REF,
@@ -101,6 +106,73 @@ export function applyVercelAiGatewayProviderConfig(cfg: OpenClawConfig): OpenCla
   };
 }
 
+export function applyCloudflareAiGatewayProviderConfig(
+  cfg: OpenClawConfig,
+  params?: { accountId?: string; gatewayId?: string },
+): OpenClawConfig {
+  const models = { ...cfg.agents?.defaults?.models };
+  models[CLOUDFLARE_AI_GATEWAY_DEFAULT_MODEL_REF] = {
+    ...models[CLOUDFLARE_AI_GATEWAY_DEFAULT_MODEL_REF],
+    alias: models[CLOUDFLARE_AI_GATEWAY_DEFAULT_MODEL_REF]?.alias ?? "Cloudflare AI Gateway",
+  };
+
+  const providers = { ...cfg.models?.providers };
+  const existingProvider = providers["cloudflare-ai-gateway"];
+  const existingModels = Array.isArray(existingProvider?.models) ? existingProvider.models : [];
+  const defaultModel = buildCloudflareAiGatewayModelDefinition();
+  const hasDefaultModel = existingModels.some((model) => model.id === defaultModel.id);
+  const mergedModels = hasDefaultModel ? existingModels : [...existingModels, defaultModel];
+  const baseUrl =
+    params?.accountId && params?.gatewayId
+      ? resolveCloudflareAiGatewayBaseUrl({
+          accountId: params.accountId,
+          gatewayId: params.gatewayId,
+        })
+      : existingProvider?.baseUrl;
+
+  if (!baseUrl) {
+    return {
+      ...cfg,
+      agents: {
+        ...cfg.agents,
+        defaults: {
+          ...cfg.agents?.defaults,
+          models,
+        },
+      },
+    };
+  }
+
+  const { apiKey: existingApiKey, ...existingProviderRest } = (existingProvider ?? {}) as Record<
+    string,
+    unknown
+  > as { apiKey?: string };
+  const resolvedApiKey = typeof existingApiKey === "string" ? existingApiKey : undefined;
+  const normalizedApiKey = resolvedApiKey?.trim();
+  providers["cloudflare-ai-gateway"] = {
+    ...existingProviderRest,
+    baseUrl,
+    api: "anthropic-messages",
+    ...(normalizedApiKey ? { apiKey: normalizedApiKey } : {}),
+    models: mergedModels.length > 0 ? mergedModels : [defaultModel],
+  };
+
+  return {
+    ...cfg,
+    agents: {
+      ...cfg.agents,
+      defaults: {
+        ...cfg.agents?.defaults,
+        models,
+      },
+    },
+    models: {
+      mode: cfg.models?.mode ?? "merge",
+      providers,
+    },
+  };
+}
+
 export function applyVercelAiGatewayConfig(cfg: OpenClawConfig): OpenClawConfig {
   const next = applyVercelAiGatewayProviderConfig(cfg);
   const existingModel = next.agents?.defaults?.model;
@@ -117,6 +189,31 @@ export function applyVercelAiGatewayConfig(cfg: OpenClawConfig): OpenClawConfig 
               }
             : undefined),
           primary: VERCEL_AI_GATEWAY_DEFAULT_MODEL_REF,
+        },
+      },
+    },
+  };
+}
+
+export function applyCloudflareAiGatewayConfig(
+  cfg: OpenClawConfig,
+  params?: { accountId?: string; gatewayId?: string },
+): OpenClawConfig {
+  const next = applyCloudflareAiGatewayProviderConfig(cfg, params);
+  const existingModel = next.agents?.defaults?.model;
+  return {
+    ...next,
+    agents: {
+      ...next.agents,
+      defaults: {
+        ...next.agents?.defaults,
+        model: {
+          ...(existingModel && "fallbacks" in (existingModel as Record<string, unknown>)
+            ? {
+                fallbacks: (existingModel as { fallbacks?: string[] }).fallbacks,
+              }
+            : undefined),
+          primary: CLOUDFLARE_AI_GATEWAY_DEFAULT_MODEL_REF,
         },
       },
     },
@@ -565,7 +662,7 @@ export function applyDeepseekProviderConfig(cfg: OpenClawConfig): OpenClawConfig
   const providers = { ...cfg.models?.providers };
   const existingProvider = providers.deepseek;
   const existingModels = Array.isArray(existingProvider?.models) ? existingProvider.models : [];
-  
+
   // DeepSeek 模型定义
   const deepseekModels = [
     {
@@ -587,17 +684,17 @@ export function applyDeepseekProviderConfig(cfg: OpenClawConfig): OpenClawConfig
       maxTokens: 8192,
     },
   ];
-  
+
   const hasDefaultModel = existingModels.some((model) => model.id === DEEPSEEK_DEFAULT_MODEL_ID);
   const mergedModels = hasDefaultModel ? existingModels : [...existingModels, ...deepseekModels];
-  
+
   const { apiKey: existingApiKey, ...existingProviderRest } = (existingProvider ?? {}) as Record<
     string,
     unknown
   > as { apiKey?: string };
   const resolvedApiKey = typeof existingApiKey === "string" ? existingApiKey : undefined;
   const normalizedApiKey = resolvedApiKey?.trim();
-  
+
   providers.deepseek = {
     ...existingProviderRest,
     baseUrl: DEEPSEEK_BASE_URL,
@@ -661,7 +758,7 @@ export function applyBaiduQianfanProviderConfig(cfg: OpenClawConfig): OpenClawCo
   const providers = { ...cfg.models?.providers };
   const existingProvider = providers.baidu;
   const existingModels = Array.isArray(existingProvider?.models) ? existingProvider.models : [];
-  
+
   // 百度文心模型定义
   const baiduModels = [
     {
@@ -692,17 +789,17 @@ export function applyBaiduQianfanProviderConfig(cfg: OpenClawConfig): OpenClawCo
       maxTokens: 4096,
     },
   ];
-  
+
   const hasDefaultModel = existingModels.some((model) => model.id === BAIDU_DEFAULT_MODEL_ID);
   const mergedModels = hasDefaultModel ? existingModels : [...existingModels, ...baiduModels];
-  
+
   const { apiKey: existingApiKey, ...existingProviderRest } = (existingProvider ?? {}) as Record<
     string,
     unknown
   > as { apiKey?: string };
   const resolvedApiKey = typeof existingApiKey === "string" ? existingApiKey : undefined;
   const normalizedApiKey = resolvedApiKey?.trim();
-  
+
   providers.baidu = {
     ...existingProviderRest,
     baseUrl: BAIDU_QIANFAN_BASE_URL,
@@ -766,7 +863,7 @@ export function applyDoubaoProviderConfig(cfg: OpenClawConfig): OpenClawConfig {
   const providers = { ...cfg.models?.providers };
   const existingProvider = providers.doubao;
   const existingModels = Array.isArray(existingProvider?.models) ? existingProvider.models : [];
-  
+
   // 字节豆包模型定义
   const doubaoModels = [
     {
@@ -797,17 +894,17 @@ export function applyDoubaoProviderConfig(cfg: OpenClawConfig): OpenClawConfig {
       maxTokens: 4096,
     },
   ];
-  
+
   const hasDefaultModel = existingModels.some((model) => model.id === DOUBAO_DEFAULT_MODEL_ID);
   const mergedModels = hasDefaultModel ? existingModels : [...existingModels, ...doubaoModels];
-  
+
   const { apiKey: existingApiKey, ...existingProviderRest } = (existingProvider ?? {}) as Record<
     string,
     unknown
   > as { apiKey?: string };
   const resolvedApiKey = typeof existingApiKey === "string" ? existingApiKey : undefined;
   const normalizedApiKey = resolvedApiKey?.trim();
-  
+
   providers.doubao = {
     ...existingProviderRest,
     baseUrl: DOUBAO_BASE_URL,
@@ -871,7 +968,7 @@ export function applyTencentHunyuanProviderConfig(cfg: OpenClawConfig): OpenClaw
   const providers = { ...cfg.models?.providers };
   const existingProvider = providers.tencent;
   const existingModels = Array.isArray(existingProvider?.models) ? existingProvider.models : [];
-  
+
   // 腾讯混元模型定义
   const hunyuanModels = [
     {
@@ -902,17 +999,17 @@ export function applyTencentHunyuanProviderConfig(cfg: OpenClawConfig): OpenClaw
       maxTokens: 4096,
     },
   ];
-  
+
   const hasDefaultModel = existingModels.some((model) => model.id === TENCENT_DEFAULT_MODEL_ID);
   const mergedModels = hasDefaultModel ? existingModels : [...existingModels, ...hunyuanModels];
-  
+
   const { apiKey: existingApiKey, ...existingProviderRest } = (existingProvider ?? {}) as Record<
     string,
     unknown
   > as { apiKey?: string };
   const resolvedApiKey = typeof existingApiKey === "string" ? existingApiKey : undefined;
   const normalizedApiKey = resolvedApiKey?.trim();
-  
+
   providers.tencent = {
     ...existingProviderRest,
     baseUrl: TENCENT_HUNYUAN_BASE_URL,
@@ -976,7 +1073,7 @@ export function applyXinghuoProviderConfig(cfg: OpenClawConfig): OpenClawConfig 
   const providers = { ...cfg.models?.providers };
   const existingProvider = providers.xinghuo;
   const existingModels = Array.isArray(existingProvider?.models) ? existingProvider.models : [];
-  
+
   // 讯飞星火模型定义
   const xinghuoModels = [
     {
@@ -1007,17 +1104,17 @@ export function applyXinghuoProviderConfig(cfg: OpenClawConfig): OpenClawConfig 
       maxTokens: 4096,
     },
   ];
-  
+
   const hasDefaultModel = existingModels.some((model) => model.id === XINGHUO_DEFAULT_MODEL_ID);
   const mergedModels = hasDefaultModel ? existingModels : [...existingModels, ...xinghuoModels];
-  
+
   const { apiKey: existingApiKey, ...existingProviderRest } = (existingProvider ?? {}) as Record<
     string,
     unknown
   > as { apiKey?: string };
   const resolvedApiKey = typeof existingApiKey === "string" ? existingApiKey : undefined;
   const normalizedApiKey = resolvedApiKey?.trim();
-  
+
   providers.xinghuo = {
     ...existingProviderRest,
     baseUrl: XINGHUO_BASE_URL,
@@ -1081,7 +1178,7 @@ export function applySiliconflowProviderConfig(cfg: OpenClawConfig): OpenClawCon
   const providers = { ...cfg.models?.providers };
   const existingProvider = providers.siliconflow;
   const existingModels = Array.isArray(existingProvider?.models) ? existingProvider.models : [];
-  
+
   // 硅基流动免费模型定义
   const siliconflowModels = [
     {
@@ -1121,17 +1218,17 @@ export function applySiliconflowProviderConfig(cfg: OpenClawConfig): OpenClawCon
       maxTokens: 4096,
     },
   ];
-  
+
   const hasDefaultModel = existingModels.some((model) => model.id === SILICONFLOW_DEFAULT_MODEL_ID);
   const mergedModels = hasDefaultModel ? existingModels : [...existingModels, ...siliconflowModels];
-  
+
   const { apiKey: existingApiKey, ...existingProviderRest } = (existingProvider ?? {}) as Record<
     string,
     unknown
   > as { apiKey?: string };
   const resolvedApiKey = typeof existingApiKey === "string" ? existingApiKey : undefined;
   const normalizedApiKey = resolvedApiKey?.trim();
-  
+
   providers.siliconflow = {
     ...existingProviderRest,
     baseUrl: SILICONFLOW_BASE_URL,
@@ -1195,7 +1292,7 @@ export function applyGroqProviderConfig(cfg: OpenClawConfig): OpenClawConfig {
   const providers = { ...cfg.models?.providers };
   const existingProvider = providers.groq;
   const existingModels = Array.isArray(existingProvider?.models) ? existingProvider.models : [];
-  
+
   // Groq 免费模型定义
   const groqModels = [
     {
@@ -1235,17 +1332,17 @@ export function applyGroqProviderConfig(cfg: OpenClawConfig): OpenClawConfig {
       maxTokens: 32768,
     },
   ];
-  
+
   const hasDefaultModel = existingModels.some((model) => model.id === GROQ_DEFAULT_MODEL_ID);
   const mergedModels = hasDefaultModel ? existingModels : [...existingModels, ...groqModels];
-  
+
   const { apiKey: existingApiKey, ...existingProviderRest } = (existingProvider ?? {}) as Record<
     string,
     unknown
   > as { apiKey?: string };
   const resolvedApiKey = typeof existingApiKey === "string" ? existingApiKey : undefined;
   const normalizedApiKey = resolvedApiKey?.trim();
-  
+
   providers.groq = {
     ...existingProviderRest,
     baseUrl: GROQ_BASE_URL,
@@ -1309,7 +1406,7 @@ export function applyTogetherAiProviderConfig(cfg: OpenClawConfig): OpenClawConf
   const providers = { ...cfg.models?.providers };
   const existingProvider = providers["together-ai"];
   const existingModels = Array.isArray(existingProvider?.models) ? existingProvider.models : [];
-  
+
   // Together AI 免费模型定义
   const togetherAiModels = [
     {
@@ -1340,17 +1437,17 @@ export function applyTogetherAiProviderConfig(cfg: OpenClawConfig): OpenClawConf
       maxTokens: 8192,
     },
   ];
-  
+
   const hasDefaultModel = existingModels.some((model) => model.id === TOGETHER_AI_DEFAULT_MODEL_ID);
   const mergedModels = hasDefaultModel ? existingModels : [...existingModels, ...togetherAiModels];
-  
+
   const { apiKey: existingApiKey, ...existingProviderRest } = (existingProvider ?? {}) as Record<
     string,
     unknown
   > as { apiKey?: string };
   const resolvedApiKey = typeof existingApiKey === "string" ? existingApiKey : undefined;
   const normalizedApiKey = resolvedApiKey?.trim();
-  
+
   providers["together-ai"] = {
     ...existingProviderRest,
     baseUrl: TOGETHER_AI_BASE_URL,

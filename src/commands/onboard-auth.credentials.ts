@@ -1,6 +1,7 @@
 import type { OAuthCredentials } from "@mariozechner/pi-ai";
 import { resolveOpenClawAgentDir } from "../agents/agent-paths.js";
 import { upsertAuthProfile } from "../agents/auth-profiles.js";
+export { CLOUDFLARE_AI_GATEWAY_DEFAULT_MODEL_REF } from "../agents/cloudflare-ai-gateway.js";
 
 const resolveAuthAgentDir = (agentDir?: string) => agentDir ?? resolveOpenClawAgentDir();
 
@@ -126,7 +127,8 @@ export const XINGHUO_DEFAULT_MODEL_REF = "xinghuo/spark-pro";
 // 国际免费模型默认引用
 export const SILICONFLOW_DEFAULT_MODEL_REF = "siliconflow/qwen-2.5-7b-instruct";
 export const GROQ_DEFAULT_MODEL_REF = "groq/llama-3.3-70b-versatile";
-export const TOGETHER_AI_DEFAULT_MODEL_REF = "together-ai/meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo";
+export const TOGETHER_AI_DEFAULT_MODEL_REF =
+  "together-ai/meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo";
 
 export async function setZaiApiKey(key: string, agentDir?: string) {
   // Write to resolved agent dir so gateway finds credentials on startup.
@@ -160,6 +162,30 @@ export async function setOpenrouterApiKey(key: string, agentDir?: string) {
       type: "api_key",
       provider: "openrouter",
       key,
+    },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
+
+export async function setCloudflareAiGatewayConfig(
+  accountId: string,
+  gatewayId: string,
+  apiKey: string,
+  agentDir?: string,
+) {
+  const normalizedAccountId = accountId.trim();
+  const normalizedGatewayId = gatewayId.trim();
+  const normalizedKey = apiKey.trim();
+  upsertAuthProfile({
+    profileId: "cloudflare-ai-gateway:default",
+    credential: {
+      type: "api_key",
+      provider: "cloudflare-ai-gateway",
+      key: normalizedKey,
+      metadata: {
+        accountId: normalizedAccountId,
+        gatewayId: normalizedGatewayId,
+      },
     },
     agentDir: resolveAuthAgentDir(agentDir),
   });

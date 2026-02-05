@@ -1660,6 +1660,13 @@
 .agent-kv {
   display: grid;
   gap: 6px;
+  min-width: 0;
+}
+
+.agent-kv > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .agent-kv-sub {
@@ -1902,4 +1909,125 @@
   .agent-tools-list {
     grid-template-columns: 1fr;
   }
+}
+
+/* ========================================
+   Storage Browser
+   ======================================== */
+
+.storage-browser-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.storage-browser {
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.storage-browser-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.storage-browser-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.storage-browser-current-path {
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-browser-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 0;
+  min-height: 300px;
+}
+
+.storage-browser-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.storage-browser-section {
+  padding: 0 20px;
+  margin-bottom: 16px;
+}
+
+.storage-browser-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.storage-browser-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.storage-browser-item:hover {
+  background: var(--secondary);
+}
+
+.storage-browser-item--parent {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.storage-browser-item-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.storage-browser-item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.storage-browser-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.loading-spinner {
+  padding: 40px;
+  text-align: center;
+  color: var(--muted);
 }

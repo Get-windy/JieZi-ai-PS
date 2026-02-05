@@ -128,12 +128,151 @@ The onboarding wizard has been localized to support Chinese (Simplified):
   **向导本地化** - 所有引导向导界面已翻译为中文
 - ✅ **Language switching** - Automatically detects system locale or can be manually configured
   **语言切换** - 自动检测系统语言或可手动配置
+- ✅ **Web UI i18n** - Full Chinese/English support in Control UI and components
+  **Web UI 国际化** - Control UI 和组件完整的中英文支持
 
 **Localized files / 本地化文件:**
+
 - `src/i18n/index.ts` - Translation system core / 翻译系统核心
 - `src/i18n/types.ts` - Translation key types / 翻译键类型定义
 - `src/i18n/translations.ts` - Chinese & English translations / 中英文翻译内容
 - `src/wizard/onboarding.ts` - Localized onboarding wizard / 本地化引导向导
+- `ui/src/ui/i18n.ts` - Web UI internationalization / Web UI 国际化支持
+
+### Session Storage Path Visual Migration / 会话数据存储路径可视化迁移
+
+This project implements **graphical session data storage path migration**, allowing non-technical users to choose storage locations through a visual interface, avoiding excessive C drive space usage.
+本项目实现了**会话数据存储路径的图形化迁移功能**，让普通用户（不懂代码）能够通过可视化界面选择存储位置，避免C盘空间占用过多。
+
+#### 🎯 Features / 功能特点
+
+1. **Graphical File Browser / 图形化文件浏览器**
+   - Display all available drives (Windows) or root directories (Linux/macOS)
+     显示所有可用驱动器（Windows）或根目录（Linux/macOS）
+   - Support directory navigation and parent directory return
+     支持目录导航和上级目录返回
+   - Real-time display of current path
+     实时显示当前路径
+
+2. **Path Validation / 路径验证**
+   - Automatically check if path exists
+     自动检查路径是否存在
+   - Verify if path is writable
+     验证路径是否可写
+   - Check parent directory permissions for non-existent paths
+     对不存在的路径检查父目录权限
+
+3. **Data Migration Options / 数据迁移选项**
+   - **Copy mode**: Copy session data to new location, keep original data
+     **复制模式**：将会话数据复制到新位置，保留原数据
+   - **Move mode**: Move session data to new location, delete original data
+     **移动模式**：将会话数据移动到新位置，删除原数据
+   - Auto-copy `sessions.json` and all `.jsonl` session log files
+     自动复制 `sessions.json` 和所有 `.jsonl` 会话记录文件
+   - **Auto-update configuration file**, no manual JSON editing required
+     **自动更新配置文件**，无需手动修改 JSON
+
+4. **User-friendly Interface / 用户友好的界面**
+   - Auto-load current storage path after connection
+     连接成功后自动加载当前存储路径
+   - Real-time success/error message display
+     实时显示成功/错误消息
+   - Support light/dark themes
+     支持明暗主题
+   - Full Chinese/English bilingual support
+     完整的中英文双语支持
+
+#### 🔧 Usage / 使用方法
+
+1. **Start Gateway and Control UI / 启动 Gateway 和 Control UI**
+
+   ```bash
+   pnpm openclaw gateway
+   # Visit / 访问 http://localhost:18789
+   ```
+
+2. **Open Session Storage Settings / 打开会话存储设置**
+   - Navigate to **Overview** page in Control UI
+     在 Control UI 中导航到 **Overview（概览）** 页面
+   - Scroll down to find **"Session Data Storage"** card
+     向下滚动找到 **"会话数据存储"** 卡片
+
+3. **Browse and Select New Location / 浏览并选择新位置**
+   - Click **"Browse..."** button to open file browser
+     点击 **"浏览..."** 按钮打开文件浏览器
+   - Select target drive from drive list
+     在驱动器列表中选择目标驱动器
+   - Navigate to target folder
+     导航到目标文件夹
+   - Click **"Select This Location"** to confirm
+     点击 **"选择此位置"** 确认
+
+4. **Validate Path / 验证路径**
+   - Click **"Validate"** button to check if path is valid
+     点击 **"验证"** 按钮检查路径是否有效
+   - System will display validation results and permission info
+     系统会显示验证结果和权限信息
+
+5. **Migrate Data / 迁移数据**
+   - Choose **"Copy to New Location"** (keep original) or **"Move to New Location"** (delete original)
+     选择 **"复制到新位置"**（保留原数据）或 **"移动到新位置"**（删除原数据）
+   - Wait for migration to complete
+     等待迁移完成
+   - View migration results (shows number of copied/moved files)
+     查看迁移结果（显示已复制/移动的文件数量）
+   - **Configuration file will be auto-updated**, no manual editing required!
+     **配置文件将自动更新**，无需手动修改！
+
+6. **Restart Gateway / 重启 Gateway**
+   - After migration, restart Gateway to apply new storage path:
+     迁移完成后，重启 Gateway 以应用新的存储路径：
+
+   ```bash
+   # Stop Gateway / 停止 Gateway
+   # Ctrl+C or close terminal / Ctrl+C 或关闭终端
+
+   # Restart Gateway / 重新启动 Gateway
+   pnpm openclaw gateway
+   ```
+
+#### 📁 Technical Implementation / 技术实现
+
+**Backend (Gateway RPC Methods) / 后端（Gateway RPC 方法）**:
+
+- `src/gateway/server-methods/storage.ts` - 5 RPC methods / 5个RPC方法
+  - `storage.listDrives()` - List available drives / 列出可用驱动器
+  - `storage.listDirectories({ path })` - List directory contents / 列出目录内容
+  - `storage.validatePath({ path })` - Validate path validity / 验证路径有效性
+  - `storage.getCurrentPath()` - Get current storage path / 获取当前存储路径
+  - `storage.migrateData({ newPath, moveFiles })` - Migrate data / 迁移数据
+
+**Frontend (Web UI Components) / 前端（Web UI 组件）**:
+
+- `ui/src/ui/views/storage-browser.ts` - File browser component / 文件浏览器组件
+- `ui/src/ui/views/session-storage.ts` - Session storage settings component / 会话存储设置组件
+- `ui/src/ui/controllers/storage.ts` - Storage management controller (business logic) / 存储管理控制器（业务逻辑）
+- `ui/src/styles/components.css` - File browser styles / 文件浏览器样式
+
+**Integration & State Management / 集成与状态管理**:
+
+- `ui/src/ui/app.ts` - 15 state fields and 7 handler methods / 15个状态字段和7个处理方法
+- `ui/src/ui/app-render.ts` - Props passing and callback binding / props传递和回调绑定
+- `ui/src/ui/app-gateway.ts` - Auto-load storage path / 自动加载存储路径
+- `ui/src/ui/views/overview.ts` - Overview page integration / Overview页面集成
+
+**Internationalization Support / 国际化支持**:
+
+- `ui/src/ui/i18n.ts` - 29 session storage translation keys (Chinese/English) / 29个会话存储相关的翻译键（中英文）
+- All UI text supports Chinese/English switching / 所有界面文本支持中英文切换
+
+#### 🔒 Permission Control / 权限控制
+
+- **Read operations** (browse, validate, get current path) require `operator.read` permission
+  **读取操作**（浏览、验证、获取当前路径）需要 `operator.read` 权限
+- **Migration operations** require `operator.admin` permission
+  **迁移操作**需要 `operator.admin` 权限
+- Permission configuration in `src/gateway/server-methods.ts`
+  在 `src/gateway/server-methods.ts` 中配置权限
 
 ## Security defaults (DM access)
 
@@ -567,5 +706,5 @@ Thanks to all clawtributors:
   <a href="https://github.com/voidserf"><img src="https://avatars.githubusercontent.com/u/477673?v=4&s=48" width="48" height="48" alt="voidserf" title="voidserf"/></a> <a href="https://github.com/search?q=Vultr-Clawd%20Admin"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="Vultr-Clawd Admin" title="Vultr-Clawd Admin"/></a> <a href="https://github.com/search?q=Wimmie"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="Wimmie" title="Wimmie"/></a> <a href="https://github.com/search?q=wolfred"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="wolfred" title="wolfred"/></a> <a href="https://github.com/wstock"><img src="https://avatars.githubusercontent.com/u/1394687?v=4&s=48" width="48" height="48" alt="wstock" title="wstock"/></a> <a href="https://github.com/YangHuang2280"><img src="https://avatars.githubusercontent.com/u/201681634?v=4&s=48" width="48" height="48" alt="YangHuang2280" title="YangHuang2280"/></a> <a href="https://github.com/yazinsai"><img src="https://avatars.githubusercontent.com/u/1846034?v=4&s=48" width="48" height="48" alt="yazinsai" title="yazinsai"/></a> <a href="https://github.com/yevhen"><img src="https://avatars.githubusercontent.com/u/107726?v=4&s=48" width="48" height="48" alt="yevhen" title="yevhen"/></a> <a href="https://github.com/YiWang24"><img src="https://avatars.githubusercontent.com/u/176262341?v=4&s=48" width="48" height="48" alt="YiWang24" title="YiWang24"/></a> <a href="https://github.com/search?q=ymat19"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="ymat19" title="ymat19"/></a>
   <a href="https://github.com/search?q=Zach%20Knickerbocker"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="Zach Knickerbocker" title="Zach Knickerbocker"/></a> <a href="https://github.com/zackerthescar"><img src="https://avatars.githubusercontent.com/u/38077284?v=4&s=48" width="48" height="48" alt="zackerthescar" title="zackerthescar"/></a> <a href="https://github.com/0xJonHoldsCrypto"><img src="https://avatars.githubusercontent.com/u/81202085?v=4&s=48" width="48" height="48" alt="0xJonHoldsCrypto" title="0xJonHoldsCrypto"/></a> <a href="https://github.com/aaronn"><img src="https://avatars.githubusercontent.com/u/1653630?v=4&s=48" width="48" height="48" alt="aaronn" title="aaronn"/></a> <a href="https://github.com/Alphonse-arianee"><img src="https://avatars.githubusercontent.com/u/254457365?v=4&s=48" width="48" height="48" alt="Alphonse-arianee" title="Alphonse-arianee"/></a> <a href="https://github.com/atalovesyou"><img src="https://avatars.githubusercontent.com/u/3534502?v=4&s=48" width="48" height="48" alt="atalovesyou" title="atalovesyou"/></a> <a href="https://github.com/search?q=Azade"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="Azade" title="Azade"/></a> <a href="https://github.com/carlulsoe"><img src="https://avatars.githubusercontent.com/u/34673973?v=4&s=48" width="48" height="48" alt="carlulsoe" title="carlulsoe"/></a> <a href="https://github.com/search?q=ddyo"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="ddyo" title="ddyo"/></a> <a href="https://github.com/search?q=Erik"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="Erik" title="Erik"/></a>
   <a href="https://github.com/latitudeki5223"><img src="https://avatars.githubusercontent.com/u/119656367?v=4&s=48" width="48" height="48" alt="latitudeki5223" title="latitudeki5223"/></a> <a href="https://github.com/search?q=Manuel%20Maly"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="Manuel Maly" title="Manuel Maly"/></a> <a href="https://github.com/search?q=Mourad%20Boustani"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="Mourad Boustani" title="Mourad Boustani"/></a> <a href="https://github.com/odrobnik"><img src="https://avatars.githubusercontent.com/u/333270?v=4&s=48" width="48" height="48" alt="odrobnik" title="odrobnik"/></a> <a href="https://github.com/pcty-nextgen-ios-builder"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="pcty-nextgen-ios-builder" title="pcty-nextgen-ios-builder"/></a> <a href="https://github.com/search?q=Quentin"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="Quentin" title="Quentin"/></a> <a href="https://github.com/search?q=Randy%20Torres"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="Randy Torres" title="Randy Torres"/></a> <a href="https://github.com/rhjoh"><img src="https://avatars.githubusercontent.com/u/105699450?v=4&s=48" width="48" height="48" alt="rhjoh" title="rhjoh"/></a> <a href="https://github.com/search?q=Rolf%20Fredheim"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="Rolf Fredheim" title="Rolf Fredheim"/></a> <a href="https://github.com/ronak-guliani"><img src="https://avatars.githubusercontent.com/u/23518228?v=4&s=48" width="48" height="48" alt="ronak-guliani" title="ronak-guliani"/></a>
-  <a href="https://github.com/search?q=William%20Stock"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="William Stock" title="William Stock"/></a>
+  <a href="https://github.com/search?q=William%20Stock"><img src="assets/avatar-placeholder.svg" width="48" height="48" alt="William Stock" title="William Stock"/></a> <a href="https://github.com/roerohan"><img src="https://avatars.githubusercontent.com/u/42958812?v=4&s=48" width="48" height="48" alt="roerohan" title="roerohan"/></a>
 </p>

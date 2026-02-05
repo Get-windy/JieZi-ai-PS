@@ -4,7 +4,6 @@ import type { GatewayBrowserClient } from "./gateway";
 import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
 import { refreshChatAvatar } from "./app-chat";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers";
-import { t } from "./i18n.js";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity";
 import { loadAgentSkills } from "./controllers/agent-skills";
@@ -52,9 +51,12 @@ import {
   updateSkillEdit,
   updateSkillEnabled,
 } from "./controllers/skills";
+import { t } from "./i18n.js";
 import { icons } from "./icons";
 import { TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation";
 import { renderAgents } from "./views/agents";
+import { renderBindings } from "./views/bindings";
+import { BindingsController } from "./views/bindings-controller";
 import { renderChannels } from "./views/channels";
 import { renderChat } from "./views/chat";
 import { renderConfig } from "./views/config";
@@ -68,8 +70,6 @@ import { renderNodes } from "./views/nodes";
 import { renderOverview } from "./views/overview";
 import { renderSessions } from "./views/sessions";
 import { renderSkills } from "./views/skills";
-import { renderBindings } from "./views/bindings";
-import { BindingsController } from "./views/bindings-controller";
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
@@ -80,16 +80,13 @@ let bindingsControllerInitPromise: Promise<void> | null = null;
 
 function getBindingsController(client: GatewayBrowserClient): BindingsController | null {
   if (!bindingsControllerInstance && client) {
-    bindingsControllerInstance = new BindingsController(
-      client,
-      () => {
-        // Trigger re-render through Lit's update mechanism
-        const app = document.querySelector('openclaw-app') as any;
-        if (app) {
-          app.requestUpdate();
-        }
+    bindingsControllerInstance = new BindingsController(client, () => {
+      // Trigger re-render through Lit's update mechanism
+      const app = document.querySelector("openclaw-app") as any;
+      if (app) {
+        app.requestUpdate();
       }
-    );
+    });
     // Initialize asynchronously
     if (!bindingsControllerInitPromise) {
       bindingsControllerInitPromise = bindingsControllerInstance.init();
@@ -133,6 +130,27 @@ export function renderApp(state: AppViewState) {
     state.agentsList?.defaultId ??
     state.agentsList?.agents?.[0]?.id ??
     null;
+  const ensureAgentListEntry = (agentId: string) => {
+    const snapshot = (state.configForm ??
+      (state.configSnapshot?.config as Record<string, unknown> | null)) as {
+      agents?: { list?: unknown[] };
+    } | null;
+    const listRaw = snapshot?.agents?.list;
+    const list = Array.isArray(listRaw) ? listRaw : [];
+    let index = list.findIndex(
+      (entry) =>
+        entry &&
+        typeof entry === "object" &&
+        "id" in entry &&
+        (entry as { id?: string }).id === agentId,
+    );
+    if (index < 0) {
+      const nextList = [...list, { id: agentId }];
+      updateConfigFormValue(state as unknown as ConfigState, ["agents", "list"], nextList);
+      index = nextList.length - 1;
+    }
+    return index;
+  };
 
   return html`
     <div class="shell ${isChat ? "shell--chat" : ""} ${chatFocus ? "shell--chat-focus" : ""} ${state.settings.navCollapsed ? "shell--nav-collapsed" : ""} ${state.onboarding ? "shell--onboarding" : ""}">
@@ -254,6 +272,39 @@ export function renderApp(state: AppViewState) {
                 },
                 onConnect: () => state.connect(),
                 onRefresh: () => state.loadOverview(),
+                sessionStorage: {
+                  connected: state.connected,
+                  currentPath: state.storageCurrentPath,
+                  newPath: state.storageNewPath,
+                  loading: state.storageLoading,
+                  migrating: state.storageMigrating,
+                  error: state.storageError,
+                  success: state.storageSuccess,
+                  showBrowser: state.storageShowBrowser,
+                  browserProps: state.storageShowBrowser
+                    ? {
+                        currentPath: state.storageBrowserPath,
+                        parentPath: state.storageBrowserParent,
+                        directories: state.storageBrowserDirectories,
+                        drives: state.storageBrowserDrives,
+                        loading: state.storageBrowserLoading,
+                        error: state.storageBrowserError,
+                        onNavigate: (path) =>
+                          (state as unknown as OpenClawApp).handleStorageBrowserNavigate(path),
+                        onSelect: (path) =>
+                          (state as unknown as OpenClawApp).handleStorageBrowserSelect(path),
+                        onCancel: () =>
+                          (state as unknown as OpenClawApp).handleStorageBrowserCancel(),
+                      }
+                    : null,
+                  onNewPathChange: (path) => (state.storageNewPath = path),
+                  onBrowse: () => (state as unknown as OpenClawApp).handleStorageBrowse(),
+                  onValidate: () => (state as unknown as OpenClawApp).handleStorageValidate(),
+                  onMigrate: (moveFiles) =>
+                    (state as unknown as OpenClawApp).handleStorageMigrate(moveFiles),
+                  onRefreshCurrentPath: () =>
+                    (state as unknown as OpenClawApp).loadStorageCurrentPath(),
+                },
               })
             : nothing
         }
@@ -666,26 +717,48 @@ export function renderApp(state: AppViewState) {
                   if (!configValue) {
                     return;
                   }
-                  const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
-                  if (!Array.isArray(list)) {
+                  const defaultId = state.agentsList?.defaultId ?? null;
+                  if (defaultId && agentId === defaultId) {
+                    const basePath = ["agents", "defaults", "model"];
+                    const defaults =
+                      (configValue as { agents?: { defaults?: { model?: unknown } } }).agents
+                        ?.defaults ?? {};
+                    const existing = defaults.model;
+                    if (!modelId) {
+                      removeConfigFormValue(state as unknown as ConfigState, basePath);
+                      return;
+                    }
+                    if (existing && typeof existing === "object" && !Array.isArray(existing)) {
+                      const fallbacks = (existing as { fallbacks?: unknown }).fallbacks;
+                      const next = {
+                        primary: modelId,
+                        ...(Array.isArray(fallbacks) ? { fallbacks } : {}),
+                      };
+                      updateConfigFormValue(state as unknown as ConfigState, basePath, next);
+                    } else {
+                      updateConfigFormValue(state as unknown as ConfigState, basePath, {
+                        primary: modelId,
+                      });
+                    }
                     return;
                   }
-                  const index = list.findIndex(
-                    (entry) =>
-                      entry &&
-                      typeof entry === "object" &&
-                      "id" in entry &&
-                      (entry as { id?: string }).id === agentId,
-                  );
-                  if (index < 0) {
-                    return;
-                  }
+
+                  const index = ensureAgentListEntry(agentId);
                   const basePath = ["agents", "list", index, "model"];
                   if (!modelId) {
                     removeConfigFormValue(state as unknown as ConfigState, basePath);
                     return;
                   }
-                  const entry = list[index] as { model?: unknown };
+                  const list = (
+                    (state.configForm ??
+                      (state.configSnapshot?.config as Record<string, unknown> | null)) as {
+                      agents?: { list?: unknown[] };
+                    }
+                  )?.agents?.list;
+                  const entry =
+                    Array.isArray(list) && list[index]
+                      ? (list[index] as { model?: unknown })
+                      : null;
                   const existing = entry?.model;
                   if (existing && typeof existing === "object" && !Array.isArray(existing)) {
                     const fallbacks = (existing as { fallbacks?: unknown }).fallbacks;
@@ -702,24 +775,61 @@ export function renderApp(state: AppViewState) {
                   if (!configValue) {
                     return;
                   }
-                  const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
-                  if (!Array.isArray(list)) {
-                    return;
-                  }
-                  const index = list.findIndex(
-                    (entry) =>
-                      entry &&
-                      typeof entry === "object" &&
-                      "id" in entry &&
-                      (entry as { id?: string }).id === agentId,
-                  );
-                  if (index < 0) {
-                    return;
-                  }
-                  const basePath = ["agents", "list", index, "model"];
-                  const entry = list[index] as { model?: unknown };
                   const normalized = fallbacks.map((name) => name.trim()).filter(Boolean);
-                  const existing = entry.model;
+                  const defaultId = state.agentsList?.defaultId ?? null;
+                  if (defaultId && agentId === defaultId) {
+                    const basePath = ["agents", "defaults", "model"];
+                    const defaults =
+                      (configValue as { agents?: { defaults?: { model?: unknown } } }).agents
+                        ?.defaults ?? {};
+                    const existing = defaults.model;
+                    const resolvePrimary = () => {
+                      if (typeof existing === "string") {
+                        return existing.trim() || null;
+                      }
+                      if (existing && typeof existing === "object" && !Array.isArray(existing)) {
+                        const primary = (existing as { primary?: unknown }).primary;
+                        if (typeof primary === "string") {
+                          const trimmed = primary.trim();
+                          return trimmed || null;
+                        }
+                      }
+                      return null;
+                    };
+                    const primary = resolvePrimary();
+                    if (normalized.length === 0) {
+                      if (primary) {
+                        updateConfigFormValue(state as unknown as ConfigState, basePath, {
+                          primary,
+                        });
+                      } else {
+                        removeConfigFormValue(state as unknown as ConfigState, basePath);
+                      }
+                      return;
+                    }
+                    const next = primary
+                      ? { primary, fallbacks: normalized }
+                      : { fallbacks: normalized };
+                    updateConfigFormValue(state as unknown as ConfigState, basePath, next);
+                    return;
+                  }
+
+                  const index = ensureAgentListEntry(agentId);
+                  const basePath = ["agents", "list", index, "model"];
+                  const list = (
+                    (state.configForm ??
+                      (state.configSnapshot?.config as Record<string, unknown> | null)) as {
+                      agents?: { list?: unknown[] };
+                    }
+                  )?.agents?.list;
+                  const entry =
+                    Array.isArray(list) && list[index]
+                      ? (list[index] as { model?: unknown })
+                      : null;
+                  const existing = entry?.model;
+                  if (!existing) {
+                    return;
+                  }
                   const resolvePrimary = () => {
                     if (typeof existing === "string") {
                       return existing.trim() || null;
@@ -804,11 +914,17 @@ export function renderApp(state: AppViewState) {
                     const config = await state.client.request("config.get", {});
                     const list = config?.agents?.list ?? [];
                     // 检查是否是新建还是编辑
-                    const existingIndex = list.findIndex((a: { id: string }) => a.id === state.editingAgent?.id);
+                    const existingIndex = list.findIndex(
+                      (a: { id: string }) => a.id === state.editingAgent?.id,
+                    );
                     const newAgent = {
                       id: state.editingAgent.id,
-                      ...(state.editingAgent.name ? { identity: { name: state.editingAgent.name } } : {}),
-                      ...(state.editingAgent.workspace ? { workspace: state.editingAgent.workspace } : {}),
+                      ...(state.editingAgent.name
+                        ? { identity: { name: state.editingAgent.name } }
+                        : {}),
+                      ...(state.editingAgent.workspace
+                        ? { workspace: state.editingAgent.workspace }
+                        : {}),
                     };
                     let newList;
                     if (existingIndex >= 0) {
@@ -1047,7 +1163,9 @@ export function renderApp(state: AppViewState) {
             ? (() => {
                 const controller = state.client ? getBindingsController(state.client) : null;
                 if (!controller) {
-                  return html`<div class="loading">连接中...</div>`;
+                  return html`
+                    <div class="loading">连接中...</div>
+                  `;
                 }
                 return renderBindings(controller.getProps());
               })()

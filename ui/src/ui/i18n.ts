@@ -139,6 +139,36 @@ const translations: Record<Locale, Record<string, string>> = {
     "sessions.level.stream": "stream",
     "sessions.button.delete": "Delete",
 
+    // Session Storage Management
+    "storage.title": "Session Data Storage",
+    "storage.subtitle": "Configure session data storage location to avoid excessive C drive usage.",
+    "storage.connect_first": "Please connect to Gateway first to configure storage location",
+    "storage.current_path": "Current Storage Path",
+    "storage.new_path": "New Storage Path",
+    "storage.new_path_placeholder": "e.g., D:\\\\OpenClaw\\\\Sessions",
+    "storage.new_path_help":
+      "Set a new storage path, choose another drive to free up C drive space",
+    "storage.refresh": "Refresh",
+    "storage.browse": "Browse...",
+    "storage.validate": "Validate",
+    "storage.copy": "Copy to New Location",
+    "storage.move": "Move to New Location",
+    "storage.copy_hint": "Copy session data to new location, keep original data",
+    "storage.move_hint": "Move session data to new location, delete original data",
+    "storage.migrating": "Migrating...",
+    "storage.migrate_note": "Configuration file will be auto-updated after successful migration",
+    "storage.migrate_wait": "Migrating data, please wait...",
+    "storage.loading": "Loading...",
+
+    // File Browser
+    "storage.browser.title": "Select Storage Location",
+    "storage.browser.drives": "Drives",
+    "storage.browser.parent": "Parent Directory",
+    "storage.browser.empty": "This directory is empty",
+    "storage.browser.cancel": "Cancel",
+    "storage.browser.select": "Select This Location",
+    "storage.browser.loading": "Loading...",
+
     // Channels page
     "channels.health.title": "Channel health",
     "channels.health.subtitle": "Channel status snapshots from the gateway.",
@@ -244,57 +274,90 @@ const translations: Record<Locale, Record<string, string>> = {
     "skills.button.save_key": "Save key",
 
     // Skill descriptions (built-in skills)
-    "skill.desc.1password": "Set up and use 1Password CLI (op). Use when installing the CLI, enabling desktop app integration, signing in (single or multi-account), or reading/injecting/running secrets via op.",
-    "skill.desc.apple-notes": "Manage Apple Notes via the `memo` CLI on macOS (create, view, edit, delete, search, move, and export notes). Use when a user asks OpenClaw to add a note, list notes, search notes, or manage note folders.",
-    "skill.desc.apple-reminders": "Manage Apple Reminders via the `remindctl` CLI on macOS (list, add, edit, complete, delete). Supports lists, date filters, and JSON/plain output.",
+    "skill.desc.1password":
+      "Set up and use 1Password CLI (op). Use when installing the CLI, enabling desktop app integration, signing in (single or multi-account), or reading/injecting/running secrets via op.",
+    "skill.desc.apple-notes":
+      "Manage Apple Notes via the `memo` CLI on macOS (create, view, edit, delete, search, move, and export notes). Use when a user asks OpenClaw to add a note, list notes, search notes, or manage note folders.",
+    "skill.desc.apple-reminders":
+      "Manage Apple Reminders via the `remindctl` CLI on macOS (list, add, edit, complete, delete). Supports lists, date filters, and JSON/plain output.",
     "skill.desc.bear-notes": "Create, search, and manage Bear notes via grizzly CLI.",
     "skill.desc.bird": "X/Twitter CLI for reading, searching, posting, and engagement via cookies.",
-    "skill.desc.blogwatcher": "Monitor blogs and RSS/Atom feeds for updates using the blogwatcher CLI.",
+    "skill.desc.blogwatcher":
+      "Monitor blogs and RSS/Atom feeds for updates using the blogwatcher CLI.",
     "skill.desc.blucli": "BluOS CLI (blu) for discovery, playback, grouping, and volume.",
-    "skill.desc.bluebubbles": "Build or update the BlueBubbles external channel plugin for OpenClaw (extension package, REST send/probe, webhook inbound).",
+    "skill.desc.bluebubbles":
+      "Build or update the BlueBubbles external channel plugin for OpenClaw (extension package, REST send/probe, webhook inbound).",
     "skill.desc.camsnap": "Capture frames or clips from RTSP/ONVIF cameras.",
-    "skill.desc.clawhub": "Use the ClawHub CLI to search, install, update, and publish agent skills from clawhub.com. Use when you need to fetch new skills on the fly, sync installed skills to latest or a specific version, or publish new/updated skill folders with the npm-installed clawhub CLI.",
-    "skill.desc.coding-agent": "Run Codex CLI, Claude Code, OpenCode, or Pi Coding Agent via background process for programmatic control.",
-    "skill.desc.discord": "Use when you need to control Discord from OpenClaw via the discord tool: send messages, react, post or upload stickers, upload emojis, run polls, manage threads/pins/search, create/edit/delete channels and categories, fetch permissions or member/role/channel info, or handle moderation actions in Discord DMs or channels.",
+    "skill.desc.clawhub":
+      "Use the ClawHub CLI to search, install, update, and publish agent skills from clawhub.com. Use when you need to fetch new skills on the fly, sync installed skills to latest or a specific version, or publish new/updated skill folders with the npm-installed clawhub CLI.",
+    "skill.desc.coding-agent":
+      "Run Codex CLI, Claude Code, OpenCode, or Pi Coding Agent via background process for programmatic control.",
+    "skill.desc.discord":
+      "Use when you need to control Discord from OpenClaw via the discord tool: send messages, react, post or upload stickers, upload emojis, run polls, manage threads/pins/search, create/edit/delete channels and categories, fetch permissions or member/role/channel info, or handle moderation actions in Discord DMs or channels.",
     "skill.desc.eightctl": "Control Eight Sleep pods (status, temperature, alarms, schedules).",
-    "skill.desc.food-order": "Reorder Foodora orders + track ETA/status with ordercli. Never confirm without explicit user approval. Triggers: order food, reorder, track ETA.",
+    "skill.desc.food-order":
+      "Reorder Foodora orders + track ETA/status with ordercli. Never confirm without explicit user approval. Triggers: order food, reorder, track ETA.",
     "skill.desc.gemini": "Gemini CLI for one-shot Q&A, summaries, and generation.",
-    "skill.desc.gifgrep": "Search GIF providers with CLI/TUI, download results, and extract stills/sheets.",
-    "skill.desc.github": "Interact with GitHub using the `gh` CLI. Use `gh issue`, `gh pr`, `gh run`, and `gh api` for issues, PRs, CI runs, and advanced queries.",
-    "skill.desc.gog": "Google Workspace CLI for Gmail, Calendar, Drive, Contacts, Sheets, and Docs.",
-    "skill.desc.goplaces": "Query Google Places API (New) via the goplaces CLI for text search, place details, resolve, and reviews. Use for human-friendly place lookup or JSON output for scripts.",
-    "skill.desc.healthcheck": "Host security hardening and risk-tolerance configuration for OpenClaw deployments. Use when a user asks for security audits, firewall/SSH/update hardening, risk posture, exposure review, OpenClaw cron scheduling for periodic checks, or version status checks on a machine running OpenClaw (laptop, workstation, Pi, VPS).",
-    "skill.desc.himalaya": "CLI to manage emails via IMAP/SMTP. Use `himalaya` to list, read, write, reply, forward, search, and organize emails from the terminal. Supports multiple accounts and message composition with MML (MIME Meta Language).",
+    "skill.desc.gifgrep":
+      "Search GIF providers with CLI/TUI, download results, and extract stills/sheets.",
+    "skill.desc.github":
+      "Interact with GitHub using the `gh` CLI. Use `gh issue`, `gh pr`, `gh run`, and `gh api` for issues, PRs, CI runs, and advanced queries.",
+    "skill.desc.gog":
+      "Google Workspace CLI for Gmail, Calendar, Drive, Contacts, Sheets, and Docs.",
+    "skill.desc.goplaces":
+      "Query Google Places API (New) via the goplaces CLI for text search, place details, resolve, and reviews. Use for human-friendly place lookup or JSON output for scripts.",
+    "skill.desc.healthcheck":
+      "Host security hardening and risk-tolerance configuration for OpenClaw deployments. Use when a user asks for security audits, firewall/SSH/update hardening, risk posture, exposure review, OpenClaw cron scheduling for periodic checks, or version status checks on a machine running OpenClaw (laptop, workstation, Pi, VPS).",
+    "skill.desc.himalaya":
+      "CLI to manage emails via IMAP/SMTP. Use `himalaya` to list, read, write, reply, forward, search, and organize emails from the terminal. Supports multiple accounts and message composition with MML (MIME Meta Language).",
     "skill.desc.imsg": "iMessage/SMS CLI for listing chats, history, watch, and sending.",
-    "skill.desc.local-places": "Search for places (restaurants, cafes, etc.) via Google Places API proxy on localhost.",
-    "skill.desc.mcporter": "Use the mcporter CLI to list, configure, auth, and call MCP servers/tools directly (HTTP or stdio), including ad-hoc servers, config edits, and CLI/type generation.",
-    "skill.desc.model-usage": "Use CodexBar CLI local cost usage to summarize per-model usage for Codex or Claude, including the current (most recent) model or a full model breakdown. Trigger when asked for model-level usage/cost data from codexbar, or when you need a scriptable per-model summary from codexbar cost JSON.",
-    "skill.desc.nano-banana-pro": "Generate or edit images via Gemini 3 Pro Image (Nano Banana Pro).",
+    "skill.desc.local-places":
+      "Search for places (restaurants, cafes, etc.) via Google Places API proxy on localhost.",
+    "skill.desc.mcporter":
+      "Use the mcporter CLI to list, configure, auth, and call MCP servers/tools directly (HTTP or stdio), including ad-hoc servers, config edits, and CLI/type generation.",
+    "skill.desc.model-usage":
+      "Use CodexBar CLI local cost usage to summarize per-model usage for Codex or Claude, including the current (most recent) model or a full model breakdown. Trigger when asked for model-level usage/cost data from codexbar, or when you need a scriptable per-model summary from codexbar cost JSON.",
+    "skill.desc.nano-banana-pro":
+      "Generate or edit images via Gemini 3 Pro Image (Nano Banana Pro).",
     "skill.desc.nano-pdf": "Edit PDFs with natural-language instructions using the nano-pdf CLI.",
     "skill.desc.notion": "Notion API for creating and managing pages, databases, and blocks.",
-    "skill.desc.obsidian": "Work with Obsidian vaults (plain Markdown notes) and automate via obsidian-cli.",
-    "skill.desc.openai-image-gen": "Batch-generate images via OpenAI Images API. Random prompt sampler + `index.html` gallery.",
+    "skill.desc.obsidian":
+      "Work with Obsidian vaults (plain Markdown notes) and automate via obsidian-cli.",
+    "skill.desc.openai-image-gen":
+      "Batch-generate images via OpenAI Images API. Random prompt sampler + `index.html` gallery.",
     "skill.desc.openai-whisper": "Local speech-to-text with the Whisper CLI (no API key).",
-    "skill.desc.openai-whisper-api": "Transcribe audio via OpenAI Audio Transcriptions API (Whisper).",
+    "skill.desc.openai-whisper-api":
+      "Transcribe audio via OpenAI Audio Transcriptions API (Whisper).",
     "skill.desc.openhue": "Control Philips Hue lights/scenes via the OpenHue CLI.",
-    "skill.desc.oracle": "Best practices for using the oracle CLI (prompt + file bundling, engines, sessions, and file attachment patterns).",
-    "skill.desc.ordercli": "Foodora-only CLI for checking past orders and active order status (Deliveroo WIP).",
+    "skill.desc.oracle":
+      "Best practices for using the oracle CLI (prompt + file bundling, engines, sessions, and file attachment patterns).",
+    "skill.desc.ordercli":
+      "Foodora-only CLI for checking past orders and active order status (Deliveroo WIP).",
     "skill.desc.peekaboo": "Capture and automate macOS UI with the Peekaboo CLI.",
     "skill.desc.sag": "ElevenLabs text-to-speech with mac-style say UX.",
-    "skill.desc.session-logs": "Search and analyze your own session logs (older/parent conversations) using jq.",
+    "skill.desc.session-logs":
+      "Search and analyze your own session logs (older/parent conversations) using jq.",
     "skill.desc.sherpa-onnx-tts": "Local text-to-speech via sherpa-onnx (offline, no cloud)",
-    "skill.desc.skill-creator": "Create or update AgentSkills. Use when designing, structuring, or packaging skills with scripts, references, and assets.",
-    "skill.desc.slack": "Use when you need to control Slack from OpenClaw via the slack tool, including reacting to messages or pinning/unpinning items in Slack channels or DMs.",
-    "skill.desc.songsee": "Generate spectrograms and feature-panel visualizations from audio with the songsee CLI.",
+    "skill.desc.skill-creator":
+      "Create or update AgentSkills. Use when designing, structuring, or packaging skills with scripts, references, and assets.",
+    "skill.desc.slack":
+      "Use when you need to control Slack from OpenClaw via the slack tool, including reacting to messages or pinning/unpinning items in Slack channels or DMs.",
+    "skill.desc.songsee":
+      "Generate spectrograms and feature-panel visualizations from audio with the songsee CLI.",
     "skill.desc.sonoscli": "Control Sonos speakers (discover/status/play/volume/group).",
-    "skill.desc.spotify-player": "Terminal Spotify playback/search via spogo (preferred) or spotify_player.",
-    "skill.desc.summarize": "Summarize or extract text/transcripts from URLs, podcasts, and local files (great fallback for 'transcribe this YouTube/video').",
-    "skill.desc.things-mac": "Manage Things 3 via the `things` CLI on macOS (add/update projects+todos via URL scheme; read/search/list from the local Things database). Use when a user asks OpenClaw to add a task to Things, list inbox/today/upcoming, search tasks, or inspect projects/areas/tags.",
-    "skill.desc.tmux": "Remote-control tmux sessions for interactive CLIs by sending keystrokes and scraping pane output.",
+    "skill.desc.spotify-player":
+      "Terminal Spotify playback/search via spogo (preferred) or spotify_player.",
+    "skill.desc.summarize":
+      "Summarize or extract text/transcripts from URLs, podcasts, and local files (great fallback for 'transcribe this YouTube/video').",
+    "skill.desc.things-mac":
+      "Manage Things 3 via the `things` CLI on macOS (add/update projects+todos via URL scheme; read/search/list from the local Things database). Use when a user asks OpenClaw to add a task to Things, list inbox/today/upcoming, search tasks, or inspect projects/areas/tags.",
+    "skill.desc.tmux":
+      "Remote-control tmux sessions for interactive CLIs by sending keystrokes and scraping pane output.",
     "skill.desc.trello": "Manage Trello boards, lists, and cards via the Trello REST API.",
     "skill.desc.video-frames": "Extract frames or short clips from videos using ffmpeg.",
     "skill.desc.voice-call": "Start voice calls via the OpenClaw voice-call plugin.",
-    "skill.desc.wacli": "Send WhatsApp messages to other people or search/sync WhatsApp history via the wacli CLI (not for normal user chats).",
+    "skill.desc.wacli":
+      "Send WhatsApp messages to other people or search/sync WhatsApp history via the wacli CLI (not for normal user chats).",
     "skill.desc.weather": "Get current weather and forecasts (no API key required).",
 
     // Nodes page
@@ -328,7 +391,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "nodes.binding.button.saving": "Saving…",
     "nodes.binding.button.load_config": "Load config",
     "nodes.binding.button.loading": "Loading…",
-    "nodes.binding.warning.switch_form": "Switch the Config tab to Form mode to edit bindings here.",
+    "nodes.binding.warning.switch_form":
+      "Switch the Config tab to Form mode to edit bindings here.",
     "nodes.binding.message.load_config": "Load config to edit bindings.",
     "nodes.binding.default.title": "Default binding",
     "nodes.binding.default.subtitle": "Used when agents do not override a node binding.",
@@ -521,7 +585,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "config.diff.view_changes_plural": "View {count} pending changes",
     "config.subnav.all": "All",
     "config.loading.schema": "Loading schema…",
-    "config.warning.unsafe_form": "Form view can't safely edit some fields. Use Raw to avoid losing config entries.",
+    "config.warning.unsafe_form":
+      "Form view can't safely edit some fields. Use Raw to avoid losing config entries.",
     "config.raw.label": "Raw JSON5",
 
     // Channel pages - common labels
@@ -576,7 +641,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "config_form.array.count": "{count} item",
     "config_form.array.count_plural": "{count} items",
     "config_form.array.add": "Add",
-    "config_form.array.empty": "No items yet. Click \"Add\" to create one.",
+    "config_form.array.empty": 'No items yet. Click "Add" to create one.',
     "config_form.array.item_remove": "Remove item",
     "config_form.map.label": "Custom entries",
     "config_form.map.add": "Add Entry",
@@ -584,7 +649,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "config_form.map.key_placeholder": "Key",
     "config_form.map.value_placeholder": "JSON value",
     "config_form.map.entry_remove": "Remove entry",
-    "config_form.search.no_match": "No settings match \"{query}\"",
+    "config_form.search.no_match": 'No settings match "{query}"',
     "config_form.search.no_settings": "No settings in this section",
 
     // Config field labels - Common fields
@@ -1093,7 +1158,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "config_field.webFetchUserAgent": "Web Fetch User-Agent",
     "config_field.controlUiBasePath": "Control UI Base Path",
     "config_field.allowInsecureControlUiAuth": "Allow Insecure Control UI Auth",
-    "config_field.dangerouslyDisableControlUiDeviceAuth": "Dangerously Disable Control UI Device Auth",
+    "config_field.dangerouslyDisableControlUiDeviceAuth":
+      "Dangerously Disable Control UI Device Auth",
     "config_field.openaiChatCompletionsEndpoint": "OpenAI Chat Completions Endpoint",
     "config_field.configReloadMode": "Config Reload Mode",
     "config_field.configReloadDebounceMs": "Config Reload Debounce (ms)",
@@ -1133,9 +1199,11 @@ const translations: Record<Locale, Record<string, string>> = {
     "config_field.memorySearchHybrid": "Memory Search Hybrid",
     "config_field.memorySearchVectorWeight": "Memory Search Vector Weight",
     "config_field.memorySearchTextWeight": "Memory Search Text Weight",
-    "config_field.memorySearchHybridCandidateMultiplier": "Memory Search Hybrid Candidate Multiplier",
+    "config_field.memorySearchHybridCandidateMultiplier":
+      "Memory Search Hybrid Candidate Multiplier",
     "config_field.memorySearchEmbeddingCache": "Memory Search Embedding Cache",
-    "config_field.memorySearchEmbeddingCacheMaxEntries": "Memory Search Embedding Cache Max Entries",
+    "config_field.memorySearchEmbeddingCacheMaxEntries":
+      "Memory Search Embedding Cache Max Entries",
     "config_field.authProfiles": "Auth Profiles",
     "config_field.authProfileOrder": "Auth Profile Order",
     "config_field.primaryModel": "Primary Model",
@@ -1230,7 +1298,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.no_agents": "No agents configured.",
     "agents.select_prompt": "Select an agent from the sidebar.",
     "agents.subtitle_default": "Agent workspace and routing.",
-    
+
     // Agent tabs
     "agents.tab.overview": "Overview",
     "agents.tab.files": "Files",
@@ -1238,7 +1306,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.tab.skills": "Skills",
     "agents.tab.channels": "Channels",
     "agents.tab.cron": "Cron Jobs",
-    
+
     // Agent overview
     "agents.overview.title": "Overview",
     "agents.overview.subtitle": "Workspace paths and identity metadata.",
@@ -1264,7 +1332,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.overview.reload_config": "Reload Config",
     "agents.overview.save": "Save",
     "agents.overview.saving": "Saving…",
-    
+
     // Agents main page
     "agents.title": "Agents",
     "agents.configured_count": "{count} configured.",
@@ -1272,7 +1340,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.add_agent": "Add Agent",
     "agents.edit_agent": "Edit Agent",
     "agents.delete_agent": "Delete",
-    "agents.delete_confirm": "Are you sure you want to delete agent '{id}'? This action cannot be undone.",
+    "agents.delete_confirm":
+      "Are you sure you want to delete agent '{id}'? This action cannot be undone.",
     "agents.creating": "Creating...",
     "agents.deleting": "Deleting...",
     "agents.agent_id": "Agent ID",
@@ -1289,12 +1358,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.no_agents_found": "No agents found.",
     "agents.select_title": "Select an agent",
     "agents.select_subtitle": "Pick an agent to inspect its workspace and tools.",
-    
+
     // Agent context card
     "agents.context.title": "Agent Context",
     "agents.context.subtitle_channels": "Workspace, identity, and model configuration.",
     "agents.context.subtitle_cron": "Workspace and scheduling targets.",
-    
+
     // Agent channels tab
     "agents.channels.title": "Channels",
     "agents.channels.subtitle": "Gateway-wide channel status snapshot.",
@@ -1310,12 +1379,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.channels.not_configured": "not configured",
     "agents.channels.enabled": "{count} enabled",
     "agents.channels.disabled": "disabled",
-    
+
     // Channel extra fields
     "agents.channels.field.groupPolicy": "Group Policy",
     "agents.channels.field.streamMode": "Stream Mode",
     "agents.channels.field.dmPolicy": "DM Policy",
-    
+
     // Agent cron tab
     "agents.cron.title": "Scheduler",
     "agents.cron.subtitle": "Gateway cron status.",
@@ -1329,7 +1398,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.cron.no_jobs": "No jobs assigned.",
     "agents.cron.enabled_status": "enabled",
     "agents.cron.disabled_status": "disabled",
-    
+
     // Agent files tab
     "agents.files.title": "Core Files",
     "agents.files.subtitle": "Bootstrap persona, identity, and tool guidance.",
@@ -1340,11 +1409,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.files.reset": "Reset",
     "agents.files.save": "Save",
     "agents.files.saving": "Saving…",
-    "agents.files.missing_hint": "This file is missing. Saving will create it in the agent workspace.",
+    "agents.files.missing_hint":
+      "This file is missing. Saving will create it in the agent workspace.",
     "agents.files.content": "Content",
     "agents.files.status_missing": "Missing",
     "agents.files.badge_missing": "missing",
-    
+
     // Agent tools tab
     "agents.tools.title": "Tool Access",
     "agents.tools.subtitle": "Profile + per-tool overrides for this agent.",
@@ -1355,8 +1425,10 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.tools.save": "Save",
     "agents.tools.saving": "Saving…",
     "agents.tools.load_prompt": "Load the gateway config to adjust tool profiles.",
-    "agents.tools.allowlist_hint": "This agent is using an explicit allowlist in config. Tool overrides are managed in the Config tab.",
-    "agents.tools.global_allow_hint": "Global tools.allow is set. Agent overrides cannot enable tools that are globally blocked.",
+    "agents.tools.allowlist_hint":
+      "This agent is using an explicit allowlist in config. Tool overrides are managed in the Config tab.",
+    "agents.tools.global_allow_hint":
+      "Global tools.allow is set. Agent overrides cannot enable tools that are globally blocked.",
     "agents.tools.profile": "Profile",
     "agents.tools.source": "Source",
     "agents.tools.source_agent": "agent override",
@@ -1370,7 +1442,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.tools.preset_messaging": "Messaging",
     "agents.tools.preset_full": "Full",
     "agents.tools.inherit": "Inherit",
-    
+
     // Tool sections
     "agents.tools.section.fs": "Files",
     "agents.tools.section.runtime": "Runtime",
@@ -1383,7 +1455,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.tools.section.nodes": "Nodes",
     "agents.tools.section.agents": "Agents",
     "agents.tools.section.media": "Media",
-    
+
     // Tool descriptions
     "agents.tools.tool.read": "Read file contents",
     "agents.tools.tool.write": "Create or overwrite files",
@@ -1408,7 +1480,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.tools.tool.nodes": "Nodes + devices",
     "agents.tools.tool.agents_list": "List agents",
     "agents.tools.tool.image": "Image understanding",
-    
+
     // Agent skills tab
     "agents.skills.title": "Skills",
     "agents.skills.subtitle": "Per-agent skill allowlist and workspace skills.",
@@ -1422,20 +1494,22 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.skills.saving": "Saving…",
     "agents.skills.load_config_prompt": "Load the gateway config to set per-agent skills.",
     "agents.skills.allowlist_hint": "This agent uses a custom skill allowlist.",
-    "agents.skills.all_enabled_hint": "All skills are enabled. Disabling any skill will create a per-agent allowlist.",
-    "agents.skills.load_skills_prompt": "Load skills for this agent to view workspace-specific entries.",
+    "agents.skills.all_enabled_hint":
+      "All skills are enabled. Disabling any skill will create a per-agent allowlist.",
+    "agents.skills.load_skills_prompt":
+      "Load skills for this agent to view workspace-specific entries.",
     "agents.skills.filter": "Filter",
     "agents.skills.filter_placeholder": "Search skills",
     "agents.skills.shown_count": "{count} shown",
     "agents.skills.no_skills": "No skills found.",
-    
+
     // Skill groups
     "agents.skills.group.workspace": "Workspace Skills",
     "agents.skills.group.builtin": "Built-in Skills",
     "agents.skills.group.installed": "Installed Skills",
     "agents.skills.group.extra": "Extra Skills",
     "agents.skills.group.other": "Other Skills",
-    
+
     // Skill status
     "agents.skills.status.eligible": "eligible",
     "agents.skills.status.blocked": "blocked",
@@ -1443,10 +1517,11 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.skills.status.blocked_by_allowlist": "blocked by allowlist",
     "agents.skills.missing_prefix": "Missing: {items}",
     "agents.skills.reason_prefix": "Reason: {reasons}",
-    
+
     // Bindings page
     "bindings.title": "Bindings",
-    "bindings.subtitle": "Configure which agent handles messages from different channels and conversations.",
+    "bindings.subtitle":
+      "Configure which agent handles messages from different channels and conversations.",
     "bindings.add": "Add Binding",
     "bindings.refresh": "Refresh",
     "bindings.edit": "Edit",
@@ -1673,6 +1748,35 @@ const translations: Record<Locale, Record<string, string>> = {
     "sessions.level.stream": "流式",
     "sessions.button.delete": "删除",
 
+    // 会话存储管理
+    "storage.title": "会话数据存储",
+    "storage.subtitle": "配置会话数据的存储位置，避免C盘空间占用过多。",
+    "storage.connect_first": "请先连接到 Gateway 才能配置存储位置",
+    "storage.current_path": "当前存储路径",
+    "storage.new_path": "新存储路径",
+    "storage.new_path_placeholder": "例如: D:\\\\OpenClaw\\\\Sessions",
+    "storage.new_path_help": "设置新的存储路径，可以选择其他盘符以释放C盘空间",
+    "storage.refresh": "刷新",
+    "storage.browse": "浏览...",
+    "storage.validate": "验证",
+    "storage.copy": "复制到新位置",
+    "storage.move": "移动到新位置",
+    "storage.copy_hint": "复制会话数据到新位置，保留原数据",
+    "storage.move_hint": "移动会话数据到新位置，删除原数据",
+    "storage.migrating": "迁移中...",
+    "storage.migrate_note": "迁移成功后将自动更新配置文件",
+    "storage.migrate_wait": "正在迁移数据，请稍候...",
+    "storage.loading": "加载中...",
+
+    // 文件浏览器
+    "storage.browser.title": "选择存储位置",
+    "storage.browser.drives": "驱动器",
+    "storage.browser.parent": "上级目录",
+    "storage.browser.empty": "此目录为空",
+    "storage.browser.cancel": "取消",
+    "storage.browser.select": "选择此位置",
+    "storage.browser.loading": "加载中...",
+
     // 通道配置页面
     "channels.health.title": "通道健康状态",
     "channels.health.subtitle": "来自 Gateway 的通道状态快照。",
@@ -1778,57 +1882,82 @@ const translations: Record<Locale, Record<string, string>> = {
     "skills.button.save_key": "保存密钥",
 
     // 技能描述（内置技能）
-    "skill.desc.1password": "设置和使用 1Password 命令行工具（op）。用于安装 CLI、启用桌面应用集成、登录（单账户或多账户）或通过 op 读取/注入/运行密钥。",
-    "skill.desc.apple-notes": "通过 macOS 上的 `memo` CLI 管理 Apple 备忘录（创建、查看、编辑、删除、搜索、移动和导出备忘录）。当用户要求 OpenClaw 添加备忘录、列出备忘录、搜索备忘录或管理备忘录文件夹时使用。",
-    "skill.desc.apple-reminders": "通过 macOS 上的 `remindctl` CLI 管理 Apple 提醒事项（列出、添加、编辑、完成、删除）。支持列表、日期过滤和 JSON/纯文本输出。",
+    "skill.desc.1password":
+      "设置和使用 1Password 命令行工具（op）。用于安装 CLI、启用桌面应用集成、登录（单账户或多账户）或通过 op 读取/注入/运行密钥。",
+    "skill.desc.apple-notes":
+      "通过 macOS 上的 `memo` CLI 管理 Apple 备忘录（创建、查看、编辑、删除、搜索、移动和导出备忘录）。当用户要求 OpenClaw 添加备忘录、列出备忘录、搜索备忘录或管理备忘录文件夹时使用。",
+    "skill.desc.apple-reminders":
+      "通过 macOS 上的 `remindctl` CLI 管理 Apple 提醒事项（列出、添加、编辑、完成、删除）。支持列表、日期过滤和 JSON/纯文本输出。",
     "skill.desc.bear-notes": "通过 grizzly CLI 创建、搜索和管理 Bear 笔记。",
     "skill.desc.bird": "X/Twitter 命令行工具，通过 cookies 实现阅读、搜索、发布和互动功能。",
     "skill.desc.blogwatcher": "使用 blogwatcher CLI 监控博客和 RSS/Atom 订阅源更新。",
     "skill.desc.blucli": "BluOS 命令行工具（blu），用于发现、播放、分组和音量控制。",
-    "skill.desc.bluebubbles": "为 OpenClaw 构建或更新 BlueBubbles 外部通道插件（扩展包、REST 发送/探测、webhook 入站）。",
+    "skill.desc.bluebubbles":
+      "为 OpenClaw 构建或更新 BlueBubbles 外部通道插件（扩展包、REST 发送/探测、webhook 入站）。",
     "skill.desc.camsnap": "从 RTSP/ONVIF 摄像头捕获帧或视频片段。",
-    "skill.desc.clawhub": "使用 ClawHub CLI 从 clawhub.com 搜索、安装、更新和发布代理技能。当需要即时获取新技能、将已安装技能同步到最新版或特定版本，或使用 npm 安装的 clawhub CLI 发布新的/更新的技能文件夹时使用。",
-    "skill.desc.coding-agent": "通过后台进程运行 Codex CLI、Claude Code、OpenCode 或 Pi Coding Agent 以实现程序化控制。",
-    "skill.desc.discord": "当需要从 OpenClaw 通过 discord 工具控制 Discord 时使用：发送消息、回应、发布或上传贴纸、上传表情符号、运行投票、管理线程/置顶/搜索、创建/编辑/删除频道和分类、获取权限或成员/角色/频道信息，或在 Discord 私聊或频道中处理审核操作。",
+    "skill.desc.clawhub":
+      "使用 ClawHub CLI 从 clawhub.com 搜索、安装、更新和发布代理技能。当需要即时获取新技能、将已安装技能同步到最新版或特定版本，或使用 npm 安装的 clawhub CLI 发布新的/更新的技能文件夹时使用。",
+    "skill.desc.coding-agent":
+      "通过后台进程运行 Codex CLI、Claude Code、OpenCode 或 Pi Coding Agent 以实现程序化控制。",
+    "skill.desc.discord":
+      "当需要从 OpenClaw 通过 discord 工具控制 Discord 时使用：发送消息、回应、发布或上传贴纸、上传表情符号、运行投票、管理线程/置顶/搜索、创建/编辑/删除频道和分类、获取权限或成员/角色/频道信息，或在 Discord 私聊或频道中处理审核操作。",
     "skill.desc.eightctl": "控制 Eight Sleep 睡眠床垫（状态、温度、闹钟、时间表）。",
-    "skill.desc.food-order": "使用 ordercli 重新订购 Foodora 订单并跟踪预计送达时间/状态。未经用户明确批准，切勿确认订单。触发词：订餐、重新订购、跟踪预计送达时间。",
+    "skill.desc.food-order":
+      "使用 ordercli 重新订购 Foodora 订单并跟踪预计送达时间/状态。未经用户明确批准，切勿确认订单。触发词：订餐、重新订购、跟踪预计送达时间。",
     "skill.desc.gemini": "Gemini 命令行工具，用于一次性问答、摘要和生成。",
     "skill.desc.gifgrep": "通过 CLI/TUI 搜索 GIF 提供商，下载结果并提取静止图/图集。",
-    "skill.desc.github": "使用 `gh` CLI 与 GitHub 交互。使用 `gh issue`、`gh pr`、`gh run` 和 `gh api` 处理问题、拉取请求、CI 运行和高级查询。",
-    "skill.desc.gog": "Google Workspace 命令行工具，用于 Gmail、日历、云端硬盘、联系人、表格和文档。",
-    "skill.desc.goplaces": "通过 goplaces CLI 查询 Google Places API（新版），进行文本搜索、地点详情、解析和评论查询。用于人性化的地点查找或脚本的 JSON 输出。",
-    "skill.desc.healthcheck": "针对 OpenClaw 部署的主机安全加固和风险容忍度配置。当用户询问安全审计、防火墙/SSH/更新加固、风险态势、暴露审查、定期检查的 OpenClaw cron 调度或运行 OpenClaw 的机器（笔记本电脑、工作站、Pi、VPS）的版本状态检查时使用。",
-    "skill.desc.himalaya": "通过 IMAP/SMTP 管理电子邮件的 CLI。使用 `himalaya` 从终端列出、阅读、写入、回复、转发、搜索和整理电子邮件。支持多账户和使用 MML（MIME 元语言）撰写消息。",
+    "skill.desc.github":
+      "使用 `gh` CLI 与 GitHub 交互。使用 `gh issue`、`gh pr`、`gh run` 和 `gh api` 处理问题、拉取请求、CI 运行和高级查询。",
+    "skill.desc.gog":
+      "Google Workspace 命令行工具，用于 Gmail、日历、云端硬盘、联系人、表格和文档。",
+    "skill.desc.goplaces":
+      "通过 goplaces CLI 查询 Google Places API（新版），进行文本搜索、地点详情、解析和评论查询。用于人性化的地点查找或脚本的 JSON 输出。",
+    "skill.desc.healthcheck":
+      "针对 OpenClaw 部署的主机安全加固和风险容忍度配置。当用户询问安全审计、防火墙/SSH/更新加固、风险态势、暴露审查、定期检查的 OpenClaw cron 调度或运行 OpenClaw 的机器（笔记本电脑、工作站、Pi、VPS）的版本状态检查时使用。",
+    "skill.desc.himalaya":
+      "通过 IMAP/SMTP 管理电子邮件的 CLI。使用 `himalaya` 从终端列出、阅读、写入、回复、转发、搜索和整理电子邮件。支持多账户和使用 MML（MIME 元语言）撰写消息。",
     "skill.desc.imsg": "iMessage/短信 CLI，用于列出聊天、历史记录、监控和发送。",
-    "skill.desc.local-places": "通过 localhost 上的 Google Places API 代理搜索地点（餐厅、咖啡馆等）。",
-    "skill.desc.mcporter": "使用 mcporter CLI 直接列出、配置、认证和调用 MCP 服务器/工具（HTTP 或 stdio），包括临时服务器、配置编辑和 CLI/类型生成。",
-    "skill.desc.model-usage": "使用 CodexBar CLI 本地成本使用情况汇总 Codex 或 Claude 的每个模型使用情况，包括当前（最近）模型或完整的模型细分。当被问及 codexbar 的模型级使用/成本数据，或需要从 codexbar 成本 JSON 获取可脚本化的每模型摘要时触发。",
+    "skill.desc.local-places":
+      "通过 localhost 上的 Google Places API 代理搜索地点（餐厅、咖啡馆等）。",
+    "skill.desc.mcporter":
+      "使用 mcporter CLI 直接列出、配置、认证和调用 MCP 服务器/工具（HTTP 或 stdio），包括临时服务器、配置编辑和 CLI/类型生成。",
+    "skill.desc.model-usage":
+      "使用 CodexBar CLI 本地成本使用情况汇总 Codex 或 Claude 的每个模型使用情况，包括当前（最近）模型或完整的模型细分。当被问及 codexbar 的模型级使用/成本数据，或需要从 codexbar 成本 JSON 获取可脚本化的每模型摘要时触发。",
     "skill.desc.nano-banana-pro": "通过 Gemini 3 Pro Image（Nano Banana Pro）生成或编辑图像。",
     "skill.desc.nano-pdf": "使用 nano-pdf CLI 通过自然语言指令编辑 PDF。",
     "skill.desc.notion": "Notion API，用于创建和管理页面、数据库和块。",
-    "skill.desc.obsidian": "使用 Obsidian vault（纯 Markdown 笔记）并通过 obsidian-cli 自动化操作。",
-    "skill.desc.openai-image-gen": "通过 OpenAI Images API 批量生成图像。随机提示采样器 + `index.html` 画廊。",
+    "skill.desc.obsidian":
+      "使用 Obsidian vault（纯 Markdown 笔记）并通过 obsidian-cli 自动化操作。",
+    "skill.desc.openai-image-gen":
+      "通过 OpenAI Images API 批量生成图像。随机提示采样器 + `index.html` 画廊。",
     "skill.desc.openai-whisper": "使用 Whisper CLI 进行本地语音转文本（无需 API 密钥）。",
     "skill.desc.openai-whisper-api": "通过 OpenAI Audio Transcriptions API（Whisper）转录音频。",
     "skill.desc.openhue": "通过 OpenHue CLI 控制飞利浦 Hue 灯光/场景。",
-    "skill.desc.oracle": "使用 oracle CLI 的最佳实践（提示 + 文件打包、引擎、会话和文件附件模式）。",
-    "skill.desc.ordercli": "仅限 Foodora 的 CLI，用于检查过去的订单和活动订单状态（Deliveroo 正在开发中）。",
+    "skill.desc.oracle":
+      "使用 oracle CLI 的最佳实践（提示 + 文件打包、引擎、会话和文件附件模式）。",
+    "skill.desc.ordercli":
+      "仅限 Foodora 的 CLI，用于检查过去的订单和活动订单状态（Deliveroo 正在开发中）。",
     "skill.desc.peekaboo": "使用 Peekaboo CLI 捕获和自动化 macOS 用户界面。",
     "skill.desc.sag": "ElevenLabs 文本转语音，采用 mac 风格的 say 用户体验。",
     "skill.desc.session-logs": "使用 jq 搜索和分析您自己的会话日志（较旧/父对话）。",
     "skill.desc.sherpa-onnx-tts": "通过 sherpa-onnx 进行本地文本转语音（离线，无需云）",
-    "skill.desc.skill-creator": "创建或更新 AgentSkills。用于设计、构建或打包带有脚本、参考和资源的技能。",
-    "skill.desc.slack": "当需要从 OpenClaw 通过 slack 工具控制 Slack 时使用，包括对消息做出反应或在 Slack 频道或私聊中置顶/取消置顶项目。",
+    "skill.desc.skill-creator":
+      "创建或更新 AgentSkills。用于设计、构建或打包带有脚本、参考和资源的技能。",
+    "skill.desc.slack":
+      "当需要从 OpenClaw 通过 slack 工具控制 Slack 时使用，包括对消息做出反应或在 Slack 频道或私聊中置顶/取消置顶项目。",
     "skill.desc.songsee": "使用 songsee CLI 从音频生成频谱图和特征面板可视化。",
     "skill.desc.sonoscli": "控制 Sonos 扬声器（发现/状态/播放/音量/分组）。",
     "skill.desc.spotify-player": "通过 spogo（首选）或 spotify_player 进行终端 Spotify 播放/搜索。",
-    "skill.desc.summarize": "从 URL、播客和本地文件中总结或提取文本/转录（是'转录此 YouTube/视频'的绝佳备用方案）。",
-    "skill.desc.things-mac": "通过 macOS 上的 `things` CLI 管理 Things 3（通过 URL scheme 添加/更新项目和待办事项；从本地 Things 数据库读取/搜索/列出）。当用户要求 OpenClaw 将任务添加到 Things、列出收件箱/今天/即将到来、搜索任务或检查项目/区域/标签时使用。",
+    "skill.desc.summarize":
+      "从 URL、播客和本地文件中总结或提取文本/转录（是'转录此 YouTube/视频'的绝佳备用方案）。",
+    "skill.desc.things-mac":
+      "通过 macOS 上的 `things` CLI 管理 Things 3（通过 URL scheme 添加/更新项目和待办事项；从本地 Things 数据库读取/搜索/列出）。当用户要求 OpenClaw 将任务添加到 Things、列出收件箱/今天/即将到来、搜索任务或检查项目/区域/标签时使用。",
     "skill.desc.tmux": "通过发送击键和抓取窗格输出，远程控制 tmux 会话以执行交互式 CLI。",
     "skill.desc.trello": "通过 Trello REST API 管理 Trello 面板、列表和卡片。",
     "skill.desc.video-frames": "使用 ffmpeg 从视频中提取帧或短片段。",
     "skill.desc.voice-call": "通过 OpenClaw voice-call 插件启动语音通话。",
-    "skill.desc.wacli": "通过 wacli CLI 向其他人发送 WhatsApp 消息或搜索/同步 WhatsApp 历史记录（不适用于普通用户聊天）。",
+    "skill.desc.wacli":
+      "通过 wacli CLI 向其他人发送 WhatsApp 消息或搜索/同步 WhatsApp 历史记录（不适用于普通用户聊天）。",
     "skill.desc.weather": "获取当前天气和预报（无需 API 密钥）。",
 
     // 节点管理页面
@@ -2806,7 +2935,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.no_agents_found": "未找到代理。",
     "agents.select_title": "选择一个代理",
     "agents.select_subtitle": "选择一个代理来检查其工作区和工具。",
-    
+
     // 代理标签页
     "agents.tab.overview": "概览",
     "agents.tab.files": "文件",
@@ -2814,7 +2943,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.tab.skills": "技能",
     "agents.tab.channels": "通道",
     "agents.tab.cron": "定时任务",
-    
+
     // 代理概览
     "agents.overview.title": "概览",
     "agents.overview.subtitle": "工作区路径和身份元数据。",
@@ -2840,12 +2969,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.overview.reload_config": "重新加载配置",
     "agents.overview.save": "保存",
     "agents.overview.saving": "保存中…",
-    
+
     // 代理上下文卡片
     "agents.context.title": "代理上下文",
     "agents.context.subtitle_channels": "工作区、身份和模型配置。",
     "agents.context.subtitle_cron": "工作区和调度目标。",
-    
+
     // 代理通道标签页
     "agents.channels.title": "通道",
     "agents.channels.subtitle": "网关范围的通道状态快照。",
@@ -2861,12 +2990,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.channels.not_configured": "未配置",
     "agents.channels.enabled": "{count} 个已启用",
     "agents.channels.disabled": "已禁用",
-    
+
     // 通道额外字段
     "agents.channels.field.groupPolicy": "群组策略",
     "agents.channels.field.streamMode": "流模式",
     "agents.channels.field.dmPolicy": "私聊策略",
-    
+
     // 代理定时任务标签页
     "agents.cron.title": "调度器",
     "agents.cron.subtitle": "网关定时任务状态。",
@@ -2880,7 +3009,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.cron.no_jobs": "未分配任务。",
     "agents.cron.enabled_status": "已启用",
     "agents.cron.disabled_status": "已禁用",
-    
+
     // 代理文件标签页
     "agents.files.title": "核心文件",
     "agents.files.subtitle": "引导角色、身份和工具指导。",
@@ -2895,7 +3024,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.files.content": "内容",
     "agents.files.status_missing": "缺失",
     "agents.files.badge_missing": "缺失",
-    
+
     // 代理工具标签页
     "agents.tools.title": "工具访问权限",
     "agents.tools.subtitle": "此代理的配置文件 + 每个工具的覆盖设置。",
@@ -2906,7 +3035,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.tools.save": "保存",
     "agents.tools.saving": "保存中…",
     "agents.tools.load_prompt": "加载网关配置以调整工具配置文件。",
-    "agents.tools.allowlist_hint": "此代理正在使用配置中的显式允许列表。工具覆盖在配置标签页中管理。",
+    "agents.tools.allowlist_hint":
+      "此代理正在使用配置中的显式允许列表。工具覆盖在配置标签页中管理。",
     "agents.tools.global_allow_hint": "已设置全局 tools.allow。代理覆盖无法启用全局阻止的工具。",
     "agents.tools.profile": "配置文件",
     "agents.tools.source": "来源",
@@ -2921,7 +3051,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.tools.preset_messaging": "消息",
     "agents.tools.preset_full": "完整",
     "agents.tools.inherit": "继承",
-    
+
     // 工具分类
     "agents.tools.section.fs": "文件",
     "agents.tools.section.runtime": "运行时",
@@ -2934,7 +3064,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.tools.section.nodes": "节点",
     "agents.tools.section.agents": "代理",
     "agents.tools.section.media": "媒体",
-    
+
     // 工具描述
     "agents.tools.tool.read": "读取文件内容",
     "agents.tools.tool.write": "创建或覆盖文件",
@@ -2959,7 +3089,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.tools.tool.nodes": "节点 + 设备",
     "agents.tools.tool.agents_list": "列出代理",
     "agents.tools.tool.image": "图像理解",
-    
+
     // 代理技能标签页
     "agents.skills.title": "技能",
     "agents.skills.subtitle": "每个代理的技能允许列表和工作区技能。",
@@ -2979,14 +3109,14 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.skills.filter_placeholder": "搜索技能",
     "agents.skills.shown_count": "显示 {count} 个",
     "agents.skills.no_skills": "未找到技能。",
-    
+
     // 技能分组
     "agents.skills.group.workspace": "工作区技能",
     "agents.skills.group.builtin": "内置技能",
     "agents.skills.group.installed": "已安装技能",
     "agents.skills.group.extra": "额外技能",
     "agents.skills.group.other": "其他技能",
-    
+
     // 技能状态
     "agents.skills.status.eligible": "合格",
     "agents.skills.status.blocked": "已阻止",

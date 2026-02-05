@@ -145,6 +145,8 @@ export function connectGateway(host: GatewayHost) {
       void loadNodes(host as unknown as OpenClawApp, { quiet: true });
       void loadDevices(host as unknown as OpenClawApp, { quiet: true });
       void refreshActiveTab(host as unknown as Parameters<typeof refreshActiveTab>[0]);
+      // 加载当前会话存储路径
+      void (host as unknown as OpenClawApp).loadStorageCurrentPath?.();
     },
     onClose: ({ code, reason }) => {
       host.connected = false;
