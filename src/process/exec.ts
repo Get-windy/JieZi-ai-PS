@@ -9,24 +9,25 @@ const execFileAsync = promisify(execFile);
 
 /**
  * Resolves a command for Windows compatibility.
- * On Windows, non-.exe commands (like npm, pnpm) require their .cmd extension.
+ * On Windows, non-.exe commands (like npm, pnpm) require their .cmd extension or shell execution.
  */
-function resolveCommand(command: string): string {
+function resolveCommand(command: string): { command: string; useShell: boolean } {
   if (process.platform !== "win32") {
-    return command;
+    return { command, useShell: false };
   }
   const basename = path.basename(command).toLowerCase();
   // Skip if already has an extension (.cmd, .exe, .bat, etc.)
   const ext = path.extname(basename);
   if (ext) {
-    return command;
+    return { command, useShell: false };
   }
   // Common npm-related commands that need .cmd extension on Windows
   const cmdCommands = ["npm", "pnpm", "yarn", "npx"];
   if (cmdCommands.includes(basename)) {
-    return `${command}.cmd`;
+    // Use .cmd extension and shell to avoid EINVAL on Windows
+    return { command: `${command}.cmd`, useShell: true };
   }
-  return command;
+  return { command, useShell: false };
 }
 
 // Simple promise-wrapped execFile with optional verbosity logging.
@@ -44,7 +45,8 @@ export async function runExec(
           encoding: "utf8" as const,
         };
   try {
-    const { stdout, stderr } = await execFileAsync(resolveCommand(command), args, options);
+    const resolved = resolveCommand(command);
+    const { stdout, stderr } = await execFileAsync(resolved.command, args, options);
     if (shouldLogVerbose()) {
       if (stdout.trim()) {
         logDebug(stdout.trim());
@@ -111,11 +113,27 @@ export async function runCommandWithTimeout(
   }
 
   const stdio = resolveCommandStdio({ hasInput, preferInherit: true });
-  const child = spawn(resolveCommand(argv[0]), argv.slice(1), {
+  const command = argv[0];
+  if (!command) {
+    throw new Error(
+      `Invalid command: argv[0] is undefined or empty. Full argv: ${JSON.stringify(argv)}`,
+    );
+  }
+
+  const resolved = resolveCommand(command);
+
+  if (shouldLogVerbose()) {
+    logDebug(
+      `Running command: ${resolved.command} ${argv.slice(1).join(" ")} (shell: ${resolved.useShell})`,
+    );
+  }
+
+  const child = spawn(resolved.command, argv.slice(1), {
     stdio,
     cwd,
     env: resolvedEnv,
     windowsVerbatimArguments,
+    shell: resolved.useShell,
   });
   // Spawn with inherited stdin (TTY) so tools like `pi` stay interactive when needed.
   return await new Promise((resolve, reject) => {

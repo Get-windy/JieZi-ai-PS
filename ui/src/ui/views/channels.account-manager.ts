@@ -3,6 +3,7 @@ import type { ChannelAccountSnapshot } from "../types.js";
 import type { ChannelsProps } from "./channels.types.ts";
 import { formatAgo } from "../format.js";
 import { t } from "../i18n.js";
+import { renderSchemaForm, type JsonSchema } from "./channels.schema-form.js";
 
 /**
  * 获取通道状态
@@ -335,33 +336,33 @@ export function renderAccountManagerModal(props: ChannelsProps) {
           <button class="btn-icon" @click=${() => props.onManageAccounts("")}>&times;</button>
         </div>
         
-        <div class="modal-body">
+        <div class="modal-body" style="padding: 32px;">
           <!-- 通道全局操作按钮栏 -->
-          <div class="row" style="gap: 8px; margin-bottom: 20px; padding: 12px; background: var(--bg-secondary); border-radius: var(--radius-md);">
-            <button class="btn btn--sm" @click=${() => props.onEditChannelGlobalConfig(channelId)}>
+          <div class="row" style="gap: 12px; margin-bottom: 32px; padding: 16px; background: var(--bg-secondary); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);">
+            <button class="btn btn--sm" style="color: #000000; font-weight: 600; background: var(--bg-elevated); position: relative; z-index: 10;" @click=${() => props.onEditChannelGlobalConfig(channelId)}>
               🛠️ ${t("channels.global.config")}
             </button>
-            <button class="btn btn--sm" @click=${() => props.onDebugChannel(channelId)}>
+            <button class="btn btn--sm" style="color: #000000; font-weight: 600; background: var(--bg-elevated); position: relative; z-index: 10;" @click=${() => props.onDebugChannel(channelId)}>
               🐞 ${t("channels.global.debug")}
             </button>
           </div>
 
           <!-- 账号区域 -->
           <div class="account-section">
-            <div class="row" style="margin-bottom: 16px; justify-content: space-between; align-items: center;">
-              <h3 style="font-size: 16px; font-weight: 600;">
+            <div class="row" style="margin-bottom: 20px; justify-content: space-between; align-items: center;">
+              <h3 style="font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -0.02em; color: var(--text-strong);">
                 ${t("channels.accounts.title")}
               </h3>
-              <button class="btn btn--primary" @click=${() => props.onAddAccount(channelId)}>
-                ${t("channels.account.add_account")}
+              <button class="btn btn--primary" style="font-size: 14px; padding: 10px 18px; background: #ff5c5c; border-color: #ff5c5c; color: #ffffff;" @click=${() => props.onAddAccount(channelId)}>
+                ➕ ${t("channels.account.add_account")}
               </button>
             </div>
             
             ${
               accounts.length === 0
-                ? html`<div class="muted">${t("channels.account.no_accounts")}</div>`
+                ? html`<div class="muted" style="padding: 40px; text-align: center; font-size: 14px; color: var(--muted);">${t("channels.account.no_accounts")}</div>`
                 : html`
-                <div class="account-list">
+                <div class="account-list" style="display: grid; gap: 16px;">
                   ${accounts.map((account: any) => renderAccountCard({ account, channelId, props }))}
                 </div>
               `
@@ -415,24 +416,26 @@ function renderAccountCard(params: {
   return html`
     <div 
       class="card card--clickable" 
-      style="margin-bottom: 12px;"
+      style="margin-bottom: 16px; padding: 20px; transition: all 0.2s ease;"
       @click=${() => props.onViewAccount(channelId, account.accountId)}
     >
-      <div class="row" style="justify-content: space-between; align-items: center;">
-        <div class="row" style="align-items: center; gap: 12px;">
+      <div class="row" style="justify-content: space-between; align-items: center; gap: 16px;">
+        <div class="row" style="align-items: center; gap: 16px; flex: 1;">
           <!-- 状态灯 -->
           <span 
             class="status-indicator status-indicator--${statusColor}" 
+            style="width: 12px; height: 12px; flex-shrink: 0;"
             title="${statusColor === "green" ? "正常" : statusColor === "yellow" ? "异常" : statusColor === "red" ? "故障" : "未配置"}"
           ></span>
-          <div>
-            <div class="card-title">${displayName}</div>
-            <div class="card-sub mono">${displaySubtitle}</div>
+          <div style="flex: 1; min-width: 0;">
+            <div class="card-title" style="font-size: 16px; margin-bottom: 6px;">${displayName}</div>
+            <div class="card-sub mono" style="font-size: 12px; opacity: 0.7;">${displaySubtitle}</div>
           </div>
         </div>
-        <div class="row" style="gap: 8px;">
+        <div class="row" style="gap: 10px; flex-shrink: 0;">
           <button 
             class="btn btn--sm" 
+            style="padding: 8px 14px; font-size: 13px; color: #000000; font-weight: 600; background: var(--bg-elevated); position: relative; z-index: 10;"
             @click=${(e: Event) => {
               e.stopPropagation();
               props.onEditAccount(channelId, account.accountId);
@@ -443,6 +446,7 @@ function renderAccountCard(params: {
           </button>
           <button 
             class="btn btn--sm" 
+            style="padding: 8px 14px; font-size: 13px; color: #000000; font-weight: 600; background: var(--bg-elevated); position: relative; z-index: 10;"
             @click=${(e: Event) => {
               e.stopPropagation();
               props.onDebugChannel(channelId, account.accountId);
@@ -457,7 +461,7 @@ function renderAccountCard(params: {
       ${
         hasError
           ? html`
-        <div class="callout danger" style="margin-top: 12px;">
+        <div class="callout danger" style="margin-top: 16px; padding: 12px; font-size: 13px; border-radius: var(--radius-md);">
           ${account.lastError}
         </div>
       `
@@ -768,9 +772,9 @@ export function renderAccountEditModal(props: ChannelsProps) {
 
   return html`
     <div class="modal-overlay" @click=${props.onCancelAccountEdit}>
-      <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
+      <div class="modal-content" style="max-width: 680px;" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
-          <h2>
+          <h2 style="font-size: 20px;">
             ${
               isNew
                 ? t("channels.account.add_title").replace("{channel}", channelLabel)
@@ -780,36 +784,39 @@ export function renderAccountEditModal(props: ChannelsProps) {
           <button class="btn-icon" @click=${props.onCancelAccountEdit}>&times;</button>
         </div>
         
-        <div class="modal-body">
-          <div class="form-group">
-            <label>
+        <div class="modal-body" style="padding: 32px;">
+          <div class="form-group" style="margin-bottom: 24px;">
+            <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; color: var(--text-strong);">
               ${t("channels.account.field.name")}
               <span class="text-danger">*</span>
             </label>
             <input
               type="text"
               class="form-control"
+              style="width: 100%; padding: 10px 14px; font-size: 14px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--card);"
               .value=${name || ""}
               placeholder=${t("channels.account.field.name_placeholder")}
               @input=${(e: Event) => handleNameChange((e.target as HTMLInputElement).value)}
             />
-            <small class="form-text">${t("channels.account.field.name_help")}</small>
+            <small class="form-text" style="display: block; margin-top: 6px; font-size: 12px; color: var(--muted);">${t("channels.account.field.name_help")}</small>
             ${
               !hasName && name !== undefined
                 ? html`
-              <small class="form-text text-danger">${t("channels.account.name_required")}</small>
+              <small class="form-text text-danger" style="display: block; margin-top: 4px; font-size: 12px; color: var(--danger);">${t("channels.account.name_required")}</small>
             `
                 : nothing
             }
           </div>
           
-          <div class="form-group">
-            <label>
+          <div class="form-group" style="margin-bottom: 24px;">
+            <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; color: var(--text-strong);">
               ${t("channels.account.field.account_id")}
               ${
                 isNew
                   ? html`
-                      <span class="text-muted" style="font-weight: normal; font-size: 12px"> (自动生成，可修改)</span>
+                      <span class="text-muted" style="font-weight: normal; font-size: 12px; color: var(--muted)">
+                        (自动生成，可修改)</span
+                      >
                     `
                   : ""
               }
@@ -817,16 +824,17 @@ export function renderAccountEditModal(props: ChannelsProps) {
             <input
               type="text"
               class="form-control"
+              style="width: 100%; padding: 10px 14px; font-size: 14px; border-radius: var(--radius-md); border: 1px solid var(--input); background: var(--card); font-family: var(--mono);"
               .value=${accountId || ""}
               ?disabled=${!isNew}
               placeholder=${t("channels.account.field.account_id_placeholder")}
               @input=${(e: Event) => props.onAccountFormChange("accountId", (e.target as HTMLInputElement).value)}
             />
-            <small class="form-text">${t("channels.account.field.account_id_help")}</small>
+            <small class="form-text" style="display: block; margin-top: 6px; font-size: 12px; color: var(--muted);">${t("channels.account.field.account_id_help")}</small>
             ${
               !isValidId && accountId
                 ? html`
-              <small class="form-text text-danger">${t("channels.account.invalid_id")}</small>
+              <small class="form-text text-danger" style="display: block; margin-top: 4px; font-size: 12px; color: var(--danger);">${t("channels.account.invalid_id")}</small>
             `
                 : nothing
             }
@@ -835,13 +843,13 @@ export function renderAccountEditModal(props: ChannelsProps) {
           ${renderChannelSpecificFields(channelId, config, props)}
         </div>
         
-        <div class="modal-footer">
+        <div class="modal-footer" style="padding: 20px 32px; gap: 10px;">
           ${
             !isNew
               ? html`
             <button 
               class="btn btn--danger" 
-              style="margin-right: auto;"
+              style="margin-right: auto; font-size: 13px; padding: 9px 16px;"
               ?disabled=${props.deletingChannelAccount}
               @click=${(e: Event) => {
                 e.stopPropagation();
@@ -851,12 +859,12 @@ export function renderAccountEditModal(props: ChannelsProps) {
                 }
               }}
             >
-              ${t("channels.account.delete")}
+              🗑️ ${t("channels.account.delete")}
             </button>
           `
               : nothing
           }
-          <button class="btn" @click=${props.onCancelAccountEdit}>
+          <button class="btn" style="font-size: 13px; padding: 9px 16px;" @click=${props.onCancelAccountEdit}>
             ${t("channels.account.cancel")}
           </button>
           ${
@@ -864,6 +872,7 @@ export function renderAccountEditModal(props: ChannelsProps) {
               ? html`
             <button 
               class="btn" 
+              style="font-size: 13px; padding: 9px 16px;"
               @click=${() => {
                 props.onCancelAccountEdit();
                 props.onDebugChannel(channelId, accountId);
@@ -876,10 +885,11 @@ export function renderAccountEditModal(props: ChannelsProps) {
           }
           <button 
             class="btn btn--primary" 
+            style="font-size: 14px; padding: 10px 20px;"
             ?disabled=${!canSave || props.creatingChannelAccount}
             @click=${props.onSaveAccount}
           >
-            ${props.creatingChannelAccount ? t("channels.account.saving") : t("channels.account.save")}
+            ✔️ ${props.creatingChannelAccount ? t("channels.account.saving") : t("channels.account.save")}
           </button>
         </div>
       </div>
@@ -888,128 +898,45 @@ export function renderAccountEditModal(props: ChannelsProps) {
 }
 
 /**
- * 渲染通道特定的配置字段
+ * 渲染通道特定的配置字段（通用动态渲染）
  */
 function renderChannelSpecificFields(
   channelId: string,
   config: Record<string, unknown>,
   props: ChannelsProps,
 ) {
-  switch (channelId) {
-    case "feishu":
-      return renderFeishuFields(config, props);
-    case "dingtalk":
-      return renderDingtalkFields(config, props);
-    case "wecom":
-      return renderWecomFields(config, props);
-    default:
-      return nothing;
-  }
-}
+  // 获取通道的 configSchema
+  const channelConfigSchemas = props.snapshot?.channelConfigSchemas as
+    | Record<string, JsonSchema>
+    | undefined;
+  const schema = channelConfigSchemas?.[channelId];
 
-/**
- * 渲染飞书特定字段
- */
-function renderFeishuFields(config: Record<string, unknown>, props: ChannelsProps) {
-  return html`
-    <div class="form-group">
-      <label>${t("channels.feishu.field.app_id")}</label>
-      <input
-        type="text"
-        class="form-control"
-        .value=${(config.appId as string) || ""}
-        placeholder="cli_xxxxx"
-        @input=${(e: Event) => props.onAccountFormChange("config.appId", (e.target as HTMLInputElement).value)}
-      />
-    </div>
-    
-    <div class="form-group">
-      <label>${t("channels.feishu.field.app_secret")}</label>
-      <input
-        type="password"
-        class="form-control"
-        .value=${(config.appSecret as string) || ""}
-        @input=${(e: Event) => props.onAccountFormChange("config.appSecret", (e.target as HTMLInputElement).value)}
-      />
-    </div>
-    
-    <div class="form-group">
-      <label>${t("channels.feishu.field.domain")}</label>
-      <select
-        class="form-control"
-        .value=${(config.domain as string) || "feishu"}
-        @change=${(e: Event) => props.onAccountFormChange("config.domain", (e.target as HTMLSelectElement).value)}
+  if (!schema || !schema.properties) {
+    // 如果没有 schema，返回空（新插件自动支持）
+    return html`
+      <div
+        class="callout"
+        style="
+          margin-top: 16px;
+          padding: 16px;
+          background: var(--bg-secondary);
+          border-radius: var(--radius-md);
+        "
       >
-        <option value="feishu">飞书 (feishu.cn)</option>
-        <option value="lark">Lark (larksuite.com)</option>
-      </select>
-    </div>
-  `;
-}
+        <p style="margin: 0; color: var(--muted); font-size: 13px">
+          💡 此通道暂无配置项，或需要在配置文件中手动配置。
+        </p>
+      </div>
+    `;
+  }
 
-/**
- * 渲染钉钉特定字段
- */
-function renderDingtalkFields(config: Record<string, unknown>, props: ChannelsProps) {
-  return html`
-    <div class="form-group">
-      <label>${t("channels.dingtalk.field.app_key")}</label>
-      <input
-        type="text"
-        class="form-control"
-        .value=${(config.appKey as string) || ""}
-        placeholder="dingxxxxx"
-        @input=${(e: Event) => props.onAccountFormChange("config.appKey", (e.target as HTMLInputElement).value)}
-      />
-    </div>
-    
-    <div class="form-group">
-      <label>${t("channels.dingtalk.field.app_secret")}</label>
-      <input
-        type="password"
-        class="form-control"
-        .value=${(config.appSecret as string) || ""}
-        @input=${(e: Event) => props.onAccountFormChange("config.appSecret", (e.target as HTMLInputElement).value)}
-      />
-    </div>
-  `;
-}
-
-/**
- * 渲染企业微信特定字段
- */
-function renderWecomFields(config: Record<string, unknown>, props: ChannelsProps) {
-  return html`
-    <div class="form-group">
-      <label>${t("channels.wecom.field.corpid")}</label>
-      <input
-        type="text"
-        class="form-control"
-        .value=${(config.corpid as string) || ""}
-        @input=${(e: Event) => props.onAccountFormChange("config.corpid", (e.target as HTMLInputElement).value)}
-      />
-    </div>
-    
-    <div class="form-group">
-      <label>${t("channels.wecom.field.corpsecret")}</label>
-      <input
-        type="password"
-        class="form-control"
-        .value=${(config.corpsecret as string) || ""}
-        @input=${(e: Event) => props.onAccountFormChange("config.corpsecret", (e.target as HTMLInputElement).value)}
-      />
-    </div>
-    
-    <div class="form-group">
-      <label>${t("channels.wecom.field.agentid")}</label>
-      <input
-        type="number"
-        class="form-control"
-        .value=${(config.agentid as number) || ""}
-        @input=${(e: Event) => props.onAccountFormChange("config.agentid", parseInt((e.target as HTMLInputElement).value, 10))}
-      />
-    </div>
-  `;
+  // 使用通用的 schema 渲染器
+  return renderSchemaForm({
+    schema,
+    config,
+    onFieldChange: (fieldPath, value) => props.onAccountFormChange(fieldPath, value),
+    fieldPrefix: "config",
+  });
 }
 
 /**

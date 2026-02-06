@@ -31,6 +31,18 @@ export function renderOverview(props: OverviewProps) {
     | undefined;
   const uptime = snapshot?.uptimeMs ? formatDurationMs(snapshot.uptimeMs) : "n/a";
   const tick = snapshot?.policy?.tickIntervalMs ? `${snapshot.policy.tickIntervalMs}ms` : "n/a";
+
+  // 获取当前使用的时区
+  const currentTimezone = (() => {
+    if (props.settings.timezone === "auto") {
+      try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone;
+      } catch {
+        return "浏览器默认";
+      }
+    }
+    return props.settings.timezone;
+  })();
   const authHint = (() => {
     if (props.connected || !props.lastError) {
       return null;
@@ -176,6 +188,33 @@ export function renderOverview(props: OverviewProps) {
               }}
             />
           </label>
+          <label class="field">
+            <span>显示时区</span>
+            <select
+              .value=${props.settings.timezone}
+              @change=${(e: Event) => {
+                const v = (e.target as HTMLSelectElement).value;
+                props.onSettingsChange({ ...props.settings, timezone: v });
+              }}
+            >
+              <option value="auto">自动检测</option>
+              <option value="Asia/Shanghai">中国时间 (Asia/Shanghai)</option>
+              <option value="Asia/Hong_Kong">香港时间 (Asia/Hong_Kong)</option>
+              <option value="Asia/Taipei">台北时间 (Asia/Taipei)</option>
+              <option value="Asia/Tokyo">东京时间 (Asia/Tokyo)</option>
+              <option value="Asia/Seoul">首尔时间 (Asia/Seoul)</option>
+              <option value="Asia/Singapore">新加坡时间 (Asia/Singapore)</option>
+              <option value="America/New_York">纽约时间 (America/New_York)</option>
+              <option value="America/Los_Angeles">洛杉矶时间 (America/Los_Angeles)</option>
+              <option value="America/Chicago">芝加哥时间 (America/Chicago)</option>
+              <option value="Europe/London">伦敦时间 (Europe/London)</option>
+              <option value="Europe/Paris">巴黎时间 (Europe/Paris)</option>
+              <option value="UTC">UTC 时间</option>
+            </select>
+          </label>
+        </div>
+        <div class="muted" style="margin-top: 8px; font-size: 12px;">
+          当前时区：<span class="mono" style="color: var(--accent);">${currentTimezone}</span>
         </div>
         <div class="row" style="margin-top: 14px;">
           <button class="btn" @click=${() => props.onConnect()}>连接</button>

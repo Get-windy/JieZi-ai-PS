@@ -279,8 +279,15 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
           : isAccountEnabled(account);
         const described = plugin.config.describeAccount?.(account, cfg);
         const configured = described?.configured;
+
+        // 统一从配置中读取 name 字段（UI管理层通用字段）
+        const channelConfig = cfg.channels?.[plugin.id] as Record<string, unknown> | undefined;
+        const accountsConfig = channelConfig?.accounts as Record<string, unknown> | undefined;
+        const accountConfig = accountsConfig?.[id] as { name?: string } | undefined;
+        const name = accountConfig?.name || described?.name;
+
         const current = store.runtimes.get(id) ?? cloneDefaultRuntime(plugin.id, id);
-        const next = { ...current, accountId: id };
+        const next = { ...current, accountId: id, name };
         if (!next.running) {
           if (!enabled) {
             next.lastError ??= plugin.config.disabledReason?.(account, cfg) ?? "disabled";

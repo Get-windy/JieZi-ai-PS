@@ -1,10 +1,42 @@
 import { stripReasoningTagsFromText } from "../../../src/shared/text/reasoning-tags.js";
 
+/**
+ * 获取用户设置的时区（从 localStorage）
+ */
+function getUserTimezone(): string {
+  try {
+    const settings = localStorage.getItem("openclaw.control.settings.v1");
+    if (settings) {
+      const parsed = JSON.parse(settings);
+      if (parsed.timezone && parsed.timezone !== "auto") {
+        return parsed.timezone;
+      }
+    }
+  } catch {
+    // 忽略错误，使用默认值
+  }
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
 export function formatMs(ms?: number | null): string {
   if (!ms && ms !== 0) {
     return "n/a";
   }
-  return new Date(ms).toLocaleString();
+  const timezone = getUserTimezone();
+  try {
+    return new Date(ms).toLocaleString(undefined, {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    // 如果时区无效，回退到默认
+    return new Date(ms).toLocaleString();
+  }
 }
 
 export function formatAgo(ms?: number | null): string {

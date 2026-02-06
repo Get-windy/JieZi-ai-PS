@@ -47,6 +47,14 @@ pnpm install
 
 **注意**: 首次安装可能需要较长时间，请耐心等待。
 
+### 4. 初始化 UI 依赖（可选）
+
+```bash
+pnpm ui:install
+```
+
+**说明**: 如果需要开发或构建 Web UI，需要先安装 UI 依赖。
+
 ---
 
 ## 项目打包
@@ -671,35 +679,196 @@ export WECOM_SECRET="your-secret"
 ## 快速命令参考
 
 ```bash
-# 安装依赖
+# ========== 安装与初始化 ==========
+
+# 安装项目依赖
 pnpm install
+
+# 初始化 UI 依赖（可选）
+pnpm ui:install
+
+# 构建 UI
+pnpm ui:build
 
 # 构建项目
 pnpm build
 
-# 运行引导向导
+# 准备 Git Hooks
+pnpm prepare
+
+# 完整初始化流程（推荐）
+pnpm install && pnpm ui:install && pnpm ui:build && pnpm build
+
+# ========== 配置与引导 ==========
+
+# 运行引导向导（推荐）
 pnpm openclaw onboard
+
+# 安装为系统服务
+pnpm openclaw onboard --install-daemon
+
+# ========== 启动服务 ==========
 
 # 启动网关
 pnpm openclaw gateway
 
-# 检查状态
+# 指定端口和详细日志
+pnpm openclaw gateway --port 18789 --verbose
+
+# 开发模式（自动重载）
+pnpm gateway:watch
+
+# 开发模式（跳过通道）
+pnpm gateway:dev
+
+# 启动 TUI 终端界面
+pnpm tui
+
+# TUI 开发模式
+pnpm tui:dev
+
+# UI 开发服务器
+pnpm ui:dev
+
+# ========== 状态检查 ==========
+
+# 检查网关状态
 pnpm openclaw doctor
-
-# 发送消息
-pnpm openclaw message send --to <号码> --message "内容"
-
-# AI 对话
-pnpm openclaw agent --message "你的问题"
-
-# 更新项目
-pnpm openclaw update
 
 # 查看版本
 pnpm openclaw --version
 
 # 查看帮助
 pnpm openclaw --help
+
+# ========== 消息发送 ==========
+
+# 发送消息
+pnpm openclaw message send --to <号码> --message "内容"
+
+# ========== AI 对话 ==========
+
+# AI 对话
+pnpm openclaw agent --message "你的问题"
+
+# 高级思考模式
+pnpm openclaw agent --message "写一个快速排序算法" --thinking high
+
+# RPC 模式
+pnpm openclaw:rpc
+
+# ========== 代码检查与格式化 ==========
+
+# 完整检查（tsgo + lint + format）
+pnpm check
+
+# 代码检查
+pnpm lint
+
+# 代码检查并修复
+pnpm lint:fix
+
+# 格式化检查
+pnpm format
+
+# 格式化修复
+pnpm format:fix
+
+# ========== 测试 ==========
+
+# 运行测试
+pnpm test
+
+# 运行 E2E 测试
+pnpm test:e2e
+
+# 运行实时测试
+pnpm test:live
+
+# 测试覆盖率
+pnpm test:coverage
+
+# 监视模式测试
+pnpm test:watch
+
+# UI 测试
+pnpm test:ui
+
+# ========== 插件管理 ==========
+
+# 同步插件版本
+pnpm plugins:sync
+
+# ========== 协议生成 ==========
+
+# 生成协议 Schema
+pnpm protocol:gen
+
+# 生成 Swift 模型
+pnpm protocol:gen:swift
+
+# 检查协议一致性
+pnpm protocol:check
+
+# ========== 文档命令 ==========
+
+# 构建文档列表
+pnpm docs:bin
+
+# 开发模式预览文档
+pnpm docs:dev
+
+# 构建文档
+pnpm docs:build
+
+# ========== 移动端构建 ==========
+
+# Android 编译
+pnpm android:assemble
+
+# Android 安装
+pnpm android:install
+
+# Android 运行
+pnpm android:run
+
+# Android 测试
+pnpm android:test
+
+# iOS 生成项目
+pnpm ios:gen
+
+# iOS 打开项目
+pnpm ios:open
+
+# iOS 构建
+pnpm ios:build
+
+# iOS 运行
+pnpm ios:run
+
+# macOS 打包
+pnpm mac:package
+
+# macOS 打开应用
+pnpm mac:open
+
+# macOS 重启
+pnpm mac:restart
+
+# ========== 其他工具 ==========
+
+# 更新项目
+pnpm openclaw update
+
+# Canvas A2UI 打包
+pnpm canvas:a2ui:bundle
+
+# 检查 TypeScript 文件行数
+pnpm check:loc
+
+# 发布检查
+pnpm release:check
 ```
 
 ---
