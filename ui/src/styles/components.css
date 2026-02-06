@@ -520,6 +520,80 @@
   animation: none;
 }
 
+/* Status Indicator - Enhanced for account cards */
+.status-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.status-indicator::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+  transform: translate(-50%, -50%);
+  opacity: 0.3;
+  animation: pulse-ring 2s ease-in-out infinite;
+}
+
+.status-indicator--green {
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.15);
+}
+
+.status-indicator--green::before {
+  background: #22c55e;
+}
+
+.status-indicator--yellow {
+  background: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+}
+
+.status-indicator--yellow::before {
+  background: #f59e0b;
+  animation: pulse-ring 1.5s ease-in-out infinite;
+}
+
+.status-indicator--red {
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+}
+
+.status-indicator--red::before {
+  background: #ef4444;
+  animation: pulse-ring 1s ease-in-out infinite;
+}
+
+.status-indicator--gray {
+  background: #94a3b8;
+  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.15);
+}
+
+.status-indicator--gray::before {
+  animation: none;
+}
+
+@keyframes pulse-ring {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0;
+  }
+}
+
 /* ===========================================
    Buttons - Tactile with personality
    =========================================== */
@@ -531,12 +605,15 @@
   gap: 8px;
   border: 1px solid var(--border);
   background: var(--bg-elevated);
+  color: var(--text);
   padding: 9px 16px;
   border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: -0.01em;
   cursor: pointer;
+  position: relative;
+  z-index: 1;
   transition:
     border-color var(--duration-fast) var(--ease-out),
     background var(--duration-fast) var(--ease-out),
@@ -618,24 +695,51 @@
   color: var(--accent);
 }
 
-.btn.danger {
+.btn.danger,
+.btn--danger {
   border-color: transparent;
   background: var(--danger-subtle);
   color: var(--danger);
+  font-weight: 500;
 }
 
-.btn.danger:hover {
+.btn.danger:hover,
+.btn--danger:hover {
   background: rgba(239, 68, 68, 0.15);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+}
+
+.btn--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--primary-foreground);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  font-weight: 600;
+  position: relative;
+  z-index: 1;
+}
+
+.btn--primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow:
+    var(--shadow-md),
+    0 0 20px var(--accent-glow);
 }
 
 .btn--sm {
   padding: 6px 10px;
   font-size: 12px;
+  font-weight: 500;
+  position: relative;
+  z-index: 1;
 }
 
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none !important;
 }
 
 /* ===========================================

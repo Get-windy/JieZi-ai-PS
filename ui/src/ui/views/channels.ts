@@ -47,7 +47,7 @@ export function renderChannels(props: ChannelsProps) {
       <div class="channels-header">
         <button 
           class="btn btn--sm" 
-          style="margin-left: auto;"
+          style="margin-left: auto; color: #000000; font-weight: 600; background: var(--bg-elevated);"
           @click=${props.onToggleAllChannelsModal}
           title="${t("channels.show_hidden")}"
         >
@@ -448,7 +448,7 @@ function renderGenericChannelCard(
           ? html`
         <button 
           class="btn btn--sm" 
-          style="position: absolute; top: 12px; right: 12px; padding: 4px 8px; font-size: 11px;"
+          style="position: absolute; top: 12px; right: 12px; padding: 4px 8px; font-size: 11px; color: #000000; font-weight: 600; background: var(--bg-elevated);"
           @click=${() => props.onToggleChannelVisibility(key)}
           title="${t("channels.hide")}"
         >
@@ -469,7 +469,7 @@ function renderGenericChannelCard(
             ? html`
             <button 
               class="btn btn--primary btn--sm" 
-              style="margin-top: 12px;"
+              style="margin-top: 12px; font-size: 14px; padding: 10px 20px; background: #ff5c5c; border-color: #ff5c5c; color: #ffffff;"
               @click=${() => props.onManageAccounts(key)}
             >
               ${t("channels.account.manage_accounts")}
@@ -478,7 +478,7 @@ function renderGenericChannelCard(
             : html`
             <button 
               class="btn btn--primary btn--sm" 
-              style="margin-top: 12px;"
+              style="margin-top: 12px; font-size: 14px; padding: 10px 20px; background: #ff5c5c; border-color: #ff5c5c; color: #ffffff;"
               @click=${() => props.onAddAccount(key)}
             >
               ${t("channels.account.add_account")}

@@ -5,6 +5,7 @@ export type ChannelsStatusSnapshot = {
   channelDetailLabels?: Record<string, string>;
   channelSystemImages?: Record<string, string>;
   channelMeta?: ChannelUiMetaEntry[];
+  channelConfigSchemas?: Record<string, unknown>; // 新增：JSON Schema 映射
   channels: Record<string, unknown>;
   channelAccounts: Record<string, ChannelAccountSnapshot[]>;
   channelDefaultAccountId: Record<string, string>;

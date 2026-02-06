@@ -194,6 +194,15 @@ export const channelsHandlers: GatewayRequestHandlers = {
     };
 
     const uiCatalog = buildChannelUiCatalog(plugins);
+
+    // 构建通道配置 schema 映射（用于动态表单渲染）
+    const channelConfigSchemas: Record<string, unknown> = {};
+    for (const plugin of plugins) {
+      if (plugin.configSchema?.schema) {
+        channelConfigSchemas[plugin.id] = plugin.configSchema.schema;
+      }
+    }
+
     const payload: Record<string, unknown> = {
       ts: Date.now(),
       channelOrder: uiCatalog.order,
@@ -201,6 +210,7 @@ export const channelsHandlers: GatewayRequestHandlers = {
       channelDetailLabels: uiCatalog.detailLabels,
       channelSystemImages: uiCatalog.systemImages,
       channelMeta: uiCatalog.entries,
+      channelConfigSchemas, // 新增：通道配置 schema
       channels: {} as Record<string, unknown>,
       channelAccounts: {} as Record<string, unknown>,
       channelDefaultAccountId: {} as Record<string, unknown>,
