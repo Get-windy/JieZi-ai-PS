@@ -1,9 +1,9 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { createFeishuClient } from "./client.js";
-import type { FeishuConfig } from "./types.js";
 import type * as Lark from "@larksuiteoapi/node-sdk";
-import { FeishuWikiSchema, type FeishuWikiParams } from "./wiki-schema.js";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { listEnabledFeishuAccounts } from "./accounts.js";
+import { createFeishuClient } from "./client.js";
 import { resolveToolsConfig } from "./tools-config.js";
+import { FeishuWikiSchema, type FeishuWikiParams } from "./wiki-schema.js";
 
 // ============ Helpers ============
 
@@ -24,7 +24,9 @@ const WIKI_ACCESS_HINT =
 
 async function listSpaces(client: Lark.Client) {
   const res = await client.wiki.space.list({});
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   const spaces =
     res.data?.items?.map((s) => ({
@@ -45,7 +47,9 @@ async function listNodes(client: Lark.Client, spaceId: string, parentNodeToken?:
     path: { space_id: spaceId },
     params: { parent_node_token: parentNodeToken },
   });
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   return {
     nodes:
@@ -63,7 +67,9 @@ async function getNode(client: Lark.Client, token: string) {
   const res = await client.wiki.space.getNode({
     params: { token },
   });
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   const node = res.data?.node;
   return {
@@ -95,7 +101,9 @@ async function createNode(
       parent_node_token: parentNodeToken,
     },
   });
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   const node = res.data?.node;
   return {
@@ -120,7 +128,9 @@ async function moveNode(
       target_parent_token: targetParentToken,
     },
   });
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   return {
     success: true,
@@ -128,17 +138,14 @@ async function moveNode(
   };
 }
 
-async function renameNode(
-  client: Lark.Client,
-  spaceId: string,
-  nodeToken: string,
-  title: string,
-) {
+async function renameNode(client: Lark.Client, spaceId: string, nodeToken: string, title: string) {
   const res = await client.wiki.spaceNode.updateTitle({
     path: { space_id: spaceId, node_token: nodeToken },
     data: { title },
   });
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   return {
     success: true,
@@ -150,19 +157,25 @@ async function renameNode(
 // ============ Tool Registration ============
 
 export function registerFeishuWikiTools(api: OpenClawPluginApi) {
-  const feishuCfg = api.config?.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg?.appId || !feishuCfg?.appSecret) {
-    api.logger.debug?.("feishu_wiki: Feishu credentials not configured, skipping wiki tools");
+  if (!api.config) {
+    api.logger.debug?.("feishu_wiki: No config available, skipping wiki tools");
     return;
   }
 
-  const toolsCfg = resolveToolsConfig(feishuCfg.tools);
+  const accounts = listEnabledFeishuAccounts(api.config);
+  if (accounts.length === 0) {
+    api.logger.debug?.("feishu_wiki: No Feishu accounts configured, skipping wiki tools");
+    return;
+  }
+
+  const firstAccount = accounts[0];
+  const toolsCfg = resolveToolsConfig(firstAccount.config.tools);
   if (!toolsCfg.wiki) {
     api.logger.debug?.("feishu_wiki: wiki tool disabled in config");
     return;
   }
 
-  const getClient = () => createFeishuClient(feishuCfg);
+  const getClient = () => createFeishuClient(firstAccount);
 
   api.registerTool(
     {
@@ -204,6 +217,7 @@ export function registerFeishuWikiTools(api: OpenClawPluginApi) {
             case "rename":
               return json(await renameNode(client, p.space_id, p.node_token, p.title));
             default:
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any -- exhaustive check fallback
               return json({ error: `Unknown action: ${(p as any).action}` });
           }
         } catch (err) {

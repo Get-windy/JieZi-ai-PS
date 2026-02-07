@@ -1,7 +1,11 @@
-import type { ChannelPlugin, OpenClawConfig } from "openclaw/plugin-sdk";
+import type { ChannelPlugin, ClawdbotConfig } from "openclaw/plugin-sdk";
 import { DEFAULT_ACCOUNT_ID, PAIRING_APPROVED_MESSAGE } from "openclaw/plugin-sdk";
 import type { ResolvedFeishuAccount, FeishuConfig } from "./types.js";
-import { resolveFeishuAccount, resolveFeishuCredentials } from "./accounts.js";
+import {
+  resolveFeishuAccount,
+  listFeishuAccountIds,
+  resolveDefaultFeishuAccountId,
+} from "./accounts.js";
 import {
   listFeishuDirectoryPeers,
   listFeishuDirectoryGroups,
@@ -13,7 +17,7 @@ import { feishuOutbound } from "./outbound.js";
 import { resolveFeishuGroupToolPolicy } from "./policy.js";
 import { probeFeishu } from "./probe.js";
 import { sendMessageFeishu } from "./send.js";
-import { normalizeFeishuTarget, looksLikeFeishuId, formatFeishuTarget } from "./targets.js";
+import { normalizeFeishuTarget, looksLikeFeishuId } from "./targets.js";
 
 const meta = {
   id: "feishu",
@@ -34,22 +38,23 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
   pairing: {
     idLabel: "feishuUserId",
     normalizeAllowEntry: (entry) => entry.replace(/^(feishu|user|open_id):/i, ""),
-    notifyApproval: async ({ cfg, id }) => {
+    notifyApproval: async ({ cfg, id, accountId }) => {
       await sendMessageFeishu({
         cfg,
         to: id,
         text: PAIRING_APPROVED_MESSAGE,
+        accountId,
       });
     },
   },
   capabilities: {
-    chatTypes: ["direct", "channel"],
-    polls: false,
-    threads: true,
+    chatTypes: ["direct", "group"],
     media: true,
     reactions: true,
-    edit: true,
-    reply: true,
+    threads: false,
+    polls: false,
+    nativeCommands: true,
+    blockStreaming: true,
   },
   agentPrompt: {
     messageToolHints: () => [
@@ -71,7 +76,12 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
         appSecret: { type: "string" },
         encryptKey: { type: "string" },
         verificationToken: { type: "string" },
-        domain: { type: "string", enum: ["feishu", "lark"] },
+        domain: {
+          oneOf: [
+            { type: "string", enum: ["feishu", "lark"] },
+            { type: "string", format: "uri", pattern: "^https://" },
+          ],
+        },
         connectionMode: { type: "string", enum: ["websocket", "webhook"] },
         webhookPath: { type: "string" },
         webhookPort: { type: "integer", minimum: 1 },
@@ -89,54 +99,111 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
         chunkMode: { type: "string", enum: ["length", "newline"] },
         mediaMaxMb: { type: "number", minimum: 0 },
         renderMode: { type: "string", enum: ["auto", "raw", "card"] },
+        accounts: {
+          type: "object",
+          additionalProperties: {
+            type: "object",
+            properties: {
+              enabled: { type: "boolean" },
+              name: { type: "string" },
+              appId: { type: "string" },
+              appSecret: { type: "string" },
+              encryptKey: { type: "string" },
+              verificationToken: { type: "string" },
+              domain: { type: "string", enum: ["feishu", "lark"] },
+              connectionMode: { type: "string", enum: ["websocket", "webhook"] },
+            },
+          },
+        },
       },
     },
   },
   config: {
-    listAccountIds: (cfg) => {
+    listAccountIds: (cfg) => listFeishuAccountIds(cfg),
+    resolveAccount: (cfg, accountId) => resolveFeishuAccount({ cfg, accountId }),
+    defaultAccountId: (cfg) => resolveDefaultFeishuAccountId(cfg),
+    setAccountEnabled: ({ cfg, accountId, enabled }) => {
+      const _account = resolveFeishuAccount({ cfg, accountId });
+      const isDefault = accountId === DEFAULT_ACCOUNT_ID;
+
+      if (isDefault) {
+        // For default account, set top-level enabled
+        return {
+          ...cfg,
+          channels: {
+            ...cfg.channels,
+            feishu: {
+              ...cfg.channels?.feishu,
+              enabled,
+            },
+          },
+        };
+      }
+
+      // For named accounts, set enabled in accounts[accountId]
       const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
-      const accountsConfig = feishuCfg?.accounts as Record<string, unknown> | undefined;
-
-      // 如果配置了多账号，返回账号ID列表
-      if (accountsConfig && Object.keys(accountsConfig).length > 0) {
-        return Object.keys(accountsConfig).filter(Boolean);
-      }
-
-      // 否则返回默认账号
-      return [DEFAULT_ACCOUNT_ID];
-    },
-    resolveAccount: (cfg, accountId) => resolveFeishuAccount({ cfg, accountId: accountId ?? null }),
-    defaultAccountId: () => DEFAULT_ACCOUNT_ID,
-    setAccountEnabled: ({ cfg, enabled }) => ({
-      ...cfg,
-      channels: {
-        ...cfg.channels,
-        feishu: {
-          ...cfg.channels?.feishu,
-          enabled,
+      return {
+        ...cfg,
+        channels: {
+          ...cfg.channels,
+          feishu: {
+            ...feishuCfg,
+            accounts: {
+              ...feishuCfg?.accounts,
+              [accountId]: {
+                ...feishuCfg?.accounts?.[accountId],
+                enabled,
+              },
+            },
+          },
         },
-      },
-    }),
-    deleteAccount: ({ cfg }) => {
-      const next = { ...cfg } as OpenClawConfig;
-      const nextChannels = { ...cfg.channels };
-      delete (nextChannels as Record<string, unknown>).feishu;
-      if (Object.keys(nextChannels).length > 0) {
-        next.channels = nextChannels;
-      } else {
-        delete next.channels;
-      }
-      return next;
+      };
     },
-    isConfigured: (_account, cfg) =>
-      Boolean(resolveFeishuCredentials(cfg.channels?.feishu as FeishuConfig | undefined)),
+    deleteAccount: ({ cfg, accountId }) => {
+      const isDefault = accountId === DEFAULT_ACCOUNT_ID;
+
+      if (isDefault) {
+        // Delete entire feishu config
+        const next = { ...cfg } as ClawdbotConfig;
+        const nextChannels = { ...cfg.channels };
+        delete (nextChannels as Record<string, unknown>).feishu;
+        if (Object.keys(nextChannels).length > 0) {
+          next.channels = nextChannels;
+        } else {
+          delete next.channels;
+        }
+        return next;
+      }
+
+      // Delete specific account from accounts
+      const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
+      const accounts = { ...feishuCfg?.accounts };
+      delete accounts[accountId];
+
+      return {
+        ...cfg,
+        channels: {
+          ...cfg.channels,
+          feishu: {
+            ...feishuCfg,
+            accounts: Object.keys(accounts).length > 0 ? accounts : undefined,
+          },
+        },
+      };
+    },
+    isConfigured: (account) => account.configured,
     describeAccount: (account) => ({
       accountId: account.accountId,
       enabled: account.enabled,
       configured: account.configured,
+      name: account.name,
+      appId: account.appId,
+      domain: account.domain,
     }),
-    resolveAllowFrom: ({ cfg }) =>
-      (cfg.channels?.feishu as FeishuConfig | undefined)?.allowFrom ?? [],
+    resolveAllowFrom: ({ cfg, accountId }) => {
+      const account = resolveFeishuAccount({ cfg, accountId });
+      return account.config?.allowFrom ?? [];
+    },
     formatAllowFrom: ({ allowFrom }) =>
       allowFrom
         .map((entry) => String(entry).trim())
@@ -144,30 +211,57 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
         .map((entry) => entry.toLowerCase()),
   },
   security: {
-    collectWarnings: ({ cfg }) => {
-      const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
+    collectWarnings: ({ cfg, accountId }) => {
+      const account = resolveFeishuAccount({ cfg, accountId });
+      const feishuCfg = account.config;
       const defaultGroupPolicy = (
         cfg.channels as Record<string, { groupPolicy?: string }> | undefined
       )?.defaults?.groupPolicy;
       const groupPolicy = feishuCfg?.groupPolicy ?? defaultGroupPolicy ?? "allowlist";
-      if (groupPolicy !== "open") return [];
+      if (groupPolicy !== "open") {
+        return [];
+      }
       return [
-        `- Feishu groups: groupPolicy="open" allows any member to trigger (mention-gated). Set channels.feishu.groupPolicy="allowlist" + channels.feishu.groupAllowFrom to restrict senders.`,
+        `- Feishu[${account.accountId}] groups: groupPolicy="open" allows any member to trigger (mention-gated). Set channels.feishu.groupPolicy="allowlist" + channels.feishu.groupAllowFrom to restrict senders.`,
       ];
     },
   },
   setup: {
     resolveAccountId: () => DEFAULT_ACCOUNT_ID,
-    applyAccountConfig: ({ cfg }) => ({
-      ...cfg,
-      channels: {
-        ...cfg.channels,
-        feishu: {
-          ...cfg.channels?.feishu,
-          enabled: true,
+    applyAccountConfig: ({ cfg, accountId }) => {
+      const isDefault = !accountId || accountId === DEFAULT_ACCOUNT_ID;
+
+      if (isDefault) {
+        return {
+          ...cfg,
+          channels: {
+            ...cfg.channels,
+            feishu: {
+              ...cfg.channels?.feishu,
+              enabled: true,
+            },
+          },
+        };
+      }
+
+      const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
+      return {
+        ...cfg,
+        channels: {
+          ...cfg.channels,
+          feishu: {
+            ...feishuCfg,
+            accounts: {
+              ...feishuCfg?.accounts,
+              [accountId]: {
+                ...feishuCfg?.accounts?.[accountId],
+                enabled: true,
+              },
+            },
+          },
         },
-      },
-    }),
+      };
+    },
   },
   onboarding: feishuOnboardingAdapter,
   messaging: {
@@ -179,12 +273,14 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
   },
   directory: {
     self: async () => null,
-    listPeers: async ({ cfg, query, limit }) => listFeishuDirectoryPeers({ cfg, query, limit }),
-    listGroups: async ({ cfg, query, limit }) => listFeishuDirectoryGroups({ cfg, query, limit }),
-    listPeersLive: async ({ cfg, query, limit }) =>
-      listFeishuDirectoryPeersLive({ cfg, query, limit }),
-    listGroupsLive: async ({ cfg, query, limit }) =>
-      listFeishuDirectoryGroupsLive({ cfg, query, limit }),
+    listPeers: async ({ cfg, query, limit, accountId }) =>
+      listFeishuDirectoryPeers({ cfg, query, limit, accountId }),
+    listGroups: async ({ cfg, query, limit, accountId }) =>
+      listFeishuDirectoryGroups({ cfg, query, limit, accountId }),
+    listPeersLive: async ({ cfg, query, limit, accountId }) =>
+      listFeishuDirectoryPeersLive({ cfg, query, limit, accountId }),
+    listGroupsLive: async ({ cfg, query, limit, accountId }) =>
+      listFeishuDirectoryGroupsLive({ cfg, query, limit, accountId }),
   },
   outbound: feishuOutbound,
   status: {
@@ -206,12 +302,17 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
       probe: snapshot.probe,
       lastProbeAt: snapshot.lastProbeAt ?? null,
     }),
-    probeAccount: async ({ cfg }) =>
-      await probeFeishu(cfg.channels?.feishu as FeishuConfig | undefined),
+    probeAccount: async ({ cfg, accountId }) => {
+      const account = resolveFeishuAccount({ cfg, accountId });
+      return await probeFeishu(account);
+    },
     buildAccountSnapshot: ({ account, runtime, probe }) => ({
       accountId: account.accountId,
       enabled: account.enabled,
       configured: account.configured,
+      name: account.name,
+      appId: account.appId,
+      domain: account.domain,
       running: runtime?.running ?? false,
       lastStartAt: runtime?.lastStartAt ?? null,
       lastStopAt: runtime?.lastStopAt ?? null,
@@ -223,10 +324,12 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
   gateway: {
     startAccount: async (ctx) => {
       const { monitorFeishuProvider } = await import("./monitor.js");
-      const feishuCfg = ctx.cfg.channels?.feishu as FeishuConfig | undefined;
-      const port = feishuCfg?.webhookPort ?? null;
+      const account = resolveFeishuAccount({ cfg: ctx.cfg, accountId: ctx.accountId });
+      const port = account.config?.webhookPort ?? null;
       ctx.setStatus({ accountId: ctx.accountId, port });
-      ctx.log?.info(`starting feishu provider (mode: ${feishuCfg?.connectionMode ?? "websocket"})`);
+      ctx.log?.info(
+        `starting feishu[${ctx.accountId}] (mode: ${account.config?.connectionMode ?? "websocket"})`,
+      );
       return monitorFeishuProvider({
         config: ctx.cfg,
         runtime: ctx.runtime,

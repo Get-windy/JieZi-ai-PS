@@ -6,9 +6,11 @@ import {
   DEFAULT_GROUP_HISTORY_LIMIT,
   type HistoryEntry,
 } from "openclaw/plugin-sdk";
-import type { FeishuConfig, FeishuMessageContext, FeishuMediaInfo } from "./types.js";
-import { getFeishuRuntime } from "./runtime.js";
+import type { FeishuMessageContext, FeishuMediaInfo, ResolvedFeishuAccount } from "./types.js";
+import { resolveFeishuAccount } from "./accounts.js";
 import { createFeishuClient } from "./client.js";
+import { downloadMessageResourceFeishu } from "./media.js";
+import { extractMentionTargets, extractMessageBody, isMentionForwardRequest } from "./mention.js";
 import {
   resolveFeishuGroupConfig,
   resolveFeishuReplyPolicy,
@@ -16,13 +18,8 @@ import {
   isFeishuGroupAllowed,
 } from "./policy.js";
 import { createFeishuReplyDispatcher } from "./reply-dispatcher.js";
+import { getFeishuRuntime } from "./runtime.js";
 import { getMessageFeishu } from "./send.js";
-import { downloadImageFeishu, downloadMessageResourceFeishu } from "./media.js";
-import {
-  extractMentionTargets,
-  extractMessageBody,
-  isMentionForwardRequest,
-} from "./mention.js";
 
 // --- Permission error extraction ---
 // Extract permission grant URL from Feishu API error response.
@@ -33,12 +30,16 @@ type PermissionError = {
 };
 
 function extractPermissionError(err: unknown): PermissionError | null {
-  if (!err || typeof err !== "object") return null;
+  if (!err || typeof err !== "object") {
+    return null;
+  }
 
   // Axios error structure: err.response.data contains the Feishu error
   const axiosErr = err as { response?: { data?: unknown } };
   const data = axiosErr.response?.data;
-  if (!data || typeof data !== "object") return null;
+  if (!data || typeof data !== "object") {
+    return null;
+  }
 
   const feishuErr = data as {
     code?: number;
@@ -47,11 +48,13 @@ function extractPermissionError(err: unknown): PermissionError | null {
   };
 
   // Feishu permission error code: 99991672
-  if (feishuErr.code !== 99991672) return null;
+  if (feishuErr.code !== 99991672) {
+    return null;
+  }
 
   // Extract the grant URL from the error message (contains the direct link)
   const msg = feishuErr.msg ?? "";
-  const urlMatch = msg.match(/https:\/\/open\.feishu\.cn\/app\/[^\s,]+/);
+  const urlMatch = msg.match(/https:\/\/[^\s,]+\/app\/[^\s,]+/);
   const grantUrl = urlMatch?.[0];
 
   return {
@@ -77,22 +80,30 @@ type SenderNameResult = {
 };
 
 async function resolveFeishuSenderName(params: {
-  feishuCfg?: FeishuConfig;
+  account: ResolvedFeishuAccount;
   senderOpenId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic log function
   log: (...args: any[]) => void;
 }): Promise<SenderNameResult> {
-  const { feishuCfg, senderOpenId, log } = params;
-  if (!feishuCfg) return {};
-  if (!senderOpenId) return {};
+  const { account, senderOpenId, log } = params;
+  if (!account.configured) {
+    return {};
+  }
+  if (!senderOpenId) {
+    return {};
+  }
 
   const cached = senderNameCache.get(senderOpenId);
   const now = Date.now();
-  if (cached && cached.expireAt > now) return { name: cached.name };
+  if (cached && cached.expireAt > now) {
+    return { name: cached.name };
+  }
 
   try {
-    const client = createFeishuClient(feishuCfg);
+    const client = createFeishuClient(account);
 
     // contact/v3/users/:user_id?user_id_type=open_id
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK response type
     const res: any = await client.contact.user.get({
       path: { user_id: senderOpenId },
       params: { user_id_type: "open_id" },
@@ -185,13 +196,22 @@ function parseMessageContent(content: string, messageType: string): string {
 
 function checkBotMentioned(event: FeishuMessageEvent, botOpenId?: string): boolean {
   const mentions = event.message.mentions ?? [];
-  if (mentions.length === 0) return false;
-  if (!botOpenId) return mentions.length > 0;
+  if (mentions.length === 0) {
+    return false;
+  }
+  if (!botOpenId) {
+    return mentions.length > 0;
+  }
   return mentions.some((m) => m.id.open_id === botOpenId);
 }
 
-function stripBotMention(text: string, mentions?: FeishuMessageEvent["message"]["mentions"]): string {
-  if (!mentions || mentions.length === 0) return text;
+function stripBotMention(
+  text: string,
+  mentions?: FeishuMessageEvent["message"]["mentions"],
+): string {
+  if (!mentions || mentions.length === 0) {
+    return text;
+  }
   let result = text;
   for (const mention of mentions) {
     result = result.replace(new RegExp(`@${mention.name}\\s*`, "g"), "").trim();
@@ -308,8 +328,9 @@ async function resolveFeishuMediaList(params: {
   content: string;
   maxBytes: number;
   log?: (msg: string) => void;
+  accountId?: string;
 }): Promise<FeishuMediaInfo[]> {
-  const { cfg, messageId, messageType, content, maxBytes, log } = params;
+  const { cfg, messageId, messageType, content, maxBytes, log, accountId } = params;
 
   // Only process media message types (including post for embedded images)
   const mediaTypes = ["image", "file", "audio", "video", "sticker", "post"];
@@ -337,6 +358,7 @@ async function resolveFeishuMediaList(params: {
           messageId,
           fileKey: imageKey,
           type: "image",
+          accountId,
         });
 
         let contentType = result.contentType;
@@ -390,6 +412,7 @@ async function resolveFeishuMediaList(params: {
       messageId,
       fileKey,
       type: resourceType,
+      accountId,
     });
     buffer = result.buffer;
     contentType = result.contentType;
@@ -427,9 +450,7 @@ async function resolveFeishuMediaList(params: {
  * Build media payload for inbound context.
  * Similar to Discord's buildDiscordMediaPayload().
  */
-function buildFeishuMediaPayload(
-  mediaList: FeishuMediaInfo[],
-): {
+function buildFeishuMediaPayload(mediaList: FeishuMediaInfo[]): {
   MediaPath?: string;
   MediaType?: string;
   MediaUrl?: string;
@@ -491,9 +512,14 @@ export async function handleFeishuMessage(params: {
   botOpenId?: string;
   runtime?: RuntimeEnv;
   chatHistories?: Map<string, HistoryEntry[]>;
+  accountId?: string;
 }): Promise<void> {
-  const { cfg, event, botOpenId, runtime, chatHistories } = params;
-  const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
+  const { cfg, event, botOpenId, runtime, chatHistories, accountId } = params;
+
+  // Resolve account with merged config
+  const account = resolveFeishuAccount({ cfg, accountId });
+  const feishuCfg = account.config;
+
   const log = runtime?.log ?? console.log;
   const error = runtime?.error ?? console.error;
 
@@ -502,16 +528,18 @@ export async function handleFeishuMessage(params: {
 
   // Resolve sender display name (best-effort) so the agent can attribute messages correctly.
   const senderResult = await resolveFeishuSenderName({
-    feishuCfg,
+    account,
     senderOpenId: ctx.senderOpenId,
     log,
   });
-  if (senderResult.name) ctx = { ...ctx, senderName: senderResult.name };
+  if (senderResult.name) {
+    ctx = { ...ctx, senderName: senderResult.name };
+  }
 
   // Track permission error to inform agent later (with cooldown to avoid repetition)
   let permissionErrorForAgent: PermissionError | undefined;
   if (senderResult.permissionError) {
-    const appKey = feishuCfg?.appId ?? "default";
+    const appKey = account.appId ?? "default";
     const now = Date.now();
     const lastNotified = permissionErrorNotifiedAt.get(appKey) ?? 0;
 
@@ -521,12 +549,14 @@ export async function handleFeishuMessage(params: {
     }
   }
 
-  log(`feishu: received message from ${ctx.senderOpenId} in ${ctx.chatId} (${ctx.chatType})`);
+  log(
+    `feishu[${account.accountId}]: received message from ${ctx.senderOpenId} in ${ctx.chatId} (${ctx.chatType})`,
+  );
 
   // Log mention targets if detected
   if (ctx.mentionTargets && ctx.mentionTargets.length > 0) {
     const names = ctx.mentionTargets.map((t) => t.name).join(", ");
-    log(`feishu: detected @ forward request, targets: [${names}]`);
+    log(`feishu[${account.accountId}]: detected @ forward request, targets: [${names}]`);
   }
 
   const historyLimit = Math.max(
@@ -537,19 +567,35 @@ export async function handleFeishuMessage(params: {
   if (isGroup) {
     const groupPolicy = feishuCfg?.groupPolicy ?? "open";
     const groupAllowFrom = feishuCfg?.groupAllowFrom ?? [];
+    // DEBUG: log(`feishu[${account.accountId}]: groupPolicy=${groupPolicy}`);
     const groupConfig = resolveFeishuGroupConfig({ cfg: feishuCfg, groupId: ctx.chatId });
 
-    const senderAllowFrom = groupConfig?.allowFrom ?? groupAllowFrom;
-    const allowed = isFeishuGroupAllowed({
+    // Check if this GROUP is allowed (groupAllowFrom contains group IDs like oc_xxx, not user IDs)
+    const groupAllowed = isFeishuGroupAllowed({
       groupPolicy,
-      allowFrom: senderAllowFrom,
-      senderId: ctx.senderOpenId,
-      senderName: ctx.senderName,
+      allowFrom: groupAllowFrom,
+      senderId: ctx.chatId, // Check group ID, not sender ID
+      senderName: undefined,
     });
 
-    if (!allowed) {
-      log(`feishu: sender ${ctx.senderOpenId} not in group allowlist`);
+    if (!groupAllowed) {
+      log(`feishu[${account.accountId}]: sender ${ctx.senderOpenId} not in group allowlist`);
       return;
+    }
+
+    // Additional sender-level allowlist check if group has specific allowFrom config
+    const senderAllowFrom = groupConfig?.allowFrom ?? [];
+    if (senderAllowFrom.length > 0) {
+      const senderAllowed = isFeishuGroupAllowed({
+        groupPolicy: "allowlist",
+        allowFrom: senderAllowFrom,
+        senderId: ctx.senderOpenId,
+        senderName: ctx.senderName,
+      });
+      if (!senderAllowed) {
+        log(`feishu: sender ${ctx.senderOpenId} not in group ${ctx.chatId} sender allowlist`);
+        return;
+      }
     }
 
     const { requireMention } = resolveFeishuReplyPolicy({
@@ -559,7 +605,9 @@ export async function handleFeishuMessage(params: {
     });
 
     if (requireMention && !ctx.mentionedBot) {
-      log(`feishu: message in group ${ctx.chatId} did not mention bot, recording to history`);
+      log(
+        `feishu[${account.accountId}]: message in group ${ctx.chatId} did not mention bot, recording to history`,
+      );
       if (chatHistories) {
         recordPendingHistoryEntryIfEnabled({
           historyMap: chatHistories,
@@ -585,7 +633,7 @@ export async function handleFeishuMessage(params: {
         senderId: ctx.senderOpenId,
       });
       if (!match.allowed) {
-        log(`feishu: sender ${ctx.senderOpenId} not in DM allowlist`);
+        log(`feishu[${account.accountId}]: sender ${ctx.senderOpenId} not in DM allowlist`);
         return;
       }
     }
@@ -602,6 +650,7 @@ export async function handleFeishuMessage(params: {
     const route = core.channel.routing.resolveAgentRoute({
       cfg,
       channel: "feishu",
+      accountId: account.accountId,
       peer: {
         kind: isGroup ? "group" : "dm",
         id: isGroup ? ctx.chatId : ctx.senderOpenId,
@@ -610,8 +659,8 @@ export async function handleFeishuMessage(params: {
 
     const preview = ctx.content.replace(/\s+/g, " ").slice(0, 160);
     const inboundLabel = isGroup
-      ? `Feishu message in group ${ctx.chatId}`
-      : `Feishu DM from ${ctx.senderOpenId}`;
+      ? `Feishu[${account.accountId}] message in group ${ctx.chatId}`
+      : `Feishu[${account.accountId}] DM from ${ctx.senderOpenId}`;
 
     core.system.enqueueSystemEvent(`${inboundLabel}: ${preview}`, {
       sessionKey: route.sessionKey,
@@ -627,6 +676,7 @@ export async function handleFeishuMessage(params: {
       content: event.message.content,
       maxBytes: mediaMaxBytes,
       log,
+      accountId: account.accountId,
     });
     const mediaPayload = buildFeishuMediaPayload(mediaList);
 
@@ -634,13 +684,19 @@ export async function handleFeishuMessage(params: {
     let quotedContent: string | undefined;
     if (ctx.parentId) {
       try {
-        const quotedMsg = await getMessageFeishu({ cfg, messageId: ctx.parentId });
+        const quotedMsg = await getMessageFeishu({
+          cfg,
+          messageId: ctx.parentId,
+          accountId: account.accountId,
+        });
         if (quotedMsg) {
           quotedContent = quotedMsg.content;
-          log(`feishu: fetched quoted message: ${quotedContent?.slice(0, 100)}`);
+          log(
+            `feishu[${account.accountId}]: fetched quoted message: ${quotedContent?.slice(0, 100)}`,
+          );
         }
       } catch (err) {
-        log(`feishu: failed to fetch quoted message: ${String(err)}`);
+        log(`feishu[${account.accountId}]: failed to fetch quoted message: ${String(err)}`);
       }
     }
 
@@ -700,16 +756,20 @@ export async function handleFeishuMessage(params: {
         OriginatingTo: feishuTo,
       });
 
-      const { dispatcher: permDispatcher, replyOptions: permReplyOptions, markDispatchIdle: markPermIdle } =
-        createFeishuReplyDispatcher({
-          cfg,
-          agentId: route.agentId,
-          runtime: runtime as RuntimeEnv,
-          chatId: ctx.chatId,
-          replyToMessageId: ctx.messageId,
-        });
+      const {
+        dispatcher: permDispatcher,
+        replyOptions: permReplyOptions,
+        markDispatchIdle: markPermIdle,
+      } = createFeishuReplyDispatcher({
+        cfg,
+        agentId: route.agentId,
+        runtime: runtime as RuntimeEnv,
+        chatId: ctx.chatId,
+        replyToMessageId: ctx.messageId,
+        accountId: account.accountId,
+      });
 
-      log(`feishu: dispatching permission error notification to agent`);
+      log(`feishu[${account.accountId}]: dispatching permission error notification to agent`);
 
       await core.channel.reply.dispatchReplyFromConfig({
         ctx: permissionCtx,
@@ -780,9 +840,10 @@ export async function handleFeishuMessage(params: {
       chatId: ctx.chatId,
       replyToMessageId: ctx.messageId,
       mentionTargets: ctx.mentionTargets,
+      accountId: account.accountId,
     });
 
-    log(`feishu: dispatching to agent (session=${route.sessionKey})`);
+    log(`feishu[${account.accountId}]: dispatching to agent (session=${route.sessionKey})`);
 
     const { queuedFinal, counts } = await core.channel.reply.dispatchReplyFromConfig({
       ctx: ctxPayload,
@@ -801,8 +862,10 @@ export async function handleFeishuMessage(params: {
       });
     }
 
-    log(`feishu: dispatch complete (queuedFinal=${queuedFinal}, replies=${counts.final})`);
+    log(
+      `feishu[${account.accountId}]: dispatch complete (queuedFinal=${queuedFinal}, replies=${counts.final})`,
+    );
   } catch (err) {
-    error(`feishu: failed to dispatch message: ${String(err)}`);
+    error(`feishu[${account.accountId}]: failed to dispatch message: ${String(err)}`);
   }
 }

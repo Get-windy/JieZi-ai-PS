@@ -3,7 +3,10 @@ export { z };
 
 const DmPolicySchema = z.enum(["open", "pairing", "allowlist"]);
 const GroupPolicySchema = z.enum(["open", "allowlist", "disabled"]);
-const FeishuDomainSchema = z.enum(["feishu", "lark"]);
+const FeishuDomainSchema = z.union([
+  z.enum(["feishu", "lark"]),
+  z.string().url().startsWith("https://"),
+]);
 const FeishuConnectionModeSchema = z.enum(["websocket", "webhook"]);
 
 const ToolPolicySchema = z
@@ -80,11 +83,14 @@ export const FeishuGroupSchema = z
   })
   .strict();
 
-// 单个飞书账号的配置 Schema
-export const FeishuAccountSchema = z
+/**
+ * Per-account configuration.
+ * All fields are optional - missing fields inherit from top-level config.
+ */
+export const FeishuAccountConfigSchema = z
   .object({
-    name: z.string().optional(), // 账号显示名称
     enabled: z.boolean().optional(),
+    name: z.string().optional(), // Display name for this account
     appId: z.string().optional(),
     appSecret: z.string().optional(),
     encryptKey: z.string().optional(),
@@ -107,33 +113,18 @@ export const FeishuAccountSchema = z
     dms: z.record(z.string(), DmConfigSchema).optional(),
     textChunkLimit: z.number().int().positive().optional(),
     chunkMode: z.enum(["length", "newline"]).optional(),
-    blockStreaming: z.boolean().optional(),
-    streaming: z.boolean().optional(),
     blockStreamingCoalesce: BlockStreamingCoalesceSchema,
     mediaMaxMb: z.number().positive().optional(),
-    responsePrefix: z.string().optional(),
     heartbeat: ChannelHeartbeatVisibilitySchema,
     renderMode: RenderModeSchema,
     tools: FeishuToolsConfigSchema,
   })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (value.dmPolicy === "open") {
-      const allowFrom = value.allowFrom ?? [];
-      const hasWildcard = allowFrom.some((entry) => String(entry).trim() === "*");
-      if (!hasWildcard) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["allowFrom"],
-          message: 'dmPolicy="open" requires allowFrom to include "*"',
-        });
-      }
-    }
-  });
+  .strict();
 
 export const FeishuConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
+    // Top-level credentials (backward compatible for single-account mode)
     appId: z.string().optional(),
     appSecret: z.string().optional(),
     encryptKey: z.string().optional(),
@@ -156,16 +147,13 @@ export const FeishuConfigSchema = z
     dms: z.record(z.string(), DmConfigSchema).optional(),
     textChunkLimit: z.number().int().positive().optional(),
     chunkMode: z.enum(["length", "newline"]).optional(),
-    blockStreaming: z.boolean().optional(),
-    streaming: z.boolean().optional(),
     blockStreamingCoalesce: BlockStreamingCoalesceSchema,
     mediaMaxMb: z.number().positive().optional(),
-    responsePrefix: z.string().optional(),
     heartbeat: ChannelHeartbeatVisibilitySchema,
     renderMode: RenderModeSchema, // raw = plain text (default), card = interactive card with markdown
     tools: FeishuToolsConfigSchema,
-    // 多账号支持
-    accounts: z.record(z.string(), FeishuAccountSchema.optional()).optional(),
+    // Multi-account configuration
+    accounts: z.record(z.string(), FeishuAccountConfigSchema.optional()).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {

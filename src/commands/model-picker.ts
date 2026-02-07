@@ -12,7 +12,7 @@ import {
   resolveConfiguredModelRef,
 } from "../agents/model-selection.js";
 import { formatTokenK } from "./models/shared.js";
-import { t } from "../i18n/index.js";
+import { OPENAI_CODEX_DEFAULT_MODEL } from "./openai-codex-model-default.js";
 
 const KEEP_VALUE = "__keep__";
 const MANUAL_VALUE = "__manual__";
@@ -89,10 +89,10 @@ async function promptManualModel(params: {
   initialValue?: string;
 }): Promise<PromptDefaultModelResult> {
   const modelInput = await params.prompter.text({
-    message: params.allowBlank ? t('wizard.model.blank_to_keep') : t('wizard.model.default'),
+    message: params.allowBlank ? "Default model (blank to keep)" : "Default model",
     initialValue: params.initialValue,
-    placeholder: t('wizard.model.placeholder'),
-    validate: params.allowBlank ? undefined : (value) => (value?.trim() ? undefined : t('wizard.model.required')),
+    placeholder: "provider/model",
+    validate: params.allowBlank ? undefined : (value) => (value?.trim() ? undefined : "Required"),
   });
   const model = String(modelInput ?? "").trim();
   if (!model) {
@@ -162,9 +162,9 @@ export async function promptDefaultModel(
     !hasPreferredProvider && providers.length > 1 && models.length > PROVIDER_FILTER_THRESHOLD;
   if (shouldPromptProvider) {
     const selection = await params.prompter.select({
-      message: t('wizard.model.filter_provider'),
+      message: "Filter models by provider",
       options: [
-        { value: "*", label: t('wizard.model.all_providers') },
+        { value: "*", label: "All providers" },
         ...providers.map((provider) => {
           const count = models.filter((entry) => entry.provider === provider).length;
           return {
@@ -203,14 +203,14 @@ export async function promptDefaultModel(
     options.push({
       value: KEEP_VALUE,
       label: configuredRaw
-        ? `${t('wizard.model.keep_current')} (${configuredRaw})`
-        : `${t('wizard.model.keep_current')} (${t('wizard.model.default')}: ${resolvedKey})`,
+        ? `Keep current (${configuredRaw})`
+        : `Keep current (default: ${resolvedKey})`,
       hint:
-        configuredRaw && configuredRaw !== resolvedKey ? `${t('wizard.model.hint.resolves_to')} ${resolvedKey}` : undefined,
+        configuredRaw && configuredRaw !== resolvedKey ? `resolves to ${resolvedKey}` : undefined,
     });
   }
   if (includeManual) {
-    options.push({ value: MANUAL_VALUE, label: t('wizard.model.enter_manually') });
+    options.push({ value: MANUAL_VALUE, label: "Enter model manually" });
   }
 
   const seen = new Set<string>();
@@ -244,7 +244,7 @@ export async function promptDefaultModel(
       hints.push(`alias: ${aliases.join(", ")}`);
     }
     if (!hasAuth(entry.provider)) {
-      hints.push(t('wizard.model.hint.auth_missing'));
+      hints.push("auth missing");
     }
     options.push({
       value: key,
@@ -262,7 +262,7 @@ export async function promptDefaultModel(
     options.push({
       value: configuredKey,
       label: configuredKey,
-      hint: t('wizard.model.hint.current_not_in_catalog'),
+      hint: "current (not in catalog)",
     });
   }
 
@@ -280,7 +280,7 @@ export async function promptDefaultModel(
   }
 
   const selection = await params.prompter.select({
-    message: params.message ?? t('wizard.model.default'),
+    message: params.message ?? "Default model",
     options,
     initialValue,
   });
@@ -332,7 +332,7 @@ export async function promptModelAllowlist(params: {
         params.message ??
         "Allowlist models (comma-separated provider/model; blank to keep current)",
       initialValue: existingKeys.join(", "),
-      placeholder: "openai-codex/gpt-5.2, anthropic/claude-opus-4-5",
+      placeholder: `${OPENAI_CODEX_DEFAULT_MODEL}, anthropic/claude-opus-4-6`,
     });
     const parsed = String(raw ?? "")
       .split(",")
@@ -393,7 +393,7 @@ export async function promptModelAllowlist(params: {
       hints.push(`alias: ${aliases.join(", ")}`);
     }
     if (!hasAuth(entry.provider)) {
-      hints.push(t('wizard.model.hint.auth_missing'));
+      hints.push("auth missing");
     }
     options.push({
       value: key,

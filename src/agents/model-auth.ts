@@ -213,7 +213,7 @@ export async function resolveApiKeyForProvider(params: {
     const hasCodex = listProfilesForProvider(store, "openai-codex").length > 0;
     if (hasCodex) {
       throw new Error(
-        'No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.2 (ChatGPT OAuth) or set OPENAI_API_KEY for openai/gpt-5.2.',
+        'No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.3-codex (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.1-codex.',
       );
     }
   }
@@ -287,6 +287,7 @@ export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
   const envMap: Record<string, string> = {
     openai: "OPENAI_API_KEY",
     google: "GEMINI_API_KEY",
+    voyage: "VOYAGE_API_KEY",
     groq: "GROQ_API_KEY",
     deepgram: "DEEPGRAM_API_KEY",
     cerebras: "CEREBRAS_API_KEY",
@@ -301,15 +302,8 @@ export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
     venice: "VENICE_API_KEY",
     mistral: "MISTRAL_API_KEY",
     opencode: "OPENCODE_API_KEY",
-    // 国内模型提供商
-    deepseek: "DEEPSEEK_API_KEY",
-    baidu: "QIANFAN_ACCESS_KEY",
-    doubao: "ARK_API_KEY",
-    tencent: "HUNYUAN_API_KEY",
-    xinghuo: "SPARK_API_KEY",
-    // 国际免费模型
-    siliconflow: "SILICONFLOW_API_KEY",
-    "together-ai": "TOGETHER_AI_API_KEY",
+    qianfan: "QIANFAN_API_KEY",
+    ollama: "OLLAMA_API_KEY",
   };
   const envVar = envMap[normalized];
   if (!envVar) {
