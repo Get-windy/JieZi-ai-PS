@@ -13,7 +13,7 @@ export const TAB_GROUPS = [
   { label: "nav.chat", tabs: ["chat"] },
   {
     label: "nav.control",
-    tabs: ["overview", "channels", "instances", "sessions", "cron"],
+    tabs: ["overview", "channels", "models", "instances", "sessions", "cron"],
   },
   { label: "nav.agent", tabs: ["agents", "skills", "nodes"] },
   { label: "nav.settings", tabs: ["bindings", "config", "debug", "logs"] },
@@ -23,6 +23,7 @@ export type Tab =
   | "agents"
   | "overview"
   | "channels"
+  | "models"
   | "instances"
   | "sessions"
   | "cron"
@@ -38,6 +39,7 @@ const TAB_PATHS: Record<Tab, string> = {
   agents: "/agents",
   overview: "/overview",
   channels: "/channels",
+  models: "/models",
   instances: "/instances",
   sessions: "/sessions",
   cron: "/cron",
@@ -141,6 +143,8 @@ export function iconForTab(tab: Tab): IconName {
       return "barChart";
     case "channels":
       return "link";
+    case "models":
+      return "brain";
     case "instances":
       return "radio";
     case "sessions":
@@ -172,6 +176,8 @@ export function titleForTab(tab: Tab) {
       return t("tab.overview");
     case "channels":
       return t("tab.channels");
+    case "models":
+      return t("models.title");
     case "instances":
       return t("tab.instances");
     case "sessions":
@@ -205,6 +211,8 @@ export function subtitleForTab(tab: Tab) {
       return t("tab.overview.subtitle");
     case "channels":
       return t("tab.channels.subtitle");
+    case "models":
+      return t("models.subtitle");
     case "instances":
       return t("tab.instances.subtitle");
     case "sessions":

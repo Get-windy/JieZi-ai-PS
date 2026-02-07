@@ -17,6 +17,7 @@ import { loadDebug } from "./controllers/debug.ts";
 import { loadDevices } from "./controllers/devices.ts";
 import { loadExecApprovals } from "./controllers/exec-approvals.ts";
 import { loadLogs } from "./controllers/logs.ts";
+import { loadModels } from "./controllers/models.js";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
 import { loadSessions } from "./controllers/sessions.ts";
@@ -175,6 +176,17 @@ export function setTab(host: SettingsHost, next: Tab) {
   } else {
     stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
   }
+  if (next === "models") {
+    // 切换到模型管理页面时，启动自动刷新
+    void import("./controllers/models.js").then(({ startModelsAutoRefresh }) => {
+      startModelsAutoRefresh(host as any);
+    });
+  } else {
+    // 离开模型管理页面时，停止自动刷新
+    void import("./controllers/models.js").then(({ stopModelsAutoRefresh }) => {
+      stopModelsAutoRefresh();
+    });
+  }
   void refreshActiveTab(host);
   syncUrlWithTab(host, next, false);
 }
@@ -199,6 +211,9 @@ export async function refreshActiveTab(host: SettingsHost) {
   }
   if (host.tab === "channels") {
     await loadChannelsTab(host);
+  }
+  if (host.tab === "models") {
+    await loadModelsTab(host);
   }
   if (host.tab === "instances") {
     await loadPresence(host as unknown as OpenClawApp);
@@ -434,6 +449,13 @@ export async function loadChannelsTab(host: SettingsHost) {
     loadConfigSchema(host as unknown as OpenClawApp),
     loadConfig(host as unknown as OpenClawApp),
   ]);
+}
+
+export async function loadModelsTab(host: SettingsHost) {
+  await Promise.all([loadModels(host as unknown as OpenClawApp, true)]);
+  setTimeout(() => {
+    void loadModels(host as unknown as OpenClawApp, false);
+  }, 200);
 }
 
 export async function loadCron(host: SettingsHost) {

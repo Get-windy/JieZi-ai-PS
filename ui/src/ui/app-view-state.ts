@@ -20,6 +20,7 @@ import type {
   HealthSnapshot,
   LogEntry,
   LogLevel,
+  ModelsStatusSnapshot,
   NostrProfile,
   PresenceEntry,
   SessionsListResult,
@@ -118,6 +119,77 @@ export type AppViewState = {
   debuggingChannel: { channelId: string; accountId?: string } | null;
   editingChannelGlobalConfig: string | null;
   configFormDirty: boolean;
+  // 模型管理状态（新架构）
+  modelsLoading: boolean;
+  modelsSnapshot: ModelsStatusSnapshot | null;
+  modelsError: string | null;
+  modelsLastSuccess: number | null;
+
+  // 认证管理状态
+  managingAuthProvider: string | null;
+  editingAuth: {
+    authId?: string;
+    provider: string;
+    name: string;
+    apiKey: string;
+    baseUrl?: string;
+  } | null;
+  viewingAuth: {
+    authId: string;
+    provider: string;
+  } | null;
+
+  // 模型列表状态
+  managingModelsProvider: string | null;
+
+  // 模型配置状态
+  editingModelConfig: {
+    configId?: string;
+    authId: string;
+    provider: string;
+    modelName: string;
+    nickname?: string;
+    enabled: boolean;
+    temperature?: number;
+    topP?: number;
+    maxTokens?: number;
+    frequencyPenalty?: number;
+    systemPrompt?: string;
+    conversationRounds?: number;
+    maxIterations?: number;
+    usageLimits?: {
+      maxRequestsPerDay?: number;
+      maxTokensPerRequest?: number;
+    };
+  } | null;
+
+  // 可导入模型列表状态
+  importableModels: Array<{
+    modelName: string;
+    isConfigured: boolean;
+    isEnabled: boolean;
+    isDeprecated: boolean;
+    configId?: string;
+  }> | null;
+  importingAuthId: string | null;
+  importingProvider: string | null;
+  selectedImportModels: Set<string>;
+
+  // 供应商管理状态
+  addingProvider: boolean;
+  viewingProviderId: string | null;
+  providerForm: {
+    selectedTemplateId: string | null;
+    id: string;
+    name: string;
+    icon: string;
+    website: string;
+    defaultBaseUrl: string;
+    apiKeyPlaceholder: string;
+    isEditing?: boolean;
+    originalId?: string;
+  } | null;
+
   presenceLoading: boolean;
   presenceEntries: PresenceEntry[];
   presenceError: string | null;
