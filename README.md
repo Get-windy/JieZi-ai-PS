@@ -76,6 +76,38 @@ If you're merging code from upstream or updating `package.json`, please be aware
 - ✅ **无需 WSL2 | No WSL2 required**: Windows 用户可以直接构建和运行 | Windows users can build and run natively
 - ✅ **TypeScript 编译器 | TypeScript compiler**: 默认使用 `tsc` 而非 `tsgo` | Uses `tsc` by default instead of `tsgo`
 
+### 📌 项目更新记录 | Project Update Log
+
+#### 2026年2月7日 - 上游同步更新 | 2026-02-07 - Upstream Sync (2026.2.6-3)
+
+**上游更新内容 | Upstream Updates:**
+
+- 🐛 **修复 | Fix**: BlueBubbles 和通道清理的全面修复 | Comprehensive BlueBubbles and channel cleanup (#11093)
+- 📦 **版本 | Version**: 更新至 2026.2.6-3 | Updated to 2026.2.6-3
+- ⚙️ **调整 | Adjustment**: xAI + Qianfan 供应商顺序优化 | xAI + Qianfan provider order optimization
+
+**本地改进 | Local Improvements:**
+
+- 🌐 **完善 Usage 页面国际化 | Enhanced Usage Page Internationalization**
+  - 新增星期标签翻译 | Added weekday translations (周日-周六 | Sun-Sat)
+  - 新增时间标签翻译 | Added time labels (凌晨4点/上午8点/下午4点/晚上8点 | 4am/8am/4pm/8pm)
+  - "Activity by Time" 完整中英文支持 | Full bilingual support for "Activity by Time"
+  - 时间活动分布图表全面汉化 | Complete localization of time activity charts
+- 🛡️ **保护本地特性 | Protected Local Features**
+  - 保留所有汉化文件 | Preserved all localized files (UI, config, docs)
+  - 保留 Windows PowerShell 兼容性改造 | Maintained Windows PowerShell compatibility
+  - 保留 `canvas:a2ui:bundle` 的 Node.js 脚本配置 | Kept Node.js script configuration for `canvas:a2ui:bundle`
+  - 保留 README 中英文对照文档 | Maintained bilingual README documentation
+- ✅ **合并策略 | Merge Strategy**: 自动合并成功，无冲突 | Automatic merge succeeded, no conflicts
+- 📊 **状态 | Status**: 已推送至 Gitee (origin) 和 GitHub (github) 仓库 | Pushed to both Gitee (origin) and GitHub (github) repositories
+
+**测试建议 | Testing Recommendations:**
+
+1. 验证 Usage 页面中英文切换功能 | Verify Usage page language switching
+2. 测试 Windows 环境下的项目构建 | Test project build on Windows
+3. 检查 BlueBubbles 通道功能 | Check BlueBubbles channel functionality
+4. 验证新增的 xAI 和 Qianfan 供应商配置 | Validate new xAI and Qianfan provider configurations
+
 ---
 
 ## 📖 项目简介 | Project Overview
