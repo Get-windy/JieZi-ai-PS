@@ -68,8 +68,22 @@ export function renderModels(
     });
 
   return html`
-    <!-- 添加供应商按钮 -->
-    <div style="margin-bottom: 24px; display: flex; justify-content: flex-end;">
+    <!-- 顶部操作栏 -->
+    <div style="margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+      <!-- 查看使用情况按钮 -->
+      <button
+        class="btn btn--sm"
+        style="font-size: 13px; padding: 8px 16px; display: inline-flex; align-items: center; gap: 6px;"
+        @click=${() => {
+          const baseP = window.location.pathname.split("/models")[0] || "";
+          window.location.href = `${baseP}/usage`;
+        }}
+        title=${t("models.view_usage")}
+      >
+        📊 ${t("models.view_usage")}
+      </button>
+      
+      <!-- 添加供应商按钮 -->
       <button 
         class="btn btn--primary" 
         style="font-size: 14px; padding: 10px 20px; background: #ff5c5c; border-color: #ff5c5c; color: #ffffff;"

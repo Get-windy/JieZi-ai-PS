@@ -1,4 +1,5 @@
 import { html, svg, nothing } from "lit";
+import { t } from "../i18n.ts";
 import { extractQueryTerms, filterSessionsByQuery, parseToolSummary } from "../usage-helpers.ts";
 
 // Inline styles for usage view (app uses light DOM, so static styles don't work)
@@ -776,6 +777,9 @@ const usageStylesString = `
     font-size: 12px;
     font-weight: 600;
     margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   .usage-insight-subtitle {
     font-size: 11px;
@@ -2284,7 +2288,15 @@ type UsageMosaicStats = {
   weekdayTotals: Array<{ label: string; tokens: number }>;
 };
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAYS = [
+  t("usage.weekday.sun"),
+  t("usage.weekday.mon"),
+  t("usage.weekday.tue"),
+  t("usage.weekday.wed"),
+  t("usage.weekday.thu"),
+  t("usage.weekday.fri"),
+  t("usage.weekday.sat"),
+];
 
 function getZonedHour(date: Date, zone: "local" | "utc"): number {
   return zone === "utc" ? date.getUTCHours() : date.getHours();
@@ -2372,12 +2384,12 @@ function renderUsageMosaic(
       <div class="card usage-mosaic">
         <div class="usage-mosaic-header">
           <div>
-            <div class="usage-mosaic-title">Activity by Time</div>
-            <div class="usage-mosaic-sub">Estimates require session timestamps.</div>
+            <div class="usage-mosaic-title">${t("usage.activity_by_time")}</div>
+            <div class="usage-mosaic-sub">${t("usage.estimates_require_timestamps")}</div>
           </div>
-          <div class="usage-mosaic-total">${formatTokens(0)} tokens</div>
+          <div class="usage-mosaic-total">${formatTokens(0)} ${t("usage.tokens_label")}</div>
         </div>
-        <div class="muted" style="padding: 12px; text-align: center;">No timeline data yet.</div>
+        <div class="muted" style="padding: 12px; text-align: center;">${t("usage.no_timeline_data")}</div>
       </div>
     `;
   }
@@ -2389,16 +2401,16 @@ function renderUsageMosaic(
     <div class="card usage-mosaic">
       <div class="usage-mosaic-header">
         <div>
-          <div class="usage-mosaic-title">Activity by Time</div>
+          <div class="usage-mosaic-title">${t("usage.activity_by_time")}</div>
           <div class="usage-mosaic-sub">
-            Estimated from session spans (first/last activity). Time zone: ${timeZone === "utc" ? "UTC" : "Local"}.
+            ${t("usage.activity_subtitle").replace("{zone}", timeZone === "utc" ? t("usage.timezone_utc") : t("usage.timezone_local"))}
           </div>
         </div>
-        <div class="usage-mosaic-total">${formatTokens(stats.totalTokens)} tokens</div>
+        <div class="usage-mosaic-total">${formatTokens(stats.totalTokens)} ${t("usage.tokens_label")}</div>
       </div>
       <div class="usage-mosaic-grid">
         <div class="usage-mosaic-section">
-          <div class="usage-mosaic-section-title">Day of Week</div>
+          <div class="usage-mosaic-section-title">${t("usage.day_of_week")}</div>
           <div class="usage-daypart-grid">
             ${stats.weekdayTotals.map((part) => {
               const intensity = Math.min(part.tokens / maxWeekday, 1);
@@ -2415,7 +2427,7 @@ function renderUsageMosaic(
         </div>
         <div class="usage-mosaic-section">
           <div class="usage-mosaic-section-title">
-            <span>Hours</span>
+            <span>${t("usage.hours")}</span>
             <span class="usage-mosaic-sub">0 → 23</span>
           </div>
           <div class="usage-hour-grid">
@@ -2436,16 +2448,16 @@ function renderUsageMosaic(
             })}
           </div>
           <div class="usage-hour-labels">
-            <span>Midnight</span>
-            <span>4am</span>
-            <span>8am</span>
-            <span>Noon</span>
-            <span>4pm</span>
-            <span>8pm</span>
+            <span>${t("usage.midnight")}</span>
+            <span>${t("usage.4am")}</span>
+            <span>${t("usage.8am")}</span>
+            <span>${t("usage.noon")}</span>
+            <span>${t("usage.4pm")}</span>
+            <span>${t("usage.8pm")}</span>
           </div>
           <div class="usage-hour-legend">
             <span></span>
-            Low → High token density
+            ${t("usage.token_density")}
           </div>
         </div>
       </div>
@@ -3215,8 +3227,8 @@ function renderDailyChartCompact(
   if (!daily.length) {
     return html`
       <div class="daily-chart-compact">
-        <div class="sessions-panel-title">Daily Usage</div>
-        <div class="muted" style="padding: 20px; text-align: center">No data</div>
+        <div class="sessions-panel-title">${t("usage.daily_usage")}</div>
+        <div class="muted" style="padding: 20px; text-align: center">${t("usage.no_data")}</div>
       </div>
     `;
   }
@@ -3237,16 +3249,16 @@ function renderDailyChartCompact(
             class="toggle-btn ${dailyChartMode === "total" ? "active" : ""}"
             @click=${() => onDailyChartModeChange("total")}
           >
-            Total
+            ${t("usage.total_tab")}
           </button>
           <button
             class="toggle-btn ${dailyChartMode === "by-type" ? "active" : ""}"
             @click=${() => onDailyChartModeChange("by-type")}
           >
-            By Type
+            ${t("usage.by_type_tab")}
           </button>
         </div>
-        <div class="card-title">Daily ${isTokenMode ? "Token" : "Cost"} Usage</div>
+        <div class="card-title">${isTokenMode ? t("usage.daily_token_usage_title") : t("usage.daily_cost_usage_title")}</div>
       </div>
       <div class="daily-chart">
         <div class="daily-chart-bars" style="--bar-max-width: ${barMaxWidth}px">
@@ -3278,16 +3290,16 @@ function renderDailyChartCompact(
               dailyChartMode === "by-type"
                 ? isTokenMode
                   ? [
-                      `Output ${formatTokens(d.output)}`,
-                      `Input ${formatTokens(d.input)}`,
-                      `Cache write ${formatTokens(d.cacheWrite)}`,
-                      `Cache read ${formatTokens(d.cacheRead)}`,
+                      `${t("usage.output")} ${formatTokens(d.output)}`,
+                      `${t("usage.input")} ${formatTokens(d.input)}`,
+                      `${t("usage.cache_write")} ${formatTokens(d.cacheWrite)}`,
+                      `${t("usage.cache_read")} ${formatTokens(d.cacheRead)}`,
                     ]
                   : [
-                      `Output ${formatCost(d.outputCost ?? 0)}`,
-                      `Input ${formatCost(d.inputCost ?? 0)}`,
-                      `Cache write ${formatCost(d.cacheWriteCost ?? 0)}`,
-                      `Cache read ${formatCost(d.cacheReadCost ?? 0)}`,
+                      `${t("usage.output")} ${formatCost(d.outputCost ?? 0)}`,
+                      `${t("usage.input")} ${formatCost(d.inputCost ?? 0)}`,
+                      `${t("usage.cache_write")} ${formatCost(d.cacheWriteCost ?? 0)}`,
+                      `${t("usage.cache_read")} ${formatCost(d.cacheReadCost ?? 0)}`,
                     ]
                 : [];
             const totalLabel = isTokenMode ? formatTokens(d.totalTokens) : formatCost(d.totalCost);
@@ -3354,7 +3366,7 @@ function renderCostBreakdownCompact(totals: UsageTotals, mode: "tokens" | "cost"
 
   return html`
     <div class="cost-breakdown cost-breakdown-compact">
-      <div class="cost-breakdown-header">${isTokenMode ? "Tokens" : "Cost"} by Type</div>
+      <div class="cost-breakdown-header">${isTokenMode ? t("usage.tokens_by_type_title") : t("usage.cost_by_type_title")}</div>
       <div class="cost-breakdown-bar">
         <div class="cost-segment output" style="width: ${(isTokenMode ? tokenPcts.output : breakdown.output.pct).toFixed(1)}%"
           title="Output: ${isTokenMode ? formatTokens(totals.output) : formatCost(breakdown.output.cost)}"></div>
@@ -3366,13 +3378,13 @@ function renderCostBreakdownCompact(totals: UsageTotals, mode: "tokens" | "cost"
           title="Cache Read: ${isTokenMode ? formatTokens(totals.cacheRead) : formatCost(breakdown.cacheRead.cost)}"></div>
       </div>
       <div class="cost-breakdown-legend">
-        <span class="legend-item"><span class="legend-dot output"></span>Output ${isTokenMode ? formatTokens(totals.output) : formatCost(breakdown.output.cost)}</span>
-        <span class="legend-item"><span class="legend-dot input"></span>Input ${isTokenMode ? formatTokens(totals.input) : formatCost(breakdown.input.cost)}</span>
-        <span class="legend-item"><span class="legend-dot cache-write"></span>Cache Write ${isTokenMode ? formatTokens(totals.cacheWrite) : formatCost(breakdown.cacheWrite.cost)}</span>
-        <span class="legend-item"><span class="legend-dot cache-read"></span>Cache Read ${isTokenMode ? formatTokens(totals.cacheRead) : formatCost(breakdown.cacheRead.cost)}</span>
+        <span class="legend-item"><span class="legend-dot output"></span>${t("usage.output")} ${isTokenMode ? formatTokens(totals.output) : formatCost(breakdown.output.cost)}</span>
+        <span class="legend-item"><span class="legend-dot input"></span>${t("usage.input")} ${isTokenMode ? formatTokens(totals.input) : formatCost(breakdown.input.cost)}</span>
+        <span class="legend-item"><span class="legend-dot cache-write"></span>${t("usage.cache_write")} ${isTokenMode ? formatTokens(totals.cacheWrite) : formatCost(breakdown.cacheWrite.cost)}</span>
+        <span class="legend-item"><span class="legend-dot cache-read"></span>${t("usage.cache_read")} ${isTokenMode ? formatTokens(totals.cacheRead) : formatCost(breakdown.cacheRead.cost)}</span>
       </div>
       <div class="cost-breakdown-total">
-        Total: ${isTokenMode ? formatTokens(totals.totalTokens) : formatCost(totals.totalCost)}
+        ${t("usage.total_label")}: ${isTokenMode ? formatTokens(totals.totalTokens) : formatCost(totals.totalCost)}
       </div>
     </div>
   `;
@@ -3382,10 +3394,27 @@ function renderInsightList(
   title: string,
   items: Array<{ label: string; value: string; sub?: string }>,
   emptyLabel: string,
+  actionButton?: { label: string; onClick: () => void },
 ) {
   return html`
     <div class="usage-insight-card">
-      <div class="usage-insight-title">${title}</div>
+      <div class="usage-insight-title">
+        ${title}
+        ${
+          actionButton
+            ? html`
+          <button
+            class="btn btn-sm"
+            style="margin-left: auto; font-size: 12px; padding: 2px 8px;"
+            @click=${actionButton.onClick}
+            title=${actionButton.label}
+          >
+            ${actionButton.label}
+          </button>
+        `
+            : nothing
+        }
+      </div>
       ${
         items.length === 0
           ? html`<div class="muted">${emptyLabel}</div>`
@@ -3406,6 +3435,110 @@ function renderInsightList(
             `
       }
     </div>
+  `;
+}
+
+/**
+ * 渲染成本洞察与优化建议卡片
+ */
+function renderCostInsights(
+  totals: UsageTotals | null,
+  aggregates: UsageAggregates,
+  stats: UsageInsightStats,
+  cacheHitRate: number,
+) {
+  if (!totals || aggregates.messages.total === 0) {
+    return nothing;
+  }
+
+  const insights: Array<{ type: "warning" | "info" | "success"; title: string; message: string }> =
+    [];
+
+  // 1. 检测高成本模型
+  const topModel = aggregates.byModel[0];
+  if (topModel && topModel.totals.totalCost > totals.totalCost * 0.5) {
+    insights.push({
+      type: "warning",
+      title: t("usage.high_cost_model"),
+      message: `${topModel.model ?? "unknown"} 账户总成本的 ${((topModel.totals.totalCost / totals.totalCost) * 100).toFixed(0)}%。${t("usage.consider_alternatives")}`,
+    });
+  }
+
+  // 2. 缓存优化机会
+  if (cacheHitRate < 0.3 && totals.input > 1000) {
+    insights.push({
+      type: "info",
+      title: t("usage.cache_optimization"),
+      message: t("usage.low_cache_hint"),
+    });
+  }
+
+  // 3. 高错误率警告
+  const errorRate = stats.errorRate;
+  if (errorRate > 0.05) {
+    insights.push({
+      type: "warning",
+      title: t("usage.error_rate_warning"),
+      message: t("usage.error_rate_hint"),
+    });
+  }
+
+  // 4. Token 效率分析
+  const avgTokens = aggregates.messages.total
+    ? Math.round(totals.totalTokens / aggregates.messages.total)
+    : 0;
+  if (avgTokens > 5000) {
+    insights.push({
+      type: "info",
+      title: t("usage.token_efficiency"),
+      message: `${t("usage.avg_tokens_per_message")}: ${formatTokens(avgTokens)}。考虑使用更精简的提示词或较小的模型。`,
+    });
+  }
+
+  if (insights.length === 0) {
+    return nothing;
+  }
+
+  return html`
+    <section class="card" style="margin-top: 16px; border-left: 3px solid var(--accent);">
+      <div class="card-title" style="display: flex; align-items: center; gap: 8px;">
+        💡 ${t("usage.cost_insights")}
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
+        ${insights.map(
+          (insight) => html`
+            <div
+              style="
+                padding: 12px 16px;
+                border-radius: 8px;
+                background: ${
+                  insight.type === "warning"
+                    ? "rgba(255, 77, 77, 0.1)"
+                    : insight.type === "success"
+                      ? "rgba(16, 185, 129, 0.1)"
+                      : "rgba(59, 130, 246, 0.1)"
+                };
+                border-left: 3px solid ${
+                  insight.type === "warning"
+                    ? "#ff4d4d"
+                    : insight.type === "success"
+                      ? "#10b981"
+                      : "#3b82f6"
+                };
+              "
+            >
+              <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px;">
+                ${insight.type === "warning" ? "⚠️" : insight.type === "success" ? "✅" : "ℹ️"}
+                ${insight.title}
+              </div>
+              <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
+                ${insight.message}
+              </div>
+            </div>
+          `,
+        )}
+      </div>
+    </section>
   `;
 }
 
@@ -3468,13 +3601,11 @@ function renderUsageInsights(
       ? `${formatCost(stats.throughputCostPerMin, 4)} / min`
       : "—";
   const avgDurationLabel = stats.durationCount > 0 ? formatDurationShort(stats.avgDurationMs) : "—";
-  const cacheHint = "Cache hit rate = cache read / (input + cache read). Higher is better.";
-  const errorHint = "Error rate = errors / total messages. Lower is better.";
-  const throughputHint = "Throughput shows tokens per minute over active time. Higher is better.";
-  const tokensHint = "Average tokens per message in this range.";
-  const costHint = showCostHint
-    ? "Average cost per message when providers report costs. Cost data is missing for some or all sessions in this range."
-    : "Average cost per message when providers report costs.";
+  const cacheHint = t("usage.cache_hit_hint");
+  const errorHint = t("usage.error_rate_formula_hint");
+  const throughputHint = t("usage.throughput_hint");
+  const tokensHint = t("usage.avg_tokens_hint");
+  const costHint = showCostHint ? t("usage.avg_cost_hint_missing") : t("usage.avg_cost_hint");
 
   const errorDays = aggregates.daily
     .filter((day) => day.messages > 0 && day.errors > 0)
@@ -3494,17 +3625,17 @@ function renderUsageInsights(
   const topModels = aggregates.byModel.slice(0, 5).map((entry) => ({
     label: entry.model ?? "unknown",
     value: formatCost(entry.totals.totalCost),
-    sub: `${formatTokens(entry.totals.totalTokens)} · ${entry.count} msgs`,
+    sub: `${formatTokens(entry.totals.totalTokens)} · ${entry.count} ${t("usage.msgs")}`,
   }));
   const topProviders = aggregates.byProvider.slice(0, 5).map((entry) => ({
     label: entry.provider ?? "unknown",
     value: formatCost(entry.totals.totalCost),
-    sub: `${formatTokens(entry.totals.totalTokens)} · ${entry.count} msgs`,
+    sub: `${formatTokens(entry.totals.totalTokens)} · ${entry.count} ${t("usage.msgs")}`,
   }));
   const topTools = aggregates.tools.tools.slice(0, 6).map((tool) => ({
     label: tool.name,
     value: `${tool.count}`,
-    sub: "calls",
+    sub: t("usage.calls"),
   }));
   const topAgents = aggregates.byAgent.slice(0, 5).map((entry) => ({
     label: entry.agentId,
@@ -3518,62 +3649,65 @@ function renderUsageInsights(
   }));
 
   return html`
+    <!-- 成本洞察与优化建议 -->
+    ${renderCostInsights(totals, aggregates, stats, cacheHitRate)}
+    
     <section class="card" style="margin-top: 16px;">
-      <div class="card-title">Usage Overview</div>
+      <div class="card-title">${t("usage.usage_overview")}</div>
       <div class="usage-summary-grid">
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            Messages
-            <span class="usage-summary-hint" title="Total user + assistant messages in range.">?</span>
+            ${t("usage.messages")}
+            <span class="usage-summary-hint" title="${t("usage.messages_hint")}">?</span>
           </div>
           <div class="usage-summary-value">${aggregates.messages.total}</div>
           <div class="usage-summary-sub">
-            ${aggregates.messages.user} user · ${aggregates.messages.assistant} assistant
+            ${aggregates.messages.user} ${t("usage.user")} · ${aggregates.messages.assistant} ${t("usage.assistant")}
           </div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            Tool Calls
-            <span class="usage-summary-hint" title="Total tool call count across sessions.">?</span>
+            ${t("usage.tool_calls")}
+            <span class="usage-summary-hint" title="${t("usage.tool_calls_hint")}">?</span>
           </div>
           <div class="usage-summary-value">${aggregates.tools.totalCalls}</div>
-          <div class="usage-summary-sub">${aggregates.tools.uniqueTools} tools used</div>
+          <div class="usage-summary-sub">${aggregates.tools.uniqueTools} ${t("usage.tools_used")}</div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            Errors
-            <span class="usage-summary-hint" title="Total message/tool errors in range.">?</span>
+            ${t("usage.errors")}
+            <span class="usage-summary-hint" title="${t("usage.errors_hint")}">?</span>
           </div>
           <div class="usage-summary-value">${aggregates.messages.errors}</div>
-          <div class="usage-summary-sub">${aggregates.messages.toolResults} tool results</div>
+          <div class="usage-summary-sub">${aggregates.messages.toolResults} ${t("usage.tool_results")}</div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            Avg Tokens / Msg
+            ${t("usage.avg_tokens_msg")}
             <span class="usage-summary-hint" title=${tokensHint}>?</span>
           </div>
           <div class="usage-summary-value">${formatTokens(avgTokens)}</div>
-          <div class="usage-summary-sub">Across ${aggregates.messages.total || 0} messages</div>
+          <div class="usage-summary-sub">${t("usage.across_messages").replace("{count}", String(aggregates.messages.total || 0))}</div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            Avg Cost / Msg
+            ${t("usage.avg_cost_msg")}
             <span class="usage-summary-hint" title=${costHint}>?</span>
           </div>
           <div class="usage-summary-value">${formatCost(avgCost, 4)}</div>
-          <div class="usage-summary-sub">${formatCost(totals.totalCost)} total</div>
+          <div class="usage-summary-sub">${formatCost(totals.totalCost)} ${t("usage.total")}</div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            Sessions
-            <span class="usage-summary-hint" title="Distinct sessions in the range.">?</span>
+            ${t("usage.sessions")}
+            <span class="usage-summary-hint" title="${t("usage.sessions_hint")}">?</span>
           </div>
           <div class="usage-summary-value">${sessionCount}</div>
-          <div class="usage-summary-sub">of ${totalSessions} in range</div>
+          <div class="usage-summary-sub">${t("usage.of_in_range").replace("{count}", String(totalSessions))}</div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            Throughput
+            ${t("usage.throughput")}
             <span class="usage-summary-hint" title=${throughputHint}>?</span>
           </div>
           <div class="usage-summary-value">${throughputLabel}</div>
@@ -3581,33 +3715,102 @@ function renderUsageInsights(
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            Error Rate
+            ${t("usage.error_rate")}
             <span class="usage-summary-hint" title=${errorHint}>?</span>
           </div>
           <div class="usage-summary-value ${errorRatePct > 5 ? "bad" : errorRatePct > 1 ? "warn" : "good"}">${errorRatePct.toFixed(2)}%</div>
           <div class="usage-summary-sub">
-            ${aggregates.messages.errors} errors · ${avgDurationLabel} avg session
+            ${aggregates.messages.errors} ${t("usage.errors_count")} · ${avgDurationLabel} ${t("usage.avg_session")}
           </div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            Cache Hit Rate
+            ${t("usage.cache_hit_rate")}
             <span class="usage-summary-hint" title=${cacheHint}>?</span>
           </div>
           <div class="usage-summary-value ${cacheHitRate > 0.6 ? "good" : cacheHitRate > 0.3 ? "warn" : "bad"}">${cacheHitLabel}</div>
           <div class="usage-summary-sub">
-            ${formatTokens(totals.cacheRead)} cached · ${formatTokens(cacheBase)} prompt
+            ${formatTokens(totals.cacheRead)} ${t("usage.cached")} · ${formatTokens(cacheBase)} ${t("usage.prompt")}
           </div>
         </div>
       </div>
       <div class="usage-insights-grid">
-        ${renderInsightList("Top Models", topModels, "No model data")}
-        ${renderInsightList("Top Providers", topProviders, "No provider data")}
-        ${renderInsightList("Top Tools", topTools, "No tool calls")}
-        ${renderInsightList("Top Agents", topAgents, "No agent data")}
-        ${renderInsightList("Top Channels", topChannels, "No channel data")}
-        ${renderPeakErrorList("Peak Error Days", errorDays, "No error data")}
-        ${renderPeakErrorList("Peak Error Hours", errorHours, "No error data")}
+        ${renderInsightList(t("usage.top_models"), topModels, t("usage.no_model_data"), {
+          label: t("usage.view_model_config"),
+          onClick: () => {
+            // Navigate to models page
+            const baseP = window.location.pathname.split("/usage")[0] || "";
+            window.location.href = `${baseP}/models`;
+          },
+        })}
+        ${renderInsightList(t("usage.top_providers"), topProviders, t("usage.no_provider_data"), {
+          label: t("usage.go_to_models"),
+          onClick: () => {
+            const baseP = window.location.pathname.split("/usage")[0] || "";
+            window.location.href = `${baseP}/models`;
+          },
+        })}
+        ${renderInsightList(t("usage.top_tools"), topTools, t("usage.no_tool_calls"))}
+        ${renderInsightList(t("usage.top_agents"), topAgents, t("usage.no_agent_data"))}
+        ${renderInsightList(t("usage.top_channels"), topChannels, t("usage.no_channel_data"))}
+        ${renderPeakErrorList(t("usage.peak_error_days"), errorDays, t("usage.no_error_data"))}
+        ${renderPeakErrorList(t("usage.peak_error_hours"), errorHours, t("usage.no_error_data"))}
+      </div>
+    </section>
+    
+    <!-- 供应商和模型分组详情 -->
+    <section class="card" style="margin-top: 16px;">
+      <div class="card-title">
+        ${t("usage.provider_breakdown")} & ${t("usage.model_breakdown")}
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 16px;">
+        <!-- 供应商分组 -->
+        <div style="background: var(--bg-secondary); border-radius: 8px; padding: 16px;">
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-strong);">
+            ${t("usage.provider_breakdown")}
+          </div>
+          <div class="usage-list">
+            ${aggregates.byProvider.map(
+              (entry, index) => html`
+                <div class="usage-list-item" style="padding: 8px 0; ${index === 0 ? "border-top: 1px solid var(--border);" : ""}">
+                  <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+                    <span style="font-weight: 500;">${entry.provider ?? "unknown"}</span>
+                    <span style="font-size: 11px; color: var(--text-muted);">
+                      ${formatTokens(entry.totals.totalTokens)} · ${entry.count} ${t("usage.messages_count")}
+                    </span>
+                  </div>
+                  <span style="font-weight: 600; color: var(--accent);">
+                    ${formatCost(entry.totals.totalCost)}
+                  </span>
+                </div>
+              `,
+            )}
+          </div>
+        </div>
+        
+        <!-- 模型分组 -->
+        <div style="background: var(--bg-secondary); border-radius: 8px; padding: 16px;">
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-strong);">
+            ${t("usage.model_breakdown")}
+          </div>
+          <div class="usage-list" style="max-height: 400px; overflow-y: auto;">
+            ${aggregates.byModel.map(
+              (entry, index) => html`
+                <div class="usage-list-item" style="padding: 8px 0; ${index === 0 ? "border-top: 1px solid var(--border);" : ""}">
+                  <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+                    <span style="font-weight: 500;">${entry.model ?? "unknown"}</span>
+                    <span style="font-size: 11px; color: var(--text-muted);">
+                      ${entry.provider ? `${entry.provider} · ` : ""}${formatTokens(entry.totals.totalTokens)} · ${entry.count} ${t("usage.messages_count")}
+                    </span>
+                  </div>
+                  <span style="font-weight: 600; color: var(--accent);">
+                    ${formatCost(entry.totals.totalCost)}
+                  </span>
+                </div>
+              `,
+            )}
+          </div>
+        </div>
       </div>
     </section>
   `;
@@ -3731,46 +3934,46 @@ function renderSessionsCard(
   return html`
     <div class="card sessions-card">
       <div class="sessions-card-header">
-        <div class="card-title">Sessions</div>
+        <div class="card-title">${t("usage.sessions")}</div>
         <div class="sessions-card-count">
-          ${sessions.length} shown${totalSessions !== sessions.length ? ` · ${totalSessions} total` : ""}
+          ${sessions.length} ${t("usage.shown")}${totalSessions !== sessions.length ? ` · ${totalSessions} ${t("usage.total")}` : ""}
         </div>
       </div>
       <div class="sessions-card-meta">
         <div class="sessions-card-stats">
-          <span>${isTokenMode ? formatTokens(avgValue) : formatCost(avgValue)} avg</span>
-          <span>${totalErrors} errors</span>
+          <span>${isTokenMode ? formatTokens(avgValue) : formatCost(avgValue)} ${t("usage.sessions_avg").replace("{count}", "")}</span>
+          <span>${totalErrors} ${t("usage.errors_count")}</span>
         </div>
         <div class="chart-toggle small">
           <button
             class="toggle-btn ${sessionsTab === "all" ? "active" : ""}"
             @click=${() => onSessionsTabChange("all")}
           >
-            All
+            ${t("usage.all_tab")}
           </button>
           <button
             class="toggle-btn ${sessionsTab === "recent" ? "active" : ""}"
             @click=${() => onSessionsTabChange("recent")}
           >
-            Recently viewed
+            ${t("usage.recently_viewed")}
           </button>
         </div>
         <label class="sessions-sort">
-          <span>Sort</span>
+          <span>${t("usage.sort")}</span>
           <select
             @change=${(e: Event) => onSessionSortChange((e.target as HTMLSelectElement).value as typeof sessionSort)}
           >
-            <option value="cost" ?selected=${sessionSort === "cost"}>Cost</option>
-            <option value="errors" ?selected=${sessionSort === "errors"}>Errors</option>
-            <option value="messages" ?selected=${sessionSort === "messages"}>Messages</option>
-            <option value="recent" ?selected=${sessionSort === "recent"}>Recent</option>
-            <option value="tokens" ?selected=${sessionSort === "tokens"}>Tokens</option>
+            <option value="cost" ?selected=${sessionSort === "cost"}>${t("usage.sort_cost")}</option>
+            <option value="errors" ?selected=${sessionSort === "errors"}>${t("usage.sort_errors")}</option>
+            <option value="messages" ?selected=${sessionSort === "messages"}>${t("usage.sort_messages")}</option>
+            <option value="recent" ?selected=${sessionSort === "recent"}>${t("usage.sort_recent")}</option>
+            <option value="tokens" ?selected=${sessionSort === "tokens"}>${t("usage.sort_tokens")}</option>
           </select>
         </label>
         <button
           class="btn btn-sm sessions-action-btn icon"
           @click=${() => onSessionSortDirChange(sessionSortDir === "desc" ? "asc" : "desc")}
-          title=${sessionSortDir === "desc" ? "Descending" : "Ascending"}
+          title=${sessionSortDir === "desc" ? t("usage.descending") : t("usage.ascending")}
         >
           ${sessionSortDir === "desc" ? "↓" : "↑"}
         </button>
@@ -3778,7 +3981,7 @@ function renderSessionsCard(
           selectedCount > 0
             ? html`
                 <button class="btn btn-sm sessions-action-btn sessions-clear-btn" @click=${onClearSessions}>
-                  Clear Selection
+                  ${t("usage.clear_selection")}
                 </button>
               `
             : nothing
@@ -3788,7 +3991,7 @@ function renderSessionsCard(
         sessionsTab === "recent"
           ? recentEntries.length === 0
             ? html`
-                <div class="muted" style="padding: 20px; text-align: center">No recent sessions</div>
+                <div class="muted" style="padding: 20px; text-align: center">${t("usage.no_recent_sessions")}</div>
               `
             : html`
                 <div class="session-bars" style="max-height: 220px; margin-top: 6px;">
@@ -3811,13 +4014,13 @@ function renderSessionsCard(
                         <div class="session-bar-actions">
                           <button
                             class="session-copy-btn"
-                            title="Copy session name"
+                            title="${t("usage.copy")}"
                             @click=${(e: MouseEvent) => {
                               e.stopPropagation();
                               void copySessionName(s);
                             }}
                           >
-                            Copy
+                            ${t("usage.copy")}
                           </button>
                           <div class="session-bar-value">${isTokenMode ? formatTokens(value) : formatCost(value)}</div>
                         </div>
@@ -3828,7 +4031,7 @@ function renderSessionsCard(
               `
           : sessions.length === 0
             ? html`
-                <div class="muted" style="padding: 20px; text-align: center">No sessions in range</div>
+                <div class="muted" style="padding: 20px; text-align: center">${t("usage.no_sessions_shown")}</div>
               `
             : html`
                 <div class="session-bars">
@@ -3852,13 +4055,13 @@ function renderSessionsCard(
                         <div class="session-bar-actions">
                           <button
                             class="session-copy-btn"
-                            title="Copy session name"
+                            title="${t("usage.copy")}"
                             @click=${(e: MouseEvent) => {
                               e.stopPropagation();
                               void copySessionName(s);
                             }}
                           >
-                            Copy
+                            ${t("usage.copy")}
                           </button>
                           <div class="session-bar-value">${isTokenMode ? formatTokens(value) : formatCost(value)}</div>
                         </div>
@@ -3893,13 +4096,13 @@ function renderSessionsCard(
                         <div class="session-bar-actions">
                           <button
                             class="session-copy-btn"
-                            title="Copy session name"
+                            title="${t("usage.copy")}"
                             @click=${(e: MouseEvent) => {
                               e.stopPropagation();
                               void copySessionName(s);
                             }}
                           >
-                            Copy
+                            ${t("usage.copy")}
                           </button>
                           <div class="session-bar-value">${isTokenMode ? formatTokens(value) : formatCost(value)}</div>
                         </div>
@@ -4095,7 +4298,7 @@ function renderTimeSeriesCompact(
   if (!timeSeries || timeSeries.points.length < 2) {
     return html`
       <div class="session-timeseries-compact">
-        <div class="muted" style="padding: 20px; text-align: center">No timeline data</div>
+        <div class="muted" style="padding: 20px; text-align: center">${t("usage.no_timeline_data")}</div>
       </div>
     `;
   }
@@ -4234,10 +4437,10 @@ function renderTimeSeriesCompact(
             `${formatTokens(val)} tokens`,
           ];
           if (breakdownByType) {
-            tooltipLines.push(`Output ${formatTokens(p.output)}`);
-            tooltipLines.push(`Input ${formatTokens(p.input)}`);
-            tooltipLines.push(`Cache write ${formatTokens(p.cacheWrite)}`);
-            tooltipLines.push(`Cache read ${formatTokens(p.cacheRead)}`);
+            tooltipLines.push(`${t("usage.output")} ${formatTokens(p.output)}`);
+            tooltipLines.push(`${t("usage.input")} ${formatTokens(p.input)}`);
+            tooltipLines.push(`${t("usage.cache_write")} ${formatTokens(p.cacheWrite)}`);
+            tooltipLines.push(`${t("usage.cache_read")} ${formatTokens(p.cacheRead)}`);
           }
           const tooltip = tooltipLines.join(" · ");
           if (!breakdownByType) {
@@ -4267,7 +4470,7 @@ function renderTimeSeriesCompact(
         breakdownByType
           ? html`
               <div style="margin-top: 8px;">
-                <div class="card-title" style="font-size: 12px; margin-bottom: 6px;">Tokens by Type</div>
+                <div class="card-title" style="font-size: 12px; margin-bottom: 6px;">${t("usage.tokens_by_type_title")}</div>
                 <div class="cost-breakdown-bar" style="height: 18px;">
                   <div class="cost-segment output" style="width: ${pct(sumOutput, totalTypeTokens).toFixed(1)}%"></div>
                   <div class="cost-segment input" style="width: ${pct(sumInput, totalTypeTokens).toFixed(1)}%"></div>
@@ -4276,19 +4479,19 @@ function renderTimeSeriesCompact(
                 </div>
                 <div class="cost-breakdown-legend">
                   <div class="legend-item" title="Assistant output tokens">
-                    <span class="legend-dot output"></span>Output ${formatTokens(sumOutput)}
+                    <span class="legend-dot output"></span>${t("usage.output")} ${formatTokens(sumOutput)}
                   </div>
                   <div class="legend-item" title="User + tool input tokens">
-                    <span class="legend-dot input"></span>Input ${formatTokens(sumInput)}
+                    <span class="legend-dot input"></span>${t("usage.input")} ${formatTokens(sumInput)}
                   </div>
                   <div class="legend-item" title="Tokens written to cache">
-                    <span class="legend-dot cache-write"></span>Cache Write ${formatTokens(sumCacheWrite)}
+                    <span class="legend-dot cache-write"></span>${t("usage.cache_write")} ${formatTokens(sumCacheWrite)}
                   </div>
                   <div class="legend-item" title="Tokens read from cache">
-                    <span class="legend-dot cache-read"></span>Cache Read ${formatTokens(sumCacheRead)}
+                    <span class="legend-dot cache-read"></span>${t("usage.cache_read")} ${formatTokens(sumCacheRead)}
                   </div>
                 </div>
-                <div class="cost-breakdown-total">Total: ${formatTokens(totalTypeTokens)}</div>
+                <div class="cost-breakdown-total">${t("usage.total_label")}: ${formatTokens(totalTypeTokens)}</div>
               </div>
             `
           : nothing
@@ -4651,7 +4854,7 @@ export function renderUsage(props: UsageProps) {
         <div class="row" style="justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
           <div style="flex: 1; min-width: 250px;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 2px;">
-              <div class="card-title" style="margin: 0;">Token Usage</div>
+              <div class="card-title" style="margin: 0;">${t("usage.token_usage")}</div>
               <span style="
                 display: inline-flex;
                 align-items: center;
@@ -4670,14 +4873,14 @@ export function renderUsage(props: UsageProps) {
                   border-radius: 50%;
                   animation: initial-spin 0.6s linear infinite;
                 "></span>
-                Loading
+                ${t("usage.loading")}
               </span>
             </div>
           </div>
           <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
             <div style="display: flex; gap: 8px; align-items: center;">
               <input type="date" .value=${props.startDate} disabled style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 13px; opacity: 0.6;" />
-              <span style="color: var(--text-muted);">to</span>
+              <span style="color: var(--text-muted);">${t("usage.date_to")}</span>
               <input type="date" .value=${props.endDate} disabled style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 13px; opacity: 0.6;" />
             </div>
           </div>
@@ -4933,9 +5136,9 @@ export function renderUsage(props: UsageProps) {
           0
       : false);
   const datePresets = [
-    { label: "Today", days: 1 },
-    { label: "7d", days: 7 },
-    { label: "30d", days: 30 },
+    { label: t("usage.preset_today"), days: 1 },
+    { label: t("usage.preset_7d"), days: 7 },
+    { label: t("usage.preset_30d"), days: 30 },
   ];
   const applyPreset = (days: number) => {
     const end = new Date();
@@ -4977,7 +5180,7 @@ export function renderUsage(props: UsageProps) {
             selectedCount > 0
               ? html`<span class="usage-filter-badge">${selectedCount}</span>`
               : html`
-                  <span class="usage-filter-badge">All</span>
+                  <span class="usage-filter-badge">${t("usage.filter_all")}</span>
                 `
           }
         </summary>
@@ -4992,7 +5195,7 @@ export function renderUsage(props: UsageProps) {
               }}
               ?disabled=${allSelected}
             >
-              Select All
+              ${t("usage.select_all")}
             </button>
             <button
               class="btn btn-sm"
@@ -5003,7 +5206,7 @@ export function renderUsage(props: UsageProps) {
               }}
               ?disabled=${selectedCount === 0}
             >
-              Clear
+              ${t("usage.clear")}
             </button>
           </div>
           <div class="usage-filter-options">
@@ -5039,25 +5242,25 @@ export function renderUsage(props: UsageProps) {
     <style>${usageStylesString}</style>
 
     <section class="usage-page-header">
-      <div class="usage-page-title">Usage</div>
-      <div class="usage-page-subtitle">See where tokens go, when sessions spike, and what drives cost.</div>
+      <div class="usage-page-title">${t("usage.page_title")}</div>
+      <div class="usage-page-subtitle">${t("usage.page_subtitle")}</div>
     </section>
 
     <section class="card usage-header ${props.headerPinned ? "pinned" : ""}">
       <div class="usage-header-row">
         <div class="usage-header-title">
-          <div class="card-title" style="margin: 0;">Filters</div>
+          <div class="card-title" style="margin: 0;">${t("usage.filters_title")}</div>
           ${
             props.loading
               ? html`
-                  <span class="usage-refresh-indicator">Loading</span>
+                  <span class="usage-refresh-indicator">${t("usage.loading")}</span>
                 `
               : nothing
           }
           ${
             isEmpty
               ? html`
-                  <span class="usage-query-hint">Select a date range and click Refresh to load usage.</span>
+                  <span class="usage-query-hint">${t("usage.select_date_hint")}</span>
                 `
               : nothing
           }
@@ -5067,24 +5270,24 @@ export function renderUsage(props: UsageProps) {
             displayTotals
               ? html`
                 <span class="usage-metric-badge">
-                  <strong>${formatTokens(displayTotals.totalTokens)}</strong> tokens
+                  <strong>${formatTokens(displayTotals.totalTokens)}</strong> ${t("usage.tokens_badge")}
                 </span>
                 <span class="usage-metric-badge">
-                  <strong>${formatCost(displayTotals.totalCost)}</strong> cost
+                  <strong>${formatCost(displayTotals.totalCost)}</strong> ${t("usage.cost_badge")}
                 </span>
                 <span class="usage-metric-badge">
                   <strong>${displaySessionCount}</strong>
-                  session${displaySessionCount !== 1 ? "s" : ""}
+                  ${displaySessionCount !== 1 ? t("usage.sessions_badge_plural") : t("usage.sessions_badge")}
                 </span>
               `
               : nothing
           }
           <button
             class="usage-pin-btn ${props.headerPinned ? "active" : ""}"
-            title=${props.headerPinned ? "Unpin filters" : "Pin filters"}
+            title=${props.headerPinned ? t("usage.unpin_filters") : t("usage.pin_filters")}
             @click=${props.onToggleHeaderPinned}
           >
-            ${props.headerPinned ? "Pinned" : "Pin"}
+            ${props.headerPinned ? t("usage.pinned") : t("usage.pin")}
           </button>
           <details
             class="usage-export-menu"
@@ -5103,7 +5306,7 @@ export function renderUsage(props: UsageProps) {
               window.addEventListener("click", onClick, true);
             }}
           >
-            <summary class="usage-export-button">Export ▾</summary>
+            <summary class="usage-export-button">${t("usage.export")} ▾</summary>
             <div class="usage-export-popover">
               <div class="usage-export-list">
                 <button
@@ -5183,7 +5386,7 @@ export function renderUsage(props: UsageProps) {
             title="Start Date"
             @change=${(e: Event) => props.onStartDateChange((e.target as HTMLInputElement).value)}
           />
-          <span style="color: var(--text-muted);">to</span>
+          <span style="color: var(--text-muted);">${t("usage.date_to")}</span>
           <input
             type="date"
             .value=${props.endDate}
@@ -5196,21 +5399,21 @@ export function renderUsage(props: UsageProps) {
             @change=${(e: Event) =>
               props.onTimeZoneChange((e.target as HTMLSelectElement).value as "local" | "utc")}
           >
-            <option value="local">Local</option>
-            <option value="utc">UTC</option>
+            <option value="local">${t("usage.timezone_local")}</option>
+            <option value="utc">${t("usage.timezone_utc")}</option>
           </select>
           <div class="chart-toggle">
             <button
               class="toggle-btn ${isTokenMode ? "active" : ""}"
               @click=${() => props.onChartModeChange("tokens")}
             >
-              Tokens
+              ${t("usage.mode_tokens")}
             </button>
             <button
               class="toggle-btn ${!isTokenMode ? "active" : ""}"
               @click=${() => props.onChartModeChange("cost")}
             >
-              Cost
+              ${t("usage.mode_cost")}
             </button>
           </div>
           <button
@@ -5218,7 +5421,7 @@ export function renderUsage(props: UsageProps) {
             @click=${props.onRefresh}
             ?disabled=${props.loading}
           >
-            Refresh
+            ${t("usage.refresh")}
           </button>
         </div>
         
@@ -5230,7 +5433,7 @@ export function renderUsage(props: UsageProps) {
             class="usage-query-input"
             type="text"
             .value=${props.queryDraft}
-            placeholder="Filter sessions (e.g. key:agent:main:cron* model:gpt-4o has:errors minTokens:2000)"
+            placeholder="${t("usage.filter_placeholder")}"
             @input=${(e: Event) => props.onQueryDraftChange((e.target as HTMLInputElement).value)}
             @keydown=${(e: KeyboardEvent) => {
               if (e.key === "Enter") {
@@ -5245,30 +5448,32 @@ export function renderUsage(props: UsageProps) {
               @click=${props.onApplyQuery}
               ?disabled=${props.loading || (!hasDraftQuery && !hasQuery)}
             >
-              Filter (client-side)
+              ${t("usage.filter_client_side")}
             </button>
             ${
               hasDraftQuery || hasQuery
-                ? html`<button class="btn btn-sm usage-action-btn usage-secondary-btn" @click=${props.onClearQuery}>Clear</button>`
+                ? html`<button class="btn btn-sm usage-action-btn usage-secondary-btn" @click=${props.onClearQuery}>${t("usage.clear")}</button>`
                 : nothing
             }
             <span class="usage-query-hint">
               ${
                 hasQuery
-                  ? `${filteredSessions.length} of ${totalSessions} sessions match`
-                  : `${totalSessions} sessions in range`
+                  ? t("usage.sessions_match")
+                      .replace("{filtered}", String(filteredSessions.length))
+                      .replace("{total}", String(totalSessions))
+                  : t("usage.sessions_in_range_count").replace("{count}", String(totalSessions))
               }
             </span>
           </div>
         </div>
         <div class="usage-filter-row">
-          ${renderFilterSelect("agent", "Agent", agentOptions)}
-          ${renderFilterSelect("channel", "Channel", channelOptions)}
-          ${renderFilterSelect("provider", "Provider", providerOptions)}
-          ${renderFilterSelect("model", "Model", modelOptions)}
-          ${renderFilterSelect("tool", "Tool", toolOptions)}
+          ${renderFilterSelect("agent", t("usage.filter_agent"), agentOptions)}
+          ${renderFilterSelect("channel", t("usage.filter_channel"), channelOptions)}
+          ${renderFilterSelect("provider", t("usage.filter_provider"), providerOptions)}
+          ${renderFilterSelect("model", t("usage.filter_model"), modelOptions)}
+          ${renderFilterSelect("tool", t("usage.filter_tools"), toolOptions)}
           <span class="usage-query-hint">
-            Tip: use filters or click bars to filter days.
+            ${t("usage.tip_use_filters")}
           </span>
         </div>
         ${

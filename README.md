@@ -21,6 +21,63 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="MIT License"></a>
 </p>
 
+---
+
+## ⚠️ Windows 用户重要提示 | Important Notice for Windows Users
+
+**本项目已完全适配 Windows 环境，无需 bash 或 WSL2！**
+**This project is fully adapted for Windows environments - no bash or WSL2 required!**
+
+### 关键改动说明 | Critical Adaptation Details
+
+如果你从上游项目合并代码或更新 `package.json`，请注意以下问题：
+If you're merging code from upstream or updating `package.json`, please be aware of the following:
+
+**问题 | Problem**:
+
+- 原项目的 `package.json` 中 `canvas:a2ui:bundle` 脚本使用了 `bash scripts/bundle-a2ui.sh`
+- The original project's `package.json` uses `bash scripts/bundle-a2ui.sh` in the `canvas:a2ui:bundle` script
+- Windows 系统没有原生 bash 命令，会导致构建失败
+- Windows systems don't have native bash command, which causes build failures
+
+**解决方案 | Solution**:
+
+- ✅ 本项目已提供 **Node.js 版本的脚本**：`scripts/bundle-a2ui.mjs`
+- ✅ This project provides a **Node.js version of the script**: `scripts/bundle-a2ui.mjs`
+- ✅ 所有构建命令已改为使用纯 JavaScript/TypeScript 实现
+- ✅ All build commands have been converted to pure JavaScript/TypeScript implementation
+- ✅ **直接在 PowerShell 中运行，无需任何额外配置**
+- ✅ **Run directly in PowerShell without any additional configuration**
+
+**正确的 package.json 配置 | Correct package.json configuration**:
+
+```json
+{
+  "scripts": {
+    "canvas:a2ui:bundle": "node scripts/bundle-a2ui.mjs"
+  }
+}
+```
+
+**错误的配置（不要使用）| Incorrect configuration (do NOT use)**:
+
+```json
+{
+  "scripts": {
+    "canvas:a2ui:bundle": "bash scripts/bundle-a2ui.sh" // ❌ Windows 不支持 | Not supported on Windows
+  }
+}
+```
+
+### Windows 兼容性保证 | Windows Compatibility Guarantee
+
+- ✅ **PowerShell 原生支持 | Native PowerShell support**: 所有命令在 PowerShell 7+ 中完美运行 | All commands work perfectly in PowerShell 7+
+- ✅ **跨平台脚本 | Cross-platform scripts**: `scripts/bundle-a2ui.mjs` 替代了 `scripts/bundle-a2ui.sh` | `scripts/bundle-a2ui.mjs` replaces `scripts/bundle-a2ui.sh`
+- ✅ **无需 WSL2 | No WSL2 required**: Windows 用户可以直接构建和运行 | Windows users can build and run natively
+- ✅ **TypeScript 编译器 | TypeScript compiler**: 默认使用 `tsc` 而非 `tsgo` | Uses `tsc` by default instead of `tsgo`
+
+---
+
 ## 📖 项目简介 | Project Overview
 
 **OpenClaw** 是一个运行在你自己设备上的**个人 AI 助手**。
@@ -467,7 +524,7 @@ openclaw gateway
 - [Nix mode](https://docs.openclaw.ai/install/nix) for declarative config; [Docker](https://docs.openclaw.ai/install/docker)-based installs.
 - [Doctor](https://docs.openclaw.ai/gateway/doctor) migrations, [logging](https://docs.openclaw.ai/logging).
 
-## How it works (short)
+## 工作原理（简版） | How it works (short)
 
 ```
 
@@ -476,135 +533,142 @@ WhatsApp / Telegram / Slack / Discord / Google Chat / Signal / iMessage / BlueBu
 ▼
 ┌───────────────────────────────┐
 │ Gateway │
-│ (control plane) │
+│ (control plane / 控制平面) │
 │ ws://127.0.0.1:18789 │
 └──────────────┬────────────────┘
 │
-├─ Pi agent (RPC)
-├─ CLI (openclaw …)
-├─ WebChat UI
-├─ macOS app
-└─ iOS / Android nodes
+├─ Pi agent (RPC / 智能体)
+├─ CLI (openclaw … / 命令行)
+├─ WebChat UI (网页聊天)
+├─ macOS app (macOS 应用)
+└─ iOS / Android nodes (节点)
 
 ````
 
-## Key subsystems
+## 核心子系统 | Key subsystems
 
-- **[Gateway WebSocket network](https://docs.openclaw.ai/concepts/architecture)** — single WS control plane for clients, tools, and events (plus ops: [Gateway runbook](https://docs.openclaw.ai/gateway)).
-- **[Tailscale exposure](https://docs.openclaw.ai/gateway/tailscale)** — Serve/Funnel for the Gateway dashboard + WS (remote access: [Remote](https://docs.openclaw.ai/gateway/remote)).
-- **[Browser control](https://docs.openclaw.ai/tools/browser)** — openclaw‑managed Chrome/Chromium with CDP control.
-- **[Canvas + A2UI](https://docs.openclaw.ai/platforms/mac/canvas)** — agent‑driven visual workspace (A2UI host: [Canvas/A2UI](https://docs.openclaw.ai/platforms/mac/canvas#canvas-a2ui)).
-- **[Voice Wake](https://docs.openclaw.ai/nodes/voicewake) + [Talk Mode](https://docs.openclaw.ai/nodes/talk)** — always‑on speech and continuous conversation.
-- **[Nodes](https://docs.openclaw.ai/nodes)** — Canvas, camera snap/clip, screen record, `location.get`, notifications, plus macOS‑only `system.run`/`system.notify`.
+- **[Gateway WebSocket 网络 | network](https://docs.openclaw.ai/concepts/architecture)** — 面向客户端、工具和事件的单一 WS 控制平面 | single WS control plane for clients, tools, and events（运维：[Gateway 运行手册 | runbook](https://docs.openclaw.ai/gateway)）
+- **[Tailscale 暴露 | exposure](https://docs.openclaw.ai/gateway/tailscale)** — Gateway 仪表板 + WS 的 Serve/Funnel（远程访问：[远程 | Remote](https://docs.openclaw.ai/gateway/remote)）
+- **[浏览器控制 | Browser control](https://docs.openclaw.ai/tools/browser)** — OpenClaw 管理的 Chrome/Chromium，支持 CDP 控制 | openclaw-managed Chrome/Chromium with CDP control
+- **[Canvas + A2UI](https://docs.openclaw.ai/platforms/mac/canvas)** — 智能体驱动的视觉工作空间 | agent-driven visual workspace（A2UI 主机：[Canvas/A2UI](https://docs.openclaw.ai/platforms/mac/canvas#canvas-a2ui)）
+- **[语音唤醒 | Voice Wake](https://docs.openclaw.ai/nodes/voicewake) + [对话模式 | Talk Mode](https://docs.openclaw.ai/nodes/talk)** — 全天候语音和连续对话 | always-on speech and continuous conversation
+- **[节点功能 | Nodes](https://docs.openclaw.ai/nodes)** — Canvas、相机拍照/录像、屏幕录制、`location.get`、通知，以及 macOS 独占的 `system.run`/`system.notify` | Canvas, camera snap/clip, screen record, `location.get`, notifications, plus macOS-only `system.run`/`system.notify`
 
-## Tailscale access (Gateway dashboard)
+## Tailscale 访问（Gateway 仪表板） | Tailscale access (Gateway dashboard)
 
+OpenClaw 可以自动配置 Tailscale **Serve**（仅 tailnet）或 **Funnel**（公开），同时 Gateway 保持绑定到回环。配置 `gateway.tailscale.mode`：
 OpenClaw can auto-configure Tailscale **Serve** (tailnet-only) or **Funnel** (public) while the Gateway stays bound to loopback. Configure `gateway.tailscale.mode`:
 
-- `off`: no Tailscale automation (default).
-- `serve`: tailnet-only HTTPS via `tailscale serve` (uses Tailscale identity headers by default).
-- `funnel`: public HTTPS via `tailscale funnel` (requires shared password auth).
+- `off`: 无 Tailscale 自动化（默认）| no Tailscale automation (default)
+- `serve`: 仅 tailnet HTTPS，通过 `tailscale serve`（默认使用 Tailscale 身份头）| tailnet-only HTTPS via `tailscale serve` (uses Tailscale identity headers by default)
+- `funnel`: 公开 HTTPS，通过 `tailscale funnel`（需要共享密码认证）| public HTTPS via `tailscale funnel` (requires shared password auth)
 
-Notes:
+**注意事项 | Notes:**
 
-- `gateway.bind` must stay `loopback` when Serve/Funnel is enabled (OpenClaw enforces this).
-- Serve can be forced to require a password by setting `gateway.auth.mode: "password"` or `gateway.auth.allowTailscale: false`.
-- Funnel refuses to start unless `gateway.auth.mode: "password"` is set.
-- Optional: `gateway.tailscale.resetOnExit` to undo Serve/Funnel on shutdown.
+- 当启用 Serve/Funnel 时，`gateway.bind` 必须保持为 `loopback`（OpenClaw 强制执行）| `gateway.bind` must stay `loopback` when Serve/Funnel is enabled (OpenClaw enforces this)
+- 可以通过设置 `gateway.auth.mode: "password"` 或 `gateway.auth.allowTailscale: false` 强制 Serve 需要密码 | Serve can be forced to require a password by setting `gateway.auth.mode: "password"` or `gateway.auth.allowTailscale: false`
+- Funnel 拒绝启动，除非设置了 `gateway.auth.mode: "password"` | Funnel refuses to start unless `gateway.auth.mode: "password"` is set
+- 可选：`gateway.tailscale.resetOnExit` 在关闭时撤销 Serve/Funnel | Optional: `gateway.tailscale.resetOnExit` to undo Serve/Funnel on shutdown
 
-Details: [Tailscale guide](https://docs.openclaw.ai/gateway/tailscale) · [Web surfaces](https://docs.openclaw.ai/web)
+**详细信息 | Details:** [Tailscale 指南 | guide](https://docs.openclaw.ai/gateway/tailscale) · [网页界面 | Web surfaces](https://docs.openclaw.ai/web)
 
-## Remote Gateway (Linux is great)
+## 远程 Gateway（Linux 很棒） | Remote Gateway (Linux is great)
 
-It’s perfectly fine to run the Gateway on a small Linux instance. Clients (macOS app, CLI, WebChat) can connect over **Tailscale Serve/Funnel** or **SSH tunnels**, and you can still pair device nodes (macOS/iOS/Android) to execute device‑local actions when needed.
+在小型 Linux 实例上运行 Gateway 完全可行。客户端（macOS 应用、CLI、WebChat）可以通过 **Tailscale Serve/Funnel** 或 **SSH 隧道**连接，并且你仍然可以配对设备节点（macOS/iOS/Android）来执行设备本地操作。
+It's perfectly fine to run the Gateway on a small Linux instance. Clients (macOS app, CLI, WebChat) can connect over **Tailscale Serve/Funnel** or **SSH tunnels**, and you can still pair device nodes (macOS/iOS/Android) to execute device-local actions when needed.
 
-- **Gateway host** runs the exec tool and channel connections by default.
-- **Device nodes** run device‑local actions (`system.run`, camera, screen recording, notifications) via `node.invoke`.
-  In short: exec runs where the Gateway lives; device actions run where the device lives.
+- **Gateway 主机 | host** 默认运行 exec 工具和通道连接 | runs the exec tool and channel connections by default
+- **设备节点 | Device nodes** 通过 `node.invoke` 运行设备本地操作（`system.run`、相机、屏幕录制、通知）| run device-local actions (`system.run`, camera, screen recording, notifications) via `node.invoke`
+  简而言之：exec 在 Gateway 所在地运行；设备操作在设备所在地运行。| In short: exec runs where the Gateway lives; device actions run where the device lives.
 
-Details: [Remote access](https://docs.openclaw.ai/gateway/remote) · [Nodes](https://docs.openclaw.ai/nodes) · [Security](https://docs.openclaw.ai/gateway/security)
+**详细信息 | Details:** [远程访问 | Remote access](https://docs.openclaw.ai/gateway/remote) · [节点 | Nodes](https://docs.openclaw.ai/nodes) · [安全 | Security](https://docs.openclaw.ai/gateway/security)
 
-## macOS permissions via the Gateway protocol
+## macOS 权限（通过 Gateway 协议） | macOS permissions via the Gateway protocol
 
+macOS 应用可以以 **节点模式**运行，并通过 Gateway WebSocket（`node.list` / `node.describe`）通告其功能 + 权限映射。然后客户端可以通过 `node.invoke` 执行本地操作：
 The macOS app can run in **node mode** and advertises its capabilities + permission map over the Gateway WebSocket (`node.list` / `node.describe`). Clients can then execute local actions via `node.invoke`:
 
-- `system.run` runs a local command and returns stdout/stderr/exit code; set `needsScreenRecording: true` to require screen-recording permission (otherwise you’ll get `PERMISSION_MISSING`).
-- `system.notify` posts a user notification and fails if notifications are denied.
-- `canvas.*`, `camera.*`, `screen.record`, and `location.get` are also routed via `node.invoke` and follow TCC permission status.
+- `system.run` 运行本地命令并返回 stdout/stderr/退出代码；设置 `needsScreenRecording: true` 需要屏幕录制权限（否则会得到 `PERMISSION_MISSING`）| runs a local command and returns stdout/stderr/exit code; set `needsScreenRecording: true` to require screen-recording permission (otherwise you'll get `PERMISSION_MISSING`)
+- `system.notify` 发送用户通知，如果通知被拒绝则失败 | posts a user notification and fails if notifications are denied
+- `canvas.*`、`camera.*`、`screen.record` 和 `location.get` 也通过 `node.invoke` 路由，并遵循 TCC 权限状态 | are also routed via `node.invoke` and follow TCC permission status
 
-Elevated bash (host permissions) is separate from macOS TCC:
+**提升权限 bash（主机权限）与 macOS TCC 是独立的 | Elevated bash (host permissions) is separate from macOS TCC:**
 
-- Use `/elevated on|off` to toggle per‑session elevated access when enabled + allowlisted.
-- Gateway persists the per‑session toggle via `sessions.patch` (WS method) alongside `thinkingLevel`, `verboseLevel`, `model`, `sendPolicy`, and `groupActivation`.
+- 使用 `/elevated on|off` 在启用 + 白名单时切换每会话提升访问 | Use `/elevated on|off` to toggle per-session elevated access when enabled + allowlisted
+- Gateway 通过 `sessions.patch`（WS 方法）持久化每会话切换，与 `thinkingLevel`、`verboseLevel`、`model`、`sendPolicy` 和 `groupActivation` 一起 | Gateway persists the per-session toggle via `sessions.patch` (WS method) alongside `thinkingLevel`, `verboseLevel`, `model`, `sendPolicy`, and `groupActivation`
 
-Details: [Nodes](https://docs.openclaw.ai/nodes) · [macOS app](https://docs.openclaw.ai/platforms/macos) · [Gateway protocol](https://docs.openclaw.ai/concepts/architecture)
+**详细信息 | Details:** [节点 | Nodes](https://docs.openclaw.ai/nodes) · [macOS 应用 | app](https://docs.openclaw.ai/platforms/macos) · [Gateway 协议 | protocol](https://docs.openclaw.ai/concepts/architecture)
 
-## Agent to Agent (sessions\_\* tools)
+## 智能体间协作（sessions_* 工具） | Agent to Agent (sessions_* tools)
 
-- Use these to coordinate work across sessions without jumping between chat surfaces.
-- `sessions_list` — discover active sessions (agents) and their metadata.
-- `sessions_history` — fetch transcript logs for a session.
-- `sessions_send` — message another session; optional reply‑back ping‑pong + announce step (`REPLY_SKIP`, `ANNOUNCE_SKIP`).
+- 使用这些工具在会话之间协调工作，无需在聊天界面之间跳转 | Use these to coordinate work across sessions without jumping between chat surfaces
+- `sessions_list` — 发现活跃的会话（智能体）及其元数据 | discover active sessions (agents) and their metadata
+- `sessions_history` — 获取会话的对话记录 | fetch transcript logs for a session
+- `sessions_send` — 向另一个会话发送消息；可选回复 ping-pong + 通知步骤（`REPLY_SKIP`、`ANNOUNCE_SKIP`）| message another session; optional reply-back ping-pong + announce step (`REPLY_SKIP`, `ANNOUNCE_SKIP`)
 
-Details: [Session tools](https://docs.openclaw.ai/concepts/session-tool)
+**详细信息 | Details:** [会话工具 | Session tools](https://docs.openclaw.ai/concepts/session-tool)
 
-## Skills registry (ClawHub)
+## 技能注册表（ClawHub） | Skills registry (ClawHub)
 
+ClawHub 是一个简洁的技能注册表。启用 ClawHub 后，智能体可以自动搜索技能并根据需要拉取新技能。
 ClawHub is a minimal skill registry. With ClawHub enabled, the agent can search for skills automatically and pull in new ones as needed.
 
 [ClawHub](https://clawhub.com)
 
-## Chat commands
+## 聊天命令 | Chat commands
 
+在 WhatsApp/Telegram/Slack/Google Chat/Microsoft Teams/WebChat 中发送这些命令（群组命令仅限所有者）：
 Send these in WhatsApp/Telegram/Slack/Google Chat/Microsoft Teams/WebChat (group commands are owner-only):
 
-- `/status` — compact session status (model + tokens, cost when available)
-- `/new` or `/reset` — reset the session
-- `/compact` — compact session context (summary)
-- `/think <level>` — off|minimal|low|medium|high|xhigh (GPT-5.2 + Codex models only)
-- `/verbose on|off`
-- `/usage off|tokens|full` — per-response usage footer
-- `/restart` — restart the gateway (owner-only in groups)
-- `/activation mention|always` — group activation toggle (groups only)
+- `/status` — 简洁的会话状态（模型 + tokens，可用时显示成本）| compact session status (model + tokens, cost when available)
+- `/new` 或 `/reset` — 重置会话 | reset the session
+- `/compact` — 压缩会话上下文（总结）| compact session context (summary)
+- `/think <level>` — off|minimal|low|medium|high|xhigh（仅 GPT-5.2 + Codex 模型）| off|minimal|low|medium|high|xhigh (GPT-5.2 + Codex models only)
+- `/verbose on|off` — 详细模式开/关 | verbose mode on/off
+- `/usage off|tokens|full` — 每次响应的使用情况页脚 | per-response usage footer
+- `/restart` — 重启 gateway（群组中仅限所有者）| restart the gateway (owner-only in groups)
+- `/activation mention|always` — 群组激活切换（仅群组）| group activation toggle (groups only)
 
-## Apps (optional)
+## 应用程序（可选） | Apps (optional)
 
+单独的 Gateway 就能提供出色的体验。所有应用都是可选的，并增加额外功能。
 The Gateway alone delivers a great experience. All apps are optional and add extra features.
 
+如果你计划构建/运行配套应用，请遵循下面的平台运行手册。
 If you plan to build/run companion apps, follow the platform runbooks below.
 
-### macOS (OpenClaw.app) (optional)
+### macOS (OpenClaw.app)（可选） | macOS (OpenClaw.app) (optional)
 
-- Menu bar control for the Gateway and health.
-- Voice Wake + push-to-talk overlay.
-- WebChat + debug tools.
-- Remote gateway control over SSH.
+- 菜单栏控制 Gateway 和健康状态 | Menu bar control for the Gateway and health
+- 语音唤醒 + 按键说话覆盖层 | Voice Wake + push-to-talk overlay
+- WebChat + 调试工具 | WebChat + debug tools
+- 通过 SSH 远程控制 gateway | Remote gateway control over SSH
 
-Note: signed builds required for macOS permissions to stick across rebuilds (see `docs/mac/permissions.md`).
+**注意 | Note:** 需要签名构建，以便 macOS 权限在重新构建后保持（参见 `docs/mac/permissions.md`）| signed builds required for macOS permissions to stick across rebuilds (see `docs/mac/permissions.md`)
 
-### iOS node (optional)
+### iOS 节点（可选） | iOS node (optional)
 
-- Pairs as a node via the Bridge.
-- Voice trigger forwarding + Canvas surface.
-- Controlled via `openclaw nodes …`.
+- 通过 Bridge 配对为节点 | Pairs as a node via the Bridge
+- 语音触发转发 + Canvas 界面 | Voice trigger forwarding + Canvas surface
+- 通过 `openclaw nodes …` 控制 | Controlled via `openclaw nodes …`
 
-Runbook: [iOS connect](https://docs.openclaw.ai/platforms/ios).
+**运行手册 | Runbook:** [iOS 连接 | connect](https://docs.openclaw.ai/platforms/ios)
 
-### Android node (optional)
+### Android 节点（可选） | Android node (optional)
 
-- Pairs via the same Bridge + pairing flow as iOS.
-- Exposes Canvas, Camera, and Screen capture commands.
-- Runbook: [Android connect](https://docs.openclaw.ai/platforms/android).
+- 通过与 iOS 相同的 Bridge + 配对流程进行配对 | Pairs via the same Bridge + pairing flow as iOS
+- 暴露 Canvas、相机和屏幕捕获命令 | Exposes Canvas, Camera, and Screen capture commands
+- **运行手册 | Runbook:** [Android 连接 | connect](https://docs.openclaw.ai/platforms/android)
 
-## Agent workspace + skills
+## 智能体工作空间 + 技能 | Agent workspace + skills
 
-- Workspace root: `~/.openclaw/workspace` (configurable via `agents.defaults.workspace`).
-- Injected prompt files: `AGENTS.md`, `SOUL.md`, `TOOLS.md`.
-- Skills: `~/.openclaw/workspace/skills/<skill>/SKILL.md`.
+- **工作空间根目录 | Workspace root:** `~/.openclaw/workspace`（可通过 `agents.defaults.workspace` 配置 | configurable via `agents.defaults.workspace`）
+- **注入的提示文件 | Injected prompt files:** `AGENTS.md`, `SOUL.md`, `TOOLS.md`
+- **技能 | Skills:** `~/.openclaw/workspace/skills/<skill>/SKILL.md`
 
-## Configuration
+## 配置 | Configuration
 
-Minimal `~/.openclaw/openclaw.json` (model + defaults):
+**最小配置 | Minimal** `~/.openclaw/openclaw.json`（模型 + 默认值 | model + defaults）：
 
 ```json5
 {
@@ -614,26 +678,26 @@ Minimal `~/.openclaw/openclaw.json` (model + defaults):
 }
 ````
 
-[Full configuration reference (all keys + examples).](https://docs.openclaw.ai/gateway/configuration)
+[完整配置参考（所有键 + 示例）| Full configuration reference (all keys + examples)](https://docs.openclaw.ai/gateway/configuration)
 
-## Security model (important)
+## 安全模型（重要） | Security model (important)
 
-- **Default:** tools run on the host for the **main** session, so the agent has full access when it’s just you.
-- **Group/channel safety:** set `agents.defaults.sandbox.mode: "non-main"` to run **non‑main sessions** (groups/channels) inside per‑session Docker sandboxes; bash then runs in Docker for those sessions.
-- **Sandbox defaults:** allowlist `bash`, `process`, `read`, `write`, `edit`, `sessions_list`, `sessions_history`, `sessions_send`, `sessions_spawn`; denylist `browser`, `canvas`, `nodes`, `cron`, `discord`, `gateway`.
+- **默认情况 | Default:** 工具在主机上为 **main** 会话运行，因此当只有你自己时，智能体具有完全访问权限 | tools run on the host for the **main** session, so the agent has full access when it's just you
+- **群组/通道安全 | Group/channel safety:** 设置 `agents.defaults.sandbox.mode: "non-main"` 在每会话 Docker 沙盒中运行 **非 main 会话**（群组/通道）；然后 bash 在 Docker 中运行这些会话 | set `agents.defaults.sandbox.mode: "non-main"` to run **non-main sessions** (groups/channels) inside per-session Docker sandboxes; bash then runs in Docker for those sessions
+- **沙监默认配置 | Sandbox defaults:** 白名单 | allowlist `bash`, `process`, `read`, `write`, `edit`, `sessions_list`, `sessions_history`, `sessions_send`, `sessions_spawn`；黑名单 | denylist `browser`, `canvas`, `nodes`, `cron`, `discord`, `gateway`
 
-Details: [Security guide](https://docs.openclaw.ai/gateway/security) · [Docker + sandboxing](https://docs.openclaw.ai/install/docker) · [Sandbox config](https://docs.openclaw.ai/gateway/configuration)
+**详细信息 | Details:** [安全指南 | Security guide](https://docs.openclaw.ai/gateway/security) · [Docker + 沙监 | sandboxing](https://docs.openclaw.ai/install/docker) · [沙监配置 | Sandbox config](https://docs.openclaw.ai/gateway/configuration)
 
 ### [WhatsApp](https://docs.openclaw.ai/channels/whatsapp)
 
-- Link the device: `pnpm openclaw channels login` (stores creds in `~/.openclaw/credentials`).
-- Allowlist who can talk to the assistant via `channels.whatsapp.allowFrom`.
-- If `channels.whatsapp.groups` is set, it becomes a group allowlist; include `"*"` to allow all.
+- 链接设备 | Link the device: `pnpm openclaw channels login`（将凭据存储在 `~/.openclaw/credentials` | stores creds in `~/.openclaw/credentials`）
+- 通过 `channels.whatsapp.allowFrom` 白名单谁可以与助手对话 | Allowlist who can talk to the assistant via `channels.whatsapp.allowFrom`
+- 如果设置了 `channels.whatsapp.groups`，它就变成群组白名单；包含 `"*"` 允许所有 | If `channels.whatsapp.groups` is set, it becomes a group allowlist; include `"*"` to allow all
 
 ### [Telegram](https://docs.openclaw.ai/channels/telegram)
 
-- Set `TELEGRAM_BOT_TOKEN` or `channels.telegram.botToken` (env wins).
-- Optional: set `channels.telegram.groups` (with `channels.telegram.groups."*".requireMention`); when set, it is a group allowlist (include `"*"` to allow all). Also `channels.telegram.allowFrom` or `channels.telegram.webhookUrl` + `channels.telegram.webhookSecret` as needed.
+- 设置 | Set `TELEGRAM_BOT_TOKEN` 或 | or `channels.telegram.botToken`（环境变量优先 | env wins）
+- 可选 | Optional: 设置 | set `channels.telegram.groups`（带有 | with `channels.telegram.groups."*".requireMention`）；设置后，它是群组白名单（包含 `"*"` 允许所有）| when set, it is a group allowlist (include `"*"` to allow all)。还有 `channels.telegram.allowFrom` 或 `channels.telegram.webhookUrl` + `channels.telegram.webhookSecret` 根据需要 | Also `channels.telegram.allowFrom` or `channels.telegram.webhookUrl` + `channels.telegram.webhookSecret` as needed
 
 ```json5
 {
@@ -647,12 +711,12 @@ Details: [Security guide](https://docs.openclaw.ai/gateway/security) · [Docker 
 
 ### [Slack](https://docs.openclaw.ai/channels/slack)
 
-- Set `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN` (or `channels.slack.botToken` + `channels.slack.appToken`).
+- 设置 | Set `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN`（或 | or `channels.slack.botToken` + `channels.slack.appToken`）
 
 ### [Discord](https://docs.openclaw.ai/channels/discord)
 
-- Set `DISCORD_BOT_TOKEN` or `channels.discord.token` (env wins).
-- Optional: set `commands.native`, `commands.text`, or `commands.useAccessGroups`, plus `channels.discord.dm.allowFrom`, `channels.discord.guilds`, or `channels.discord.mediaMaxMb` as needed.
+- 设置 | Set `DISCORD_BOT_TOKEN` 或 | or `channels.discord.token`（环境变量优先 | env wins）
+- 可选 | Optional: 设置 | set `commands.native`, `commands.text`, 或 | or `commands.useAccessGroups`，以及 | plus `channels.discord.dm.allowFrom`, `channels.discord.guilds`, 或 | or `channels.discord.mediaMaxMb` 根据需要 | as needed
 
 ```json5
 {
@@ -666,29 +730,29 @@ Details: [Security guide](https://docs.openclaw.ai/gateway/security) · [Docker 
 
 ### [Signal](https://docs.openclaw.ai/channels/signal)
 
-- Requires `signal-cli` and a `channels.signal` config section.
+- 需要 | Requires `signal-cli` 和 | and `channels.signal` 配置部分 | config section
 
 ### [BlueBubbles (iMessage)](https://docs.openclaw.ai/channels/bluebubbles)
 
-- **Recommended** iMessage integration.
-- Configure `channels.bluebubbles.serverUrl` + `channels.bluebubbles.password` and a webhook (`channels.bluebubbles.webhookPath`).
-- The BlueBubbles server runs on macOS; the Gateway can run on macOS or elsewhere.
+- **推荐的 | Recommended** iMessage 集成 | integration
+- 配置 | Configure `channels.bluebubbles.serverUrl` + `channels.bluebubbles.password` 和 | and webhook（`channels.bluebubbles.webhookPath`）
+- BlueBubbles 服务器在 macOS 上运行；Gateway 可以在 macOS 或其他地方运行 | The BlueBubbles server runs on macOS; the Gateway can run on macOS or elsewhere
 
 ### [iMessage (legacy)](https://docs.openclaw.ai/channels/imessage)
 
-- Legacy macOS-only integration via `imsg` (Messages must be signed in).
-- If `channels.imessage.groups` is set, it becomes a group allowlist; include `"*"` to allow all.
+- 通过 `imsg` 的旧版 macOS 独占集成（Messages 必须登录）| Legacy macOS-only integration via `imsg` (Messages must be signed in)
+- 如果设置了 `channels.imessage.groups`，它就变成群组白名单；包含 `"*"` 允许所有 | If `channels.imessage.groups` is set, it becomes a group allowlist; include `"*"` to allow all
 
 ### [Microsoft Teams](https://docs.openclaw.ai/channels/msteams)
 
-- Configure a Teams app + Bot Framework, then add a `msteams` config section.
-- Allowlist who can talk via `msteams.allowFrom`; group access via `msteams.groupAllowFrom` or `msteams.groupPolicy: "open"`.
+- 配置 | Configure Teams 应用 | app + Bot Framework，然后添加 | then add `msteams` 配置部分 | config section
+- 通过 `msteams.allowFrom` 白名单谁可以对话 | Allowlist who can talk via `msteams.allowFrom`；群组访问通过 | group access via `msteams.groupAllowFrom` 或 | or `msteams.groupPolicy: "open"`
 
 ### [WebChat](https://docs.openclaw.ai/web/webchat)
 
-- Uses the Gateway WebSocket; no separate WebChat port/config.
+- 使用 Gateway WebSocket；无需单独的 WebChat 端口/配置 | Uses the Gateway WebSocket; no separate WebChat port/config
 
-Browser control (optional):
+**浏览器控制（可选）| Browser control (optional)**:
 
 ```json5
 {
@@ -699,77 +763,75 @@ Browser control (optional):
 }
 ```
 
-## Docs
+## 文档 | Docs
 
-Use these when you’re past the onboarding flow and want the deeper reference.
+当你完成引导流程并想要更深入的参考时使用这些文档。
+Use these when you're past the onboarding flow and want the deeper reference.
 
-- [Start with the docs index for navigation and “what’s where.”](https://docs.openclaw.ai)
-- [Read the architecture overview for the gateway + protocol model.](https://docs.openclaw.ai/concepts/architecture)
-- [Use the full configuration reference when you need every key and example.](https://docs.openclaw.ai/gateway/configuration)
-- [Run the Gateway by the book with the operational runbook.](https://docs.openclaw.ai/gateway)
-- [Learn how the Control UI/Web surfaces work and how to expose them safely.](https://docs.openclaw.ai/web)
-- [Understand remote access over SSH tunnels or tailnets.](https://docs.openclaw.ai/gateway/remote)
-- [Follow the onboarding wizard flow for a guided setup.](https://docs.openclaw.ai/start/wizard)
-- [Wire external triggers via the webhook surface.](https://docs.openclaw.ai/automation/webhook)
-- [Set up Gmail Pub/Sub triggers.](https://docs.openclaw.ai/automation/gmail-pubsub)
-- [Learn the macOS menu bar companion details.](https://docs.openclaw.ai/platforms/mac/menu-bar)
-- [Platform guides: Windows (WSL2)](https://docs.openclaw.ai/platforms/windows), [Linux](https://docs.openclaw.ai/platforms/linux), [macOS](https://docs.openclaw.ai/platforms/macos), [iOS](https://docs.openclaw.ai/platforms/ios), [Android](https://docs.openclaw.ai/platforms/android)
-- [Debug common failures with the troubleshooting guide.](https://docs.openclaw.ai/channels/troubleshooting)
-- [Review security guidance before exposing anything.](https://docs.openclaw.ai/gateway/security)
+- [从文档索引开始导航和“哪里是什么” | Start with the docs index for navigation and "what's where"](https://docs.openclaw.ai)
+- [阅读架构概述以了解 gateway + 协议模型 | Read the architecture overview for the gateway + protocol model](https://docs.openclaw.ai/concepts/architecture)
+- [需要每个键和示例时使用完整配置参考 | Use the full configuration reference when you need every key and example](https://docs.openclaw.ai/gateway/configuration)
+- [按手册运行 Gateway | Run the Gateway by the book with the operational runbook](https://docs.openclaw.ai/gateway)
+- [了解 Control UI/Web 界面如何工作以及如何安全暴露它们 | Learn how the Control UI/Web surfaces work and how to expose them safely](https://docs.openclaw.ai/web)
+- [了解通过 SSH 隧道或 tailnets 的远程访问 | Understand remote access over SSH tunnels or tailnets](https://docs.openclaw.ai/gateway/remote)
+- [遵循引导向导流程进行引导设置 | Follow the onboarding wizard flow for a guided setup](https://docs.openclaw.ai/start/wizard)
+- [通过 webhook 界面连接外部触发器 | Wire external triggers via the webhook surface](https://docs.openclaw.ai/automation/webhook)
+- [设置 Gmail Pub/Sub 触发器 | Set up Gmail Pub/Sub triggers](https://docs.openclaw.ai/automation/gmail-pubsub)
+- [了解 macOS 菜单栏配套详情 | Learn the macOS menu bar companion details](https://docs.openclaw.ai/platforms/mac/menu-bar)
+- [平台指南 | Platform guides]: [Windows (WSL2)](https://docs.openclaw.ai/platforms/windows), [Linux](https://docs.openclaw.ai/platforms/linux), [macOS](https://docs.openclaw.ai/platforms/macos), [iOS](https://docs.openclaw.ai/platforms/ios), [Android](https://docs.openclaw.ai/platforms/android)
+- [使用故障排除指南调试常见故障 | Debug common failures with the troubleshooting guide](https://docs.openclaw.ai/channels/troubleshooting)
+- [在暴露任何内容之前查看安全指导 | Review security guidance before exposing anything](https://docs.openclaw.ai/gateway/security)
 
-## Advanced docs (discovery + control)
+## 高级文档（发现 + 控制） | Advanced docs (discovery + control)
 
-- [Discovery + transports](https://docs.openclaw.ai/gateway/discovery)
+- [发现 + 传输 | Discovery + transports](https://docs.openclaw.ai/gateway/discovery)
 - [Bonjour/mDNS](https://docs.openclaw.ai/gateway/bonjour)
-- [Gateway pairing](https://docs.openclaw.ai/gateway/pairing)
-- [Remote gateway README](https://docs.openclaw.ai/gateway/remote-gateway-readme)
+- [Gateway 配对 | pairing](https://docs.openclaw.ai/gateway/pairing)
+- [远程 gateway README | Remote gateway README](https://docs.openclaw.ai/gateway/remote-gateway-readme)
 - [Control UI](https://docs.openclaw.ai/web/control-ui)
-- [Dashboard](https://docs.openclaw.ai/web/dashboard)
+- [仪表板 | Dashboard](https://docs.openclaw.ai/web/dashboard)
 
-## Operations & troubleshooting
+## 运维和故障排除 | Operations & troubleshooting
 
-- [Health checks](https://docs.openclaw.ai/gateway/health)
-- [Gateway lock](https://docs.openclaw.ai/gateway/gateway-lock)
-- [Background process](https://docs.openclaw.ai/gateway/background-process)
-- [Browser troubleshooting (Linux)](https://docs.openclaw.ai/tools/browser-linux-troubleshooting)
-- [Logging](https://docs.openclaw.ai/logging)
+- [健康检查 | Health checks](https://docs.openclaw.ai/gateway/health)
+- [Gateway 锁 | lock](https://docs.openclaw.ai/gateway/gateway-lock)
+- [后台进程 | Background process](https://docs.openclaw.ai/gateway/background-process)
+- [浏览器故障排除（Linux）| Browser troubleshooting (Linux)](https://docs.openclaw.ai/tools/browser-linux-troubleshooting)
+- [日志记录 | Logging](https://docs.openclaw.ai/logging)
 
-## Deep dives
+## 深入了解 | Deep dives
 
-- [Agent loop](https://docs.openclaw.ai/concepts/agent-loop)
-- [Presence](https://docs.openclaw.ai/concepts/presence)
+- [智能体循环 | Agent loop](https://docs.openclaw.ai/concepts/agent-loop)
+- [在线状态 | Presence](https://docs.openclaw.ai/concepts/presence)
 - [TypeBox schemas](https://docs.openclaw.ai/concepts/typebox)
-- [RPC adapters](https://docs.openclaw.ai/reference/rpc)
-- [Queue](https://docs.openclaw.ai/concepts/queue)
+- [RPC 适配器 | adapters](https://docs.openclaw.ai/reference/rpc)
+- [队列 | Queue](https://docs.openclaw.ai/concepts/queue)
 
-## Workspace & skills
+## 工作空间和技能 | Workspace & skills
 
-- [Skills config](https://docs.openclaw.ai/tools/skills-config)
-- [Default AGENTS](https://docs.openclaw.ai/reference/AGENTS.default)
-- [Templates: AGENTS](https://docs.openclaw.ai/reference/templates/AGENTS)
-- [Templates: BOOTSTRAP](https://docs.openclaw.ai/reference/templates/BOOTSTRAP)
-- [Templates: IDENTITY](https://docs.openclaw.ai/reference/templates/IDENTITY)
-- [Templates: SOUL](https://docs.openclaw.ai/reference/templates/SOUL)
-- [Templates: TOOLS](https://docs.openclaw.ai/reference/templates/TOOLS)
-- [Templates: USER](https://docs.openclaw.ai/reference/templates/USER)
+- [技能配置 | Skills config](https://docs.openclaw.ai/tools/skills-config)
+- [默认 AGENTS | Default AGENTS](https://docs.openclaw.ai/reference/AGENTS.default)
+- [模板 | Templates]: [AGENTS](https://docs.openclaw.ai/reference/templates/AGENTS), [BOOTSTRAP](https://docs.openclaw.ai/reference/templates/BOOTSTRAP), [IDENTITY](https://docs.openclaw.ai/reference/templates/IDENTITY), [SOUL](https://docs.openclaw.ai/reference/templates/SOUL), [TOOLS](https://docs.openclaw.ai/reference/templates/TOOLS), [USER](https://docs.openclaw.ai/reference/templates/USER)
 
-## Platform internals
+## 平台内部 | Platform internals
 
-- [macOS dev setup](https://docs.openclaw.ai/platforms/mac/dev-setup)
-- [macOS menu bar](https://docs.openclaw.ai/platforms/mac/menu-bar)
-- [macOS voice wake](https://docs.openclaw.ai/platforms/mac/voicewake)
-- [iOS node](https://docs.openclaw.ai/platforms/ios)
-- [Android node](https://docs.openclaw.ai/platforms/android)
+- [macOS 开发设置 | dev setup](https://docs.openclaw.ai/platforms/mac/dev-setup)
+- [macOS 菜单栏 | menu bar](https://docs.openclaw.ai/platforms/mac/menu-bar)
+- [macOS 语音唤醒 | voice wake](https://docs.openclaw.ai/platforms/mac/voicewake)
+- [iOS 节点 | node](https://docs.openclaw.ai/platforms/ios)
+- [Android 节点 | node](https://docs.openclaw.ai/platforms/android)
 - [Windows (WSL2)](https://docs.openclaw.ai/platforms/windows)
-- [Linux app](https://docs.openclaw.ai/platforms/linux)
+- [Linux 应用 | app](https://docs.openclaw.ai/platforms/linux)
 
-## Email hooks (Gmail)
+## 邮件钩子（Gmail） | Email hooks (Gmail)
 
 - [docs.openclaw.ai/gmail-pubsub](https://docs.openclaw.ai/automation/gmail-pubsub)
 
 ## Molty
 
+OpenClaw 为 **Molty** 构建，一个太空龙虾 AI 助手。🦞
 OpenClaw was built for **Molty**, a space lobster AI assistant. 🦞
+由 Peter Steinberger 和社区构建。
 by Peter Steinberger and the community.
 
 - [openclaw.ai](https://openclaw.ai)
@@ -777,15 +839,20 @@ by Peter Steinberger and the community.
 - [steipete.me](https://steipete.me)
 - [@openclaw](https://x.com/openclaw)
 
-## Community
+## 社区 | Community
 
+查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解指南、维护者和如何提交 PR。
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines, maintainers, and how to submit PRs.
+
+AI/vibe-coded PRs 欢迎！🤖
 AI/vibe-coded PRs welcome! 🤖
 
-Special thanks to [Mario Zechner](https://mariozechner.at/) for his support and for
-[pi-mono](https://github.com/badlogic/pi-mono).
+特别感谢 [Mario Zechner](https://mariozechner.at/) 的支持和 [pi-mono](https://github.com/badlogic/pi-mono)。
+Special thanks to [Mario Zechner](https://mariozechner.at/) for his support and for [pi-mono](https://github.com/badlogic/pi-mono).
+特别感谢 Adam Doppelt 的 lobster.bot。
 Special thanks to Adam Doppelt for lobster.bot.
 
+感谢所有 clawtributors：
 Thanks to all clawtributors:
 
 <p align="left">
