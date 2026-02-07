@@ -20,14 +20,19 @@ import type {
   HealthSnapshot,
   LogEntry,
   LogLevel,
+  ModelsStatusSnapshot,
   NostrProfile,
   PresenceEntry,
   SessionsListResult,
+  SessionsUsageResult,
+  CostUsageSummary,
+  SessionUsageTimeSeries,
   SkillStatusReport,
   StatusSummary,
 } from "./types.ts";
 import type { ChatAttachment, ChatQueueItem, CronFormState } from "./ui-types.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
+import type { SessionLogEntry } from "./views/usage.ts";
 
 export type AppViewState = {
   settings: UiSettings;
@@ -118,6 +123,77 @@ export type AppViewState = {
   debuggingChannel: { channelId: string; accountId?: string } | null;
   editingChannelGlobalConfig: string | null;
   configFormDirty: boolean;
+  // 模型管理状态（新架构）
+  modelsLoading: boolean;
+  modelsSnapshot: ModelsStatusSnapshot | null;
+  modelsError: string | null;
+  modelsLastSuccess: number | null;
+
+  // 认证管理状态
+  managingAuthProvider: string | null;
+  editingAuth: {
+    authId?: string;
+    provider: string;
+    name: string;
+    apiKey: string;
+    baseUrl?: string;
+  } | null;
+  viewingAuth: {
+    authId: string;
+    provider: string;
+  } | null;
+
+  // 模型列表状态
+  managingModelsProvider: string | null;
+
+  // 模型配置状态
+  editingModelConfig: {
+    configId?: string;
+    authId: string;
+    provider: string;
+    modelName: string;
+    nickname?: string;
+    enabled: boolean;
+    temperature?: number;
+    topP?: number;
+    maxTokens?: number;
+    frequencyPenalty?: number;
+    systemPrompt?: string;
+    conversationRounds?: number;
+    maxIterations?: number;
+    usageLimits?: {
+      maxRequestsPerDay?: number;
+      maxTokensPerRequest?: number;
+    };
+  } | null;
+
+  // 可导入模型列表状态
+  importableModels: Array<{
+    modelName: string;
+    isConfigured: boolean;
+    isEnabled: boolean;
+    isDeprecated: boolean;
+    configId?: string;
+  }> | null;
+  importingAuthId: string | null;
+  importingProvider: string | null;
+  selectedImportModels: Set<string>;
+
+  // 供应商管理状态
+  addingProvider: boolean;
+  viewingProviderId: string | null;
+  providerForm: {
+    selectedTemplateId: string | null;
+    id: string;
+    name: string;
+    icon: string;
+    website: string;
+    defaultBaseUrl: string;
+    apiKeyPlaceholder: string;
+    isEditing?: boolean;
+    originalId?: string;
+  } | null;
+
   presenceLoading: boolean;
   presenceEntries: PresenceEntry[];
   presenceError: string | null;
@@ -151,6 +227,39 @@ export type AppViewState = {
   sessionsFilterLimit: string;
   sessionsIncludeGlobal: boolean;
   sessionsIncludeUnknown: boolean;
+  usageLoading: boolean;
+  usageResult: SessionsUsageResult | null;
+  usageCostSummary: CostUsageSummary | null;
+  usageError: string | null;
+  usageStartDate: string;
+  usageEndDate: string;
+  usageSelectedSessions: string[];
+  usageSelectedDays: string[];
+  usageSelectedHours: number[];
+  usageChartMode: "tokens" | "cost";
+  usageDailyChartMode: "total" | "by-type";
+  usageTimeSeriesMode: "cumulative" | "per-turn";
+  usageTimeSeriesBreakdownMode: "total" | "by-type";
+  usageTimeSeries: SessionUsageTimeSeries | null;
+  usageTimeSeriesLoading: boolean;
+  usageSessionLogs: SessionLogEntry[] | null;
+  usageSessionLogsLoading: boolean;
+  usageSessionLogsExpanded: boolean;
+  usageQuery: string;
+  usageQueryDraft: string;
+  usageQueryDebounceTimer: number | null;
+  usageSessionSort: "tokens" | "cost" | "recent" | "messages" | "errors";
+  usageSessionSortDir: "asc" | "desc";
+  usageRecentSessions: string[];
+  usageTimeZone: "local" | "utc";
+  usageContextExpanded: boolean;
+  usageHeaderPinned: boolean;
+  usageSessionsTab: "all" | "recent";
+  usageVisibleColumns: string[];
+  usageLogFilterRoles: import("./views/usage.js").SessionLogRole[];
+  usageLogFilterTools: string[];
+  usageLogFilterHasTools: boolean;
+  usageLogFilterQuery: string;
   cronLoading: boolean;
   cronJobs: CronJob[];
   cronStatus: CronStatus | null;

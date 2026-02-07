@@ -24,6 +24,10 @@ export type AgentConfig = {
   workspace?: string;
   agentDir?: string;
   model?: AgentModelConfig;
+  /** 绑定的模型账号ID（格式：provider/accountId） */
+  modelAccountId?: string;
+  /** 绑定的通道账号ID列表（格式：channel/accountId） */
+  channelAccountIds?: string[];
   /** Optional allowlist of skills for this agent (omit = all skills; empty = none). */
   skills?: string[];
   memorySearch?: MemorySearchConfig;

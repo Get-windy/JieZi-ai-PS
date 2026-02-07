@@ -43,6 +43,25 @@ import {
   updateExecApprovalsFormValue,
 } from "./controllers/exec-approvals.ts";
 import { loadLogs, LogsState } from "./controllers/logs.ts";
+import {
+  loadModels,
+  saveAuth,
+  deleteAuth,
+  setDefaultAuth,
+  saveModelConfig,
+  deleteModelConfig,
+  toggleModelConfig,
+  testAuth,
+  refreshAuthBalance,
+  fetchAvailableModels,
+  startModelsAutoRefresh,
+  stopModelsAutoRefresh,
+  refreshAuthModels,
+  batchAddModels,
+  addProvider,
+  updateProvider,
+  deleteProvider,
+} from "./controllers/models.js";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
 import { deleteSession, loadSessions, patchSession } from "./controllers/sessions.ts";
@@ -53,6 +72,12 @@ import {
   updateSkillEdit,
   updateSkillEnabled,
 } from "./controllers/skills.js";
+import {
+  loadUsage,
+  loadSessionTimeSeries,
+  loadSessionLogs,
+  type UsageState,
+} from "./controllers/usage.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { TAB_GROUPS, subtitleForTab, titleForTab, normalizeBasePath } from "./navigation.js";
@@ -68,10 +93,21 @@ import { renderExecApprovalPrompt } from "./views/exec-approval.js";
 import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.js";
 import { renderInstances } from "./views/instances.js";
 import { renderLogs } from "./views/logs.js";
+import { renderModels } from "./views/models.js";
 import { renderNodes } from "./views/nodes.js";
 import { renderOverview } from "./views/overview.js";
 import { renderSessions } from "./views/sessions.js";
 import { renderSkills } from "./views/skills.js";
+import { renderUsage } from "./views/usage.js";
+
+// Module-scope debounce for usage date changes (avoids type-unsafe hacks on state object)
+let usageDateDebounceTimeout: number | null = null;
+const debouncedLoadUsage = (state: UsageState) => {
+  if (usageDateDebounceTimeout) {
+    clearTimeout(usageDateDebounceTimeout);
+  }
+  usageDateDebounceTimeout = window.setTimeout(() => void loadUsage(state), 400);
+};
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
@@ -387,6 +423,348 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
+          state.tab === "models"
+            ? renderModels({
+                snapshot: state.modelsSnapshot,
+                loading: state.modelsLoading,
+                error: state.modelsError,
+
+                // 认证管理状态
+                managingAuthProvider: state.managingAuthProvider || null,
+                editingAuth: state.editingAuth || null,
+                viewingAuth: state.viewingAuth || null,
+
+                // 模型列表状态
+                managingModelsProvider: state.managingModelsProvider || null,
+
+                // 模型配置状态
+                editingModelConfig: state.editingModelConfig || null,
+
+                // 认证操作回调
+                onManageAuths: (provider: string) => {
+                  state.managingAuthProvider = provider;
+                },
+                onAddAuth: (provider: string) => {
+                  state.editingAuth = {
+                    provider,
+                    name: "",
+                    apiKey: "",
+                    baseUrl: "",
+                  };
+                },
+                onEditAuth: (authId: string) => {
+                  const provider = Object.keys(state.modelsSnapshot?.auths ?? {}).find((p) =>
+                    state.modelsSnapshot?.auths?.[p]?.some((a) => a.authId === authId),
+                  );
+                  const auth = provider
+                    ? state.modelsSnapshot?.auths?.[provider]?.find((a) => a.authId === authId)
+                    : null;
+                  if (auth) {
+                    state.editingAuth = {
+                      authId: auth.authId,
+                      provider: auth.provider,
+                      name: auth.name,
+                      apiKey: auth.apiKey,
+                      baseUrl: auth.baseUrl || "",
+                    };
+                  }
+                },
+                onDeleteAuth: async (authId: string) => {
+                  if (confirm("确定要删除该认证吗？")) {
+                    await deleteAuth(state, authId);
+                  }
+                },
+                onSetDefaultAuth: async (authId: string) => {
+                  await setDefaultAuth(state, authId);
+                },
+                onSaveAuth: async (params) => {
+                  await saveAuth(state, params);
+                  state.editingAuth = null;
+                  state.managingAuthProvider = null;
+                },
+                onCancelAuthEdit: () => {
+                  state.editingAuth = null;
+                },
+                onTestAuth: async (authId: string) => {
+                  try {
+                    await testAuth(state, authId);
+                    alert("认证测试成功！");
+                  } catch (err) {
+                    alert(`认证测试失败: ${err}`);
+                  }
+                },
+                onRefreshAuthBalance: async (authId: string) => {
+                  await refreshAuthBalance(state, authId);
+                },
+
+                // 模型列表操作回调
+                onManageModels: (provider: string) => {
+                  state.managingModelsProvider = provider;
+                },
+                onCloseModelsList: () => {
+                  state.managingModelsProvider = null;
+                },
+
+                // 模型配置操作回调
+                onAddModelConfig: (authId: string, modelName: string) => {
+                  const provider = Object.keys(state.modelsSnapshot?.auths ?? {}).find((p) =>
+                    state.modelsSnapshot?.auths?.[p]?.some((a) => a.authId === authId),
+                  );
+                  if (provider) {
+                    state.editingModelConfig = {
+                      authId,
+                      provider,
+                      modelName,
+                      nickname: "",
+                      enabled: false,
+                    };
+                  }
+                },
+                onEditModelConfig: (configId: string) => {
+                  const provider = Object.keys(state.modelsSnapshot?.modelConfigs ?? {}).find((p) =>
+                    state.modelsSnapshot?.modelConfigs?.[p]?.some((c) => c.configId === configId),
+                  );
+                  const config = provider
+                    ? state.modelsSnapshot?.modelConfigs?.[provider]?.find(
+                        (c) => c.configId === configId,
+                      )
+                    : null;
+                  if (config) {
+                    // 过滤 null 值和不需要的字段
+                    state.editingModelConfig = {
+                      configId: config.configId,
+                      authId: config.authId,
+                      provider: config.provider,
+                      modelName: config.modelName,
+                      nickname: config.nickname ?? undefined,
+                      enabled: config.enabled,
+                      temperature: config.temperature ?? undefined,
+                      topP: config.topP ?? undefined,
+                      maxTokens: config.maxTokens ?? undefined,
+                      frequencyPenalty: config.frequencyPenalty ?? undefined,
+                      systemPrompt: config.systemPrompt ?? undefined,
+                      conversationRounds: config.conversationRounds ?? undefined,
+                      maxIterations: config.maxIterations ?? undefined,
+                      usageLimits: config.usageLimits
+                        ? {
+                            maxRequestsPerDay: config.usageLimits.maxRequestsPerDay ?? undefined,
+                            maxTokensPerRequest:
+                              config.usageLimits.maxTokensPerRequest ?? undefined,
+                          }
+                        : undefined,
+                    };
+                  }
+                },
+                onDeleteModelConfig: async (configId: string) => {
+                  if (confirm("确定要删除该模型配置吗？")) {
+                    await deleteModelConfig(state, configId);
+                  }
+                },
+                onToggleModelConfig: async (configId: string, enabled: boolean) => {
+                  // 查找模型配置
+                  const modelConfig = Object.values(state.modelsSnapshot?.modelConfigs || {})
+                    .flat()
+                    .find((m: any) => m.configId === configId);
+
+                  if (!modelConfig) {
+                    alert("模型配置不存在");
+                    return;
+                  }
+
+                  // 如果要启用模型，检查是否有认证
+                  if (enabled && !modelConfig.authId) {
+                    alert("启用模型前请先关联认证，请点击配置按钮选择认证。");
+                    return;
+                  }
+
+                  await toggleModelConfig(state, configId, enabled);
+                },
+                onSaveModelConfig: async (params) => {
+                  await saveModelConfig(state, params);
+                  state.editingModelConfig = null;
+                },
+                onCancelModelConfigEdit: () => {
+                  state.editingModelConfig = null;
+                },
+
+                // 刷新和导入模型
+                onRefreshAuthModels: async (authId: string) => {
+                  const provider = Object.keys(state.modelsSnapshot?.auths ?? {}).find((p) =>
+                    state.modelsSnapshot?.auths?.[p]?.some((a) => a.authId === authId),
+                  );
+                  if (!provider) return;
+
+                  const models = await refreshAuthModels(state, authId);
+                  state.importableModels = models;
+                  state.importingAuthId = authId;
+                  state.importingProvider = provider;
+                  state.selectedImportModels = new Set();
+                },
+                onImportModels: async (authId: string, modelNames: string[]) => {
+                  const provider = state.importingProvider;
+                  if (!provider) return;
+
+                  try {
+                    const result = await batchAddModels(state, authId, provider, modelNames);
+                    alert(
+                      `成功导入 ${result.added} 个模型，跳过 ${result.skipped} 个已存在的模型。`,
+                    );
+                    // 关闭导入模态框
+                    state.importableModels = null;
+                    state.importingAuthId = null;
+                    state.importingProvider = null;
+                    state.selectedImportModels = new Set();
+                  } catch (err) {
+                    alert(`导入失败：${err}`);
+                  }
+                },
+
+                // 供应商管理回调
+                addingProvider: state.addingProvider,
+                viewingProviderId: state.viewingProviderId,
+                providerForm: state.providerForm,
+                onAddProvider: () => {
+                  // 默认选中第一个模板（OpenAI 兼容）
+                  const defaultTemplate = state.modelsSnapshot?.apiTemplates?.[0];
+                  const defaultTemplateId = defaultTemplate?.id || "openai-compatible";
+                  const defaultBaseUrl =
+                    defaultTemplate?.defaultBaseUrl || "https://api.openai.com/v1";
+                  const defaultApiKeyPlaceholder = defaultTemplate?.apiKeyPlaceholder || "sk-...";
+
+                  state.addingProvider = true;
+                  state.providerForm = {
+                    selectedTemplateId: defaultTemplateId,
+                    id: "",
+                    name: "",
+                    icon: "",
+                    website: "",
+                    defaultBaseUrl: defaultBaseUrl,
+                    apiKeyPlaceholder: defaultApiKeyPlaceholder,
+                  };
+                },
+                onViewProvider: (id: string) => {
+                  state.viewingProviderId = id;
+                },
+                onEditProvider: (id: string) => {
+                  // 从 providerInstances 读取完整的供应商信息
+                  const providerInstance = (state.modelsSnapshot?.providerInstances as any[])?.find(
+                    (p: any) => p.id === id,
+                  );
+                  const providerLabel = state.modelsSnapshot?.providerLabels?.[id] || id;
+
+                  console.log("[编辑供应商] ID:", id);
+                  console.log("[编辑供应商] providerInstance:", providerInstance);
+
+                  if (!providerInstance) {
+                    alert("找不到供应商信息");
+                    return;
+                  }
+
+                  // 填充表单，进入编辑模式
+                  state.addingProvider = true;
+                  state.providerForm = {
+                    selectedTemplateId: providerInstance.templateId || null,
+                    id: id,
+                    name: providerInstance.name || providerLabel,
+                    icon: providerInstance.icon || "🤖",
+                    website: providerInstance.website || "",
+                    defaultBaseUrl: providerInstance.defaultBaseUrl || "",
+                    apiKeyPlaceholder: providerInstance.apiKeyPlaceholder || "",
+                    isEditing: true,
+                    originalId: id,
+                  };
+
+                  console.log("[编辑供应商] 表单数据:", state.providerForm);
+                },
+                onTemplateSelect: (templateId: string) => {
+                  if (!state.providerForm) return;
+
+                  // 查找模板
+                  const template = state.modelsSnapshot?.apiTemplates?.find(
+                    (t: any) => t.id === templateId,
+                  );
+                  if (!template) return;
+
+                  // 更新表单数据
+                  state.providerForm = {
+                    ...state.providerForm,
+                    selectedTemplateId: templateId,
+                    defaultBaseUrl: template.defaultBaseUrl,
+                    apiKeyPlaceholder: template.apiKeyPlaceholder || "",
+                  };
+                },
+                onProviderFormChange: (patch: any) => {
+                  if (!state.providerForm) return;
+                  // 通过创建新对象来触发响应式更新
+                  state.providerForm = {
+                    ...state.providerForm,
+                    ...patch,
+                  };
+                },
+                onSaveProvider: async (params) => {
+                  try {
+                    // 判断是编辑还是新增
+                    if (state.providerForm?.isEditing) {
+                      // 编辑模式：调用 update 接口
+                      await updateProvider(state, params);
+                    } else {
+                      // 新增模式：调用 add 接口
+                      await addProvider(state, params);
+                    }
+
+                    state.addingProvider = false;
+                    state.providerForm = null;
+                  } catch (err) {
+                    const action = state.providerForm?.isEditing ? "编辑" : "添加";
+                    alert(`${action}供应商失败：${err}`);
+                  }
+                },
+                onDeleteProvider: async (id: string) => {
+                  try {
+                    // 第一次尝试删除，不级联
+                    const result = await deleteProvider(state, id, false);
+
+                    if (result?.success) {
+                      // 成功删除
+                      return;
+                    }
+
+                    // 检查是否需要级联删除
+                    if (result?.requiresCascade) {
+                      const authCount = result.authCount || 0;
+                      const modelCount = result.modelCount || 0;
+
+                      const message = `该供应商有 ${authCount} 个认证和 ${modelCount} 个模型配置。\n\n是否一并删除所有相关数据？`;
+
+                      if (confirm(message)) {
+                        // 用户确认，执行级联删除
+                        const cascadeResult = await deleteProvider(state, id, true);
+                        if (cascadeResult?.success) {
+                          alert(
+                            `已成功删除供应商及其下的 ${authCount} 个认证和 ${modelCount} 个模型配置。`,
+                          );
+                        }
+                      }
+                    }
+                  } catch (err) {
+                    alert(`删除失败：${err}`);
+                  }
+                },
+                onCancelProviderEdit: () => {
+                  state.addingProvider = false;
+                  state.providerForm = null;
+                },
+                onCancelProviderView: () => {
+                  state.viewingProviderId = null;
+                },
+
+                // 通用操作回调
+                onRefresh: () => loadModels(state, false),
+              })
+            : nothing
+        }
+
+        ${
           state.tab === "instances"
             ? renderInstances({
                 loading: state.presenceLoading,
@@ -423,6 +801,271 @@ export function renderApp(state: AppViewState) {
                 onRefresh: () => loadSessions(state),
                 onPatch: (key: string, patch: any) => patchSession(state, key, patch),
                 onDelete: (key: string) => deleteSession(state, key),
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "usage"
+            ? renderUsage({
+                loading: state.usageLoading,
+                error: state.usageError,
+                startDate: state.usageStartDate,
+                endDate: state.usageEndDate,
+                sessions: state.usageResult?.sessions ?? [],
+                sessionsLimitReached: (state.usageResult?.sessions?.length ?? 0) >= 1000,
+                totals: state.usageResult?.totals ?? null,
+                aggregates: state.usageResult?.aggregates ?? null,
+                costDaily: state.usageCostSummary?.daily ?? [],
+                selectedSessions: state.usageSelectedSessions,
+                selectedDays: state.usageSelectedDays,
+                selectedHours: state.usageSelectedHours,
+                chartMode: state.usageChartMode,
+                dailyChartMode: state.usageDailyChartMode,
+                timeSeriesMode: state.usageTimeSeriesMode,
+                timeSeriesBreakdownMode: state.usageTimeSeriesBreakdownMode,
+                timeSeries: state.usageTimeSeries,
+                timeSeriesLoading: state.usageTimeSeriesLoading,
+                sessionLogs: state.usageSessionLogs,
+                sessionLogsLoading: state.usageSessionLogsLoading,
+                sessionLogsExpanded: state.usageSessionLogsExpanded,
+                logFilterRoles: state.usageLogFilterRoles,
+                logFilterTools: state.usageLogFilterTools,
+                logFilterHasTools: state.usageLogFilterHasTools,
+                logFilterQuery: state.usageLogFilterQuery,
+                query: state.usageQuery,
+                queryDraft: state.usageQueryDraft,
+                sessionSort: state.usageSessionSort,
+                sessionSortDir: state.usageSessionSortDir,
+                recentSessions: state.usageRecentSessions,
+                sessionsTab: state.usageSessionsTab,
+                visibleColumns:
+                  state.usageVisibleColumns as import("./views/usage.js").UsageColumnId[],
+                timeZone: state.usageTimeZone,
+                contextExpanded: state.usageContextExpanded,
+                headerPinned: state.usageHeaderPinned,
+                onStartDateChange: (date: string) => {
+                  state.usageStartDate = date;
+                  state.usageSelectedDays = [];
+                  state.usageSelectedHours = [];
+                  state.usageSelectedSessions = [];
+                  debouncedLoadUsage(state);
+                },
+                onEndDateChange: (date: string) => {
+                  state.usageEndDate = date;
+                  state.usageSelectedDays = [];
+                  state.usageSelectedHours = [];
+                  state.usageSelectedSessions = [];
+                  debouncedLoadUsage(state);
+                },
+                onRefresh: () => loadUsage(state),
+                onTimeZoneChange: (zone: "local" | "utc") => {
+                  state.usageTimeZone = zone;
+                },
+                onToggleContextExpanded: () => {
+                  state.usageContextExpanded = !state.usageContextExpanded;
+                },
+                onToggleSessionLogsExpanded: () => {
+                  state.usageSessionLogsExpanded = !state.usageSessionLogsExpanded;
+                },
+                onLogFilterRolesChange: (next: import("./views/usage.js").SessionLogRole[]) => {
+                  state.usageLogFilterRoles = next;
+                },
+                onLogFilterToolsChange: (next: string[]) => {
+                  state.usageLogFilterTools = next;
+                },
+                onLogFilterHasToolsChange: (next: boolean) => {
+                  state.usageLogFilterHasTools = next;
+                },
+                onLogFilterQueryChange: (next: string) => {
+                  state.usageLogFilterQuery = next;
+                },
+                onLogFilterClear: () => {
+                  state.usageLogFilterRoles = [];
+                  state.usageLogFilterTools = [];
+                  state.usageLogFilterHasTools = false;
+                  state.usageLogFilterQuery = "";
+                },
+                onToggleHeaderPinned: () => {
+                  state.usageHeaderPinned = !state.usageHeaderPinned;
+                },
+                onSelectHour: (hour: number, shiftKey: boolean) => {
+                  if (shiftKey && state.usageSelectedHours.length > 0) {
+                    const allHours = Array.from({ length: 24 }, (_, i) => i);
+                    const lastSelected =
+                      state.usageSelectedHours[state.usageSelectedHours.length - 1];
+                    const lastIdx = allHours.indexOf(lastSelected);
+                    const thisIdx = allHours.indexOf(hour);
+                    if (lastIdx !== -1 && thisIdx !== -1) {
+                      const [start, end] =
+                        lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
+                      const range = allHours.slice(start, end + 1);
+                      state.usageSelectedHours = [
+                        ...new Set([...state.usageSelectedHours, ...range]),
+                      ];
+                    }
+                  } else {
+                    if (state.usageSelectedHours.includes(hour)) {
+                      state.usageSelectedHours = state.usageSelectedHours.filter((h) => h !== hour);
+                    } else {
+                      state.usageSelectedHours = [...state.usageSelectedHours, hour];
+                    }
+                  }
+                },
+                onQueryDraftChange: (query: string) => {
+                  state.usageQueryDraft = query;
+                  if (state.usageQueryDebounceTimer) {
+                    window.clearTimeout(state.usageQueryDebounceTimer);
+                  }
+                  state.usageQueryDebounceTimer = window.setTimeout(() => {
+                    state.usageQuery = state.usageQueryDraft;
+                    state.usageQueryDebounceTimer = null;
+                  }, 250);
+                },
+                onApplyQuery: () => {
+                  if (state.usageQueryDebounceTimer) {
+                    window.clearTimeout(state.usageQueryDebounceTimer);
+                    state.usageQueryDebounceTimer = null;
+                  }
+                  state.usageQuery = state.usageQueryDraft;
+                },
+                onClearQuery: () => {
+                  if (state.usageQueryDebounceTimer) {
+                    window.clearTimeout(state.usageQueryDebounceTimer);
+                    state.usageQueryDebounceTimer = null;
+                  }
+                  state.usageQueryDraft = "";
+                  state.usageQuery = "";
+                },
+                onSessionSortChange: (
+                  sort: "tokens" | "cost" | "recent" | "messages" | "errors",
+                ) => {
+                  state.usageSessionSort = sort;
+                },
+                onSessionSortDirChange: (dir: "desc" | "asc") => {
+                  state.usageSessionSortDir = dir;
+                },
+                onSessionsTabChange: (tab: "all" | "recent") => {
+                  state.usageSessionsTab = tab;
+                },
+                onToggleColumn: (column: string) => {
+                  if (state.usageVisibleColumns.includes(column)) {
+                    state.usageVisibleColumns = state.usageVisibleColumns.filter(
+                      (entry) => entry !== column,
+                    );
+                  } else {
+                    state.usageVisibleColumns = [...state.usageVisibleColumns, column];
+                  }
+                },
+                onSelectSession: (key: string, shiftKey: boolean) => {
+                  state.usageTimeSeries = null;
+                  state.usageSessionLogs = null;
+                  state.usageRecentSessions = [
+                    key,
+                    ...state.usageRecentSessions.filter((entry) => entry !== key),
+                  ].slice(0, 8);
+
+                  if (shiftKey && state.usageSelectedSessions.length > 0) {
+                    // Shift-click: select range from last selected to this session
+                    // Sort sessions same way as displayed (by tokens or cost descending)
+                    const isTokenMode = state.usageChartMode === "tokens";
+                    const sortedSessions = [...(state.usageResult?.sessions ?? [])].toSorted(
+                      (a, b) => {
+                        const valA = isTokenMode
+                          ? (a.usage?.totalTokens ?? 0)
+                          : (a.usage?.totalCost ?? 0);
+                        const valB = isTokenMode
+                          ? (b.usage?.totalTokens ?? 0)
+                          : (b.usage?.totalCost ?? 0);
+                        return valB - valA;
+                      },
+                    );
+                    const allKeys = sortedSessions.map((s) => s.key);
+                    const lastSelected =
+                      state.usageSelectedSessions[state.usageSelectedSessions.length - 1];
+                    const lastIdx = allKeys.indexOf(lastSelected);
+                    const thisIdx = allKeys.indexOf(key);
+                    if (lastIdx !== -1 && thisIdx !== -1) {
+                      const [start, end] =
+                        lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
+                      const range = allKeys.slice(start, end + 1);
+                      const newSelection = [...new Set([...state.usageSelectedSessions, ...range])];
+                      state.usageSelectedSessions = newSelection;
+                    }
+                  } else {
+                    // Regular click: focus a single session (so details always open).
+                    // Click the focused session again to clear selection.
+                    if (
+                      state.usageSelectedSessions.length === 1 &&
+                      state.usageSelectedSessions[0] === key
+                    ) {
+                      state.usageSelectedSessions = [];
+                    } else {
+                      state.usageSelectedSessions = [key];
+                    }
+                  }
+
+                  // Load timeseries/logs only if exactly one session selected
+                  if (state.usageSelectedSessions.length === 1) {
+                    void loadSessionTimeSeries(state, state.usageSelectedSessions[0]);
+                    void loadSessionLogs(state, state.usageSelectedSessions[0]);
+                  }
+                },
+                onSelectDay: (day: string, shiftKey: boolean) => {
+                  if (shiftKey && state.usageSelectedDays.length > 0) {
+                    // Shift-click: select range from last selected to this day
+                    const allDays = (state.usageCostSummary?.daily ?? []).map((d) => d.date);
+                    const lastSelected =
+                      state.usageSelectedDays[state.usageSelectedDays.length - 1];
+                    const lastIdx = allDays.indexOf(lastSelected);
+                    const thisIdx = allDays.indexOf(day);
+                    if (lastIdx !== -1 && thisIdx !== -1) {
+                      const [start, end] =
+                        lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
+                      const range = allDays.slice(start, end + 1);
+                      // Merge with existing selection
+                      const newSelection = [...new Set([...state.usageSelectedDays, ...range])];
+                      state.usageSelectedDays = newSelection;
+                    }
+                  } else {
+                    // Regular click: toggle single day
+                    if (state.usageSelectedDays.includes(day)) {
+                      state.usageSelectedDays = state.usageSelectedDays.filter((d) => d !== day);
+                    } else {
+                      state.usageSelectedDays = [day];
+                    }
+                  }
+                },
+                onChartModeChange: (mode: "tokens" | "cost") => {
+                  state.usageChartMode = mode;
+                },
+                onDailyChartModeChange: (mode: "total" | "by-type") => {
+                  state.usageDailyChartMode = mode;
+                },
+                onTimeSeriesModeChange: (mode: "cumulative" | "per-turn") => {
+                  state.usageTimeSeriesMode = mode;
+                },
+                onTimeSeriesBreakdownChange: (mode: "total" | "by-type") => {
+                  state.usageTimeSeriesBreakdownMode = mode;
+                },
+                onClearDays: () => {
+                  state.usageSelectedDays = [];
+                },
+                onClearHours: () => {
+                  state.usageSelectedHours = [];
+                },
+                onClearSessions: () => {
+                  state.usageSelectedSessions = [];
+                  state.usageTimeSeries = null;
+                  state.usageSessionLogs = null;
+                },
+                onClearFilters: () => {
+                  state.usageSelectedDays = [];
+                  state.usageSelectedHours = [];
+                  state.usageSelectedSessions = [];
+                  state.usageTimeSeries = null;
+                  state.usageSessionLogs = null;
+                },
               })
             : nothing
         }

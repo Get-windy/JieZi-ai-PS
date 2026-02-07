@@ -13,6 +13,10 @@ import {
 } from "./google-gemini-model-default.js";
 import {
   applyAuthProfileConfig,
+  applyCloudflareAiGatewayConfig,
+  applyCloudflareAiGatewayProviderConfig,
+  applyQianfanConfig,
+  applyQianfanProviderConfig,
   applyKimiCodeConfig,
   applyKimiCodeProviderConfig,
   applyMoonshotConfig,
@@ -32,23 +36,8 @@ import {
   applyXiaomiConfig,
   applyXiaomiProviderConfig,
   applyZaiConfig,
-  // 国内模型
-  applyDeepseekConfig,
-  applyDeepseekProviderConfig,
-  applyBaiduQianfanConfig,
-  applyBaiduQianfanProviderConfig,
-  applyDoubaoConfig,
-  applyDoubaoProviderConfig,
-  applyTencentHunyuanConfig,
-  applyTencentHunyuanProviderConfig,
-  applyXinghuoConfig,
-  applyXinghuoProviderConfig,
-  applySiliconflowConfig,
-  applySiliconflowProviderConfig,
-  applyGroqConfig,
-  applyGroqProviderConfig,
-  applyTogetherAiConfig,
-  applyTogetherAiProviderConfig,
+  CLOUDFLARE_AI_GATEWAY_DEFAULT_MODEL_REF,
+  QIANFAN_DEFAULT_MODEL_REF,
   KIMI_CODING_MODEL_REF,
   MOONSHOT_DEFAULT_MODEL_REF,
   OPENROUTER_DEFAULT_MODEL_REF,
@@ -56,6 +45,8 @@ import {
   VENICE_DEFAULT_MODEL_REF,
   VERCEL_AI_GATEWAY_DEFAULT_MODEL_REF,
   XIAOMI_DEFAULT_MODEL_REF,
+  setCloudflareAiGatewayConfig,
+  setQianfanApiKey,
   setGeminiApiKey,
   setKimiCodingApiKey,
   setMoonshotApiKey,
@@ -67,22 +58,6 @@ import {
   setXiaomiApiKey,
   setZaiApiKey,
   ZAI_DEFAULT_MODEL_REF,
-  DEEPSEEK_DEFAULT_MODEL_REF,
-  setDeepseekApiKey,
-  BAIDU_QIANFAN_DEFAULT_MODEL_REF,
-  setBaiduQianfanApiKey,
-  DOUBAO_DEFAULT_MODEL_REF,
-  setDoubaoApiKey,
-  TENCENT_HUNYUAN_DEFAULT_MODEL_REF,
-  setTencentHunyuanApiKey,
-  XINGHUO_DEFAULT_MODEL_REF,
-  setXinghuoApiKey,
-  SILICONFLOW_DEFAULT_MODEL_REF,
-  setSiliconflowApiKey,
-  GROQ_DEFAULT_MODEL_REF,
-  setGroqApiKey,
-  TOGETHER_AI_DEFAULT_MODEL_REF,
-  setTogetherAiApiKey,
 } from "./onboard-auth.js";
 import { OPENCODE_ZEN_DEFAULT_MODEL } from "./opencode-zen-model-default.js";
 
@@ -112,6 +87,8 @@ export async function applyAuthChoiceApiProviders(
       authChoice = "openrouter-api-key";
     } else if (params.opts.tokenProvider === "vercel-ai-gateway") {
       authChoice = "ai-gateway-api-key";
+    } else if (params.opts.tokenProvider === "cloudflare-ai-gateway") {
+      authChoice = "cloudflare-ai-gateway-api-key";
     } else if (params.opts.tokenProvider === "moonshot") {
       authChoice = "moonshot-api-key";
     } else if (
@@ -131,6 +108,8 @@ export async function applyAuthChoiceApiProviders(
       authChoice = "venice-api-key";
     } else if (params.opts.tokenProvider === "opencode") {
       authChoice = "opencode-zen";
+    } else if (params.opts.tokenProvider === "qianfan") {
+      authChoice = "qianfan-api-key";
     }
   }
 
@@ -255,6 +234,105 @@ export async function applyAuthChoiceApiProviders(
         applyDefaultConfig: applyVercelAiGatewayConfig,
         applyProviderConfig: applyVercelAiGatewayProviderConfig,
         noteDefault: VERCEL_AI_GATEWAY_DEFAULT_MODEL_REF,
+        noteAgentModel,
+        prompter: params.prompter,
+      });
+      nextConfig = applied.config;
+      agentModelOverride = applied.agentModelOverride ?? agentModelOverride;
+    }
+    return { config: nextConfig, agentModelOverride };
+  }
+
+  if (authChoice === "cloudflare-ai-gateway-api-key") {
+    let hasCredential = false;
+    let accountId = params.opts?.cloudflareAiGatewayAccountId?.trim() ?? "";
+    let gatewayId = params.opts?.cloudflareAiGatewayGatewayId?.trim() ?? "";
+
+    const ensureAccountGateway = async () => {
+      if (!accountId) {
+        const value = await params.prompter.text({
+          message: "Enter Cloudflare Account ID",
+          validate: (val) => (String(val).trim() ? undefined : "Account ID is required"),
+        });
+        accountId = String(value).trim();
+      }
+      if (!gatewayId) {
+        const value = await params.prompter.text({
+          message: "Enter Cloudflare AI Gateway ID",
+          validate: (val) => (String(val).trim() ? undefined : "Gateway ID is required"),
+        });
+        gatewayId = String(value).trim();
+      }
+    };
+
+    const optsApiKey = normalizeApiKeyInput(params.opts?.cloudflareAiGatewayApiKey ?? "");
+    if (!hasCredential && accountId && gatewayId && optsApiKey) {
+      await setCloudflareAiGatewayConfig(accountId, gatewayId, optsApiKey, params.agentDir);
+      hasCredential = true;
+    }
+
+    const envKey = resolveEnvApiKey("cloudflare-ai-gateway");
+    if (!hasCredential && envKey) {
+      const useExisting = await params.prompter.confirm({
+        message: `Use existing CLOUDFLARE_AI_GATEWAY_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
+        initialValue: true,
+      });
+      if (useExisting) {
+        await ensureAccountGateway();
+        await setCloudflareAiGatewayConfig(
+          accountId,
+          gatewayId,
+          normalizeApiKeyInput(envKey.apiKey),
+          params.agentDir,
+        );
+        hasCredential = true;
+      }
+    }
+
+    if (!hasCredential && optsApiKey) {
+      await ensureAccountGateway();
+      await setCloudflareAiGatewayConfig(accountId, gatewayId, optsApiKey, params.agentDir);
+      hasCredential = true;
+    }
+
+    if (!hasCredential) {
+      await ensureAccountGateway();
+      const key = await params.prompter.text({
+        message: "Enter Cloudflare AI Gateway API key",
+        validate: validateApiKeyInput,
+      });
+      await setCloudflareAiGatewayConfig(
+        accountId,
+        gatewayId,
+        normalizeApiKeyInput(String(key)),
+        params.agentDir,
+      );
+      hasCredential = true;
+    }
+
+    if (hasCredential) {
+      nextConfig = applyAuthProfileConfig(nextConfig, {
+        profileId: "cloudflare-ai-gateway:default",
+        provider: "cloudflare-ai-gateway",
+        mode: "api_key",
+      });
+    }
+    {
+      const applied = await applyDefaultModelChoice({
+        config: nextConfig,
+        setDefaultModel: params.setDefaultModel,
+        defaultModel: CLOUDFLARE_AI_GATEWAY_DEFAULT_MODEL_REF,
+        applyDefaultConfig: (cfg) =>
+          applyCloudflareAiGatewayConfig(cfg, {
+            accountId: accountId || params.opts?.cloudflareAiGatewayAccountId,
+            gatewayId: gatewayId || params.opts?.cloudflareAiGatewayGatewayId,
+          }),
+        applyProviderConfig: (cfg) =>
+          applyCloudflareAiGatewayProviderConfig(cfg, {
+            accountId: accountId || params.opts?.cloudflareAiGatewayAccountId,
+            gatewayId: gatewayId || params.opts?.cloudflareAiGatewayGatewayId,
+          }),
+        noteDefault: CLOUDFLARE_AI_GATEWAY_DEFAULT_MODEL_REF,
         noteAgentModel,
         prompter: params.prompter,
       });
@@ -680,7 +758,7 @@ export async function applyAuthChoiceApiProviders(
         [
           "OpenCode Zen provides access to Claude, GPT, Gemini, and more models.",
           "Get your API key at: https://opencode.ai/auth",
-          "Requires an active OpenCode Zen subscription.",
+          "OpenCode Zen bills per request. Check your OpenCode dashboard for details.",
         ].join("\n"),
         "OpenCode Zen",
       );
@@ -725,437 +803,53 @@ export async function applyAuthChoiceApiProviders(
     return { config: nextConfig, agentModelOverride };
   }
 
-  // ============================================================================
-  // DeepSeek API Key 处理（深度求索）
-  // ============================================================================
-  if (authChoice === "deepseek-api-key") {
+  if (authChoice === "qianfan-api-key") {
     let hasCredential = false;
-
-    if (
-      !hasCredential &&
-      params.opts?.token &&
-      params.opts?.tokenProvider === "deepseek"
-    ) {
-      await setDeepseekApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
+    if (!hasCredential && params.opts?.token && params.opts?.tokenProvider === "qianfan") {
+      setQianfanApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
       hasCredential = true;
     }
 
-    const envKey = resolveEnvApiKey("deepseek");
+    if (!hasCredential) {
+      await params.prompter.note(
+        [
+          "Get your API key at: https://console.bce.baidu.com/qianfan/ais/console/apiKey",
+          "API key format: bce-v3/ALTAK-...",
+        ].join("\n"),
+        "QIANFAN",
+      );
+    }
+    const envKey = resolveEnvApiKey("qianfan");
     if (envKey) {
       const useExisting = await params.prompter.confirm({
-        message: `使用现有的 DEEPSEEK_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
+        message: `Use existing QIANFAN_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
         initialValue: true,
       });
       if (useExisting) {
-        await setDeepseekApiKey(envKey.apiKey, params.agentDir);
+        setQianfanApiKey(envKey.apiKey, params.agentDir);
         hasCredential = true;
       }
     }
     if (!hasCredential) {
       const key = await params.prompter.text({
-        message: "输入 DeepSeek API key",
+        message: "Enter QIANFAN API key",
         validate: validateApiKeyInput,
       });
-      await setDeepseekApiKey(normalizeApiKeyInput(String(key)), params.agentDir);
+      setQianfanApiKey(normalizeApiKeyInput(String(key)), params.agentDir);
     }
     nextConfig = applyAuthProfileConfig(nextConfig, {
-      profileId: "deepseek:default",
-      provider: "deepseek",
+      profileId: "qianfan:default",
+      provider: "qianfan",
       mode: "api_key",
     });
     {
       const applied = await applyDefaultModelChoice({
         config: nextConfig,
         setDefaultModel: params.setDefaultModel,
-        defaultModel: DEEPSEEK_DEFAULT_MODEL_REF,
-        applyDefaultConfig: applyDeepseekConfig,
-        applyProviderConfig: applyDeepseekProviderConfig,
-        noteDefault: DEEPSEEK_DEFAULT_MODEL_REF,
-        noteAgentModel,
-        prompter: params.prompter,
-      });
-      nextConfig = applied.config;
-      agentModelOverride = applied.agentModelOverride ?? agentModelOverride;
-    }
-    return { config: nextConfig, agentModelOverride };
-  }
-
-  // ============================================================================
-  // 百度文心一言 API Key 处理（ERNIE/千帆大模型平台）
-  // ============================================================================
-  if (authChoice === "baidu-qianfan-api-key") {
-    let hasCredential = false;
-
-    if (
-      !hasCredential &&
-      params.opts?.token &&
-      params.opts?.tokenProvider === "baidu"
-    ) {
-      await setBaiduQianfanApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
-      hasCredential = true;
-    }
-
-    const envKey = resolveEnvApiKey("baidu");
-    if (envKey) {
-      const useExisting = await params.prompter.confirm({
-        message: `使用现有的 QIANFAN_ACCESS_KEY (或 BAIDU_API_KEY) (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
-        initialValue: true,
-      });
-      if (useExisting) {
-        await setBaiduQianfanApiKey(envKey.apiKey, params.agentDir);
-        hasCredential = true;
-      }
-    }
-    if (!hasCredential) {
-      const key = await params.prompter.text({
-        message: "输入百度千帆 API key（Access Key）",
-        validate: validateApiKeyInput,
-      });
-      await setBaiduQianfanApiKey(normalizeApiKeyInput(String(key)), params.agentDir);
-    }
-    nextConfig = applyAuthProfileConfig(nextConfig, {
-      profileId: "baidu:default",
-      provider: "baidu",
-      mode: "api_key",
-    });
-    {
-      const applied = await applyDefaultModelChoice({
-        config: nextConfig,
-        setDefaultModel: params.setDefaultModel,
-        defaultModel: BAIDU_QIANFAN_DEFAULT_MODEL_REF,
-        applyDefaultConfig: applyBaiduQianfanConfig,
-        applyProviderConfig: applyBaiduQianfanProviderConfig,
-        noteDefault: BAIDU_QIANFAN_DEFAULT_MODEL_REF,
-        noteAgentModel,
-        prompter: params.prompter,
-      });
-      nextConfig = applied.config;
-      agentModelOverride = applied.agentModelOverride ?? agentModelOverride;
-    }
-    return { config: nextConfig, agentModelOverride };
-  }
-
-  // ============================================================================
-  // 字节豆包 API Key 处理（Doubao/火山引擎）
-  // ============================================================================
-  if (authChoice === "doubao-api-key") {
-    let hasCredential = false;
-
-    if (
-      !hasCredential &&
-      params.opts?.token &&
-      params.opts?.tokenProvider === "doubao"
-    ) {
-      await setDoubaoApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
-      hasCredential = true;
-    }
-
-    const envKey = resolveEnvApiKey("doubao");
-    if (envKey) {
-      const useExisting = await params.prompter.confirm({
-        message: `使用现有的 ARK_API_KEY (或 DOUBAO_API_KEY) (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
-        initialValue: true,
-      });
-      if (useExisting) {
-        await setDoubaoApiKey(envKey.apiKey, params.agentDir);
-        hasCredential = true;
-      }
-    }
-    if (!hasCredential) {
-      const key = await params.prompter.text({
-        message: "输入火山引擎/豆包 API key",
-        validate: validateApiKeyInput,
-      });
-      await setDoubaoApiKey(normalizeApiKeyInput(String(key)), params.agentDir);
-    }
-    nextConfig = applyAuthProfileConfig(nextConfig, {
-      profileId: "doubao:default",
-      provider: "doubao",
-      mode: "api_key",
-    });
-    {
-      const applied = await applyDefaultModelChoice({
-        config: nextConfig,
-        setDefaultModel: params.setDefaultModel,
-        defaultModel: DOUBAO_DEFAULT_MODEL_REF,
-        applyDefaultConfig: applyDoubaoConfig,
-        applyProviderConfig: applyDoubaoProviderConfig,
-        noteDefault: DOUBAO_DEFAULT_MODEL_REF,
-        noteAgentModel,
-        prompter: params.prompter,
-      });
-      nextConfig = applied.config;
-      agentModelOverride = applied.agentModelOverride ?? agentModelOverride;
-    }
-    return { config: nextConfig, agentModelOverride };
-  }
-
-  // ============================================================================
-  // 腾讯混元 API Key 处理（Tencent Hunyuan）
-  // ============================================================================
-  if (authChoice === "tencent-hunyuan-api-key") {
-    let hasCredential = false;
-
-    if (
-      !hasCredential &&
-      params.opts?.token &&
-      params.opts?.tokenProvider === "tencent"
-    ) {
-      await setTencentHunyuanApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
-      hasCredential = true;
-    }
-
-    const envKey = resolveEnvApiKey("tencent");
-    if (envKey) {
-      const useExisting = await params.prompter.confirm({
-        message: `使用现有的 HUNYUAN_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
-        initialValue: true,
-      });
-      if (useExisting) {
-        await setTencentHunyuanApiKey(envKey.apiKey, params.agentDir);
-        hasCredential = true;
-      }
-    }
-    if (!hasCredential) {
-      const key = await params.prompter.text({
-        message: "输入腾讯混元 API key",
-        validate: validateApiKeyInput,
-      });
-      await setTencentHunyuanApiKey(normalizeApiKeyInput(String(key)), params.agentDir);
-    }
-    nextConfig = applyAuthProfileConfig(nextConfig, {
-      profileId: "tencent:default",
-      provider: "tencent",
-      mode: "api_key",
-    });
-    {
-      const applied = await applyDefaultModelChoice({
-        config: nextConfig,
-        setDefaultModel: params.setDefaultModel,
-        defaultModel: TENCENT_HUNYUAN_DEFAULT_MODEL_REF,
-        applyDefaultConfig: applyTencentHunyuanConfig,
-        applyProviderConfig: applyTencentHunyuanProviderConfig,
-        noteDefault: TENCENT_HUNYUAN_DEFAULT_MODEL_REF,
-        noteAgentModel,
-        prompter: params.prompter,
-      });
-      nextConfig = applied.config;
-      agentModelOverride = applied.agentModelOverride ?? agentModelOverride;
-    }
-    return { config: nextConfig, agentModelOverride };
-  }
-
-  // ============================================================================
-  // 讯飞星火 API Key 处理（iFlytek Spark）
-  // ============================================================================
-  if (authChoice === "xinghuo-api-key") {
-    let hasCredential = false;
-
-    if (
-      !hasCredential &&
-      params.opts?.token &&
-      params.opts?.tokenProvider === "xinghuo"
-    ) {
-      await setXinghuoApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
-      hasCredential = true;
-    }
-
-    const envKey = resolveEnvApiKey("xinghuo");
-    if (envKey) {
-      const useExisting = await params.prompter.confirm({
-        message: `使用现有的 SPARK_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
-        initialValue: true,
-      });
-      if (useExisting) {
-        await setXinghuoApiKey(envKey.apiKey, params.agentDir);
-        hasCredential = true;
-      }
-    }
-    if (!hasCredential) {
-      const key = await params.prompter.text({
-        message: "输入讯飞星火 API key",
-        validate: validateApiKeyInput,
-      });
-      await setXinghuoApiKey(normalizeApiKeyInput(String(key)), params.agentDir);
-    }
-    nextConfig = applyAuthProfileConfig(nextConfig, {
-      profileId: "xinghuo:default",
-      provider: "xinghuo",
-      mode: "api_key",
-    });
-    {
-      const applied = await applyDefaultModelChoice({
-        config: nextConfig,
-        setDefaultModel: params.setDefaultModel,
-        defaultModel: XINGHUO_DEFAULT_MODEL_REF,
-        applyDefaultConfig: applyXinghuoConfig,
-        applyProviderConfig: applyXinghuoProviderConfig,
-        noteDefault: XINGHUO_DEFAULT_MODEL_REF,
-        noteAgentModel,
-        prompter: params.prompter,
-      });
-      nextConfig = applied.config;
-      agentModelOverride = applied.agentModelOverride ?? agentModelOverride;
-    }
-    return { config: nextConfig, agentModelOverride };
-  }
-
-  // ============================================================================
-  // 硅基流动 API Key 处理（SiliconFlow - 注册送2000万Tokens）
-  // ============================================================================
-  if (authChoice === "siliconflow-api-key") {
-    let hasCredential = false;
-
-    if (
-      !hasCredential &&
-      params.opts?.token &&
-      params.opts?.tokenProvider === "siliconflow"
-    ) {
-      await setSiliconflowApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
-      hasCredential = true;
-    }
-
-    const envKey = resolveEnvApiKey("siliconflow");
-    if (envKey) {
-      const useExisting = await params.prompter.confirm({
-        message: `使用现有的 SILICONFLOW_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
-        initialValue: true,
-      });
-      if (useExisting) {
-        await setSiliconflowApiKey(envKey.apiKey, params.agentDir);
-        hasCredential = true;
-      }
-    }
-    if (!hasCredential) {
-      const key = await params.prompter.text({
-        message: "输入 SiliconFlow API key（硅基流动 - 注册送2000万Tokens）",
-        validate: validateApiKeyInput,
-      });
-      await setSiliconflowApiKey(normalizeApiKeyInput(String(key)), params.agentDir);
-    }
-    nextConfig = applyAuthProfileConfig(nextConfig, {
-      profileId: "siliconflow:default",
-      provider: "siliconflow",
-      mode: "api_key",
-    });
-    {
-      const applied = await applyDefaultModelChoice({
-        config: nextConfig,
-        setDefaultModel: params.setDefaultModel,
-        defaultModel: SILICONFLOW_DEFAULT_MODEL_REF,
-        applyDefaultConfig: applySiliconflowConfig,
-        applyProviderConfig: applySiliconflowProviderConfig,
-        noteDefault: SILICONFLOW_DEFAULT_MODEL_REF,
-        noteAgentModel,
-        prompter: params.prompter,
-      });
-      nextConfig = applied.config;
-      agentModelOverride = applied.agentModelOverride ?? agentModelOverride;
-    }
-    return { config: nextConfig, agentModelOverride };
-  }
-
-  // ============================================================================
-  // Groq API Key 处理（超快推理速度，免费）
-  // ============================================================================
-  if (authChoice === "groq-api-key") {
-    let hasCredential = false;
-
-    if (
-      !hasCredential &&
-      params.opts?.token &&
-      params.opts?.tokenProvider === "groq"
-    ) {
-      await setGroqApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
-      hasCredential = true;
-    }
-
-    const envKey = resolveEnvApiKey("groq");
-    if (envKey) {
-      const useExisting = await params.prompter.confirm({
-        message: `使用现有的 GROQ_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
-        initialValue: true,
-      });
-      if (useExisting) {
-        await setGroqApiKey(envKey.apiKey, params.agentDir);
-        hasCredential = true;
-      }
-    }
-    if (!hasCredential) {
-      const key = await params.prompter.text({
-        message: "输入 Groq API key（超快推理速度，免费）",
-        validate: validateApiKeyInput,
-      });
-      await setGroqApiKey(normalizeApiKeyInput(String(key)), params.agentDir);
-    }
-    nextConfig = applyAuthProfileConfig(nextConfig, {
-      profileId: "groq:default",
-      provider: "groq",
-      mode: "api_key",
-    });
-    {
-      const applied = await applyDefaultModelChoice({
-        config: nextConfig,
-        setDefaultModel: params.setDefaultModel,
-        defaultModel: GROQ_DEFAULT_MODEL_REF,
-        applyDefaultConfig: applyGroqConfig,
-        applyProviderConfig: applyGroqProviderConfig,
-        noteDefault: GROQ_DEFAULT_MODEL_REF,
-        noteAgentModel,
-        prompter: params.prompter,
-      });
-      nextConfig = applied.config;
-      agentModelOverride = applied.agentModelOverride ?? agentModelOverride;
-    }
-    return { config: nextConfig, agentModelOverride };
-  }
-
-  // ============================================================================
-  // Together AI API Key 处理（免费模型访问）
-  // ============================================================================
-  if (authChoice === "together-ai-api-key") {
-    let hasCredential = false;
-
-    if (
-      !hasCredential &&
-      params.opts?.token &&
-      params.opts?.tokenProvider === "together-ai"
-    ) {
-      await setTogetherAiApiKey(normalizeApiKeyInput(params.opts.token), params.agentDir);
-      hasCredential = true;
-    }
-
-    const envKey = resolveEnvApiKey("together-ai");
-    if (envKey) {
-      const useExisting = await params.prompter.confirm({
-        message: `使用现有的 TOGETHER_AI_API_KEY (${envKey.source}, ${formatApiKeyPreview(envKey.apiKey)})?`,
-        initialValue: true,
-      });
-      if (useExisting) {
-        await setTogetherAiApiKey(envKey.apiKey, params.agentDir);
-        hasCredential = true;
-      }
-    }
-    if (!hasCredential) {
-      const key = await params.prompter.text({
-        message: "输入 Together AI API key（免费模型访问）",
-        validate: validateApiKeyInput,
-      });
-      await setTogetherAiApiKey(normalizeApiKeyInput(String(key)), params.agentDir);
-    }
-    nextConfig = applyAuthProfileConfig(nextConfig, {
-      profileId: "together-ai:default",
-      provider: "together-ai",
-      mode: "api_key",
-    });
-    {
-      const applied = await applyDefaultModelChoice({
-        config: nextConfig,
-        setDefaultModel: params.setDefaultModel,
-        defaultModel: TOGETHER_AI_DEFAULT_MODEL_REF,
-        applyDefaultConfig: applyTogetherAiConfig,
-        applyProviderConfig: applyTogetherAiProviderConfig,
-        noteDefault: TOGETHER_AI_DEFAULT_MODEL_REF,
+        defaultModel: QIANFAN_DEFAULT_MODEL_REF,
+        applyDefaultConfig: applyQianfanConfig,
+        applyProviderConfig: applyQianfanProviderConfig,
+        noteDefault: QIANFAN_DEFAULT_MODEL_REF,
         noteAgentModel,
         prompter: params.prompter,
       });

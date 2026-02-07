@@ -256,5 +256,5 @@ export async function acquireGatewayLock(
   }
 
   const owner = lastPayload?.pid ? ` (pid ${lastPayload.pid})` : "";
-  throw new GatewayLockError(`gateway already running${owner}; lock timeout after ${timeoutMs}ms`);
+  throw new GatewayLockError(`Gateway 已在运行${owner}；锁等待超时 ${timeoutMs}ms 后失败`);
 }

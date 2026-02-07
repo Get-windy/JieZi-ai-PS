@@ -1,5 +1,5 @@
 import type { ClawdbotConfig } from "openclaw/plugin-sdk";
-import type { FeishuConfig } from "./types.js";
+import { resolveFeishuAccount } from "./accounts.js";
 import { createFeishuClient } from "./client.js";
 import { normalizeFeishuTarget } from "./targets.js";
 
@@ -19,19 +19,25 @@ export async function listFeishuDirectoryPeers(params: {
   cfg: ClawdbotConfig;
   query?: string;
   limit?: number;
+  accountId?: string;
 }): Promise<FeishuDirectoryPeer[]> {
-  const feishuCfg = params.cfg.channels?.feishu as FeishuConfig | undefined;
+  const account = resolveFeishuAccount({ cfg: params.cfg, accountId: params.accountId });
+  const feishuCfg = account.config;
   const q = params.query?.trim().toLowerCase() || "";
   const ids = new Set<string>();
 
   for (const entry of feishuCfg?.allowFrom ?? []) {
     const trimmed = String(entry).trim();
-    if (trimmed && trimmed !== "*") ids.add(trimmed);
+    if (trimmed && trimmed !== "*") {
+      ids.add(trimmed);
+    }
   }
 
   for (const userId of Object.keys(feishuCfg?.dms ?? {})) {
     const trimmed = userId.trim();
-    if (trimmed) ids.add(trimmed);
+    if (trimmed) {
+      ids.add(trimmed);
+    }
   }
 
   return Array.from(ids)
@@ -47,19 +53,25 @@ export async function listFeishuDirectoryGroups(params: {
   cfg: ClawdbotConfig;
   query?: string;
   limit?: number;
+  accountId?: string;
 }): Promise<FeishuDirectoryGroup[]> {
-  const feishuCfg = params.cfg.channels?.feishu as FeishuConfig | undefined;
+  const account = resolveFeishuAccount({ cfg: params.cfg, accountId: params.accountId });
+  const feishuCfg = account.config;
   const q = params.query?.trim().toLowerCase() || "";
   const ids = new Set<string>();
 
   for (const groupId of Object.keys(feishuCfg?.groups ?? {})) {
     const trimmed = groupId.trim();
-    if (trimmed && trimmed !== "*") ids.add(trimmed);
+    if (trimmed && trimmed !== "*") {
+      ids.add(trimmed);
+    }
   }
 
   for (const entry of feishuCfg?.groupAllowFrom ?? []) {
     const trimmed = String(entry).trim();
-    if (trimmed && trimmed !== "*") ids.add(trimmed);
+    if (trimmed && trimmed !== "*") {
+      ids.add(trimmed);
+    }
   }
 
   return Array.from(ids)
@@ -74,14 +86,15 @@ export async function listFeishuDirectoryPeersLive(params: {
   cfg: ClawdbotConfig;
   query?: string;
   limit?: number;
+  accountId?: string;
 }): Promise<FeishuDirectoryPeer[]> {
-  const feishuCfg = params.cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg?.appId || !feishuCfg?.appSecret) {
+  const account = resolveFeishuAccount({ cfg: params.cfg, accountId: params.accountId });
+  if (!account.configured) {
     return listFeishuDirectoryPeers(params);
   }
 
   try {
-    const client = createFeishuClient(feishuCfg);
+    const client = createFeishuClient(account);
     const peers: FeishuDirectoryPeer[] = [];
     const limit = params.limit ?? 50;
 
@@ -104,7 +117,9 @@ export async function listFeishuDirectoryPeersLive(params: {
             });
           }
         }
-        if (peers.length >= limit) break;
+        if (peers.length >= limit) {
+          break;
+        }
       }
     }
 
@@ -118,14 +133,15 @@ export async function listFeishuDirectoryGroupsLive(params: {
   cfg: ClawdbotConfig;
   query?: string;
   limit?: number;
+  accountId?: string;
 }): Promise<FeishuDirectoryGroup[]> {
-  const feishuCfg = params.cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg?.appId || !feishuCfg?.appSecret) {
+  const account = resolveFeishuAccount({ cfg: params.cfg, accountId: params.accountId });
+  if (!account.configured) {
     return listFeishuDirectoryGroups(params);
   }
 
   try {
-    const client = createFeishuClient(feishuCfg);
+    const client = createFeishuClient(account);
     const groups: FeishuDirectoryGroup[] = [];
     const limit = params.limit ?? 50;
 
@@ -148,7 +164,9 @@ export async function listFeishuDirectoryGroupsLive(params: {
             });
           }
         }
-        if (groups.length >= limit) break;
+        if (groups.length >= limit) {
+          break;
+        }
       }
     }
 

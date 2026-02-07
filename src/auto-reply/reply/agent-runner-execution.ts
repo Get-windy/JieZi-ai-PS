@@ -24,6 +24,7 @@ import {
   type SessionEntry,
   updateSessionStore,
 } from "../../config/sessions.js";
+import { checkModelAvailability } from "../../gateway/server-methods/models.js";
 import { logVerbose } from "../../globals.js";
 import { emitAgentEvent, registerAgentRunContext } from "../../infra/agent-events.js";
 import { defaultRuntime } from "../../runtime.js";
@@ -143,6 +144,25 @@ export async function runAgentTurnWithFallback(params: {
       };
       const blockReplyPipeline = params.blockReplyPipeline;
       const onToolResult = params.opts?.onToolResult;
+
+      // 检查模型是否启用，禁用的模型不能被调用
+      const modelAvailability = await checkModelAvailability(
+        params.followupRun.run.provider,
+        params.followupRun.run.model,
+      );
+
+      if (!modelAvailability.available) {
+        // 模型已被禁用，返回错误消息
+        console.error(`[AgentRunner] ${modelAvailability.reason}`);
+        return {
+          kind: "final",
+          payload: {
+            text: `⚠️ ${modelAvailability.reason}`,
+            mediaUrls: [],
+          },
+        };
+      }
+
       const fallbackResult = await runWithModelFallback({
         cfg: params.followupRun.run.config,
         provider: params.followupRun.run.provider,
@@ -178,6 +198,7 @@ export async function runAgentTurnWithFallback(params: {
                 const result = await runCliAgent({
                   sessionId: params.followupRun.run.sessionId,
                   sessionKey: params.sessionKey,
+                  agentId: params.followupRun.run.agentId,
                   sessionFile: params.followupRun.run.sessionFile,
                   workspaceDir: params.followupRun.run.workspaceDir,
                   config: params.followupRun.run.config,
@@ -255,6 +276,7 @@ export async function runAgentTurnWithFallback(params: {
           return runEmbeddedPiAgent({
             sessionId: params.followupRun.run.sessionId,
             sessionKey: params.sessionKey,
+            agentId: params.followupRun.run.agentId,
             messageProvider: params.sessionCtx.Provider?.trim().toLowerCase() || undefined,
             agentAccountId: params.sessionCtx.AccountId,
             messageTo: params.sessionCtx.OriginatingTo ?? params.sessionCtx.To,

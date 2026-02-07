@@ -303,20 +303,20 @@ export type ConfigSchemaResponse = {
 };
 
 export type PresenceEntry = {
-  deviceFamily?: string | null;
-  host?: string | null;
   instanceId?: string | null;
+  host?: string | null;
   ip?: string | null;
-  lastInputSeconds?: number | null;
-  mode?: string | null;
-  modelIdentifier?: string | null;
+  version?: string | null;
   platform?: string | null;
+  deviceFamily?: string | null;
+  modelIdentifier?: string | null;
+  roles?: string[] | null;
+  scopes?: string[] | null;
+  mode?: string | null;
+  lastInputSeconds?: number | null;
   reason?: string | null;
-  roles?: Array<string | null> | null;
-  scopes?: Array<string | null> | null;
   text?: string | null;
   ts?: number | null;
-  version?: string | null;
 };
 
 export type GatewaySessionsDefaults = {
@@ -426,6 +426,223 @@ export type SessionsPatchResult = {
   };
 };
 
+export type SessionsUsageEntry = {
+  key: string;
+  label?: string;
+  sessionId?: string;
+  updatedAt?: number;
+  agentId?: string;
+  channel?: string;
+  chatType?: string;
+  origin?: {
+    label?: string;
+    provider?: string;
+    surface?: string;
+    chatType?: string;
+    from?: string;
+    to?: string;
+    accountId?: string;
+    threadId?: string | number;
+  };
+  modelOverride?: string;
+  providerOverride?: string;
+  modelProvider?: string;
+  model?: string;
+  usage: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    totalTokens: number;
+    totalCost: number;
+    inputCost?: number;
+    outputCost?: number;
+    cacheReadCost?: number;
+    cacheWriteCost?: number;
+    missingCostEntries: number;
+    firstActivity?: number;
+    lastActivity?: number;
+    durationMs?: number;
+    activityDates?: string[]; // YYYY-MM-DD dates when session had activity
+    dailyBreakdown?: Array<{ date: string; tokens: number; cost: number }>;
+    dailyMessageCounts?: Array<{
+      date: string;
+      total: number;
+      user: number;
+      assistant: number;
+      toolCalls: number;
+      toolResults: number;
+      errors: number;
+    }>;
+    dailyLatency?: Array<{
+      date: string;
+      count: number;
+      avgMs: number;
+      p95Ms: number;
+      minMs: number;
+      maxMs: number;
+    }>;
+    dailyModelUsage?: Array<{
+      date: string;
+      provider?: string;
+      model?: string;
+      tokens: number;
+      cost: number;
+      count: number;
+    }>;
+    messageCounts?: {
+      total: number;
+      user: number;
+      assistant: number;
+      toolCalls: number;
+      toolResults: number;
+      errors: number;
+    };
+    toolUsage?: {
+      totalCalls: number;
+      uniqueTools: number;
+      tools: Array<{ name: string; count: number }>;
+    };
+    modelUsage?: Array<{
+      provider?: string;
+      model?: string;
+      count: number;
+      totals: SessionsUsageTotals;
+    }>;
+    latency?: {
+      count: number;
+      avgMs: number;
+      p95Ms: number;
+      minMs: number;
+      maxMs: number;
+    };
+  } | null;
+  contextWeight?: {
+    systemPrompt: { chars: number; projectContextChars: number; nonProjectContextChars: number };
+    skills: { promptChars: number; entries: Array<{ name: string; blockChars: number }> };
+    tools: {
+      listChars: number;
+      schemaChars: number;
+      entries: Array<{ name: string; summaryChars: number; schemaChars: number }>;
+    };
+    injectedWorkspaceFiles: Array<{
+      name: string;
+      path: string;
+      rawChars: number;
+      injectedChars: number;
+      truncated: boolean;
+    }>;
+  } | null;
+};
+
+export type SessionsUsageTotals = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  totalTokens: number;
+  totalCost: number;
+  inputCost: number;
+  outputCost: number;
+  cacheReadCost: number;
+  cacheWriteCost: number;
+  missingCostEntries: number;
+};
+
+export type SessionsUsageResult = {
+  updatedAt: number;
+  startDate: string;
+  endDate: string;
+  sessions: SessionsUsageEntry[];
+  totals: SessionsUsageTotals;
+  aggregates: {
+    messages: {
+      total: number;
+      user: number;
+      assistant: number;
+      toolCalls: number;
+      toolResults: number;
+      errors: number;
+    };
+    tools: {
+      totalCalls: number;
+      uniqueTools: number;
+      tools: Array<{ name: string; count: number }>;
+    };
+    byModel: Array<{
+      provider?: string;
+      model?: string;
+      count: number;
+      totals: SessionsUsageTotals;
+    }>;
+    byProvider: Array<{
+      provider?: string;
+      model?: string;
+      count: number;
+      totals: SessionsUsageTotals;
+    }>;
+    byAgent: Array<{ agentId: string; totals: SessionsUsageTotals }>;
+    byChannel: Array<{ channel: string; totals: SessionsUsageTotals }>;
+    latency?: {
+      count: number;
+      avgMs: number;
+      p95Ms: number;
+      minMs: number;
+      maxMs: number;
+    };
+    dailyLatency?: Array<{
+      date: string;
+      count: number;
+      avgMs: number;
+      p95Ms: number;
+      minMs: number;
+      maxMs: number;
+    }>;
+    modelDaily?: Array<{
+      date: string;
+      provider?: string;
+      model?: string;
+      tokens: number;
+      cost: number;
+      count: number;
+    }>;
+    daily: Array<{
+      date: string;
+      tokens: number;
+      cost: number;
+      messages: number;
+      toolCalls: number;
+      errors: number;
+    }>;
+  };
+};
+
+export type CostUsageDailyEntry = SessionsUsageTotals & { date: string };
+
+export type CostUsageSummary = {
+  updatedAt: number;
+  days: number;
+  daily: CostUsageDailyEntry[];
+  totals: SessionsUsageTotals;
+};
+
+export type SessionUsageTimePoint = {
+  timestamp: number;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  totalTokens: number;
+  cost: number;
+  cumulativeTokens: number;
+  cumulativeCost: number;
+};
+
+export type SessionUsageTimeSeries = {
+  sessionId?: string;
+  points: SessionUsageTimePoint[];
+};
+
 export type CronSchedule =
   | { kind: "at"; at: string }
   | { kind: "every"; everyMs: number; anchorMs?: number }
@@ -489,6 +706,8 @@ export type CronRunLogEntry = {
   durationMs?: number;
   error?: string;
   summary?: string;
+  sessionId?: string;
+  sessionKey?: string;
 };
 
 export type SkillsStatusConfigCheck = {
@@ -508,10 +727,10 @@ export type SkillStatusEntry = {
   name: string;
   description: string;
   source: string;
-  bundled?: boolean;
   filePath: string;
   baseDir: string;
   skillKey: string;
+  bundled?: boolean;
   primaryEnv?: string;
   emoji?: string;
   homepage?: string;
@@ -554,4 +773,159 @@ export type LogEntry = {
   subsystem?: string | null;
   message?: string | null;
   meta?: Record<string, unknown> | null;
+};
+
+// === 模型管理相关类型 ===
+
+/** 模型供应商状态快照（新架构）*/
+export type ModelsStatusSnapshot = {
+  ts: number;
+  providerOrder: string[]; // 模型供应商顺序，如 ["openai", "anthropic", "google"]
+  providerLabels: Record<string, string>; // 供应商显示名称
+  providerMeta?: ModelProviderMetaEntry[];
+  providers: Record<string, unknown>; // 供应商配置
+
+  // 新的数据结构
+  auths: Record<string, ProviderAuthSnapshot[]>; // 供应商的认证列表（按供应商分组）
+  modelConfigs: Record<string, ModelConfigSnapshot[]>; // 模型配置列表（按供应商分组）
+  defaultAuthId: Record<string, string>; // 每个供应商的默认认证ID
+
+  // API模板库（预置）
+  apiTemplates?: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    defaultBaseUrl: string;
+    apiKeyPlaceholder?: string;
+    authType?: "bearer" | "api-key" | "custom";
+  }>;
+
+  // 供应商实例列表（用户添加的）
+  providerInstances?: Array<{
+    id: string;
+    name: string;
+    icon?: string;
+    website?: string;
+    templateId?: string;
+    defaultBaseUrl: string;
+    apiKeyPlaceholder?: string;
+    custom: boolean;
+    createdAt: number;
+  }>;
+};
+
+/** 模型供应商元信息 */
+export type ModelProviderMetaEntry = {
+  id: string; // 供应商ID，如 "openai"
+  label: string; // 显示名称，如 "OpenAI"
+  detailLabel: string; // 详细说明
+  icon?: string; // 图标
+};
+
+/** 供应商认证快照 */
+export type ProviderAuthSnapshot = {
+  authId: string; // 认证ID
+  name: string; // 认证昵称（如"公司主账号"、"个人测试账号"）
+  provider: string; // 所属供应商
+  apiKey: string; // API Key
+  baseUrl?: string | null; // Base URL
+  enabled: boolean; // 是否启用
+  isDefault: boolean; // 是否为默认认证
+  createdAt: number; // 创建时间
+
+  // 认证状态检测
+  status?: {
+    valid: boolean; // 是否有效
+    lastChecked: number; // 最后检测时间
+    error?: string | null; // 错误信息
+  } | null;
+
+  // 成本控制
+  budgetControl?: {
+    dailyLimit?: number | null; // 每日预算上限（美元）
+    monthlyLimit?: number | null; // 每月预算上限（美元）
+    alertThreshold?: number | null; // 预警阈值（百分比）
+  } | null;
+
+  // 实时查询的数据（不持久化）
+  availableModels?: string[] | null; // 该认证可用的模型列表
+  balance?: {
+    amount: number; // 账户余额
+    currency: string; // 货币单位
+    lastUpdated: number; // 最后更新时间
+  } | null;
+};
+
+/** 模型配置快照 */
+export type ModelConfigSnapshot = {
+  configId: string; // 配置ID
+  authId: string; // 关联的认证ID
+  provider: string; // 所属供应商
+  modelName: string; // 模型名称（如 "gpt-4"）
+  nickname?: string | null; // 模型昵称（如"生产环境GPT4"）
+  enabled: boolean; // 是否启用
+
+  // 内容控制参数
+  temperature?: number | null; // 随机性 (0-2)
+  topP?: number | null; // 核采样 (0-1)
+  maxTokens?: number | null; // 单次回复长度
+  frequencyPenalty?: number | null; // 频率惩罚 (-2 to 2)
+
+  // 资源与功能
+  systemPrompt?: string | null; // System Prompt
+  conversationRounds?: number | null; // 对话轮数保留
+  maxIterations?: number | null; // 最大思考步骤
+
+  // 使用限制
+  usageLimits?: {
+    maxRequestsPerDay?: number | null; // 每日最大请求数
+    maxTokensPerRequest?: number | null; // 单次最大 tokens
+  } | null;
+
+  // 实时查询的数据（不持久化）
+  pricing?: {
+    inputPer1k: number; // 输入token单价（每1K tokens，美元）
+    outputPer1k: number; // 输出token单价（每1K tokens，美元）
+    currency: string; // 货币单位
+  } | null;
+};
+
+// ============ 旧的类型定义（向后兼容，标记为废弃）============
+
+/** @deprecated 使用 ModelConfigSnapshot 代替 */
+export type ModelAccountSnapshot = {
+  accountId: string; // 账号ID
+  name: string; // 账号名称（必填）
+  provider: string; // 所属供应商
+  model: string; // 模型名称，如 "gpt-4"
+  enabled: boolean; // 是否启用
+  connected: boolean; // 是否已连接
+
+  // 连接信息
+  lastConnectedAt?: number | null;
+  lastDisconnectedAt?: number | null;
+  lastError?: string | null;
+
+  // Token 使用统计
+  tokenUsage?: {
+    input: number; // 输入token数
+    output: number; // 输出token数
+    total: number; // 总token数
+    cost?: number; // 成本（可选）
+  } | null;
+
+  // 限制配置
+  maxTokensPerRequest?: number | null; // 单次请求最大token数
+  maxTokensDaily?: number | null; // 每日token限制
+  autoDisconnectAfterMinutes?: number | null; // 自动断连时间（分钟）
+
+  // API配置
+  apiKey?: string | null;
+  baseUrl?: string | null;
+  apiVersion?: string | null;
+
+  // 其他配置
+  temperature?: number | null;
+  maxTokens?: number | null;
+  topP?: number | null;
 };

@@ -1,7 +1,7 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { createFeishuClient } from "./client.js";
-import type { FeishuConfig } from "./types.js";
 import type * as Lark from "@larksuiteoapi/node-sdk";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { listEnabledFeishuAccounts } from "./accounts.js";
+import { createFeishuClient } from "./client.js";
 import { FeishuPermSchema, type FeishuPermParams } from "./perm-schema.js";
 import { resolveToolsConfig } from "./tools-config.js";
 
@@ -53,7 +53,9 @@ async function listMembers(client: Lark.Client, token: string, type: string) {
     path: { token },
     params: { type: type as ListTokenType },
   });
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   return {
     members:
@@ -83,7 +85,9 @@ async function addMember(
       perm: perm as PermType,
     },
   });
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   return {
     success: true,
@@ -102,7 +106,9 @@ async function removeMember(
     path: { token, member_id: memberId },
     params: { type: type as CreateTokenType, member_type: memberType as MemberType },
   });
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   return {
     success: true,
@@ -112,19 +118,25 @@ async function removeMember(
 // ============ Tool Registration ============
 
 export function registerFeishuPermTools(api: OpenClawPluginApi) {
-  const feishuCfg = api.config?.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg?.appId || !feishuCfg?.appSecret) {
-    api.logger.debug?.("feishu_perm: Feishu credentials not configured, skipping perm tools");
+  if (!api.config) {
+    api.logger.debug?.("feishu_perm: No config available, skipping perm tools");
     return;
   }
 
-  const toolsCfg = resolveToolsConfig(feishuCfg.tools);
+  const accounts = listEnabledFeishuAccounts(api.config);
+  if (accounts.length === 0) {
+    api.logger.debug?.("feishu_perm: No Feishu accounts configured, skipping perm tools");
+    return;
+  }
+
+  const firstAccount = accounts[0];
+  const toolsCfg = resolveToolsConfig(firstAccount.config.tools);
   if (!toolsCfg.perm) {
     api.logger.debug?.("feishu_perm: perm tool disabled in config (default: false)");
     return;
   }
 
-  const getClient = () => createFeishuClient(feishuCfg);
+  const getClient = () => createFeishuClient(firstAccount);
 
   api.registerTool(
     {
@@ -146,6 +158,7 @@ export function registerFeishuPermTools(api: OpenClawPluginApi) {
             case "remove":
               return json(await removeMember(client, p.token, p.type, p.member_type, p.member_id));
             default:
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any -- exhaustive check fallback
               return json({ error: `Unknown action: ${(p as any).action}` });
           }
         } catch (err) {

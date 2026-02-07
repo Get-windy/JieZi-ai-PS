@@ -1,7 +1,7 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { createFeishuClient } from "./client.js";
-import type { FeishuConfig } from "./types.js";
 import type * as Lark from "@larksuiteoapi/node-sdk";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { listEnabledFeishuAccounts } from "./accounts.js";
+import { createFeishuClient } from "./client.js";
 import { FeishuDriveSchema, type FeishuDriveParams } from "./drive-schema.js";
 import { resolveToolsConfig } from "./tools-config.js";
 
@@ -19,13 +19,19 @@ function json(data: unknown) {
 async function getRootFolderToken(client: Lark.Client): Promise<string> {
   // Use generic HTTP client to call the root folder meta API
   // as it's not directly exposed in the SDK
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing internal SDK property
   const domain = (client as any).domain ?? "https://open.feishu.cn";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing internal SDK property
   const res = (await (client as any).httpInstance.get(
     `${domain}/open-apis/drive/explorer/v2/root_folder/meta`,
   )) as { code: number; msg?: string; data?: { token?: string } };
-  if (res.code !== 0) throw new Error(res.msg ?? "Failed to get root folder");
+  if (res.code !== 0) {
+    throw new Error(res.msg ?? "Failed to get root folder");
+  }
   const token = res.data?.token;
-  if (!token) throw new Error("Root folder token not found");
+  if (!token) {
+    throw new Error("Root folder token not found");
+  }
   return token;
 }
 
@@ -35,7 +41,9 @@ async function listFolder(client: Lark.Client, folderToken?: string) {
   const res = await client.drive.file.list({
     params: validFolderToken ? { folder_token: validFolderToken } : {},
   });
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   return {
     files:
@@ -57,7 +65,9 @@ async function getFileInfo(client: Lark.Client, fileToken: string, folderToken?:
   const res = await client.drive.file.list({
     params: folderToken ? { folder_token: folderToken } : {},
   });
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   const file = res.data?.files?.find((f) => f.token === fileToken);
   if (!file) {
@@ -94,7 +104,9 @@ async function createFolder(client: Lark.Client, name: string, folderToken?: str
       folder_token: effectiveToken,
     },
   });
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   return {
     token: res.data?.token,
@@ -102,20 +114,25 @@ async function createFolder(client: Lark.Client, name: string, folderToken?: str
   };
 }
 
-async function moveFile(
-  client: Lark.Client,
-  fileToken: string,
-  type: string,
-  folderToken: string,
-) {
+async function moveFile(client: Lark.Client, fileToken: string, type: string, folderToken: string) {
   const res = await client.drive.file.move({
     path: { file_token: fileToken },
     data: {
-      type: type as "doc" | "docx" | "sheet" | "bitable" | "folder" | "file" | "mindnote" | "slides",
+      type: type as
+        | "doc"
+        | "docx"
+        | "sheet"
+        | "bitable"
+        | "folder"
+        | "file"
+        | "mindnote"
+        | "slides",
       folder_token: folderToken,
     },
   });
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   return {
     success: true,
@@ -139,7 +156,9 @@ async function deleteFile(client: Lark.Client, fileToken: string, type: string) 
         | "shortcut",
     },
   });
-  if (res.code !== 0) throw new Error(res.msg);
+  if (res.code !== 0) {
+    throw new Error(res.msg);
+  }
 
   return {
     success: true,
@@ -150,19 +169,25 @@ async function deleteFile(client: Lark.Client, fileToken: string, type: string) 
 // ============ Tool Registration ============
 
 export function registerFeishuDriveTools(api: OpenClawPluginApi) {
-  const feishuCfg = api.config?.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg?.appId || !feishuCfg?.appSecret) {
-    api.logger.debug?.("feishu_drive: Feishu credentials not configured, skipping drive tools");
+  if (!api.config) {
+    api.logger.debug?.("feishu_drive: No config available, skipping drive tools");
     return;
   }
 
-  const toolsCfg = resolveToolsConfig(feishuCfg.tools);
+  const accounts = listEnabledFeishuAccounts(api.config);
+  if (accounts.length === 0) {
+    api.logger.debug?.("feishu_drive: No Feishu accounts configured, skipping drive tools");
+    return;
+  }
+
+  const firstAccount = accounts[0];
+  const toolsCfg = resolveToolsConfig(firstAccount.config.tools);
   if (!toolsCfg.drive) {
     api.logger.debug?.("feishu_drive: drive tool disabled in config");
     return;
   }
 
-  const getClient = () => createFeishuClient(feishuCfg);
+  const getClient = () => createFeishuClient(firstAccount);
 
   api.registerTool(
     {
@@ -187,6 +212,7 @@ export function registerFeishuDriveTools(api: OpenClawPluginApi) {
             case "delete":
               return json(await deleteFile(client, p.file_token, p.type));
             default:
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any -- exhaustive check fallback
               return json({ error: `Unknown action: ${(p as any).action}` });
           }
         } catch (err) {

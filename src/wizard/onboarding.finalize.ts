@@ -27,7 +27,6 @@ import {
   detectBrowserOpenSupport,
   formatControlUiSshHint,
   openUrl,
-  openUrlInBackground,
   probeGatewayReachable,
   waitForGatewayReachable,
   resolveControlUiLinks,
@@ -126,8 +125,8 @@ export async function finalizeOnboardingWizard(
           });
     if (flow === "quickstart") {
       await prompter.note(
-        "快速开始使用 Node 作为 Gateway 服务运行时（稳定且受支持）。",
-        "Gateway 服务运行时",
+        "QuickStart uses Node for the Gateway service (stable + supported).",
+        "Gateway service runtime",
       );
     }
     const service = resolveGatewayService();
@@ -179,7 +178,7 @@ export async function finalizeOnboardingWizard(
           config: nextConfig,
         });
 
-        progress.update("正在安装 Gateway 服务…");
+        progress.update("Installing Gateway service…");
         await service.install({
           env: process.env,
           stdout: process.stdout,
@@ -190,7 +189,9 @@ export async function finalizeOnboardingWizard(
       } catch (err) {
         installError = err instanceof Error ? err.message : String(err);
       } finally {
-        progress.stop(installError ? "Gateway 服务安装失败。" : "Gateway 服务已安装。");
+        progress.stop(
+          installError ? "Gateway service install failed." : "Gateway service installed.",
+        );
       }
       if (installError) {
         await prompter.note(`Gateway service install failed: ${installError}`, "Gateway");
@@ -222,7 +223,7 @@ export async function finalizeOnboardingWizard(
           "https://docs.openclaw.ai/gateway/health",
           "https://docs.openclaw.ai/gateway/troubleshooting",
         ].join("\n"),
-        "健康检查帮助",
+        "Health check help",
       );
     }
   }
@@ -238,12 +239,12 @@ export async function finalizeOnboardingWizard(
 
   await prompter.note(
     [
-      "添加节点以获得额外功能：",
-      "- macOS 应用（系统 + 通知）",
-      "- iOS 应用（相机/画布）",
-      "- Android 应用（相机/画布）",
+      "Add nodes for extra features:",
+      "- macOS app (system + notifications)",
+      "- iOS app (camera/canvas)",
+      "- Android app (camera/canvas)",
     ].join("\n"),
-    "可选应用",
+    "Optional apps",
   );
 
   const controlUiBasePath =
@@ -254,11 +255,10 @@ export async function finalizeOnboardingWizard(
     customBindHost: settings.customBindHost,
     basePath: controlUiBasePath,
   });
-  const tokenParam =
+  const authedUrl =
     settings.authMode === "token" && settings.gatewayToken
-      ? `?token=${encodeURIComponent(settings.gatewayToken)}`
-      : "";
-  const authedUrl = `${links.httpUrl}${tokenParam}`;
+      ? `${links.httpUrl}#token=${encodeURIComponent(settings.gatewayToken)}`
+      : links.httpUrl;
   const gatewayProbe = await probeGatewayReachable({
     url: links.wsUrl,
     token: settings.authMode === "token" ? settings.gatewayToken : undefined,
@@ -279,10 +279,12 @@ export async function finalizeOnboardingWizard(
   await prompter.note(
     [
       `Web UI: ${links.httpUrl}`,
-      tokenParam ? `Web UI (带 token): ${authedUrl}` : undefined,
+      settings.authMode === "token" && settings.gatewayToken
+        ? `Web UI (with token): ${authedUrl}`
+        : undefined,
       `Gateway WS: ${links.wsUrl}`,
       gatewayStatusLine,
-      "文档：https://docs.openclaw.ai/web/control-ui",
+      "Docs: https://docs.openclaw.ai/web/control-ui",
     ]
       .filter(Boolean)
       .join("\n"),
@@ -299,31 +301,34 @@ export async function finalizeOnboardingWizard(
     if (hasBootstrap) {
       await prompter.note(
         [
-          "这是让你的代理成为你的关键行动。",
-          "请慢慢来。",
-          "你告诉它的越多，体验就会越好。",
-          "我们将发送：“醒醒，我的朋友！”",
+          "This is the defining action that makes your agent you.",
+          "Please take your time.",
+          "The more you tell it, the better the experience will be.",
+          'We will send: "Wake up, my friend!"',
         ].join("\n"),
-        "启动 TUI（最佳选项！）",
+        "Start TUI (best option!)",
       );
     }
 
     await prompter.note(
       [
-        "Gateway token: Gateway + Control UI 的共享认证。",
-        "存储在：~/.openclaw/openclaw.json (gateway.auth.token) 或 OPENCLAW_GATEWAY_TOKEN。",
-        "Web UI 在此浏览器的 localStorage 中存储副本 (openclaw.control.settings.v1)。",
-        `随时获取带 token 的链接：${formatCliCommand("openclaw dashboard --no-open")}`,
+        "Gateway token: shared auth for the Gateway + Control UI.",
+        "Stored in: ~/.openclaw/openclaw.json (gateway.auth.token) or OPENCLAW_GATEWAY_TOKEN.",
+        `View token: ${formatCliCommand("openclaw config get gateway.auth.token")}`,
+        `Generate token: ${formatCliCommand("openclaw doctor --generate-gateway-token")}`,
+        "Web UI stores a copy in this browser's localStorage (openclaw.control.settings.v1).",
+        `Open the dashboard anytime: ${formatCliCommand("openclaw dashboard --no-open")}`,
+        "If prompted: paste the token into Control UI settings (or use the tokenized dashboard URL).",
       ].join("\n"),
       "Token",
     );
 
     hatchChoice = await prompter.select({
-      message: "你想如何孵化你的机器人？",
+      message: "How do you want to hatch your bot?",
       options: [
-        { value: "tui", label: "在 TUI 中孵化（推荐）" },
-        { value: "web", label: "打开 Web UI" },
-        { value: "later", label: "稍后再做" },
+        { value: "tui", label: "Hatch in TUI (recommended)" },
+        { value: "web", label: "Open the Web UI" },
+        { value: "later", label: "Do this later" },
       ],
       initialValue: "tui",
     });
@@ -338,15 +343,7 @@ export async function finalizeOnboardingWizard(
         deliver: false,
         message: hasBootstrap ? "Wake up, my friend!" : undefined,
       });
-      if (settings.authMode === "token" && settings.gatewayToken) {
-        seededInBackground = await openUrlInBackground(authedUrl);
-      }
-      if (seededInBackground) {
-        await prompter.note(
-          `Web UI 在后台种子化。稍后打开：${formatCliCommand("openclaw dashboard --no-open")}`,
-          "Web UI",
-        );
-      }
+      launchedTui = true;
     } else if (hatchChoice === "web") {
       const browserSupport = await detectBrowserOpenSupport();
       if (browserSupport.ok) {
@@ -355,32 +352,32 @@ export async function finalizeOnboardingWizard(
           controlUiOpenHint = formatControlUiSshHint({
             port: settings.port,
             basePath: controlUiBasePath,
-            token: settings.gatewayToken,
+            token: settings.authMode === "token" ? settings.gatewayToken : undefined,
           });
         }
       } else {
         controlUiOpenHint = formatControlUiSshHint({
           port: settings.port,
           basePath: controlUiBasePath,
-          token: settings.gatewayToken,
+          token: settings.authMode === "token" ? settings.gatewayToken : undefined,
         });
       }
       await prompter.note(
         [
-          `Dashboard 链接（带 token）: ${authedUrl}`,
+          `Dashboard link (with token): ${authedUrl}`,
           controlUiOpened
-            ? "已在浏览器中打开。保留该标签页以控制 OpenClaw。"
-            : "复制/粘贴此 URL 到此计算机上的浏览器以控制 OpenClaw。",
+            ? "Opened in your browser. Keep that tab to control OpenClaw."
+            : "Copy/paste this URL in a browser on this machine to control OpenClaw.",
           controlUiOpenHint,
         ]
           .filter(Boolean)
           .join("\n"),
-        "Dashboard 已就绪",
+        "Dashboard ready",
       );
     } else {
       await prompter.note(
-        `当你准备好时：${formatCliCommand("openclaw dashboard --no-open")}`,
-        "稍后",
+        `When you're ready: ${formatCliCommand("openclaw dashboard --no-open")}`,
+        "Later",
       );
     }
   } else if (opts.skipUi) {
@@ -388,13 +385,16 @@ export async function finalizeOnboardingWizard(
   }
 
   await prompter.note(
-    ["备份你的代理工作区。", "文档：https://docs.openclaw.ai/concepts/agent-workspace"].join("\n"),
-    "工作区备份",
+    [
+      "Back up your agent workspace.",
+      "Docs: https://docs.openclaw.ai/concepts/agent-workspace",
+    ].join("\n"),
+    "Workspace backup",
   );
 
   await prompter.note(
-    "在你的计算机上运行代理是有风险的 — 加固你的设置：https://docs.openclaw.ai/security",
-    "安全",
+    "Running agents on your computer is risky — harden your setup: https://docs.openclaw.ai/security",
+    "Security",
   );
 
   // Shell completion setup
@@ -468,10 +468,10 @@ export async function finalizeOnboardingWizard(
 
     await prompter.note(
       [
-        `Dashboard 链接（带 token）: ${authedUrl}`,
+        `Dashboard link (with token): ${authedUrl}`,
         controlUiOpened
-          ? "已在浏览器中打开。保留该标签页以控制 OpenClaw。"
-          : "复制/粘贴此 URL 到此计算机上的浏览器以控制 OpenClaw。",
+          ? "Opened in your browser. Keep that tab to control OpenClaw."
+          : "Copy/paste this URL in a browser on this machine to control OpenClaw.",
         controlUiOpenHint,
       ]
         .filter(Boolean)
@@ -486,39 +486,39 @@ export async function finalizeOnboardingWizard(
   await prompter.note(
     hasWebSearchKey
       ? [
-          "Web 搜索已启用，因此你的代理可以在需要时在线查找信息。",
+          "Web search is enabled, so your agent can look things up online when needed.",
           "",
           webSearchKey
-            ? "API 密钥：存储在配置中 (tools.web.search.apiKey)。"
-            : "API 密钥：通过 BRAVE_API_KEY 环境变量提供（Gateway 环境）。",
-          "文档：https://docs.openclaw.ai/tools/web",
+            ? "API key: stored in config (tools.web.search.apiKey)."
+            : "API key: provided via BRAVE_API_KEY env var (Gateway environment).",
+          "Docs: https://docs.openclaw.ai/tools/web",
         ].join("\n")
       : [
-          "如果你希望你的代理能够搜索网络，你需要一个 API 密钥。",
+          "If you want your agent to be able to search the web, you’ll need an API key.",
           "",
-          "OpenClaw 使用 Brave Search 作为 `web_search` 工具。没有 Brave Search API 密钥，Web 搜索将无法工作。",
+          "OpenClaw uses Brave Search for the `web_search` tool. Without a Brave Search API key, web search won’t work.",
           "",
-          "交互式设置：",
-          `- 运行：${formatCliCommand("openclaw configure --section web")}`,
-          "- 启用 web_search 并粘贴你的 Brave Search API 密钥",
+          "Set it up interactively:",
+          `- Run: ${formatCliCommand("openclaw configure --section web")}`,
+          "- Enable web_search and paste your Brave Search API key",
           "",
-          "备选方案：在 Gateway 环境中设置 BRAVE_API_KEY（无需更改配置）。",
-          "文档：https://docs.openclaw.ai/tools/web",
+          "Alternative: set BRAVE_API_KEY in the Gateway environment (no config changes).",
+          "Docs: https://docs.openclaw.ai/tools/web",
         ].join("\n"),
-    "Web 搜索（可选）",
+    "Web search (optional)",
   );
 
   await prompter.note(
-    "接下来做什么：https://openclaw.ai/showcase（“人们在构建什么”）。",
-    "接下来做什么",
+    'What now: https://openclaw.ai/showcase ("What People Are Building").',
+    "What now",
   );
 
   await prompter.outro(
     controlUiOpened
-      ? "配置完成。Dashboard 已带着你的 token 打开；保留该标签页以控制 OpenClaw。"
+      ? "Onboarding complete. Dashboard opened; keep that tab to control OpenClaw."
       : seededInBackground
-        ? "配置完成。Web UI 在后台种子化；随时使用上面带 token 的链接打开。"
-        : "配置完成。使用上面带 token 的 Dashboard 链接控制 OpenClaw。",
+        ? "Onboarding complete. Web UI seeded in the background; open it anytime with the dashboard link above."
+        : "Onboarding complete. Use the dashboard link above to control OpenClaw.",
   );
 
   return { launchedTui };
