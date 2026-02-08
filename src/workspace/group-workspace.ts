@@ -16,7 +16,7 @@ import {
   GroupBootstrapFile,
   GroupMemberPermissions,
   WorkspaceStats,
-} from './types';
+} from './types.js';
 
 /**
  * 群组工作空间管理器（单例）
@@ -213,10 +213,10 @@ ${workspace.createdAt}
 ${workspace.createdBy}
 
 ## 成员列表
-${workspace.members.map(m => `- ${m}`).join('\n')}
+${workspace.members.map((m: string) => `- ${m}`).join('\n')}
 
 ## 管理员
-${workspace.admins?.map(a => `- ${a}`).join('\n') || '- ' + workspace.createdBy}
+${workspace.admins?.map((a: string) => `- ${a}`).join('\n') || '- ' + workspace.createdBy}
 
 ## 目录结构
 - \`shared/\`: 共享文档目录
@@ -236,11 +236,9 @@ ${workspace.admins?.map(a => `- ${a}`).join('\n') || '- ' + workspace.createdBy}
 
 ## 成员列表
 
-${workspace.members.map(m => `### ${m}
+${workspace.members.map((m: string) => `### ${m}
 - 加入时间: ${workspace.createdAt}
-- 权限: ${workspace.admins?.includes(m) ? '管理员' : '普通成员'}`).join('
-
-')}
+- 权限: ${workspace.admins?.includes(m) ? '管理员' : '普通成员'}`).join('\n\n')}
 `;
 
     fs.writeFileSync(workspace.membersPath, content, 'utf-8');
