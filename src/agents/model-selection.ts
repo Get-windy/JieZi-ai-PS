@@ -1,7 +1,13 @@
 import type { OpenClawConfig } from "../config/config.js";
 import type { ModelCatalogEntry } from "./model-catalog.js";
 import { resolveAgentModelPrimary } from "./agent-scope.js";
+import { resolveAgentModelAccounts } from "./agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
+import {
+  routeToOptimalModelAccount,
+  type SessionContext,
+  type ModelInfo,
+} from "./model-routing.js";
 import { normalizeGoogleModelId } from "./models-config.providers.js";
 
 export type ModelRef = {
@@ -444,4 +450,131 @@ export function resolveHooksGmailModel(params: {
   });
 
   return resolved?.ref ?? null;
+}
+
+/**
+ * 为智能助手智能路由选择最优模型账号
+ *
+ * 此函数集成智能路由引擎，根据问题复杂度、模型能力、成本等因素选择最优模型账号。
+ * 如果智能助手未配置 modelAccounts，则回退到传统的 model 配置。
+ *
+ * @param params - 参数对象
+ * @returns 选中的模型账号 ID 和模型引用，如果路由失败则返回 null
+ */
+export async function resolveModelAccountForSession(params: {
+  /** OpenClaw 配置对象 */
+  cfg: OpenClawConfig;
+  /** 智能助手 ID */
+  agentId: string;
+  /** 用户消息内容 */
+  message: string;
+  /** 会话上下文 */
+  sessionContext: SessionContext;
+  /** 模型目录（用于获取模型信息） */
+  catalog: ModelCatalogEntry[];
+}): Promise<{
+  accountId: string;
+  modelRef: ModelRef;
+  reason: string;
+} | null> {
+  // 1. 检查智能助手是否配置了模型账号智能路由
+  const modelAccountsConfig = resolveAgentModelAccounts(params.cfg, params.agentId);
+
+  if (!modelAccountsConfig) {
+    // 未配置智能路由，回退到传统 model 配置
+    return null;
+  }
+
+  // 2. 构建模型信息获取函数
+  const modelInfoGetter = async (accountId: string): Promise<ModelInfo | undefined> => {
+    // 从 auth.profiles 中查找账号信息
+    const authProfile = params.cfg.auth?.profiles?.[accountId];
+
+    if (!authProfile) {
+      return undefined;
+    }
+
+    // 获取账号关联的模型 ID
+    const modelId =
+      (authProfile as { model?: string }).model ??
+      (authProfile as { defaultModel?: string }).defaultModel;
+
+    if (!modelId) {
+      return undefined;
+    }
+
+    // 解析模型引用
+    const modelRef = parseModelRef(modelId, DEFAULT_PROVIDER);
+    if (!modelRef) {
+      return undefined;
+    }
+
+    // 从目录中查找模型信息
+    const catalogEntry = params.catalog.find(
+      (entry) => entry.provider === modelRef.provider && entry.id === modelRef.model,
+    );
+
+    if (!catalogEntry) {
+      // 如果目录中没有，使用默认值
+      return {
+        id: modelId,
+        contextWindow: 128000, // 默认值
+        supportsTools: true,
+        supportsVision: false,
+        reasoningLevel: 2, // 中级
+        inputPrice: 0.003, // 默认价格（每 1K tokens，美元）
+        outputPrice: 0.015,
+      };
+    }
+
+    // 构建 ModelInfo
+    return {
+      id: modelId,
+      contextWindow: catalogEntry.contextWindow ?? 128000,
+      supportsTools: true, // 假设所有模型都支持工具调用（需要根据实际情况调整）
+      supportsVision: catalogEntry.input?.includes("image") ?? false,
+      reasoningLevel: catalogEntry.reasoning ? 3 : 2, // 如果支持推理则为高级，否则为中级
+      inputPrice: 0.003, // 默认价格（需要从配置或其他地方获取实际价格）
+      outputPrice: 0.015,
+    };
+  };
+
+  // 3. 调用智能路由引擎
+  try {
+    const routingResult = await routeToOptimalModelAccount(
+      params.message,
+      params.sessionContext,
+      modelAccountsConfig,
+      modelInfoGetter,
+    );
+
+    // 4. 获取选中账号的模型引用
+    const authProfile = params.cfg.auth?.profiles?.[routingResult.accountId];
+
+    if (!authProfile) {
+      return null;
+    }
+
+    const modelId =
+      (authProfile as { model?: string }).model ??
+      (authProfile as { defaultModel?: string }).defaultModel;
+
+    if (!modelId) {
+      return null;
+    }
+
+    const modelRef = parseModelRef(modelId, DEFAULT_PROVIDER);
+    if (!modelRef) {
+      return null;
+    }
+
+    return {
+      accountId: routingResult.accountId,
+      modelRef,
+      reason: routingResult.reason,
+    };
+  } catch (error) {
+    console.error(`[model-selection] 智能路由失败: ${String(error)}`);
+    return null;
+  }
 }

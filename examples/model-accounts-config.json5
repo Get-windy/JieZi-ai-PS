@@ -1,0 +1,284 @@
+/**
+ * 智能助手模型账号智能路由配置完整示例
+ *
+ * 此文件展示了如何配置智能助手的模型账号智能路由功能。
+ *
+ * 核心功能：
+ * 1. 一对多绑定：一个智能助手可以关联多个模型账号
+ * 2. 智能路由：根据问题复杂度、模型能力、成本、速度自动选择最优账号
+ * 3. 手动模式：固定使用指定的默认账号
+ * 4. 会话固定：同一会话内优先复用已选择的账号，避免频繁切换
+ * 5. 故障转移：账号调用失败时自动切换到下一个可用账号
+ */
+
+{
+  // ==================== 认证配置 ====================
+  // 定义所有可用的模型账号
+  auth: {
+    profiles: {
+      // Anthropic OAuth 账号（推荐用于生产环境）
+      "anthropic-oauth": {
+        provider: "anthropic",
+        mode: "oauth",
+        email: "user@example.com",
+      },
+
+      // Anthropic API Key 账号
+      "anthropic-key-1": {
+        provider: "anthropic",
+        mode: "api_key",
+      },
+
+      // OpenAI 高级账号
+      "openai-key-premium": {
+        provider: "openai",
+        mode: "api_key",
+      },
+
+      // OpenAI 标准账号
+      "openai-key-standard": {
+        provider: "openai",
+        mode: "api_key",
+      },
+
+      // DeepSeek 账号（低成本选项）
+      "deepseek-key": {
+        provider: "deepseek",
+        mode: "api_key",
+      },
+
+      // Google Gemini 账号
+      "google-key": {
+        provider: "google",
+        mode: "api_key",
+      },
+    },
+  },
+
+  // ==================== 智能助手配置 ====================
+  agents: {
+    list: [
+      // ========== 示例1: CEO 智能助手（平衡型配置） ==========
+      {
+        id: "ceo-agent",
+        name: "CEO 智能助手",
+        description: "用于高级决策和战略规划的智能助手",
+
+        // 模型账号智能路由配置
+        modelAccounts: {
+          // 可用模型账号列表
+          accounts: [
+            "anthropic-oauth", // 主要账号：高级推理能力
+            "openai-key-premium", // 备用账号：综合能力强
+            "google-key", // 第三选择：多模态支持
+            "deepseek-key", // 兜底账号：低成本
+          ],
+
+          // 智能路由模式
+          routingMode: "smart",
+
+          // 启用会话级别账号固定
+          enableSessionPinning: true,
+
+          // 智能路由配置
+          smartRouting: {
+            // 启用成本优化
+            enableCostOptimization: true,
+
+            // 权重配置（平衡型）
+            complexityWeight: 40, // 复杂度权重
+            capabilityWeight: 30, // 能力权重
+            costWeight: 20, // 成本权重
+            speedWeight: 10, // 速度权重
+
+            // 复杂度阈值
+            complexityThresholds: {
+              simple: 3, // 简单任务：0-3分
+              medium: 7, // 中等任务：4-7分
+              complex: 10, // 复杂任务：8-10分
+            },
+          },
+        },
+
+        // 兼容旧配置：如果 modelAccounts 不可用，回退到此配置
+        model: {
+          primary: "anthropic/claude-opus-4-5",
+          fallbacks: ["openai/gpt-4o"],
+        },
+      },
+
+      // ========== 示例2: 客服助手（成本优先配置） ==========
+      {
+        id: "customer-service",
+        name: "客服助手",
+        description: "用于客户服务的智能助手，优先考虑成本控制",
+
+        modelAccounts: {
+          accounts: [
+            "deepseek-key", // 主要账号：低成本
+            "openai-key-standard", // 备用账号：标准能力
+            "anthropic-key-1", // 复杂问题备用
+          ],
+
+          routingMode: "smart",
+          enableSessionPinning: true,
+
+          smartRouting: {
+            enableCostOptimization: true,
+
+            // 成本敏感型配置
+            complexityWeight: 20,
+            capabilityWeight: 30,
+            costWeight: 40, // 提高成本权重
+            speedWeight: 10,
+          },
+        },
+      },
+
+      // ========== 示例3: 研发助手（性能优先配置） ==========
+      {
+        id: "dev-agent",
+        name: "研发助手",
+        description: "用于代码开发和技术支持的智能助手",
+
+        modelAccounts: {
+          accounts: [
+            "anthropic-oauth", // 主要账号：代码能力强
+            "openai-key-premium", // 备用账号：工具调用支持好
+            "deepseek-key", // 兜底账号
+          ],
+
+          routingMode: "smart",
+          enableSessionPinning: true,
+
+          smartRouting: {
+            enableCostOptimization: false, // 不优化成本
+
+            // 性能优先型配置
+            complexityWeight: 30,
+            capabilityWeight: 50, // 提高能力权重
+            costWeight: 10, // 降低成本权重
+            speedWeight: 10,
+          },
+        },
+      },
+
+      // ========== 示例4: 实时交互助手（速度优先配置） ==========
+      {
+        id: "realtime-agent",
+        name: "实时交互助手",
+        description: "用于实时对话的智能助手，要求快速响应",
+
+        modelAccounts: {
+          accounts: [
+            "openai-key-standard", // 主要账号：响应快
+            "deepseek-key", // 备用账号：成本低且快
+            "anthropic-oauth", // 复杂问题备用
+          ],
+
+          routingMode: "smart",
+          enableSessionPinning: true,
+
+          smartRouting: {
+            enableCostOptimization: true,
+
+            // 速度优先型配置
+            complexityWeight: 20,
+            capabilityWeight: 30,
+            costWeight: 20,
+            speedWeight: 30, // 提高速度权重
+          },
+        },
+      },
+
+      // ========== 示例5: 手动模式助手 ==========
+      {
+        id: "manual-agent",
+        name: "手动模式助手",
+        description: "固定使用指定账号的智能助手",
+
+        modelAccounts: {
+          accounts: ["anthropic-oauth", "openai-key-premium"],
+
+          // 手动模式：始终使用 defaultAccountId
+          routingMode: "manual",
+          defaultAccountId: "anthropic-oauth",
+
+          enableSessionPinning: false, // 手动模式不需要会话固定
+        },
+      },
+
+      // ========== 示例6: 混合模式助手（同时支持新旧配置） ==========
+      {
+        id: "hybrid-agent",
+        name: "混合模式助手",
+        description: "同时配置 modelAccounts 和 model，优先使用智能路由",
+
+        // 新配置：智能路由
+        modelAccounts: {
+          accounts: ["anthropic-oauth", "openai-key-premium", "deepseek-key"],
+          routingMode: "smart",
+          smartRouting: {
+            enableCostOptimization: true,
+          },
+        },
+
+        // 旧配置：作为回退
+        model: {
+          primary: "anthropic/claude-sonnet-4-5",
+          fallbacks: ["openai/gpt-4o"],
+        },
+      },
+
+      // ========== 示例7: 多模态助手（支持图片处理） ==========
+      {
+        id: "multimodal-agent",
+        name: "多模态助手",
+        description: "支持图片、代码等多模态输入的智能助手",
+
+        modelAccounts: {
+          accounts: [
+            "anthropic-oauth", // 支持视觉输入
+            "google-key", // 支持视觉输入
+            "openai-key-premium", // 支持视觉输入
+          ],
+
+          routingMode: "smart",
+          enableSessionPinning: true,
+
+          smartRouting: {
+            enableCostOptimization: true,
+
+            // 能力优先，因为需要视觉支持
+            complexityWeight: 30,
+            capabilityWeight: 45,
+            costWeight: 15,
+            speedWeight: 10,
+          },
+        },
+      },
+
+      // ========== 示例8: 传统配置（不使用智能路由） ==========
+      {
+        id: "legacy-agent",
+        name: "传统配置助手",
+        description: "使用传统 model 配置的智能助手（向后兼容）",
+
+        // 只配置 model，不配置 modelAccounts
+        model: {
+          primary: "anthropic/claude-opus-4-5",
+          fallbacks: ["anthropic/claude-sonnet-4-5", "openai/gpt-4o"],
+        },
+      },
+    ],
+
+    // 全局默认配置
+    defaults: {
+      // 全局默认模型（当智能助手未配置 model 或 modelAccounts 时使用）
+      model: {
+        primary: "anthropic/claude-sonnet-4-5",
+        fallbacks: ["openai/gpt-4o"],
+      },
+    },
+  },
+}

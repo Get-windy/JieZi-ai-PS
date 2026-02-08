@@ -112,7 +112,7 @@
 
 ```bash
 git clone https://gitee.com/CozyNook/JieZi-ai-PS.git
-cd JieZi-ai-PS
+cd 你的项目目录
 ```
 
 ### 2. 安装 pnpm（如果还没安装）

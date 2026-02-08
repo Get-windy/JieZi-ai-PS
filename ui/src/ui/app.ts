@@ -29,6 +29,7 @@ import type {
   StatusSummary,
   NostrProfile,
 } from "./types.ts";
+import type { ModelAccountsConfig, ChannelPoliciesConfig } from "./views/agents-management.js";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
 import {
   handleChannelConfigReload as handleChannelConfigReloadInternal,
@@ -326,6 +327,30 @@ export class OpenClawApp extends LitElement {
   @state() editingAgent: { id: string; name?: string; workspace?: string } | null = null;
   @state() creatingAgent = false;
   @state() deletingAgent = false;
+  // Phase 5: Agents Management 状态
+  @state() agentsManagementActivePanel: "detail" | "modelAccounts" | "channelPolicies" = "detail";
+  @state() modelAccountsConfig: ModelAccountsConfig | null = null;
+  @state() modelAccountsLoading = false;
+  @state() modelAccountsError: string | null = null;
+  @state() channelPoliciesConfig: ChannelPoliciesConfig | null = null;
+  @state() channelPoliciesLoading = false;
+  @state() channelPoliciesError: string | null = null;
+  // Phase 5: Organization Chart 状态
+  @state() organizationChartViewMode: "tree" | "list" = "list";
+  @state() organizationChartSelectedNode: string | null = null;
+  @state() organizationData: any | null = null;
+  @state() organizationDataLoading = false;
+  @state() organizationDataError: string | null = null;
+  // Phase 5: Permissions Management 状态
+  @state() permissionsManagementActiveTab: "config" | "approvals" | "history" = "config";
+  @state() permissionsConfig: any | null = null;
+  @state() permissionsConfigLoading = false;
+  @state() permissionsConfigSaving = false;
+  @state() permissionsConfigError: string | null = null;
+  @state() approvalRequests: any[] = [];
+  @state() approvalRequestsLoading = false;
+  @state() permissionsChangeHistory: any[] = [];
+  @state() permissionsHistoryLoading = false;
 
   @state() sessionsLoading = false;
   @state() sessionsResult: SessionsListResult | null = null;

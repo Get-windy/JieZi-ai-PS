@@ -1,6 +1,7 @@
 import type { GatewayRequestHandlers, GatewayRequestOptions } from "./server-methods/types.js";
 import { ErrorCodes, errorShape } from "./protocol/index.js";
 import { agentHandlers } from "./server-methods/agent.js";
+import { agentsManagementHandlers } from "./server-methods/agents-management.js";
 import { agentsHandlers } from "./server-methods/agents.js";
 import { browserHandlers } from "./server-methods/browser.js";
 import { channelsHandlers } from "./server-methods/channels.js";
@@ -14,6 +15,9 @@ import { healthHandlers } from "./server-methods/health.js";
 import { logsHandlers } from "./server-methods/logs.js";
 import { modelsHandlers } from "./server-methods/models.js";
 import { nodeHandlers } from "./server-methods/nodes.js";
+import { organizationChartHandlers } from "./server-methods/organization-chart.js";
+import { permissionsManagementHandlers } from "./server-methods/permissions-management.js";
+import { phase5RpcHandlers } from "./server-methods/phase5-rpc.js";
 import { sendHandlers } from "./server-methods/send.js";
 import { sessionsHandlers } from "./server-methods/sessions.js";
 import { skillsHandlers } from "./server-methods/skills.js";
@@ -61,6 +65,11 @@ const READ_METHODS = new Set([
   "models.list",
   "agents.list",
   "agent.identity.get",
+  "agent.modelAccounts.list",
+  "agent.channelPolicies.list",
+  "permission.config.get",
+  "approval.requests.list",
+  "organization.data.get",
   "skills.status",
   "voicewake.get",
   "sessions.list",
@@ -192,6 +201,10 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...agentHandlers,
   ...agentsHandlers,
   ...browserHandlers,
+  ...agentsManagementHandlers,
+  ...organizationChartHandlers,
+  ...permissionsManagementHandlers,
+  ...phase5RpcHandlers,
 };
 
 export async function handleGatewayRequest(

@@ -25,7 +25,65 @@ import {
   formatNextRun,
 } from "../presenter.ts";
 
-export type AgentsPanel = "overview" | "files" | "tools" | "skills" | "channels" | "cron";
+export type AgentsPanel =
+  | "overview"
+  | "files"
+  | "tools"
+  | "skills"
+  | "channels"
+  | "cron"
+  | "modelAccounts"
+  | "channelPolicies";
+
+/**
+ * Phase 5: 模型账号配置类型（Phase 1 智能路由）
+ */
+export type ModelAccountsConfig = {
+  accounts: string[];
+  routingMode: "manual" | "smart";
+  smartRouting?: {
+    enableCostOptimization?: boolean;
+    complexityWeight?: number;
+    capabilityWeight?: number;
+    costWeight?: number;
+    speedWeight?: number;
+    complexityThresholds?: {
+      simple: number;
+      medium: number;
+      complex: number;
+    };
+  };
+  defaultAccountId?: string;
+  enableSessionPinning?: boolean;
+};
+
+/**
+ * Phase 5: 通道策略配置类型（Phase 2 多通道协作）
+ */
+export type ChannelPoliciesConfig = {
+  bindings: ChannelBinding[];
+  defaultPolicy: ChannelPolicy;
+};
+
+export type ChannelBinding = {
+  channelId: string;
+  accountId?: string;
+  policy: ChannelPolicy;
+};
+
+export type ChannelPolicy =
+  | "private"
+  | "monitor"
+  | "listen_only"
+  | "filter"
+  | "scheduled"
+  | "forward"
+  | "smart_route"
+  | "broadcast"
+  | "round_robin"
+  | "queue"
+  | "moderate"
+  | "echo";
 
 export type AgentsProps = {
   loading: boolean;
@@ -41,6 +99,13 @@ export type AgentsProps = {
   channelsError: string | null;
   channelsSnapshot: ChannelsStatusSnapshot | null;
   channelsLastSuccess: number | null;
+  // Phase 5: 模型账号和通道策略
+  modelAccountsConfig: ModelAccountsConfig | null;
+  modelAccountsLoading: boolean;
+  modelAccountsError: string | null;
+  channelPoliciesConfig: ChannelPoliciesConfig | null;
+  channelPoliciesLoading: boolean;
+  channelPoliciesError: string | null;
   cronLoading: boolean;
   cronStatus: CronStatus | null;
   cronJobs: CronJob[];
@@ -80,6 +145,9 @@ export type AgentsProps = {
   onModelChange: (agentId: string, modelId: string | null) => void;
   onModelFallbacksChange: (agentId: string, fallbacks: string[]) => void;
   onChannelsRefresh: () => void;
+  // Phase 5: 模型账号和通道策略回调
+  onModelAccountsChange?: (agentId: string, config: ModelAccountsConfig) => void;
+  onChannelPoliciesChange?: (agentId: string, config: ChannelPoliciesConfig) => void;
   onCronRefresh: () => void;
   onSkillsFilterChange: (next: string) => void;
   onSkillsRefresh: () => void;
@@ -594,6 +662,224 @@ function matchesList(name: string, list?: string[]) {
   return false;
 }
 
+/**
+ * Phase 5: 渲染模型账号配置面板（Phase 1 智能路由）
+ */
+function renderAgentModelAccounts(params: {
+  agentId: string;
+  config: ModelAccountsConfig | null;
+  loading: boolean;
+  error: string | null;
+  onChange?: (agentId: string, config: ModelAccountsConfig) => void;
+}) {
+  if (params.loading) {
+    return html`
+      <section class="card">
+        <div class="card-title">${t("agents.model_accounts.title")}</div>
+        <div class="loading">${t("agents.loading")}</div>
+      </section>
+    `;
+  }
+
+  if (params.error) {
+    return html`
+      <section class="card">
+        <div class="card-title">${t("agents.model_accounts.title")}</div>
+        <div class="error">${params.error}</div>
+      </section>
+    `;
+  }
+
+  const config = params.config;
+  if (!config) {
+    return html`
+      <section class="card">
+        <div class="card-title">${t("agents.model_accounts.title")}</div>
+        <div class="empty">${t("agents.model_accounts.no_config")}</div>
+      </section>
+    `;
+  }
+
+  return html`
+    <section class="card">
+      <div class="card-title">${t("agents.model_accounts.title")}</div>
+      <div class="card-sub">${t("agents.model_accounts.subtitle")}</div>
+      
+      <div style="margin-top: 20px;">
+        <div class="label">${t("agents.model_accounts.routing_mode")}</div>
+        <div style="display: flex; gap: 16px; margin-top: 8px;">
+          <label style="display: flex; align-items: center; gap: 6px;">
+            <input
+              type="radio"
+              name="routingMode-${params.agentId}"
+              value="manual"
+              ?checked=${config.routingMode === "manual"}
+              ?disabled=${!params.onChange}
+            />
+            <span>${t("agents.model_accounts.mode.manual")}</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px;">
+            <input
+              type="radio"
+              name="routingMode-${params.agentId}"
+              value="smart"
+              ?checked=${config.routingMode === "smart"}
+              ?disabled=${!params.onChange}
+            />
+            <span>${t("agents.model_accounts.mode.smart")}</span>
+          </label>
+        </div>
+      </div>
+
+      <div style="margin-top: 20px;">
+        <div class="label">${t("agents.model_accounts.accounts")}</div>
+        <div class="list" style="margin-top: 8px;">
+          ${
+            Array.isArray(config.accounts) && config.accounts.length > 0
+              ? config.accounts.map(
+                  (account: string) => html`
+                <div class="list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 4px; background: var(--bg-1); margin-bottom: 6px;">
+                  <span class="mono">${account}</span>
+                  ${account === config.defaultAccountId ? html`<span class="agent-pill">${t("agents.default_badge")}</span>` : nothing}
+                </div>
+              `,
+                )
+              : html`<div class="muted">${t("agents.model_accounts.no_accounts")}</div>`
+          }
+        </div>
+      </div>
+
+      ${
+        config.routingMode === "smart" && config.smartRouting
+          ? html`
+        <div style="margin-top: 20px;">
+          <div class="label">${t("agents.model_accounts.smart_routing")}</div>
+          <div style="margin-top: 12px; padding: 16px; border-radius: 6px; background: var(--bg-1);">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+              <div>
+                <div class="muted" style="font-size: 0.875rem;">${t("agents.model_accounts.complexity_weight")}</div>
+                <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.complexityWeight || 0}%</div>
+              </div>
+              <div>
+                <div class="muted" style="font-size: 0.875rem;">${t("agents.model_accounts.capability_weight")}</div>
+                <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.capabilityWeight || 0}%</div>
+              </div>
+              <div>
+                <div class="muted" style="font-size: 0.875rem;">${t("agents.model_accounts.cost_weight")}</div>
+                <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.costWeight || 0}%</div>
+              </div>
+              <div>
+                <div class="muted" style="font-size: 0.875rem;">${t("agents.model_accounts.speed_weight")}</div>
+                <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.speedWeight || 0}%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `
+          : nothing
+      }
+    </section>
+  `;
+}
+
+/**
+ * Phase 5: 渲染通道策略配置面板（Phase 2 多通道协作）
+ */
+function renderAgentChannelPolicies(params: {
+  agentId: string;
+  config: ChannelPoliciesConfig | null;
+  loading: boolean;
+  error: string | null;
+  onChange?: (agentId: string, config: ChannelPoliciesConfig) => void;
+}) {
+  if (params.loading) {
+    return html`
+      <section class="card">
+        <div class="card-title">${t("agents.channel_policies.title")}</div>
+        <div class="loading">${t("agents.loading")}</div>
+      </section>
+    `;
+  }
+
+  if (params.error) {
+    return html`
+      <section class="card">
+        <div class="card-title">${t("agents.channel_policies.title")}</div>
+        <div class="error">${params.error}</div>
+      </section>
+    `;
+  }
+
+  const config = params.config;
+  if (!config) {
+    return html`
+      <section class="card">
+        <div class="card-title">${t("agents.channel_policies.title")}</div>
+        <div class="empty">${t("agents.channel_policies.no_config")}</div>
+      </section>
+    `;
+  }
+
+  const policyOptions: Array<{ value: string; label: string }> = [
+    { value: "private", label: t("agents.channel_policies.policy.private") },
+    { value: "monitor", label: t("agents.channel_policies.policy.monitor") },
+    { value: "listen_only", label: t("agents.channel_policies.policy.listen_only") },
+    { value: "filter", label: t("agents.channel_policies.policy.filter") },
+    { value: "scheduled", label: t("agents.channel_policies.policy.scheduled") },
+    { value: "forward", label: t("agents.channel_policies.policy.forward") },
+    { value: "smart_route", label: t("agents.channel_policies.policy.smart_route") },
+    { value: "broadcast", label: t("agents.channel_policies.policy.broadcast") },
+    { value: "round_robin", label: t("agents.channel_policies.policy.round_robin") },
+    { value: "queue", label: t("agents.channel_policies.policy.queue") },
+    { value: "moderate", label: t("agents.channel_policies.policy.moderate") },
+    { value: "echo", label: t("agents.channel_policies.policy.echo") },
+  ];
+
+  return html`
+    <section class="card">
+      <div class="card-title">${t("agents.channel_policies.title")}</div>
+      <div class="card-sub">${t("agents.channel_policies.subtitle")}</div>
+      
+      <div style="margin-top: 20px;">
+        <div class="label">${t("agents.channel_policies.default_policy")}</div>
+        <select
+          style="margin-top: 8px; width: 100%; max-width: 300px;"
+          ?disabled=${!params.onChange}
+        >
+          ${policyOptions.map(
+            (opt) => html`
+            <option value=${opt.value} ?selected=${config.defaultPolicy === opt.value}>
+              ${opt.label}
+            </option>
+          `,
+          )}
+        </select>
+      </div>
+
+      <div style="margin-top: 20px;">
+        <div class="label">${t("agents.channel_policies.bindings")}</div>
+        <div class="list" style="margin-top: 8px;">
+          ${
+            Array.isArray(config.bindings) && config.bindings.length > 0
+              ? config.bindings.map(
+                  (binding: any) => html`
+                <div class="list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 4px; background: var(--bg-1); margin-bottom: 8px;">
+                  <div>
+                    <div class="mono" style="font-weight: 500;">${binding.channelId}</div>
+                    ${binding.accountId ? html`<div class="muted" style="font-size: 0.875rem; margin-top: 2px;">${binding.accountId}</div>` : nothing}
+                  </div>
+                  <span class="agent-pill">${t(`agents.channel_policies.policy.${binding.policy}`)}</span>
+                </div>
+              `,
+                )
+              : html`<div class="muted">${t("agents.channel_policies.no_bindings")}</div>`
+          }
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 export function renderAgents(props: AgentsProps) {
   const agents = props.agentsList?.agents ?? [];
   const defaultId = props.agentsList?.defaultId ?? null;
@@ -783,6 +1069,28 @@ export function renderAgents(props: AgentsProps) {
                     })
                   : nothing
               }
+              ${
+                props.activePanel === "modelAccounts"
+                  ? renderAgentModelAccounts({
+                      agentId: selectedAgent.id,
+                      config: props.modelAccountsConfig,
+                      loading: props.modelAccountsLoading,
+                      error: props.modelAccountsError,
+                      onChange: props.onModelAccountsChange,
+                    })
+                  : nothing
+              }
+              ${
+                props.activePanel === "channelPolicies"
+                  ? renderAgentChannelPolicies({
+                      agentId: selectedAgent.id,
+                      config: props.channelPoliciesConfig,
+                      loading: props.channelPoliciesLoading,
+                      error: props.channelPoliciesError,
+                      onChange: props.onChannelPoliciesChange,
+                    })
+                  : nothing
+              }
             `
                 : nothing
         }
@@ -857,6 +1165,8 @@ function renderAgentTabs(active: AgentsPanel, onSelect: (panel: AgentsPanel) => 
     { id: "skills", label: () => t("agents.tab.skills") },
     { id: "channels", label: () => t("agents.tab.channels") },
     { id: "cron", label: () => t("agents.tab.cron") },
+    { id: "modelAccounts", label: () => t("agents.tab.model_accounts") },
+    { id: "channelPolicies", label: () => t("agents.tab.channel_policies") },
   ];
   return html`
     <div class="agent-tabs">

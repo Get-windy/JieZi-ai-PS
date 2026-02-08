@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import type { OpenClawConfig } from "../config/config.js";
+import type { AgentModelAccountsConfig } from "../config/types.agents.js";
 import { resolveStateDir } from "../config/paths.js";
 import {
   DEFAULT_AGENT_ID,
@@ -189,4 +190,38 @@ export function resolveAgentDir(cfg: OpenClawConfig, agentId: string) {
   }
   const root = resolveStateDir(process.env, os.homedir);
   return path.join(root, "agents", id, "agent");
+}
+
+/**
+ * 解析智能助手的模型账号配置
+ *
+ * @param cfg - OpenClaw 配置对象
+ * @param agentId - 智能助手 ID
+ * @returns 模型账号配置，如果未配置则返回 undefined
+ */
+export function resolveAgentModelAccounts(
+  cfg: OpenClawConfig,
+  agentId: string,
+): AgentModelAccountsConfig | undefined {
+  const id = normalizeAgentId(agentId);
+  const entry = resolveAgentEntry(cfg, id);
+  if (!entry?.modelAccounts) {
+    return undefined;
+  }
+  return entry.modelAccounts;
+}
+
+/**
+ * 获取智能助手可用的模型账号列表
+ *
+ * @param cfg - OpenClaw 配置对象
+ * @param agentId - 智能助手 ID
+ * @returns 模型账号 ID 列表，如果未配置则返回空数组
+ */
+export function listAgentModelAccounts(cfg: OpenClawConfig, agentId: string): string[] {
+  const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
+  if (!modelAccounts) {
+    return [];
+  }
+  return modelAccounts.accounts || [];
 }

@@ -31,6 +31,7 @@ import type {
   StatusSummary,
 } from "./types.ts";
 import type { ChatAttachment, ChatQueueItem, CronFormState } from "./ui-types.ts";
+import type { ModelAccountsConfig, ChannelPoliciesConfig } from "./views/agents-management.js";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
 import type { SessionLogEntry } from "./views/usage.ts";
 
@@ -220,6 +221,30 @@ export type AppViewState = {
   editingAgent: { id: string; name?: string; workspace?: string } | null;
   creatingAgent: boolean;
   deletingAgent: boolean;
+  // Phase 5: Agents Management 状态
+  agentsManagementActivePanel: "detail" | "modelAccounts" | "channelPolicies";
+  modelAccountsConfig: ModelAccountsConfig | null;
+  modelAccountsLoading: boolean;
+  modelAccountsError: string | null;
+  channelPoliciesConfig: ChannelPoliciesConfig | null;
+  channelPoliciesLoading: boolean;
+  channelPoliciesError: string | null;
+  // Phase 5: Organization Chart 状态
+  organizationChartViewMode: "tree" | "list";
+  organizationChartSelectedNode: string | null;
+  organizationData: any | null;
+  organizationDataLoading: boolean;
+  organizationDataError: string | null;
+  // Phase 5: Permissions Management 状态
+  permissionsManagementActiveTab: "config" | "approvals" | "history";
+  permissionsConfig: any | null;
+  permissionsConfigLoading: boolean;
+  permissionsConfigSaving: boolean;
+  permissionsConfigError: string | null;
+  approvalRequests: any[];
+  approvalRequestsLoading: boolean;
+  permissionsChangeHistory: any[];
+  permissionsHistoryLoading: boolean;
   sessionsLoading: boolean;
   sessionsResult: SessionsListResult | null;
   sessionsError: string | null;

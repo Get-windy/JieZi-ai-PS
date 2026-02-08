@@ -35,6 +35,20 @@ const BASE_METHODS = [
   "agents.files.list",
   "agents.files.get",
   "agents.files.set",
+  // Agents Management
+  "agent.list",
+  "agent.modelAccounts.list",
+  "agent.modelAccounts.update",
+  "agent.channelPolicies.list",
+  "agent.channelPolicies.update",
+  // Organization Chart
+  "organization.data.get",
+  // Permissions Management
+  "permission.config.get",
+  "permission.update",
+  "approval.requests.list",
+  "approval.approve",
+  "approval.deny",
   "skills.status",
   "skills.bins",
   "skills.install",

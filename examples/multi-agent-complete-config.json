@@ -1,0 +1,348 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Multi-Agent Configuration Example",
+  "description": "Complete configuration example for Phase 1, 2, and 3 features",
+
+  "agents": [
+    {
+      "id": "main-assistant",
+      "name": "主助手",
+      "description": "主要智能助手，拥有完整权限",
+
+      "_comment_phase1": "=== Phase 1: 智能模型账号路由 ===",
+      "modelAccounts": {
+        "accounts": [
+          {
+            "id": "openai-premium",
+            "provider": "openai",
+            "apiKey": "${OPENAI_API_KEY_PREMIUM}",
+            "model": "gpt-4",
+            "capabilities": ["text", "image", "code", "reasoning"],
+            "costPerToken": 0.00003,
+            "priority": 100,
+            "enabled": true,
+            "metadata": {
+              "tier": "premium",
+              "region": "us-east-1"
+            }
+          },
+          {
+            "id": "openai-standard",
+            "provider": "openai",
+            "apiKey": "${OPENAI_API_KEY_STANDARD}",
+            "model": "gpt-3.5-turbo",
+            "capabilities": ["text", "code"],
+            "costPerToken": 0.000002,
+            "priority": 50,
+            "enabled": true,
+            "metadata": {
+              "tier": "standard"
+            }
+          },
+          {
+            "id": "anthropic-claude",
+            "provider": "anthropic",
+            "apiKey": "${ANTHROPIC_API_KEY}",
+            "model": "claude-3-opus",
+            "capabilities": ["text", "code", "reasoning"],
+            "costPerToken": 0.000015,
+            "priority": 90,
+            "enabled": true
+          }
+        ],
+        "routing": {
+          "strategy": "capability-cost",
+          "fallbackOrder": ["openai-premium", "anthropic-claude", "openai-standard"],
+          "enableFailover": true,
+          "healthCheckInterval": 300
+        }
+      },
+
+      "_comment_phase2": "=== Phase 2: 通道账号绑定与策略 ===",
+      "channelBindings": {
+        "bindings": [
+          {
+            "id": "telegram-private",
+            "channelId": "telegram",
+            "accountId": "telegram-bot-1",
+            "policy": {
+              "type": "private",
+              "config": {
+                "allowedUsers": ["user_123", "user_456"],
+                "unauthorizedReply": "此通道仅限授权用户使用。"
+              }
+            },
+            "enabled": true,
+            "priority": 100,
+            "description": "Telegram 私密通道"
+          },
+          {
+            "id": "wechat-queue",
+            "channelId": "wechat",
+            "accountId": "wechat-bot-1",
+            "policy": {
+              "type": "queue",
+              "config": {
+                "maxQueueSize": 100,
+                "batchInterval": 30,
+                "batchSize": 10,
+                "overflowAction": "drop-oldest"
+              }
+            },
+            "enabled": true,
+            "priority": 50,
+            "description": "微信队列模式，批量处理消息"
+          },
+          {
+            "id": "slack-loadbalance",
+            "channelId": "slack",
+            "accountId": "slack-bot-1",
+            "policy": {
+              "type": "load-balance",
+              "config": {
+                "accountIds": ["slack-bot-1", "slack-bot-2", "slack-bot-3"],
+                "algorithm": "least-load",
+                "healthCheck": {
+                  "enabled": true,
+                  "interval": 60,
+                  "timeout": 10
+                }
+              }
+            },
+            "enabled": true,
+            "priority": 80,
+            "description": "Slack 负载均衡"
+          },
+          {
+            "id": "discord-monitor",
+            "channelId": "discord",
+            "accountId": "discord-bot-1",
+            "policy": {
+              "type": "monitor",
+              "config": {
+                "monitorChannels": ["channel_123", "channel_456"],
+                "enableLogging": true,
+                "logPath": "./logs/discord-monitor.jsonl"
+              }
+            },
+            "enabled": true,
+            "priority": 60,
+            "description": "Discord 监控模式"
+          }
+        ],
+        "defaultPolicy": {
+          "type": "listen-only",
+          "config": {
+            "enableLogging": true,
+            "logPath": "./logs/default-channel.jsonl",
+            "triggerEvents": false
+          }
+        }
+      },
+
+      "_comment_phase3": "=== Phase 3: 权限管理系统 ===",
+      "permissions": {
+        "defaultAction": "deny",
+        "enableAuditLog": true,
+        "auditLogPath": "./logs/permissions-audit.jsonl",
+        "enableCache": true,
+        "cacheTtl": 300,
+
+        "roles": [
+          {
+            "id": "admin",
+            "name": "管理员",
+            "description": "拥有所有权限",
+            "members": [
+              { "type": "user", "id": "admin_user_1" },
+              { "type": "user", "id": "admin_user_2" }
+            ],
+            "permissions": ["rule_allow_all"]
+          },
+          {
+            "id": "developer",
+            "name": "开发者",
+            "description": "可以执行代码相关工具",
+            "inheritsFrom": ["basic_user"],
+            "members": [{ "type": "user", "id": "dev_user_1" }],
+            "permissions": ["rule_code_tools", "rule_file_read"]
+          },
+          {
+            "id": "basic_user",
+            "name": "基础用户",
+            "description": "基本权限",
+            "members": [{ "type": "group", "id": "all_users" }],
+            "permissions": ["rule_basic_tools"]
+          }
+        ],
+
+        "groups": [
+          {
+            "id": "all_users",
+            "name": "所有用户",
+            "description": "所有注册用户",
+            "members": ["user_123", "user_456", "user_789"],
+            "admins": ["admin_user_1"]
+          },
+          {
+            "id": "beta_testers",
+            "name": "Beta 测试者",
+            "description": "测试新功能",
+            "members": ["user_123"],
+            "admins": ["admin_user_1"]
+          }
+        ],
+
+        "rules": [
+          {
+            "id": "rule_allow_all",
+            "toolName": "*",
+            "subjects": [{ "type": "role", "id": "admin" }],
+            "action": "allow",
+            "priority": 1000,
+            "enabled": true,
+            "description": "管理员拥有所有权限"
+          },
+          {
+            "id": "rule_code_tools",
+            "toolName": "code.*",
+            "subjects": [{ "type": "role", "id": "developer" }],
+            "action": "allow",
+            "priority": 100,
+            "enabled": true,
+            "description": "开发者可以执行代码工具"
+          },
+          {
+            "id": "rule_file_write_approval",
+            "toolName": "file.write",
+            "subjects": [{ "type": "role", "id": "developer" }],
+            "action": "require_approval",
+            "priority": 90,
+            "enabled": true,
+            "description": "文件写入需要审批"
+          },
+          {
+            "id": "rule_dangerous_tools",
+            "toolName": "system.*",
+            "subjects": [{ "type": "role", "id": "basic_user" }],
+            "action": "deny",
+            "priority": 80,
+            "enabled": true,
+            "description": "禁止基础用户使用系统工具"
+          },
+          {
+            "id": "rule_basic_tools",
+            "toolName": "search.*",
+            "subjects": [{ "type": "role", "id": "basic_user" }],
+            "action": "allow",
+            "priority": 50,
+            "enabled": true,
+            "description": "基础用户可以使用搜索工具"
+          },
+          {
+            "id": "rule_file_read",
+            "toolName": "file.read",
+            "subjects": [{ "type": "role", "id": "developer" }],
+            "action": "allow",
+            "conditions": {
+              "parameterConstraints": {
+                "path": "./allowed/**"
+              }
+            },
+            "priority": 70,
+            "enabled": true,
+            "description": "开发者可以读取指定目录的文件"
+          },
+          {
+            "id": "rule_time_restricted",
+            "toolName": "deploy.*",
+            "subjects": [{ "type": "role", "id": "developer" }],
+            "action": "allow",
+            "conditions": {
+              "timeRange": {
+                "start": "2024-01-01T00:00:00Z",
+                "end": "2024-12-31T23:59:59Z"
+              }
+            },
+            "priority": 60,
+            "enabled": true,
+            "description": "部署工具仅在特定时间段可用"
+          }
+        ],
+
+        "delegations": [
+          {
+            "id": "delegation_1",
+            "delegator": { "type": "user", "id": "admin_user_1" },
+            "delegate": { "type": "user", "id": "temp_admin" },
+            "tools": ["file.*", "code.*"],
+            "expiresAt": 1735689600000,
+            "enabled": true,
+            "note": "临时授权，2025年1月1日到期"
+          }
+        ],
+
+        "approvalConfig": {
+          "approvers": [
+            { "type": "user", "id": "admin_user_1" },
+            { "type": "user", "id": "admin_user_2" }
+          ],
+          "requiredApprovals": 1,
+          "timeout": 3600,
+          "timeoutAction": "reject",
+          "requireReason": true,
+          "notificationMethods": ["slack", "email"],
+          "webhookUrl": "https://example.com/approval-webhook"
+        }
+      }
+    },
+
+    {
+      "id": "monitor-assistant",
+      "name": "监控助手",
+      "description": "只监控，不执行操作",
+
+      "channelBindings": {
+        "bindings": [
+          {
+            "id": "all-channels-monitor",
+            "channelId": "*",
+            "accountId": "*",
+            "policy": {
+              "type": "listen-only",
+              "config": {
+                "enableLogging": true,
+                "logPath": "./logs/monitor-all.jsonl",
+                "triggerEvents": true
+              }
+            },
+            "enabled": true,
+            "priority": 10
+          }
+        ]
+      },
+
+      "permissions": {
+        "defaultAction": "deny",
+        "rules": [
+          {
+            "id": "monitor_read_only",
+            "toolName": "*.read",
+            "subjects": [{ "type": "role", "id": "monitor" }],
+            "action": "allow",
+            "priority": 100,
+            "enabled": true
+          }
+        ],
+        "roles": [
+          {
+            "id": "monitor",
+            "name": "监控角色",
+            "members": [{ "type": "user", "id": "monitor_bot" }],
+            "permissions": ["monitor_read_only"]
+          }
+        ]
+      }
+    }
+  ]
+}

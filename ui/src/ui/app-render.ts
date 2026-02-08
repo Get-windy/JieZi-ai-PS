@@ -63,6 +63,19 @@ import {
   deleteProvider,
 } from "./controllers/models.js";
 import { loadNodes } from "./controllers/nodes.ts";
+import {
+  loadModelAccountsConfig,
+  updateModelAccountsConfig,
+  loadChannelPoliciesConfig,
+  updateChannelPoliciesConfig,
+  loadOrganizationData,
+  loadPermissionsConfig,
+  updatePermissionConfig,
+  loadApprovalRequests,
+  handleApprovalRequest,
+  loadPermissionsHistory,
+  clearPhase5Cache,
+} from "./controllers/phase5.js";
 import { loadPresence } from "./controllers/presence.ts";
 import { deleteSession, loadSessions, patchSession } from "./controllers/sessions.ts";
 import {
@@ -95,7 +108,9 @@ import { renderInstances } from "./views/instances.js";
 import { renderLogs } from "./views/logs.js";
 import { renderModels } from "./views/models.js";
 import { renderNodes } from "./views/nodes.js";
+import { renderOrganizationChart } from "./views/organization-chart.js";
 import { renderOverview } from "./views/overview.js";
+import { renderPermissionsManagement } from "./views/permissions-management.js";
 import { renderSessions } from "./views/sessions.js";
 import { renderSkills } from "./views/skills.js";
 import { renderUsage } from "./views/usage.js";
@@ -1113,6 +1128,13 @@ export function renderApp(state: AppViewState) {
                 channelsError: state.channelsError,
                 channelsSnapshot: state.channelsSnapshot,
                 channelsLastSuccess: state.channelsLastSuccess,
+                // Phase 5: 模型账号和通道策略
+                modelAccountsConfig: state.modelAccountsConfig,
+                modelAccountsLoading: state.modelAccountsLoading,
+                modelAccountsError: state.modelAccountsError,
+                channelPoliciesConfig: state.channelPoliciesConfig,
+                channelPoliciesLoading: state.channelPoliciesLoading,
+                channelPoliciesError: state.channelPoliciesError,
                 cronLoading: state.cronLoading,
                 cronStatus: state.cronStatus,
                 cronJobs: state.cronJobs,
@@ -1282,6 +1304,15 @@ export function renderApp(state: AppViewState) {
                 onConfigReload: () => loadConfig(state as any),
                 onConfigSave: () => saveConfig(state as any),
                 onChannelsRefresh: () => loadChannels(state, false),
+                // Phase 5: 模型账号和通道策略回调
+                onModelAccountsChange: async (agentId: string, config: any) => {
+                  // TODO: 实现模型账号配置更新
+                  console.log("[Phase5] Model accounts config update:", agentId, config);
+                },
+                onChannelPoliciesChange: async (agentId: string, config: any) => {
+                  // TODO: 实现通道策略配置更新
+                  console.log("[Phase5] Channel policies config update:", agentId, config);
+                },
                 onCronRefresh: () => state.loadCron(),
                 onSkillsFilterChange: (next: string) => (state.skillsFilter = next),
                 onSkillsRefresh: () => {
@@ -1544,10 +1575,16 @@ export function renderApp(state: AppViewState) {
                     }
                     // 过滤掉要删除的 agent
                     const list = config.agents.list.filter((a: { id: string }) => a.id !== agentId);
-                    // 更新配置
+                    // 更新配置 - 使用完整配置对象
+                    const baseConfig = await state.client.request("config.get", {});
+                    const baseHash = (baseConfig as any)?.hash;
+                    const patchedConfig = {
+                      ...config,
+                      agents: { ...config.agents, list },
+                    };
                     await state.client.request("config.patch", {
-                      path: ["agents", "list"],
-                      value: list,
+                      raw: JSON.stringify(patchedConfig, null, 2),
+                      baseHash,
                     });
                     // 刷新列表
                     await loadAgents(state);
@@ -1598,10 +1635,19 @@ export function renderApp(state: AppViewState) {
                       // 添加新 agent
                       newList = [...list, newAgent];
                     }
-                    // 更新配置
+                    // 更新配置 - 使用完整配置对象
+                    const baseConfig = await state.client.request("config.get", {});
+                    const baseHash = (baseConfig as any)?.hash;
+                    if (!config) {
+                      throw new Error("Failed to get config");
+                    }
+                    const patchedConfig = {
+                      ...config,
+                      agents: { ...config!.agents, list: newList },
+                    };
                     await state.client.request("config.patch", {
-                      path: ["agents", "list"],
-                      value: newList,
+                      raw: JSON.stringify(patchedConfig, null, 2),
+                      baseHash,
                     });
                     // 刷新列表
                     await loadAgents(state);
@@ -1625,6 +1671,133 @@ export function renderApp(state: AppViewState) {
                     return;
                   }
                   state.editingAgent = { ...state.editingAgent, [field]: value };
+                },
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "organization-chart"
+            ? renderOrganizationChart({
+                loading: state.organizationDataLoading,
+                error: state.organizationDataError,
+                organizationData: state.organizationData || {
+                  organizations: [],
+                  teams: [],
+                  agents:
+                    state.agentsList?.agents?.map((agent: any) => ({
+                      id: agent.id,
+                      name: agent.name || agent.id,
+                      organizationId: undefined,
+                      teamId: undefined,
+                      role: undefined,
+                      permissionLevel: 0,
+                      identity: agent.identity,
+                    })) || [],
+                  relationships: [],
+                  statistics: {
+                    totalOrganizations: 0,
+                    totalTeams: 0,
+                    totalAgents: state.agentsList?.agents?.length || 0,
+                    averageTeamSize: 0,
+                    permissionDistribution: {},
+                  },
+                },
+                selectedNodeId: state.organizationChartSelectedNode,
+                viewMode: state.organizationChartViewMode,
+                onRefresh: async () => {
+                  await Promise.all([loadAgents(state), loadOrganizationData(state)]);
+                },
+                onSelectNode: (nodeId: string) => {
+                  state.organizationChartSelectedNode = nodeId;
+                },
+                onViewModeChange: (mode: any) => {
+                  state.organizationChartViewMode = mode;
+                },
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "permissions-management"
+            ? renderPermissionsManagement({
+                loading: state.permissionsConfigLoading,
+                error: state.permissionsConfigError,
+                activeTab: state.permissionsManagementActiveTab,
+                permissionsConfig: state.permissionsConfig,
+                configLoading: state.permissionsConfigLoading,
+                configSaving: state.permissionsConfigSaving,
+                approvalRequests: state.approvalRequests,
+                approvalsLoading: state.approvalRequestsLoading,
+                changeHistory: state.permissionsChangeHistory,
+                historyLoading: state.permissionsHistoryLoading,
+                onRefresh: async () => {
+                  // 根据当前标签页加载相应数据
+                  switch (state.permissionsManagementActiveTab) {
+                    case "config":
+                      await loadPermissionsConfig(state);
+                      break;
+                    case "approvals":
+                      await loadApprovalRequests(state);
+                      break;
+                    case "history":
+                      await loadPermissionsHistory(state);
+                      break;
+                  }
+                },
+                onTabChange: async (tab: any) => {
+                  state.permissionsManagementActiveTab = tab;
+                  // 切换标签页时加载相应数据
+                  switch (tab) {
+                    case "config":
+                      if (!state.permissionsConfig) {
+                        await loadPermissionsConfig(state);
+                      }
+                      break;
+                    case "approvals":
+                      if (state.approvalRequests.length === 0) {
+                        await loadApprovalRequests(state);
+                      }
+                      break;
+                    case "history":
+                      if (state.permissionsChangeHistory.length === 0) {
+                        await loadPermissionsHistory(state);
+                      }
+                      break;
+                  }
+                },
+                onPermissionChange: async (
+                  agentId: string,
+                  permission: string,
+                  granted: boolean,
+                ) => {
+                  try {
+                    await updatePermissionConfig(state, agentId, permission, granted);
+                    console.log("[Phase5] Permission updated successfully");
+                  } catch (error) {
+                    console.error("[Phase5] Failed to update permission:", error);
+                    alert(
+                      `更新权限失败: ${error instanceof Error ? error.message : String(error)}`,
+                    );
+                  }
+                },
+                onSaveConfig: async () => {
+                  // 保存权限配置（当前配置已在onPermissionChange中保存）
+                  // 这里可以添加批量保存逻辑
+                  console.log("[Phase5] Permissions config saved");
+                },
+                onApprovalAction: async (requestId: string, action: any, comment?: string) => {
+                  try {
+                    await handleApprovalRequest(state, requestId, action, comment);
+                    console.log(`[Phase5] Approval request ${action}ed successfully`);
+                  } catch (error) {
+                    console.error(`[Phase5] Failed to ${action} approval request:`, error);
+                    alert(
+                      `${action === "approve" ? "批准" : "拒绝"}审批请求失败: ${
+                        error instanceof Error ? error.message : String(error)
+                      }`,
+                    );
+                  }
                 },
               })
             : nothing
