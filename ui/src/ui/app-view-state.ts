@@ -1,4 +1,5 @@
 import type { EventLogEntry } from "./app-events.ts";
+import type { CompactionStatus } from "./app-tool-stream.ts";
 import type { DevicePairingList } from "./controllers/devices.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
@@ -14,24 +15,23 @@ import type {
   AgentIdentityResult,
   ChannelsStatusSnapshot,
   ConfigSnapshot,
+  ConfigUiHints,
   CronJob,
   CronRunLogEntry,
   CronStatus,
   HealthSnapshot,
   LogEntry,
   LogLevel,
-  ModelsStatusSnapshot,
   NostrProfile,
   PresenceEntry,
-  SessionsListResult,
   SessionsUsageResult,
   CostUsageSummary,
   SessionUsageTimeSeries,
+  SessionsListResult,
   SkillStatusReport,
   StatusSummary,
 } from "./types.ts";
 import type { ChatAttachment, ChatQueueItem, CronFormState } from "./ui-types.ts";
-import type { ModelAccountsConfig, ChannelPoliciesConfig } from "./views/agents-management.js";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
 import type { SessionLogEntry } from "./views/usage.ts";
 
@@ -58,14 +58,21 @@ export type AppViewState = {
   chatMessages: unknown[];
   chatToolMessages: unknown[];
   chatStream: string | null;
+  chatStreamStartedAt: number | null;
   chatRunId: string | null;
+  compactionStatus: CompactionStatus | null;
   chatAvatarUrl: string | null;
   chatThinkingLevel: string | null;
   chatQueue: ChatQueueItem[];
+  chatManualRefreshInFlight: boolean;
   nodesLoading: boolean;
   nodes: Array<Record<string, unknown>>;
   chatNewMessagesBelow: boolean;
-  scrollToBottom: () => void;
+  sidebarOpen: boolean;
+  sidebarContent: string | null;
+  sidebarError: string | null;
+  splitRatio: number;
+  scrollToBottom: (opts?: { smooth?: boolean }) => void;
   devicesLoading: boolean;
   devicesError: string | null;
   devicesList: DevicePairingList | null;
@@ -89,13 +96,18 @@ export type AppViewState = {
   configSaving: boolean;
   configApplying: boolean;
   updateRunning: boolean;
+  applySessionKey: string;
   configSnapshot: ConfigSnapshot | null;
   configSchema: unknown;
+  configSchemaVersion: string | null;
   configSchemaLoading: boolean;
-  configUiHints: Record<string, unknown>;
+  configUiHints: ConfigUiHints;
   configForm: Record<string, unknown> | null;
   configFormOriginal: Record<string, unknown> | null;
   configFormMode: "form" | "raw";
+  configSearchQuery: string;
+  configActiveSection: string | null;
+  configActiveSubsection: string | null;
   channelsLoading: boolean;
   channelsSnapshot: ChannelsStatusSnapshot | null;
   channelsError: string | null;
@@ -106,95 +118,7 @@ export type AppViewState = {
   whatsappBusy: boolean;
   nostrProfileFormState: NostrProfileFormState | null;
   nostrProfileAccountId: string | null;
-  // 通道账号管理状态
-  editingChannelAccount: {
-    channelId: string;
-    accountId: string;
-    name?: string;
-    config: Record<string, unknown>;
-  } | null;
-  viewingChannelAccount: {
-    channelId: string;
-    accountId: string;
-  } | null; // 查看模式，只读
-  creatingChannelAccount: boolean;
-  deletingChannelAccount: boolean;
-  managingChannelId: string | null;
-  showAllChannelsModal: boolean;
-  debuggingChannel: { channelId: string; accountId?: string } | null;
-  editingChannelGlobalConfig: string | null;
   configFormDirty: boolean;
-  // 模型管理状态（新架构）
-  modelsLoading: boolean;
-  modelsSnapshot: ModelsStatusSnapshot | null;
-  modelsError: string | null;
-  modelsLastSuccess: number | null;
-
-  // 认证管理状态
-  managingAuthProvider: string | null;
-  editingAuth: {
-    authId?: string;
-    provider: string;
-    name: string;
-    apiKey: string;
-    baseUrl?: string;
-  } | null;
-  viewingAuth: {
-    authId: string;
-    provider: string;
-  } | null;
-
-  // 模型列表状态
-  managingModelsProvider: string | null;
-
-  // 模型配置状态
-  editingModelConfig: {
-    configId?: string;
-    authId: string;
-    provider: string;
-    modelName: string;
-    nickname?: string;
-    enabled: boolean;
-    temperature?: number;
-    topP?: number;
-    maxTokens?: number;
-    frequencyPenalty?: number;
-    systemPrompt?: string;
-    conversationRounds?: number;
-    maxIterations?: number;
-    usageLimits?: {
-      maxRequestsPerDay?: number;
-      maxTokensPerRequest?: number;
-    };
-  } | null;
-
-  // 可导入模型列表状态
-  importableModels: Array<{
-    modelName: string;
-    isConfigured: boolean;
-    isEnabled: boolean;
-    isDeprecated: boolean;
-    configId?: string;
-  }> | null;
-  importingAuthId: string | null;
-  importingProvider: string | null;
-  selectedImportModels: Set<string>;
-
-  // 供应商管理状态
-  addingProvider: boolean;
-  viewingProviderId: string | null;
-  providerForm: {
-    selectedTemplateId: string | null;
-    id: string;
-    name: string;
-    icon: string;
-    website: string;
-    defaultBaseUrl: string;
-    apiKeyPlaceholder: string;
-    isEditing?: boolean;
-    originalId?: string;
-  } | null;
-
   presenceLoading: boolean;
   presenceEntries: PresenceEntry[];
   presenceError: string | null;
@@ -203,7 +127,7 @@ export type AppViewState = {
   agentsList: AgentsListResult | null;
   agentsError: string | null;
   agentsSelectedId: string | null;
-  agentsPanel: "overview" | "files" | "tools" | "skills" | "channels" | "cron";
+  agentsPanel: "overview" | "files" | "tools" | "skills" | "channels" | "cron" | "modelAccounts" | "channelPolicies";
   agentFilesLoading: boolean;
   agentFilesError: string | null;
   agentFilesList: AgentsFilesListResult | null;
@@ -218,33 +142,6 @@ export type AppViewState = {
   agentSkillsError: string | null;
   agentSkillsReport: SkillStatusReport | null;
   agentSkillsAgentId: string | null;
-  editingAgent: { id: string; name?: string; workspace?: string } | null;
-  creatingAgent: boolean;
-  deletingAgent: boolean;
-  // Phase 5: Agents Management 状态
-  agentsManagementActivePanel: "detail" | "modelAccounts" | "channelPolicies";
-  modelAccountsConfig: ModelAccountsConfig | null;
-  modelAccountsLoading: boolean;
-  modelAccountsError: string | null;
-  channelPoliciesConfig: ChannelPoliciesConfig | null;
-  channelPoliciesLoading: boolean;
-  channelPoliciesError: string | null;
-  // Phase 5: Organization Chart 状态
-  organizationChartViewMode: "tree" | "list";
-  organizationChartSelectedNode: string | null;
-  organizationData: any | null;
-  organizationDataLoading: boolean;
-  organizationDataError: string | null;
-  // Phase 5: Permissions Management 状态
-  permissionsManagementActiveTab: "config" | "approvals" | "history";
-  permissionsConfig: any | null;
-  permissionsConfigLoading: boolean;
-  permissionsConfigSaving: boolean;
-  permissionsConfigError: string | null;
-  approvalRequests: any[];
-  approvalRequestsLoading: boolean;
-  permissionsChangeHistory: any[];
-  permissionsHistoryLoading: boolean;
   sessionsLoading: boolean;
   sessionsResult: SessionsListResult | null;
   sessionsError: string | null;
@@ -317,21 +214,13 @@ export type AppViewState = {
   logsLevelFilters: Record<LogLevel, boolean>;
   logsAutoFollow: boolean;
   logsTruncated: boolean;
-  // 会话存储状态
-  storageCurrentPath: string | null;
-  storageNewPath: string;
-  storageLoading: boolean;
-  storageMigrating: boolean;
-  storageError: string | null;
-  storageSuccess: string | null;
-  storageShowBrowser: boolean;
-  storageBrowserPath: string;
-  storageBrowserParent: string | null;
-  storageBrowserDirectories: string[];
-  storageBrowserDrives: string[];
-  storageBrowserLoading: boolean;
-  storageBrowserError: string | null;
+  logsCursor: number | null;
+  logsLastFetchAt: number | null;
+  logsLimit: number;
+  logsMaxBytes: number;
+  logsAtBottom: boolean;
   client: GatewayBrowserClient | null;
+  refreshSessionsAfterChat: Set<string>;
   connect: () => void;
   setTab: (tab: Tab) => void;
   setTheme: (theme: ThemeMode, context?: ThemeTransitionContext) => void;
@@ -382,13 +271,15 @@ export type AppViewState = {
   setPassword: (next: string) => void;
   setSessionKey: (next: string) => void;
   setChatMessage: (next: string) => void;
-  handleChatSend: () => Promise<void>;
-  handleChatAbort: () => Promise<void>;
-  handleChatSelectQueueItem: (id: string) => void;
-  handleChatDropQueueItem: (id: string) => void;
-  handleChatClearQueue: () => void;
-  handleLogsFilterChange: (next: string) => void;
-  handleLogsLevelFilterToggle: (level: LogLevel) => void;
-  handleLogsAutoFollowToggle: (next: boolean) => void;
-  handleCallDebugMethod: (method: string, params: string) => Promise<void>;
+  handleSendChat: (messageOverride?: string, opts?: { restoreDraft?: boolean }) => Promise<void>;
+  handleAbortChat: () => Promise<void>;
+  removeQueuedMessage: (id: string) => void;
+  handleChatScroll: (event: Event) => void;
+  resetToolStream: () => void;
+  resetChatScroll: () => void;
+  exportLogs: (lines: string[], label: string) => void;
+  handleLogsScroll: (event: Event) => void;
+  handleOpenSidebar: (content: string) => void;
+  handleCloseSidebar: () => void;
+  handleSplitRatioChange: (ratio: number) => void;
 };

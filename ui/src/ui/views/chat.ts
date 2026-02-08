@@ -8,12 +8,12 @@ import {
   renderMessageGroup,
   renderReadingIndicatorGroup,
   renderStreamingGroup,
-} from "../chat/grouped-render.js";
-import { normalizeMessage, normalizeRoleForGrouping } from "../chat/message-normalizer.js";
-import { t } from "../i18n.js";
-import { icons } from "../icons.js";
-import { renderMarkdownSidebar } from "./markdown-sidebar.js";
-import "../components/resizable-divider";
+} from "../chat/grouped-render.ts";
+import { normalizeMessage, normalizeRoleForGrouping } from "../chat/message-normalizer.ts";
+import { icons } from "../icons.ts";
+import { t } from "../i18n.ts";
+import { renderMarkdownSidebar } from "./markdown-sidebar.ts";
+import "../components/resizable-divider.ts";
 
 export type CompactionIndicatorStatus = {
   active: boolean;
@@ -86,7 +86,7 @@ function renderCompactionIndicator(status: CompactionIndicatorStatus | null | un
   // Show "compacting..." while active
   if (status.active) {
     return html`
-      <div class="callout info compaction-indicator compaction-indicator--active">
+      <div class="compaction-indicator compaction-indicator--active" role="status" aria-live="polite">
         ${icons.loader} ${t("chat.compacting")}
       </div>
     `;
@@ -97,7 +97,7 @@ function renderCompactionIndicator(status: CompactionIndicatorStatus | null | un
     const elapsed = Date.now() - status.completedAt;
     if (elapsed < COMPACTION_TOAST_DURATION_MS) {
       return html`
-        <div class="callout success compaction-indicator compaction-indicator--complete">
+        <div class="compaction-indicator compaction-indicator--complete" role="status" aria-live="polite">
           ${icons.check} ${t("chat.compacted")}
         </div>
       `;
@@ -201,7 +201,7 @@ export function renderChat(props: ChatProps) {
   const hasAttachments = (props.attachments?.length ?? 0) > 0;
   const composePlaceholder = props.connected
     ? hasAttachments
-      ? t("chat.placeholder.with_images")
+      ? t("chat.placeholder.with_attachments")
       : t("chat.placeholder.connected")
     : t("chat.placeholder.disconnected");
 
@@ -217,7 +217,7 @@ export function renderChat(props: ChatProps) {
       ${
         props.loading
           ? html`
-              <div class="muted">${t("chat.loading")}</div>
+              <div class="muted">Loading chat…</div>
             `
           : nothing
       }
@@ -225,6 +225,16 @@ export function renderChat(props: ChatProps) {
         buildChatItems(props),
         (item) => item.key,
         (item) => {
+          if (item.kind === "divider") {
+            return html`
+              <div class="chat-divider" role="separator" data-ts=${String(item.timestamp)}>
+                <span class="chat-divider__line"></span>
+                <span class="chat-divider__label">${item.label}</span>
+                <span class="chat-divider__line"></span>
+              </div>
+            `;
+          }
+
           if (item.kind === "reading-indicator") {
             return renderReadingIndicatorGroup(assistantIdentity);
           }
@@ -259,8 +269,6 @@ export function renderChat(props: ChatProps) {
 
       ${props.error ? html`<div class="callout danger">${props.error}</div>` : nothing}
 
-      ${renderCompactionIndicator(props.compactionStatus)}
-
       ${
         props.focusMode
           ? html`
@@ -268,8 +276,8 @@ export function renderChat(props: ChatProps) {
               class="chat-focus-exit"
               type="button"
               @click=${props.onToggleFocusMode}
-              aria-label="${t("chat.focus_exit")}"
-              title="${t("chat.focus_exit")}"
+              aria-label="Exit focus mode"
+              title="Exit focus mode"
             >
               ${icons.x}
             </button>
@@ -316,7 +324,7 @@ export function renderChat(props: ChatProps) {
         props.queue.length
           ? html`
             <div class="chat-queue" role="status" aria-live="polite">
-              <div class="chat-queue__title">${t("chat.queue.title")} (${props.queue.length})</div>
+              <div class="chat-queue__title">Queued (${props.queue.length})</div>
               <div class="chat-queue__list">
                 ${props.queue.map(
                   (item) => html`
@@ -324,15 +332,13 @@ export function renderChat(props: ChatProps) {
                       <div class="chat-queue__text">
                         ${
                           item.text ||
-                          (item.attachments?.length
-                            ? `${t("chat.queue.image")} (${item.attachments.length})`
-                            : "")
+                          (item.attachments?.length ? `Image (${item.attachments.length})` : "")
                         }
                       </div>
                       <button
                         class="btn chat-queue__remove"
                         type="button"
-                        aria-label="${t("chat.queue.remove")}"
+                        aria-label="Remove queued message"
                         @click=${() => props.onQueueRemove(item.id)}
                       >
                         ${icons.x}
@@ -346,6 +352,8 @@ export function renderChat(props: ChatProps) {
           : nothing
       }
 
+      ${renderCompactionIndicator(props.compactionStatus)}
+
       ${
         props.showNewMessages
           ? html`
@@ -354,7 +362,7 @@ export function renderChat(props: ChatProps) {
               type="button"
               @click=${props.onScrollToBottom}
             >
-              ${t("chat.new_messages")} ${icons.arrowDown}
+              New messages ${icons.arrowDown}
             </button>
           `
           : nothing
@@ -364,7 +372,7 @@ export function renderChat(props: ChatProps) {
         ${renderAttachmentPreview(props)}
         <div class="chat-compose__row">
           <label class="field chat-compose__field">
-            <span>${t("chat.compose.message")}</span>
+            <span>Message</span>
             <textarea
               ${ref((el) => el && adjustTextareaHeight(el as HTMLTextAreaElement))}
               .value=${props.draft}
@@ -402,14 +410,14 @@ export function renderChat(props: ChatProps) {
               ?disabled=${!props.connected || (!canAbort && props.sending)}
               @click=${canAbort ? props.onAbort : props.onNewSession}
             >
-              ${canAbort ? t("chat.compose.stop") : t("chat.compose.new_session")}
+              ${canAbort ? "Stop" : "New session"}
             </button>
             <button
               class="btn primary"
               ?disabled=${!props.connected}
               @click=${props.onSend}
             >
-              ${isBusy ? t("chat.compose.queue") : t("chat.compose.send")}<kbd class="btn-kbd">↵</kbd>
+              ${isBusy ? "Queue" : "Send"}<kbd class="btn-kbd">↵</kbd>
             </button>
           </div>
         </div>
@@ -472,9 +480,7 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
       key: "chat:history:notice",
       message: {
         role: "system",
-        content: t("chat.history.showing")
-          .replace("{count}", String(CHAT_HISTORY_RENDER_LIMIT))
-          .replace("{hidden}", String(historyStart)),
+        content: `Showing last ${CHAT_HISTORY_RENDER_LIMIT} messages (${historyStart} hidden).`,
         timestamp: Date.now(),
       },
     });
@@ -482,6 +488,20 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
   for (let i = historyStart; i < history.length; i++) {
     const msg = history[i];
     const normalized = normalizeMessage(msg);
+    const raw = msg as Record<string, unknown>;
+    const marker = raw.__openclaw as Record<string, unknown> | undefined;
+    if (marker && marker.kind === "compaction") {
+      items.push({
+        kind: "divider",
+        key:
+          typeof marker.id === "string"
+            ? `divider:compaction:${marker.id}`
+            : `divider:compaction:${normalized.timestamp}:${i}`,
+        label: "Compaction",
+        timestamp: normalized.timestamp ?? Date.now(),
+      });
+      continue;
+    }
 
     if (!props.showThinking && normalized.role.toLowerCase() === "toolresult") {
       continue;
