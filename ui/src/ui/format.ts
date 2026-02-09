@@ -1,4 +1,9 @@
+import { formatDurationHuman } from "../../../src/infra/format-time/format-duration.ts";
+import { formatRelativeTimestamp } from "../../../src/infra/format-time/format-relative.ts";
 import { stripReasoningTagsFromText } from "../../../src/shared/text/reasoning-tags.js";
+
+// 导出上游新增的工具函数
+export { formatRelativeTimestamp, formatDurationHuman };
 
 /**
  * 获取用户设置的时区（从 localStorage）
