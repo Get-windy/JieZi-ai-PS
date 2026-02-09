@@ -365,6 +365,13 @@ export class TrainingSystem {
     return Array.from(this.progresses.values()).filter((p) => p.agentId === agentId);
   }
 
+  /**
+   * 获取所有培训进度
+   */
+  public getAllProgresses(): TrainingProgress[] {
+    return Array.from(this.progresses.values());
+  }
+
   // ========== 培训计划管理 ==========
 
   /**
@@ -551,6 +558,13 @@ export class TrainingSystem {
   }
 
   /**
+   * 获取所有证书
+   */
+  public getAllCertificates(): Certificate[] {
+    return Array.from(this.certificates.values());
+  }
+
+  /**
    * 获取有效证书
    */
   public getValidCertificates(agentId: string): Certificate[] {
@@ -563,6 +577,38 @@ export class TrainingSystem {
   }
 
   // ========== 统计信息 ==========
+
+  /**
+   * 获取全局培训统计信息
+   */
+  public getStatistics(): TrainingStatistics {
+    const allProgresses = this.getAllProgresses();
+    const allCertificates = this.getAllCertificates();
+
+    const completed = allProgresses.filter((p) => p.status === "completed");
+    const inProgress = allProgresses.filter((p) => p.status === "in-progress");
+
+    const totalTime = allProgresses.reduce((sum, p) => sum + p.totalTimeSpent, 0);
+    const avgTime = completed.length > 0 ? totalTime / completed.length : 0;
+
+    return {
+      agentId: "all",
+      totalCourses: this.courses.size,
+      completedCourses: completed.length,
+      inProgressCourses: inProgress.length,
+      totalSkills: 0,
+      certifiedSkills: 0,
+      skillsByCategory: new Map(),
+      totalTrainingTime: totalTime,
+      averageCompletionTime: avgTime,
+      totalAssessments: allProgresses.filter((p) => p.assessmentScore !== undefined).length,
+      averageAssessmentScore: this.calculateAverageAssessmentScore(allProgresses),
+      totalCertificates: allCertificates.length,
+      activeCertificates: allCertificates.filter((c) => c.isValid).length,
+      expiredCertificates: allCertificates.filter((c) => !c.isValid).length,
+      lastUpdatedAt: Date.now(),
+    };
+  }
 
   /**
    * 获取培训统计信息

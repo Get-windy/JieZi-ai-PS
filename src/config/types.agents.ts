@@ -1,5 +1,6 @@
 import type { AgentDefaultsConfig } from "./types.agent-defaults.js";
 import type { HumanDelayConfig, IdentityConfig } from "./types.base.js";
+import type { AgentChannelPolicies } from "./types.channel-policies.js";
 import type { GroupChatConfig } from "./types.messages.js";
 import type {
   SandboxBrowserSettings,
@@ -74,8 +75,10 @@ export type AgentConfig = {
   modelAccountId?: string;
   /** 绑定的通道账号ID列表（格式：channel/accountId） */
   channelAccountIds?: string[];
-  /** 【新增】智能助手模型账号智能路由配置 */
+  /** 【Phase 1】智能助手模型账号智能路由配置 */
   modelAccounts?: AgentModelAccountsConfig;
+  /** 【Phase 2】通道账号策略配置 */
+  channelPolicies?: AgentChannelPolicies;
   /** Optional allowlist of skills for this agent (omit = all skills; empty = none). */
   skills?: string[];
   memorySearch?: MemorySearchConfig;

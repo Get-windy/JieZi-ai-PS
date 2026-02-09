@@ -4,6 +4,7 @@ import { agentHandlers } from "./server-methods/agent.js";
 import { agentsManagementHandlers } from "./server-methods/agents-management.js";
 import { agentsHandlers } from "./server-methods/agents.js";
 import { browserHandlers } from "./server-methods/browser.js";
+import { channelPoliciesHandlers } from "./server-methods/channel-policies.js";
 import { channelsHandlers } from "./server-methods/channels.js";
 import { chatHandlers } from "./server-methods/chat.js";
 import { configHandlers } from "./server-methods/config.js";
@@ -11,19 +12,25 @@ import { connectHandlers } from "./server-methods/connect.js";
 import { cronHandlers } from "./server-methods/cron.js";
 import { deviceHandlers } from "./server-methods/devices.js";
 import { execApprovalsHandlers } from "./server-methods/exec-approvals.js";
+import { friendsHandlers } from "./server-methods/friends-rpc.js";
+import { groupsHandlers } from "./server-methods/groups-rpc.js";
 import { healthHandlers } from "./server-methods/health.js";
 import { logsHandlers } from "./server-methods/logs.js";
+import { messageQueueHandlers } from "./server-methods/message-queue-rpc.js";
 import { modelsHandlers } from "./server-methods/models.js";
+import { monitorHandlers } from "./server-methods/monitor-rpc.js";
 import { nodeHandlers } from "./server-methods/nodes.js";
 import { organizationChartHandlers } from "./server-methods/organization-chart.js";
 import { permissionsManagementHandlers } from "./server-methods/permissions-management.js";
 import { phase5RpcHandlers } from "./server-methods/phase5-rpc.js";
+import { scenariosHandlers } from "./server-methods/scenarios-rpc.js";
 import { sendHandlers } from "./server-methods/send.js";
 import { sessionsHandlers } from "./server-methods/sessions.js";
 import { skillsHandlers } from "./server-methods/skills.js";
 import { storageHandlers } from "./server-methods/storage.js";
 import { systemHandlers } from "./server-methods/system.js";
 import { talkHandlers } from "./server-methods/talk.js";
+import { trainingMethods } from "./server-methods/training.js";
 import { ttsHandlers } from "./server-methods/tts.js";
 import { updateHandlers } from "./server-methods/update.js";
 import { usageHandlers } from "./server-methods/usage.js";
@@ -67,6 +74,15 @@ const READ_METHODS = new Set([
   "agent.identity.get",
   "agent.modelAccounts.list",
   "agent.channelPolicies.list",
+  "agent.modelAccounts.get",
+  "agent.channelPolicies.get",
+  "permissions.get",
+  "approvals.list",
+  "approvals.stats",
+  "permissions.history",
+  "messageQueue.status",
+  "messageQueue.stats",
+  "messageQueue.config.get",
   "permission.config.get",
   "approval.requests.list",
   "organization.data.get",
@@ -86,6 +102,36 @@ const READ_METHODS = new Set([
   "storage.listDirectories",
   "storage.validatePath",
   "storage.getCurrentPath",
+  // Groups - Read
+  "groups.list",
+  "groups.get",
+  "groups.members",
+  "groups.friends",
+  // Friends - Read
+  "friends.list",
+  "friends.requests",
+  "friends.messages",
+  // Monitor - Read
+  "monitor.sessions",
+  "monitor.messageFlows",
+  "monitor.forwardingRules",
+  "monitor.metrics",
+  "monitor.alerts",
+  // Scenarios - Read
+  "scenarios.list",
+  "scenarios.get",
+  "scenarios.runs",
+  "scenarios.recommendations",
+  // Training - Read
+  "training.courses.list",
+  "training.progresses.list",
+  "training.certificates.list",
+  "training.course.get",
+  "training.stats",
+  // Channel Policies - Read
+  "channel.policy.get",
+  "channel.policy.list",
+  "channel.policy.status",
 ]);
 const WRITE_METHODS = new Set([
   "send",
@@ -102,6 +148,46 @@ const WRITE_METHODS = new Set([
   "chat.send",
   "chat.abort",
   "browser.request",
+  "agent.modelAccounts.update",
+  "agent.channelPolicies.update",
+  "approvals.respond",
+  "approvals.cancel",
+  "approvals.batch-approve",
+  "approvals.batch-deny",
+  "messageQueue.config.update",
+  "messageQueue.clear",
+  // Groups - Write
+  "groups.addMember",
+  "groups.removeMember",
+  "groups.updateMemberRole",
+  "groups.muteMember",
+  "groups.addFriend",
+  "groups.confirmFriend",
+  "groups.removeFriend",
+  // Friends - Write
+  "friends.add",
+  "friends.confirm",
+  "friends.remove",
+  "friends.sendMessage",
+  // Monitor - Write
+  "monitor.addForwardingRule",
+  "monitor.updateForwardingRule",
+  "monitor.deleteForwardingRule",
+  "monitor.acknowledgeAlert",
+  "monitor.clearAlerts",
+  // Scenarios - Write
+  "scenarios.create",
+  "scenarios.update",
+  "scenarios.delete",
+  "scenarios.run",
+  // Training - Write
+  "training.course.start",
+  "training.module.complete",
+  "training.course.complete",
+  "training.exercise.submit",
+  // Channel Policies - Write
+  "channel.policy.set",
+  "channel.policy.test",
 ]);
 
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {
@@ -170,7 +256,11 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
     method === "sessions.reset" ||
     method === "sessions.delete" ||
     method === "sessions.compact" ||
-    method === "storage.migrateData"
+    method === "storage.migrateData" ||
+    method === "groups.create" ||
+    method === "groups.update" ||
+    method === "groups.delete" ||
+    method === "training.course.create"
   ) {
     return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.admin");
   }
@@ -208,6 +298,13 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...organizationChartHandlers,
   ...permissionsManagementHandlers,
   ...phase5RpcHandlers,
+  ...messageQueueHandlers,
+  ...groupsHandlers,
+  ...friendsHandlers,
+  ...monitorHandlers,
+  ...scenariosHandlers,
+  ...trainingMethods,
+  ...channelPoliciesHandlers,
 };
 
 export async function handleGatewayRequest(

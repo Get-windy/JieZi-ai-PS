@@ -1,6 +1,6 @@
 /**
  * Phase 1/2/3/4 集成初始化
- * 在应用启动时初始化智能模型路由、通道绑定、权限系统和组织协作体系
+ * 在应用启动时初始化智能模型路由、通道策略、权限系统和组织协作体系
  */
 
 import type { OrganizationConfig } from "../organization/organization-integration.js";
@@ -8,9 +8,15 @@ import type { AgentModelAccountsConfig } from "./types.agents.js";
 import type { AgentChannelBindings } from "./types.channel-bindings.js";
 import type { OpenClawConfig } from "./types.js";
 import type { AgentPermissionsConfig } from "./types.permissions.js";
+import { agentContextManager } from "../agents/agent-context.js";
 import { modelRoutingIntegrator } from "../agents/model-routing-integration.js";
+import { skillManager } from "../agents/skill-manager.js";
+import { messageQueue } from "../channels/message-queue.js";
+import { initializeChannelPolicies } from "../channels/policy-integration.js";
 import { initializeFromConfig } from "../organization/organization-integration.js";
+import { approvalSystem } from "../permissions/approval-system.js";
 import { initializePermissionSystem } from "../permissions/integration.js";
+import { groupSessionCoordinator } from "../sessions/group-session-coordinator.js";
 
 /**
  * 验证模型账号配置
@@ -301,9 +307,9 @@ function validateOrganizationConfig(config: OrganizationConfig): {
 }
 
 /**
- * 初始化 Phase 1/2/3/4 系统
+ * 初始化 Phase 1/2/3/4/5/6 系统
  *
- * 在应用启动时调用，用于验证配置并初始化模型路由、权限系统和组织体系
+ * 在应用启动时调用，用于验证配置并初始化所有核心系统
  */
 export function initializePhaseIntegration(config: OpenClawConfig): {
   success: boolean;
@@ -313,7 +319,7 @@ export function initializePhaseIntegration(config: OpenClawConfig): {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  console.log("[Phase Integration] Initializing Phase 1/2/3/4 systems...");
+  console.log("[Phase Integration] Initializing Phase 1/2/3/4/5/6 systems...");
 
   // 初始化全局模型路由集成器（Phase 1）
   try {
@@ -329,53 +335,68 @@ export function initializePhaseIntegration(config: OpenClawConfig): {
   const agents = config.agents?.list;
   if (!agents || !Array.isArray(agents)) {
     warnings.push("No agents configured");
-    return { success: true, errors, warnings };
-  }
-
-  for (const agent of agents) {
-    if (!agent || typeof agent !== "object") {
-      continue;
-    }
-
-    const agentId = (agent as any).id || "default";
-
-    // 验证模型账号配置（Phase 1）
-    if ((agent as any).modelAccounts) {
-      const modelAccountsResult = validateModelAccounts((agent as any).modelAccounts);
-      if (!modelAccountsResult.valid) {
-        errors.push(...modelAccountsResult.errors.map((e) => `Agent ${agentId}: ${e}`));
-      } else {
-        console.log(`[Phase Integration] Agent ${agentId}: model accounts validated`);
+  } else {
+    for (const agent of agents) {
+      if (!agent || typeof agent !== "object") {
+        continue;
       }
-    }
 
-    // 验证通道绑定配置（Phase 2）
-    if ((agent as any).channelBindings) {
-      const bindingResult = validateChannelBindings((agent as any).channelBindings);
-      if (!bindingResult.valid) {
-        errors.push(...bindingResult.errors.map((e) => `Agent ${agentId}: ${e}`));
-      } else {
-        console.log(`[Phase Integration] Agent ${agentId}: channel bindings validated`);
+      const agentId = (agent as any).id || "default";
+
+      // 验证模型账号配置（Phase 1）
+      if ((agent as any).modelAccounts) {
+        const modelAccountsResult = validateModelAccounts((agent as any).modelAccounts);
+        if (!modelAccountsResult.valid) {
+          errors.push(...modelAccountsResult.errors.map((e) => `Agent ${agentId}: ${e}`));
+        } else {
+          console.log(`[Phase Integration] Agent ${agentId}: model accounts validated`);
+        }
       }
-    }
 
-    // 验证和初始化权限配置（Phase 3）
-    if ((agent as any).permissions) {
-      const permissionResult = validatePermissions((agent as any).permissions);
-      if (!permissionResult.valid) {
-        errors.push(...permissionResult.errors.map((e) => `Agent ${agentId}: ${e}`));
-      } else {
-        // 初始化权限系统
-        try {
-          initializePermissionSystem((agent as any).permissions);
-          console.log(`[Phase Integration] Agent ${agentId}: permissions initialized`);
-        } catch (err) {
-          errors.push(
-            `Agent ${agentId}: failed to initialize permissions: ${err instanceof Error ? err.message : String(err)}`,
-          );
+      // 验证通道绑定配置（Phase 2）
+      if ((agent as any).channelBindings) {
+        const bindingResult = validateChannelBindings((agent as any).channelBindings);
+        if (!bindingResult.valid) {
+          errors.push(...bindingResult.errors.map((e) => `Agent ${agentId}: ${e}`));
+        } else {
+          console.log(`[Phase Integration] Agent ${agentId}: channel bindings validated`);
+        }
+      }
+
+      // 验证和初始化权限配置（Phase 3）
+      if ((agent as any).permissions) {
+        const permissionResult = validatePermissions((agent as any).permissions);
+        if (!permissionResult.valid) {
+          errors.push(...permissionResult.errors.map((e) => `Agent ${agentId}: ${e}`));
+        } else {
+          // 初始化权限系统
+          try {
+            initializePermissionSystem((agent as any).permissions);
+            console.log(`[Phase Integration] Agent ${agentId}: permissions initialized`);
+          } catch (err) {
+            errors.push(
+              `Agent ${agentId}: failed to initialize permissions: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
         }
       }
     }
+  }
+
+  // 初始化通道策略系统（Phase 2）
+  try {
+    const policyResult = initializeChannelPolicies(config);
+    if (!policyResult.success) {
+      errors.push(...policyResult.errors);
+    }
+    if (policyResult.warnings.length > 0) {
+      warnings.push(...policyResult.warnings);
+    }
+    console.log("[Phase Integration] Channel policies initialized");
+  } catch (err) {
+    errors.push(
+      `Failed to initialize channel policies: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   // 验证和初始化组织体系配置（Phase 4）
@@ -408,9 +429,76 @@ export function initializePhaseIntegration(config: OpenClawConfig): {
     }
   }
 
+  // 初始化群组会话系统（Phase 6）
+  try {
+    // 群组系统已通过单例自动初始化
+    console.log("[Phase Integration] Group session system ready");
+  } catch (err) {
+    errors.push(
+      `Failed to initialize group session system: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  // 初始化 Agent 上下文管理器（Phase 5）
+  try {
+    // 为每个配置的 Agent 创建上下文
+    if (agents && Array.isArray(agents)) {
+      for (const agent of agents) {
+        if (agent && typeof agent === "object") {
+          agentContextManager.createContext(agent as any).catch((err) => {
+            warnings.push(
+              `Failed to create context for agent ${(agent as any).id}: ${err.message}`,
+            );
+          });
+        }
+      }
+    }
+    console.log("[Phase Integration] Agent context manager initialized");
+  } catch (err) {
+    errors.push(
+      `Failed to initialize agent context manager: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  // 初始化技能管理器（Phase 3）
+  try {
+    // 技能管理器已通过单例自动初始化
+    console.log("[Phase Integration] Skill manager ready");
+  } catch (err) {
+    errors.push(
+      `Failed to initialize skill manager: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  // 初始化消息队列系统（Phase 2）
+  try {
+    // 消息队列已通过单例自动初始化
+    console.log("[Phase Integration] Message queue ready");
+  } catch (err) {
+    errors.push(
+      `Failed to initialize message queue: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  // 初始化审批系统（Phase 3）
+  try {
+    // 审批系统已通过单例自动初始化
+    // 启动过期请求检查定时器
+    setInterval(() => {
+      approvalSystem.checkExpiredRequests().catch((err) => {
+        console.error("[Phase Integration] Failed to check expired approvals:", err);
+      });
+    }, 60 * 1000); // 每分钟检查一次
+    console.log("[Phase Integration] Approval system ready");
+  } catch (err) {
+    errors.push(
+      `Failed to initialize approval system: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
   const success = errors.length === 0;
   if (success) {
-    console.log("[Phase Integration] Phase 1/2/3/4 systems initialized successfully");
+    console.log("[Phase Integration] Phase 1/2/3/4/5/6 systems initialized successfully");
     if (warnings.length > 0) {
       console.warn("[Phase Integration] Warnings:", warnings);
     }

@@ -3,6 +3,7 @@ import type { CompactionStatus } from "./app-tool-stream.ts";
 import type { DevicePairingList } from "./controllers/devices.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
+import type { QueuedMessage, QueueStats, QueueConfig } from "./controllers/message-queue.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
@@ -119,6 +120,23 @@ export type AppViewState = {
   nostrProfileFormState: NostrProfileFormState | null;
   nostrProfileAccountId: string | null;
   configFormDirty: boolean;
+  // 通道账号管理状态
+  editingChannelAccount: {
+    channelId: string;
+    accountId: string;
+    name?: string;
+    config: Record<string, unknown>;
+  } | null;
+  viewingChannelAccount: {
+    channelId: string;
+    accountId: string;
+  } | null;
+  creatingChannelAccount: boolean;
+  deletingChannelAccount: boolean;
+  managingChannelId: string | null;
+  showAllChannelsModal: boolean;
+  debuggingChannel: { channelId: string; accountId?: string } | null;
+  editingChannelGlobalConfig: string | null;
   presenceLoading: boolean;
   presenceEntries: PresenceEntry[];
   presenceError: string | null;
@@ -127,7 +145,17 @@ export type AppViewState = {
   agentsList: AgentsListResult | null;
   agentsError: string | null;
   agentsSelectedId: string | null;
-  agentsPanel: "overview" | "files" | "tools" | "skills" | "channels" | "cron" | "modelAccounts" | "channelPolicies";
+  agentsPanel:
+    | "overview"
+    | "files"
+    | "tools"
+    | "skills"
+    | "channels"
+    | "cron"
+    | "modelAccounts"
+    | "channelPolicies";
+  // Collaboration 协作管理状态
+  collaborationActivePanel: "groups" | "friends" | "monitor" | "scenarios";
   agentFilesLoading: boolean;
   agentFilesError: string | null;
   agentFilesList: AgentsFilesListResult | null;
@@ -142,6 +170,69 @@ export type AppViewState = {
   agentSkillsError: string | null;
   agentSkillsReport: SkillStatusReport | null;
   agentSkillsAgentId: string | null;
+  // 群组管理状态
+  groupsLoading: boolean;
+  groupsList: import("./views/groups.ts").GroupsListResult | null;
+  groupsError: string | null;
+  groupsSelectedId: string | null;
+  groupsActivePanel: "list" | "members" | "settings";
+  creatingGroup: boolean;
+  editingGroup: import("./views/groups.ts").GroupInfo | null;
+  // Friends 好友关系状态
+  friendsLoading: boolean;
+  friendsError: string | null;
+  friendsList: import("./controllers/friends.ts").Friend[];
+  friendsTotal: number;
+  friendRequestsLoading: boolean;
+  friendRequestsList: import("./controllers/friends.ts").FriendRequest[];
+  selectedFriendId: string | null;
+  messagesLoading: boolean;
+  messagesList: import("./controllers/friends.ts").DirectMessage[];
+  sendingMessage: boolean;
+  friendsActiveSubPanel: "list" | "requests" | "chat";
+  draftMessage: string;
+  // Monitor 协作监控状态
+  monitorActiveSubPanel: "sessions" | "flows" | "forwarding" | "metrics" | "alerts";
+  monitorSessionsLoading: boolean;
+  monitorSessionsError: string | null;
+  monitorActiveSessions: import("./controllers/monitor.ts").ActiveSession[];
+  monitorMessageFlowsLoading: boolean;
+  monitorMessageFlows: import("./controllers/monitor.ts").MessageFlow[];
+  monitorForwardingRulesLoading: boolean;
+  monitorForwardingRules: import("./controllers/monitor.ts").ForwardingRule[];
+  monitorEditingRule: import("./controllers/monitor.ts").ForwardingRule | null;
+  monitorCreatingRule: boolean;
+  monitorMetricsLoading: boolean;
+  monitorMetrics: import("./controllers/monitor.ts").PerformanceMetrics | null;
+  monitorAlertsLoading: boolean;
+  monitorAlerts: import("./controllers/monitor.ts").Alert[];
+  // Scenarios 协作场景状态
+  scenariosActiveSubPanel: "list" | "runs" | "recommendations" | "analytics";
+  scenariosLoading: boolean;
+  scenariosError: string | null;
+  scenariosList: import("./controllers/scenarios.ts").CollaborationScenario[];
+  scenariosTotal: number;
+  selectedScenarioId: string | null;
+  editingScenario: import("./controllers/scenarios.ts").CollaborationScenario | null;
+  creatingScenario: boolean;
+  runningScenarioId: string | null;
+  scenarioRunsLoading: boolean;
+  scenarioRuns: import("./controllers/scenarios.ts").ScenarioRun[];
+  recommendationsLoading: boolean;
+  recommendations: import("./controllers/scenarios.ts").ScenarioRecommendation[];
+  // Phase 5: 模型账号和通道策略
+  modelAccountsConfig: Record<string, unknown> | null;
+  modelAccountsLoading: boolean;
+  modelAccountsError: string | null;
+  modelAccountsSaving: boolean;
+  modelAccountsSaveSuccess: boolean;
+  channelPoliciesConfig: Record<string, unknown> | null;
+  channelPoliciesLoading: boolean;
+  channelPoliciesError: string | null;
+  channelPoliciesSaving: boolean;
+  channelPoliciesSaveSuccess: boolean;
+  editingPolicyBinding: { agentId: string; index: number; binding: any } | null;
+  addingPolicyBinding: string | null;
   sessionsLoading: boolean;
   sessionsResult: SessionsListResult | null;
   sessionsError: string | null;
@@ -197,6 +288,11 @@ export type AppViewState = {
   skillEdits: Record<string, string>;
   skillMessages: Record<string, SkillMessage>;
   skillsBusyKey: string | null;
+  // Skills Advanced Features
+  skillsAdvancedMode: boolean;
+  skillsSelectedSkills: Set<string>;
+  skillsFilterStatus: "all" | "eligible" | "blocked" | "disabled";
+  skillsFilterSource: "all" | "workspace" | "built-in" | "installed" | "extra";
   debugLoading: boolean;
   debugStatus: StatusSummary | null;
   debugHealth: HealthSnapshot | null;
@@ -219,6 +315,39 @@ export type AppViewState = {
   logsLimit: number;
   logsMaxBytes: number;
   logsAtBottom: boolean;
+  // Message Queue 状态
+  messageQueueActivePanel: "monitor" | "statistics" | "configuration";
+  queueLoading: boolean;
+  queueError: string | null;
+  queueMessages: QueuedMessage[];
+  queueStats: QueueStats | null;
+  queueStatsLoading: boolean;
+  queueConfig: QueueConfig | null;
+  queueConfigLoading: boolean;
+  queueConfigSaving: boolean;
+  // Permissions Management 状态
+  permissionsManagementActiveTab: "config" | "approvals" | "history";
+  permissionsConfig: any | null;
+  permissionsConfigLoading: boolean;
+  permissionsConfigSaving: boolean;
+  permissionsConfigError: string | null;
+  approvalRequests: any[];
+  approvalRequestsLoading: boolean;
+  permissionsChangeHistory: any[];
+  permissionsHistoryLoading: boolean;
+  // Approvals State (for ApprovalsState compatibility)
+  approvalsLoading: boolean;
+  approvalsError: string | null;
+  approvalsList: import("./controllers/approvals.ts").ApprovalRequest[];
+  approvalsTotal: number;
+  approvalsStats: import("./controllers/approvals.ts").ApprovalStats | null;
+  approvalsStatsLoading: boolean;
+  // Organization Chart 状态
+  organizationChartViewMode: "tree" | "list";
+  organizationChartSelectedNode: string | null;
+  organizationData: any | null;
+  organizationDataLoading: boolean;
+  organizationDataError: string | null;
   client: GatewayBrowserClient | null;
   refreshSessionsAfterChat: Set<string>;
   connect: () => void;

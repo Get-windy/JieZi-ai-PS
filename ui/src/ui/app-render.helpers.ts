@@ -8,6 +8,7 @@ import { refreshChat } from "./app-chat.ts";
 import { syncUrlWithSessionKey } from "./app-settings.ts";
 import { OpenClawApp } from "./app.ts";
 import { ChatState, loadChatHistory } from "./controllers/chat.ts";
+import { t } from "./i18n.ts";
 import { icons } from "./icons.ts";
 import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
 

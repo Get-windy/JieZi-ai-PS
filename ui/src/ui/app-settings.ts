@@ -11,13 +11,16 @@ import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
 import { loadAgents } from "./controllers/agents.ts";
+import { loadApprovals, loadApprovalStats } from "./controllers/approvals.ts";
 import { loadChannels } from "./controllers/channels.ts";
 import { loadConfig, loadConfigSchema } from "./controllers/config.ts";
 import { loadCronJobs, loadCronStatus } from "./controllers/cron.ts";
 import { loadDebug } from "./controllers/debug.ts";
 import { loadDevices } from "./controllers/devices.ts";
 import { loadExecApprovals } from "./controllers/exec-approvals.ts";
+import { loadGroups } from "./controllers/groups.ts";
 import { loadLogs } from "./controllers/logs.ts";
+import { loadQueueStatus, loadQueueStats, loadQueueConfig } from "./controllers/message-queue.ts";
 import { loadModels } from "./controllers/models.js";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
@@ -262,6 +265,22 @@ export async function refreshActiveTab(host: SettingsHost) {
     host.logsAtBottom = true;
     await loadLogs(host as unknown as OpenClawApp, { reset: true });
     scheduleLogsScroll(host as unknown as Parameters<typeof scheduleLogsScroll>[0], true);
+  }
+  if (host.tab === "message-queue") {
+    await loadQueueStatus(host as unknown as OpenClawApp);
+    await loadQueueStats(host as unknown as OpenClawApp);
+  }
+  if (host.tab === "permissions-management") {
+    await loadApprovals(host as unknown as OpenClawApp);
+    await loadApprovalStats(host as unknown as OpenClawApp);
+  }
+  if (host.tab === "organization-chart") {
+    // TODO: 加载组织架构数据
+    console.log("Load organization chart data");
+  }
+  if (host.tab === "collaboration") {
+    // 默认加载群组管理数据
+    await loadGroups(host as unknown as OpenClawApp);
   }
 }
 

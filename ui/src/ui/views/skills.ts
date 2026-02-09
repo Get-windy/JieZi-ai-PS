@@ -82,17 +82,58 @@ export type SkillsProps = {
   onEdit: (skillKey: string, value: string) => void;
   onSaveKey: (skillKey: string) => void;
   onInstall: (skillKey: string, name: string, installId: string) => void;
+  // Advanced features
+  advancedMode?: boolean;
+  selectedSkills?: Set<string>;
+  filterStatus?: "all" | "eligible" | "blocked" | "disabled";
+  filterSource?: "all" | "workspace" | "built-in" | "installed" | "extra";
+  onToggleAdvancedMode?: () => void;
+  onSelectSkill?: (skillKey: string, selected: boolean) => void;
+  onSelectAll?: () => void;
+  onDeselectAll?: () => void;
+  onBatchEnable?: () => void;
+  onBatchDisable?: () => void;
+  onFilterStatusChange?: (status: "all" | "eligible" | "blocked" | "disabled") => void;
+  onFilterSourceChange?: (source: "all" | "workspace" | "built-in" | "installed" | "extra") => void;
+  onShowDependencies?: (skillKey: string) => void;
 };
 
 export function renderSkills(props: SkillsProps) {
   const skills = props.report?.skills ?? [];
   const filter = props.filter.trim().toLowerCase();
-  const filtered = filter
+  let filtered = filter
     ? skills.filter((skill: any) =>
         [skill.name, skill.description, skill.source].join(" ").toLowerCase().includes(filter),
       )
     : skills;
+
+  // Advanced filtering
+  if (props.advancedMode && props.filterStatus && props.filterStatus !== "all") {
+    filtered = filtered.filter((skill) => {
+      if (props.filterStatus === "eligible") return skill.eligible && !skill.disabled;
+      if (props.filterStatus === "blocked") return !skill.eligible;
+      if (props.filterStatus === "disabled") return skill.disabled;
+      return true;
+    });
+  }
+
+  if (props.advancedMode && props.filterSource && props.filterSource !== "all") {
+    filtered = filtered.filter((skill) => {
+      const sourceMap: Record<string, string[]> = {
+        workspace: ["openclaw-workspace"],
+        "built-in": ["openclaw-bundled"],
+        installed: ["openclaw-managed"],
+        extra: ["openclaw-extra"],
+      };
+      const sources = sourceMap[props.filterSource!] || [];
+      return skill.bundled && props.filterSource === "built-in"
+        ? true
+        : sources.includes(skill.source);
+    });
+  }
+
   const groups = groupSkills(filtered);
+  const selectedCount = props.selectedSkills?.size ?? 0;
 
   return html`
     <section class="card">
@@ -101,9 +142,32 @@ export function renderSkills(props: SkillsProps) {
           <div class="card-title">${t("skills.title")}</div>
           <div class="card-sub">${t("skills.subtitle")}</div>
         </div>
-        <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
-          ${props.loading ? t("skills.loading") : t("skills.refresh")}
-        </button>
+        <div class="row" style="gap: 8px;">
+          ${
+            props.advancedMode
+              ? html`
+                <button
+                  class="btn"
+                  ?disabled=${props.loading}
+                  @click=${props.onToggleAdvancedMode}
+                >
+                  ${t("skills.advanced.exit")}
+                </button>
+              `
+              : html`
+                <button
+                  class="btn"
+                  ?disabled=${props.loading}
+                  @click=${props.onToggleAdvancedMode}
+                >
+                  ${t("skills.advanced.enter")}
+                </button>
+              `
+          }
+          <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
+            ${props.loading ? t("skills.loading") : t("skills.refresh")}
+          </button>
+        </div>
       </div>
 
       <div class="filters" style="margin-top: 14px;">
@@ -117,6 +181,72 @@ export function renderSkills(props: SkillsProps) {
         </label>
         <div class="muted">${t("skills.shown").replace("{count}", String(filtered.length))}</div>
       </div>
+
+      ${
+        props.advancedMode
+          ? html`
+            <div class="row" style="margin-top: 12px; gap: 12px; flex-wrap: wrap;">
+              <label class="field" style="min-width: 150px;">
+                <span>${t("skills.advanced.filter_status")}</span>
+                <select
+                  .value=${props.filterStatus || "all"}
+                  @change=${(e: Event) =>
+                    props.onFilterStatusChange?.((e.target as HTMLSelectElement).value as any)}
+                >
+                  <option value="all">${t("skills.advanced.status.all")}</option>
+                  <option value="eligible">${t("skills.advanced.status.eligible")}</option>
+                  <option value="blocked">${t("skills.advanced.status.blocked")}</option>
+                  <option value="disabled">${t("skills.advanced.status.disabled")}</option>
+                </select>
+              </label>
+              <label class="field" style="min-width: 150px;">
+                <span>${t("skills.advanced.filter_source")}</span>
+                <select
+                  .value=${props.filterSource || "all"}
+                  @change=${(e: Event) =>
+                    props.onFilterSourceChange?.((e.target as HTMLSelectElement).value as any)}
+                >
+                  <option value="all">${t("skills.advanced.source.all")}</option>
+                  <option value="workspace">${t("skills.advanced.source.workspace")}</option>
+                  <option value="built-in">${t("skills.advanced.source.built_in")}</option>
+                  <option value="installed">${t("skills.advanced.source.installed")}</option>
+                  <option value="extra">${t("skills.advanced.source.extra")}</option>
+                </select>
+              </label>
+            </div>
+            <div class="row" style="margin-top: 12px; gap: 8px; flex-wrap: wrap;">
+              <button
+                class="btn"
+                ?disabled=${props.loading || filtered.length === 0}
+                @click=${props.onSelectAll}
+              >
+                ${t("skills.advanced.select_all")}
+              </button>
+              <button
+                class="btn"
+                ?disabled=${props.loading || selectedCount === 0}
+                @click=${props.onDeselectAll}
+              >
+                ${t("skills.advanced.deselect_all")}
+              </button>
+              <button
+                class="btn primary"
+                ?disabled=${props.loading || selectedCount === 0}
+                @click=${props.onBatchEnable}
+              >
+                ${t("skills.advanced.batch_enable")} (${selectedCount})
+              </button>
+              <button
+                class="btn"
+                ?disabled=${props.loading || selectedCount === 0}
+                @click=${props.onBatchDisable}
+              >
+                ${t("skills.advanced.batch_disable")} (${selectedCount})
+              </button>
+            </div>
+          `
+          : nothing
+      }
 
       ${
         props.error
@@ -158,6 +288,7 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
   const message = props.messages[skill.skillKey] ?? null;
   const canInstall = skill.install.length > 0 && skill.missing.bins.length > 0;
   const showBundledBadge = Boolean(skill.bundled && skill.source !== "openclaw-bundled");
+  const isSelected = props.selectedSkills?.has(skill.skillKey) ?? false;
   const missing = [
     ...skill.missing.bins.map((b: string) => `bin:${b}`),
     ...skill.missing.env.map((e: string) => `env:${e}`),
@@ -172,7 +303,22 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
     reasons.push(t("skills.reason.blocked_by_allowlist"));
   }
   return html`
-    <div class="list-item">
+    <div class="list-item" style="${props.advancedMode ? "border-left: 3px solid " + (isSelected ? "var(--primary-color, #0066cc)" : "transparent") + ";" : ""}">
+      ${
+        props.advancedMode
+          ? html`
+            <label class="row" style="align-items: flex-start; margin-right: 12px;">
+              <input
+                type="checkbox"
+                .checked=${isSelected}
+                @change=${(e: Event) =>
+                  props.onSelectSkill?.(skill.skillKey, (e.target as HTMLInputElement).checked)}
+                style="margin-top: 4px;"
+              />
+            </label>
+          `
+          : nothing
+      }
       <div class="list-main">
         <div class="list-title">
           ${skill.emoji ? `${skill.emoji} ` : ""}${skill.name}

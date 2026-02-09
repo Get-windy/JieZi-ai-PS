@@ -1,13 +1,26 @@
 import { html, nothing } from "lit";
 import type { AppViewState } from "./app-view-state.ts";
+import type { OpenClawApp } from "./app.ts";
 import type { UsageState } from "./controllers/usage.ts";
 import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
 import { refreshChatAvatar } from "./app-chat.ts";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
+import {
+  loadModelAccounts,
+  loadChannelPolicies,
+  saveModelAccounts,
+  saveChannelPolicies,
+} from "./controllers/agent-phase5.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
 import { loadAgents } from "./controllers/agents.ts";
+import {
+  loadApprovals,
+  loadApprovalStats,
+  respondToApproval,
+  cancelApproval,
+} from "./controllers/approvals.ts";
 import { loadChannels } from "./controllers/channels.ts";
 import { loadChatHistory } from "./controllers/chat.ts";
 import {
@@ -39,9 +52,54 @@ import {
   saveExecApprovals,
   updateExecApprovalsFormValue,
 } from "./controllers/exec-approvals.ts";
+import {
+  loadFriends,
+  loadFriendRequests,
+  addFriend,
+  confirmFriend,
+  removeFriend,
+  loadMessages,
+  sendMessage,
+} from "./controllers/friends.ts";
+import {
+  loadGroups,
+  createGroup,
+  deleteGroup,
+  addGroupMember,
+  removeGroupMember,
+  updateGroupMemberRole,
+} from "./controllers/groups.ts";
 import { loadLogs } from "./controllers/logs.ts";
+import {
+  loadQueueStatus,
+  loadQueueStats,
+  loadQueueConfig,
+  saveQueueConfig,
+  clearQueue,
+} from "./controllers/message-queue.ts";
+import {
+  loadActiveSessions,
+  loadMessageFlows,
+  loadForwardingRules,
+  addForwardingRule,
+  updateForwardingRule,
+  deleteForwardingRule,
+  loadMetrics,
+  loadAlerts,
+  acknowledgeAlert,
+  clearAllAlerts,
+} from "./controllers/monitor.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
+import {
+  loadScenarios,
+  createScenario,
+  updateScenario,
+  deleteScenario,
+  runScenario,
+  loadScenarioRuns,
+  loadRecommendations,
+} from "./controllers/scenarios.ts";
 import { deleteSession, loadSessions, patchSession } from "./controllers/sessions.ts";
 import {
   installSkill,
@@ -49,6 +107,14 @@ import {
   saveSkillApiKey,
   updateSkillEdit,
   updateSkillEnabled,
+  toggleAdvancedMode,
+  selectSkill,
+  selectAllSkills,
+  deselectAllSkills,
+  batchEnableSkills,
+  batchDisableSkills,
+  changeFilterStatus,
+  changeFilterSource,
 } from "./controllers/skills.ts";
 import { loadUsage, loadSessionTimeSeries, loadSessionLogs } from "./controllers/usage.ts";
 import { icons } from "./icons.ts";
@@ -65,15 +131,20 @@ const debouncedLoadUsage = (state: UsageState) => {
 import { renderAgents } from "./views/agents.ts";
 import { renderChannels } from "./views/channels.ts";
 import { renderChat } from "./views/chat.ts";
+import { renderCollaboration } from "./views/collaboration.ts";
 import { renderConfig } from "./views/config.ts";
 import { renderCron } from "./views/cron.ts";
 import { renderDebug } from "./views/debug.ts";
 import { renderExecApprovalPrompt } from "./views/exec-approval.ts";
 import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.ts";
+import { renderGroups } from "./views/groups.ts";
 import { renderInstances } from "./views/instances.ts";
 import { renderLogs } from "./views/logs.ts";
+import { renderMessageQueue } from "./views/message-queue.ts";
 import { renderNodes } from "./views/nodes.ts";
+import { renderOrganizationChart } from "./views/organization-chart.ts";
 import { renderOverview } from "./views/overview.ts";
+import { renderPermissionsManagement } from "./views/permissions-management.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
 import { renderUsage } from "./views/usage.ts";
@@ -260,6 +331,15 @@ export function renderApp(state: AppViewState) {
                 configFormDirty: state.configFormDirty,
                 nostrProfileFormState: state.nostrProfileFormState,
                 nostrProfileAccountId: state.nostrProfileAccountId,
+                // 账号管理状态
+                editingChannelAccount: state.editingChannelAccount,
+                viewingChannelAccount: state.viewingChannelAccount,
+                creatingChannelAccount: state.creatingChannelAccount,
+                deletingChannelAccount: state.deletingChannelAccount,
+                managingChannelId: state.managingChannelId,
+                showAllChannelsModal: state.showAllChannelsModal,
+                debuggingChannel: state.debuggingChannel,
+                editingChannelGlobalConfig: state.editingChannelGlobalConfig,
                 onRefresh: (probe) => loadChannels(state, probe),
                 onWhatsAppStart: (force) => state.handleWhatsAppStart(force),
                 onWhatsAppWait: () => state.handleWhatsAppWait(),
@@ -275,6 +355,77 @@ export function renderApp(state: AppViewState) {
                 onNostrProfileSave: () => state.handleNostrProfileSave(),
                 onNostrProfileImport: () => state.handleNostrProfileImport(),
                 onNostrProfileToggleAdvanced: () => state.handleNostrProfileToggleAdvanced(),
+                // 账号管理回调 - TODO: 实现这些回调
+                onManageAccounts: (channelId) => {
+                  state.managingChannelId = channelId;
+                },
+                onAddAccount: (channelId) => {
+                  state.creatingChannelAccount = true;
+                  state.managingChannelId = channelId;
+                },
+                onViewAccount: (channelId, accountId) => {
+                  state.viewingChannelAccount = { channelId, accountId };
+                },
+                onEditAccount: (channelId, accountId) => {
+                  // TODO: 加载账号配置
+                  state.editingChannelAccount = {
+                    channelId,
+                    accountId,
+                    config: {},
+                  };
+                },
+                onDeleteAccount: (channelId, accountId) => {
+                  if (confirm(`确定要删除此账号吗？`)) {
+                    // TODO: 实现删除逻辑
+                    console.log("Delete account:", channelId, accountId);
+                  }
+                },
+                onSaveAccount: () => {
+                  // TODO: 保存账号
+                  state.editingChannelAccount = null;
+                  state.creatingChannelAccount = false;
+                },
+                onCancelAccountEdit: () => {
+                  state.editingChannelAccount = null;
+                  state.creatingChannelAccount = false;
+                },
+                onCancelAccountView: () => {
+                  state.viewingChannelAccount = null;
+                },
+                onAccountFormChange: (field, value) => {
+                  if (state.editingChannelAccount) {
+                    state.editingChannelAccount = {
+                      ...state.editingChannelAccount,
+                      config: {
+                        ...state.editingChannelAccount.config,
+                        [field]: value,
+                      },
+                    };
+                  }
+                },
+                onToggleAllChannelsModal: () => {
+                  state.showAllChannelsModal = !state.showAllChannelsModal;
+                },
+                onToggleChannelVisibility: (channelId) => {
+                  // TODO: 实现显示/隐藏逻辑
+                  console.log("Toggle channel visibility:", channelId);
+                },
+                onDebugChannel: (channelId, accountId) => {
+                  state.debuggingChannel = { channelId, accountId };
+                },
+                onCloseDebug: () => {
+                  state.debuggingChannel = null;
+                },
+                onEditChannelGlobalConfig: (channelId) => {
+                  state.editingChannelGlobalConfig = channelId;
+                },
+                onCancelChannelGlobalConfig: () => {
+                  state.editingChannelGlobalConfig = null;
+                },
+                onSaveChannelGlobalConfig: () => {
+                  // TODO: 保存全局配置
+                  state.editingChannelGlobalConfig = null;
+                },
               })
             : nothing
         }
@@ -581,7 +732,6 @@ export function renderApp(state: AppViewState) {
         ${
           state.tab === "cron"
             ? renderCron({
-                basePath: state.basePath,
                 loading: state.cronLoading,
                 status: state.cronStatus,
                 jobs: state.cronJobs,
@@ -641,6 +791,20 @@ export function renderApp(state: AppViewState) {
                 agentSkillsError: state.agentSkillsError,
                 agentSkillsAgentId: state.agentSkillsAgentId,
                 skillsFilter: state.skillsFilter,
+                // Phase 5: 模型账号和通道策略
+                modelAccountsConfig: state.modelAccountsConfig as any,
+                modelAccountsLoading: state.modelAccountsLoading,
+                modelAccountsError: state.modelAccountsError,
+                modelAccountsSaving: (state as any).modelAccountsSaving || false,
+                modelAccountsSaveSuccess: (state as any).modelAccountsSaveSuccess || false,
+                channelPoliciesConfig: state.channelPoliciesConfig as any,
+                channelPoliciesLoading: state.channelPoliciesLoading,
+                channelPoliciesError: state.channelPoliciesError,
+                channelPoliciesSaving: (state as any).channelPoliciesSaving || false,
+                channelPoliciesSaveSuccess: (state as any).channelPoliciesSaveSuccess || false,
+                editingAgent: (state as any).editingAgent || null,
+                creatingAgent: (state as any).creatingAgent || false,
+                deletingAgent: (state as any).deletingAgent || false,
                 onRefresh: async () => {
                   await loadAgents(state);
                   const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
@@ -692,6 +856,13 @@ export function renderApp(state: AppViewState) {
                   }
                   if (panel === "cron") {
                     void state.loadCron();
+                  }
+                  // Phase 5: 加载模型账号和通道策略
+                  if (panel === "modelAccounts" && resolvedAgentId) {
+                    void loadModelAccounts(state, resolvedAgentId);
+                  }
+                  if (panel === "channelPolicies" && resolvedAgentId) {
+                    void loadChannelPolicies(state, resolvedAgentId);
                   }
                 },
                 onLoadFiles: (agentId) => loadAgentFiles(state, agentId),
@@ -948,6 +1119,452 @@ export function renderApp(state: AppViewState) {
                     : { fallbacks: normalized };
                   updateConfigFormValue(state, basePath, next);
                 },
+                // Phase 5: 回调函数
+                onModelAccountsChange: resolvedAgentId
+                  ? async (agentId, config) => {
+                      try {
+                        await saveModelAccounts(state, agentId, config as any);
+                        // 保存成功后重新加载
+                        await loadModelAccounts(state, agentId);
+                      } catch (err) {
+                        console.error("Failed to save model accounts:", err);
+                      }
+                    }
+                  : undefined,
+                onChannelPoliciesChange: resolvedAgentId
+                  ? async (agentId, config) => {
+                      try {
+                        await saveChannelPolicies(state, agentId, config as any);
+                        // 保存成功后重新加载
+                        await loadChannelPolicies(state, agentId);
+                      } catch (err) {
+                        console.error("Failed to save channel policies:", err);
+                      }
+                    }
+                  : undefined,
+                editingPolicyBinding: state.editingPolicyBinding,
+                addingPolicyBinding: state.addingPolicyBinding,
+                onEditPolicyBinding: (agentId, index, binding) => {
+                  if (index === -1) {
+                    // 添加模式，切换到编辑状态
+                    state.editingPolicyBinding = { agentId, index: -1, binding };
+                    state.addingPolicyBinding = null;
+                  } else {
+                    // 编辑模式
+                    state.editingPolicyBinding = { agentId, index, binding };
+                  }
+                },
+                onAddPolicyBinding: (agentId) => {
+                  state.addingPolicyBinding = agentId;
+                },
+                onCancelPolicyDialog: () => {
+                  state.editingPolicyBinding = null;
+                  state.addingPolicyBinding = null;
+                },
+                onSavePolicyBinding: async (agentId, binding, index) => {
+                  try {
+                    const config = state.channelPoliciesConfig as any;
+                    if (!config) return;
+
+                    const bindings = Array.isArray(config.bindings) ? [...config.bindings] : [];
+                    if (index !== undefined && index >= 0) {
+                      // 编辑模式
+                      bindings[index] = binding;
+                    } else {
+                      // 添加模式
+                      bindings.push(binding);
+                    }
+
+                    await saveChannelPolicies(state, agentId, {
+                      ...config,
+                      bindings,
+                    } as any);
+
+                    // 关闭对话框
+                    state.editingPolicyBinding = null;
+                    state.addingPolicyBinding = null;
+
+                    // 重新加载配置
+                    await loadChannelPolicies(state, agentId);
+                  } catch (err) {
+                    console.error("Failed to save policy binding:", err);
+                  }
+                },
+                onAddAgent: () => {
+                  // TODO: 实现添加智能助手
+                  console.log("Add agent not implemented yet");
+                },
+                onEditAgent: (agentId) => {
+                  // TODO: 实现编辑智能助手
+                  console.log("Edit agent not implemented yet:", agentId);
+                },
+                onDeleteAgent: (agentId) => {
+                  // TODO: 实现删除智能助手
+                  console.log("Delete agent not implemented yet:", agentId);
+                },
+                onSaveAgent: () => {
+                  // TODO: 实现保存智能助手
+                  console.log("Save agent not implemented yet");
+                },
+                onCancelEdit: () => {
+                  // TODO: 实现取消编辑
+                  console.log("Cancel edit not implemented yet");
+                },
+                onAgentFormChange: (field, value) => {
+                  // TODO: 实现表单更改
+                  console.log("Agent form change not implemented yet:", field, value);
+                },
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "collaboration"
+            ? renderCollaboration({
+                activePanel: state.collaborationActivePanel,
+                onSelectPanel: (panel) => {
+                  state.collaborationActivePanel = panel;
+                  // 切换到群组面板时加载数据
+                  if (panel === "groups" && !state.groupsList) {
+                    void loadGroups(state);
+                  }
+                  // 切换到好友面板时加载数据
+                  if (panel === "friends" && state.friendsList.length === 0) {
+                    // TODO: 加载好友列表，需要当前智能助手 ID
+                    // void loadFriends(state, "current-agent-id");
+                  }
+                },
+                groupsProps: {
+                  loading: state.groupsLoading,
+                  error: state.groupsError,
+                  groupsList: state.groupsList,
+                  selectedGroupId: state.groupsSelectedId,
+                  activePanel: state.groupsActivePanel,
+                  creatingGroup: state.creatingGroup,
+                  editingGroup: state.editingGroup,
+                  onRefresh: () => loadGroups(state),
+                  onSelectGroup: (groupId) => {
+                    state.groupsSelectedId = groupId;
+                  },
+                  onSelectPanel: (panel) => {
+                    state.groupsActivePanel = panel;
+                  },
+                  onCreateGroup: () => {
+                    state.creatingGroup = true;
+                    state.editingGroup = null;
+                  },
+                  onEditGroup: (groupId) => {
+                    const group = state.groupsList?.groups.find((g) => g.id === groupId);
+                    if (group) {
+                      state.editingGroup = group;
+                      state.creatingGroup = false;
+                    }
+                  },
+                  onDeleteGroup: async (groupId) => {
+                    if (confirm(`确定要删除群组 ${groupId} 吗？`)) {
+                      try {
+                        await deleteGroup(state, groupId);
+                      } catch (err) {
+                        alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    }
+                  },
+                  onSaveGroup: async () => {
+                    try {
+                      const group = state.editingGroup || {
+                        id: "",
+                        name: "",
+                        description: "",
+                        isPublic: false,
+                      };
+                      await createGroup(state, group as any);
+                      state.creatingGroup = false;
+                      state.editingGroup = null;
+                    } catch (err) {
+                      alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  },
+                  onCancelEdit: () => {
+                    state.creatingGroup = false;
+                    state.editingGroup = null;
+                  },
+                  onGroupFormChange: (field, value) => {
+                    if (state.editingGroup) {
+                      state.editingGroup = { ...state.editingGroup, [field]: value };
+                    } else if (state.creatingGroup) {
+                      state.editingGroup = {
+                        id: "",
+                        name: "",
+                        ownerId: "",
+                        createdAt: Date.now(),
+                        members: [],
+                        isPublic: false,
+                        [field]: value,
+                      } as any;
+                    }
+                  },
+                  onAddMember: async (groupId, agentId, role) => {
+                    try {
+                      await addGroupMember(state, groupId, agentId, role);
+                    } catch (err) {
+                      alert(`添加成员失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  },
+                  onRemoveMember: async (groupId, agentId) => {
+                    try {
+                      await removeGroupMember(state, groupId, agentId);
+                    } catch (err) {
+                      alert(`移除成员失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  },
+                  onUpdateMemberRole: async (groupId, agentId, role) => {
+                    try {
+                      await updateGroupMemberRole(state, groupId, agentId, role);
+                    } catch (err) {
+                      alert(`更新角色失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  },
+                },
+                friendsProps: {
+                  loading: state.friendsLoading,
+                  error: state.friendsError,
+                  friendsList: state.friendsList,
+                  friendsTotal: state.friendsTotal,
+                  friendRequestsLoading: state.friendRequestsLoading,
+                  friendRequestsList: state.friendRequestsList,
+                  selectedFriendId: state.selectedFriendId,
+                  messagesLoading: state.messagesLoading,
+                  messagesList: state.messagesList,
+                  sendingMessage: state.sendingMessage,
+                  activeSubPanel: state.friendsActiveSubPanel,
+                  draftMessage: state.draftMessage,
+                  onRefresh: () => {
+                    // TODO: 需要当前智能助手 ID
+                    // void loadFriends(state, "current-agent-id");
+                  },
+                  onSelectSubPanel: (panel) => {
+                    state.friendsActiveSubPanel = panel;
+                  },
+                  onSelectFriend: (friendId) => {
+                    state.selectedFriendId = friendId;
+                    // 加载消息历史
+                    // TODO: 需要当前智能助手 ID
+                    // void loadMessages(state, "current-agent-id", friendId);
+                  },
+                  onAddFriend: async (toAgentId, message) => {
+                    // TODO: 需要当前智能助手 ID
+                    // await addFriend(state, "current-agent-id", toAgentId, message);
+                  },
+                  onRemoveFriend: async (friendId) => {
+                    // TODO: 需要当前智能助手 ID
+                    // await removeFriend(state, "current-agent-id", friendId);
+                  },
+                  onConfirmFriend: async (friendId, accept) => {
+                    // TODO: 需要当前智能助手 ID
+                    // await confirmFriend(state, "current-agent-id", friendId, accept);
+                  },
+                  onSendMessage: async (content) => {
+                    if (state.selectedFriendId) {
+                      // TODO: 需要当前智能助手 ID
+                      // await sendMessage(state, "current-agent-id", state.selectedFriendId, content);
+                      state.draftMessage = "";
+                    }
+                  },
+                  onDraftMessageChange: (content) => {
+                    state.draftMessage = content;
+                  },
+                },
+                monitorProps: {
+                  loading: false,
+                  error: null,
+                  activeSubPanel: state.monitorActiveSubPanel,
+                  sessionsLoading: state.monitorSessionsLoading,
+                  sessionsError: state.monitorSessionsError,
+                  activeSessions: state.monitorActiveSessions,
+                  messageFlowsLoading: state.monitorMessageFlowsLoading,
+                  messageFlows: state.monitorMessageFlows,
+                  forwardingRulesLoading: state.monitorForwardingRulesLoading,
+                  forwardingRules: state.monitorForwardingRules,
+                  editingRule: state.monitorEditingRule,
+                  creatingRule: state.monitorCreatingRule,
+                  metricsLoading: state.monitorMetricsLoading,
+                  metrics: state.monitorMetrics,
+                  alertsLoading: state.monitorAlertsLoading,
+                  alerts: state.monitorAlerts,
+                  onRefresh: () => {
+                    void loadActiveSessions(state as unknown as OpenClawApp);
+                    void loadMessageFlows(state as unknown as OpenClawApp);
+                    void loadForwardingRules(state as unknown as OpenClawApp);
+                    void loadMetrics(state as unknown as OpenClawApp);
+                    void loadAlerts(state as unknown as OpenClawApp);
+                  },
+                  onSelectSubPanel: (panel) => {
+                    state.monitorActiveSubPanel = panel;
+                  },
+                  onAddForwardingRule: () => {
+                    state.monitorCreatingRule = true;
+                    state.monitorEditingRule = null;
+                  },
+                  onEditForwardingRule: (rule) => {
+                    state.monitorEditingRule = rule;
+                    state.monitorCreatingRule = false;
+                  },
+                  onDeleteForwardingRule: async (ruleId) => {
+                    await deleteForwardingRule(state as unknown as OpenClawApp, ruleId);
+                  },
+                  onSaveForwardingRule: async (rule) => {
+                    if (state.monitorEditingRule) {
+                      await updateForwardingRule(
+                        state as unknown as OpenClawApp,
+                        state.monitorEditingRule.id,
+                        rule,
+                      );
+                    } else {
+                      await addForwardingRule(state as unknown as OpenClawApp, rule as any);
+                    }
+                    state.monitorCreatingRule = false;
+                    state.monitorEditingRule = null;
+                  },
+                  onCancelEditRule: () => {
+                    state.monitorCreatingRule = false;
+                    state.monitorEditingRule = null;
+                  },
+                  onRuleFormChange: (field, value) => {
+                    if (state.monitorEditingRule) {
+                      state.monitorEditingRule = { ...state.monitorEditingRule, [field]: value };
+                    } else if (state.monitorCreatingRule) {
+                      state.monitorEditingRule = {
+                        id: "",
+                        name: "",
+                        sourceChannelId: "",
+                        targetChannelId: "",
+                        enabled: true,
+                        createdAt: Date.now(),
+                        [field]: value,
+                      } as any;
+                    }
+                  },
+                  onToggleRule: async (ruleId, enabled) => {
+                    await updateForwardingRule(state as unknown as OpenClawApp, ruleId, {
+                      enabled,
+                    });
+                  },
+                  onAcknowledgeAlert: async (alertId) => {
+                    await acknowledgeAlert(state as unknown as OpenClawApp, alertId);
+                  },
+                  onClearAllAlerts: async () => {
+                    await clearAllAlerts(state as unknown as OpenClawApp);
+                  },
+                },
+                scenariosProps: {
+                  loading: state.scenariosLoading,
+                  error: state.scenariosError,
+                  activeSubPanel: state.scenariosActiveSubPanel,
+                  scenariosList: state.scenariosList,
+                  scenariosTotal: state.scenariosTotal,
+                  selectedScenarioId: state.selectedScenarioId,
+                  editingScenario: state.editingScenario,
+                  creatingScenario: state.creatingScenario,
+                  runningScenarioId: state.runningScenarioId,
+                  scenarioRunsLoading: state.scenarioRunsLoading,
+                  scenarioRuns: state.scenarioRuns,
+                  recommendationsLoading: state.recommendationsLoading,
+                  recommendations: state.recommendations,
+                  onRefresh: () => {
+                    void loadScenarios(state as unknown as OpenClawApp);
+                  },
+                  onSelectSubPanel: (panel) => {
+                    state.scenariosActiveSubPanel = panel;
+                    if (panel === "runs" && state.scenarioRuns.length === 0) {
+                      void loadScenarioRuns(state as unknown as OpenClawApp);
+                    }
+                    if (panel === "recommendations" && state.recommendations.length === 0) {
+                      void loadRecommendations(state as unknown as OpenClawApp);
+                    }
+                  },
+                  onSelectScenario: (scenarioId) => {
+                    state.selectedScenarioId = scenarioId;
+                  },
+                  onCreateScenario: () => {
+                    state.creatingScenario = true;
+                    state.editingScenario = null;
+                  },
+                  onEditScenario: (scenarioId) => {
+                    const scenario = state.scenariosList.find((s) => s.id === scenarioId);
+                    if (scenario) {
+                      state.editingScenario = scenario;
+                      state.creatingScenario = false;
+                    }
+                  },
+                  onDeleteScenario: async (scenarioId) => {
+                    if (confirm("确定要删除此场景吗？")) {
+                      try {
+                        await deleteScenario(state as unknown as OpenClawApp, scenarioId);
+                      } catch (err) {
+                        alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    }
+                  },
+                  onSaveScenario: async () => {
+                    try {
+                      if (state.editingScenario && state.editingScenario.id) {
+                        await updateScenario(
+                          state as unknown as OpenClawApp,
+                          state.editingScenario.id,
+                          state.editingScenario,
+                        );
+                      } else {
+                        await createScenario(
+                          state as unknown as OpenClawApp,
+                          state.editingScenario as any,
+                        );
+                      }
+                      state.creatingScenario = false;
+                      state.editingScenario = null;
+                    } catch (err) {
+                      alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  },
+                  onCancelEdit: () => {
+                    state.creatingScenario = false;
+                    state.editingScenario = null;
+                  },
+                  onScenarioFormChange: (field, value) => {
+                    if (state.editingScenario) {
+                      state.editingScenario = { ...state.editingScenario, [field]: value };
+                    } else if (state.creatingScenario) {
+                      state.editingScenario = {
+                        id: "",
+                        name: "",
+                        description: "",
+                        type: "custom",
+                        enabled: false,
+                        config: {},
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                        [field]: value,
+                      } as any;
+                    }
+                  },
+                  onToggleScenario: async (scenarioId, enabled) => {
+                    await updateScenario(state as unknown as OpenClawApp, scenarioId, { enabled });
+                  },
+                  onRunScenario: async (scenarioId) => {
+                    try {
+                      await runScenario(state as unknown as OpenClawApp, scenarioId);
+                    } catch (err) {
+                      alert(`执行失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  },
+                  onApplyRecommendation: async (scenarioId) => {
+                    const scenario = state.scenariosList.find((s) => s.id === scenarioId);
+                    if (scenario) {
+                      await updateScenario(state as unknown as OpenClawApp, scenarioId, {
+                        enabled: true,
+                      });
+                    }
+                  },
+                },
               })
             : nothing
         }
@@ -969,6 +1586,19 @@ export function renderApp(state: AppViewState) {
                 onSaveKey: (key) => saveSkillApiKey(state, key),
                 onInstall: (skillKey, name, installId) =>
                   installSkill(state, skillKey, name, installId),
+                // Advanced features
+                advancedMode: state.skillsAdvancedMode,
+                selectedSkills: state.skillsSelectedSkills,
+                filterStatus: state.skillsFilterStatus,
+                filterSource: state.skillsFilterSource,
+                onToggleAdvancedMode: () => toggleAdvancedMode(state),
+                onSelectSkill: (skillKey, selected) => selectSkill(state, skillKey, selected),
+                onSelectAll: () => selectAllSkills(state),
+                onDeselectAll: () => deselectAllSkills(state),
+                onBatchEnable: () => batchEnableSkills(state),
+                onBatchDisable: () => batchDisableSkills(state),
+                onFilterStatusChange: (status) => changeFilterStatus(state, status),
+                onFilterSourceChange: (source) => changeFilterSource(state, source),
               })
             : nothing
         }
@@ -1211,6 +1841,124 @@ export function renderApp(state: AppViewState) {
                 onRefresh: () => loadLogs(state, { reset: true }),
                 onExport: (lines, label) => state.exportLogs(lines, label),
                 onScroll: (event) => state.handleLogsScroll(event),
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "message-queue"
+            ? renderMessageQueue({
+                activePanel: state.messageQueueActivePanel,
+                queueLoading: state.queueLoading,
+                queueError: state.queueError,
+                queueMessages: state.queueMessages,
+                queueStats: state.queueStats,
+                queueStatsLoading: state.queueStatsLoading,
+                queueConfig: state.queueConfig,
+                queueConfigLoading: state.queueConfigLoading,
+                queueConfigSaving: state.queueConfigSaving,
+                onSelectPanel: (panel) => {
+                  state.messageQueueActivePanel = panel;
+                  // 切换到相应 panel 时加载数据
+                  if (panel === "monitor") {
+                    void loadQueueStatus(state);
+                    void loadQueueStats(state);
+                  } else if (panel === "statistics") {
+                    void loadQueueStats(state);
+                  } else if (panel === "configuration") {
+                    void loadQueueConfig(state);
+                  }
+                },
+                onRefresh: () => {
+                  void loadQueueStatus(state);
+                  void loadQueueStats(state);
+                },
+                onClearQueue: () => void clearQueue(state),
+                onSaveConfig: (config) => void saveQueueConfig(state, config),
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "organization-chart"
+            ? renderOrganizationChart({
+                loading: state.organizationDataLoading,
+                error: state.organizationDataError,
+                organizationData: state.organizationData,
+                selectedNodeId: state.organizationChartSelectedNode,
+                viewMode: state.organizationChartViewMode,
+                onRefresh: () => {
+                  // TODO: 实现组织架构数据加载
+                  console.log("Load organization data");
+                },
+                onSelectNode: (nodeId) => {
+                  state.organizationChartSelectedNode = nodeId;
+                },
+                onViewModeChange: (mode) => {
+                  state.organizationChartViewMode = mode;
+                },
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "permissions-management"
+            ? renderPermissionsManagement({
+                loading: state.permissionsConfigLoading || state.approvalRequestsLoading,
+                error: state.permissionsConfigError,
+                activeTab: state.permissionsManagementActiveTab,
+                permissionsConfig: state.permissionsConfig,
+                configLoading: state.permissionsConfigLoading,
+                configSaving: state.permissionsConfigSaving,
+                approvalRequests: state.approvalRequests,
+                approvalsLoading: state.approvalRequestsLoading,
+                changeHistory: state.permissionsChangeHistory,
+                historyLoading: state.permissionsHistoryLoading,
+                onRefresh: () => {
+                  if (state.permissionsManagementActiveTab === "approvals") {
+                    void loadApprovals(state);
+                    void loadApprovalStats(state);
+                  } else if (state.permissionsManagementActiveTab === "config") {
+                    // TODO: 加载权限配置
+                    console.log("Load permissions config");
+                  } else if (state.permissionsManagementActiveTab === "history") {
+                    // TODO: 加载变更历史
+                    console.log("Load permissions history");
+                  }
+                },
+                onTabChange: (tab) => {
+                  state.permissionsManagementActiveTab = tab;
+                  // 切换 tab 时加载相应数据
+                  if (tab === "approvals") {
+                    void loadApprovals(state);
+                    void loadApprovalStats(state);
+                  } else if (tab === "config") {
+                    // TODO: 加载权限配置
+                    console.log("Load permissions config");
+                  } else if (tab === "history") {
+                    // TODO: 加载变更历史
+                    console.log("Load permissions history");
+                  }
+                },
+                onPermissionChange: (agentId, permission, granted) => {
+                  // TODO: 实现权限更改
+                  console.log("Permission change:", agentId, permission, granted);
+                },
+                onSaveConfig: () => {
+                  // TODO: 实现保存权限配置
+                  console.log("Save permissions config");
+                },
+                onApprovalAction: async (requestId, action, comment) => {
+                  try {
+                    // 将 "deny" 转换为 "reject" 以匹配 respondToApproval 的类型
+                    const approvalAction: "approve" | "reject" =
+                      action === "deny" ? "reject" : "approve";
+                    // 假设当前用户是 "admin"，实际应该从状态中获取
+                    await respondToApproval(state, requestId, "admin", approvalAction, comment);
+                  } catch (err) {
+                    console.error("Failed to respond to approval:", err);
+                  }
+                },
               })
             : nothing
         }

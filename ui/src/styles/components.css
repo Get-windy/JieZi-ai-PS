@@ -239,6 +239,81 @@
   gap: 6px;
 }
 
+/* Stat card for large displays */
+.stat-card-large {
+  padding: 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  transition: border-color var(--duration-fast) ease;
+}
+
+.stat-card-large:hover {
+  border-color: var(--border-strong);
+}
+
+.stat-value-large {
+  font-size: 36px;
+  font-weight: 700;
+  margin-top: 8px;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--text-strong);
+}
+
+.stat-desc {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* Agent pill for priority display */
+.agent-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+/* Data table for message queue */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.data-table thead {
+  background: var(--bg-1);
+  border-bottom: 2px solid var(--border);
+}
+
+.data-table th {
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.data-table td {
+  padding: 12px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.data-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
 .note-title {
   font-weight: 600;
   letter-spacing: -0.01em;

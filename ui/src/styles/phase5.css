@@ -1585,3 +1585,290 @@
     padding-left: 8px;
   }
 }
+
+/* ===========================================
+   Phase 6: Training Management Styles
+   培训管理样式
+   =========================================== */
+
+/* Training Courses Grid */
+.training-courses-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+  margin-top: 16px;
+}
+
+.training-course-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: all var(--duration-fast) var(--ease-out);
+  box-shadow: var(--shadow-sm);
+}
+
+.training-course-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.training-course-card .course-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.training-course-card .course-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-strong);
+  line-height: 1.4;
+}
+
+.training-course-card .course-description {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.training-course-card .course-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.training-course-card .meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.training-course-card .meta-icon {
+  font-size: 16px;
+}
+
+.training-course-card .course-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Chip Styles for Training */
+.chip-onboarding,
+.chip-skill-specific,
+.chip-role-upgrade,
+.chip-continuous {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.chip-beginner {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.chip-intermediate {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.chip-advanced {
+  background: #fce4ec;
+  color: #c2185b;
+}
+
+.chip-gray {
+  background: var(--secondary);
+  color: var(--muted);
+}
+
+.chip-blue {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.chip-green {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.chip-red {
+  background: #ffebee;
+  color: #c62828;
+}
+
+/* Progress Bar */
+.progress-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--secondary);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-light));
+  border-radius: 999px;
+  transition: width var(--duration-normal) var(--ease-out);
+}
+
+.progress-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* Training Progress List */
+.training-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Certificates Grid */
+.certificates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  margin-top: 16px;
+}
+
+.certificate-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 24px;
+  background: linear-gradient(135deg, var(--card) 0%, var(--bg-elevated) 100%);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.certificate-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.certificate-card.certificate-expired {
+  opacity: 0.7;
+  border-color: var(--muted);
+  background: var(--secondary);
+}
+
+.certificate-icon {
+  font-size: 48px;
+  margin-bottom: 8px;
+}
+
+.certificate-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-strong);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.certificate-description {
+  font-size: 14px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.certificate-meta {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.certificate-meta .meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.certificate-meta .meta-label {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.certificate-meta code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 2px 6px;
+  background: var(--secondary);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+}
+
+.certificate-expired-badge {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  padding: 4px 12px;
+  background: var(--danger-color, #d14343);
+  color: white;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.text-danger {
+  color: var(--danger-color, #d14343);
+}
+
+/* Button Variants */
+.btn--primary {
+  background: var(--accent);
+  color: white;
+  border: none;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-dark);
+  box-shadow: var(--shadow-md);
+}
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+  .training-courses-grid,
+  .certificates-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .training-course-card,
+  .certificate-card {
+    margin: 0;
+  }
+}

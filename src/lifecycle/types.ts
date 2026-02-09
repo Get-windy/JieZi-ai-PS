@@ -32,7 +32,8 @@ export type LifecycleEventType =
   | "suspended" // 暂停
   | "reactivated" // 重新激活
   | "retired" // 退役
-  | "archived"; // 归档
+  | "archived" // 归档
+  | "workspace_setup"; // 工作空间设置
 
 /**
  * 生命周期事件
@@ -419,6 +420,9 @@ export interface Certificate {
  * 生命周期配置
  */
 export interface LifecycleConfig {
+  // 工作空间根目录
+  workspaceRoot?: string;
+
   // 自动晋升配置
   autoPromotion?: {
     enabled: boolean;

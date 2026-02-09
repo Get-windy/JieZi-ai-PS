@@ -179,7 +179,7 @@ export class LifecycleManager {
       onboarding: "onboarded",
       training: "training_started",
       active: "activated",
-      retired: "retired",
+      retirement: "retired",
       archived: "archived",
     };
 
@@ -455,6 +455,164 @@ export class LifecycleManager {
    */
   public clearAll(): void {
     this.lifecycleStates.clear();
+  }
+
+  /**
+   * 复制工作空间模板（从导师到学员）
+   */
+  public async copyWorkspaceTemplate(params: {
+    mentorAgentId: string;
+    studentAgentId: string;
+    workspaceRoot?: string;
+    excludePatterns?: string[];
+  }): Promise<{
+    success: boolean;
+    copiedFiles: number;
+    totalSize: number;
+    skippedFiles: number;
+    error?: string;
+  }> {
+    const { mentorAgentId, studentAgentId, workspaceRoot, excludePatterns = [] } = params;
+
+    try {
+      // 验证智能助手存在
+      const mentorState = this.lifecycleStates.get(mentorAgentId);
+      const studentState = this.lifecycleStates.get(studentAgentId);
+
+      if (!mentorState) {
+        return {
+          success: false,
+          copiedFiles: 0,
+          totalSize: 0,
+          skippedFiles: 0,
+          error: `Mentor agent not found: ${mentorAgentId}`,
+        };
+      }
+
+      if (!studentState) {
+        return {
+          success: false,
+          copiedFiles: 0,
+          totalSize: 0,
+          skippedFiles: 0,
+          error: `Student agent not found: ${studentAgentId}`,
+        };
+      }
+
+      // 动态导入 fs 和path 模块
+      const fs = await import("fs/promises");
+      const path = await import("path");
+
+      // 确定工作空间路径
+      const baseWorkspaceRoot = workspaceRoot || this.config.workspaceRoot || "./workspaces";
+      const mentorWorkspace = path.join(baseWorkspaceRoot, mentorAgentId);
+      const studentWorkspace = path.join(baseWorkspaceRoot, studentAgentId);
+
+      // 检查导师工作空间是否存在
+      try {
+        await fs.access(mentorWorkspace);
+      } catch {
+        return {
+          success: false,
+          copiedFiles: 0,
+          totalSize: 0,
+          skippedFiles: 0,
+          error: `Mentor workspace not found: ${mentorWorkspace}`,
+        };
+      }
+
+      // 创建学员工作空间（如果不存在）
+      await fs.mkdir(studentWorkspace, { recursive: true });
+
+      // 默认排除模式
+      const defaultExcludePatterns = [
+        "node_modules",
+        ".git",
+        ".env",
+        ".env.local",
+        "*.log",
+        "dist",
+        "build",
+        ".cache",
+        "tmp",
+        "temp",
+      ];
+
+      const allExcludePatterns = [...defaultExcludePatterns, ...excludePatterns];
+
+      // 递归复制文件
+      let copiedFiles = 0;
+      let totalSize = 0;
+      let skippedFiles = 0;
+
+      const copyRecursive = async (sourcePath: string, destPath: string): Promise<void> => {
+        const entries = await fs.readdir(sourcePath, { withFileTypes: true });
+
+        for (const entry of entries) {
+          const sourceEntry = path.join(sourcePath, entry.name);
+          const destEntry = path.join(destPath, entry.name);
+
+          // 检查是否应该排除
+          const shouldExclude = allExcludePatterns.some((pattern) => {
+            if (pattern.includes("*")) {
+              // 简单的通配符匹配
+              const regex = new RegExp(`^${pattern.replace(/\*/g, ".*")}$`);
+              return regex.test(entry.name);
+            }
+            return entry.name === pattern;
+          });
+
+          if (shouldExclude) {
+            skippedFiles++;
+            continue;
+          }
+
+          if (entry.isDirectory()) {
+            // 创建目录并递归复制
+            await fs.mkdir(destEntry, { recursive: true });
+            await copyRecursive(sourceEntry, destEntry);
+          } else if (entry.isFile()) {
+            // 复制文件
+            await fs.copyFile(sourceEntry, destEntry);
+            const stats = await fs.stat(sourceEntry);
+            copiedFiles++;
+            totalSize += stats.size;
+          }
+        }
+      };
+
+      // 开始复制
+      await copyRecursive(mentorWorkspace, studentWorkspace);
+
+      // 记录工作空间复制事件
+      this.recordEvent({
+        agentId: studentAgentId,
+        eventType: "workspace_setup",
+        triggeredBy: mentorAgentId,
+        metadata: {
+          source: "template_copy",
+          mentorAgentId,
+          copiedFiles,
+          totalSize,
+          skippedFiles,
+        },
+      });
+
+      return {
+        success: true,
+        copiedFiles,
+        totalSize,
+        skippedFiles,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        copiedFiles: 0,
+        totalSize: 0,
+        skippedFiles: 0,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 }
 

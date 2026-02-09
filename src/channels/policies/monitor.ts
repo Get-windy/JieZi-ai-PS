@@ -1,7 +1,10 @@
 /**
- * Monitor 策略处理器
+ * Monitor 策略处理器（长通模式）
  *
- * 功能：只读监控，记录消息但不回复
+ * 功能：
+ * 1. 监控指定通道的所有消息
+ * 2. 将消息转发到监控通道，标记来源
+ * 3. 可选：记录日志
  */
 
 import { existsSync } from "node:fs";
@@ -14,13 +17,14 @@ export class MonitorPolicyHandler implements PolicyHandler {
   readonly type = "monitor";
 
   async process(context: PolicyProcessContext): Promise<PolicyResult> {
-    const { message, binding, channelId, accountId } = context;
+    const { message, binding, channelId, accountId, agentId } = context;
 
     if (binding.policy.type !== "monitor") {
       throw new Error(`Invalid policy type: ${binding.policy.type}, expected monitor`);
     }
 
     const config = binding.policy.config as MonitorPolicyConfig;
+    const senderId = "from" in message ? message.from : undefined;
 
     // 检查是否监控当前通道
     const isMonitored = config.monitorChannels.includes(channelId);
@@ -37,17 +41,40 @@ export class MonitorPolicyHandler implements PolicyHandler {
         channelId,
         accountId,
         messageId: message.messageId,
-        from: "from" in message ? message.from : undefined,
+        from: senderId,
         to: message.to,
         content: message.content,
         type: message.type,
       });
     }
 
-    // 监控模式：阻止消息处理，不回复
+    // 【长通模式】将消息转发到当前监控通道（当前绑定的通道）
+    // 标记消息来源：[来自通道名:账号ID] 消息内容
+    const sourceLabel = `[来自 ${channelId}:${accountId}${senderId ? `:${senderId}` : ""}]`;
+    const transformedContent = `${sourceLabel} ${message.content}`;
+
+    // 允许消息通过，但转换内容以标记来源
     return {
-      allow: false,
-      reason: "Monitor mode - message logged but not processed",
+      allow: true,
+      transformedMessage: {
+        content: transformedContent,
+        type: message.type,
+        attachments: message.attachments,
+        metadata: {
+          ...message.metadata,
+          monitorSource: {
+            channelId,
+            accountId,
+            senderId,
+            originalContent: message.content,
+          },
+        },
+      },
+      metadata: {
+        policyType: "monitor",
+        sourceChannel: channelId,
+        sourceAccount: accountId,
+      },
     };
   }
 

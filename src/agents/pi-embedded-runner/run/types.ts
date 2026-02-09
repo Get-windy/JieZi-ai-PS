@@ -53,8 +53,8 @@ export type EmbeddedRunAttemptParams = {
   provider: string;
   modelId: string;
   model: Model<Api>;
-  authStorage: AuthStorage;
-  modelRegistry: ModelRegistry;
+  authStorage: InstanceType<typeof AuthStorage>;
+  modelRegistry: InstanceType<typeof ModelRegistry>;
   thinkLevel: ThinkLevel;
   verboseLevel?: VerboseLevel;
   reasoningLevel?: ReasoningLevel;

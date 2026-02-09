@@ -6,10 +6,13 @@
  * 2. 应用工作空间访问控制
  * 3. 提供安全的文件操作接口
  * 4. 记录文件访问日志
+ * 5. Phase 3: 集成权限检查系统
  */
 
 import * as fs from "fs";
 import * as path from "path";
+import type { PermissionCheckContext } from "../permissions/checker.js";
+import { permissionIntegrator } from "../permissions/integration.js";
 import { SessionType, WorkspaceResolution } from "./types.js";
 import { workspaceAccessControl } from "./workspace-access-control.js";
 
@@ -117,11 +120,68 @@ export class FileToolsSecureInterceptor {
    * @param workspace 工作空间解析结果
    * @returns 文件内容或错误
    */
-  public secureReadFile(
+  public async secureReadFile(
     filePath: string,
     workspace: WorkspaceResolution,
-  ): FileOperationResult<string> {
+  ): Promise<FileOperationResult<string>> {
     const startTime = Date.now();
+
+    // === Phase 3: 权限检查拦截 ===
+    if (workspace.agentId) {
+      const permissionContext: PermissionCheckContext = {
+        subject: {
+          type: "user",
+          id: workspace.agentId,
+          name: workspace.agentId,
+        },
+        toolName: "file_read",
+        toolParams: {
+          filePath,
+          workspaceRoot: workspace.rootDir,
+        },
+        sessionId: workspace.sessionKey,
+        agentId: workspace.agentId,
+        timestamp: startTime,
+        metadata: {
+          sessionType: workspace.sessionType,
+        },
+      };
+
+      const permissionResult = await permissionIntegrator.checkToolPermission(permissionContext);
+
+      if (!permissionResult.allowed) {
+        // 记录日志
+        this.logAccess({
+          timestamp: startTime,
+          agentId: workspace.agentId,
+          operation: "read",
+          filePath,
+          allowed: false,
+          reason: permissionResult.reason || "权限被拒绝",
+          sessionKey: workspace.sessionKey,
+        });
+
+        if (permissionResult.requiresApproval) {
+          // 需要审批
+          const approvalRequest = await permissionIntegrator.createApprovalRequest(
+            permissionContext,
+            permissionResult.approvalId,
+          );
+
+          return {
+            success: false,
+            error: `file_read requires approval. Request ID: ${approvalRequest.id}. Reason: ${permissionResult.reason || "Approval required"}`,
+          };
+        } else {
+          // 直接拒绝
+          return {
+            success: false,
+            error: `file_read permission denied. Reason: ${permissionResult.reason || "Access denied"}`,
+          };
+        }
+      }
+    }
+    // === 权限检查结束 ===
 
     // 检查访问权限
     const checkResult = workspaceAccessControl.checkFileAccess(filePath, "read", workspace);
@@ -168,12 +228,70 @@ export class FileToolsSecureInterceptor {
    * @param workspace 工作空间解析结果
    * @returns 操作结果
    */
-  public secureWriteFile(
+  public async secureWriteFile(
     filePath: string,
     content: string,
     workspace: WorkspaceResolution,
-  ): FileOperationResult<void> {
+  ): Promise<FileOperationResult<void>> {
     const startTime = Date.now();
+
+    // === Phase 3: 权限检查拦截 ===
+    if (workspace.agentId) {
+      const permissionContext: PermissionCheckContext = {
+        subject: {
+          type: "user",
+          id: workspace.agentId,
+          name: workspace.agentId,
+        },
+        toolName: "file_write",
+        toolParams: {
+          filePath,
+          workspaceRoot: workspace.rootDir,
+          contentLength: content.length,
+        },
+        sessionId: workspace.sessionKey,
+        agentId: workspace.agentId,
+        timestamp: startTime,
+        metadata: {
+          sessionType: workspace.sessionType,
+        },
+      };
+
+      const permissionResult = await permissionIntegrator.checkToolPermission(permissionContext);
+
+      if (!permissionResult.allowed) {
+        // 记录日志
+        this.logAccess({
+          timestamp: startTime,
+          agentId: workspace.agentId,
+          operation: "write",
+          filePath,
+          allowed: false,
+          reason: permissionResult.reason || "权限被拒绝",
+          sessionKey: workspace.sessionKey,
+        });
+
+        if (permissionResult.requiresApproval) {
+          // 需要审批
+          const approvalRequest = await permissionIntegrator.createApprovalRequest(
+            permissionContext,
+            permissionResult.approvalId,
+          );
+
+          return {
+            success: false,
+            error: `file_write requires approval. Request ID: ${approvalRequest.id}. Reason: ${permissionResult.reason || "Approval required"}`,
+          };
+        } else {
+          // 直接拒绝
+          return {
+            success: false,
+            error: `file_write permission denied. Reason: ${permissionResult.reason || "Access denied"}`,
+          };
+        }
+      }
+    }
+    // === 权限检查结束 ===
 
     // 检查访问权限
     const checkResult = workspaceAccessControl.checkFileAccess(filePath, "write", workspace);
@@ -402,14 +520,14 @@ export class FileToolsSecureInterceptor {
    * @param workspace 工作空间解析结果
    * @returns 文件内容列表
    */
-  public secureBatchReadFiles(
+  public async secureBatchReadFiles(
     filePaths: string[],
     workspace: WorkspaceResolution,
-  ): Map<string, FileOperationResult<string>> {
+  ): Promise<Map<string, FileOperationResult<string>>> {
     const results = new Map<string, FileOperationResult<string>>();
 
     for (const filePath of filePaths) {
-      results.set(filePath, this.secureReadFile(filePath, workspace));
+      results.set(filePath, await this.secureReadFile(filePath, workspace));
     }
 
     return results;
@@ -478,40 +596,40 @@ export const fileToolsSecure = FileToolsSecureInterceptor.getInstance();
 /**
  * 便捷函数：安全读取文件
  */
-export function readFileSecure(
+export async function readFileSecure(
   filePath: string,
   sessionKey: string,
   sessionType: SessionType,
   agentId: string,
   groupId?: string,
-): FileOperationResult<string> {
+): Promise<FileOperationResult<string>> {
   const workspace = workspaceAccessControl.resolveWorkspace(
     sessionKey,
     sessionType,
     agentId,
     groupId,
   );
-  return fileToolsSecure.secureReadFile(filePath, workspace);
+  return await fileToolsSecure.secureReadFile(filePath, workspace);
 }
 
 /**
  * 便捷函数：安全写入文件
  */
-export function writeFileSecure(
+export async function writeFileSecure(
   filePath: string,
   content: string,
   sessionKey: string,
   sessionType: SessionType,
   agentId: string,
   groupId?: string,
-): FileOperationResult<void> {
+): Promise<FileOperationResult<void>> {
   const workspace = workspaceAccessControl.resolveWorkspace(
     sessionKey,
     sessionType,
     agentId,
     groupId,
   );
-  return fileToolsSecure.secureWriteFile(filePath, content, workspace);
+  return await fileToolsSecure.secureWriteFile(filePath, content, workspace);
 }
 
 /**

@@ -24,6 +24,7 @@ import {
   formatCronState,
   formatNextRun,
 } from "../presenter.ts";
+import { renderPolicyBindingDialog } from "./agents.channel-policy-dialog.ts";
 
 export type AgentsPanel =
   | "overview"
@@ -69,6 +70,37 @@ export type ChannelBinding = {
   channelId: string;
   accountId?: string;
   policy: ChannelPolicy;
+  // 策略特定配置
+  filterConfig?: {
+    allowKeywords?: string[];
+    blockKeywords?: string[];
+    allowSenders?: string[];
+    blockSenders?: string[];
+  };
+  scheduledConfig?: {
+    timezone?: string;
+    rules?: Array<{
+      dayOfWeek?: number[]; // 0-6
+      hourStart?: number; // 0-23
+      hourEnd?: number; // 0-23
+    }>;
+  };
+  forwardConfig?: {
+    targetChannelId?: string;
+    targetAccountId?: string;
+    includeSource?: boolean;
+  };
+  broadcastConfig?: {
+    targetChannels?: Array<{ channelId: string; accountId?: string }>;
+  };
+  queueConfig?: {
+    batchSize?: number;
+    maxWaitMs?: number;
+  };
+  moderateConfig?: {
+    requireApprovalFrom?: string[]; // user IDs
+    autoApproveKeywords?: string[];
+  };
 };
 
 export type ChannelPolicy =
@@ -103,9 +135,13 @@ export type AgentsProps = {
   modelAccountsConfig: ModelAccountsConfig | null;
   modelAccountsLoading: boolean;
   modelAccountsError: string | null;
+  modelAccountsSaving: boolean;
+  modelAccountsSaveSuccess: boolean;
   channelPoliciesConfig: ChannelPoliciesConfig | null;
   channelPoliciesLoading: boolean;
   channelPoliciesError: string | null;
+  channelPoliciesSaving: boolean;
+  channelPoliciesSaveSuccess: boolean;
   cronLoading: boolean;
   cronStatus: CronStatus | null;
   cronJobs: CronJob[];
@@ -148,6 +184,12 @@ export type AgentsProps = {
   // Phase 5: 模型账号和通道策略回调
   onModelAccountsChange?: (agentId: string, config: ModelAccountsConfig) => void;
   onChannelPoliciesChange?: (agentId: string, config: ChannelPoliciesConfig) => void;
+  editingPolicyBinding?: { agentId: string; index: number; binding: ChannelBinding } | null;
+  addingPolicyBinding?: string | null;
+  onEditPolicyBinding?: (agentId: string, index: number, binding: ChannelBinding) => void;
+  onAddPolicyBinding?: (agentId: string) => void;
+  onCancelPolicyDialog?: () => void;
+  onSavePolicyBinding?: (agentId: string, binding: ChannelBinding, index?: number) => void;
   onCronRefresh: () => void;
   onSkillsFilterChange: (next: string) => void;
   onSkillsRefresh: () => void;
@@ -670,6 +712,8 @@ function renderAgentModelAccounts(params: {
   config: ModelAccountsConfig | null;
   loading: boolean;
   error: string | null;
+  saving: boolean;
+  saveSuccess: boolean;
   onChange?: (agentId: string, config: ModelAccountsConfig) => void;
 }) {
   if (params.loading) {
@@ -705,6 +749,16 @@ function renderAgentModelAccounts(params: {
       <div class="card-title">${t("agents.model_accounts.title")}</div>
       <div class="card-sub">${t("agents.model_accounts.subtitle")}</div>
       
+      ${
+        params.saveSuccess
+          ? html`
+        <div class="callout success" style="margin-top: 12px;">
+          ✓ ${t("agents.save_success")}
+        </div>
+      `
+          : nothing
+      }
+      
       <div style="margin-top: 20px;">
         <div class="label">${t("agents.model_accounts.routing_mode")}</div>
         <div style="display: flex; gap: 16px; margin-top: 8px;">
@@ -715,6 +769,14 @@ function renderAgentModelAccounts(params: {
               value="manual"
               ?checked=${config.routingMode === "manual"}
               ?disabled=${!params.onChange}
+              @change=${() => {
+                if (params.onChange) {
+                  params.onChange(params.agentId, {
+                    ...config,
+                    routingMode: "manual",
+                  });
+                }
+              }}
             />
             <span>${t("agents.model_accounts.mode.manual")}</span>
           </label>
@@ -725,6 +787,14 @@ function renderAgentModelAccounts(params: {
               value="smart"
               ?checked=${config.routingMode === "smart"}
               ?disabled=${!params.onChange}
+              @change=${() => {
+                if (params.onChange) {
+                  params.onChange(params.agentId, {
+                    ...config,
+                    routingMode: "smart",
+                  });
+                }
+              }}
             />
             <span>${t("agents.model_accounts.mode.smart")}</span>
           </label>
@@ -790,7 +860,11 @@ function renderAgentChannelPolicies(params: {
   config: ChannelPoliciesConfig | null;
   loading: boolean;
   error: string | null;
+  saving: boolean;
+  saveSuccess: boolean;
   onChange?: (agentId: string, config: ChannelPoliciesConfig) => void;
+  onEditPolicyBinding?: (agentId: string, index: number, binding: ChannelBinding) => void;
+  onAddPolicyBinding?: (agentId: string) => void;
 }) {
   if (params.loading) {
     return html`
@@ -820,19 +894,67 @@ function renderAgentChannelPolicies(params: {
     `;
   }
 
-  const policyOptions: Array<{ value: string; label: string }> = [
-    { value: "private", label: t("agents.channel_policies.policy.private") },
-    { value: "monitor", label: t("agents.channel_policies.policy.monitor") },
-    { value: "listen_only", label: t("agents.channel_policies.policy.listen_only") },
-    { value: "filter", label: t("agents.channel_policies.policy.filter") },
-    { value: "scheduled", label: t("agents.channel_policies.policy.scheduled") },
-    { value: "forward", label: t("agents.channel_policies.policy.forward") },
-    { value: "smart_route", label: t("agents.channel_policies.policy.smart_route") },
-    { value: "broadcast", label: t("agents.channel_policies.policy.broadcast") },
-    { value: "round_robin", label: t("agents.channel_policies.policy.round_robin") },
-    { value: "queue", label: t("agents.channel_policies.policy.queue") },
-    { value: "moderate", label: t("agents.channel_policies.policy.moderate") },
-    { value: "echo", label: t("agents.channel_policies.policy.echo") },
+  const policyOptions: Array<{ value: string; label: string; description: string }> = [
+    {
+      value: "private",
+      label: t("agents.channel_policies.policy.private"),
+      description: "智能助手专属通道，不对外暴露",
+    },
+    {
+      value: "monitor",
+      label: t("agents.channel_policies.policy.monitor"),
+      description: "长通模式，接收所有消息并带来源标记",
+    },
+    {
+      value: "listen_only",
+      label: t("agents.channel_policies.policy.listen_only"),
+      description: "仅监听，不回复",
+    },
+    {
+      value: "filter",
+      label: t("agents.channel_policies.policy.filter"),
+      description: "基于规则过滤消息",
+    },
+    {
+      value: "scheduled",
+      label: t("agents.channel_policies.policy.scheduled"),
+      description: "根据时间表响应消息",
+    },
+    {
+      value: "forward",
+      label: t("agents.channel_policies.policy.forward"),
+      description: "自动转发消息到其他通道",
+    },
+    {
+      value: "smart_route",
+      label: t("agents.channel_policies.policy.smart_route"),
+      description: "根据内容智能选择通道",
+    },
+    {
+      value: "broadcast",
+      label: t("agents.channel_policies.policy.broadcast"),
+      description: "一条消息发送到多个通道",
+    },
+    {
+      value: "round_robin",
+      label: t("agents.channel_policies.policy.round_robin"),
+      description: "多通道负载均衡",
+    },
+    {
+      value: "queue",
+      label: t("agents.channel_policies.policy.queue"),
+      description: "消息排队，批量处理",
+    },
+    {
+      value: "moderate",
+      label: t("agents.channel_policies.policy.moderate"),
+      description: "需要审核后才发送",
+    },
+    {
+      value: "echo",
+      label: t("agents.channel_policies.policy.echo"),
+      description: "记录日志，不处理",
+    },
   ];
 
   return html`
@@ -840,35 +962,99 @@ function renderAgentChannelPolicies(params: {
       <div class="card-title">${t("agents.channel_policies.title")}</div>
       <div class="card-sub">${t("agents.channel_policies.subtitle")}</div>
       
+      ${
+        params.saveSuccess
+          ? html`
+        <div class="callout success" style="margin-top: 12px;">
+          ✓ ${t("agents.save_success")}
+        </div>
+      `
+          : nothing
+      }
+      
+      <!-- 默认策略选择 -->
       <div style="margin-top: 20px;">
         <div class="label">${t("agents.channel_policies.default_policy")}</div>
-        <select
-          style="margin-top: 8px; width: 100%; max-width: 300px;"
-          ?disabled=${!params.onChange}
-        >
-          ${policyOptions.map(
-            (opt) => html`
-            <option value=${opt.value} ?selected=${config.defaultPolicy === opt.value}>
-              ${opt.label}
-            </option>
-          `,
-          )}
-        </select>
+        <div style="margin-top: 8px; display: flex; gap: 12px; align-items: flex-start;">
+          <select
+            style="flex: 0 0 300px;"
+            ?disabled=${!params.onChange}
+            @change=${(e: Event) => {
+              if (params.onChange) {
+                const target = e.target as HTMLSelectElement;
+                params.onChange(params.agentId, {
+                  ...config,
+                  defaultPolicy: target.value as any,
+                });
+              }
+            }}
+          >
+            ${policyOptions.map(
+              (opt) => html`
+              <option value=${opt.value} ?selected=${config.defaultPolicy === opt.value}>
+                ${opt.label}
+              </option>
+            `,
+            )}
+          </select>
+          <div class="muted" style="flex: 1; font-size: 0.875rem; padding-top: 8px;">
+            ${policyOptions.find((p) => p.value === config.defaultPolicy)?.description || ""}
+          </div>
+        </div>
       </div>
 
-      <div style="margin-top: 20px;">
-        <div class="label">${t("agents.channel_policies.bindings")}</div>
+      <!-- 通道绑定列表 -->
+      <div style="margin-top: 24px;">
+        <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div class="label">${t("agents.channel_policies.bindings")} (${config.bindings?.length || 0})</div>
+          <button class="btn btn--sm" ?disabled=${!params.onChange} @click=${() => {
+            if (params.onAddPolicyBinding) {
+              params.onAddPolicyBinding(params.agentId);
+            }
+          }}>
+            + 添加绑定
+          </button>
+        </div>
         <div class="list" style="margin-top: 8px;">
           ${
             Array.isArray(config.bindings) && config.bindings.length > 0
               ? config.bindings.map(
-                  (binding: any) => html`
+                  (binding: any, index: number) => html`
                 <div class="list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 4px; background: var(--bg-1); margin-bottom: 8px;">
-                  <div>
+                  <div style="flex: 1;">
                     <div class="mono" style="font-weight: 500;">${binding.channelId}</div>
                     ${binding.accountId ? html`<div class="muted" style="font-size: 0.875rem; margin-top: 2px;">${binding.accountId}</div>` : nothing}
                   </div>
-                  <span class="agent-pill">${t(`agents.channel_policies.policy.${binding.policy}`)}</span>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <span class="agent-pill">${t(`agents.channel_policies.policy.${binding.policy}`)}</span>
+                    <button 
+                      class="btn btn--sm"
+                      @click=${() => {
+                        if (params.onEditPolicyBinding) {
+                          params.onEditPolicyBinding(params.agentId, index, binding);
+                        }
+                      }}
+                    >
+                      配置
+                    </button>
+                    <button 
+                      class="btn btn--sm"
+                      style="color: var(--color-danger);"
+                      ?disabled=${!params.onChange}
+                      @click=${() => {
+                        if (params.onChange && confirm("确定要删除该绑定吗？")) {
+                          const newBindings = [...config.bindings];
+                          newBindings.splice(index, 1);
+                          params.onChange(params.agentId, {
+                            ...config,
+                            bindings: newBindings,
+                          });
+                        }
+                      }}
+                    >
+                      删除
+                    </button>
+                  </div>
                 </div>
               `,
                 )
@@ -876,6 +1062,22 @@ function renderAgentChannelPolicies(params: {
           }
         </div>
       </div>
+
+      <!-- 策略说明 -->
+      <details style="margin-top: 24px; padding: 16px; border: 1px solid var(--border); border-radius: 6px;">
+        <summary style="cursor: pointer; font-weight: 500; margin-bottom: 12px;">
+          📖 策略说明
+        </summary>
+        <div style="font-size: 0.875rem; line-height: 1.6; color: var(--fg-muted);">
+          ${policyOptions.map(
+            (opt) => html`
+            <div style="margin-bottom: 8px;">
+              <span style="font-weight: 500; color: var(--fg-base);">${opt.label}:</span> ${opt.description}
+            </div>
+          `,
+          )}
+        </div>
+      </details>
     </section>
   `;
 }
@@ -1076,6 +1278,8 @@ export function renderAgents(props: AgentsProps) {
                       config: props.modelAccountsConfig,
                       loading: props.modelAccountsLoading,
                       error: props.modelAccountsError,
+                      saving: props.modelAccountsSaving,
+                      saveSuccess: props.modelAccountsSaveSuccess,
                       onChange: props.onModelAccountsChange,
                     })
                   : nothing
@@ -1087,7 +1291,11 @@ export function renderAgents(props: AgentsProps) {
                       config: props.channelPoliciesConfig,
                       loading: props.channelPoliciesLoading,
                       error: props.channelPoliciesError,
+                      saving: props.channelPoliciesSaving,
+                      saveSuccess: props.channelPoliciesSaveSuccess,
                       onChange: props.onChannelPoliciesChange,
+                      onEditPolicyBinding: props.onEditPolicyBinding,
+                      onAddPolicyBinding: props.onAddPolicyBinding,
                     })
                   : nothing
               }
@@ -1096,6 +1304,54 @@ export function renderAgents(props: AgentsProps) {
         }
       </section>
     </div>
+    
+    ${
+      props.editingPolicyBinding || props.addingPolicyBinding
+        ? renderPolicyBindingDialog({
+            agentId: props.editingPolicyBinding?.agentId || props.addingPolicyBinding || "",
+            binding: props.editingPolicyBinding?.binding || null,
+            index: props.editingPolicyBinding?.index,
+            onChange: (field: string, value: any) => {
+              // 修改编辑中的绑定对象
+              if (props.editingPolicyBinding) {
+                const updated = { ...props.editingPolicyBinding.binding, [field]: value };
+                if (props.onEditPolicyBinding) {
+                  props.onEditPolicyBinding(
+                    props.editingPolicyBinding.agentId,
+                    props.editingPolicyBinding.index,
+                    updated,
+                  );
+                }
+              } else if (props.addingPolicyBinding) {
+                // 添加模式，创建一个临时的编辑状态
+                const tempBinding = {
+                  channelId: "",
+                  policy: "private" as any,
+                  [field]: value,
+                };
+                if (props.onEditPolicyBinding) {
+                  // 使用 -1 作为添加模式的标记
+                  props.onEditPolicyBinding(props.addingPolicyBinding, -1, tempBinding);
+                }
+              }
+            },
+            onSave: () => {
+              if (props.onSavePolicyBinding) {
+                const binding = props.editingPolicyBinding?.binding;
+                const agentId = props.editingPolicyBinding?.agentId || props.addingPolicyBinding;
+                if (binding && agentId) {
+                  props.onSavePolicyBinding(agentId, binding, props.editingPolicyBinding?.index);
+                }
+              }
+            },
+            onCancel: () => {
+              if (props.onCancelPolicyDialog) {
+                props.onCancelPolicyDialog();
+              }
+            },
+          })
+        : nothing
+    }
   `;
 }
 
