@@ -452,6 +452,56 @@ export class TrainingSystem {
     return plan;
   }
 
+  /**
+   * 更新培训计划
+   */
+  public updateTrainingPlan(
+    planId: string,
+    updates: Partial<Omit<TrainingPlan, "id" | "agentId" | "createdAt" | "createdBy">>,
+  ): TrainingPlan {
+    const plan = this.plans.get(planId);
+    if (!plan) {
+      throw new Error(`Training plan not found: ${planId}`);
+    }
+
+    const updated: TrainingPlan = {
+      ...plan,
+      ...updates,
+      updatedAt: Date.now(),
+    };
+
+    this.plans.set(planId, updated);
+    return updated;
+  }
+
+  /**
+   * 删除培训计划
+   */
+  public deleteTrainingPlan(planId: string): boolean {
+    return this.plans.delete(planId);
+  }
+
+  /**
+   * 获取智能助手的培训计划
+   */
+  public getAgentTrainingPlans(agentId: string): TrainingPlan[] {
+    return Array.from(this.plans.values()).filter((p) => p.agentId === agentId);
+  }
+
+  /**
+   * 获取所有培训计划
+   */
+  public getAllTrainingPlans(): TrainingPlan[] {
+    return Array.from(this.plans.values());
+  }
+
+  /**
+   * 更新培训计划进度（别名）
+   */
+  public updateTrainingPlanProgress(planId: string): TrainingPlan {
+    return this.updatePlanProgress(planId);
+  }
+
   // ========== 证书管理 ==========
 
   /**

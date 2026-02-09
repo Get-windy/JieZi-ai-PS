@@ -191,7 +191,14 @@ export async function dispatchReplyFromConfig(params: {
         };
 
         try {
+          logVerbose(
+            `dispatch: checking policy for agent=${agentId}, channel=${channelId}, policy=${policy.type}`,
+          );
           const policyResult = await policyEngine.execute(policyContext);
+
+          logVerbose(
+            `dispatch: policy result: allow=${policyResult.allow}, reason=${policyResult.reason ?? "none"}`,
+          );
 
           // 如果策略不允许消息通过
           if (!policyResult.allow) {
@@ -223,7 +230,13 @@ export async function dispatchReplyFromConfig(params: {
           logVerbose(`dispatch: policy check error: ${String(err)}`);
           // 策略检查失败时继续处理消息（fail-safe）
         }
+      } else {
+        logVerbose(
+          `dispatch: no policy found for agent=${agentId}, channel=${channelId}, allowing by default`,
+        );
       }
+    } else {
+      logVerbose(`dispatch: no policy engine for agent=${agentId}, allowing by default`);
     }
   }
 

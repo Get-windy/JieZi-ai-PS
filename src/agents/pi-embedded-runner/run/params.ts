@@ -68,7 +68,7 @@ export type RunEmbeddedPiAgentParams = {
   provider?: string;
   model?: string;
   authProfileId?: string;
-  authProfileIdSource?: "auto" | "user";
+  authProfileIdSource?: "auto" | "user" | "smart-routing";
   thinkLevel?: ThinkLevel;
   verboseLevel?: VerboseLevel;
   reasoningLevel?: ReasoningLevel;

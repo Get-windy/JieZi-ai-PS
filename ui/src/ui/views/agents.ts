@@ -25,6 +25,7 @@ import {
   formatNextRun,
 } from "../presenter.ts";
 import { renderPolicyBindingDialog } from "./agents.channel-policy-dialog.ts";
+import { renderPermissionsManagement } from "./permissions-management.js";
 
 export type AgentsPanel =
   | "overview"
@@ -34,7 +35,8 @@ export type AgentsPanel =
   | "channels"
   | "cron"
   | "modelAccounts"
-  | "channelPolicies";
+  | "channelPolicies"
+  | "permissions";
 
 /**
  * Phase 5: 模型账号配置类型（Phase 1 智能路由）
@@ -161,6 +163,21 @@ export type AgentsProps = {
   agentSkillsError: string | null;
   agentSkillsAgentId: string | null;
   skillsFilter: string;
+  // Phase 3: 权限管理
+  permissionsLoading?: boolean;
+  permissionsError?: string | null;
+  permissionsActiveTab?: "config" | "approvals" | "history";
+  permissionsConfig?: any;
+  permissionsConfigLoading?: boolean;
+  permissionsConfigSaving?: boolean;
+  approvalRequests?: any[];
+  approvalsLoading?: boolean;
+  approvalStats?: any;
+  approvalsFilter?: any;
+  selectedApprovals?: Set<string>;
+  selectedApprovalDetail?: any;
+  permissionChangeHistory?: any[];
+  permissionHistoryLoading?: boolean;
   // 增删改查相关状态
   editingAgent: { id: string; name?: string; workspace?: string } | null;
   creatingAgent: boolean;
@@ -196,6 +213,19 @@ export type AgentsProps = {
   onAgentSkillToggle: (agentId: string, skillName: string, enabled: boolean) => void;
   onAgentSkillsClear: (agentId: string) => void;
   onAgentSkillsDisableAll: (agentId: string) => void;
+  // Phase 3: 权限管理回调
+  onPermissionsRefresh?: (agentId: string) => void;
+  onPermissionsTabChange?: (tab: "config" | "approvals" | "history") => void;
+  onPermissionChange?: (agentId: string, permission: string, granted: boolean) => void;
+  onPermissionsSaveConfig?: (agentId: string) => void;
+  onApprovalAction?: (requestId: string, action: "approve" | "deny", comment?: string) => void;
+  onBatchApprove?: (requestIds: string[], comment?: string) => void;
+  onBatchDeny?: (requestIds: string[], reason: string) => void;
+  onApprovalsFilterChange?: (filter: any) => void;
+  onSelectApproval?: (requestId: string, selected: boolean) => void;
+  onSelectAllApprovals?: () => void;
+  onDeselectAllApprovals?: () => void;
+  onShowApprovalDetail?: (request: any) => void;
   // 增删改查回调
   onAddAgent: () => void;
   onEditAgent: (agentId: string) => void;
@@ -1299,6 +1329,48 @@ export function renderAgents(props: AgentsProps) {
                     })
                   : nothing
               }
+              ${
+                props.activePanel === "permissions"
+                  ? renderPermissionsManagement({
+                      loading: props.permissionsLoading || false,
+                      error: props.permissionsError || null,
+                      activeTab: props.permissionsActiveTab || "config",
+                      permissionsConfig: props.permissionsConfig || null,
+                      configLoading: props.permissionsConfigLoading || false,
+                      configSaving: props.permissionsConfigSaving || false,
+                      approvalRequests: props.approvalRequests || [],
+                      approvalsLoading: props.approvalsLoading || false,
+                      approvalStats: props.approvalStats || null,
+                      approvalsFilter: props.approvalsFilter || {
+                        status: "all",
+                        priority: "all",
+                        type: "all",
+                        requester: "all",
+                        search: "",
+                      },
+                      selectedApprovals: props.selectedApprovals || new Set(),
+                      selectedApprovalDetail: props.selectedApprovalDetail || null,
+                      changeHistory: props.permissionChangeHistory || [],
+                      historyLoading: props.permissionHistoryLoading || false,
+                      onRefresh: () => props.onPermissionsRefresh?.(selectedAgent.id),
+                      onTabChange: (tab) => props.onPermissionsTabChange?.(tab),
+                      onPermissionChange: (agentId, permission, granted) =>
+                        props.onPermissionChange?.(agentId, permission, granted),
+                      onSaveConfig: () => props.onPermissionsSaveConfig?.(selectedAgent.id),
+                      onApprovalAction: (requestId, action, comment) =>
+                        props.onApprovalAction?.(requestId, action, comment),
+                      onBatchApprove: (requestIds, comment) =>
+                        props.onBatchApprove?.(requestIds, comment),
+                      onBatchDeny: (requestIds, reason) => props.onBatchDeny?.(requestIds, reason),
+                      onFilterChange: (filter) => props.onApprovalsFilterChange?.(filter),
+                      onSelectApproval: (requestId, selected) =>
+                        props.onSelectApproval?.(requestId, selected),
+                      onSelectAll: () => props.onSelectAllApprovals?.(),
+                      onDeselectAll: () => props.onDeselectAllApprovals?.(),
+                      onShowApprovalDetail: (request) => props.onShowApprovalDetail?.(request),
+                    })
+                  : nothing
+              }
             `
                 : nothing
         }
@@ -1423,6 +1495,7 @@ function renderAgentTabs(active: AgentsPanel, onSelect: (panel: AgentsPanel) => 
     { id: "cron", label: () => t("agents.tab.cron") },
     { id: "modelAccounts", label: () => t("agents.tab.model_accounts") },
     { id: "channelPolicies", label: () => t("agents.tab.channel_policies") },
+    { id: "permissions", label: () => t("agents.tab.permissions") },
   ];
   return html`
     <div class="agent-tabs">

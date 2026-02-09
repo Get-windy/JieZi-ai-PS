@@ -4,16 +4,36 @@
  */
 
 import type { GatewayRequestHandlers } from "./types.js";
+import { listAgentIds } from "../../agents/agent-scope.js";
 import { loadConfig, writeConfigFile } from "../../config/config.js";
 import { approvalSystem } from "../../permissions/approval-system.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 
 /**
  * 辅助函数：查找智能助手
+ * 支持配置文件中的 agent 和系统中存在的虚拟 agent
  */
 function findAgent(config: any, agentId: string): any | undefined {
   const agents = config?.agents?.list || [];
-  return agents.find((a: any) => a.id === agentId);
+
+  // 首先在配置文件中查找
+  const configuredAgent = agents.find((a: any) => a.id === agentId);
+  if (configuredAgent) {
+    return configuredAgent;
+  }
+
+  // 如果配置文件中没有，检查是否是系统中存在的 agent
+  const systemAgentIds = listAgentIds(config);
+  if (systemAgentIds.includes(agentId)) {
+    // 返回一个虚拟 agent 对象，使用默认配置
+    return {
+      id: agentId,
+      // 虚拟 agent 标记，表示不在配置文件中
+      _virtual: true,
+    };
+  }
+
+  return undefined;
 }
 
 /**
@@ -35,10 +55,15 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
       const agent = findAgent(config, agentId);
 
       if (!agent) {
+        const systemAgentIds = listAgentIds(config);
+        const availableIds = systemAgentIds.join(", ");
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Agent "${agentId}" not found. Available agents: ${availableIds}`,
+          ),
         );
         return;
       }
@@ -74,10 +99,15 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
       const agent = findAgent(config, agentId);
 
       if (!agent) {
+        const systemAgentIds = listAgentIds(config);
+        const availableIds = systemAgentIds.join(", ");
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Agent "${agentId}" not found. Available agents: ${availableIds}`,
+          ),
         );
         return;
       }
@@ -340,16 +370,26 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
       const agentIndex = agents.findIndex((a: any) => a.id === agentId);
 
       if (agentIndex === -1) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
-        );
-        return;
-      }
+        // 如果 agent 不在配置文件中，检查是否是系统中存在的虚拟 agent
+        const systemAgentIds = listAgentIds(currentConfig);
+        if (!systemAgentIds.includes(agentId)) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+          );
+          return;
+        }
 
-      // 更新模型账号配置
-      (agents[agentIndex] as any).modelAccounts = config;
+        // 自动添加虚拟 agent 到配置文件
+        agents.push({
+          id: agentId,
+          modelAccounts: config as any,
+        });
+      } else {
+        // 更新现有 agent 的模型账号配置
+        (agents[agentIndex] as any).modelAccounts = config;
+      }
 
       // 保存配置
       const updatedConfig = {
@@ -398,16 +438,26 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
       const agentIndex = agents.findIndex((a: any) => a.id === agentId);
 
       if (agentIndex === -1) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
-        );
-        return;
-      }
+        // 如果 agent 不在配置文件中，检查是否是系统中存在的虚拟 agent
+        const systemAgentIds = listAgentIds(currentConfig);
+        if (!systemAgentIds.includes(agentId)) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+          );
+          return;
+        }
 
-      // 更新通道策略配置
-      (agents[agentIndex] as any).channelPolicies = config;
+        // 自动添加虚拟 agent 到配置文件
+        agents.push({
+          id: agentId,
+          channelPolicies: config as any,
+        });
+      } else {
+        // 更新现有 agent 的通道策略配置
+        (agents[agentIndex] as any).channelPolicies = config;
+      }
 
       // 保存配置
       const updatedConfig = {

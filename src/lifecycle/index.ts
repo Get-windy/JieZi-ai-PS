@@ -11,6 +11,7 @@ export * from "./types.js";
 export { lifecycleManager } from "./lifecycle-manager.js";
 export { trainingSystem } from "./training-system.js";
 export { skillManagement } from "./skill-management.js";
+export { assessmentSystem } from "./assessment-system.js";
 
 // === Phase 6 集成器 ===
 export { phase6Integration, initializePhase6, phase6HealthCheck } from "./phase6-integration.js";

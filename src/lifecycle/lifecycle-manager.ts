@@ -451,6 +451,66 @@ export class LifecycleManager {
   }
 
   /**
+   * 暂停智能助手
+   */
+  public suspendAgent(params: {
+    agentId: string;
+    triggeredBy?: string;
+    reason?: string;
+  }): AgentLifecycleState {
+    return this.suspend(params);
+  }
+
+  /**
+   * 重新激活智能助手
+   */
+  public reactivateAgent(params: { agentId: string; triggeredBy?: string }): AgentLifecycleState {
+    return this.reactivate(params);
+  }
+
+  /**
+   * 获取统计信息
+   */
+  public getStatistics(): {
+    totalAgents: number;
+    activeAgents: number;
+    suspendedAgents: number;
+    byStage: Record<LifecycleStage, number>;
+    totalEvents: number;
+  } {
+    const states = Array.from(this.lifecycleStates.values());
+
+    const byStage: Record<LifecycleStage, number> = {
+      initialization: 0,
+      onboarding: 0,
+      training: 0,
+      active: 0,
+      maintenance: 0,
+      retirement: 0,
+      archived: 0,
+    };
+
+    let activeAgents = 0;
+    let suspendedAgents = 0;
+    let totalEvents = 0;
+
+    for (const state of states) {
+      byStage[state.currentStage]++;
+      if (state.isActive) activeAgents++;
+      if (state.isSuspended) suspendedAgents++;
+      totalEvents += state.events.length;
+    }
+
+    return {
+      totalAgents: states.length,
+      activeAgents,
+      suspendedAgents,
+      byStage,
+      totalEvents,
+    };
+  }
+
+  /**
    * 清空所有数据（仅用于测试）
    */
   public clearAll(): void {

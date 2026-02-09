@@ -464,6 +464,214 @@ export class SkillManagementSystem {
   }
 
   /**
+   * 添加技能定义（别名方法）
+   */
+  public addSkill(skill: SkillDefinition): void {
+    this.skillDefinitions.set(skill.id, skill);
+  }
+
+  /**
+   * 获取技能定义（别名方法）
+   */
+  public getSkill(skillId: string): SkillDefinition | null {
+    return this.getSkillDefinition(skillId);
+  }
+
+  /**
+   * 获取所有技能（别名方法）
+   */
+  public getAllSkills(): SkillDefinition[] {
+    return this.getAllSkillDefinitions();
+  }
+
+  /**
+   * 更新技能定义
+   */
+  public updateSkill(
+    skillId: string,
+    updates: Partial<Omit<SkillDefinition, "id" | "createdAt">>,
+  ): SkillDefinition {
+    const skill = this.skillDefinitions.get(skillId);
+    if (!skill) {
+      throw new Error(`Skill not found: ${skillId}`);
+    }
+
+    const updated = {
+      ...skill,
+      ...updates,
+    };
+
+    this.skillDefinitions.set(skillId, updated);
+    return updated;
+  }
+
+  /**
+   * 删除技能定义
+   */
+  public deleteSkill(skillId: string): boolean {
+    return this.skillDefinitions.delete(skillId);
+  }
+
+  /**
+   * 授予技能（别名方法）
+   */
+  public grantSkill(params: {
+    agentId: string;
+    skillId: string;
+    level?: SkillLevel;
+    acquiredFrom?: string;
+  }): AgentSkill {
+    return this.addSkillToAgent({
+      agentId: params.agentId,
+      skillId: params.skillId,
+      initialLevel: params.level,
+      acquiredFrom: params.acquiredFrom,
+    });
+  }
+
+  /**
+   * 升级技能（别名方法）
+   */
+  public levelUpSkill(agentId: string, skillId: string): AgentSkill {
+    const skill = this.getAgentSkill(agentId, skillId);
+    if (!skill) {
+      throw new Error(`Agent does not have skill: ${skillId}`);
+    }
+
+    const levelOrder: SkillLevel[] = [
+      "novice",
+      "beginner",
+      "intermediate",
+      "advanced",
+      "expert",
+      "master",
+    ];
+    const currentIndex = levelOrder.indexOf(skill.currentLevel);
+
+    if (currentIndex >= levelOrder.length - 1) {
+      throw new Error(`Skill is already at maximum level: ${skill.currentLevel}`);
+    }
+
+    return this.upgradeSkillLevel({
+      agentId,
+      skillId,
+      newLevel: levelOrder[currentIndex + 1],
+    });
+  }
+
+  /**
+   * 评估技能
+   */
+  public assessSkill(agentId: string, skillId: string, score: number): AgentSkill {
+    const skill = this.getAgentSkill(agentId, skillId);
+    if (!skill) {
+      throw new Error(`Agent does not have skill: ${skillId}`);
+    }
+
+    skill.assessmentScore = Math.max(0, Math.min(100, score));
+    skill.lastAssessedAt = Date.now();
+
+    return skill;
+  }
+
+  /**
+   * 获取智能助手技能统计信息
+   */
+  public getAgentSkillStatistics(agentId: string): {
+    totalSkills: number;
+    certifiedSkills: number;
+    skillsByCategory: Record<SkillCategory, number>;
+    averageLevel: number;
+    averageAssessmentScore: number;
+  } {
+    const skills = this.getAgentSkills(agentId);
+
+    const skillsByCategory: Record<SkillCategory, number> = {
+      technical: 0,
+      communication: 0,
+      leadership: 0,
+      "domain-knowledge": 0,
+      "tool-proficiency": 0,
+      "soft-skill": 0,
+    };
+
+    let certifiedSkills = 0;
+    let totalLevelPoints = 0;
+    let totalAssessmentScore = 0;
+    let assessedCount = 0;
+
+    const levelPoints: Record<SkillLevel, number> = {
+      novice: 1,
+      beginner: 2,
+      intermediate: 3,
+      advanced: 4,
+      expert: 5,
+      master: 6,
+    };
+
+    for (const skill of skills) {
+      const skillDef = this.skillDefinitions.get(skill.skillId);
+      if (skillDef) {
+        skillsByCategory[skillDef.category]++;
+      }
+
+      if (skill.isCertified) {
+        certifiedSkills++;
+      }
+
+      totalLevelPoints += levelPoints[skill.currentLevel];
+
+      if (skill.assessmentScore !== undefined) {
+        totalAssessmentScore += skill.assessmentScore;
+        assessedCount++;
+      }
+    }
+
+    return {
+      totalSkills: skills.length,
+      certifiedSkills,
+      skillsByCategory,
+      averageLevel: skills.length > 0 ? totalLevelPoints / skills.length : 0,
+      averageAssessmentScore: assessedCount > 0 ? totalAssessmentScore / assessedCount : 0,
+    };
+  }
+
+  /**
+   * 获取全局统计信息
+   */
+  public getGlobalStatistics(): {
+    totalSkillDefinitions: number;
+    totalAgentsWithSkills: number;
+    totalSkillInstances: number;
+    skillsByCategory: Record<SkillCategory, number>;
+  } {
+    const skillsByCategory: Record<SkillCategory, number> = {
+      technical: 0,
+      communication: 0,
+      leadership: 0,
+      "domain-knowledge": 0,
+      "tool-proficiency": 0,
+      "soft-skill": 0,
+    };
+
+    for (const skill of this.skillDefinitions.values()) {
+      skillsByCategory[skill.category]++;
+    }
+
+    let totalSkillInstances = 0;
+    for (const skills of this.agentSkills.values()) {
+      totalSkillInstances += skills.length;
+    }
+
+    return {
+      totalSkillDefinitions: this.skillDefinitions.size,
+      totalAgentsWithSkills: this.agentSkills.size,
+      totalSkillInstances,
+      skillsByCategory,
+    };
+  }
+
+  /**
    * 推荐培训课程
    */
   public recommendCourses(agentId: string, skillId: string): string[] {

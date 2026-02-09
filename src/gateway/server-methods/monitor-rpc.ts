@@ -178,7 +178,7 @@ export const monitorHandlers: GatewayRequestHandlers = {
     try {
       const rule = forwardingRules.get(ruleId);
       if (!rule) {
-        respond(false, null, errorShape(ErrorCodes.NOT_FOUND, "Rule not found"));
+        respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Rule not found"));
         return;
       }
 
@@ -206,7 +206,7 @@ export const monitorHandlers: GatewayRequestHandlers = {
     try {
       const deleted = forwardingRules.delete(ruleId);
       if (!deleted) {
-        respond(false, null, errorShape(ErrorCodes.NOT_FOUND, "Rule not found"));
+        respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Rule not found"));
         return;
       }
 
@@ -264,7 +264,7 @@ export const monitorHandlers: GatewayRequestHandlers = {
     try {
       const alert = alerts.get(alertId);
       if (!alert) {
-        respond(false, null, errorShape(ErrorCodes.NOT_FOUND, "Alert not found"));
+        respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Alert not found"));
         return;
       }
 
@@ -286,11 +286,282 @@ export const monitorHandlers: GatewayRequestHandlers = {
       respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }
   },
+
+  /**
+   * 获取实时性能监控数据
+   */
+  "monitor.realtime": async ({ respond }) => {
+    try {
+      const now = Date.now();
+      const realtimeData = {
+        timestamp: now,
+        activeSessions: activeSessions.size,
+        activeFlows: messageFlows.size,
+        recentMessages: performanceMetrics.totalMessages,
+        unacknowledgedAlerts: Array.from(alerts.values()).filter((a) => !a.acknowledged).length,
+        systemUptime: now - performanceMetrics.uptime,
+      };
+
+      respond(true, { data: realtimeData }, undefined);
+    } catch (err) {
+      respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+
+  /**
+   * 获取会话详细信息
+   */
+  "monitor.sessionDetail": async ({ params, respond }) => {
+    const { sessionId } = params || {};
+
+    if (!sessionId || typeof sessionId !== "string") {
+      respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Missing sessionId"));
+      return;
+    }
+
+    try {
+      const session = activeSessions.get(sessionId);
+      if (!session) {
+        respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Session not found"));
+        return;
+      }
+
+      // 查找相关的消息流
+      const relatedFlows = Array.from(messageFlows.values()).filter(
+        (flow) => flow.fromAgentId === session.agentId || flow.toAgentId === session.agentId,
+      );
+
+      const detail = {
+        session,
+        relatedFlows,
+        duration: Date.now() - session.startedAt,
+        avgMessageInterval:
+          session.messageCount > 1
+            ? (session.lastActivityAt - session.startedAt) / (session.messageCount - 1)
+            : 0,
+      };
+
+      respond(true, { detail }, undefined);
+    } catch (err) {
+      respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+
+  /**
+   * 获取智能助手监控数据
+   */
+  "monitor.agentStats": async ({ params, respond }) => {
+    const { agentId } = params || {};
+
+    if (!agentId || typeof agentId !== "string") {
+      respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Missing agentId"));
+      return;
+    }
+
+    try {
+      const agentSessions = Array.from(activeSessions.values()).filter(
+        (s) => s.agentId === agentId,
+      );
+
+      const sentFlows = Array.from(messageFlows.values()).filter((f) => f.fromAgentId === agentId);
+
+      const receivedFlows = Array.from(messageFlows.values()).filter(
+        (f) => f.toAgentId === agentId,
+      );
+
+      const agentAlerts = Array.from(alerts.values()).filter((a) => a.agentId === agentId);
+
+      const stats = {
+        agentId,
+        activeSessions: agentSessions.length,
+        totalMessagesSent: sentFlows.reduce((sum, f) => sum + f.count, 0),
+        totalMessagesReceived: receivedFlows.reduce((sum, f) => sum + f.count, 0),
+        avgResponseTime:
+          sentFlows.length > 0
+            ? sentFlows.reduce((sum, f) => sum + f.avgResponseTime, 0) / sentFlows.length
+            : 0,
+        activeAlerts: agentAlerts.filter((a) => !a.acknowledged).length,
+        totalAlerts: agentAlerts.length,
+        lastActivityAt: Math.max(...agentSessions.map((s) => s.lastActivityAt), 0),
+      };
+
+      respond(true, { stats }, undefined);
+    } catch (err) {
+      respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+
+  /**
+   * 获取通道监控数据
+   */
+  "monitor.channelStats": async ({ params, respond }) => {
+    const { channelId } = params || {};
+
+    if (!channelId || typeof channelId !== "string") {
+      respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Missing channelId"));
+      return;
+    }
+
+    try {
+      const channelSessions = Array.from(activeSessions.values()).filter(
+        (s) => s.channelId === channelId,
+      );
+
+      const channelFlows = Array.from(messageFlows.values()).filter(
+        (f) => f.channelId === channelId,
+      );
+
+      const channelAlerts = Array.from(alerts.values()).filter((a) => a.channelId === channelId);
+
+      const stats = {
+        channelId,
+        activeSessions: channelSessions.length,
+        totalMessages: channelFlows.reduce((sum, f) => sum + f.count, 0),
+        activeFlows: channelFlows.length,
+        avgResponseTime:
+          channelFlows.length > 0
+            ? channelFlows.reduce((sum, f) => sum + f.avgResponseTime, 0) / channelFlows.length
+            : 0,
+        activeAlerts: channelAlerts.filter((a) => !a.acknowledged).length,
+        forwardingRules: Array.from(forwardingRules.values()).filter(
+          (r) => r.sourceChannelId === channelId || r.targetChannelId === channelId,
+        ).length,
+      };
+
+      respond(true, { stats }, undefined);
+    } catch (err) {
+      respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+
+  /**
+   * 获取系统健康状态
+   */
+  "monitor.healthStatus": async ({ respond }) => {
+    try {
+      const now = Date.now();
+      const uptime = now - performanceMetrics.uptime;
+
+      // 计算健康指标
+      const idleSessions = Array.from(activeSessions.values()).filter(
+        (s) => s.status === "idle",
+      ).length;
+
+      const errorSessions = Array.from(activeSessions.values()).filter(
+        (s) => s.status === "error",
+      ).length;
+
+      const unacknowledgedAlerts = Array.from(alerts.values()).filter(
+        (a) => !a.acknowledged,
+      ).length;
+
+      const criticalAlerts = Array.from(alerts.values()).filter(
+        (a) => a.type === "error" && !a.acknowledged,
+      ).length;
+
+      // 计算健康分数（0-100）
+      let healthScore = 100;
+
+      if (activeSessions.size > 0) {
+        healthScore -= (errorSessions / activeSessions.size) * 30;
+        healthScore -= (idleSessions / activeSessions.size) * 10;
+      }
+
+      healthScore -= criticalAlerts * 5;
+      healthScore -= unacknowledgedAlerts * 2;
+
+      healthScore = Math.max(0, Math.min(100, healthScore));
+
+      const status = {
+        healthy: healthScore >= 80,
+        score: Math.round(healthScore),
+        uptime,
+        metrics: {
+          totalSessions: activeSessions.size,
+          activeSessions: activeSessions.size - idleSessions - errorSessions,
+          idleSessions,
+          errorSessions,
+          totalAlerts: alerts.size,
+          unacknowledgedAlerts,
+          criticalAlerts,
+        },
+        recommendations: generateHealthRecommendations(
+          healthScore,
+          errorSessions,
+          unacknowledgedAlerts,
+          criticalAlerts,
+        ),
+      };
+
+      respond(true, { status }, undefined);
+    } catch (err) {
+      respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+
+  /**
+   * 记录自定义指标
+   */
+  "monitor.recordMetric": async ({ params, respond }) => {
+    const { metricName, value, tags } = params || {};
+
+    if (!metricName || typeof metricName !== "string") {
+      respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Missing metricName"));
+      return;
+    }
+
+    if (value === undefined || typeof value !== "number") {
+      respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Invalid value"));
+      return;
+    }
+
+    try {
+      // 这里简化处理，实际应该存储到时序数据库
+      const metric = {
+        name: metricName,
+        value,
+        tags: tags || {},
+        timestamp: Date.now(),
+      };
+
+      respond(true, { metric, recorded: true }, undefined);
+    } catch (err) {
+      respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
 };
 
 /**
- * 辅助函数：记录活动会话
+ * 生成健康建议
  */
+function generateHealthRecommendations(
+  healthScore: number,
+  errorSessions: number,
+  unacknowledgedAlerts: number,
+  criticalAlerts: number,
+): string[] {
+  const recommendations: string[] = [];
+
+  if (healthScore < 60) {
+    recommendations.push("系统健康度较低，需要立即关注");
+  }
+
+  if (errorSessions > 0) {
+    recommendations.push(`存在 ${errorSessions} 个错误会话，建议排查问题`);
+  }
+
+  if (criticalAlerts > 0) {
+    recommendations.push(`有 ${criticalAlerts} 个严重告警未处理，请立即处理`);
+  } else if (unacknowledgedAlerts > 5) {
+    recommendations.push(`有 ${unacknowledgedAlerts} 个未确认告警，建议及时处理`);
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push("系统运行正常");
+  }
+
+  return recommendations;
+}
 export function recordActiveSession(session: ActiveSession): void {
   activeSessions.set(session.id, session);
   performanceMetrics.totalMessages += session.messageCount;

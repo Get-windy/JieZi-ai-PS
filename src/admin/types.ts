@@ -10,6 +10,9 @@ import type {
   ApprovalConfig,
 } from "../config/types.permissions.js";
 
+// 重新导出 PermissionSubject 供外部使用
+export type { PermissionSubject, PermissionAction, ApprovalConfig };
+
 /**
  * 超级管理员角色类型
  */

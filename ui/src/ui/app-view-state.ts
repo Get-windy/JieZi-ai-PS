@@ -348,6 +348,31 @@ export type AppViewState = {
   organizationData: any | null;
   organizationDataLoading: boolean;
   organizationDataError: string | null;
+  // Phase 7: 超级管理员与审批系统状态
+  superAdminsLoading?: boolean;
+  superAdminsError?: string | null;
+  superAdmins?: any[];
+  adminSession?: any | null;
+  adminOperationsLoading?: boolean;
+  adminOperationsError?: string | null;
+  adminOperations?: any[];
+  // approvalRequests 和 approvalRequestsLoading 已在上面定义（第334-335行）
+  approvalRequestsError?: string | null;
+  pendingApprovalsLoading?: boolean;
+  pendingApprovalsError?: string | null;
+  pendingApprovals?: any[];
+  approvalStatsLoading?: boolean;
+  approvalStatsError?: string | null;
+  approvalStats?: any | null;
+  approvalPoliciesLoading?: boolean;
+  approvalPoliciesError?: string | null;
+  approvalPolicies?: any[];
+  notificationsLoading?: boolean;
+  notificationsError?: string | null;
+  notifications?: any[];
+  notificationStatsLoading?: boolean;
+  notificationStatsError?: string | null;
+  notificationStats?: any | null;
   client: GatewayBrowserClient | null;
   refreshSessionsAfterChat: Set<string>;
   connect: () => void;
