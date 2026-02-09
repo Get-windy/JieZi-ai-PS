@@ -8,6 +8,7 @@ import type { InlineDirectives } from "./directive-handling.js";
 import type { createModelSelectionState } from "./model-selection.js";
 import type { TypingController } from "./typing.js";
 import { resolveSessionAuthProfileOverride } from "../../agents/auth-profiles/session-override.js";
+import { resolveSessionAuthProfileWithSmartRouting } from "../../agents/auth-profiles/session-smart-routing.js";
 import {
   abortEmbeddedPiRun,
   isEmbeddedPiRunActive,
@@ -342,16 +343,33 @@ export async function runPreparedReply(
     resolvedQueue.mode === "followup" ||
     resolvedQueue.mode === "collect" ||
     resolvedQueue.mode === "steer-backlog";
-  const authProfileId = await resolveSessionAuthProfileOverride({
+  // 尝试智能路由（如果配置了）
+  let authProfileId = await resolveSessionAuthProfileWithSmartRouting({
     cfg,
-    provider,
+    agentId,
     agentDir,
+    provider,
+    message: baseBodyTrimmed,
     sessionEntry,
     sessionStore,
     sessionKey,
     storePath,
     isNewSession,
   });
+
+  // 如果智能路由未启用或失败，回退到默认的轮询策略
+  if (!authProfileId) {
+    authProfileId = await resolveSessionAuthProfileOverride({
+      cfg,
+      provider,
+      agentDir,
+      sessionEntry,
+      sessionStore,
+      sessionKey,
+      storePath,
+      isNewSession,
+    });
+  }
   const authProfileIdSource = sessionEntry?.authProfileOverrideSource;
   const followupRun = {
     prompt: queuedBody,

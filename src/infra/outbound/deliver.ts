@@ -1,5 +1,6 @@
 import type { ReplyPayload } from "../../auto-reply/types.js";
 import type { ChannelOutboundAdapter } from "../../channels/plugins/types.js";
+import type { OutboundMessageContext } from "../../channels/policies/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { sendMessageDiscord } from "../../discord/send.js";
 import type { sendMessageIMessage } from "../../imessage/send.js";
@@ -8,6 +9,7 @@ import type { sendMessageTelegram } from "../../telegram/send.js";
 import type { sendMessageWhatsApp } from "../../web/outbound.js";
 import type { NormalizedOutboundPayload } from "./payloads.js";
 import type { OutboundChannel } from "./targets.js";
+import { resolveSessionAgentId } from "../../agents/agent-scope.js";
 import {
   chunkByParagraph,
   chunkMarkdownTextWithMode,
@@ -16,11 +18,13 @@ import {
 } from "../../auto-reply/chunk.js";
 import { resolveChannelMediaMaxBytes } from "../../channels/plugins/media-limits.js";
 import { loadChannelOutboundAdapter } from "../../channels/plugins/outbound/load.js";
+import { getPolicyEngine } from "../../channels/policy-integration.js";
 import { resolveMarkdownTableMode } from "../../config/markdown-tables.js";
 import {
   appendAssistantMessageToSessionTranscript,
   resolveMirroredTranscriptText,
 } from "../../config/sessions.js";
+import { logVerbose } from "../../globals.js";
 import { markdownToSignalTextChunks, type SignalTextStyleRange } from "../../signal/format.js";
 import { sendMessageSignal } from "../../signal/send.js";
 import { normalizeReplyPayloadsForDelivery } from "./payloads.js";
@@ -197,12 +201,95 @@ export async function deliverOutboundPayloads(params: {
     mediaUrls?: string[];
   };
 }): Promise<OutboundDeliveryResult[]> {
-  const { cfg, channel, to, payloads } = params;
+  const { cfg, channel, to } = params;
+  let payloads = params.payloads;
   const accountId = params.accountId;
   const deps = params.deps;
   const abortSignal = params.abortSignal;
   const sendSignal = params.deps?.sendSignal ?? sendMessageSignal;
   const results: OutboundDeliveryResult[] = [];
+
+  // Phase 2: 应用出站策略检查
+  const sessionKey = params.mirror?.sessionKey;
+  if (sessionKey && accountId) {
+    const agentId = params.mirror?.agentId ?? resolveSessionAgentId({ sessionKey, config: cfg });
+    const channelId = channel;
+
+    if (agentId && channelId) {
+      const policyEngine = getPolicyEngine(agentId);
+
+      if (policyEngine) {
+        const policy = policyEngine.getPolicy(channelId);
+
+        if (policy) {
+          // 为每个 payload 执行策略检查
+          const normalizedForCheck = normalizeReplyPayloadsForDelivery(payloads);
+          const allowedPayloads: typeof payloads = [];
+
+          for (const payload of normalizedForCheck) {
+            const policyContext = {
+              agentId,
+              channelId,
+              accountId,
+              message: payload.text ?? "",
+              timestamp: Date.now(),
+              metadata: {
+                to,
+                mediaUrls: payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []),
+                channelData: payload.channelData,
+                replyToId: params.replyToId,
+                threadId: params.threadId,
+              },
+            };
+
+            try {
+              const policyResult = await policyEngine.execute(policyContext);
+
+              // 如果策略不允许消息发送
+              if (!policyResult.allow) {
+                logVerbose(
+                  `outbound: message blocked by policy: ${policyResult.reason ?? "no reason"}`,
+                );
+                continue; // 跳过此 payload
+              }
+
+              // 如果策略转换了消息内容
+              if (
+                policyResult.transformedMessage &&
+                typeof policyResult.transformedMessage === "string"
+              ) {
+                // 创建转换后的 payload
+                const transformedPayload = {
+                  ...payload,
+                  text: policyResult.transformedMessage,
+                };
+                allowedPayloads.push(transformedPayload);
+                logVerbose(`outbound: message transformed by policy`);
+              } else {
+                // 允许原始 payload
+                allowedPayloads.push(payload);
+              }
+            } catch (err) {
+              logVerbose(`outbound: policy check error: ${String(err)}`);
+              // 策略检查失败时继续发送消息（fail-safe）
+              allowedPayloads.push(payload);
+            }
+          }
+
+          // 如果所有消息都被阻止
+          if (allowedPayloads.length === 0) {
+            logVerbose(`outbound: all messages blocked by policy`);
+            return [];
+          }
+
+          // 使用过滤后的 payloads
+          payloads = allowedPayloads;
+        }
+      }
+    }
+  }
+
+  // 继续原有的发送逻辑
   const handler = await createChannelHandler({
     cfg,
     channel,

@@ -3,6 +3,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { Type } from "@sinclair/typebox";
 import crypto from "node:crypto";
 import path from "node:path";
+import type { PermissionCheckContext } from "../permissions/checker.js";
 import type { BashSandboxConfig } from "./bash-tools.shared.js";
 import {
   type ExecAsk,
@@ -27,6 +28,7 @@ import {
 } from "../infra/shell-env.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
 import { logInfo, logWarn } from "../logger.js";
+import { permissionIntegrator } from "../permissions/integration.js";
 import { formatSpawnError, spawnWithFallback } from "../process/spawn-utils.js";
 import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 import {
@@ -848,6 +850,53 @@ export function createExecTool(
       if (!params.command) {
         throw new Error("Provide a command to start.");
       }
+
+      // === Phase 3: 权限检查拦截 ===
+      if (agentId) {
+        const permissionContext: PermissionCheckContext = {
+          subject: {
+            type: "user",
+            id: agentId,
+            name: agentId,
+          },
+          toolName: "exec",
+          toolParams: {
+            command: params.command,
+            workdir: params.workdir,
+            elevated: params.elevated,
+            host: params.host,
+          },
+          sessionId: defaults?.sessionKey,
+          agentId,
+          timestamp: Date.now(),
+          metadata: {
+            elevated: params.elevated,
+            host: params.host || defaults?.host,
+          },
+        };
+
+        const permissionResult = await permissionIntegrator.checkToolPermission(permissionContext);
+
+        if (!permissionResult.allowed) {
+          if (permissionResult.requiresApproval) {
+            // 需要审批
+            const approvalRequest = await permissionIntegrator.createApprovalRequest(
+              permissionContext,
+              permissionResult.approvalId,
+            );
+
+            throw new Error(
+              `exec tool requires approval. Request ID: ${approvalRequest.id}. Reason: ${permissionResult.reason || "Approval required"}`,
+            );
+          } else {
+            // 直接拒绝
+            throw new Error(
+              `exec tool permission denied. Reason: ${permissionResult.reason || "Access denied"}`,
+            );
+          }
+        }
+      }
+      // === 权限检查结束 ===
 
       const maxOutput = DEFAULT_MAX_OUTPUT;
       const pendingMaxOutput = DEFAULT_PENDING_MAX_OUTPUT;

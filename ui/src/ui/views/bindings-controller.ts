@@ -1,5 +1,5 @@
-import type { BindingEntry, BindingsProps } from "./bindings.js";
 import type { AgentsListResult } from "../types.js";
+import type { BindingEntry, BindingsProps } from "./bindings.js";
 
 type RpcClient = {
   request: <T = unknown>(method: string, params?: unknown) => Promise<T>;
@@ -16,7 +16,7 @@ export class BindingsController {
 
   constructor(
     private rpc: RpcClient,
-    private render: () => void
+    private render: () => void,
   ) {}
 
   async init() {
@@ -33,7 +33,7 @@ export class BindingsController {
       const snapshot = await this.rpc.request<any>("config.get", {});
       const config = snapshot?.config || {};
       const bindingsArray = config?.bindings || [];
-      
+
       // 转换为 BindingEntry 格式
       this.bindings = bindingsArray.map((b: any, index: number) => ({
         id: b.id || `binding-${index}`,
@@ -95,11 +95,11 @@ export class BindingsController {
         return bindingId !== id;
       });
 
-      // 保存配置 - 使用 config.patch
+      // 保存配置 - 使用完整配置对象
       const baseHash = snapshot?.hash || null;
-      const patchPayload = { bindings: filtered };
+      const patchedConfig = { ...config, bindings: filtered };
       await this.rpc.request("config.patch", {
-        raw: JSON.stringify(patchPayload, null, 2),
+        raw: JSON.stringify(patchedConfig, null, 2),
         baseHash,
       });
 
@@ -172,11 +172,11 @@ export class BindingsController {
         }
       }
 
-      // 保存配置 - 使用 config.patch
+      // 保存配置 - 使用完整配置对象
       const baseHash = snapshot?.hash || null;
-      const patchPayload = { bindings: bindingsArray };
+      const patchedConfig = { ...config, bindings: bindingsArray };
       await this.rpc.request("config.patch", {
-        raw: JSON.stringify(patchPayload, null, 2),
+        raw: JSON.stringify(patchedConfig, null, 2),
         baseHash,
       });
 

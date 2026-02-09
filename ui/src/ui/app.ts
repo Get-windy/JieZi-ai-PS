@@ -29,6 +29,7 @@ import type {
   StatusSummary,
   NostrProfile,
 } from "./types.ts";
+import type { ModelAccountsConfig, ChannelPoliciesConfig } from "./views/agents.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
 import {
   handleChannelConfigReload as handleChannelConfigReloadInternal,
@@ -137,6 +138,7 @@ export class OpenClawApp extends LitElement {
   @state() chatThinkingLevel: string | null = null;
   @state() chatQueue: ChatQueueItem[] = [];
   @state() chatAttachments: ChatAttachment[] = [];
+  @state() chatManualRefreshInFlight = false;
   // Sidebar state for tool output viewing
   @state() sidebarOpen = false;
   @state() sidebarContent: string | null = null;
@@ -307,8 +309,69 @@ export class OpenClawApp extends LitElement {
   @state() agentsList: AgentsListResult | null = null;
   @state() agentsError: string | null = null;
   @state() agentsSelectedId: string | null = null;
-  @state() agentsPanel: "overview" | "files" | "tools" | "skills" | "channels" | "cron" =
-    "overview";
+  @state() agentsPanel:
+    | "overview"
+    | "files"
+    | "tools"
+    | "skills"
+    | "channels"
+    | "cron"
+    | "modelAccounts"
+    | "channelPolicies" = "overview";
+  // Collaboration 协作管理状态
+  @state() collaborationActivePanel: "groups" | "friends" | "monitor" | "scenarios" = "groups";
+  // 群组管理状态
+  @state() groupsLoading = false;
+  @state() groupsList: import("./views/groups.ts").GroupsListResult | null = null;
+  @state() groupsError: string | null = null;
+  @state() groupsSelectedId: string | null = null;
+  @state() groupsActivePanel: "list" | "members" | "settings" = "list";
+  @state() creatingGroup = false;
+  @state() editingGroup: import("./views/groups.ts").GroupInfo | null = null;
+  // Friends 好友关系状态
+  @state() friendsLoading = false;
+  @state() friendsError: string | null = null;
+  @state() friendsList: import("./controllers/friends.ts").Friend[] = [];
+  @state() friendsTotal = 0;
+  @state() friendRequestsLoading = false;
+  @state() friendRequestsList: import("./controllers/friends.ts").FriendRequest[] = [];
+  @state() selectedFriendId: string | null = null;
+  @state() messagesLoading = false;
+  @state() messagesList: import("./controllers/friends.ts").DirectMessage[] = [];
+  @state() sendingMessage = false;
+  @state() friendsActiveSubPanel: "list" | "requests" | "chat" = "list";
+  @state() draftMessage = "";
+  // Monitor 协作监控状态
+  @state() monitorActiveSubPanel: "sessions" | "flows" | "forwarding" | "metrics" | "alerts" =
+    "sessions";
+  @state() monitorSessionsLoading = false;
+  @state() monitorSessionsError: string | null = null;
+  @state() monitorActiveSessions: import("./controllers/monitor.ts").ActiveSession[] = [];
+  @state() monitorMessageFlowsLoading = false;
+  @state() monitorMessageFlows: import("./controllers/monitor.ts").MessageFlow[] = [];
+  @state() monitorForwardingRulesLoading = false;
+  @state() monitorForwardingRules: import("./controllers/monitor.ts").ForwardingRule[] = [];
+  @state() monitorEditingRule: import("./controllers/monitor.ts").ForwardingRule | null = null;
+  @state() monitorCreatingRule = false;
+  @state() monitorMetricsLoading = false;
+  @state() monitorMetrics: import("./controllers/monitor.ts").PerformanceMetrics | null = null;
+  @state() monitorAlertsLoading = false;
+  @state() monitorAlerts: import("./controllers/monitor.ts").Alert[] = [];
+  // Scenarios 协作场景状态
+  @state() scenariosActiveSubPanel: "list" | "runs" | "recommendations" | "analytics" = "list";
+  @state() scenariosLoading = false;
+  @state() scenariosError: string | null = null;
+  @state() scenariosList: import("./controllers/scenarios.ts").CollaborationScenario[] = [];
+  @state() scenariosTotal = 0;
+  @state() selectedScenarioId: string | null = null;
+  @state() editingScenario: import("./controllers/scenarios.ts").CollaborationScenario | null =
+    null;
+  @state() creatingScenario = false;
+  @state() runningScenarioId: string | null = null;
+  @state() scenarioRunsLoading = false;
+  @state() scenarioRuns: import("./controllers/scenarios.ts").ScenarioRun[] = [];
+  @state() recommendationsLoading = false;
+  @state() recommendations: import("./controllers/scenarios.ts").ScenarioRecommendation[] = [];
   @state() agentFilesLoading = false;
   @state() agentFilesError: string | null = null;
   @state() agentFilesList: AgentsFilesListResult | null = null;
@@ -326,6 +389,54 @@ export class OpenClawApp extends LitElement {
   @state() editingAgent: { id: string; name?: string; workspace?: string } | null = null;
   @state() creatingAgent = false;
   @state() deletingAgent = false;
+  // Phase 5: Agents Management 状态
+  @state() agentsManagementActivePanel: "detail" | "modelAccounts" | "channelPolicies" = "detail";
+  @state() modelAccountsConfig: ModelAccountsConfig | null = null;
+  @state() modelAccountsLoading = false;
+  @state() modelAccountsError: string | null = null;
+  @state() modelAccountsSaving = false;
+  @state() modelAccountsSaveSuccess = false;
+  @state() channelPoliciesConfig: ChannelPoliciesConfig | null = null;
+  @state() channelPoliciesLoading = false;
+  @state() channelPoliciesError: string | null = null;
+  @state() channelPoliciesSaving = false;
+  @state() channelPoliciesSaveSuccess = false;
+  @state() editingPolicyBinding: { agentId: string; index: number; binding: any } | null = null; // 正在配置的策略绑定
+  @state() addingPolicyBinding: string | null = null; // 正在添加策略绑定的 agentId
+  // Phase 5: Organization Chart 状态
+  @state() organizationChartViewMode: "tree" | "list" = "list";
+  @state() organizationChartSelectedNode: string | null = null;
+  @state() organizationData: any | null = null;
+  @state() organizationDataLoading = false;
+  @state() organizationDataError: string | null = null;
+  // Phase 5: Permissions Management 状态
+  @state() permissionsManagementActiveTab: "config" | "approvals" | "history" = "config";
+  @state() permissionsConfig: any | null = null;
+  @state() permissionsConfigLoading = false;
+  @state() permissionsConfigSaving = false;
+  @state() permissionsConfigError: string | null = null;
+  @state() approvalRequests: any[] = [];
+  @state() approvalRequestsLoading = false;
+  @state() permissionsChangeHistory: any[] = [];
+  @state() permissionsHistoryLoading = false;
+  // Approvals State (for ApprovalsState compatibility)
+  @state() approvalsLoading = false;
+  @state() approvalsError: string | null = null;
+  @state() approvalsList: import("./controllers/approvals.ts").ApprovalRequest[] = [];
+  @state() approvalsTotal = 0;
+  @state() approvalsStats: import("./controllers/approvals.ts").ApprovalStats | null = null;
+  @state() approvalsStatsLoading = false;
+
+  // Message Queue 状态
+  @state() messageQueueActivePanel: "monitor" | "statistics" | "configuration" = "monitor";
+  @state() queueLoading = false;
+  @state() queueError: string | null = null;
+  @state() queueMessages: import("./controllers/message-queue.ts").QueuedMessage[] = [];
+  @state() queueStats: import("./controllers/message-queue.ts").QueueStats | null = null;
+  @state() queueStatsLoading = false;
+  @state() queueConfig: import("./controllers/message-queue.ts").QueueConfig | null = null;
+  @state() queueConfigLoading = false;
+  @state() queueConfigSaving = false;
 
   @state() sessionsLoading = false;
   @state() sessionsResult: SessionsListResult | null = null;
@@ -404,6 +515,11 @@ export class OpenClawApp extends LitElement {
   @state() skillEdits: Record<string, string> = {};
   @state() skillsBusyKey: string | null = null;
   @state() skillMessages: Record<string, SkillMessage> = {};
+  // Skills Advanced Features
+  @state() skillsAdvancedMode = false;
+  @state() skillsSelectedSkills = new Set<string>();
+  @state() skillsFilterStatus: "all" | "eligible" | "blocked" | "disabled" = "all";
+  @state() skillsFilterSource: "all" | "workspace" | "built-in" | "installed" | "extra" = "all";
 
   @state() debugLoading = false;
   @state() debugStatus: StatusSummary | null = null;
@@ -503,11 +619,12 @@ export class OpenClawApp extends LitElement {
     resetChatScrollInternal(this as unknown as Parameters<typeof resetChatScrollInternal>[0]);
   }
 
-  scrollToBottom() {
+  scrollToBottom(opts?: { smooth?: boolean }) {
     resetChatScrollInternal(this as unknown as Parameters<typeof resetChatScrollInternal>[0]);
     scheduleChatScrollInternal(
       this as unknown as Parameters<typeof scheduleChatScrollInternal>[0],
       true,
+      Boolean(opts?.smooth),
     );
   }
 

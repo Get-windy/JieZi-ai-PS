@@ -12,6 +12,7 @@ import { formatCliCommand } from "../cli/command-format.js";
 import { createDefaultDeps } from "../cli/deps.js";
 import {
   CONFIG_PATH,
+  initializeAfterConfigLoad,
   isNixMode,
   loadConfig,
   migrateLegacyConfig,
@@ -218,6 +219,12 @@ export async function startGatewayServer(
   }
 
   const cfgAtStart = loadConfig();
+
+  // 初始化 Phase 1/2/3/4/5/6 系统（权限、策略、组织架构等）
+  log.info("gateway: initializing Phase systems...");
+  initializeAfterConfigLoad(cfgAtStart);
+  log.info("gateway: Phase systems initialized");
+
   const diagnosticsEnabled = isDiagnosticsEnabled(cfgAtStart);
   if (diagnosticsEnabled) {
     startDiagnosticHeartbeat();

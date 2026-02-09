@@ -52,6 +52,237 @@
 
 ### 📌 项目更新记录
 
+#### 2026年2月9日 - 权限管理与培训系统核心功能完成
+
+**🎯 核心功能完成：**
+
+- ✅ **权限管理系统**
+  - 实现权限检查器和审批系统 (src/permissions/)
+  - 创建工具权限包装器 (src/agents/tools/permission-wrapper.ts)
+  - 在关键工具中集成权限检查拦截（bash-tools.exec.ts, file-tools-secure.ts）
+  - 支持异步权限检查和审批流程
+  - 集成到文件读写和命令执行工具中
+
+- ✅ **智能助手培训系统**
+  - 实现培训会话管理 (src/agents/training/training-session.ts)
+  - 添加培训启动工具 (training-start-tool.ts)
+  - 添加培训评估工具 (training-assess-tool.ts)
+  - 添加技能转移工具 (skill-transfer-tool.ts)
+  - 完成导师-学员工作空间管理 (lifecycle-manager.ts)
+  - 实现工作空间模板复制功能 (copyWorkspaceTemplate)
+  - 实现培训系统框架 (lifecycle/training-system.ts)
+
+- ✅ **消息队列与策略引擎**
+  - 实现消息队列系统 (src/channels/message-queue.ts)
+  - 添加策略引擎 (src/channels/policy-engine.ts)
+  - 添加监控功能 (src/channels/policies/monitor.ts)
+  - 完善渠道策略集成 (policy-integration.ts)
+  - 新增消息队列RPC接口 (server-methods/message-queue-rpc.ts)
+  - 新增监控RPC接口 (server-methods/monitor-rpc.ts)
+
+- ✅ **群组管理功能**
+  - 实现群组会话协调器 (src/sessions/group-session-coordinator.ts)
+  - 实现群组管理器 (src/sessions/group-manager.ts)
+  - 实现群组消息存储 (src/sessions/group-message-storage.ts)
+  - 添加好友RPC接口 (server-methods/friends-rpc.ts)
+  - 添加群组RPC接口 (server-methods/groups-rpc.ts)
+  - 完成场景管理功能 (server-methods/scenarios-rpc.ts)
+
+- ✅ **UI界面完善**
+  - 完善权限管理页面 (ui/src/ui/views/permissions-management.ts)
+  - 新增培训管理界面 (ui/src/ui/views/training.ts)
+  - 新增监控界面 (ui/src/ui/views/monitor.ts)
+  - 新增协作界面 (ui/src/ui/views/collaboration.ts)
+  - 新增好友管理界面 (ui/src/ui/views/friends.ts)
+  - 新增群组管理界面 (ui/src/ui/views/groups.ts)
+  - 新增消息队列界面 (ui/src/ui/views/message-queue.ts)
+  - 新增场景管理界面 (ui/src/ui/views/scenarios.ts)
+  - 新增通道策略对话框 (ui/src/ui/views/agents.channel-policy-dialog.ts)
+  - **修复UI国际化函数导入问题** (app-render.helpers.ts)
+
+- ✅ **构建系统修复**
+  - **解决 pi-model-discovery.ts 的 `__exportAll is not a function` 运行时错误**
+  - 使用动态导入 (top-level await) 避免打包器优化问题
+  - 修复 TypeScript 类型引用问题 (InstanceType<typeof ...>)
+  - 修复 model.ts 和 types.ts 中的4处类型错误
+  - 完成项目构建和UI构建流程
+  - 验证运行时功能正常
+
+**📊 统计数据：**
+
+- 新增文件：38个
+  - src/agents/: 7个新文件
+  - src/channels/: 2个新文件
+  - src/config/: 1个新文件
+  - src/gateway/server-methods/: 6个新文件
+  - src/permissions/: 1个新文件
+  - src/sessions/: 4个新文件
+  - ui/src/ui/controllers/: 8个新文件
+  - ui/src/ui/views/: 9个新文件
+- 修改文件：17个
+- 删除临时文件：16个
+- 新增代码行数：~17,800+
+- 删除代码行数：~2,680
+- 新增RPC接口：6个
+- 新增UI页面/控制器：17个
+- 提交标识：308fdd13f
+
+**🔧 技术改进：**
+
+- ✅ 异步权限检查支持
+- ✅ 工作空间模板复制功能
+- ✅ 审批流程集成
+- ✅ 动态导入优化 (ESM兼容)
+- ✅ 文件工具安全增强
+- ✅ 构建系统稳定性修夏
+- ✅ UI国际化完整性修复
+
+**🔄 兼容性保证：**
+
+- ✅ 保持与上游 openclaw 的兼容性
+- ✅ Windows PowerShell 原生支持
+- ✅ TypeScript 类型安全保障
+- ✅ 向后兼容现有配置
+- ✅ UI国际化完整支持
+- ✅ 构建系统稳定运行
+
+**⚠️ 重要说明：**
+
+本次更新完成了多智能体协作、权限管理和培训系统的核心基础设施。特别是：
+
+1. **构建系统修复**：解决了 `pi-model-discovery.ts` 的 ESM 模块导出问题，项目现可正常构建和运行
+2. **UI修复**：修复了国际化函数导入问题，控制面板界面现可正常显示
+3. **权限系统**：在关键工具中集成了完整的权限检查和审批流程
+4. **培训系统**：完成了导师-学员培训框架的核心功能
+
+建议在生产部署前进行充分测试：
+
+1. ✅ 验证项目构建功能 (pnpm build)
+2. ✅ 测试UI界面显示 (pnpm openclaw gateway)
+3. ✅ 检查权限管理系统
+4. ✅ 验证培训系统功能
+5. ✅ 测试群组管理功能
+
+**📦 备份信息：**
+
+- 备份日期：20260209_101331
+- 备份位置：I:\JIEZI\backups\
+- 备份文件：
+  - 当前提交\_20260209_101331.txt
+  - 本地修改列表\_20260209_101331.txt
+- 推送仓库：Gitee (origin) + GitHub (github)
+
+#### 2026年2月8日 - Phase 5 智能助手管理增强
+
+**🎯 核心功能上线：**
+
+- ✅ **智能助手前端管理界面**
+  - 重构 agents 页面，新增"模型路由"和"通道策略"两个 Tab
+  - 实现完整的智能助手配置管理
+  - 支持多智能体协作配置
+
+- ✅ **组织框架可视化系统**
+  - 新增 organization-chart 页面
+  - 可视化展示智能助手层级结构
+  - 支持团队管理和导师系统
+  - 实现协作关系展示
+
+- ✅ **权限管理系统**
+  - 新增 permissions-management 页面
+  - 完整的权限检查和审批流程
+  - 支持权限层级和继承
+  - 集成审批工作流
+
+- ✅ **模型路由智能调度**
+  - 实现智能模型选择算法
+  - 支持基于复杂度的自动路由
+  - 成本优化和性能平衡
+  - 会话固定和上下文保持
+
+- ✅ **通道策略管理**
+  - 13种通道策略实现（私有、监控、过滤、转发、智能路由等）
+  - 灵活的通道绑定配置
+  - 策略注册和调度系统
+
+**📦 技术实现：**
+
+- **前端**：106个新增文件，15个修改文件
+  - 3个新页面：organization-chart, permissions-management, agents重构
+  - 完整国际化：100+个中英文翻译键
+  - 响应式设计：支持各种屏幕尺寸
+  - Phase 5专用样式系统
+
+- **后端**：15000+行核心代码
+  - 8个新RPC接口
+  - 完整的类型系统（agents, groups, permissions, bindings）
+  - 组织架构系统（hierarchy, team, mentor, collaboration）
+  - 权限管理系统（checker, approval, hierarchy, integration）
+  - 工作区管理（group-workspace, access-control, knowledge-sedimentation）
+  - 通道策略系统（13种策略类型）
+
+- **文档**：完善的集成文档
+  - Phase 1-4 完整文档
+  - Phase 5 RPC API规范
+  - Phase 5 集成指南
+  - 多智能体系统设计文档
+  - 配置示例和测试用例
+
+- **生命周期和超级管理员**（Phase 6-7预研）
+  - 生命周期管理器（训练系统、技能管理）
+  - 超级管理员系统（高级审批、通知管理）
+
+**🎨 用户体验改进：**
+
+1. **侧边栏导航优化**
+   - 新增"智能助手"分组，包含4个子页面：
+     - 助手管理（Agents）
+     - 组织框架（Organization Chart）
+     - 权限管理（Permissions Management）
+     - 绑定配置（Bindings）
+
+2. **agents页面重构**
+   - 原有Tab：概览、文件、工具、技能、通道、定时任务
+   - 新增Tab：
+     - **模型路由**：智能模型选择和配置
+     - **通道策略**：通道绑定和策略管理
+
+3. **完整国际化**
+   - 所有新增功能都有中英文翻译
+   - 翻译键覆盖：
+     - agents.tab.model_accounts（模型路由）- 26个配置项
+     - agents.tab.channel_policies（通道策略）- 22个策略项
+     - tab.organization-chart（组织框架）
+     - tab.permissions-management（权限管理）
+
+**📊 统计数据：**
+
+- 新增文件：106个
+- 修改文件：15个
+- 代码行数：约15000+行
+- 新增RPC接口：8个
+- 新增UI页面：3个
+- 新增策略类型：13个
+- 国际化键：100+个
+- 提交标识：dde724b16 + 9c2fdf35f
+
+**🔄 兼容性保证：**
+
+- ✅ 保持与上游 openclaw 的兼容性
+- ✅ Windows 环境构建优化（PowerShell原生支持）
+- ✅ TypeScript 类型安全
+- ✅ 向后兼容现有配置
+- ✅ 所有构建脚本保持跨平台兼容
+
+**⚠️ 重要说明：**
+
+这是一次重大的功能迭代，为 OpenClaw 项目引入了完整的多智能体管理体系。建议在生产环境使用前进行充分测试：
+
+1. ✅ 验证智能助手管理功能
+2. ✅ 测试组织框架可视化
+3. ✅ 检查权限管理系统
+4. ✅ 验证模型路由调度
+5. ✅ 测试通道策略配置
+
 #### 2026年2月7日 - 上游同步更新 (2026.2.6-3)
 
 **上游更新内容：**
@@ -112,7 +343,7 @@
 
 ```bash
 git clone https://gitee.com/CozyNook/JieZi-ai-PS.git
-cd JieZi-ai-PS
+cd 你的项目目录
 ```
 
 ### 2. 安装 pnpm（如果还没安装）

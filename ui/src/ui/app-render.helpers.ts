@@ -1,15 +1,16 @@
 import { html } from "lit";
 import { repeat } from "lit/directives/repeat.js";
-import type { AppViewState } from "./app-view-state.js";
-import type { ThemeTransitionContext } from "./theme-transition.js";
-import type { ThemeMode } from "./theme.js";
-import type { SessionsListResult } from "./types.js";
-import { refreshChat } from "./app-chat.js";
-import { syncUrlWithSessionKey } from "./app-settings.js";
-import { loadChatHistory } from "./controllers/chat.js";
-import { t } from "./i18n.js";
-import { icons } from "./icons.js";
-import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.js";
+import type { AppViewState } from "./app-view-state.ts";
+import type { ThemeTransitionContext } from "./theme-transition.ts";
+import type { ThemeMode } from "./theme.ts";
+import type { SessionsListResult } from "./types.ts";
+import { refreshChat } from "./app-chat.ts";
+import { syncUrlWithSessionKey } from "./app-settings.ts";
+import { OpenClawApp } from "./app.ts";
+import { ChatState, loadChatHistory } from "./controllers/chat.ts";
+import { t } from "./i18n.ts";
+import { icons } from "./icons.ts";
+import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
 
 export function renderTab(state: AppViewState, tab: Tab) {
   const href = pathForTab(tab, state.basePath);
@@ -95,18 +96,22 @@ export function renderChatControls(state: AppViewState) {
             state.sessionKey = next;
             state.chatMessage = "";
             state.chatStream = null;
-            (state as any).chatStreamStartedAt = null;
+            (state as unknown as OpenClawApp).chatStreamStartedAt = null;
             state.chatRunId = null;
-            (state as any).resetToolStream();
-            (state as any).resetChatScroll();
+            (state as unknown as OpenClawApp).resetToolStream();
+            (state as unknown as OpenClawApp).resetChatScroll();
             state.applySettings({
               ...state.settings,
               sessionKey: next,
               lastActiveSessionKey: next,
             });
             void state.loadAssistantIdentity();
-            syncUrlWithSessionKey(next, true);
-            void loadChatHistory(state as any);
+            syncUrlWithSessionKey(
+              state as unknown as Parameters<typeof syncUrlWithSessionKey>[0],
+              next,
+              true,
+            );
+            void loadChatHistory(state as unknown as ChatState);
           }}
         >
           ${repeat(
@@ -122,9 +127,23 @@ export function renderChatControls(state: AppViewState) {
       <button
         class="btn btn--sm btn--icon"
         ?disabled=${state.chatLoading || !state.connected}
-        @click=${() => {
-          (state as any).resetToolStream();
-          void refreshChat(state as any);
+        @click=${async () => {
+          const app = state as unknown as OpenClawApp;
+          app.chatManualRefreshInFlight = true;
+          app.chatNewMessagesBelow = false;
+          await app.updateComplete;
+          app.resetToolStream();
+          try {
+            await refreshChat(state as unknown as Parameters<typeof refreshChat>[0], {
+              scheduleScroll: false,
+            });
+            app.scrollToBottom({ smooth: true });
+          } finally {
+            requestAnimationFrame(() => {
+              app.chatManualRefreshInFlight = false;
+              app.chatNewMessagesBelow = false;
+            });
+          }
         }}
         title="${t("chat.controls.refresh")}"
       >
@@ -193,22 +212,20 @@ function resolveMainSessionKey(
   if (mainKey) {
     return mainKey;
   }
-  if (
-    sessions?.sessions?.some((row: SessionsListResult["sessions"][number]) => row.key === "main")
-  ) {
+  if (sessions?.sessions?.some((row) => row.key === "main")) {
     return "main";
   }
   return null;
 }
 
 function resolveSessionDisplayName(key: string, row?: SessionsListResult["sessions"][number]) {
-  const label = row?.label?.trim();
-  if (label) {
+  const label = row?.label?.trim() || "";
+  const displayName = row?.displayName?.trim() || "";
+  if (label && label !== key) {
     return `${label} (${key})`;
   }
-  const displayName = row?.displayName?.trim();
-  if (displayName) {
-    return displayName;
+  if (displayName && displayName !== key) {
+    return `${key} (${displayName})`;
   }
   return key;
 }
@@ -221,14 +238,8 @@ function resolveSessionOptions(
   const seen = new Set<string>();
   const options: Array<{ key: string; displayName?: string }> = [];
 
-  const resolvedMain =
-    mainSessionKey &&
-    sessions?.sessions?.find(
-      (s: SessionsListResult["sessions"][number]) => s.key === mainSessionKey,
-    );
-  const resolvedCurrent = sessions?.sessions?.find(
-    (s: SessionsListResult["sessions"][number]) => s.key === sessionKey,
-  );
+  const resolvedMain = mainSessionKey && sessions?.sessions?.find((s) => s.key === mainSessionKey);
+  const resolvedCurrent = sessions?.sessions?.find((s) => s.key === sessionKey);
 
   // Add main session key first
   if (mainSessionKey) {
@@ -280,14 +291,14 @@ export function renderThemeToggle(state: AppViewState) {
 
   return html`
     <div class="theme-toggle" style="--theme-index: ${index};">
-      <div class="theme-toggle__track" role="group" aria-label="${t("theme.label")}">
+      <div class="theme-toggle__track" role="group" aria-label="Theme">
         <span class="theme-toggle__indicator"></span>
         <button
           class="theme-toggle__button ${state.theme === "system" ? "active" : ""}"
           @click=${applyTheme("system")}
           aria-pressed=${state.theme === "system"}
-          aria-label="${t("theme.system.aria")}"
-          title="${t("theme.system")}"
+          aria-label="System theme"
+          title="System"
         >
           ${renderMonitorIcon()}
         </button>
@@ -295,8 +306,8 @@ export function renderThemeToggle(state: AppViewState) {
           class="theme-toggle__button ${state.theme === "light" ? "active" : ""}"
           @click=${applyTheme("light")}
           aria-pressed=${state.theme === "light"}
-          aria-label="${t("theme.light.aria")}"
-          title="${t("theme.light")}"
+          aria-label="Light theme"
+          title="Light"
         >
           ${renderSunIcon()}
         </button>
@@ -304,8 +315,8 @@ export function renderThemeToggle(state: AppViewState) {
           class="theme-toggle__button ${state.theme === "dark" ? "active" : ""}"
           @click=${applyTheme("dark")}
           aria-pressed=${state.theme === "dark"}
-          aria-label="${t("theme.dark.aria")}"
-          title="${t("theme.dark")}"
+          aria-label="Dark theme"
+          title="Dark"
         >
           ${renderMoonIcon()}
         </button>

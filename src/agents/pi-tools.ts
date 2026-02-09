@@ -52,6 +52,7 @@ import {
   resolveToolProfilePolicy,
   stripPluginOnlyAllowlist,
 } from "./tool-policy.js";
+import { wrapToolWithPermission } from "./tools/permission-wrapper.js";
 
 function isOpenAIProvider(provider?: string) {
   const normalized = provider?.trim().toLowerCase();
@@ -442,9 +443,22 @@ export function createOpenClawCodingTools(options?: {
       sessionKey: options?.sessionKey,
     }),
   );
+  // Phase 3: Add permission checking wrapper
+  const withPermissions = withHooks.map((tool) =>
+    wrapToolWithPermission(tool, {
+      agentId,
+      sessionKey: options?.sessionKey,
+      metadata: {
+        modelProvider: options?.modelProvider,
+        modelId: options?.modelId,
+        senderId: options?.senderId,
+        senderIsOwner: options?.senderIsOwner,
+      },
+    }),
+  );
   const withAbort = options?.abortSignal
-    ? withHooks.map((tool) => wrapToolWithAbortSignal(tool, options.abortSignal))
-    : withHooks;
+    ? withPermissions.map((tool) => wrapToolWithAbortSignal(tool, options.abortSignal))
+    : withPermissions;
 
   // NOTE: Keep canonical (lowercase) tool names here.
   // pi-ai's Anthropic OAuth transport remaps tool names to Claude Code-style names

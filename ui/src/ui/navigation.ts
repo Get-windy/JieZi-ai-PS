@@ -13,15 +13,38 @@ export const TAB_GROUPS = [
   { label: "nav.chat", tabs: ["chat"] },
   {
     label: "nav.control",
-    tabs: ["overview", "channels", "models", "instances", "sessions", "usage", "cron"],
+    tabs: [
+      "overview",
+      "message-queue",
+      "channels",
+      "models",
+      "instances",
+      "sessions",
+      "usage",
+      "cron",
+    ],
   },
-  { label: "nav.agent", tabs: ["agents", "skills", "nodes"] },
+  {
+    label: "nav.agent",
+    tabs: [
+      "agents",
+      "organization-chart",
+      "permissions-management",
+      "collaboration",
+      "skills",
+      "nodes",
+    ],
+  },
   { label: "nav.settings", tabs: ["bindings", "config", "debug", "logs"] },
 ] as const;
 
 export type Tab =
   | "agents"
+  | "collaboration"
+  | "organization-chart"
+  | "permissions-management"
   | "overview"
+  | "message-queue"
   | "channels"
   | "models"
   | "instances"
@@ -38,7 +61,11 @@ export type Tab =
 
 const TAB_PATHS: Record<Tab, string> = {
   agents: "/agents",
+  collaboration: "/collaboration",
+  "organization-chart": "/organization-chart",
+  "permissions-management": "/permissions-management",
   overview: "/overview",
+  "message-queue": "/message-queue",
   channels: "/channels",
   models: "/models",
   instances: "/instances",
@@ -139,6 +166,12 @@ export function iconForTab(tab: Tab): IconName {
   switch (tab) {
     case "agents":
       return "folder";
+    case "collaboration":
+      return "folder";
+    case "organization-chart":
+      return "git-branch";
+    case "permissions-management":
+      return "wrench";
     case "chat":
       return "messageSquare";
     case "overview":
@@ -167,6 +200,8 @@ export function iconForTab(tab: Tab): IconName {
       return "bug";
     case "logs":
       return "scrollText";
+    case "message-queue":
+      return "barChart";
     default:
       return "folder";
   }
@@ -176,6 +211,12 @@ export function titleForTab(tab: Tab) {
   switch (tab) {
     case "agents":
       return t("tab.agents");
+    case "collaboration":
+      return t("tab.collaboration");
+    case "organization-chart":
+      return t("tab.organization-chart");
+    case "permissions-management":
+      return t("tab.permissions-management");
     case "overview":
       return t("tab.overview");
     case "channels":
@@ -204,6 +245,8 @@ export function titleForTab(tab: Tab) {
       return t("tab.debug");
     case "logs":
       return t("tab.logs");
+    case "message-queue":
+      return t("tab.message-queue");
     default:
       return t("nav.control");
   }
@@ -213,6 +256,12 @@ export function subtitleForTab(tab: Tab) {
   switch (tab) {
     case "agents":
       return t("tab.agents.subtitle");
+    case "collaboration":
+      return t("tab.collaboration.subtitle");
+    case "organization-chart":
+      return t("tab.organization-chart.subtitle");
+    case "permissions-management":
+      return t("tab.permissions-management.subtitle");
     case "overview":
       return t("tab.overview.subtitle");
     case "channels":
@@ -241,6 +290,8 @@ export function subtitleForTab(tab: Tab) {
       return t("tab.debug.subtitle");
     case "logs":
       return t("tab.logs.subtitle");
+    case "message-queue":
+      return t("tab.message-queue.subtitle");
     default:
       return "";
   }

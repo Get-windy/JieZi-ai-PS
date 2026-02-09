@@ -1,20 +1,30 @@
 import { html, nothing } from "lit";
-import type { AppViewState } from "./app-view-state.js";
-import type { GatewayBrowserClient } from "./gateway.js";
-import type { UiSettings } from "./storage.js";
-import type { ConfigUiHints, NostrProfile } from "./types.js";
+import type { AppViewState } from "./app-view-state.ts";
+import type { OpenClawApp } from "./app.ts";
+import type { UsageState } from "./controllers/usage.ts";
 import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
-import { refreshChatAvatar } from "./app-chat.js";
-import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.js";
-import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.js";
-import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.js";
-import { loadAgentSkills } from "./controllers/agent-skills.js";
-import { loadAgents } from "./controllers/agents.js";
-import { loadChannels } from "./controllers/channels.js";
-import { loadChatHistory } from "./controllers/chat.js";
+import { refreshChatAvatar } from "./app-chat.ts";
+import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
+import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.ts";
+import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
+import {
+  loadModelAccounts,
+  loadChannelPolicies,
+  saveModelAccounts,
+  saveChannelPolicies,
+} from "./controllers/agent-phase5.ts";
+import { loadAgentSkills } from "./controllers/agent-skills.ts";
+import { loadAgents } from "./controllers/agents.ts";
+import {
+  loadApprovals,
+  loadApprovalStats,
+  respondToApproval,
+  cancelApproval,
+} from "./controllers/approvals.ts";
+import { loadChannels } from "./controllers/channels.ts";
+import { loadChatHistory } from "./controllers/chat.ts";
 import {
   applyConfig,
-  ConfigState,
   loadConfig,
   runUpdate,
   saveConfig,
@@ -42,28 +52,54 @@ import {
   saveExecApprovals,
   updateExecApprovalsFormValue,
 } from "./controllers/exec-approvals.ts";
-import { loadLogs, LogsState } from "./controllers/logs.ts";
 import {
-  loadModels,
-  saveAuth,
-  deleteAuth,
-  setDefaultAuth,
-  saveModelConfig,
-  deleteModelConfig,
-  toggleModelConfig,
-  testAuth,
-  refreshAuthBalance,
-  fetchAvailableModels,
-  startModelsAutoRefresh,
-  stopModelsAutoRefresh,
-  refreshAuthModels,
-  batchAddModels,
-  addProvider,
-  updateProvider,
-  deleteProvider,
-} from "./controllers/models.js";
+  loadFriends,
+  loadFriendRequests,
+  addFriend,
+  confirmFriend,
+  removeFriend,
+  loadMessages,
+  sendMessage,
+} from "./controllers/friends.ts";
+import {
+  loadGroups,
+  createGroup,
+  deleteGroup,
+  addGroupMember,
+  removeGroupMember,
+  updateGroupMemberRole,
+} from "./controllers/groups.ts";
+import { loadLogs } from "./controllers/logs.ts";
+import {
+  loadQueueStatus,
+  loadQueueStats,
+  loadQueueConfig,
+  saveQueueConfig,
+  clearQueue,
+} from "./controllers/message-queue.ts";
+import {
+  loadActiveSessions,
+  loadMessageFlows,
+  loadForwardingRules,
+  addForwardingRule,
+  updateForwardingRule,
+  deleteForwardingRule,
+  loadMetrics,
+  loadAlerts,
+  acknowledgeAlert,
+  clearAllAlerts,
+} from "./controllers/monitor.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
+import {
+  loadScenarios,
+  createScenario,
+  updateScenario,
+  deleteScenario,
+  runScenario,
+  loadScenarioRuns,
+  loadRecommendations,
+} from "./controllers/scenarios.ts";
 import { deleteSession, loadSessions, patchSession } from "./controllers/sessions.ts";
 import {
   installSkill,
@@ -71,34 +107,18 @@ import {
   saveSkillApiKey,
   updateSkillEdit,
   updateSkillEnabled,
-} from "./controllers/skills.js";
-import {
-  loadUsage,
-  loadSessionTimeSeries,
-  loadSessionLogs,
-  type UsageState,
-} from "./controllers/usage.js";
-import { t } from "./i18n.js";
-import { icons } from "./icons.js";
-import { TAB_GROUPS, subtitleForTab, titleForTab, normalizeBasePath } from "./navigation.js";
-import { renderAgents } from "./views/agents.js";
-import { BindingsController } from "./views/bindings-controller.js";
-import { renderBindings } from "./views/bindings.js";
-import { renderChannels } from "./views/channels.js";
-import { renderChat } from "./views/chat.js";
-import { renderConfig } from "./views/config.js";
-import { renderCron } from "./views/cron.js";
-import { renderDebug } from "./views/debug.js";
-import { renderExecApprovalPrompt } from "./views/exec-approval.js";
-import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.js";
-import { renderInstances } from "./views/instances.js";
-import { renderLogs } from "./views/logs.js";
-import { renderModels } from "./views/models.js";
-import { renderNodes } from "./views/nodes.js";
-import { renderOverview } from "./views/overview.js";
-import { renderSessions } from "./views/sessions.js";
-import { renderSkills } from "./views/skills.js";
-import { renderUsage } from "./views/usage.js";
+  toggleAdvancedMode,
+  selectSkill,
+  selectAllSkills,
+  deselectAllSkills,
+  batchEnableSkills,
+  batchDisableSkills,
+  changeFilterStatus,
+  changeFilterSource,
+} from "./controllers/skills.ts";
+import { loadUsage, loadSessionTimeSeries, loadSessionLogs } from "./controllers/usage.ts";
+import { icons } from "./icons.ts";
+import { normalizeBasePath, TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
 
 // Module-scope debounce for usage date changes (avoids type-unsafe hacks on state object)
 let usageDateDebounceTimeout: number | null = null;
@@ -108,36 +128,35 @@ const debouncedLoadUsage = (state: UsageState) => {
   }
   usageDateDebounceTimeout = window.setTimeout(() => void loadUsage(state), 400);
 };
+import { renderAgents } from "./views/agents.ts";
+import { renderChannels } from "./views/channels.ts";
+import { renderChat } from "./views/chat.ts";
+import { renderCollaboration } from "./views/collaboration.ts";
+import { renderConfig } from "./views/config.ts";
+import { renderCron } from "./views/cron.ts";
+import { renderDebug } from "./views/debug.ts";
+import { renderExecApprovalPrompt } from "./views/exec-approval.ts";
+import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.ts";
+import { renderGroups } from "./views/groups.ts";
+import { renderInstances } from "./views/instances.ts";
+import { renderLogs } from "./views/logs.ts";
+import { renderMessageQueue } from "./views/message-queue.ts";
+import { renderNodes } from "./views/nodes.ts";
+import { renderOrganizationChart } from "./views/organization-chart.ts";
+import { renderOverview } from "./views/overview.ts";
+import { renderPermissionsManagement } from "./views/permissions-management.ts";
+import { renderSessions } from "./views/sessions.ts";
+import { renderSkills } from "./views/skills.ts";
+import { renderUsage } from "./views/usage.ts";
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
-
-// Global bindings controller instance
-let bindingsControllerInstance: BindingsController | null = null;
-let bindingsControllerInitPromise: Promise<void> | null = null;
-
-function getBindingsController(client: GatewayBrowserClient): BindingsController | null {
-  if (!bindingsControllerInstance && client) {
-    bindingsControllerInstance = new BindingsController(client, () => {
-      // Trigger re-render through Lit's update mechanism
-      const app = document.querySelector("openclaw-app") as any;
-      if (app) {
-        app.requestUpdate();
-      }
-    });
-    // Initialize asynchronously
-    if (!bindingsControllerInitPromise) {
-      bindingsControllerInitPromise = bindingsControllerInstance.init();
-    }
-  }
-  return bindingsControllerInstance;
-}
 
 function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
   const list = state.agentsList?.agents ?? [];
   const parsed = parseAgentSessionKey(state.sessionKey);
   const agentId = parsed?.agentId ?? state.agentsList?.defaultId ?? "main";
-  const agent = list.find((entry: any) => entry.id === agentId);
+  const agent = list.find((entry) => entry.id === agentId);
   const identity = agent?.identity;
   const candidate = identity?.avatarUrl ?? identity?.avatar;
   if (!candidate) {
@@ -153,42 +172,20 @@ export function renderApp(state: AppViewState) {
   const presenceCount = state.presenceEntries.length;
   const sessionsCount = state.sessionsResult?.count ?? null;
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
-  const chatDisabledReason = state.connected ? null : t("app.disconnected");
+  const chatDisabledReason = state.connected ? null : "Disconnected from gateway.";
   const isChat = state.tab === "chat";
   const chatFocus = isChat && (state.settings.chatFocusMode || state.onboarding);
   const showThinking = state.onboarding ? false : state.settings.chatShowThinking;
   const assistantAvatarUrl = resolveAssistantAvatarUrl(state);
   const chatAvatarUrl = state.chatAvatarUrl ?? assistantAvatarUrl ?? null;
-  const logoBase = normalizeBasePath(state.basePath);
-  const logoHref = logoBase ? `${logoBase}/favicon.svg` : "/favicon.svg";
   const configValue =
     state.configForm ?? (state.configSnapshot?.config as Record<string, unknown> | null);
+  const basePath = normalizeBasePath(state.basePath ?? "");
   const resolvedAgentId =
     state.agentsSelectedId ??
     state.agentsList?.defaultId ??
     state.agentsList?.agents?.[0]?.id ??
     null;
-  const ensureAgentListEntry = (agentId: string) => {
-    const snapshot = (state.configForm ??
-      (state.configSnapshot?.config as Record<string, unknown> | null)) as {
-      agents?: { list?: unknown[] };
-    } | null;
-    const listRaw = snapshot?.agents?.list;
-    const list = Array.isArray(listRaw) ? listRaw : [];
-    let index = list.findIndex(
-      (entry) =>
-        entry &&
-        typeof entry === "object" &&
-        "id" in entry &&
-        (entry as { id?: string }).id === agentId,
-    );
-    if (index < 0) {
-      const nextList = [...list, { id: agentId }];
-      updateConfigFormValue(state as any, ["agents", "list"], nextList);
-      index = nextList.length - 1;
-    }
-    return index;
-  };
 
   return html`
     <div class="shell ${isChat ? "shell--chat" : ""} ${chatFocus ? "shell--chat-focus" : ""} ${state.settings.navCollapsed ? "shell--nav-collapsed" : ""} ${state.onboarding ? "shell--onboarding" : ""}">
@@ -201,34 +198,34 @@ export function renderApp(state: AppViewState) {
                 ...state.settings,
                 navCollapsed: !state.settings.navCollapsed,
               })}
-            title="${state.settings.navCollapsed ? t("app.sidebar.expand") : t("app.sidebar.collapse")}"
-            aria-label="${state.settings.navCollapsed ? t("app.sidebar.expand") : t("app.sidebar.collapse")}"
+            title="${state.settings.navCollapsed ? "Expand sidebar" : "Collapse sidebar"}"
+            aria-label="${state.settings.navCollapsed ? "Expand sidebar" : "Collapse sidebar"}"
           >
             <span class="nav-collapse-toggle__icon">${icons.menu}</span>
           </button>
           <div class="brand">
             <div class="brand-logo">
-              <img src="${logoHref}" alt="OpenClaw" />
+              <img src=${basePath ? `${basePath}/favicon.svg` : "/favicon.svg"} alt="OpenClaw" />
             </div>
             <div class="brand-text">
-              <div class="brand-title">${t("app.brand.title")}</div>
-              <div class="brand-sub">${t("app.brand.subtitle")}</div>
+              <div class="brand-title">OPENCLAW</div>
+              <div class="brand-sub">Gateway Dashboard</div>
             </div>
           </div>
         </div>
         <div class="topbar-status">
           <div class="pill">
-            <span class="statusDot ${state.connected ? "ok" : ""}"</span>
-            <span>${t("app.health")}</span>
-            <span class="mono">${state.connected ? t("app.status.ok") : t("app.status.offline")}</span>
+            <span class="statusDot ${state.connected ? "ok" : ""}"></span>
+            <span>Health</span>
+            <span class="mono">${state.connected ? "OK" : "Offline"}</span>
           </div>
           ${renderThemeToggle(state)}
         </div>
       </header>
       <aside class="nav ${state.settings.navCollapsed ? "nav--collapsed" : ""}">
-        ${TAB_GROUPS.map((group: any) => {
+        ${TAB_GROUPS.map((group) => {
           const isGroupCollapsed = state.settings.navGroupsCollapsed[group.label] ?? false;
-          const hasActiveTab = group.tabs.some((tab: any) => tab === state.tab);
+          const hasActiveTab = group.tabs.some((tab) => tab === state.tab);
           return html`
             <div class="nav-group ${isGroupCollapsed && !hasActiveTab ? "nav-group--collapsed" : ""}">
               <button
@@ -243,18 +240,18 @@ export function renderApp(state: AppViewState) {
                 }}
                 aria-expanded=${!isGroupCollapsed}
               >
-                <span class="nav-label__text">${t(group.label)}</span>
+                <span class="nav-label__text">${group.label}</span>
                 <span class="nav-label__chevron">${isGroupCollapsed ? "+" : "−"}</span>
               </button>
               <div class="nav-group__items">
-                ${group.tabs.map((tab: any) => renderTab(state, tab))}
+                ${group.tabs.map((tab) => renderTab(state, tab))}
               </div>
             </div>
           `;
         })}
         <div class="nav-group nav-group--links">
           <div class="nav-label nav-label--static">
-            <span class="nav-label__text">${t("nav.resources")}</span>
+            <span class="nav-label__text">Resources</span>
           </div>
           <div class="nav-group__items">
             <a
@@ -262,10 +259,10 @@ export function renderApp(state: AppViewState) {
               href="https://docs.openclaw.ai"
               target="_blank"
               rel="noreferrer"
-              title="${t("app.docs.title")}"
+              title="Docs (opens in new tab)"
             >
               <span class="nav-item__icon" aria-hidden="true">${icons.book}</span>
-              <span class="nav-item__text">${t("app.docs")}</span>
+              <span class="nav-item__text">Docs</span>
             </a>
           </div>
         </div>
@@ -273,8 +270,8 @@ export function renderApp(state: AppViewState) {
       <main class="content ${isChat ? "content--chat" : ""}">
         <section class="content-header">
           <div>
-            <div class="page-title">${titleForTab(state.tab)}</div>
-            <div class="page-sub">${subtitleForTab(state.tab)}</div>
+            ${state.tab === "usage" ? nothing : html`<div class="page-title">${titleForTab(state.tab)}</div>`}
+            ${state.tab === "usage" ? nothing : html`<div class="page-sub">${subtitleForTab(state.tab)}</div>`}
           </div>
           <div class="page-meta">
             ${state.lastError ? html`<div class="pill danger">${state.lastError}</div>` : nothing}
@@ -295,12 +292,12 @@ export function renderApp(state: AppViewState) {
                 cronEnabled: state.cronStatus?.enabled ?? null,
                 cronNext,
                 lastChannelsRefresh: state.channelsLastSuccess,
-                onSettingsChange: (next: UiSettings) => state.applySettings(next),
-                onPasswordChange: (next: string) => (state.password = next),
-                onSessionKeyChange: (next: string) => {
+                onSettingsChange: (next) => state.applySettings(next),
+                onPasswordChange: (next) => (state.password = next),
+                onSessionKeyChange: (next) => {
                   state.sessionKey = next;
                   state.chatMessage = "";
-                  (state as any).resetToolStream();
+                  state.resetToolStream();
                   state.applySettings({
                     ...state.settings,
                     sessionKey: next,
@@ -310,42 +307,6 @@ export function renderApp(state: AppViewState) {
                 },
                 onConnect: () => state.connect(),
                 onRefresh: () => state.loadOverview(),
-                sessionStorage: {
-                  connected: state.connected,
-                  currentPath: state.storageCurrentPath,
-                  newPath: state.storageNewPath,
-                  loading: state.storageLoading,
-                  migrating: state.storageMigrating,
-                  error: state.storageError,
-                  success: state.storageSuccess,
-                  showBrowser: state.storageShowBrowser,
-                  browserProps: state.storageShowBrowser
-                    ? {
-                        currentPath: state.storageBrowserPath,
-                        parentPath: state.storageBrowserParent,
-                        directories: state.storageBrowserDirectories.map((dir: string) => ({
-                          name: dir,
-                          path: dir,
-                        })),
-                        drives: state.storageBrowserDrives.map((drive: string) => ({
-                          path: drive,
-                          label: drive,
-                          type: "drive",
-                        })),
-                        loading: state.storageBrowserLoading,
-                        error: state.storageBrowserError,
-                        onNavigate: (path: string) =>
-                          (state as any).handleStorageBrowserNavigate(path),
-                        onSelect: (path: string) => (state as any).handleStorageBrowserSelect(path),
-                        onCancel: () => (state as any).handleStorageBrowserCancel(),
-                      }
-                    : null,
-                  onNewPathChange: (path: string) => (state.storageNewPath = path),
-                  onBrowse: () => (state as any).handleStorageBrowse(),
-                  onValidate: () => (state as any).handleStorageValidate(),
-                  onMigrate: (moveFiles: boolean) => (state as any).handleStorageMigrate(moveFiles),
-                  onRefreshCurrentPath: () => (state as any).loadStorageCurrentPath(),
-                },
               })
             : nothing
         }
@@ -365,26 +326,12 @@ export function renderApp(state: AppViewState) {
                 configSchema: state.configSchema,
                 configSchemaLoading: state.configSchemaLoading,
                 configForm: state.configForm,
-                configUiHints: state.configUiHints as ConfigUiHints,
+                configUiHints: state.configUiHints,
                 configSaving: state.configSaving,
                 configFormDirty: state.configFormDirty,
                 nostrProfileFormState: state.nostrProfileFormState,
                 nostrProfileAccountId: state.nostrProfileAccountId,
-                onRefresh: (probe: any) => loadChannels(state, probe),
-                onWhatsAppStart: (force: boolean) => state.handleWhatsAppStart(force),
-                onWhatsAppWait: () => state.handleWhatsAppWait(),
-                onWhatsAppLogout: () => state.handleWhatsAppLogout(),
-                onConfigPatch: (path: (string | number)[], value: any) =>
-                  updateConfigFormValue(state as any, path, value),
-                onConfigSave: () => state.handleChannelConfigSave(),
-                onConfigReload: () => state.handleChannelConfigReload(),
-                onNostrProfileEdit: (accountId: string, profile: any) =>
-                  state.handleNostrProfileEdit(accountId, profile),
-                onNostrProfileCancel: () => state.handleNostrProfileCancel(),
-                onNostrProfileFieldChange: (field: keyof NostrProfile, value: any) =>
-                  state.handleNostrProfileFieldChange(field, value),
-                onNostrProfileSave: () => state.handleNostrProfileSave(),
-                onNostrProfileImport: () => state.handleNostrProfileImport(),
+                // 账号管理状态
                 editingChannelAccount: state.editingChannelAccount,
                 viewingChannelAccount: state.viewingChannelAccount,
                 creatingChannelAccount: state.creatingChannelAccount,
@@ -393,373 +340,92 @@ export function renderApp(state: AppViewState) {
                 showAllChannelsModal: state.showAllChannelsModal,
                 debuggingChannel: state.debuggingChannel,
                 editingChannelGlobalConfig: state.editingChannelGlobalConfig,
-                onManageAccounts: (channelId: string) =>
-                  (state as any).handleManageAccounts(channelId),
-                onAddAccount: (channelId: string) => (state as any).handleAddAccount(channelId),
-                onViewAccount: (channelId: string, accountId: string) =>
-                  (state as any).handleViewAccount(channelId, accountId),
-                onEditAccount: (channelId: string, accountId: string) =>
-                  (state as any).handleEditAccount(channelId, accountId),
-                onDeleteAccount: (channelId: string, accountId: string) =>
-                  (state as any).handleDeleteAccount(channelId, accountId),
-                onSaveAccount: () => (state as any).handleSaveAccount(),
-                onCancelAccountEdit: () => (state as any).handleCancelAccountEdit(),
-                onCancelAccountView: () => (state as any).handleCancelAccountView(),
-                onAccountFormChange: (field: string, value: unknown) =>
-                  (state as any).handleAccountFormChange(field, value),
-                onToggleAllChannelsModal: () => (state as any).handleToggleAllChannelsModal(),
-                onToggleChannelVisibility: (channelId: string) =>
-                  (state as any).handleToggleChannelVisibility(channelId),
-                onDebugChannel: (channelId: string, accountId?: string) =>
-                  (state as any).handleDebugChannel(channelId, accountId),
-                onCloseDebug: () => (state as any).handleCloseDebug(),
-                onEditChannelGlobalConfig: (channelId: string) =>
-                  (state as any).handleEditChannelGlobalConfig(channelId),
-                onCancelChannelGlobalConfig: () => (state as any).handleCancelChannelGlobalConfig(),
-                onSaveChannelGlobalConfig: () => (state as any).handleSaveChannelGlobalConfig(),
+                onRefresh: (probe) => loadChannels(state, probe),
+                onWhatsAppStart: (force) => state.handleWhatsAppStart(force),
+                onWhatsAppWait: () => state.handleWhatsAppWait(),
+                onWhatsAppLogout: () => state.handleWhatsAppLogout(),
+                onConfigPatch: (path, value) => updateConfigFormValue(state, path, value),
+                onConfigSave: () => state.handleChannelConfigSave(),
+                onConfigReload: () => state.handleChannelConfigReload(),
+                onNostrProfileEdit: (accountId, profile) =>
+                  state.handleNostrProfileEdit(accountId, profile),
+                onNostrProfileCancel: () => state.handleNostrProfileCancel(),
+                onNostrProfileFieldChange: (field, value) =>
+                  state.handleNostrProfileFieldChange(field, value),
+                onNostrProfileSave: () => state.handleNostrProfileSave(),
+                onNostrProfileImport: () => state.handleNostrProfileImport(),
                 onNostrProfileToggleAdvanced: () => state.handleNostrProfileToggleAdvanced(),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "models"
-            ? renderModels({
-                snapshot: state.modelsSnapshot,
-                loading: state.modelsLoading,
-                error: state.modelsError,
-
-                // 认证管理状态
-                managingAuthProvider: state.managingAuthProvider || null,
-                editingAuth: state.editingAuth || null,
-                viewingAuth: state.viewingAuth || null,
-
-                // 模型列表状态
-                managingModelsProvider: state.managingModelsProvider || null,
-
-                // 模型配置状态
-                editingModelConfig: state.editingModelConfig || null,
-
-                // 认证操作回调
-                onManageAuths: (provider: string) => {
-                  state.managingAuthProvider = provider;
+                // 账号管理回调 - TODO: 实现这些回调
+                onManageAccounts: (channelId) => {
+                  state.managingChannelId = channelId;
                 },
-                onAddAuth: (provider: string) => {
-                  state.editingAuth = {
-                    provider,
-                    name: "",
-                    apiKey: "",
-                    baseUrl: "",
+                onAddAccount: (channelId) => {
+                  state.creatingChannelAccount = true;
+                  state.managingChannelId = channelId;
+                },
+                onViewAccount: (channelId, accountId) => {
+                  state.viewingChannelAccount = { channelId, accountId };
+                },
+                onEditAccount: (channelId, accountId) => {
+                  // TODO: 加载账号配置
+                  state.editingChannelAccount = {
+                    channelId,
+                    accountId,
+                    config: {},
                   };
                 },
-                onEditAuth: (authId: string) => {
-                  const provider = Object.keys(state.modelsSnapshot?.auths ?? {}).find((p) =>
-                    state.modelsSnapshot?.auths?.[p]?.some((a) => a.authId === authId),
-                  );
-                  const auth = provider
-                    ? state.modelsSnapshot?.auths?.[provider]?.find((a) => a.authId === authId)
-                    : null;
-                  if (auth) {
-                    state.editingAuth = {
-                      authId: auth.authId,
-                      provider: auth.provider,
-                      name: auth.name,
-                      apiKey: auth.apiKey,
-                      baseUrl: auth.baseUrl || "",
+                onDeleteAccount: (channelId, accountId) => {
+                  if (confirm(`确定要删除此账号吗？`)) {
+                    // TODO: 实现删除逻辑
+                    console.log("Delete account:", channelId, accountId);
+                  }
+                },
+                onSaveAccount: () => {
+                  // TODO: 保存账号
+                  state.editingChannelAccount = null;
+                  state.creatingChannelAccount = false;
+                },
+                onCancelAccountEdit: () => {
+                  state.editingChannelAccount = null;
+                  state.creatingChannelAccount = false;
+                },
+                onCancelAccountView: () => {
+                  state.viewingChannelAccount = null;
+                },
+                onAccountFormChange: (field, value) => {
+                  if (state.editingChannelAccount) {
+                    state.editingChannelAccount = {
+                      ...state.editingChannelAccount,
+                      config: {
+                        ...state.editingChannelAccount.config,
+                        [field]: value,
+                      },
                     };
                   }
                 },
-                onDeleteAuth: async (authId: string) => {
-                  if (confirm("确定要删除该认证吗？")) {
-                    await deleteAuth(state, authId);
-                  }
+                onToggleAllChannelsModal: () => {
+                  state.showAllChannelsModal = !state.showAllChannelsModal;
                 },
-                onSetDefaultAuth: async (authId: string) => {
-                  await setDefaultAuth(state, authId);
+                onToggleChannelVisibility: (channelId) => {
+                  // TODO: 实现显示/隐藏逻辑
+                  console.log("Toggle channel visibility:", channelId);
                 },
-                onSaveAuth: async (params) => {
-                  await saveAuth(state, params);
-                  state.editingAuth = null;
-                  state.managingAuthProvider = null;
+                onDebugChannel: (channelId, accountId) => {
+                  state.debuggingChannel = { channelId, accountId };
                 },
-                onCancelAuthEdit: () => {
-                  state.editingAuth = null;
+                onCloseDebug: () => {
+                  state.debuggingChannel = null;
                 },
-                onTestAuth: async (authId: string) => {
-                  try {
-                    await testAuth(state, authId);
-                    alert("认证测试成功！");
-                  } catch (err) {
-                    alert(`认证测试失败: ${err}`);
-                  }
+                onEditChannelGlobalConfig: (channelId) => {
+                  state.editingChannelGlobalConfig = channelId;
                 },
-                onRefreshAuthBalance: async (authId: string) => {
-                  await refreshAuthBalance(state, authId);
+                onCancelChannelGlobalConfig: () => {
+                  state.editingChannelGlobalConfig = null;
                 },
-
-                // 模型列表操作回调
-                onManageModels: (provider: string) => {
-                  state.managingModelsProvider = provider;
+                onSaveChannelGlobalConfig: () => {
+                  // TODO: 保存全局配置
+                  state.editingChannelGlobalConfig = null;
                 },
-                onCloseModelsList: () => {
-                  state.managingModelsProvider = null;
-                },
-
-                // 模型配置操作回调
-                onAddModelConfig: (authId: string, modelName: string) => {
-                  const provider = Object.keys(state.modelsSnapshot?.auths ?? {}).find((p) =>
-                    state.modelsSnapshot?.auths?.[p]?.some((a) => a.authId === authId),
-                  );
-                  if (provider) {
-                    state.editingModelConfig = {
-                      authId,
-                      provider,
-                      modelName,
-                      nickname: "",
-                      enabled: false,
-                    };
-                  }
-                },
-                onEditModelConfig: (configId: string) => {
-                  const provider = Object.keys(state.modelsSnapshot?.modelConfigs ?? {}).find((p) =>
-                    state.modelsSnapshot?.modelConfigs?.[p]?.some((c) => c.configId === configId),
-                  );
-                  const config = provider
-                    ? state.modelsSnapshot?.modelConfigs?.[provider]?.find(
-                        (c) => c.configId === configId,
-                      )
-                    : null;
-                  if (config) {
-                    // 过滤 null 值和不需要的字段
-                    state.editingModelConfig = {
-                      configId: config.configId,
-                      authId: config.authId,
-                      provider: config.provider,
-                      modelName: config.modelName,
-                      nickname: config.nickname ?? undefined,
-                      enabled: config.enabled,
-                      temperature: config.temperature ?? undefined,
-                      topP: config.topP ?? undefined,
-                      maxTokens: config.maxTokens ?? undefined,
-                      frequencyPenalty: config.frequencyPenalty ?? undefined,
-                      systemPrompt: config.systemPrompt ?? undefined,
-                      conversationRounds: config.conversationRounds ?? undefined,
-                      maxIterations: config.maxIterations ?? undefined,
-                      usageLimits: config.usageLimits
-                        ? {
-                            maxRequestsPerDay: config.usageLimits.maxRequestsPerDay ?? undefined,
-                            maxTokensPerRequest:
-                              config.usageLimits.maxTokensPerRequest ?? undefined,
-                          }
-                        : undefined,
-                    };
-                  }
-                },
-                onDeleteModelConfig: async (configId: string) => {
-                  if (confirm("确定要删除该模型配置吗？")) {
-                    await deleteModelConfig(state, configId);
-                  }
-                },
-                onToggleModelConfig: async (configId: string, enabled: boolean) => {
-                  // 查找模型配置
-                  const modelConfig = Object.values(state.modelsSnapshot?.modelConfigs || {})
-                    .flat()
-                    .find((m: any) => m.configId === configId);
-
-                  if (!modelConfig) {
-                    alert("模型配置不存在");
-                    return;
-                  }
-
-                  // 如果要启用模型，检查是否有认证
-                  if (enabled && !modelConfig.authId) {
-                    alert("启用模型前请先关联认证，请点击配置按钮选择认证。");
-                    return;
-                  }
-
-                  await toggleModelConfig(state, configId, enabled);
-                },
-                onSaveModelConfig: async (params) => {
-                  await saveModelConfig(state, params);
-                  state.editingModelConfig = null;
-                },
-                onCancelModelConfigEdit: () => {
-                  state.editingModelConfig = null;
-                },
-
-                // 刷新和导入模型
-                onRefreshAuthModels: async (authId: string) => {
-                  const provider = Object.keys(state.modelsSnapshot?.auths ?? {}).find((p) =>
-                    state.modelsSnapshot?.auths?.[p]?.some((a) => a.authId === authId),
-                  );
-                  if (!provider) return;
-
-                  const models = await refreshAuthModels(state, authId);
-                  state.importableModels = models;
-                  state.importingAuthId = authId;
-                  state.importingProvider = provider;
-                  state.selectedImportModels = new Set();
-                },
-                onImportModels: async (authId: string, modelNames: string[]) => {
-                  const provider = state.importingProvider;
-                  if (!provider) return;
-
-                  try {
-                    const result = await batchAddModels(state, authId, provider, modelNames);
-                    alert(
-                      `成功导入 ${result.added} 个模型，跳过 ${result.skipped} 个已存在的模型。`,
-                    );
-                    // 关闭导入模态框
-                    state.importableModels = null;
-                    state.importingAuthId = null;
-                    state.importingProvider = null;
-                    state.selectedImportModels = new Set();
-                  } catch (err) {
-                    alert(`导入失败：${err}`);
-                  }
-                },
-
-                // 供应商管理回调
-                addingProvider: state.addingProvider,
-                viewingProviderId: state.viewingProviderId,
-                providerForm: state.providerForm,
-                onAddProvider: () => {
-                  // 默认选中第一个模板（OpenAI 兼容）
-                  const defaultTemplate = state.modelsSnapshot?.apiTemplates?.[0];
-                  const defaultTemplateId = defaultTemplate?.id || "openai-compatible";
-                  const defaultBaseUrl =
-                    defaultTemplate?.defaultBaseUrl || "https://api.openai.com/v1";
-                  const defaultApiKeyPlaceholder = defaultTemplate?.apiKeyPlaceholder || "sk-...";
-
-                  state.addingProvider = true;
-                  state.providerForm = {
-                    selectedTemplateId: defaultTemplateId,
-                    id: "",
-                    name: "",
-                    icon: "",
-                    website: "",
-                    defaultBaseUrl: defaultBaseUrl,
-                    apiKeyPlaceholder: defaultApiKeyPlaceholder,
-                  };
-                },
-                onViewProvider: (id: string) => {
-                  state.viewingProviderId = id;
-                },
-                onEditProvider: (id: string) => {
-                  // 从 providerInstances 读取完整的供应商信息
-                  const providerInstance = (state.modelsSnapshot?.providerInstances as any[])?.find(
-                    (p: any) => p.id === id,
-                  );
-                  const providerLabel = state.modelsSnapshot?.providerLabels?.[id] || id;
-
-                  console.log("[编辑供应商] ID:", id);
-                  console.log("[编辑供应商] providerInstance:", providerInstance);
-
-                  if (!providerInstance) {
-                    alert("找不到供应商信息");
-                    return;
-                  }
-
-                  // 填充表单，进入编辑模式
-                  state.addingProvider = true;
-                  state.providerForm = {
-                    selectedTemplateId: providerInstance.templateId || null,
-                    id: id,
-                    name: providerInstance.name || providerLabel,
-                    icon: providerInstance.icon || "🤖",
-                    website: providerInstance.website || "",
-                    defaultBaseUrl: providerInstance.defaultBaseUrl || "",
-                    apiKeyPlaceholder: providerInstance.apiKeyPlaceholder || "",
-                    isEditing: true,
-                    originalId: id,
-                  };
-
-                  console.log("[编辑供应商] 表单数据:", state.providerForm);
-                },
-                onTemplateSelect: (templateId: string) => {
-                  if (!state.providerForm) return;
-
-                  // 查找模板
-                  const template = state.modelsSnapshot?.apiTemplates?.find(
-                    (t: any) => t.id === templateId,
-                  );
-                  if (!template) return;
-
-                  // 更新表单数据
-                  state.providerForm = {
-                    ...state.providerForm,
-                    selectedTemplateId: templateId,
-                    defaultBaseUrl: template.defaultBaseUrl,
-                    apiKeyPlaceholder: template.apiKeyPlaceholder || "",
-                  };
-                },
-                onProviderFormChange: (patch: any) => {
-                  if (!state.providerForm) return;
-                  // 通过创建新对象来触发响应式更新
-                  state.providerForm = {
-                    ...state.providerForm,
-                    ...patch,
-                  };
-                },
-                onSaveProvider: async (params) => {
-                  try {
-                    // 判断是编辑还是新增
-                    if (state.providerForm?.isEditing) {
-                      // 编辑模式：调用 update 接口
-                      await updateProvider(state, params);
-                    } else {
-                      // 新增模式：调用 add 接口
-                      await addProvider(state, params);
-                    }
-
-                    state.addingProvider = false;
-                    state.providerForm = null;
-                  } catch (err) {
-                    const action = state.providerForm?.isEditing ? "编辑" : "添加";
-                    alert(`${action}供应商失败：${err}`);
-                  }
-                },
-                onDeleteProvider: async (id: string) => {
-                  try {
-                    // 第一次尝试删除，不级联
-                    const result = await deleteProvider(state, id, false);
-
-                    if (result?.success) {
-                      // 成功删除
-                      return;
-                    }
-
-                    // 检查是否需要级联删除
-                    if (result?.requiresCascade) {
-                      const authCount = result.authCount || 0;
-                      const modelCount = result.modelCount || 0;
-
-                      const message = `该供应商有 ${authCount} 个认证和 ${modelCount} 个模型配置。\n\n是否一并删除所有相关数据？`;
-
-                      if (confirm(message)) {
-                        // 用户确认，执行级联删除
-                        const cascadeResult = await deleteProvider(state, id, true);
-                        if (cascadeResult?.success) {
-                          alert(
-                            `已成功删除供应商及其下的 ${authCount} 个认证和 ${modelCount} 个模型配置。`,
-                          );
-                        }
-                      }
-                    }
-                  } catch (err) {
-                    alert(`删除失败：${err}`);
-                  }
-                },
-                onCancelProviderEdit: () => {
-                  state.addingProvider = false;
-                  state.providerForm = null;
-                },
-                onCancelProviderView: () => {
-                  state.viewingProviderId = null;
-                },
-
-                // 通用操作回调
-                onRefresh: () => loadModels(state, false),
               })
             : nothing
         }
@@ -787,20 +453,15 @@ export function renderApp(state: AppViewState) {
                 includeGlobal: state.sessionsIncludeGlobal,
                 includeUnknown: state.sessionsIncludeUnknown,
                 basePath: state.basePath,
-                onFiltersChange: (next: {
-                  activeMinutes: string;
-                  limit: string;
-                  includeGlobal: boolean;
-                  includeUnknown: boolean;
-                }) => {
+                onFiltersChange: (next) => {
                   state.sessionsFilterActive = next.activeMinutes;
                   state.sessionsFilterLimit = next.limit;
                   state.sessionsIncludeGlobal = next.includeGlobal;
                   state.sessionsIncludeUnknown = next.includeUnknown;
                 },
                 onRefresh: () => loadSessions(state),
-                onPatch: (key: string, patch: any) => patchSession(state, key, patch),
-                onDelete: (key: string) => deleteSession(state, key),
+                onPatch: (key, patch) => patchSession(state, key, patch),
+                onDelete: (key) => deleteSession(state, key),
               })
             : nothing
         }
@@ -840,18 +501,18 @@ export function renderApp(state: AppViewState) {
                 recentSessions: state.usageRecentSessions,
                 sessionsTab: state.usageSessionsTab,
                 visibleColumns:
-                  state.usageVisibleColumns as import("./views/usage.js").UsageColumnId[],
+                  state.usageVisibleColumns as import("./views/usage.ts").UsageColumnId[],
                 timeZone: state.usageTimeZone,
                 contextExpanded: state.usageContextExpanded,
                 headerPinned: state.usageHeaderPinned,
-                onStartDateChange: (date: string) => {
+                onStartDateChange: (date) => {
                   state.usageStartDate = date;
                   state.usageSelectedDays = [];
                   state.usageSelectedHours = [];
                   state.usageSelectedSessions = [];
                   debouncedLoadUsage(state);
                 },
-                onEndDateChange: (date: string) => {
+                onEndDateChange: (date) => {
                   state.usageEndDate = date;
                   state.usageSelectedDays = [];
                   state.usageSelectedHours = [];
@@ -859,7 +520,7 @@ export function renderApp(state: AppViewState) {
                   debouncedLoadUsage(state);
                 },
                 onRefresh: () => loadUsage(state),
-                onTimeZoneChange: (zone: "local" | "utc") => {
+                onTimeZoneChange: (zone) => {
                   state.usageTimeZone = zone;
                 },
                 onToggleContextExpanded: () => {
@@ -868,16 +529,16 @@ export function renderApp(state: AppViewState) {
                 onToggleSessionLogsExpanded: () => {
                   state.usageSessionLogsExpanded = !state.usageSessionLogsExpanded;
                 },
-                onLogFilterRolesChange: (next: import("./views/usage.js").SessionLogRole[]) => {
+                onLogFilterRolesChange: (next) => {
                   state.usageLogFilterRoles = next;
                 },
-                onLogFilterToolsChange: (next: string[]) => {
+                onLogFilterToolsChange: (next) => {
                   state.usageLogFilterTools = next;
                 },
-                onLogFilterHasToolsChange: (next: boolean) => {
+                onLogFilterHasToolsChange: (next) => {
                   state.usageLogFilterHasTools = next;
                 },
-                onLogFilterQueryChange: (next: string) => {
+                onLogFilterQueryChange: (next) => {
                   state.usageLogFilterQuery = next;
                 },
                 onLogFilterClear: () => {
@@ -889,7 +550,7 @@ export function renderApp(state: AppViewState) {
                 onToggleHeaderPinned: () => {
                   state.usageHeaderPinned = !state.usageHeaderPinned;
                 },
-                onSelectHour: (hour: number, shiftKey: boolean) => {
+                onSelectHour: (hour, shiftKey) => {
                   if (shiftKey && state.usageSelectedHours.length > 0) {
                     const allHours = Array.from({ length: 24 }, (_, i) => i);
                     const lastSelected =
@@ -912,7 +573,7 @@ export function renderApp(state: AppViewState) {
                     }
                   }
                 },
-                onQueryDraftChange: (query: string) => {
+                onQueryDraftChange: (query) => {
                   state.usageQueryDraft = query;
                   if (state.usageQueryDebounceTimer) {
                     window.clearTimeout(state.usageQueryDebounceTimer);
@@ -937,18 +598,16 @@ export function renderApp(state: AppViewState) {
                   state.usageQueryDraft = "";
                   state.usageQuery = "";
                 },
-                onSessionSortChange: (
-                  sort: "tokens" | "cost" | "recent" | "messages" | "errors",
-                ) => {
+                onSessionSortChange: (sort) => {
                   state.usageSessionSort = sort;
                 },
-                onSessionSortDirChange: (dir: "desc" | "asc") => {
+                onSessionSortDirChange: (dir) => {
                   state.usageSessionSortDir = dir;
                 },
-                onSessionsTabChange: (tab: "all" | "recent") => {
+                onSessionsTabChange: (tab) => {
                   state.usageSessionsTab = tab;
                 },
-                onToggleColumn: (column: string) => {
+                onToggleColumn: (column) => {
                   if (state.usageVisibleColumns.includes(column)) {
                     state.usageVisibleColumns = state.usageVisibleColumns.filter(
                       (entry) => entry !== column,
@@ -957,7 +616,7 @@ export function renderApp(state: AppViewState) {
                     state.usageVisibleColumns = [...state.usageVisibleColumns, column];
                   }
                 },
-                onSelectSession: (key: string, shiftKey: boolean) => {
+                onSelectSession: (key, shiftKey) => {
                   state.usageTimeSeries = null;
                   state.usageSessionLogs = null;
                   state.usageRecentSessions = [
@@ -1011,7 +670,7 @@ export function renderApp(state: AppViewState) {
                     void loadSessionLogs(state, state.usageSelectedSessions[0]);
                   }
                 },
-                onSelectDay: (day: string, shiftKey: boolean) => {
+                onSelectDay: (day, shiftKey) => {
                   if (shiftKey && state.usageSelectedDays.length > 0) {
                     // Shift-click: select range from last selected to this day
                     const allDays = (state.usageCostSummary?.daily ?? []).map((d) => d.date);
@@ -1036,16 +695,16 @@ export function renderApp(state: AppViewState) {
                     }
                   }
                 },
-                onChartModeChange: (mode: "tokens" | "cost") => {
+                onChartModeChange: (mode) => {
                   state.usageChartMode = mode;
                 },
-                onDailyChartModeChange: (mode: "total" | "by-type") => {
+                onDailyChartModeChange: (mode) => {
                   state.usageDailyChartMode = mode;
                 },
-                onTimeSeriesModeChange: (mode: "cumulative" | "per-turn") => {
+                onTimeSeriesModeChange: (mode) => {
                   state.usageTimeSeriesMode = mode;
                 },
-                onTimeSeriesBreakdownChange: (mode: "total" | "by-type") => {
+                onTimeSeriesBreakdownChange: (mode) => {
                   state.usageTimeSeriesBreakdownMode = mode;
                 },
                 onClearDays: () => {
@@ -1080,19 +739,19 @@ export function renderApp(state: AppViewState) {
                 busy: state.cronBusy,
                 form: state.cronForm,
                 channels: state.channelsSnapshot?.channelMeta?.length
-                  ? state.channelsSnapshot.channelMeta.map((entry: any) => entry.id)
+                  ? state.channelsSnapshot.channelMeta.map((entry) => entry.id)
                   : (state.channelsSnapshot?.channelOrder ?? []),
                 channelLabels: state.channelsSnapshot?.channelLabels ?? {},
                 channelMeta: state.channelsSnapshot?.channelMeta ?? [],
                 runsJobId: state.cronRunsJobId,
                 runs: state.cronRuns,
-                onFormChange: (patch: any) => (state.cronForm = { ...state.cronForm, ...patch }),
+                onFormChange: (patch) => (state.cronForm = { ...state.cronForm, ...patch }),
                 onRefresh: () => state.loadCron(),
                 onAdd: () => addCronJob(state),
-                onToggle: (job: any, enabled: boolean) => toggleCronJob(state, job, enabled),
-                onRun: (job: any) => runCronJob(state, job),
-                onRemove: (job: any) => removeCronJob(state, job),
-                onLoadRuns: (jobId: any) => loadCronRuns(state, jobId),
+                onToggle: (job, enabled) => toggleCronJob(state, job, enabled),
+                onRun: (job) => runCronJob(state, job),
+                onRemove: (job) => removeCronJob(state, job),
+                onLoadRuns: (jobId) => loadCronRuns(state, jobId),
               })
             : nothing
         }
@@ -1132,17 +791,28 @@ export function renderApp(state: AppViewState) {
                 agentSkillsError: state.agentSkillsError,
                 agentSkillsAgentId: state.agentSkillsAgentId,
                 skillsFilter: state.skillsFilter,
-                editingAgent: state.editingAgent,
-                creatingAgent: state.creatingAgent,
-                deletingAgent: state.deletingAgent,
+                // Phase 5: 模型账号和通道策略
+                modelAccountsConfig: state.modelAccountsConfig as any,
+                modelAccountsLoading: state.modelAccountsLoading,
+                modelAccountsError: state.modelAccountsError,
+                modelAccountsSaving: (state as any).modelAccountsSaving || false,
+                modelAccountsSaveSuccess: (state as any).modelAccountsSaveSuccess || false,
+                channelPoliciesConfig: state.channelPoliciesConfig as any,
+                channelPoliciesLoading: state.channelPoliciesLoading,
+                channelPoliciesError: state.channelPoliciesError,
+                channelPoliciesSaving: (state as any).channelPoliciesSaving || false,
+                channelPoliciesSaveSuccess: (state as any).channelPoliciesSaveSuccess || false,
+                editingAgent: (state as any).editingAgent || null,
+                creatingAgent: (state as any).creatingAgent || false,
+                deletingAgent: (state as any).deletingAgent || false,
                 onRefresh: async () => {
                   await loadAgents(state);
-                  const agentIds = state.agentsList?.agents?.map((entry: any) => entry.id) ?? [];
+                  const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
                   if (agentIds.length > 0) {
                     void loadAgentIdentities(state, agentIds);
                   }
                 },
-                onSelectAgent: (agentId: string) => {
+                onSelectAgent: (agentId) => {
                   if (state.agentsSelectedId === agentId) {
                     return;
                   }
@@ -1164,7 +834,7 @@ export function renderApp(state: AppViewState) {
                     void loadAgentSkills(state, agentId);
                   }
                 },
-                onSelectPanel: (panel: any) => {
+                onSelectPanel: (panel) => {
                   state.agentsPanel = panel;
                   if (panel === "files" && resolvedAgentId) {
                     if (state.agentFilesList?.agentId !== resolvedAgentId) {
@@ -1187,33 +857,30 @@ export function renderApp(state: AppViewState) {
                   if (panel === "cron") {
                     void state.loadCron();
                   }
+                  // Phase 5: 加载模型账号和通道策略
+                  if (panel === "modelAccounts" && resolvedAgentId) {
+                    void loadModelAccounts(state, resolvedAgentId);
+                  }
+                  if (panel === "channelPolicies" && resolvedAgentId) {
+                    void loadChannelPolicies(state, resolvedAgentId);
+                  }
                 },
-                onLoadFiles: (agentId: string) => {
-                  void (async () => {
-                    await loadAgentFiles(state, agentId);
-                    if (state.agentFileActive) {
-                      await loadAgentFileContent(state, agentId, state.agentFileActive, {
-                        force: true,
-                        preserveDraft: true,
-                      });
-                    }
-                  })();
-                },
-                onSelectFile: (name: any) => {
+                onLoadFiles: (agentId) => loadAgentFiles(state, agentId),
+                onSelectFile: (name) => {
                   state.agentFileActive = name;
                   if (!resolvedAgentId) {
                     return;
                   }
                   void loadAgentFileContent(state, resolvedAgentId, name);
                 },
-                onFileDraftChange: (name: any, content: any) => {
+                onFileDraftChange: (name, content) => {
                   state.agentFileDrafts = { ...state.agentFileDrafts, [name]: content };
                 },
-                onFileReset: (name: any) => {
+                onFileReset: (name) => {
                   const base = state.agentFileContents[name] ?? "";
                   state.agentFileDrafts = { ...state.agentFileDrafts, [name]: base };
                 },
-                onFileSave: (name: any) => {
+                onFileSave: (name) => {
                   if (!resolvedAgentId) {
                     return;
                   }
@@ -1221,7 +888,7 @@ export function renderApp(state: AppViewState) {
                     state.agentFileDrafts[name] ?? state.agentFileContents[name] ?? "";
                   void saveAgentFile(state, resolvedAgentId, name, content);
                 },
-                onToolsProfileChange: (agentId: string, profile, clearAllow: any) => {
+                onToolsProfileChange: (agentId, profile, clearAllow) => {
                   if (!configValue) {
                     return;
                   }
@@ -1241,15 +908,15 @@ export function renderApp(state: AppViewState) {
                   }
                   const basePath = ["agents", "list", index, "tools"];
                   if (profile) {
-                    updateConfigFormValue(state as any, [...basePath, "profile"], profile);
+                    updateConfigFormValue(state, [...basePath, "profile"], profile);
                   } else {
-                    removeConfigFormValue(state as any, [...basePath, "profile"]);
+                    removeConfigFormValue(state, [...basePath, "profile"]);
                   }
                   if (clearAllow) {
-                    removeConfigFormValue(state as any, [...basePath, "allow"]);
+                    removeConfigFormValue(state, [...basePath, "allow"]);
                   }
                 },
-                onToolsOverridesChange: (agentId: string, alsoAllow, deny: any) => {
+                onToolsOverridesChange: (agentId, alsoAllow, deny) => {
                   if (!configValue) {
                     return;
                   }
@@ -1269,27 +936,27 @@ export function renderApp(state: AppViewState) {
                   }
                   const basePath = ["agents", "list", index, "tools"];
                   if (alsoAllow.length > 0) {
-                    updateConfigFormValue(state as any, [...basePath, "alsoAllow"], alsoAllow);
+                    updateConfigFormValue(state, [...basePath, "alsoAllow"], alsoAllow);
                   } else {
-                    removeConfigFormValue(state as any, [...basePath, "alsoAllow"]);
+                    removeConfigFormValue(state, [...basePath, "alsoAllow"]);
                   }
                   if (deny.length > 0) {
-                    updateConfigFormValue(state as any, [...basePath, "deny"], deny);
+                    updateConfigFormValue(state, [...basePath, "deny"], deny);
                   } else {
-                    removeConfigFormValue(state as any, [...basePath, "deny"]);
+                    removeConfigFormValue(state, [...basePath, "deny"]);
                   }
                 },
-                onConfigReload: () => loadConfig(state as any),
-                onConfigSave: () => saveConfig(state as any),
+                onConfigReload: () => loadConfig(state),
+                onConfigSave: () => saveConfig(state),
                 onChannelsRefresh: () => loadChannels(state, false),
                 onCronRefresh: () => state.loadCron(),
-                onSkillsFilterChange: (next: string) => (state.skillsFilter = next),
+                onSkillsFilterChange: (next) => (state.skillsFilter = next),
                 onSkillsRefresh: () => {
                   if (resolvedAgentId) {
                     void loadAgentSkills(state, resolvedAgentId);
                   }
                 },
-                onAgentSkillToggle: (agentId: string, skillName, enabled: boolean) => {
+                onAgentSkillToggle: (agentId, skillName, enabled) => {
                   if (!configValue) {
                     return;
                   }
@@ -1313,9 +980,8 @@ export function renderApp(state: AppViewState) {
                     return;
                   }
                   const allSkills =
-                    state.agentSkillsReport?.skills
-                      ?.map((skill: any) => skill.name)
-                      .filter(Boolean) ?? [];
+                    state.agentSkillsReport?.skills?.map((skill) => skill.name).filter(Boolean) ??
+                    [];
                   const existing = Array.isArray(entry.skills)
                     ? entry.skills.map((name) => String(name).trim()).filter(Boolean)
                     : undefined;
@@ -1326,13 +992,9 @@ export function renderApp(state: AppViewState) {
                   } else {
                     next.delete(normalizedSkill);
                   }
-                  updateConfigFormValue(
-                    state as any,
-                    ["agents", "list", index, "skills"],
-                    [...next],
-                  );
+                  updateConfigFormValue(state, ["agents", "list", index, "skills"], [...next]);
                 },
-                onAgentSkillsClear: (agentId: string) => {
+                onAgentSkillsClear: (agentId) => {
                   if (!configValue) {
                     return;
                   }
@@ -1350,9 +1012,9 @@ export function renderApp(state: AppViewState) {
                   if (index < 0) {
                     return;
                   }
-                  removeConfigFormValue(state as any, ["agents", "list", index, "skills"]);
+                  removeConfigFormValue(state, ["agents", "list", index, "skills"]);
                 },
-                onAgentSkillsDisableAll: (agentId: string) => {
+                onAgentSkillsDisableAll: (agentId) => {
                   if (!configValue) {
                     return;
                   }
@@ -1370,54 +1032,32 @@ export function renderApp(state: AppViewState) {
                   if (index < 0) {
                     return;
                   }
-                  updateConfigFormValue(state as any, ["agents", "list", index, "skills"], []);
+                  updateConfigFormValue(state, ["agents", "list", index, "skills"], []);
                 },
-                onModelChange: (agentId: string, modelId: any) => {
+                onModelChange: (agentId, modelId) => {
                   if (!configValue) {
                     return;
                   }
-                  const defaultId = state.agentsList?.defaultId ?? null;
-                  if (defaultId && agentId === defaultId) {
-                    const basePath = ["agents", "defaults", "model"];
-                    const defaults =
-                      (configValue as { agents?: { defaults?: { model?: unknown } } }).agents
-                        ?.defaults ?? {};
-                    const existing = defaults.model;
-                    if (!modelId) {
-                      removeConfigFormValue(state as any, basePath);
-                      return;
-                    }
-                    if (existing && typeof existing === "object" && !Array.isArray(existing)) {
-                      const fallbacks = (existing as { fallbacks?: unknown }).fallbacks;
-                      const next = {
-                        primary: modelId,
-                        ...(Array.isArray(fallbacks) ? { fallbacks } : {}),
-                      };
-                      updateConfigFormValue(state as any, basePath, next);
-                    } else {
-                      updateConfigFormValue(state as any, basePath, {
-                        primary: modelId,
-                      });
-                    }
+                  const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
+                  if (!Array.isArray(list)) {
                     return;
                   }
-
-                  const index = ensureAgentListEntry(agentId);
+                  const index = list.findIndex(
+                    (entry) =>
+                      entry &&
+                      typeof entry === "object" &&
+                      "id" in entry &&
+                      (entry as { id?: string }).id === agentId,
+                  );
+                  if (index < 0) {
+                    return;
+                  }
                   const basePath = ["agents", "list", index, "model"];
                   if (!modelId) {
-                    removeConfigFormValue(state as any, basePath);
+                    removeConfigFormValue(state, basePath);
                     return;
                   }
-                  const list = (
-                    (state.configForm ??
-                      (state.configSnapshot?.config as Record<string, unknown> | null)) as {
-                      agents?: { list?: unknown[] };
-                    }
-                  )?.agents?.list;
-                  const entry =
-                    Array.isArray(list) && list[index]
-                      ? (list[index] as { model?: unknown })
-                      : null;
+                  const entry = list[index] as { model?: unknown };
                   const existing = entry?.model;
                   if (existing && typeof existing === "object" && !Array.isArray(existing)) {
                     const fallbacks = (existing as { fallbacks?: unknown }).fallbacks;
@@ -1425,70 +1065,33 @@ export function renderApp(state: AppViewState) {
                       primary: modelId,
                       ...(Array.isArray(fallbacks) ? { fallbacks } : {}),
                     };
-                    updateConfigFormValue(state as any, basePath, next);
+                    updateConfigFormValue(state, basePath, next);
                   } else {
-                    updateConfigFormValue(state as any, basePath, modelId);
+                    updateConfigFormValue(state, basePath, modelId);
                   }
                 },
-                onModelFallbacksChange: (agentId: string, fallbacks: any) => {
+                onModelFallbacksChange: (agentId, fallbacks) => {
                   if (!configValue) {
                     return;
                   }
-                  const normalized = fallbacks.map((name: any) => name.trim()).filter(Boolean);
-                  const defaultId = state.agentsList?.defaultId ?? null;
-                  if (defaultId && agentId === defaultId) {
-                    const basePath = ["agents", "defaults", "model"];
-                    const defaults =
-                      (configValue as { agents?: { defaults?: { model?: unknown } } }).agents
-                        ?.defaults ?? {};
-                    const existing = defaults.model;
-                    const resolvePrimary = () => {
-                      if (typeof existing === "string") {
-                        return existing.trim() || null;
-                      }
-                      if (existing && typeof existing === "object" && !Array.isArray(existing)) {
-                        const primary = (existing as { primary?: unknown }).primary;
-                        if (typeof primary === "string") {
-                          const trimmed = primary.trim();
-                          return trimmed || null;
-                        }
-                      }
-                      return null;
-                    };
-                    const primary = resolvePrimary();
-                    if (normalized.length === 0) {
-                      if (primary) {
-                        updateConfigFormValue(state as any, basePath, {
-                          primary,
-                        });
-                      } else {
-                        removeConfigFormValue(state as any, basePath);
-                      }
-                      return;
-                    }
-                    const next = primary
-                      ? { primary, fallbacks: normalized }
-                      : { fallbacks: normalized };
-                    updateConfigFormValue(state as any, basePath, next);
+                  const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
+                  if (!Array.isArray(list)) {
                     return;
                   }
-
-                  const index = ensureAgentListEntry(agentId);
+                  const index = list.findIndex(
+                    (entry) =>
+                      entry &&
+                      typeof entry === "object" &&
+                      "id" in entry &&
+                      (entry as { id?: string }).id === agentId,
+                  );
+                  if (index < 0) {
+                    return;
+                  }
                   const basePath = ["agents", "list", index, "model"];
-                  const list = (
-                    (state.configForm ??
-                      (state.configSnapshot?.config as Record<string, unknown> | null)) as {
-                      agents?: { list?: unknown[] };
-                    }
-                  )?.agents?.list;
-                  const entry =
-                    Array.isArray(list) && list[index]
-                      ? (list[index] as { model?: unknown })
-                      : null;
-                  const existing = entry?.model;
-                  if (!existing) {
-                    return;
-                  }
+                  const entry = list[index] as { model?: unknown };
+                  const normalized = fallbacks.map((name) => name.trim()).filter(Boolean);
+                  const existing = entry.model;
                   const resolvePrimary = () => {
                     if (typeof existing === "string") {
                       return existing.trim() || null;
@@ -1505,126 +1108,462 @@ export function renderApp(state: AppViewState) {
                   const primary = resolvePrimary();
                   if (normalized.length === 0) {
                     if (primary) {
-                      updateConfigFormValue(state as any, basePath, primary);
+                      updateConfigFormValue(state, basePath, primary);
                     } else {
-                      removeConfigFormValue(state as any, basePath);
+                      removeConfigFormValue(state, basePath);
                     }
                     return;
                   }
                   const next = primary
                     ? { primary, fallbacks: normalized }
                     : { fallbacks: normalized };
-                  updateConfigFormValue(state as any, basePath, next);
+                  updateConfigFormValue(state, basePath, next);
+                },
+                // Phase 5: 回调函数
+                onModelAccountsChange: resolvedAgentId
+                  ? async (agentId, config) => {
+                      try {
+                        await saveModelAccounts(state, agentId, config as any);
+                        // 保存成功后重新加载
+                        await loadModelAccounts(state, agentId);
+                      } catch (err) {
+                        console.error("Failed to save model accounts:", err);
+                      }
+                    }
+                  : undefined,
+                onChannelPoliciesChange: resolvedAgentId
+                  ? async (agentId, config) => {
+                      try {
+                        await saveChannelPolicies(state, agentId, config as any);
+                        // 保存成功后重新加载
+                        await loadChannelPolicies(state, agentId);
+                      } catch (err) {
+                        console.error("Failed to save channel policies:", err);
+                      }
+                    }
+                  : undefined,
+                editingPolicyBinding: state.editingPolicyBinding,
+                addingPolicyBinding: state.addingPolicyBinding,
+                onEditPolicyBinding: (agentId, index, binding) => {
+                  if (index === -1) {
+                    // 添加模式，切换到编辑状态
+                    state.editingPolicyBinding = { agentId, index: -1, binding };
+                    state.addingPolicyBinding = null;
+                  } else {
+                    // 编辑模式
+                    state.editingPolicyBinding = { agentId, index, binding };
+                  }
+                },
+                onAddPolicyBinding: (agentId) => {
+                  state.addingPolicyBinding = agentId;
+                },
+                onCancelPolicyDialog: () => {
+                  state.editingPolicyBinding = null;
+                  state.addingPolicyBinding = null;
+                },
+                onSavePolicyBinding: async (agentId, binding, index) => {
+                  try {
+                    const config = state.channelPoliciesConfig as any;
+                    if (!config) return;
+
+                    const bindings = Array.isArray(config.bindings) ? [...config.bindings] : [];
+                    if (index !== undefined && index >= 0) {
+                      // 编辑模式
+                      bindings[index] = binding;
+                    } else {
+                      // 添加模式
+                      bindings.push(binding);
+                    }
+
+                    await saveChannelPolicies(state, agentId, {
+                      ...config,
+                      bindings,
+                    } as any);
+
+                    // 关闭对话框
+                    state.editingPolicyBinding = null;
+                    state.addingPolicyBinding = null;
+
+                    // 重新加载配置
+                    await loadChannelPolicies(state, agentId);
+                  } catch (err) {
+                    console.error("Failed to save policy binding:", err);
+                  }
                 },
                 onAddAgent: () => {
-                  state.editingAgent = { id: "", name: "", workspace: "" };
+                  // TODO: 实现添加智能助手
+                  console.log("Add agent not implemented yet");
                 },
-                onEditAgent: (agentId: string) => {
-                  const agent = state.agentsList?.agents?.find((a: any) => a.id === agentId);
-                  if (agent) {
-                    state.editingAgent = {
-                      id: agent.id,
-                      name: agent.identity?.name ?? "",
-                      workspace: agent.workspace ?? "",
-                    };
-                  }
+                onEditAgent: (agentId) => {
+                  // TODO: 实现编辑智能助手
+                  console.log("Edit agent not implemented yet:", agentId);
                 },
-                onDeleteAgent: async (agentId: string) => {
-                  if (!state.client || state.deletingAgent) {
-                    return;
-                  }
-                  state.deletingAgent = true;
-                  try {
-                    // 获取当前配置
-                    const config = (await state.client.request("config.get", {})) as {
-                      agents?: { list?: any[] };
-                    } | null;
-                    if (!config?.agents?.list) {
-                      throw new Error("No agents configuration found");
-                    }
-                    // 过滤掉要删除的 agent
-                    const list = config.agents.list.filter((a: { id: string }) => a.id !== agentId);
-                    // 更新配置
-                    await state.client.request("config.patch", {
-                      path: ["agents", "list"],
-                      value: list,
-                    });
-                    // 刷新列表
-                    await loadAgents(state);
-                    const agentIds = state.agentsList?.agents?.map((entry: any) => entry.id) ?? [];
-                    if (agentIds.length > 0) {
-                      void loadAgentIdentities(state, agentIds);
-                    }
-                  } catch (err) {
-                    state.agentsError = String(err);
-                  } finally {
-                    state.deletingAgent = false;
-                  }
+                onDeleteAgent: (agentId) => {
+                  // TODO: 实现删除智能助手
+                  console.log("Delete agent not implemented yet:", agentId);
                 },
-                onSaveAgent: async () => {
-                  if (!state.client || !state.editingAgent || state.creatingAgent) {
-                    return;
-                  }
-                  const idPattern = /^[a-z0-9][a-z0-9-]*$/;
-                  if (!idPattern.test(state.editingAgent.id)) {
-                    return;
-                  }
-                  state.creatingAgent = true;
-                  try {
-                    // 获取当前配置
-                    const config = (await state.client.request("config.get", {})) as {
-                      agents?: { list?: any[] };
-                    } | null;
-                    const list = config?.agents?.list ?? [];
-                    // 检查是否是新建还是编辑
-                    const existingIndex = list.findIndex(
-                      (a: { id: string }) => a.id === state.editingAgent?.id,
-                    );
-                    const newAgent = {
-                      id: state.editingAgent.id,
-                      ...(state.editingAgent.name
-                        ? { identity: { name: state.editingAgent.name } }
-                        : {}),
-                      ...(state.editingAgent.workspace
-                        ? { workspace: state.editingAgent.workspace }
-                        : {}),
-                    };
-                    let newList;
-                    if (existingIndex >= 0) {
-                      // 更新现有 agent
-                      newList = [...list];
-                      newList[existingIndex] = { ...newList[existingIndex], ...newAgent };
-                    } else {
-                      // 添加新 agent
-                      newList = [...list, newAgent];
-                    }
-                    // 更新配置
-                    await state.client.request("config.patch", {
-                      path: ["agents", "list"],
-                      value: newList,
-                    });
-                    // 刷新列表
-                    await loadAgents(state);
-                    const agentIds = state.agentsList?.agents?.map((entry: any) => entry.id) ?? [];
-                    if (agentIds.length > 0) {
-                      void loadAgentIdentities(state, agentIds);
-                    }
-                    // 关闭弹窗
-                    state.editingAgent = null;
-                  } catch (err) {
-                    state.agentsError = String(err);
-                  } finally {
-                    state.creatingAgent = false;
-                  }
+                onSaveAgent: () => {
+                  // TODO: 实现保存智能助手
+                  console.log("Save agent not implemented yet");
                 },
                 onCancelEdit: () => {
-                  state.editingAgent = null;
+                  // TODO: 实现取消编辑
+                  console.log("Cancel edit not implemented yet");
                 },
-                onAgentFormChange: (field: string, value: any) => {
-                  if (!state.editingAgent) {
-                    return;
+                onAgentFormChange: (field, value) => {
+                  // TODO: 实现表单更改
+                  console.log("Agent form change not implemented yet:", field, value);
+                },
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "collaboration"
+            ? renderCollaboration({
+                activePanel: state.collaborationActivePanel,
+                onSelectPanel: (panel) => {
+                  state.collaborationActivePanel = panel;
+                  // 切换到群组面板时加载数据
+                  if (panel === "groups" && !state.groupsList) {
+                    void loadGroups(state);
                   }
-                  state.editingAgent = { ...state.editingAgent, [field]: value };
+                  // 切换到好友面板时加载数据
+                  if (panel === "friends" && state.friendsList.length === 0) {
+                    // TODO: 加载好友列表，需要当前智能助手 ID
+                    // void loadFriends(state, "current-agent-id");
+                  }
+                },
+                groupsProps: {
+                  loading: state.groupsLoading,
+                  error: state.groupsError,
+                  groupsList: state.groupsList,
+                  selectedGroupId: state.groupsSelectedId,
+                  activePanel: state.groupsActivePanel,
+                  creatingGroup: state.creatingGroup,
+                  editingGroup: state.editingGroup,
+                  onRefresh: () => loadGroups(state),
+                  onSelectGroup: (groupId) => {
+                    state.groupsSelectedId = groupId;
+                  },
+                  onSelectPanel: (panel) => {
+                    state.groupsActivePanel = panel;
+                  },
+                  onCreateGroup: () => {
+                    state.creatingGroup = true;
+                    state.editingGroup = null;
+                  },
+                  onEditGroup: (groupId) => {
+                    const group = state.groupsList?.groups.find((g) => g.id === groupId);
+                    if (group) {
+                      state.editingGroup = group;
+                      state.creatingGroup = false;
+                    }
+                  },
+                  onDeleteGroup: async (groupId) => {
+                    if (confirm(`确定要删除群组 ${groupId} 吗？`)) {
+                      try {
+                        await deleteGroup(state, groupId);
+                      } catch (err) {
+                        alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    }
+                  },
+                  onSaveGroup: async () => {
+                    try {
+                      const group = state.editingGroup || {
+                        id: "",
+                        name: "",
+                        description: "",
+                        isPublic: false,
+                      };
+                      await createGroup(state, group as any);
+                      state.creatingGroup = false;
+                      state.editingGroup = null;
+                    } catch (err) {
+                      alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  },
+                  onCancelEdit: () => {
+                    state.creatingGroup = false;
+                    state.editingGroup = null;
+                  },
+                  onGroupFormChange: (field, value) => {
+                    if (state.editingGroup) {
+                      state.editingGroup = { ...state.editingGroup, [field]: value };
+                    } else if (state.creatingGroup) {
+                      state.editingGroup = {
+                        id: "",
+                        name: "",
+                        ownerId: "",
+                        createdAt: Date.now(),
+                        members: [],
+                        isPublic: false,
+                        [field]: value,
+                      } as any;
+                    }
+                  },
+                  onAddMember: async (groupId, agentId, role) => {
+                    try {
+                      await addGroupMember(state, groupId, agentId, role);
+                    } catch (err) {
+                      alert(`添加成员失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  },
+                  onRemoveMember: async (groupId, agentId) => {
+                    try {
+                      await removeGroupMember(state, groupId, agentId);
+                    } catch (err) {
+                      alert(`移除成员失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  },
+                  onUpdateMemberRole: async (groupId, agentId, role) => {
+                    try {
+                      await updateGroupMemberRole(state, groupId, agentId, role);
+                    } catch (err) {
+                      alert(`更新角色失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  },
+                },
+                friendsProps: {
+                  loading: state.friendsLoading,
+                  error: state.friendsError,
+                  friendsList: state.friendsList,
+                  friendsTotal: state.friendsTotal,
+                  friendRequestsLoading: state.friendRequestsLoading,
+                  friendRequestsList: state.friendRequestsList,
+                  selectedFriendId: state.selectedFriendId,
+                  messagesLoading: state.messagesLoading,
+                  messagesList: state.messagesList,
+                  sendingMessage: state.sendingMessage,
+                  activeSubPanel: state.friendsActiveSubPanel,
+                  draftMessage: state.draftMessage,
+                  onRefresh: () => {
+                    // TODO: 需要当前智能助手 ID
+                    // void loadFriends(state, "current-agent-id");
+                  },
+                  onSelectSubPanel: (panel) => {
+                    state.friendsActiveSubPanel = panel;
+                  },
+                  onSelectFriend: (friendId) => {
+                    state.selectedFriendId = friendId;
+                    // 加载消息历史
+                    // TODO: 需要当前智能助手 ID
+                    // void loadMessages(state, "current-agent-id", friendId);
+                  },
+                  onAddFriend: async (toAgentId, message) => {
+                    // TODO: 需要当前智能助手 ID
+                    // await addFriend(state, "current-agent-id", toAgentId, message);
+                  },
+                  onRemoveFriend: async (friendId) => {
+                    // TODO: 需要当前智能助手 ID
+                    // await removeFriend(state, "current-agent-id", friendId);
+                  },
+                  onConfirmFriend: async (friendId, accept) => {
+                    // TODO: 需要当前智能助手 ID
+                    // await confirmFriend(state, "current-agent-id", friendId, accept);
+                  },
+                  onSendMessage: async (content) => {
+                    if (state.selectedFriendId) {
+                      // TODO: 需要当前智能助手 ID
+                      // await sendMessage(state, "current-agent-id", state.selectedFriendId, content);
+                      state.draftMessage = "";
+                    }
+                  },
+                  onDraftMessageChange: (content) => {
+                    state.draftMessage = content;
+                  },
+                },
+                monitorProps: {
+                  loading: false,
+                  error: null,
+                  activeSubPanel: state.monitorActiveSubPanel,
+                  sessionsLoading: state.monitorSessionsLoading,
+                  sessionsError: state.monitorSessionsError,
+                  activeSessions: state.monitorActiveSessions,
+                  messageFlowsLoading: state.monitorMessageFlowsLoading,
+                  messageFlows: state.monitorMessageFlows,
+                  forwardingRulesLoading: state.monitorForwardingRulesLoading,
+                  forwardingRules: state.monitorForwardingRules,
+                  editingRule: state.monitorEditingRule,
+                  creatingRule: state.monitorCreatingRule,
+                  metricsLoading: state.monitorMetricsLoading,
+                  metrics: state.monitorMetrics,
+                  alertsLoading: state.monitorAlertsLoading,
+                  alerts: state.monitorAlerts,
+                  onRefresh: () => {
+                    void loadActiveSessions(state as unknown as OpenClawApp);
+                    void loadMessageFlows(state as unknown as OpenClawApp);
+                    void loadForwardingRules(state as unknown as OpenClawApp);
+                    void loadMetrics(state as unknown as OpenClawApp);
+                    void loadAlerts(state as unknown as OpenClawApp);
+                  },
+                  onSelectSubPanel: (panel) => {
+                    state.monitorActiveSubPanel = panel;
+                  },
+                  onAddForwardingRule: () => {
+                    state.monitorCreatingRule = true;
+                    state.monitorEditingRule = null;
+                  },
+                  onEditForwardingRule: (rule) => {
+                    state.monitorEditingRule = rule;
+                    state.monitorCreatingRule = false;
+                  },
+                  onDeleteForwardingRule: async (ruleId) => {
+                    await deleteForwardingRule(state as unknown as OpenClawApp, ruleId);
+                  },
+                  onSaveForwardingRule: async (rule) => {
+                    if (state.monitorEditingRule) {
+                      await updateForwardingRule(
+                        state as unknown as OpenClawApp,
+                        state.monitorEditingRule.id,
+                        rule,
+                      );
+                    } else {
+                      await addForwardingRule(state as unknown as OpenClawApp, rule as any);
+                    }
+                    state.monitorCreatingRule = false;
+                    state.monitorEditingRule = null;
+                  },
+                  onCancelEditRule: () => {
+                    state.monitorCreatingRule = false;
+                    state.monitorEditingRule = null;
+                  },
+                  onRuleFormChange: (field, value) => {
+                    if (state.monitorEditingRule) {
+                      state.monitorEditingRule = { ...state.monitorEditingRule, [field]: value };
+                    } else if (state.monitorCreatingRule) {
+                      state.monitorEditingRule = {
+                        id: "",
+                        name: "",
+                        sourceChannelId: "",
+                        targetChannelId: "",
+                        enabled: true,
+                        createdAt: Date.now(),
+                        [field]: value,
+                      } as any;
+                    }
+                  },
+                  onToggleRule: async (ruleId, enabled) => {
+                    await updateForwardingRule(state as unknown as OpenClawApp, ruleId, {
+                      enabled,
+                    });
+                  },
+                  onAcknowledgeAlert: async (alertId) => {
+                    await acknowledgeAlert(state as unknown as OpenClawApp, alertId);
+                  },
+                  onClearAllAlerts: async () => {
+                    await clearAllAlerts(state as unknown as OpenClawApp);
+                  },
+                },
+                scenariosProps: {
+                  loading: state.scenariosLoading,
+                  error: state.scenariosError,
+                  activeSubPanel: state.scenariosActiveSubPanel,
+                  scenariosList: state.scenariosList,
+                  scenariosTotal: state.scenariosTotal,
+                  selectedScenarioId: state.selectedScenarioId,
+                  editingScenario: state.editingScenario,
+                  creatingScenario: state.creatingScenario,
+                  runningScenarioId: state.runningScenarioId,
+                  scenarioRunsLoading: state.scenarioRunsLoading,
+                  scenarioRuns: state.scenarioRuns,
+                  recommendationsLoading: state.recommendationsLoading,
+                  recommendations: state.recommendations,
+                  onRefresh: () => {
+                    void loadScenarios(state as unknown as OpenClawApp);
+                  },
+                  onSelectSubPanel: (panel) => {
+                    state.scenariosActiveSubPanel = panel;
+                    if (panel === "runs" && state.scenarioRuns.length === 0) {
+                      void loadScenarioRuns(state as unknown as OpenClawApp);
+                    }
+                    if (panel === "recommendations" && state.recommendations.length === 0) {
+                      void loadRecommendations(state as unknown as OpenClawApp);
+                    }
+                  },
+                  onSelectScenario: (scenarioId) => {
+                    state.selectedScenarioId = scenarioId;
+                  },
+                  onCreateScenario: () => {
+                    state.creatingScenario = true;
+                    state.editingScenario = null;
+                  },
+                  onEditScenario: (scenarioId) => {
+                    const scenario = state.scenariosList.find((s) => s.id === scenarioId);
+                    if (scenario) {
+                      state.editingScenario = scenario;
+                      state.creatingScenario = false;
+                    }
+                  },
+                  onDeleteScenario: async (scenarioId) => {
+                    if (confirm("确定要删除此场景吗？")) {
+                      try {
+                        await deleteScenario(state as unknown as OpenClawApp, scenarioId);
+                      } catch (err) {
+                        alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    }
+                  },
+                  onSaveScenario: async () => {
+                    try {
+                      if (state.editingScenario && state.editingScenario.id) {
+                        await updateScenario(
+                          state as unknown as OpenClawApp,
+                          state.editingScenario.id,
+                          state.editingScenario,
+                        );
+                      } else {
+                        await createScenario(
+                          state as unknown as OpenClawApp,
+                          state.editingScenario as any,
+                        );
+                      }
+                      state.creatingScenario = false;
+                      state.editingScenario = null;
+                    } catch (err) {
+                      alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  },
+                  onCancelEdit: () => {
+                    state.creatingScenario = false;
+                    state.editingScenario = null;
+                  },
+                  onScenarioFormChange: (field, value) => {
+                    if (state.editingScenario) {
+                      state.editingScenario = { ...state.editingScenario, [field]: value };
+                    } else if (state.creatingScenario) {
+                      state.editingScenario = {
+                        id: "",
+                        name: "",
+                        description: "",
+                        type: "custom",
+                        enabled: false,
+                        config: {},
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                        [field]: value,
+                      } as any;
+                    }
+                  },
+                  onToggleScenario: async (scenarioId, enabled) => {
+                    await updateScenario(state as unknown as OpenClawApp, scenarioId, { enabled });
+                  },
+                  onRunScenario: async (scenarioId) => {
+                    try {
+                      await runScenario(state as unknown as OpenClawApp, scenarioId);
+                    } catch (err) {
+                      alert(`执行失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  },
+                  onApplyRecommendation: async (scenarioId) => {
+                    const scenario = state.scenariosList.find((s) => s.id === scenarioId);
+                    if (scenario) {
+                      await updateScenario(state as unknown as OpenClawApp, scenarioId, {
+                        enabled: true,
+                      });
+                    }
+                  },
                 },
               })
             : nothing
@@ -1640,14 +1579,26 @@ export function renderApp(state: AppViewState) {
                 edits: state.skillEdits,
                 messages: state.skillMessages,
                 busyKey: state.skillsBusyKey,
-                onFilterChange: (next: string) => (state.skillsFilter = next),
+                onFilterChange: (next) => (state.skillsFilter = next),
                 onRefresh: () => loadSkills(state, { clearMessages: true }),
-                onToggle: (key: string, enabled: boolean) =>
-                  updateSkillEnabled(state, key, enabled),
-                onEdit: (key: string, value: any) => updateSkillEdit(state, key, value),
-                onSaveKey: (key: string) => saveSkillApiKey(state, key),
-                onInstall: (skillKey: any, name, installId: any) =>
+                onToggle: (key, enabled) => updateSkillEnabled(state, key, enabled),
+                onEdit: (key, value) => updateSkillEdit(state, key, value),
+                onSaveKey: (key) => saveSkillApiKey(state, key),
+                onInstall: (skillKey, name, installId) =>
                   installSkill(state, skillKey, name, installId),
+                // Advanced features
+                advancedMode: state.skillsAdvancedMode,
+                selectedSkills: state.skillsSelectedSkills,
+                filterStatus: state.skillsFilterStatus,
+                filterSource: state.skillsFilterSource,
+                onToggleAdvancedMode: () => toggleAdvancedMode(state),
+                onSelectSkill: (skillKey, selected) => selectSkill(state, skillKey, selected),
+                onSelectAll: () => selectAllSkills(state),
+                onDeselectAll: () => deselectAllSkills(state),
+                onBatchEnable: () => batchEnableSkills(state),
+                onBatchDisable: () => batchDisableSkills(state),
+                onFilterStatusChange: (status) => changeFilterStatus(state, status),
+                onFilterSourceChange: (source) => changeFilterSource(state, source),
               })
             : nothing
         }
@@ -1677,13 +1628,12 @@ export function renderApp(state: AppViewState) {
                 execApprovalsTargetNodeId: state.execApprovalsTargetNodeId,
                 onRefresh: () => loadNodes(state),
                 onDevicesRefresh: () => loadDevices(state),
-                onDeviceApprove: (requestId: any) => approveDevicePairing(state, requestId),
-                onDeviceReject: (requestId: any) => rejectDevicePairing(state, requestId),
-                onDeviceRotate: (deviceId: any, role, scopes: any) =>
+                onDeviceApprove: (requestId) => approveDevicePairing(state, requestId),
+                onDeviceReject: (requestId) => rejectDevicePairing(state, requestId),
+                onDeviceRotate: (deviceId, role, scopes) =>
                   rotateDeviceToken(state, { deviceId, role, scopes }),
-                onDeviceRevoke: (deviceId: any, role: string) =>
-                  revokeDeviceToken(state, { deviceId, role }),
-                onLoadConfig: () => loadConfig(state as any),
+                onDeviceRevoke: (deviceId, role) => revokeDeviceToken(state, { deviceId, role }),
+                onLoadConfig: () => loadConfig(state),
                 onLoadExecApprovals: () => {
                   const target =
                     state.execApprovalsTarget === "node" && state.execApprovalsTargetNodeId
@@ -1691,37 +1641,36 @@ export function renderApp(state: AppViewState) {
                       : { kind: "gateway" as const };
                   return loadExecApprovals(state, target);
                 },
-                onBindDefault: (nodeId: string | null) => {
+                onBindDefault: (nodeId) => {
                   if (nodeId) {
-                    updateConfigFormValue(state as any, ["tools", "exec", "node"], nodeId);
+                    updateConfigFormValue(state, ["tools", "exec", "node"], nodeId);
                   } else {
-                    removeConfigFormValue(state as any, ["tools", "exec", "node"]);
+                    removeConfigFormValue(state, ["tools", "exec", "node"]);
                   }
                 },
-                onBindAgent: (agentIndex: number, nodeId: string | null) => {
+                onBindAgent: (agentIndex, nodeId) => {
                   const basePath = ["agents", "list", agentIndex, "tools", "exec", "node"];
                   if (nodeId) {
-                    updateConfigFormValue(state as any, basePath, nodeId);
+                    updateConfigFormValue(state, basePath, nodeId);
                   } else {
-                    removeConfigFormValue(state as any, basePath);
+                    removeConfigFormValue(state, basePath);
                   }
                 },
-                onSaveBindings: () => saveConfig(state as any),
-                onExecApprovalsTargetChange: (kind: "gateway" | "node", nodeId: string | null) => {
-                  state.execApprovalsTarget = kind as "gateway" | "node";
+                onSaveBindings: () => saveConfig(state),
+                onExecApprovalsTargetChange: (kind, nodeId) => {
+                  state.execApprovalsTarget = kind;
                   state.execApprovalsTargetNodeId = nodeId;
                   state.execApprovalsSnapshot = null;
                   state.execApprovalsForm = null;
                   state.execApprovalsDirty = false;
                   state.execApprovalsSelectedAgent = null;
                 },
-                onExecApprovalsSelectAgent: (agentId: string) => {
+                onExecApprovalsSelectAgent: (agentId) => {
                   state.execApprovalsSelectedAgent = agentId;
                 },
-                onExecApprovalsPatch: (path: (string | number)[], value: any) =>
+                onExecApprovalsPatch: (path, value) =>
                   updateExecApprovalsFormValue(state, path, value),
-                onExecApprovalsRemove: (path: (string | number)[]) =>
-                  removeExecApprovalsFormValue(state, path),
+                onExecApprovalsRemove: (path) => removeExecApprovalsFormValue(state, path),
                 onSaveExecApprovals: () => {
                   const target =
                     state.execApprovalsTarget === "node" && state.execApprovalsTargetNodeId
@@ -1737,34 +1686,35 @@ export function renderApp(state: AppViewState) {
           state.tab === "chat"
             ? renderChat({
                 sessionKey: state.sessionKey,
-                onSessionKeyChange: (next: any) => {
+                onSessionKeyChange: (next) => {
                   state.sessionKey = next;
                   state.chatMessage = "";
                   state.chatAttachments = [];
                   state.chatStream = null;
+                  state.chatStreamStartedAt = null;
                   state.chatRunId = null;
-                  (state as any).chatStreamStartedAt = null;
                   state.chatQueue = [];
-                  (state as any).resetToolStream();
-                  (state as any).resetChatScroll();
+                  state.resetToolStream();
+                  state.resetChatScroll();
                   state.applySettings({
                     ...state.settings,
                     sessionKey: next,
                     lastActiveSessionKey: next,
                   });
                   void state.loadAssistantIdentity();
-                  void loadChatHistory(state as any);
-                  void refreshChatAvatar(state as any);
+                  void loadChatHistory(state);
+                  void refreshChatAvatar(state);
                 },
                 thinkingLevel: state.chatThinkingLevel,
                 showThinking,
                 loading: state.chatLoading,
                 sending: state.chatSending,
+                compactionStatus: state.compactionStatus,
                 assistantAvatarUrl: chatAvatarUrl,
                 messages: state.chatMessages,
                 toolMessages: state.chatToolMessages,
                 stream: state.chatStream,
-                streamStartedAt: null,
+                streamStartedAt: state.chatStreamStartedAt,
                 draft: state.chatMessage,
                 queue: state.chatQueue,
                 connected: state.connected,
@@ -1774,10 +1724,8 @@ export function renderApp(state: AppViewState) {
                 sessions: state.sessionsResult,
                 focusMode: chatFocus,
                 onRefresh: () => {
-                  return Promise.all([
-                    loadChatHistory(state as any),
-                    refreshChatAvatar(state as any),
-                  ]);
+                  state.resetToolStream();
+                  return Promise.all([loadChatHistory(state), refreshChatAvatar(state)]);
                 },
                 onToggleFocusMode: () => {
                   if (state.onboarding) {
@@ -1788,42 +1736,28 @@ export function renderApp(state: AppViewState) {
                     chatFocusMode: !state.settings.chatFocusMode,
                   });
                 },
-                onChatScroll: (event: any) => (state as any).handleChatScroll(event),
-                onDraftChange: (next: any) => (state.chatMessage = next),
+                onChatScroll: (event) => state.handleChatScroll(event),
+                onDraftChange: (next) => (state.chatMessage = next),
                 attachments: state.chatAttachments,
-                onAttachmentsChange: (next: any) => (state.chatAttachments = next),
-                onSend: () => (state as any).handleSendChat(),
+                onAttachmentsChange: (next) => (state.chatAttachments = next),
+                onSend: () => state.handleSendChat(),
                 canAbort: Boolean(state.chatRunId),
-                onAbort: () => void (state as any).handleAbortChat(),
-                onQueueRemove: (id: any) => (state as any).removeQueuedMessage(id),
-                onNewSession: () => (state as any).handleSendChat("/new", { restoreDraft: true }),
-                showNewMessages: state.chatNewMessagesBelow,
+                onAbort: () => void state.handleAbortChat(),
+                onQueueRemove: (id) => state.removeQueuedMessage(id),
+                onNewSession: () => state.handleSendChat("/new", { restoreDraft: true }),
+                showNewMessages: state.chatNewMessagesBelow && !state.chatManualRefreshInFlight,
                 onScrollToBottom: () => state.scrollToBottom(),
                 // Sidebar props for tool output viewing
-                sidebarOpen: (state as any).sidebarOpen,
-                sidebarContent: (state as any).sidebarContent,
-                sidebarError: (state as any).sidebarError,
-                splitRatio: (state as any).splitRatio,
-                onOpenSidebar: (content: string) => (state as any).handleOpenSidebar(content),
-                onCloseSidebar: () => (state as any).handleCloseSidebar(),
-                onSplitRatioChange: (ratio: number) => (state as any).handleSplitRatioChange(ratio),
+                sidebarOpen: state.sidebarOpen,
+                sidebarContent: state.sidebarContent,
+                sidebarError: state.sidebarError,
+                splitRatio: state.splitRatio,
+                onOpenSidebar: (content: string) => state.handleOpenSidebar(content),
+                onCloseSidebar: () => state.handleCloseSidebar(),
+                onSplitRatioChange: (ratio: number) => state.handleSplitRatioChange(ratio),
                 assistantName: state.assistantName,
                 assistantAvatar: state.assistantAvatar,
               })
-            : nothing
-        }
-
-        ${
-          state.tab === "bindings"
-            ? (() => {
-                const controller = state.client ? getBindingsController(state.client) : null;
-                if (!controller) {
-                  return html`
-                    <div class="loading">连接中...</div>
-                  `;
-                }
-                return renderBindings(controller.getProps());
-              })()
             : nothing
         }
 
@@ -1841,30 +1775,28 @@ export function renderApp(state: AppViewState) {
                 connected: state.connected,
                 schema: state.configSchema,
                 schemaLoading: state.configSchemaLoading,
-                uiHints: state.configUiHints as ConfigUiHints,
+                uiHints: state.configUiHints,
                 formMode: state.configFormMode,
                 formValue: state.configForm,
                 originalValue: state.configFormOriginal,
-                searchQuery: (state as any).configSearchQuery,
-                activeSection: (state as any).configActiveSection,
-                activeSubsection: (state as any).configActiveSubsection,
-                onRawChange: (next: any) => {
+                searchQuery: state.configSearchQuery,
+                activeSection: state.configActiveSection,
+                activeSubsection: state.configActiveSubsection,
+                onRawChange: (next) => {
                   state.configRaw = next;
                 },
-                onFormModeChange: (mode: any) => (state.configFormMode = mode),
-                onFormPatch: (path: (string | number)[], value: any) =>
-                  updateConfigFormValue(state as any, path, value),
-                onSearchChange: (query: any) => ((state as any).configSearchQuery = query),
-                onSectionChange: (section: any) => {
-                  (state as any).configActiveSection = section;
-                  (state as any).configActiveSubsection = null;
+                onFormModeChange: (mode) => (state.configFormMode = mode),
+                onFormPatch: (path, value) => updateConfigFormValue(state, path, value),
+                onSearchChange: (query) => (state.configSearchQuery = query),
+                onSectionChange: (section) => {
+                  state.configActiveSection = section;
+                  state.configActiveSubsection = null;
                 },
-                onSubsectionChange: (section: any) =>
-                  ((state as any).configActiveSubsection = section),
-                onReload: () => loadConfig(state as any),
-                onSave: () => saveConfig(state as any),
-                onApply: () => applyConfig(state as any),
-                onUpdate: () => runUpdate(state as any),
+                onSubsectionChange: (section) => (state.configActiveSubsection = section),
+                onReload: () => loadConfig(state),
+                onSave: () => saveConfig(state),
+                onApply: () => applyConfig(state),
+                onUpdate: () => runUpdate(state),
               })
             : nothing
         }
@@ -1882,8 +1814,8 @@ export function renderApp(state: AppViewState) {
                 callParams: state.debugCallParams,
                 callResult: state.debugCallResult,
                 callError: state.debugCallError,
-                onCallMethodChange: (next: any) => (state.debugCallMethod = next),
-                onCallParamsChange: (next: any) => (state.debugCallParams = next),
+                onCallMethodChange: (next) => (state.debugCallMethod = next),
+                onCallParamsChange: (next) => (state.debugCallParams = next),
                 onRefresh: () => loadDebug(state),
                 onCall: () => callDebugMethod(state),
               })
@@ -1901,14 +1833,132 @@ export function renderApp(state: AppViewState) {
                 levelFilters: state.logsLevelFilters,
                 autoFollow: state.logsAutoFollow,
                 truncated: state.logsTruncated,
-                onFilterTextChange: (next: any) => (state.logsFilterText = next),
-                onLevelToggle: (level: any, enabled: boolean) => {
+                onFilterTextChange: (next) => (state.logsFilterText = next),
+                onLevelToggle: (level, enabled) => {
                   state.logsLevelFilters = { ...state.logsLevelFilters, [level]: enabled };
                 },
-                onToggleAutoFollow: (next: any) => (state.logsAutoFollow = next),
-                onRefresh: () => loadLogs(state as unknown as LogsState, { reset: true }),
-                onExport: (lines: any, label: any) => (state as any).exportLogs(lines, label),
-                onScroll: (event: any) => (state as any).handleLogsScroll(event),
+                onToggleAutoFollow: (next) => (state.logsAutoFollow = next),
+                onRefresh: () => loadLogs(state, { reset: true }),
+                onExport: (lines, label) => state.exportLogs(lines, label),
+                onScroll: (event) => state.handleLogsScroll(event),
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "message-queue"
+            ? renderMessageQueue({
+                activePanel: state.messageQueueActivePanel,
+                queueLoading: state.queueLoading,
+                queueError: state.queueError,
+                queueMessages: state.queueMessages,
+                queueStats: state.queueStats,
+                queueStatsLoading: state.queueStatsLoading,
+                queueConfig: state.queueConfig,
+                queueConfigLoading: state.queueConfigLoading,
+                queueConfigSaving: state.queueConfigSaving,
+                onSelectPanel: (panel) => {
+                  state.messageQueueActivePanel = panel;
+                  // 切换到相应 panel 时加载数据
+                  if (panel === "monitor") {
+                    void loadQueueStatus(state);
+                    void loadQueueStats(state);
+                  } else if (panel === "statistics") {
+                    void loadQueueStats(state);
+                  } else if (panel === "configuration") {
+                    void loadQueueConfig(state);
+                  }
+                },
+                onRefresh: () => {
+                  void loadQueueStatus(state);
+                  void loadQueueStats(state);
+                },
+                onClearQueue: () => void clearQueue(state),
+                onSaveConfig: (config) => void saveQueueConfig(state, config),
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "organization-chart"
+            ? renderOrganizationChart({
+                loading: state.organizationDataLoading,
+                error: state.organizationDataError,
+                organizationData: state.organizationData,
+                selectedNodeId: state.organizationChartSelectedNode,
+                viewMode: state.organizationChartViewMode,
+                onRefresh: () => {
+                  // TODO: 实现组织架构数据加载
+                  console.log("Load organization data");
+                },
+                onSelectNode: (nodeId) => {
+                  state.organizationChartSelectedNode = nodeId;
+                },
+                onViewModeChange: (mode) => {
+                  state.organizationChartViewMode = mode;
+                },
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "permissions-management"
+            ? renderPermissionsManagement({
+                loading: state.permissionsConfigLoading || state.approvalRequestsLoading,
+                error: state.permissionsConfigError,
+                activeTab: state.permissionsManagementActiveTab,
+                permissionsConfig: state.permissionsConfig,
+                configLoading: state.permissionsConfigLoading,
+                configSaving: state.permissionsConfigSaving,
+                approvalRequests: state.approvalRequests,
+                approvalsLoading: state.approvalRequestsLoading,
+                changeHistory: state.permissionsChangeHistory,
+                historyLoading: state.permissionsHistoryLoading,
+                onRefresh: () => {
+                  if (state.permissionsManagementActiveTab === "approvals") {
+                    void loadApprovals(state);
+                    void loadApprovalStats(state);
+                  } else if (state.permissionsManagementActiveTab === "config") {
+                    // TODO: 加载权限配置
+                    console.log("Load permissions config");
+                  } else if (state.permissionsManagementActiveTab === "history") {
+                    // TODO: 加载变更历史
+                    console.log("Load permissions history");
+                  }
+                },
+                onTabChange: (tab) => {
+                  state.permissionsManagementActiveTab = tab;
+                  // 切换 tab 时加载相应数据
+                  if (tab === "approvals") {
+                    void loadApprovals(state);
+                    void loadApprovalStats(state);
+                  } else if (tab === "config") {
+                    // TODO: 加载权限配置
+                    console.log("Load permissions config");
+                  } else if (tab === "history") {
+                    // TODO: 加载变更历史
+                    console.log("Load permissions history");
+                  }
+                },
+                onPermissionChange: (agentId, permission, granted) => {
+                  // TODO: 实现权限更改
+                  console.log("Permission change:", agentId, permission, granted);
+                },
+                onSaveConfig: () => {
+                  // TODO: 实现保存权限配置
+                  console.log("Save permissions config");
+                },
+                onApprovalAction: async (requestId, action, comment) => {
+                  try {
+                    // 将 "deny" 转换为 "reject" 以匹配 respondToApproval 的类型
+                    const approvalAction: "approve" | "reject" =
+                      action === "deny" ? "reject" : "approve";
+                    // 假设当前用户是 "admin"，实际应该从状态中获取
+                    await respondToApproval(state, requestId, "admin", approvalAction, comment);
+                  } catch (err) {
+                    console.error("Failed to respond to approval:", err);
+                  }
+                },
               })
             : nothing
         }

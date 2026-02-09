@@ -6,7 +6,11 @@ import type {
   GatewaySessionsDefaults,
   SessionsListResult,
 } from "./session-utils.types.js";
-import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
+import {
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId,
+  resolveAgentModelAccounts,
+} from "../agents/agent-scope.js";
 import { lookupContextTokens } from "../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import {

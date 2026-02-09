@@ -211,6 +211,8 @@ export function loadOpenClawPlugins(options: PluginLoadOptions = {}): PluginRegi
   const jiti = createJiti(import.meta.url, {
     interopDefault: true,
     extensions: [".ts", ".tsx", ".mts", ".cts", ".mtsx", ".ctsx", ".js", ".mjs", ".cjs", ".json"],
+    moduleCache: false,
+    requireCache: false,
     ...(pluginSdkAlias
       ? {
           alias: { "openclaw/plugin-sdk": pluginSdkAlias },
@@ -295,7 +297,10 @@ export function loadOpenClawPlugins(options: PluginLoadOptions = {}): PluginRegi
     try {
       mod = jiti(candidate.source) as OpenClawPluginModule;
     } catch (err) {
+      // 输出详细的错误堆栈信息用于调试
+      const errorStack = err instanceof Error ? err.stack : String(err);
       logger.error(`[plugins] ${record.id} failed to load from ${record.source}: ${String(err)}`);
+      logger.error(`[plugins] Full stack trace:\n${errorStack}`);
       record.status = "error";
       record.error = String(err);
       registry.plugins.push(record);

@@ -51,7 +51,7 @@ export type SessionEntry = {
   providerOverride?: string;
   modelOverride?: string;
   authProfileOverride?: string;
-  authProfileOverrideSource?: "auto" | "user";
+  authProfileOverrideSource?: "auto" | "user" | "smart-routing";
   authProfileOverrideCompactionCount?: number;
   groupActivation?: "mention" | "always";
   groupActivationNeedsSystemIntro?: boolean;

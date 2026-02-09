@@ -32,7 +32,7 @@ const ANTHROPIC_OPUS_TEMPLATE_MODEL_IDS = ["claude-opus-4-5", "claude-opus-4.5"]
 function resolveOpenAICodexGpt53FallbackModel(
   provider: string,
   modelId: string,
-  modelRegistry: ModelRegistry,
+  modelRegistry: InstanceType<typeof ModelRegistry>,
 ): Model<Api> | undefined {
   const normalizedProvider = normalizeProviderId(provider);
   const trimmedModelId = modelId.trim();
@@ -72,7 +72,7 @@ function resolveOpenAICodexGpt53FallbackModel(
 function resolveAnthropicOpus46ForwardCompatModel(
   provider: string,
   modelId: string,
-  modelRegistry: ModelRegistry,
+  modelRegistry: InstanceType<typeof ModelRegistry>,
 ): Model<Api> | undefined {
   const normalizedProvider = normalizeProviderId(provider);
   if (normalizedProvider !== "anthropic") {
@@ -158,8 +158,8 @@ export function resolveModel(
 ): {
   model?: Model<Api>;
   error?: string;
-  authStorage: AuthStorage;
-  modelRegistry: ModelRegistry;
+  authStorage: InstanceType<typeof AuthStorage>;
+  modelRegistry: InstanceType<typeof ModelRegistry>;
 } {
   const resolvedAgentDir = agentDir ?? resolveOpenClawAgentDir();
   const authStorage = discoverAuthStorage(resolvedAgentDir);
