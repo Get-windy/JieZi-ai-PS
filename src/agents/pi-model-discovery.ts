@@ -5,9 +5,32 @@ let piCodingAgentModule: typeof import("@mariozechner/pi-coding-agent") | null =
 
 function getPiCodingAgent(): typeof import("@mariozechner/pi-coding-agent") {
   if (!piCodingAgentModule) {
-    // 使用同步 require 而不是异步 import
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    piCodingAgentModule = require("@mariozechner/pi-coding-agent");
+    try {
+      // 尝试使用 require 加载
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      piCodingAgentModule = require("@mariozechner/pi-coding-agent");
+    } catch (requireError) {
+      // 如果 require 失败，尝试从不同的路径加载
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const pkg = require("@mariozechner/pi-coding-agent/dist/index.js");
+        piCodingAgentModule = pkg;
+      } catch (distError) {
+        // 尝试加载默认导出
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const pkg = require("@mariozechner/pi-coding-agent");
+          piCodingAgentModule = pkg.default || pkg;
+        } catch (finalError) {
+          throw new Error(
+            `Failed to load @mariozechner/pi-coding-agent: ${finalError instanceof Error ? finalError.message : String(finalError)}`,
+            { cause: requireError },
+            { cause: distError },
+            { cause: finalError },
+          );
+        }
+      }
+    }
   }
   return piCodingAgentModule!;
 }
