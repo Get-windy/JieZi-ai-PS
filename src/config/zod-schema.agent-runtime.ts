@@ -476,6 +476,67 @@ export const AgentEntrySchema = z
       })
       .strict()
       .optional(),
+    // Phase 3: Permissions 配置
+    permissions: z
+      .object({
+        rules: z
+          .array(
+            z
+              .object({
+                id: z.string(),
+                toolName: z.string(),
+                subjects: z.array(
+                  z
+                    .object({
+                      type: z.string(),
+                      id: z.string(),
+                    })
+                    .strict(),
+                ),
+                action: z.string(),
+              })
+              .strict(),
+          )
+          .optional(),
+        roles: z
+          .array(
+            z
+              .object({
+                id: z.string(),
+                name: z.string(),
+                members: z.array(z.string()),
+                permissions: z.array(z.string()),
+              })
+              .strict(),
+          )
+          .optional(),
+        groups: z
+          .array(
+            z
+              .object({
+                id: z.string(),
+                name: z.string(),
+                members: z.array(z.string()),
+              })
+              .strict(),
+          )
+          .optional(),
+        approvalConfig: z
+          .object({
+            approvers: z.array(
+              z
+                .object({
+                  type: z.string(),
+                  id: z.string(),
+                })
+                .strict(),
+            ),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
     memorySearch: MemorySearchSchema,
     humanDelay: HumanDelaySchema.optional(),
     heartbeat: HeartbeatSchema,
