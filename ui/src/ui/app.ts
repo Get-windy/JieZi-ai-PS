@@ -426,6 +426,10 @@ export class OpenClawApp extends LitElement {
   @state() approvalsTotal = 0;
   @state() approvalsStats: import("./controllers/approvals.ts").ApprovalStats | null = null;
   @state() approvalsStatsLoading = false;
+  // Phase 7: Super Admin State
+  @state() superAdminActiveTab: "management" | "approvals" | "notifications" = "management";
+  @state() superAdminsList: any[] = [];
+  @state() superAdminNotifications: any[] = [];
 
   // Message Queue 状态
   @state() messageQueueActivePanel: "monitor" | "statistics" | "configuration" = "monitor";
@@ -870,7 +874,9 @@ export class OpenClawApp extends LitElement {
   }
 
   async handleDeleteAccount(channelId: string, accountId: string) {
-    if (!this.client) return;
+    if (!this.client) {
+      return;
+    }
 
     this.deletingChannelAccount = true;
     try {
@@ -893,7 +899,9 @@ export class OpenClawApp extends LitElement {
   }
 
   async handleSaveAccount() {
-    if (!this.client || !this.editingChannelAccount) return;
+    if (!this.client || !this.editingChannelAccount) {
+      return;
+    }
 
     const { channelId, accountId, name, config } = this.editingChannelAccount;
     const idPattern = /^[a-z0-9][a-z0-9-]*$/;
@@ -993,7 +1001,9 @@ export class OpenClawApp extends LitElement {
   }
 
   async handleSaveChannelGlobalConfig() {
-    if (!this.editingChannelGlobalConfig) return;
+    if (!this.editingChannelGlobalConfig) {
+      return;
+    }
 
     // 保存配置
     const { saveConfig } = await import("./controllers/config.js");
@@ -1003,7 +1013,9 @@ export class OpenClawApp extends LitElement {
   }
 
   handleAccountFormChange(field: string, value: unknown) {
-    if (!this.editingChannelAccount) return;
+    if (!this.editingChannelAccount) {
+      return;
+    }
 
     if (field.startsWith("config.")) {
       const configField = field.substring(7);
@@ -1030,7 +1042,9 @@ export class OpenClawApp extends LitElement {
   private extractAccountConfig(channelId: string, accountId: string): Record<string, unknown> {
     // 从当前配置中提取账号配置
     const cfg = this.configForm;
-    if (!cfg) return {};
+    if (!cfg) {
+      return {};
+    }
 
     const channelsConfig = cfg.channels as Record<string, unknown> | undefined;
     const channelConfig = channelsConfig?.[channelId] as Record<string, unknown> | undefined;

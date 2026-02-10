@@ -116,6 +116,7 @@ import {
   changeFilterStatus,
   changeFilterSource,
 } from "./controllers/skills.ts";
+import { loadSuperAdmins, loadNotifications } from "./controllers/super-admin.ts";
 import { loadUsage, loadSessionTimeSeries, loadSessionLogs } from "./controllers/usage.ts";
 import { icons } from "./icons.ts";
 import { normalizeBasePath, TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
@@ -147,6 +148,7 @@ import { renderOverview } from "./views/overview.ts";
 import { renderPermissionsManagement } from "./views/permissions-management.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
+import { renderSuperAdmin } from "./views/super-admin.ts";
 import { renderUsage } from "./views/usage.ts";
 
 const AVATAR_DATA_RE = /^data:/i;
@@ -1164,7 +1166,9 @@ export function renderApp(state: AppViewState) {
                 onSavePolicyBinding: async (agentId, binding, index) => {
                   try {
                     const config = state.channelPoliciesConfig as any;
-                    if (!config) return;
+                    if (!config) {
+                      return;
+                    }
 
                     const bindings = Array.isArray(config.bindings) ? [...config.bindings] : [];
                     if (index !== undefined && index >= 0) {
@@ -1958,6 +1962,65 @@ export function renderApp(state: AppViewState) {
                   } catch (err) {
                     console.error("Failed to respond to approval:", err);
                   }
+                },
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "super-admin"
+            ? renderSuperAdmin({
+                loading: state.superAdminsLoading || state.notificationsLoading,
+                error: state.superAdminsError,
+                activeTab: state.superAdminActiveTab,
+                superAdminsList: state.superAdminsList,
+                superAdminsLoading: state.superAdminsLoading,
+                approvalRequests: state.approvalRequests,
+                approvalsLoading: state.approvalRequestsLoading,
+                notifications: state.superAdminNotifications,
+                notificationsLoading: state.notificationsLoading,
+                onRefresh: () => {
+                  if (state.superAdminActiveTab === "management") {
+                    void loadSuperAdmins(state);
+                  } else if (state.superAdminActiveTab === "approvals") {
+                    void loadApprovals(state);
+                    void loadApprovalStats(state);
+                  } else if (state.superAdminActiveTab === "notifications") {
+                    void loadNotifications(state);
+                  }
+                },
+                onTabChange: (tab) => {
+                  state.superAdminActiveTab = tab;
+                  // 切换 tab 时加载相应数据
+                  if (tab === "management") {
+                    void loadSuperAdmins(state);
+                  } else if (tab === "approvals") {
+                    void loadApprovals(state);
+                    void loadApprovalStats(state);
+                  } else if (tab === "notifications") {
+                    void loadNotifications(state);
+                  }
+                },
+                onAddSuperAdmin: (agentId) => {
+                  // TODO: 实现添加超级管理员
+                  console.log("Add super admin:", agentId);
+                },
+                onRemoveSuperAdmin: (agentId) => {
+                  // TODO: 实现移除超级管理员
+                  console.log("Remove super admin:", agentId);
+                },
+                onApprovalAction: async (requestId, action, comment) => {
+                  try {
+                    const approvalAction: "approve" | "reject" =
+                      action === "deny" ? "reject" : "approve";
+                    await respondToApproval(state, requestId, "admin", approvalAction, comment);
+                  } catch (err) {
+                    console.error("Failed to respond to approval:", err);
+                  }
+                },
+                onMarkNotificationRead: (notificationId) => {
+                  // TODO: 实现标记通知为已读
+                  console.log("Mark notification as read:", notificationId);
                 },
               })
             : nothing

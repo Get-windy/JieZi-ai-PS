@@ -349,6 +349,8 @@ export type AppViewState = {
   organizationDataLoading: boolean;
   organizationDataError: string | null;
   // Phase 7: 超级管理员与审批系统状态
+  superAdminActiveTab: "management" | "approvals" | "notifications";
+  superAdminsList: any[];
   superAdminsLoading?: boolean;
   superAdminsError?: string | null;
   superAdmins?: any[];
@@ -367,6 +369,7 @@ export type AppViewState = {
   approvalPoliciesLoading?: boolean;
   approvalPoliciesError?: string | null;
   approvalPolicies?: any[];
+  superAdminNotifications: any[];
   notificationsLoading?: boolean;
   notificationsError?: string | null;
   notifications?: any[];
