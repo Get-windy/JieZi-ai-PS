@@ -22,12 +22,13 @@ function getPiCodingAgent(): typeof import("@mariozechner/pi-coding-agent") {
           const pkg = require("@mariozechner/pi-coding-agent");
           piCodingAgentModule = pkg.default || pkg;
         } catch (finalError) {
-          throw new Error(
-            `Failed to load @mariozechner/pi-coding-agent: ${finalError instanceof Error ? finalError.message : String(finalError)}`,
-            { cause: requireError },
-            { cause: distError },
-            { cause: finalError },
-          );
+          const errorMsg = [
+            "Failed to load @mariozechner/pi-coding-agent:",
+            `1. Direct require: ${requireError instanceof Error ? requireError.message : String(requireError)}`,
+            `2. Dist path: ${distError instanceof Error ? distError.message : String(distError)}`,
+            `3. Default export: ${finalError instanceof Error ? finalError.message : String(finalError)}`,
+          ].join("\n");
+          throw new Error(errorMsg, { cause: requireError });
         }
       }
     }
