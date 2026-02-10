@@ -67,8 +67,11 @@ export async function loadModelCatalog(params?: {
       // we must not poison the cache with a rejected promise (otherwise all channel handlers
       // will keep failing until restart).
       const piSdk = await importPiSdk();
+      // 预加载 pi-coding-agent 模块
+      await piSdk.preloadPiCodingAgent();
       const agentDir = resolveOpenClawAgentDir();
       const { join } = await import("node:path");
+      // 使用同步 API，因为模块已经预加载
       const authStorage = new piSdk.AuthStorage(join(agentDir, "auth.json"));
       const registry = new piSdk.ModelRegistry(authStorage, join(agentDir, "models.json")) as
         | {
