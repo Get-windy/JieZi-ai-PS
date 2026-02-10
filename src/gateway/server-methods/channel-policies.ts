@@ -55,12 +55,12 @@ export const channelPoliciesHandlers: GatewayRequestHandlers = {
     // 否则返回所有通道的策略
     const config = loadConfig();
     const agent = config.agents?.list?.find((a: any) => a.id === agentId);
-    const channelPolicies = (agent as any)?.channelPolicies;
+    const channelBindings = (agent as any)?.channelBindings;
 
     respond(true, {
       ok: true,
-      policies: channelPolicies?.policies || {},
-      defaultPolicy: channelPolicies?.defaultPolicy || null,
+      policies: channelBindings?.bindings || [],
+      defaultPolicy: channelBindings?.defaultPolicy || null,
     });
   },
 
