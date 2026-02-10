@@ -2162,6 +2162,9 @@ export type UsageProps = {
   timeZone: "local" | "utc";
   contextExpanded: boolean;
   headerPinned: boolean;
+  // 新增：供应商筛选和概览视图
+  filterProvider: string | null; // 当前筛选的供应商ID
+  showProviderOverview: boolean; // 是否显示供应商概览视图
   onStartDateChange: (date: string) => void;
   onEndDateChange: (date: string) => void;
   onRefresh: () => void;
@@ -2192,6 +2195,9 @@ export type UsageProps = {
   onSessionSortDirChange: (dir: "asc" | "desc") => void;
   onSessionsTabChange: (tab: "all" | "recent") => void;
   onToggleColumn: (column: UsageColumnId) => void;
+  // 新增：供应商选择回调
+  onSelectProvider: (providerId: string) => void; // 点击供应商卡片
+  onClearProviderFilter: () => void; // 清除供应商筛选
 };
 
 export type SessionLogEntry = {
@@ -4836,6 +4842,180 @@ function renderSessionLogsCompact(
   `;
 }
 
+/**
+ * 渲染供应商概览卡片（按供应商聚合的使用情况）
+ */
+function renderProviderOverviewCards(
+  providers: Array<{
+    provider?: string;
+    model?: string;
+    count: number;
+    totals: UsageTotals;
+  }>,
+  onSelectProvider: (providerId: string) => void,
+  chartMode: "tokens" | "cost",
+) {
+  const isTokenMode = chartMode === "tokens";
+
+  // 按token/cost降序排列
+  const sortedProviders = [...providers].toSorted((a, b) => {
+    const valA = isTokenMode ? a.totals.totalTokens : a.totals.totalCost;
+    const valB = isTokenMode ? b.totals.totalTokens : b.totals.totalCost;
+    return valB - valA;
+  });
+
+  if (sortedProviders.length === 0) {
+    return html`
+      <div style="padding: 60px 20px; text-align: center; color: var(--text-muted);">
+        <p style="font-size: 16px; margin: 0;">${t("usage.no_provider_data")}</p>
+      </div>
+    `;
+  }
+
+  return html`
+    <div style="
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    ">
+      ${sortedProviders.map((entry) => {
+        const providerId = entry.provider || "unknown";
+        const providerLabel = providerId || t("usage.unknown_provider");
+        const tokens = entry.totals.totalTokens;
+        const cost = entry.totals.totalCost;
+        const sessionCount = entry.count;
+        const inputTokens = entry.totals.input;
+        const outputTokens = entry.totals.output;
+        const cacheRead = entry.totals.cacheRead;
+        const cacheWrite = entry.totals.cacheWrite;
+
+        return html`
+          <div 
+            class="card" 
+            style="
+              cursor: pointer;
+              transition: all 0.2s ease;
+              border: 2px solid var(--border);
+              padding: 20px;
+            "
+            @click=${() => onSelectProvider(providerId)}
+            @mouseenter=${(e: MouseEvent) => {
+              const card = e.currentTarget as HTMLElement;
+              card.style.borderColor = "var(--accent)";
+              card.style.transform = "translateY(-2px)";
+              card.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.1)";
+            }}
+            @mouseleave=${(e: MouseEvent) => {
+              const card = e.currentTarget as HTMLElement;
+              card.style.borderColor = "var(--border)";
+              card.style.transform = "translateY(0)";
+              card.style.boxShadow = "none";
+            }}
+          >
+            <!-- 供应商名称 -->
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+              <div style="
+                width: 48px;
+                height: 48px;
+                border-radius: 12px;
+                background: var(--accent-subtle);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 24px;
+              ">
+                🤖
+              </div>
+              <div style="flex: 1;">
+                <div style="font-size: 18px; font-weight: 600; margin-bottom: 4px;">
+                  ${providerLabel}
+                </div>
+                <div style="font-size: 13px; color: var(--text-muted);">
+                  ${sessionCount} ${sessionCount > 1 ? t("usage.sessions_badge_plural") : t("usage.sessions_badge")}
+                </div>
+              </div>
+            </div>
+
+            <!-- 主要指标 -->
+            <div style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 12px;
+              padding: 16px;
+              background: var(--bg-secondary);
+              border-radius: 8px;
+              margin-bottom: 12px;
+            ">
+              <div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">
+                  ${t("usage.total_tokens")}
+                </div>
+                <div style="font-size: 20px; font-weight: 700; color: var(--accent);">
+                  ${formatTokens(tokens)}
+                </div>
+              </div>
+              <div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">
+                  ${t("usage.total_cost")}
+                </div>
+                <div style="font-size: 20px; font-weight: 700; color: #ff4d4d;">
+                  $${formatCost(cost)}
+                </div>
+              </div>
+            </div>
+
+            <!-- Token细分 -->
+            <div style="font-size: 13px; color: var(--text-muted); line-height: 1.8;">
+              <div style="display: flex; justify-content: space-between;">
+                <span>${t("usage.input_tokens")}</span>
+                <span style="font-weight: 500; color: var(--text);">${formatTokens(inputTokens)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span>${t("usage.output_tokens")}</span>
+                <span style="font-weight: 500; color: var(--text);">${formatTokens(outputTokens)}</span>
+              </div>
+              ${
+                cacheRead > 0
+                  ? html`
+                <div style="display: flex; justify-content: space-between;">
+                  <span>${t("usage.cache_read")}</span>
+                  <span style="font-weight: 500; color: var(--text);">${formatTokens(cacheRead)}</span>
+                </div>
+              `
+                  : nothing
+              }
+              ${
+                cacheWrite > 0
+                  ? html`
+                <div style="display: flex; justify-content: space-between;">
+                  <span>${t("usage.cache_write")}</span>
+                  <span style="font-weight: 500; color: var(--text);">${formatTokens(cacheWrite)}</span>
+                </div>
+              `
+                  : nothing
+              }
+            </div>
+
+            <!-- 查看详情提示 -->
+            <div style="
+              margin-top: 16px;
+              padding-top: 16px;
+              border-top: 1px solid var(--border);
+              text-align: center;
+              font-size: 13px;
+              color: var(--accent);
+              font-weight: 500;
+            ">
+              ${t("usage.click_to_view_details")} →
+            </div>
+          </div>
+        `;
+      })}
+    </div>
+  `;
+}
+
 export function renderUsage(props: UsageProps) {
   // Show loading skeleton if loading and no data yet
   if (props.loading && !props.totals) {
@@ -5548,88 +5728,110 @@ export function renderUsage(props: UsageProps) {
       }
     </section>
 
-    ${renderUsageInsights(
-      displayTotals,
-      activeAggregates,
-      insightStats,
-      hasMissingCost,
-      buildPeakErrorHours(aggregateSessions, props.timeZone),
-      displaySessionCount,
-      totalSessions,
-    )}
-
-    ${renderUsageMosaic(aggregateSessions, props.timeZone, props.selectedHours, props.onSelectHour)}
-
-    <!-- Two-column layout: Daily+Breakdown on left, Sessions on right -->
-    <div class="usage-grid">
-      <div class="usage-grid-left">
-        <div class="card usage-left-card">
-          ${renderDailyChartCompact(
-            filteredDaily,
-            props.selectedDays,
-            props.chartMode,
-            props.dailyChartMode,
-            props.onDailyChartModeChange,
-            props.onSelectDay,
-          )}
-          ${displayTotals ? renderCostBreakdownCompact(displayTotals, props.chartMode) : nothing}
-        </div>
-      </div>
-      <div class="usage-grid-right">
-        ${renderSessionsCard(
-          filteredSessions,
-          props.selectedSessions,
-          props.selectedDays,
-          isTokenMode,
-          props.sessionSort,
-          props.sessionSortDir,
-          props.recentSessions,
-          props.sessionsTab,
-          props.onSelectSession,
-          props.onSessionSortChange,
-          props.onSessionSortDirChange,
-          props.onSessionsTabChange,
-          props.visibleColumns,
-          totalSessions,
-          props.onClearSessions,
-        )}
-      </div>
-    </div>
-
-    <!-- Session Detail Panel (when selected) or Empty State -->
     ${
-      primarySelectedEntry
-        ? renderSessionDetailPanel(
-            primarySelectedEntry,
-            props.timeSeries,
-            props.timeSeriesLoading,
-            props.timeSeriesMode,
-            props.onTimeSeriesModeChange,
-            props.timeSeriesBreakdownMode,
-            props.onTimeSeriesBreakdownChange,
-            props.startDate,
-            props.endDate,
-            props.selectedDays,
-            props.sessionLogs,
-            props.sessionLogsLoading,
-            props.sessionLogsExpanded,
-            props.onToggleSessionLogsExpanded,
-            {
-              roles: props.logFilterRoles,
-              tools: props.logFilterTools,
-              hasTools: props.logFilterHasTools,
-              query: props.logFilterQuery,
-            },
-            props.onLogFilterRolesChange,
-            props.onLogFilterToolsChange,
-            props.onLogFilterHasToolsChange,
-            props.onLogFilterQueryChange,
-            props.onLogFilterClear,
-            props.contextExpanded,
-            props.onToggleContextExpanded,
-            props.onClearSessions,
-          )
-        : renderEmptyDetailState()
+      // 如果显示供应商概览视图，只显示供应商卡片
+      props.showProviderOverview
+        ? html`
+            <section class="card">
+              <div class="card-title" style="margin-bottom: 16px;">
+                ${t("usage.provider_overview_title")}
+              </div>
+              <div style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px;">
+                ${t("usage.provider_overview_subtitle")}
+              </div>
+              ${renderProviderOverviewCards(
+                props.aggregates?.byProvider ?? [],
+                props.onSelectProvider,
+                props.chartMode,
+              )}
+            </section>
+          `
+        : html`
+            <!-- 原有的会话列表视图 -->
+            ${renderUsageInsights(
+              displayTotals,
+              activeAggregates,
+              insightStats,
+              hasMissingCost,
+              buildPeakErrorHours(aggregateSessions, props.timeZone),
+              displaySessionCount,
+              totalSessions,
+            )}
+
+            ${renderUsageMosaic(aggregateSessions, props.timeZone, props.selectedHours, props.onSelectHour)}
+
+            <!-- Two-column layout: Daily+Breakdown on left, Sessions on right -->
+            <div class="usage-grid">
+              <div class="usage-grid-left">
+                <div class="card usage-left-card">
+                  ${renderDailyChartCompact(
+                    filteredDaily,
+                    props.selectedDays,
+                    props.chartMode,
+                    props.dailyChartMode,
+                    props.onDailyChartModeChange,
+                    props.onSelectDay,
+                  )}
+                  ${displayTotals ? renderCostBreakdownCompact(displayTotals, props.chartMode) : nothing}
+                </div>
+              </div>
+              <div class="usage-grid-right">
+                ${renderSessionsCard(
+                  filteredSessions,
+                  props.selectedSessions,
+                  props.selectedDays,
+                  isTokenMode,
+                  props.sessionSort,
+                  props.sessionSortDir,
+                  props.recentSessions,
+                  props.sessionsTab,
+                  props.onSelectSession,
+                  props.onSessionSortChange,
+                  props.onSessionSortDirChange,
+                  props.onSessionsTabChange,
+                  props.visibleColumns,
+                  totalSessions,
+                  props.onClearSessions,
+                )}
+              </div>
+            </div>
+
+            <!-- Session Detail Panel (when selected) or Empty State -->
+            ${
+              primarySelectedEntry
+                ? renderSessionDetailPanel(
+                    primarySelectedEntry,
+                    props.timeSeries,
+                    props.timeSeriesLoading,
+                    props.timeSeriesMode,
+                    props.onTimeSeriesModeChange,
+                    props.timeSeriesBreakdownMode,
+                    props.onTimeSeriesBreakdownChange,
+                    props.startDate,
+                    props.endDate,
+                    props.selectedDays,
+                    props.sessionLogs,
+                    props.sessionLogsLoading,
+                    props.sessionLogsExpanded,
+                    props.onToggleSessionLogsExpanded,
+                    {
+                      roles: props.logFilterRoles,
+                      tools: props.logFilterTools,
+                      hasTools: props.logFilterHasTools,
+                      query: props.logFilterQuery,
+                    },
+                    props.onLogFilterRolesChange,
+                    props.onLogFilterToolsChange,
+                    props.onLogFilterHasToolsChange,
+                    props.onLogFilterQueryChange,
+                    props.onLogFilterClear,
+                    props.contextExpanded,
+                    props.onToggleContextExpanded,
+                    props.onClearSessions,
+                  )
+                : renderEmptyDetailState()
+            }
+          `
     }
   `;
 }

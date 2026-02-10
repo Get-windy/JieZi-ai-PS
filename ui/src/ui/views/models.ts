@@ -70,7 +70,7 @@ export function renderModels(
   return html`
     <!-- 顶部操作栏 -->
     <div style="margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
-      <!-- 查看使用情况按钮 -->
+      <!-- 查看所有模型使用情况按钮 -->
       <button
         class="btn btn--sm"
         style="font-size: 13px; padding: 8px 16px; display: inline-flex; align-items: center; gap: 6px;"
@@ -78,9 +78,9 @@ export function renderModels(
           const baseP = window.location.pathname.split("/models")[0] || "";
           window.location.href = `${baseP}/usage`;
         }}
-        title=${t("models.view_usage")}
+        title=${t("models.view_all_usage")}
       >
-        📊 ${t("models.view_usage")}
+        📊 ${t("models.view_all_usage")}
       </button>
       
       <!-- 添加供应商按钮 -->
@@ -118,7 +118,12 @@ function resolveProviderOrder(snapshot: ModelsStatusSnapshot | null): string[] {
     ids.add(id);
   }
 
-  // 添加 providerMeta 中的供应商
+  // 添加 providerInstances 中的所有供应商（包括预置的和用户添加的）
+  for (const provider of snapshot.providerInstances ?? []) {
+    ids.add(provider.id);
+  }
+
+  // 添加 providerMeta 中的供应商（向后兼容）
   for (const entry of snapshot.providerMeta ?? []) {
     ids.add(entry.id);
   }
@@ -140,7 +145,7 @@ function resolveProviderOrder(snapshot: ModelsStatusSnapshot | null): string[] {
   }
 
   // 剩余的按字母顺序
-  for (const id of Array.from(ids).sort()) {
+  for (const id of Array.from(ids).toSorted()) {
     ordered.push(id);
   }
 
@@ -265,6 +270,19 @@ function renderProvider(providerId: string, props: ModelsProps) {
                   @click=${() => props.onManageModels(providerId)}
                 >
                   📊 ${t("models.model_list")}
+                </button>
+                <!-- 查看该供应商Token使用情况 -->
+                <button 
+                  class="btn btn--sm" 
+                  style="font-size: 13px; padding: 8px 16px; color: #4a9eff; border-color: #4a9eff;"
+                  @click=${() => {
+                    const baseP = window.location.pathname.split("/models")[0] || "";
+                    // 跳转到 usage 页面并传递供应商筛选参数
+                    window.location.href = `${baseP}/usage?provider=${providerId}`;
+                  }}
+                  title="查看 ${providerLabel} 的 Token 使用情况"
+                >
+                  📈 ${t("models.view_provider_usage")}
                 </button>
               `
                 : html`

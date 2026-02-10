@@ -104,6 +104,21 @@ import {
   clearQueue,
 } from "./controllers/message-queue.ts";
 import {
+  loadModels,
+  saveAuth,
+  deleteAuth,
+  setDefaultAuth,
+  testAuth,
+  refreshAuthBalance,
+  fetchAvailableModels,
+  saveModelConfig,
+  deleteModelConfig,
+  toggleModelConfig,
+  addProvider,
+  updateProvider,
+  deleteProvider,
+} from "./controllers/models.ts";
+import {
   loadActiveSessions,
   loadMessageFlows,
   loadForwardingRules,
@@ -144,6 +159,7 @@ import {
 } from "./controllers/skills.ts";
 import { loadSuperAdmins, loadNotifications } from "./controllers/super-admin.ts";
 import { loadUsage, loadSessionTimeSeries, loadSessionLogs } from "./controllers/usage.ts";
+import { t } from "./i18n.js";
 import { icons } from "./icons.ts";
 import { normalizeBasePath, TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
 
@@ -168,6 +184,7 @@ import { renderGroups } from "./views/groups.ts";
 import { renderInstances } from "./views/instances.ts";
 import { renderLogs } from "./views/logs.ts";
 import { renderMessageQueue } from "./views/message-queue.ts";
+import { renderModels } from "./views/models.ts";
 import { renderNodes } from "./views/nodes.ts";
 import { renderOrganizationChart } from "./views/organization-chart.ts";
 import { renderOverview } from "./views/overview.ts";
@@ -268,7 +285,7 @@ export function renderApp(state: AppViewState) {
                 }}
                 aria-expanded=${!isGroupCollapsed}
               >
-                <span class="nav-label__text">${group.label}</span>
+                <span class="nav-label__text">${t(group.label)}</span>
                 <span class="nav-label__chevron">${isGroupCollapsed ? "+" : "−"}</span>
               </button>
               <div class="nav-group__items">
@@ -277,23 +294,41 @@ export function renderApp(state: AppViewState) {
             </div>
           `;
         })}
-        <div class="nav-group nav-group--links">
-          <div class="nav-label nav-label--static">
-            <span class="nav-label__text">Resources</span>
-          </div>
-          <div class="nav-group__items">
-            <a
-              class="nav-item nav-item--external"
-              href="https://docs.openclaw.ai"
-              target="_blank"
-              rel="noreferrer"
-              title="Docs (opens in new tab)"
-            >
-              <span class="nav-item__icon" aria-hidden="true">${icons.book}</span>
-              <span class="nav-item__text">Docs</span>
-            </a>
-          </div>
-        </div>
+        ${(() => {
+          const resourcesLabel = "nav.resources";
+          const isResourcesCollapsed = state.settings.navGroupsCollapsed[resourcesLabel] ?? false;
+          return html`
+            <div class="nav-group nav-group--links ${isResourcesCollapsed ? "nav-group--collapsed" : ""}">
+              <button
+                class="nav-label"
+                @click=${() => {
+                  const next = { ...state.settings.navGroupsCollapsed };
+                  next[resourcesLabel] = !isResourcesCollapsed;
+                  state.applySettings({
+                    ...state.settings,
+                    navGroupsCollapsed: next,
+                  });
+                }}
+                aria-expanded=${!isResourcesCollapsed}
+              >
+                <span class="nav-label__text">${t(resourcesLabel)}</span>
+                <span class="nav-label__chevron">${isResourcesCollapsed ? "+" : "−"}</span>
+              </button>
+              <div class="nav-group__items">
+                <a
+                  class="nav-item nav-item--external"
+                  href="https://docs.openclaw.ai"
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Docs (opens in new tab)"
+                >
+                  <span class="nav-item__icon" aria-hidden="true">${icons.book}</span>
+                  <span class="nav-item__text">Docs</span>
+                </a>
+              </div>
+            </div>
+          `;
+        })()}
       </aside>
       <main class="content ${isChat ? "content--chat" : ""}">
         <section class="content-header">
@@ -459,6 +494,252 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
+          state.tab === "models"
+            ? renderModels({
+                snapshot: state.modelsSnapshot,
+                loading: state.modelsLoading,
+                error: state.modelsError,
+                managingAuthProvider: state.managingAuthProvider,
+                editingAuth: state.editingAuth,
+                viewingAuth: state.viewingAuth,
+                managingModelsProvider: state.managingModelsProvider,
+                editingModelConfig: state.editingModelConfig,
+                addingProvider: state.addingProvider,
+                viewingProviderId: state.viewingProviderId,
+                providerForm: state.providerForm,
+                onRefresh: () => loadModels(state, false),
+                onManageAuths: (provider) => {
+                  state.managingAuthProvider = provider;
+                },
+                onAddAuth: (provider) => {
+                  state.editingAuth = {
+                    provider,
+                    name: "",
+                    apiKey: "",
+                    baseUrl: "",
+                  };
+                },
+                onEditAuth: (authId) => {
+                  const auth = Object.values(state.modelsSnapshot?.auths ?? {})
+                    .flat()
+                    .find((a) => a.authId === authId);
+                  if (auth) {
+                    state.editingAuth = {
+                      authId: auth.authId,
+                      provider: auth.provider,
+                      name: auth.name,
+                      apiKey: "",
+                      baseUrl: auth.baseUrl,
+                    };
+                  }
+                },
+                onDeleteAuth: async (authId) => {
+                  if (confirm("确定要删除此认证吗？")) {
+                    await deleteAuth(state, authId);
+                  }
+                },
+                onSetDefaultAuth: async (authId) => {
+                  await setDefaultAuth(state, authId);
+                },
+                onSaveAuth: async (params) => {
+                  await saveAuth(state, params);
+                  state.editingAuth = null;
+                  state.managingAuthProvider = null;
+                },
+                onCancelAuthEdit: () => {
+                  state.editingAuth = null;
+                  state.viewingAuth = null;
+                  state.managingAuthProvider = null;
+                },
+                onTestAuth: async (authId) => {
+                  const result = await testAuth(state, authId);
+                  alert(result.success ? "连接成功！" : `连接失败: ${result.message}`);
+                },
+                onRefreshAuthBalance: async (authId) => {
+                  await refreshAuthBalance(state, authId);
+                },
+                onManageModels: (provider) => {
+                  state.managingModelsProvider = provider;
+                },
+                onCloseModelsList: () => {
+                  state.managingModelsProvider = null;
+                },
+                onAddModelConfig: (authId, modelName) => {
+                  const auth = Object.values(state.modelsSnapshot?.auths ?? {})
+                    .flat()
+                    .find((a) => a.authId === authId);
+                  if (auth) {
+                    state.editingModelConfig = {
+                      authId,
+                      provider: auth.provider,
+                      modelName,
+                      enabled: true,
+                    };
+                  }
+                },
+                onEditModelConfig: (configId) => {
+                  const config = Object.values(state.modelsSnapshot?.modelConfigs ?? {})
+                    .flat()
+                    .find((c) => c.configId === configId);
+                  if (config) {
+                    state.editingModelConfig = {
+                      configId: config.configId,
+                      authId: config.authId,
+                      provider: config.provider,
+                      modelName: config.modelName,
+                      nickname: config.nickname,
+                      enabled: config.enabled,
+                      temperature: config.temperature,
+                      topP: config.topP,
+                      maxTokens: config.maxTokens,
+                      frequencyPenalty: config.frequencyPenalty,
+                      systemPrompt: config.systemPrompt,
+                      conversationRounds: config.conversationRounds,
+                      maxIterations: config.maxIterations,
+                      usageLimits: config.usageLimits,
+                    };
+                  }
+                },
+                onDeleteModelConfig: async (configId) => {
+                  if (confirm("确定要删除此模型配置吗？")) {
+                    await deleteModelConfig(state, configId);
+                  }
+                },
+                onToggleModelConfig: async (configId, enabled) => {
+                  await toggleModelConfig(state, configId, enabled);
+                },
+                onRefreshAuthModels: async (authId) => {
+                  state.importableModels = null;
+                  state.importingAuthId = authId;
+                  const models = await fetchAvailableModels(state, authId);
+                  const existingConfigs =
+                    Object.values(state.modelsSnapshot?.modelConfigs ?? {})
+                      .flat()
+                      .filter((c) => c.authId === authId) ?? [];
+                  state.importableModels = models.map((modelName) => {
+                    const existing = existingConfigs.find((c) => c.modelName === modelName);
+                    return {
+                      modelName,
+                      isConfigured: !!existing,
+                      isEnabled: existing?.enabled ?? false,
+                      isDeprecated: false,
+                      configId: existing?.configId,
+                    };
+                  });
+                },
+                onImportModels: async (authId, modelNames) => {
+                  const auth = Object.values(state.modelsSnapshot?.auths ?? {})
+                    .flat()
+                    .find((a) => a.authId === authId);
+                  if (auth) {
+                    for (const modelName of modelNames) {
+                      await saveModelConfig(state, {
+                        authId,
+                        provider: auth.provider,
+                        modelName,
+                        enabled: true,
+                      });
+                    }
+                  }
+                  state.selectedImportModels.clear();
+                  state.importableModels = null;
+                  state.importingAuthId = null;
+                },
+                onSaveModelConfig: async (params) => {
+                  await saveModelConfig(state, params);
+                  state.editingModelConfig = null;
+                },
+                onCancelModelConfigEdit: () => {
+                  state.editingModelConfig = null;
+                  state.importableModels = null;
+                  state.importingAuthId = null;
+                  state.selectedImportModels.clear();
+                },
+                onAddProvider: () => {
+                  state.addingProvider = true;
+                  state.providerForm = {
+                    selectedTemplateId: null,
+                    id: "",
+                    name: "",
+                    icon: "🤖",
+                    website: "",
+                    defaultBaseUrl: "",
+                    apiKeyPlaceholder: "请输入API密钥",
+                  };
+                },
+                onViewProvider: (id) => {
+                  state.viewingProviderId = id;
+                },
+                onEditProvider: (id) => {
+                  // 从 providerInstances 中查找供应商
+                  const provider = state.modelsSnapshot?.providerInstances?.find(
+                    (p: any) => p.id === id,
+                  );
+                  if (provider) {
+                    state.providerForm = {
+                      selectedTemplateId: (provider as any).templateId || null,
+                      id: (provider as any).id,
+                      name: (provider as any).name,
+                      icon: (provider as any).icon || "🤖",
+                      website: (provider as any).website || "",
+                      defaultBaseUrl: (provider as any).defaultBaseUrl || "",
+                      apiKeyPlaceholder: (provider as any).apiKeyPlaceholder || "请输入API密钥",
+                      isEditing: true,
+                      originalId: (provider as any).id,
+                    };
+                  }
+                },
+                onTemplateSelect: (templateId) => {
+                  if (state.providerForm) {
+                    const template = state.modelsSnapshot?.providerTemplates?.find(
+                      (t) => t.id === templateId,
+                    );
+                    if (template) {
+                      state.providerForm = {
+                        ...state.providerForm,
+                        selectedTemplateId: templateId,
+                        id: template.id,
+                        name: template.name,
+                        icon: template.icon || "🤖",
+                        website: template.website || "",
+                        defaultBaseUrl: template.defaultBaseUrl || "",
+                        apiKeyPlaceholder: template.apiKeyPlaceholder || "请输入API密钥",
+                      };
+                    }
+                  }
+                },
+                onProviderFormChange: (patch) => {
+                  if (state.providerForm) {
+                    state.providerForm = {
+                      ...state.providerForm,
+                      ...patch,
+                    };
+                  }
+                },
+                onSaveProvider: async (params) => {
+                  if (state.providerForm?.isEditing) {
+                    await updateProvider(state, params);
+                  } else {
+                    await addProvider(state, params);
+                  }
+                  state.addingProvider = false;
+                  state.providerForm = null;
+                },
+                onDeleteProvider: async (id) => {
+                  await deleteProvider(state, id);
+                },
+                onCancelProviderEdit: () => {
+                  state.addingProvider = false;
+                  state.providerForm = null;
+                },
+                onCancelProviderView: () => {
+                  state.viewingProviderId = null;
+                },
+              })
+            : nothing
+        }
+
+        ${
           state.tab === "instances"
             ? renderInstances({
                 loading: state.presenceLoading,
@@ -533,6 +814,9 @@ export function renderApp(state: AppViewState) {
                 timeZone: state.usageTimeZone,
                 contextExpanded: state.usageContextExpanded,
                 headerPinned: state.usageHeaderPinned,
+                // 供应商筛选和概览视图
+                filterProvider: state.usageFilterProvider,
+                showProviderOverview: state.usageShowProviderOverview,
                 onStartDateChange: (date) => {
                   state.usageStartDate = date;
                   state.usageSelectedDays = [];
@@ -752,6 +1036,17 @@ export function renderApp(state: AppViewState) {
                   state.usageSelectedSessions = [];
                   state.usageTimeSeries = null;
                   state.usageSessionLogs = null;
+                },
+                // 供应商选择回调
+                onSelectProvider: (providerId) => {
+                  // 跳转到该供应商的详细视图
+                  const baseP = window.location.pathname.split("/usage")[0] || "";
+                  window.location.href = `${baseP}/usage?provider=${providerId}`;
+                },
+                onClearProviderFilter: () => {
+                  // 清除供应商筛选，返回概览视图
+                  const baseP = window.location.pathname.split("/usage")[0] || "";
+                  window.location.href = `${baseP}/usage`;
                 },
               })
             : nothing

@@ -1655,6 +1655,7 @@ export function renderAgents(props: AgentsProps) {
             agentId: props.editingPolicyBinding?.agentId || props.addingPolicyBinding || "",
             binding: props.editingPolicyBinding?.binding || null,
             index: props.editingPolicyBinding?.index,
+            channelsSnapshot: props.channelsSnapshot, // 传递通道快照
             onChange: (field: string, value: any) => {
               // 修改编辑中的绑定对象
               if (props.editingPolicyBinding) {

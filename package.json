@@ -182,8 +182,7 @@
     "vitest": "^4.0.18"
   },
   "peerDependencies": {
-    "@napi-rs/canvas": "^0.1.89",
-    "node-llama-cpp": "3.15.1"
+    "@napi-rs/canvas": "^0.1.89"
   },
   "engines": {
     "node": ">=22.12.0"
@@ -199,7 +198,8 @@
       "qs": "6.14.1",
       "@sinclair/typebox": "0.34.48",
       "tar": "7.5.7",
-      "tough-cookie": "4.1.3"
+      "tough-cookie": "4.1.3",
+      "node-llama-cpp": "https://gitee.com/CozyNook/node-llama-cpp.git#v3.15.1"
     },
     "onlyBuiltDependencies": [
       "@lydell/node-pty",

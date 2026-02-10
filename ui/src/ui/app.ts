@@ -541,6 +541,8 @@ export class OpenClawApp extends LitElement {
   @state() usageLogFilterTools: string[] = [];
   @state() usageLogFilterHasTools = false;
   @state() usageLogFilterQuery = "";
+  @state() usageFilterProvider: string | null = null; // 筛选的供应商ID
+  @state() usageShowProviderOverview = false; // 是否显示供应商概览视图
 
   // Non-reactive (don’t trigger renders just for timer bookkeeping).
   usageQueryDebounceTimer: number | null = null;
