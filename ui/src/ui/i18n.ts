@@ -4380,6 +4380,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.tab.skills": "技能",
     "agents.tab.channels": "通道",
     "agents.tab.cron": "定时任务",
+    "agents.tab.model_accounts": "模型账号",
+    "agents.tab.channel_policies": "通道策略",
+    "agents.tab.permissions": "权限",
 
     // 代理概览
     "agents.overview.title": "概览",
@@ -4562,8 +4565,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.skills.missing_prefix": "缺失：{items}",
     "agents.skills.reason_prefix": "原因：{reasons}",
 
-    // 代理模型路由标签页
-    "agents.tab.model_accounts": "模型路由",
+    // 代理模型账号管理
     "agents.model_accounts.title": "模型账号管理",
     "agents.model_accounts.subtitle": "配置智能路由和模型账号选择。",
     "agents.model_accounts.loading": "加载中…",
@@ -4590,8 +4592,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.model_accounts.enabled": "已启用",
     "agents.model_accounts.disabled": "已禁用",
 
-    // 代理通道策略标签页
-    "agents.tab.channel_policies": "通道策略",
+    // 代理通道策略管理
     "agents.channel_policies.title": "通道策略管理",
     "agents.channel_policies.subtitle": "配置通道绑定和策略。",
     "agents.channel_policies.loading": "加载中…",
