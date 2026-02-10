@@ -78,6 +78,129 @@ If you're merging code from upstream or updating `package.json`, please be aware
 
 ### 📌 项目更新记录 | Project Update Log
 
+#### 2026年2月9日 - 增强式集成 OpenClaw-Docker-CN-IM 优秀功能 | 2026-02-09 - Enhanced Integration of OpenClaw-Docker-CN-IM Features
+
+**🎯 主要更新 | Major Updates:**
+
+- ✅ **Docker 优化增强 | Docker Optimization Enhancement**
+  - 添加中文字体支持 (fonts-noto-cjk, fonts-noto-color-emoji) | Chinese font support added
+  - 集成浏览器自动化 (chromium + Playwright 环境变量) | Browser automation integration (chromium + Playwright env vars)
+  - 添加权限管理工具 (gosu, tini) | Permission management tools (gosu, tini)
+  - 集成实用工具集 (bash, git, jq, python3, socat, websockify) | Utility tools integration
+  - 创建智能初始化脚本 (init.sh) | Smart initialization script (init.sh)
+  - 添加 Linux capabilities 支持 (CHOWN, SETUID, SETGID, DAC_OVERRIDE) | Linux capabilities support
+
+- ✅ **环境变量配置系统 | Environment Variable Configuration System**
+  - 新增 .env.example 模板文件 (65 行) | New .env.example template (65 lines)
+  - 支持所有中国 IM 平台配置 (飞书、钉钉、企业微信、QQ机器人) | Chinese IM platforms config support (Feishu, DingTalk, WeCom, QQ Bot)
+  - 基于环境变量的动态配置生成 | Dynamic config generation based on env vars
+  - AI 模型配置支持 (OpenAI 和 Claude 协议) | AI model config support (OpenAI & Claude protocols)
+  - Docker 镜像和运行参数配置 | Docker image and runtime parameters
+
+- ✅ **智能初始化脚本 | Smart Initialization Script**
+  - init.sh (350 行) 实现智能容器初始化 | init.sh (350 lines) smart container initialization
+  - 权限预检查和自动修复 | Permission pre-check and auto-fix
+  - 动态生成 openclaw.json 配置文件 | Dynamic openclaw.json config generation
+  - 条件性启用 IM 平台 (基于环境变量) | Conditional IM platform enablement (env-based)
+  - 优雅关闭信号处理 (SIGTERM, SIGINT, SIGQUIT) | Graceful shutdown signal handling
+  - gosu 用户切换机制 | gosu user switching mechanism
+
+- ✅ **国际化系统增强 | Internationalization Enhancement**
+  - i18n/types.ts: 新增 24 个翻译键类型定义 | 24 new translation key type definitions
+  - i18n/translations.ts: 新增 48 行中英文双语翻译 | 48 lines of bilingual translations
+  - 中国 IM 平台翻译 (飞书、钉钉、QQ机器人、企业微信) | Chinese IM platforms translations
+  - Docker 初始化消息翻译 (16 个键) | Docker init message translations (16 keys)
+  - 保持 TypeScript 类型安全 | Maintains TypeScript type safety
+
+- ✅ **Web UI 智能助手功能完善 | Web UI Agent Features Enhancement**
+  - 新增控制器: agent-channel-accounts.ts | New controller: agent-channel-accounts.ts
+  - 新增控制器: agent-model-accounts.ts | New controller: agent-model-accounts.ts
+  - 增强 Agents 视图: 账号管理界面 | Enhanced Agents view: account management UI
+  - Gateway 方法扩展: listAgentAvailableChannelAccounts | Gateway method: listAgentAvailableChannelAccounts
+  - Gateway 方法扩展: listAgentAvailableModelAccounts | Gateway method: listAgentAvailableModelAccounts
+  - 支持通道账号选择和配置 | Channel account selection and configuration
+  - 支持模型账号选择和绑定 | Model account selection and binding
+  - 添加账号状态显示和验证 | Account status display and validation
+  - 新增 7 个 UI 翻译键 (账号管理相关) | 7 new UI translation keys (account management)
+
+**📊 统计数据 | Statistics:**
+
+- 新增文件 | New files: 3 (init.sh, agent-channel-accounts.ts, agent-model-accounts.ts)
+- 修改文件 | Modified files: 12
+- 新增代码行数 | Lines added: ~2,700+
+- Docker 配置增强 | Docker config enhancements: 3 files
+- 环境变量支持 | Environment variables: 44 new vars
+- 翻译键新增 | Translation keys added: 24 (48 translations)
+- Gateway 接口新增 | New Gateway interfaces: 2
+- UI 控制器新增 | New UI controllers: 2
+- 提交标识 | Commit ID: dce48ea2f
+
+**🔧 技术改进 | Technical Improvements:**
+
+- ✅ 保留优秀的 i18n 架构 (优于参考项目) | Retained superior i18n architecture
+- ✅ Docker 权限管理优化 | Docker permission management optimization
+- ✅ 环境变量驱动配置 | Environment-driven configuration
+- ✅ 智能配置生成系统 | Smart config generation system
+- ✅ 类型安全保障 (完整 TypeScript 支持) | Type safety (full TypeScript support)
+- ✅ 向后兼容 (所有新功能可选) | Backward compatible (all new features optional)
+- ✅ 优雅容器初始化和关闭 | Graceful container init and shutdown
+
+**🔄 集成优势 | Integration Advantages:**
+
+本次集成借鉴了 OpenClaw-Docker-CN-IM 项目的优秀功能，同时保持了我们项目的技术优势：
+This integration adopts excellent features from OpenClaw-Docker-CN-IM while maintaining our project's technical advantages:
+
+1. **i18n 架构** | **i18n Architecture**: 我们的专业国际化系统远优于参考项目的硬编码中文 | Our professional i18n system is superior to reference project's hardcoded Chinese
+2. **Docker 优化** | **Docker Optimization**: 集成了参考项目的 Docker 优化（权限管理、智能初始化） | Integrated reference project's Docker optimizations (permission management, smart init)
+3. **IM 平台支持** | **IM Platform Support**: 支持所有中国 IM 平台（飞书、钉钉、企业微信、QQ机器人） | All Chinese IM platforms supported (Feishu, DingTalk, WeCom, QQ Bot)
+4. **类型安全** | **Type Safety**: 完整的 TypeScript 类型定义，避免运行时错误 | Complete TypeScript type definitions, avoiding runtime errors
+5. **环境变量驱动** | **Env-Driven**: 通过 .env 文件轻松配置，无需手动修改代码 | Easy config via .env file, no manual code modification
+
+**🔍 技术栈确认 | Technology Stack Confirmation:**
+
+经过详细检查，确认以下工具在项目中的集成状态：
+After thorough inspection, confirmed integration status of following tools:
+
+- ✅ **Playwright**: 完全集成用于浏览器自动化 (playwright-core: 1.58.2, 63个相关文件) | Fully integrated for browser automation (playwright-core: 1.58.2, 63 related files)
+- ✅ **中文 TTS**: 完全集成 (Edge TTS + node-edge-tts: ^1.2.10, 支持中文语音) | Fully integrated (Edge TTS + node-edge-tts: ^1.2.10, Chinese voice support)
+- ⚠️ **OpenCode AI**: 作为模型提供商集成（非独立AI代码助手工具） | Integrated as model provider (not standalone AI code assistant)
+
+**📦 文件变更详情 | File Change Details:**
+
+```
+.env.example                                    # 环境变量模板 (新增 65 行)
+Dockerfile                                      # Docker 镜像构建配置增强
+docker-compose.yml                              # 服务编排配置增强
+init.sh                                         # 智能初始化脚本 (新增 350 行)
+src/gateway/server-methods-list.ts              # Gateway 方法注册
+src/gateway/server-methods/agents-management.ts # 智能助手管理接口扩展
+src/i18n/translations.ts                        # 翻译内容 (新增 48 行)
+src/i18n/types.ts                               # 翻译键类型定义 (新增 24 个)
+ui/src/ui/app-render.ts                         # UI 渲染逻辑更新
+ui/src/ui/app-view-state.ts                    # UI 状态管理更新
+ui/src/ui/app.ts                                # 应用主逻辑更新
+ui/src/ui/controllers/agent-channel-accounts.ts # 通道账号管理控制器 (新增)
+ui/src/ui/controllers/agent-model-accounts.ts   # 模型账号管理控制器 (新增)
+ui/src/ui/i18n.ts                               # UI 国际化改进
+ui/src/ui/views/agents.ts                       # Agents 视图增强
+```
+
+**⚠️ 重要说明 | Important Notice:**
+
+This update implements an "enhanced integration" strategy, carefully adopting the best features from OpenClaw-Docker-CN-IM while preserving our superior i18n architecture. All Docker optimizations, IM platform support, and smart initialization features are now available. Recommended for testing in development environment before production deployment.
+
+本次更新采用"增强式集成"策略，在保留我们优秀的 i18n 架构的同时，精心采纳了 OpenClaw-Docker-CN-IM 项目的最佳功能。所有 Docker 优化、IM 平台支持和智能初始化功能现已可用。建议在生产环境部署前先在开发环境测试。
+
+**📦 备份信息 | Backup Information:**
+
+- 备份日期 | Backup date: 2026-02-09
+- 修改文件数 | Modified files: 15 (12 modified, 3 new)
+- 推送仓库 | Pushed to: Gitee (origin) + GitHub (github)
+- Git 分支 | Git branch: localization-zh-CN → main
+- 提交备注 | Commit message: "feat: 增强式集成 OpenClaw-Docker-CN-IM 优秀功能"
+
+---
+
 #### 2026年2月9日 - 权限管理与培训系统核心功能完成 | 2026-02-09 - Permission Management & Training System Core Features
 
 **🎯 核心功能完成 | Core Features Completed:**
