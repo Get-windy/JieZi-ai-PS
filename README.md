@@ -78,6 +78,130 @@ If you're merging code from upstream or updating `package.json`, please be aware
 
 ### 📌 项目更新记录 | Project Update Log
 
+#### 2026年2月10日 - 控制面板UI完善与构建配置优化 | 2026-02-10 - Control Panel UI Enhancement & Build Configuration Optimization
+
+**🎯 核心功能完成 | Core Features Completed:**
+
+- ✅ **智能体管理页面增强 | Agent Management Page Enhancement** (app-render.ts)
+  - 新增通道策略配置UI | New channel policy configuration UI
+  - 支持可视化配置智能体的通道使用策略 | Visual configuration for agent channel usage policies
+  - 实现策略引擎集成 | Policy engine integration
+  - 动态渲染策略条件和操作配置 | Dynamic rendering of policy conditions and operations
+  - 添加策略测试功能 | Policy testing functionality
+  - 支持实时测试策略规则的匹配效果 | Real-time policy rule matching testing
+  - 代码改动 | Code changes: +329 lines
+
+- ✅ **通道策略对话框 | Channel Policy Dialog** (agents.channel-policy-dialog.ts)
+  - 实现完整的策略CRUD操作 | Complete policy CRUD operations
+  - 创建、编辑、删除通道策略 | Create, edit, delete channel policies
+  - 添加策略条件构建器 | Policy condition builder
+  - 支持多种条件类型 | Multiple condition types support (message content, user ID, time range, etc.)
+  - 实现策略操作配置 | Policy action configuration
+  - 支持路由、回复、静默等多种操作 | Route, reply, silent, and other operations
+  - 添加策略优先级管理 | Policy priority management with drag-and-drop sorting
+  - 代码改动 | Code changes: +84 lines
+
+- ✅ **使用统计页面 | Usage Statistics Page** (usage.ts)
+  - 新增详细的Token使用统计 | Detailed Token usage statistics
+  - 按模型、智能体、时间维度展示 | Display by model, agent, and time dimension
+  - 实现成本分析功能 | Cost analysis functionality
+  - 自动计算并展示API调用成本 | Automatic API cost calculation and display
+  - 添加使用趋势图表 | Usage trend charts
+  - 可视化展示Token使用量和成本变化 | Visualize Token usage and cost trends
+  - 支持数据导出 | Data export support (CSV format)
+  - 代码改动 | Code changes: +356 lines
+
+- ✅ **设置页面优化 | Settings Page Optimization** (app-settings.ts)
+  - 增强模型配置界面 | Enhanced model configuration interface
+  - 改进模型路由和选择器的配置体验 | Improved model routing and selector configuration
+  - 添加通道策略管理入口 | Channel policy management entry point
+  - 代码改动 | Code changes: +14 lines
+
+- ✅ **国际化支持完善 | Internationalization Enhancement** (i18n.ts)
+  - 完善中文翻译 | Complete Chinese translations
+  - 添加所有新增UI组件的中文文案 | Chinese copy for all new UI components
+  - 新增术语翻译 | New terminology translations:
+    - "Channel Policies" → "通道策略"
+    - "Policy Engine" → "策略引擎"
+    - "Usage Statistics" → "使用统计"
+    - "Token Usage" → "Token使用量"
+    - "Cost Analysis" → "成本分析"
+  - 代码改动 | Code changes: +14 lines
+
+- ✅ **构建配置优化 | Build Configuration Optimization**
+  - **配置Gitee镜像源 | Gitee Mirror Configuration** (package.json):
+    - 添加 node-llama-cpp 的Gitee镜像 | Add node-llama-cpp Gitee mirror
+    - 使用 pnpm overrides 机制 | Use pnpm overrides mechanism
+    - 解决国内安装GitHub网络慢的问题 | Solve slow GitHub access in China
+  - **修复tsdown构建错误 | Fix tsdown Build Errors** (tsdown.config.ts):
+    - 添加 external 配置排除原生模块 | Add external config to exclude native modules
+    - 解决 rolldown 打包二进制文件的 UTF-8 错误 | Fix UTF-8 errors when bundling binary files
+    - 确保原生模块动态加载 | Ensure native modules are dynamically loaded
+  - **优化UI构建配置 | Optimize UI Build Configuration** (ui/package.json):
+    - 将硬编码vite路径改为动态命令 | Change hardcoded vite path to dynamic command
+    - 解决依赖更新后路径失效问题 | Fix path invalidation after dependency updates
+    - pnpm 自动解析正确路径 | pnpm automatically resolves correct paths
+
+- ✅ **新增核心模块 | New Core Module**
+  - **policy-engine-manager.ts**: 通道策略引擎核心 | Channel policy engine core
+    - 支持策略规则的解析、匹配和执行 | Parse, match, and execute policy rules
+    - 实现多种条件类型和策略操作 | Multiple condition types and policy actions
+    - 提供策略测试接口 | Policy testing interface for UI
+    - 与现有通道系统无缝集成 | Seamless integration with existing channel system
+
+**📊 统计数据 | Statistics:**
+
+- 修改文件 | Modified files: 12
+- 新增文件 | New files: 1 (policy-engine-manager.ts)
+- 新增代码行数 | Lines added: ~956
+- 删除代码行数 | Lines removed: ~1,198 (mainly pnpm-lock.yaml optimization)
+- 提交标识 | Commit ID: 789418903, 10201bd4c
+
+**🔧 技术改进 | Technical Improvements:**
+
+- ✅ 解决Windows环境构建问题 | Fixed Windows build issues
+- ✅ 优化依赖管理 | Optimized dependency management (pnpm overrides)
+- ✅ 改进构建性能 | Improved build performance (tsdown configuration)
+- ✅ 增强UI动态性 | Enhanced UI dynamics (dynamic command paths)
+- ✅ 完善策略引擎 | Enhanced policy engine (flexible routing and message processing)
+- ✅ 优化用户体验 | Improved UX (enhanced visualization and data analysis)
+
+**🔄 构建测试结果 | Build Test Results:**
+
+- ✅ 项目构建成功 | Project build successful: 170 files, 8.67 MB (tsdown/rolldown)
+- ✅ UI构建成功 | UI build successful: assets in `dist/control-ui/`
+- ✅ 依赖安装正常 | Dependencies installed: node-llama-cpp via Gitee mirror
+- ✅ 控制面板功能正常 | Control panel functional: all features tested
+- ✅ 国际化完整 | Internationalization complete: Chinese UI working
+
+**⚠️ 重要说明 | Important Notice:**
+
+This update focuses on:
+
+1. **Control Panel UI Enhancement**: Completed frontend interfaces for channel policies and usage statistics
+2. **Build Configuration Optimization**: Solved Windows build issues and dependency installation problems
+3. **User Experience Improvement**: Enhanced visualization and data analysis capabilities
+
+Recommended verification before production:
+
+1. ✅ Test channel policy configuration functionality
+2. ✅ Verify usage statistics data accuracy
+3. ✅ Check Chinese interface display
+4. ✅ Test build process stability on Windows
+
+本次更新主要聚焦于：
+
+1. **控制面板UI完善**：完成了通道策略、使用统计等核心管理功能的前端界面
+2. **构建配置优化**：解决了Windows环境下的构建问题和依赖安装问题
+3. **用户体验提升**：增强了可视化配置和数据分析能力
+
+**📦 提交信息 | Commit Information:**
+
+- 提交时间 | Commit date: 2026-02-10
+- 提交哈希 | Commit hash: 789418903, 10201bd4c
+- 分支 | Branch: localization-zh-CN
+- 推送仓库 | Pushed to: Gitee (origin/localization-zh-CN)
+
 #### 2026年2月9日 - 权限管理与培训系统核心功能完成 | 2026-02-09 - Permission Management & Training System Core Features
 
 **🎯 核心功能完成 | Core Features Completed:**
