@@ -5,8 +5,34 @@ import type { UsageState } from "./controllers/usage.ts";
 import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
 import { refreshChatAvatar } from "./app-chat.ts";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
+import {
+  loadBoundChannelAccounts,
+  loadAvailableChannelAccounts,
+  addChannelAccountBinding,
+  removeChannelAccountBinding,
+  toggleAvailableAccountsExpanded,
+} from "./controllers/agent-channel-accounts.ts";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
+import {
+  loadBoundModelAccounts,
+  loadAvailableModelAccounts,
+  bindModelAccount,
+  unbindModelAccount,
+  setDefaultModelAccount,
+  toggleAvailableModelAccountsExpanded,
+} from "./controllers/agent-model-accounts.ts";
+import {
+  loadAgentPermissions,
+  saveAgentPermissions,
+  loadApprovalRequests,
+  loadApprovalStats as loadPermissionApprovalStats,
+  respondToApproval as respondToPermissionApproval,
+  batchApproveRequests,
+  batchDenyRequests,
+  cancelApprovalRequest,
+  loadPermissionHistory,
+} from "./controllers/agent-permissions.ts";
 import {
   loadModelAccounts,
   loadChannelPolicies,
@@ -855,6 +881,11 @@ export function renderApp(state: AppViewState) {
                   }
                   if (panel === "channels") {
                     void loadChannels(state, false);
+                    // 加载通道账号绑定管理数据
+                    if (resolvedAgentId) {
+                      void loadBoundChannelAccounts(state, resolvedAgentId);
+                      void loadAvailableChannelAccounts(state, resolvedAgentId);
+                    }
                   }
                   if (panel === "cron") {
                     void state.loadCron();
@@ -862,9 +893,17 @@ export function renderApp(state: AppViewState) {
                   // Phase 5: 加载模型账号和通道策略
                   if (panel === "modelAccounts" && resolvedAgentId) {
                     void loadModelAccounts(state, resolvedAgentId);
+                    void loadBoundModelAccounts(state, resolvedAgentId);
+                    void loadAvailableModelAccounts(state, resolvedAgentId);
                   }
                   if (panel === "channelPolicies" && resolvedAgentId) {
                     void loadChannelPolicies(state, resolvedAgentId);
+                  }
+                  // Phase 3: 加载权限配置（针对具体助手）
+                  if (panel === "permissionsConfig" && resolvedAgentId) {
+                    void loadAgentPermissions(state, resolvedAgentId);
+                    void loadApprovalRequests(state);
+                    void loadPermissionApprovalStats(state);
                   }
                 },
                 onLoadFiles: (agentId) => loadAgentFiles(state, agentId),
@@ -1193,6 +1232,116 @@ export function renderApp(state: AppViewState) {
                   } catch (err) {
                     console.error("Failed to save policy binding:", err);
                   }
+                },
+                // Phase 3: 权限配置回调
+                onPermissionsRefresh: resolvedAgentId
+                  ? (agentId) => {
+                      void loadAgentPermissions(state, agentId);
+                      void loadApprovalRequests(state);
+                      void loadPermissionApprovalStats(state);
+                    }
+                  : undefined,
+                onPermissionsTabChange: (tab) => {
+                  state.permissionsManagementActiveTab = tab;
+                },
+                onPermissionChange: resolvedAgentId
+                  ? (agentId, permission, granted) => {
+                      // 更新权限配置
+                      if (state.permissionsConfig) {
+                        const config = state.permissionsConfig as any;
+                        // 更新权限状态
+                        // TODO: 实现权限更新逻辑
+                        console.log("Permission change:", agentId, permission, granted);
+                      }
+                    }
+                  : undefined,
+                onPermissionsSaveConfig: resolvedAgentId
+                  ? async (agentId) => {
+                      if (state.permissionsConfig) {
+                        try {
+                          await saveAgentPermissions(state, agentId, state.permissionsConfig);
+                        } catch (err) {
+                          console.error("Failed to save permissions:", err);
+                        }
+                      }
+                    }
+                  : undefined,
+                onApprovalAction: async (requestId, action, comment) => {
+                  try {
+                    const approver = { type: "user" as const, id: "admin" };
+                    await respondToPermissionApproval(state, requestId, action, approver, comment);
+                  } catch (err) {
+                    console.error("Failed to respond to approval:", err);
+                  }
+                },
+                onBatchApprove: async (requestIds, comment) => {
+                  try {
+                    const approver = { type: "user" as const, id: "admin" };
+                    await batchApproveRequests(state, requestIds, approver, comment);
+                  } catch (err) {
+                    console.error("Failed to batch approve:", err);
+                  }
+                },
+                onBatchDeny: async (requestIds, reason) => {
+                  try {
+                    const approver = { type: "user" as const, id: "admin" };
+                    await batchDenyRequests(state, requestIds, approver, reason);
+                  } catch (err) {
+                    console.error("Failed to batch deny:", err);
+                  }
+                },
+                onApprovalsFilterChange: (filter) => {
+                  // TODO: 实现审批过滤
+                  console.log("Approvals filter change:", filter);
+                },
+                onSelectApproval: (requestId, selected) => {
+                  // TODO: 实现审批选择
+                  console.log("Select approval:", requestId, selected);
+                },
+                onSelectAllApprovals: () => {
+                  // TODO: 实现全选
+                  console.log("Select all approvals");
+                },
+                onDeselectAllApprovals: () => {
+                  // TODO: 实现取消全选
+                  console.log("Deselect all approvals");
+                },
+                onShowApprovalDetail: (request) => {
+                  // TODO: 实现审批详情显示
+                  console.log("Show approval detail:", request);
+                },
+                // 模型账号绑定管理回调
+                onBindModelAccount: async (accountId) => {
+                  if (resolvedAgentId) {
+                    await bindModelAccount(state, resolvedAgentId, accountId);
+                  }
+                },
+                onUnbindModelAccount: async (accountId) => {
+                  if (resolvedAgentId) {
+                    await unbindModelAccount(state, resolvedAgentId, accountId);
+                  }
+                },
+                onToggleAvailableModelAccounts: () => {
+                  toggleAvailableModelAccountsExpanded(state);
+                },
+                onSetDefaultModelAccount: async (accountId) => {
+                  if (resolvedAgentId) {
+                    await setDefaultModelAccount(state, resolvedAgentId, accountId);
+                  }
+                },
+                // 通道账号绑定管理回调
+                onAddChannelAccount: async (channelId, accountId) => {
+                  if (resolvedAgentId) {
+                    await addChannelAccountBinding(state, resolvedAgentId, channelId, accountId);
+                  }
+                },
+                onRemoveChannelAccount: async (channelId, accountId) => {
+                  if (resolvedAgentId) {
+                    await removeChannelAccountBinding(state, resolvedAgentId, channelId, accountId);
+                  }
+                },
+                onToggleAvailableChannelAccounts: () => {
+                  toggleAvailableAccountsExpanded(state);
                 },
                 onAddAgent: () => {
                   // TODO: 实现添加智能助手

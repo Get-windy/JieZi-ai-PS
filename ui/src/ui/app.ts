@@ -317,7 +317,8 @@ export class OpenClawApp extends LitElement {
     | "channels"
     | "cron"
     | "modelAccounts"
-    | "channelPolicies" = "overview";
+    | "channelPolicies"
+    | "permissionsConfig" = "overview"; // 权限配置tab
   // Collaboration 协作管理状态
   @state() collaborationActivePanel: "groups" | "friends" | "monitor" | "scenarios" = "groups";
   // 群组管理状态
@@ -396,6 +397,20 @@ export class OpenClawApp extends LitElement {
   @state() modelAccountsError: string | null = null;
   @state() modelAccountsSaving = false;
   @state() modelAccountsSaveSuccess = false;
+  // 模型账号绑定管理
+  @state() boundModelAccounts: string[] = [];
+  @state() boundModelAccountsLoading = false;
+  @state() boundModelAccountsError: string | null = null;
+  @state() availableModelAccounts: string[] = [];
+  @state() availableModelAccountsLoading = false;
+  @state() availableModelAccountsError: string | null = null;
+  @state() availableModelAccountsExpanded = false;
+  @state() defaultModelAccountId = "";
+  @state() modelAccountOperationError: string | null = null;
+  // 模型账号配置管理
+  @state() accountConfigs: Record<string, any> = {};
+  @state() accountConfigsLoading = false;
+  @state() accountConfigsError: string | null = null;
   @state() channelPoliciesConfig: ChannelPoliciesConfig | null = null;
   @state() channelPoliciesLoading = false;
   @state() channelPoliciesError: string | null = null;
@@ -403,6 +418,26 @@ export class OpenClawApp extends LitElement {
   @state() channelPoliciesSaveSuccess = false;
   @state() editingPolicyBinding: { agentId: string; index: number; binding: any } | null = null; // 正在配置的策略绑定
   @state() addingPolicyBinding: string | null = null; // 正在添加策略绑定的 agentId
+  // 通道账号绑定管理
+  @state() boundChannelAccounts: any[] = [];
+  @state() boundChannelAccountsLoading = false;
+  @state() boundChannelAccountsError: string | null = null;
+  @state() availableChannelAccounts: any[] = [];
+  @state() availableChannelAccountsLoading = false;
+  @state() availableChannelAccountsError: string | null = null;
+  @state() availableChannelAccountsExpanded = false;
+  @state() channelAccountOperationError: string | null = null;
+  // 控制器期望的字段名（与 AgentChannelAccountsState 匹配）
+  @state() boundAccounts: any[] = [];
+  @state() boundAccountsLoading = false;
+  @state() boundAccountsError: string | null = null;
+  @state() availableAccounts: any[] = [];
+  @state() availableAccountsLoading = false;
+  @state() availableAccountsError: string | null = null;
+  @state() availableAccountsExpanded = false;
+  @state() addingAccount = false;
+  @state() removingAccount = false;
+  @state() operationError: string | null = null;
   // Phase 5: Organization Chart 状态
   @state() organizationChartViewMode: "tree" | "list" = "list";
   @state() organizationChartSelectedNode: string | null = null;
@@ -415,12 +450,19 @@ export class OpenClawApp extends LitElement {
   @state() permissionsConfigLoading = false;
   @state() permissionsConfigSaving = false;
   @state() permissionsConfigError: string | null = null;
+  // Agent Permissions State (for agent-permissions controller)
+  @state() permissionsLoading = false; // 权限加载状态
+  @state() permissionsError: string | null = null; // 权限错误信息
+  @state() permissionsSaving = false; // 权限保存中
+  @state() permissionsSaveSuccess = false; // 权限保存成功标志
   @state() approvalRequests: any[] = [];
   @state() approvalRequestsLoading = false;
-  @state() permissionsChangeHistory: any[] = [];
+  @state() approvalStats: any | null = null; // 审批统计信息
+  @state() permissionChangeHistory: any[] = [];
   @state() permissionsHistoryLoading = false;
+  @state() permissionHistoryLoading = false; // 对应 agent-permissions 中的 permissionHistoryLoading
   // Approvals State (for ApprovalsState compatibility)
-  @state() approvalsLoading = false;
+  @state() approvalsLoading = false; // 对应 agent-permissions 中的 approvalsLoading
   @state() approvalsError: string | null = null;
   @state() approvalsList: import("./controllers/approvals.ts").ApprovalRequest[] = [];
   @state() approvalsTotal = 0;

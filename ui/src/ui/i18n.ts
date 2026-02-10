@@ -4382,7 +4382,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.tab.cron": "定时任务",
     "agents.tab.model_accounts": "模型账号",
     "agents.tab.channel_policies": "通道策略",
-    "agents.tab.permissions": "权限",
+    "agents.tab.permissions": "权限配置",
 
     // 代理概览
     "agents.overview.title": "概览",
