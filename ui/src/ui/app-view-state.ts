@@ -226,6 +226,20 @@ export type AppViewState = {
   modelAccountsError: string | null;
   modelAccountsSaving: boolean;
   modelAccountsSaveSuccess: boolean;
+  // 模型账号绑定管理
+  boundModelAccounts: string[];
+  boundModelAccountsLoading: boolean;
+  boundModelAccountsError: string | null;
+  availableModelAccounts: string[];
+  availableModelAccountsLoading: boolean;
+  availableModelAccountsError: string | null;
+  availableModelAccountsExpanded: boolean;
+  defaultModelAccountId: string;
+  modelAccountOperationError: string | null;
+  // 模型账号配置管理
+  accountConfigs: Record<string, any>; // accountId -> ModelAccountConfig
+  accountConfigsLoading: boolean;
+  accountConfigsError: string | null;
   channelPoliciesConfig: Record<string, unknown> | null;
   channelPoliciesLoading: boolean;
   channelPoliciesError: string | null;
@@ -233,6 +247,26 @@ export type AppViewState = {
   channelPoliciesSaveSuccess: boolean;
   editingPolicyBinding: { agentId: string; index: number; binding: any } | null;
   addingPolicyBinding: string | null;
+  // 通道账号绑定管理
+  boundChannelAccounts: any[];
+  boundChannelAccountsLoading: boolean;
+  boundChannelAccountsError: string | null;
+  availableChannelAccounts: any[];
+  availableChannelAccountsLoading: boolean;
+  availableChannelAccountsError: string | null;
+  availableChannelAccountsExpanded: boolean;
+  channelAccountOperationError: string | null;
+  // 控制器期望的字段名（与 AgentChannelAccountsState 匹配）
+  boundAccounts: any[];
+  boundAccountsLoading: boolean;
+  boundAccountsError: string | null;
+  availableAccounts: any[];
+  availableAccountsLoading: boolean;
+  availableAccountsError: string | null;
+  availableAccountsExpanded: boolean;
+  addingAccount: boolean;
+  removingAccount: boolean;
+  operationError: string | null;
   sessionsLoading: boolean;
   sessionsResult: SessionsListResult | null;
   sessionsError: string | null;
@@ -331,12 +365,19 @@ export type AppViewState = {
   permissionsConfigLoading: boolean;
   permissionsConfigSaving: boolean;
   permissionsConfigError: string | null;
+  // Agent Permissions State (for agent-permissions controller)
+  permissionsLoading: boolean; // 权限加载状态
+  permissionsError: string | null; // 权限错误信息
+  permissionsSaving: boolean; // 权限保存中
+  permissionsSaveSuccess: boolean; // 权限保存成功标志
   approvalRequests: any[];
   approvalRequestsLoading: boolean;
-  permissionsChangeHistory: any[];
+  approvalStats: any | null; // 审批统计信息
+  permissionChangeHistory: any[];
   permissionsHistoryLoading: boolean;
+  permissionHistoryLoading: boolean; // 对应 agent-permissions 中的 permissionHistoryLoading
   // Approvals State (for ApprovalsState compatibility)
-  approvalsLoading: boolean;
+  approvalsLoading: boolean; // 对应 agent-permissions 中的 approvalsLoading
   approvalsError: string | null;
   approvalsList: import("./controllers/approvals.ts").ApprovalRequest[];
   approvalsTotal: number;
@@ -349,6 +390,8 @@ export type AppViewState = {
   organizationDataLoading: boolean;
   organizationDataError: string | null;
   // Phase 7: 超级管理员与审批系统状态
+  superAdminActiveTab: "management" | "approvals" | "notifications";
+  superAdminsList: any[];
   superAdminsLoading?: boolean;
   superAdminsError?: string | null;
   superAdmins?: any[];
@@ -363,10 +406,11 @@ export type AppViewState = {
   pendingApprovals?: any[];
   approvalStatsLoading?: boolean;
   approvalStatsError?: string | null;
-  approvalStats?: any | null;
+  // approvalStats 已在上面定义（第341行）
   approvalPoliciesLoading?: boolean;
   approvalPoliciesError?: string | null;
   approvalPolicies?: any[];
+  superAdminNotifications: any[];
   notificationsLoading?: boolean;
   notificationsError?: string | null;
   notifications?: any[];

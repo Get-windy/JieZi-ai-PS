@@ -446,6 +446,97 @@ export const AgentEntrySchema = z
     agentDir: z.string().optional(),
     model: AgentModelSchema.optional(),
     skills: z.array(z.string()).optional(),
+    // Phase 5: Model Accounts 配置
+    modelAccounts: z
+      .object({
+        accounts: z.array(z.string()).optional(),
+        routingMode: z.union([z.literal("manual"), z.literal("smart")]).optional(),
+        smartRouting: z.record(z.string(), z.unknown()).optional(),
+        defaultAccountId: z.string().optional(),
+        enableSessionPinning: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    // Phase 5: Channel Bindings 配置
+    channelBindings: z
+      .object({
+        bindings: z
+          .array(
+            z
+              .object({
+                id: z.string(),
+                channelId: z.string(),
+                accountId: z.string(),
+                policy: z.string().optional(),
+                priority: z.number().optional(),
+              })
+              .strict(),
+          )
+          .optional(),
+      })
+      .strict()
+      .optional(),
+    // Phase 3: Permissions 配置
+    permissions: z
+      .object({
+        rules: z
+          .array(
+            z
+              .object({
+                id: z.string(),
+                toolName: z.string(),
+                subjects: z.array(
+                  z
+                    .object({
+                      type: z.string(),
+                      id: z.string(),
+                    })
+                    .strict(),
+                ),
+                action: z.string(),
+              })
+              .strict(),
+          )
+          .optional(),
+        roles: z
+          .array(
+            z
+              .object({
+                id: z.string(),
+                name: z.string(),
+                members: z.array(z.string()),
+                permissions: z.array(z.string()),
+              })
+              .strict(),
+          )
+          .optional(),
+        groups: z
+          .array(
+            z
+              .object({
+                id: z.string(),
+                name: z.string(),
+                members: z.array(z.string()),
+              })
+              .strict(),
+          )
+          .optional(),
+        approvalConfig: z
+          .object({
+            approvers: z.array(
+              z
+                .object({
+                  type: z.string(),
+                  id: z.string(),
+                })
+                .strict(),
+            ),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
     memorySearch: MemorySearchSchema,
     humanDelay: HumanDelaySchema.optional(),
     heartbeat: HeartbeatSchema,

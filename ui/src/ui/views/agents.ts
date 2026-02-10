@@ -36,7 +36,7 @@ export type AgentsPanel =
   | "cron"
   | "modelAccounts"
   | "channelPolicies"
-  | "permissions";
+  | "permissionsConfig"; // 改名：权限配置（针对具体助手）
 
 /**
  * Phase 5: 模型账号配置类型（Phase 1 智能路由）
@@ -139,6 +139,20 @@ export type AgentsProps = {
   modelAccountsError: string | null;
   modelAccountsSaving: boolean;
   modelAccountsSaveSuccess: boolean;
+  // 模型账号绑定管理
+  boundModelAccounts?: string[];
+  boundModelAccountsLoading?: boolean;
+  boundModelAccountsError?: string | null;
+  availableModelAccounts?: string[];
+  availableModelAccountsLoading?: boolean;
+  availableModelAccountsError?: string | null;
+  availableModelAccountsExpanded?: boolean;
+  defaultModelAccountId?: string;
+  modelAccountOperationError?: string | null;
+  onBindModelAccount?: (accountId: string) => void;
+  onUnbindModelAccount?: (accountId: string) => void;
+  onToggleAvailableModelAccounts?: () => void;
+  onSetDefaultModelAccount?: (accountId: string) => void;
   channelPoliciesConfig: ChannelPoliciesConfig | null;
   channelPoliciesLoading: boolean;
   channelPoliciesError: string | null;
@@ -213,6 +227,18 @@ export type AgentsProps = {
   onAgentSkillToggle: (agentId: string, skillName: string, enabled: boolean) => void;
   onAgentSkillsClear: (agentId: string) => void;
   onAgentSkillsDisableAll: (agentId: string) => void;
+  // 通道账号绑定管理
+  boundChannelAccounts?: any[];
+  boundChannelAccountsLoading?: boolean;
+  boundChannelAccountsError?: string | null;
+  availableChannelAccounts?: any[];
+  availableChannelAccountsLoading?: boolean;
+  availableChannelAccountsError?: string | null;
+  availableChannelAccountsExpanded?: boolean;
+  channelAccountOperationError?: string | null;
+  onAddChannelAccount?: (channelId: string, accountId: string) => void;
+  onRemoveChannelAccount?: (channelId: string, accountId: string) => void;
+  onToggleAvailableChannelAccounts?: () => void;
   // Phase 3: 权限管理回调
   onPermissionsRefresh?: (agentId: string) => void;
   onPermissionsTabChange?: (tab: "config" | "approvals" | "history") => void;
@@ -735,7 +761,7 @@ function matchesList(name: string, list?: string[]) {
 }
 
 /**
- * Phase 5: 渲染模型账号配置面板（Phase 1 智能路由）
+ * Phase 5: 渲染模型配置面板（模型账号绑定 + 智能路由）
  */
 function renderAgentModelAccounts(params: {
   agentId: string;
@@ -744,40 +770,49 @@ function renderAgentModelAccounts(params: {
   error: string | null;
   saving: boolean;
   saveSuccess: boolean;
+  // 模型账号绑定管理
+  boundModelAccounts: string[];
+  boundModelAccountsLoading: boolean;
+  boundModelAccountsError: string | null;
+  availableModelAccounts: string[];
+  availableModelAccountsLoading: boolean;
+  availableModelAccountsError: string | null;
+  availableModelAccountsExpanded: boolean;
+  defaultModelAccountId: string;
+  modelAccountOperationError: string | null;
+  // 回调
   onChange?: (agentId: string, config: ModelAccountsConfig) => void;
+  onBindModelAccount?: (accountId: string) => void;
+  onUnbindModelAccount?: (accountId: string) => void;
+  onToggleAvailableModelAccounts?: () => void;
+  onSetDefaultModelAccount?: (accountId: string) => void;
 }) {
-  if (params.loading) {
+  if (params.loading || params.boundModelAccountsLoading) {
     return html`
       <section class="card">
-        <div class="card-title">${t("agents.model_accounts.title")}</div>
+        <div class="card-title">模型配置</div>
         <div class="loading">${t("agents.loading")}</div>
       </section>
     `;
   }
 
-  if (params.error) {
+  if (params.error || params.boundModelAccountsError) {
     return html`
       <section class="card">
-        <div class="card-title">${t("agents.model_accounts.title")}</div>
-        <div class="error">${params.error}</div>
+        <div class="card-title">模型配置</div>
+        <div class="error">${params.error || params.boundModelAccountsError}</div>
       </section>
     `;
   }
 
   const config = params.config;
-  if (!config) {
-    return html`
-      <section class="card">
-        <div class="card-title">${t("agents.model_accounts.title")}</div>
-        <div class="empty">${t("agents.model_accounts.no_config")}</div>
-      </section>
-    `;
-  }
+  const boundCount = params.boundModelAccounts.length;
+  const hasMultipleAccounts = boundCount > 1;
 
   return html`
     <section class="card">
-      <div class="card-title">${t("agents.model_accounts.title")}</div>
-      <div class="card-sub">${t("agents.model_accounts.subtitle")}</div>
+      <div class="card-title">模型配置</div>
+      <div class="card-sub">管理此助手可以使用的模型账号和智能路由策略</div>
       
       ${
         params.saveSuccess
@@ -788,95 +823,284 @@ function renderAgentModelAccounts(params: {
       `
           : nothing
       }
-      
-      <div style="margin-top: 20px;">
-        <div class="label">${t("agents.model_accounts.routing_mode")}</div>
-        <div style="display: flex; gap: 16px; margin-top: 8px;">
-          <label style="display: flex; align-items: center; gap: 6px;">
-            <input
-              type="radio"
-              name="routingMode-${params.agentId}"
-              value="manual"
-              ?checked=${config.routingMode === "manual"}
-              ?disabled=${!params.onChange}
-              @change=${() => {
-                if (params.onChange) {
-                  params.onChange(params.agentId, {
-                    ...config,
-                    routingMode: "manual",
-                  });
-                }
-              }}
-            />
-            <span>${t("agents.model_accounts.mode.manual")}</span>
-          </label>
-          <label style="display: flex; align-items: center; gap: 6px;">
-            <input
-              type="radio"
-              name="routingMode-${params.agentId}"
-              value="smart"
-              ?checked=${config.routingMode === "smart"}
-              ?disabled=${!params.onChange}
-              @change=${() => {
-                if (params.onChange) {
-                  params.onChange(params.agentId, {
-                    ...config,
-                    routingMode: "smart",
-                  });
-                }
-              }}
-            />
-            <span>${t("agents.model_accounts.mode.smart")}</span>
-          </label>
-        </div>
-      </div>
-
-      <div style="margin-top: 20px;">
-        <div class="label">${t("agents.model_accounts.accounts")}</div>
-        <div class="list" style="margin-top: 8px;">
-          ${
-            Array.isArray(config.accounts) && config.accounts.length > 0
-              ? config.accounts.map(
-                  (account: string) => html`
-                <div class="list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 4px; background: var(--bg-1); margin-bottom: 6px;">
-                  <span class="mono">${account}</span>
-                  ${account === config.defaultAccountId ? html`<span class="agent-pill">${t("agents.default_badge")}</span>` : nothing}
-                </div>
-              `,
-                )
-              : html`<div class="muted">${t("agents.model_accounts.no_accounts")}</div>`
-          }
-        </div>
-      </div>
-
       ${
-        config.routingMode === "smart" && config.smartRouting
+        params.modelAccountOperationError
           ? html`
-        <div style="margin-top: 20px;">
-          <div class="label">${t("agents.model_accounts.smart_routing")}</div>
-          <div style="margin-top: 12px; padding: 16px; border-radius: 6px; background: var(--bg-1);">
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
-              <div>
-                <div class="muted" style="font-size: 0.875rem;">${t("agents.model_accounts.complexity_weight")}</div>
-                <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.complexityWeight || 0}%</div>
-              </div>
-              <div>
-                <div class="muted" style="font-size: 0.875rem;">${t("agents.model_accounts.capability_weight")}</div>
-                <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.capabilityWeight || 0}%</div>
-              </div>
-              <div>
-                <div class="muted" style="font-size: 0.875rem;">${t("agents.model_accounts.cost_weight")}</div>
-                <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.costWeight || 0}%</div>
-              </div>
-              <div>
-                <div class="muted" style="font-size: 0.875rem;">${t("agents.model_accounts.speed_weight")}</div>
-                <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.speedWeight || 0}%</div>
-              </div>
-            </div>
-          </div>
+        <div class="callout danger" style="margin-top: 12px;">
+          ${params.modelAccountOperationError}
         </div>
       `
           : nothing
+      }
+
+      <!-- Part 1: 模型账号连接管理 -->
+      <div style="margin-top: 20px;">
+        <div class="label">已绑定的模型账号 (${boundCount})</div>
+        ${
+          boundCount === 0
+            ? html`
+                <div class="muted" style="margin-top: 8px">还没有绑定任何模型账号</div>
+              `
+            : html`
+              <div class="list" style="margin-top: 8px;">
+                ${params.boundModelAccounts.map((accountId: string) => {
+                  const accountConfig = params.accountConfigs?.[accountId];
+                  const enabled = accountConfig?.enabled !== false; // 默认启用
+                  const priority = accountConfig?.priority ?? 0;
+                  const hasSchedule = !!accountConfig?.schedule;
+                  const hasUsageLimit = !!accountConfig?.usageLimit;
+                  const hasHealthCheck = !!accountConfig?.healthCheck;
+
+                  return html`
+                      <div class="list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 4px; background: var(--bg-1); margin-bottom: 6px; opacity: ${enabled ? "1" : "0.6"};">
+                        <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                          <!-- 启用/停用开关 -->
+                          <label class="switch" style="margin: 0;">
+                            <input 
+                              type="checkbox" 
+                              ?checked=${enabled}
+                              @change=${(e: Event) => {
+                                const checked = (e.target as HTMLInputElement).checked;
+                                params.onToggleAccountEnabled?.(accountId, checked);
+                              }}
+                            />
+                            <span class="slider"></span>
+                          </label>
+                          
+                          <div style="flex: 1;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                              <span class="mono" style="font-weight: 500;">${accountId}</span>
+                              ${
+                                accountId === params.defaultModelAccountId
+                                  ? html`
+                                      <span class="agent-pill">默认</span>
+                                    `
+                                  : nothing
+                              }
+                              ${
+                                !enabled
+                                  ? html`
+                                      <span class="agent-pill" style="background: var(--color-warning-bg); color: var(--color-warning)"
+                                        >已停用</span
+                                      >
+                                    `
+                                  : nothing
+                              }
+                              ${priority > 0 ? html`<span class="agent-pill" style="background: var(--color-info-bg); color: var(--color-info);">优先级: ${priority}</span>` : nothing}
+                            </div>
+                            <div style="display: flex; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--text-3);">
+                              ${
+                                hasSchedule
+                                  ? html`
+                                      <span title="定时启用/停用">🕒 定时</span>
+                                    `
+                                  : nothing
+                              }
+                              ${
+                                hasUsageLimit
+                                  ? html`
+                                      <span title="用量控制">📊 限额</span>
+                                    `
+                                  : nothing
+                              }
+                              ${
+                                hasHealthCheck
+                                  ? html`
+                                      <span title="健康检查">❤️ 监控</span>
+                                    `
+                                  : nothing
+                              }
+                            </div>
+                          </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                          ${
+                            accountId !== params.defaultModelAccountId &&
+                            params.onSetDefaultModelAccount
+                              ? html`
+                                <button 
+                                  class="btn btn--sm"
+                                  @click=${() => params.onSetDefaultModelAccount!(accountId)}
+                                >
+                                  设为默认
+                                </button>
+                              `
+                              : nothing
+                          }
+                          <button
+                            class="btn btn--sm"
+                            @click=${() => {
+                              // TODO: 打开配置对话框
+                              alert("配置面板开发中...");
+                            }}
+                          >
+                            配置
+                          </button>
+                          <button
+                            class="btn btn--sm"
+                            style="color: var(--color-danger);"
+                            ?disabled=${boundCount === 1}
+                            title=${boundCount === 1 ? "至少需要保留一个模型账号" : ""}
+                            @click=${() => {
+                              if (
+                                boundCount > 1 &&
+                                params.onUnbindModelAccount &&
+                                confirm(`确定要移除 ${accountId} 吗？`)
+                              ) {
+                                params.onUnbindModelAccount(accountId);
+                              }
+                            }}
+                          >
+                            移除
+                          </button>
+                        </div>
+                      </div>
+                    `;
+                })}
+              </div>
+            `
+        }
+      </div>
+
+      <!-- 可用但未绑定的模型账号（折叠） -->
+      <div style="margin-top: 24px;">
+        <div class="row" style="justify-content: space-between; align-items: center;">
+          <div class="label">可用的模型账号</div>
+          <button class="btn btn--sm" @click=${() => params.onToggleAvailableModelAccounts?.()}>
+            ${params.availableModelAccountsExpanded ? "收起" : "展开"}
+          </button>
+        </div>
+
+        ${
+          params.availableModelAccountsExpanded
+            ? html`
+              <div style="margin-top: 12px;">
+                ${
+                  params.availableModelAccountsError
+                    ? html`<div class="callout danger">${params.availableModelAccountsError}</div>`
+                    : nothing
+                }
+                ${
+                  params.availableModelAccountsLoading
+                    ? html`
+                        <div class="loading">加载中...</div>
+                      `
+                    : params.availableModelAccounts.length === 0
+                      ? html`
+                          <div class="muted">没有可用的模型账号</div>
+                        `
+                      : html`
+                        <div class="list">
+                          ${params.availableModelAccounts.map(
+                            (accountId: string) => html`
+                              <div class="list-item" style="display: flex; justify-content: space-between; align-items: center;">
+                                <span class="mono">${accountId}</span>
+                                <button
+                                  class="btn btn--sm"
+                                  @click=${() => params.onBindModelAccount?.(accountId)}
+                                >
+                                  + 添加
+                                </button>
+                              </div>
+                            `,
+                          )}
+                        </div>
+                      `
+                }
+              </div>
+            `
+            : nothing
+        }
+      </div>
+
+      <!-- Part 2: 智能路由配置（只在有多个模型账号时显示） -->
+      ${
+        hasMultipleAccounts && config
+          ? html`
+            <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-1);">
+              <div class="label">智能路由配置</div>
+              <div class="muted" style="font-size: 0.875rem; margin-top: 4px;">
+                当绑定多个模型账号时，可配置智能路由策略自动选择最佳模型
+              </div>
+              
+              <div style="margin-top: 16px;">
+                <div style="display: flex; gap: 16px;">
+                  <label style="display: flex; align-items: center; gap: 6px;">
+                    <input
+                      type="radio"
+                      name="routingMode-${params.agentId}"
+                      value="manual"
+                      ?checked=${config.routingMode === "manual"}
+                      ?disabled=${!params.onChange}
+                      @change=${() => {
+                        if (params.onChange) {
+                          params.onChange(params.agentId, {
+                            ...config,
+                            routingMode: "manual",
+                          });
+                        }
+                      }}
+                    />
+                    <span>手动选择</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 6px;">
+                    <input
+                      type="radio"
+                      name="routingMode-${params.agentId}"
+                      value="smart"
+                      ?checked=${config.routingMode === "smart"}
+                      ?disabled=${!params.onChange}
+                      @change=${() => {
+                        if (params.onChange) {
+                          params.onChange(params.agentId, {
+                            ...config,
+                            routingMode: "smart",
+                          });
+                        }
+                      }}
+                    />
+                    <span>智能路由</span>
+                  </label>
+                </div>
+              </div>
+
+              ${
+                config.routingMode === "smart" && config.smartRouting
+                  ? html`
+                <div style="margin-top: 16px; padding: 16px; border-radius: 6px; background: var(--bg-1);">
+                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                    <div>
+                      <div class="muted" style="font-size: 0.875rem;">复杂度权重</div>
+                      <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.complexityWeight || 0}%</div>
+                    </div>
+                    <div>
+                      <div class="muted" style="font-size: 0.875rem;">能力权重</div>
+                      <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.capabilityWeight || 0}%</div>
+                    </div>
+                    <div>
+                      <div class="muted" style="font-size: 0.875rem;">成本权重</div>
+                      <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.costWeight || 0}%</div>
+                    </div>
+                    <div>
+                      <div class="muted" style="font-size: 0.875rem;">速度权重</div>
+                      <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.speedWeight || 0}%</div>
+                    </div>
+                  </div>
+                </div>
+              `
+                  : nothing
+              }
+            </div>
+          `
+          : !hasMultipleAccounts
+            ? html`
+                <div style="margin-top: 24px; padding: 12px; border-radius: 6px; background: var(--bg-1)">
+                  <div class="muted" style="font-size: 0.875rem">
+                    💡 提示：绑定多个模型账号后，可以配置智能路由策略，让系统自动选择最佳模型。
+                  </div>
+                </div>
+              `
+            : nothing
       }
     </section>
   `;
@@ -1277,11 +1501,30 @@ export function renderAgents(props: AgentsProps) {
                       configForm: props.configForm,
                       agentFilesList: props.agentFilesList,
                       agentIdentity: props.agentIdentityById[selectedAgent.id] ?? null,
-                      snapshot: props.channelsSnapshot,
-                      loading: props.channelsLoading,
-                      error: props.channelsError,
-                      lastSuccess: props.channelsLastSuccess,
+                      boundAccounts: props.boundChannelAccounts || [],
+                      boundAccountsLoading: props.boundChannelAccountsLoading || false,
+                      boundAccountsError: props.boundChannelAccountsError || null,
+                      availableAccounts: props.availableChannelAccounts || [],
+                      availableAccountsLoading: props.availableChannelAccountsLoading || false,
+                      availableAccountsError: props.availableChannelAccountsError || null,
+                      availableAccountsExpanded: props.availableChannelAccountsExpanded || false,
+                      operationError: props.channelAccountOperationError || null,
                       onRefresh: props.onChannelsRefresh,
+                      onAddAccount: (channelId, accountId) => {
+                        if (props.onAddChannelAccount) {
+                          props.onAddChannelAccount(channelId, accountId);
+                        }
+                      },
+                      onRemoveAccount: (channelId, accountId) => {
+                        if (props.onRemoveChannelAccount) {
+                          props.onRemoveChannelAccount(channelId, accountId);
+                        }
+                      },
+                      onToggleAvailableAccounts: () => {
+                        if (props.onToggleAvailableChannelAccounts) {
+                          props.onToggleAvailableChannelAccounts();
+                        }
+                      },
                     })
                   : nothing
               }
@@ -1310,7 +1553,36 @@ export function renderAgents(props: AgentsProps) {
                       error: props.modelAccountsError,
                       saving: props.modelAccountsSaving,
                       saveSuccess: props.modelAccountsSaveSuccess,
+                      boundModelAccounts: props.boundModelAccounts || [],
+                      boundModelAccountsLoading: props.boundModelAccountsLoading || false,
+                      boundModelAccountsError: props.boundModelAccountsError || null,
+                      availableModelAccounts: props.availableModelAccounts || [],
+                      availableModelAccountsLoading: props.availableModelAccountsLoading || false,
+                      availableModelAccountsError: props.availableModelAccountsError || null,
+                      availableModelAccountsExpanded: props.availableModelAccountsExpanded || false,
+                      defaultModelAccountId: props.defaultModelAccountId || "",
+                      modelAccountOperationError: props.modelAccountOperationError || null,
                       onChange: props.onModelAccountsChange,
+                      onBindModelAccount: (accountId) => {
+                        if (props.onBindModelAccount) {
+                          props.onBindModelAccount(accountId);
+                        }
+                      },
+                      onUnbindModelAccount: (accountId) => {
+                        if (props.onUnbindModelAccount) {
+                          props.onUnbindModelAccount(accountId);
+                        }
+                      },
+                      onToggleAvailableModelAccounts: () => {
+                        if (props.onToggleAvailableModelAccounts) {
+                          props.onToggleAvailableModelAccounts();
+                        }
+                      },
+                      onSetDefaultModelAccount: (accountId) => {
+                        if (props.onSetDefaultModelAccount) {
+                          props.onSetDefaultModelAccount(accountId);
+                        }
+                      },
                     })
                   : nothing
               }
@@ -1330,7 +1602,7 @@ export function renderAgents(props: AgentsProps) {
                   : nothing
               }
               ${
-                props.activePanel === "permissions"
+                props.activePanel === "permissionsConfig"
                   ? renderPermissionsManagement({
                       loading: props.permissionsLoading || false,
                       error: props.permissionsError || null,
@@ -1495,7 +1767,7 @@ function renderAgentTabs(active: AgentsPanel, onSelect: (panel: AgentsPanel) => 
     { id: "cron", label: () => t("agents.tab.cron") },
     { id: "modelAccounts", label: () => t("agents.tab.model_accounts") },
     { id: "channelPolicies", label: () => t("agents.tab.channel_policies") },
-    { id: "permissions", label: () => t("agents.tab.permissions") },
+    { id: "permissionsConfig", label: () => t("agents.tab.permissions") },
   ];
   return html`
     <div class="agent-tabs">
@@ -1853,11 +2125,21 @@ function renderAgentChannels(params: {
   configForm: Record<string, unknown> | null;
   agentFilesList: AgentsFilesListResult | null;
   agentIdentity: AgentIdentityResult | null;
-  snapshot: ChannelsStatusSnapshot | null;
-  loading: boolean;
-  error: string | null;
-  lastSuccess: number | null;
+  // 已绑定的通道账号
+  boundAccounts: any[];
+  boundAccountsLoading: boolean;
+  boundAccountsError: string | null;
+  // 可用但未绑定的通道账号
+  availableAccounts: any[];
+  availableAccountsLoading: boolean;
+  availableAccountsError: string | null;
+  availableAccountsExpanded: boolean;
+  operationError: string | null;
+  // 回调函数
   onRefresh: () => void;
+  onAddAccount: (channelId: string, accountId: string) => void;
+  onRemoveAccount: (channelId: string, accountId: string) => void;
+  onToggleAvailableAccounts: () => void;
 }) {
   const context = buildAgentContext(
     params.agent,
@@ -1866,81 +2148,147 @@ function renderAgentChannels(params: {
     params.defaultId,
     params.agentIdentity,
   );
-  const entries = resolveChannelEntries(params.snapshot);
-  const lastSuccessLabel = params.lastSuccess
-    ? formatAgo(params.lastSuccess)
-    : t("agents.channels.never");
+
   return html`
     <section class="grid grid-cols-2">
       ${renderAgentContextCard(context, t("agents.context.subtitle_channels"))}
       <section class="card">
         <div class="row" style="justify-content: space-between;">
           <div>
-            <div class="card-title">${t("agents.channels.title")}</div>
-            <div class="card-sub">${t("agents.channels.subtitle")}</div>
+            <div class="card-title">通道账号绑定</div>
+            <div class="card-sub">管理此助手可以使用的通道账号</div>
           </div>
-          <button class="btn btn--sm" ?disabled=${params.loading} @click=${params.onRefresh}>
-            ${params.loading ? t("agents.channels.refreshing") : t("agents.channels.refresh")}
+          <button class="btn btn--sm" ?disabled=${params.boundAccountsLoading} @click=${params.onRefresh}>
+            ${params.boundAccountsLoading ? "刷新中..." : "刷新"}
           </button>
         </div>
-        <div class="muted" style="margin-top: 8px;">
-          ${t("agents.channels.last_refresh").replace("{time}", lastSuccessLabel)}
+
+        ${
+          params.operationError
+            ? html`<div class="callout danger" style="margin-top: 12px;">${params.operationError}</div>`
+            : nothing
+        }
+        ${
+          params.boundAccountsError
+            ? html`<div class="callout danger" style="margin-top: 12px;">${params.boundAccountsError}</div>`
+            : nothing
+        }
+
+        <!-- 已绑定的通道账号 -->
+        <div style="margin-top: 20px;">
+          <div class="label">已绑定的通道账号 (${params.boundAccounts.length})</div>
+          ${
+            params.boundAccountsLoading
+              ? html`
+                  <div class="loading" style="margin-top: 8px">加载中...</div>
+                `
+              : params.boundAccounts.length === 0
+                ? html`
+                    <div class="muted" style="margin-top: 8px">还没有绑定任何通道账号</div>
+                  `
+                : html`
+                  <div class="list" style="margin-top: 8px;">
+                    ${params.boundAccounts.map(
+                      (binding: any) => html`
+                        <div class="card" style="margin-bottom: 8px; padding: 12px;">
+                          <div class="row" style="justify-content: space-between; align-items: center;">
+                            <div>
+                              <div class="list-title">${binding.channelId}</div>
+                              <div class="list-sub">
+                                ${binding.accountIds.length} 个账号: ${binding.accountIds.join(", ")}
+                              </div>
+                            </div>
+                          </div>
+                          <!-- 账号列表 -->
+                          <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px;">
+                            ${binding.accountIds.map(
+                              (accountId: string) => html`
+                                <div class="row" style="align-items: center; gap: 8px; padding: 4px 8px; background: var(--bg-1); border-radius: 4px;">
+                                  <span class="mono" style="font-size: 0.875rem;">${accountId}</span>
+                                  <button
+                                    class="btn btn--sm"
+                                    style="color: var(--color-danger); padding: 2px 6px; font-size: 0.75rem;"
+                                    @click=${() => {
+                                      if (
+                                        confirm(
+                                          `确定要移除 ${binding.channelId}:${accountId} 的绑定吗？`,
+                                        )
+                                      ) {
+                                        params.onRemoveAccount(binding.channelId, accountId);
+                                      }
+                                    }}
+                                  >
+                                    移除
+                                  </button>
+                                </div>
+                              `,
+                            )}
+                          </div>
+                        </div>
+                      `,
+                    )}
+                  </div>
+                `
+          }
         </div>
-        ${
-          params.error
-            ? html`<div class="callout danger" style="margin-top: 12px;">${params.error}</div>`
-            : nothing
-        }
-        ${
-          !params.snapshot
-            ? html`
-                <div class="callout info" style="margin-top: 12px">${t("agents.channels.load_prompt")}</div>
+
+        <!-- 可用但未绑定的通道账号（折叠） -->
+        <div style="margin-top: 24px;">
+          <div class="row" style="justify-content: space-between; align-items: center;">
+            <div class="label">可用的通道账号</div>
+            <button class="btn btn--sm" @click=${params.onToggleAvailableAccounts}>
+              ${params.availableAccountsExpanded ? "收起" : "展开"}
+            </button>
+          </div>
+
+          ${
+            params.availableAccountsExpanded
+              ? html`
+                <div style="margin-top: 12px;">
+                  ${
+                    params.availableAccountsError
+                      ? html`<div class="callout danger">${params.availableAccountsError}</div>`
+                      : nothing
+                  }
+                  ${
+                    params.availableAccountsLoading
+                      ? html`
+                          <div class="loading">加载中...</div>
+                        `
+                      : params.availableAccounts.length === 0
+                        ? html`
+                            <div class="muted">没有可用的通道账号</div>
+                          `
+                        : html`
+                          <div class="list">
+                            ${params.availableAccounts.map(
+                              (account: any) => html`
+                                <div class="list-item" style="display: flex; justify-content: space-between; align-items: center;">
+                                  <div>
+                                    <div class="list-title">${account.label}</div>
+                                    <div class="list-sub mono">
+                                      ${account.channelId}:${account.accountId}
+                                      ${account.configured ? "" : " - 未配置"}
+                                    </div>
+                                  </div>
+                                  <button
+                                    class="btn btn--sm"
+                                    ?disabled=${!account.configured}
+                                    @click=${() => params.onAddAccount(account.channelId, account.accountId)}
+                                  >
+                                    + 添加
+                                  </button>
+                                </div>
+                              `,
+                            )}
+                          </div>
+                        `
+                  }
+                </div>
               `
-            : nothing
-        }
-        ${
-          entries.length === 0
-            ? html`
-                <div class="muted" style="margin-top: 16px">${t("agents.channels.no_channels")}</div>
-              `
-            : html`
-              <div class="list" style="margin-top: 16px;">
-                ${entries.map((entry) => {
-                  const summary = summarizeChannelAccounts(entry.accounts);
-                  const status = summary.total
-                    ? t("agents.channels.connected")
-                        .replace("{connected}", String(summary.connected))
-                        .replace("{total}", String(summary.total))
-                    : t("agents.channels.no_accounts");
-                  const config = summary.configured
-                    ? t("agents.channels.configured").replace("{count}", String(summary.configured))
-                    : t("agents.channels.not_configured");
-                  const enabled = summary.total
-                    ? t("agents.channels.enabled").replace("{count}", String(summary.enabled))
-                    : t("agents.channels.disabled");
-                  const extras = resolveChannelExtras(params.configForm, entry.id);
-                  return html`
-                    <div class="list-item">
-                      <div class="list-main">
-                        <div class="list-title">${entry.label}</div>
-                        <div class="list-sub mono">${entry.id}</div>
-                      </div>
-                      <div class="list-meta">
-                        <div>${status}</div>
-                        <div>${config}</div>
-                        <div>${enabled}</div>
-                        ${
-                          extras.length > 0
-                            ? extras.map((extra) => html`<div>${extra.label}: ${extra.value}</div>`)
-                            : nothing
-                        }
-                      </div>
-                    </div>
-                  `;
-                })}
-              </div>
-            `
-        }
+              : nothing
+          }
+        </div>
       </section>
     </section>
   `;

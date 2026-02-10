@@ -3,7 +3,7 @@
  * 管理员管理、审批请求、通知中心的UI渲染
  */
 
-import { html } from "lit-html";
+import { html } from "lit";
 import type { AppViewState } from "../app-view-state.js";
 import {
   loadSuperAdmins,
@@ -238,7 +238,9 @@ function renderApprovalFilters(state: AppViewState) {
  */
 function renderApprovalStats(state: AppViewState) {
   const stats = state.approvalStats;
-  if (!stats) return html``;
+  if (!stats) {
+    return html``;
+  }
 
   return html`
     <div class="approval-stats">
@@ -510,10 +512,18 @@ function formatTime(timestamp: number): string {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return "刚刚";
-  if (diffMins < 60) return `${diffMins}分钟前`;
-  if (diffHours < 24) return `${diffHours}小时前`;
-  if (diffDays < 7) return `${diffDays}天前`;
+  if (diffMins < 1) {
+    return "刚刚";
+  }
+  if (diffMins < 60) {
+    return `${diffMins}分钟前`;
+  }
+  if (diffHours < 24) {
+    return `${diffHours}小时前`;
+  }
+  if (diffDays < 7) {
+    return `${diffDays}天前`;
+  }
 
   return date.toLocaleDateString("zh-CN", {
     year: "numeric",
@@ -582,4 +592,74 @@ async function handleNotificationAction(state: AppViewState, action: any) {
   if (action.url) {
     window.open(action.url, "_blank");
   }
+}
+
+/**
+ * 超级管理员主渲染函数
+ * 根据 activeTab 渲染不同的子界面
+ */
+export function renderSuperAdmin(props: {
+  loading: boolean;
+  error: string | null;
+  activeTab: "management" | "approvals" | "notifications";
+  superAdminsList: any[];
+  superAdminsLoading: boolean;
+  approvalRequests: any[];
+  approvalsLoading: boolean;
+  notifications: any[];
+  notificationsLoading: boolean;
+  onRefresh: () => void;
+  onTabChange: (tab: "management" | "approvals" | "notifications") => void;
+  onAddSuperAdmin: (agentId: string) => void;
+  onRemoveSuperAdmin: (agentId: string) => void;
+  onApprovalAction: (requestId: string, action: "approve" | "deny", comment?: string) => void;
+  onMarkNotificationRead: (notificationId: string) => void;
+}) {
+  // 创建一个临时的 state 对象用于内部函数
+  const tempState: Partial<AppViewState> = {
+    superAdmins: props.superAdminsList,
+    superAdminsLoading: props.superAdminsLoading,
+    superAdminsError: props.error,
+    approvalRequests: props.approvalRequests,
+    approvalRequestsLoading: props.approvalsLoading,
+    approvalRequestsError: props.error,
+    notifications: props.notifications,
+    notificationsLoading: props.notificationsLoading,
+    notificationsError: props.error,
+  };
+
+  return html`
+    <div class="super-admin-container">
+      <div class="tab-navigation">
+        <button
+          class="tab-btn ${props.activeTab === "management" ? "active" : ""}"
+          @click=${() => props.onTabChange("management")}
+        >
+          🔐 管理员管理
+        </button>
+        <button
+          class="tab-btn ${props.activeTab === "approvals" ? "active" : ""}"
+          @click=${() => props.onTabChange("approvals")}
+        >
+          📋 审批请求
+        </button>
+        <button
+          class="tab-btn ${props.activeTab === "notifications" ? "active" : ""}"
+          @click=${() => props.onTabChange("notifications")}
+        >
+          🔔 通知中心
+        </button>
+      </div>
+
+      <div class="tab-content">
+        ${
+          props.activeTab === "management"
+            ? renderSuperAdminManagement(tempState as AppViewState)
+            : props.activeTab === "approvals"
+              ? renderApprovalRequests(tempState as AppViewState)
+              : renderNotificationCenter(tempState as AppViewState)
+        }
+      </div>
+    </div>
+  `;
 }

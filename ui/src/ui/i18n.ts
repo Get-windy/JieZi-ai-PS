@@ -19,6 +19,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "tab.agents": "Agents",
     "tab.organization-chart": "Organization Chart",
     "tab.permissions-management": "Permissions Management",
+    "tab.super-admin": "Super Admin",
     "tab.overview": "Overview",
     "tab.channels": "Channels",
     "tab.instances": "Instances",
@@ -38,6 +39,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "tab.agents.subtitle": "Manage agent workspaces, tools, and identities.",
     "tab.organization-chart.subtitle": "Visualize agent hierarchies and organizational structure.",
     "tab.permissions-management.subtitle": "Manage permissions, approvals, and access control.",
+    "tab.super-admin.subtitle":
+      "Super administrator management, approval system, and emergency access.",
     "tab.overview.subtitle": "Gateway status, entry points, and a fast health read.",
     "tab.channels.subtitle": "Manage channels and settings.",
     "tab.instances.subtitle": "Presence beacons from connected clients and nodes.",
@@ -2308,6 +2311,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "tab.collaboration": "协作管理",
     "tab.organization-chart": "组织框架",
     "tab.permissions-management": "权限管理",
+    "tab.super-admin": "超级管理",
     "tab.overview": "概览",
     "tab.channels": "通道",
     "tab.instances": "实例",
@@ -2328,6 +2332,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "tab.collaboration.subtitle": "群组管理、好友关系、协作监控和自动化场景。",
     "tab.organization-chart.subtitle": "可视化智能助手层级和组织结构。",
     "tab.permissions-management.subtitle": "管理权限、审批和访问控制。",
+    "tab.super-admin.subtitle": "超级管理员管理、审批系统和紧急访问控制。",
 
     // 智能助手管理页面
     "agents.title": "助手管理",
@@ -4375,6 +4380,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.tab.skills": "技能",
     "agents.tab.channels": "通道",
     "agents.tab.cron": "定时任务",
+    "agents.tab.model_accounts": "模型账号",
+    "agents.tab.channel_policies": "通道策略",
+    "agents.tab.permissions": "权限配置",
 
     // 代理概览
     "agents.overview.title": "概览",
@@ -4557,8 +4565,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.skills.missing_prefix": "缺失：{items}",
     "agents.skills.reason_prefix": "原因：{reasons}",
 
-    // 代理模型路由标签页
-    "agents.tab.model_accounts": "模型路由",
+    // 代理模型账号管理
     "agents.model_accounts.title": "模型账号管理",
     "agents.model_accounts.subtitle": "配置智能路由和模型账号选择。",
     "agents.model_accounts.loading": "加载中…",
@@ -4585,8 +4592,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.model_accounts.enabled": "已启用",
     "agents.model_accounts.disabled": "已禁用",
 
-    // 代理通道策略标签页
-    "agents.tab.channel_policies": "通道策略",
+    // 代理通道策略管理
     "agents.channel_policies.title": "通道策略管理",
     "agents.channel_policies.subtitle": "配置通道绑定和策略。",
     "agents.channel_policies.loading": "加载中…",

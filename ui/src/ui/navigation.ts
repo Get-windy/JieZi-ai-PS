@@ -33,6 +33,7 @@ export const TAB_GROUPS = [
       "collaboration",
       "skills",
       "nodes",
+      "super-admin",
     ],
   },
   { label: "nav.settings", tabs: ["bindings", "config", "debug", "logs"] },
@@ -43,6 +44,7 @@ export type Tab =
   | "collaboration"
   | "organization-chart"
   | "permissions-management"
+  | "super-admin"
   | "overview"
   | "message-queue"
   | "channels"
@@ -64,6 +66,7 @@ const TAB_PATHS: Record<Tab, string> = {
   collaboration: "/collaboration",
   "organization-chart": "/organization-chart",
   "permissions-management": "/permissions-management",
+  "super-admin": "/super-admin",
   overview: "/overview",
   "message-queue": "/message-queue",
   channels: "/channels",
@@ -172,6 +175,8 @@ export function iconForTab(tab: Tab): IconName {
       return "git-branch";
     case "permissions-management":
       return "wrench";
+    case "super-admin":
+      return "shield";
     case "chat":
       return "messageSquare";
     case "overview":
@@ -217,6 +222,8 @@ export function titleForTab(tab: Tab) {
       return t("tab.organization-chart");
     case "permissions-management":
       return t("tab.permissions-management");
+    case "super-admin":
+      return t("tab.super-admin");
     case "overview":
       return t("tab.overview");
     case "channels":
@@ -262,6 +269,8 @@ export function subtitleForTab(tab: Tab) {
       return t("tab.organization-chart.subtitle");
     case "permissions-management":
       return t("tab.permissions-management.subtitle");
+    case "super-admin":
+      return t("tab.super-admin.subtitle");
     case "overview":
       return t("tab.overview.subtitle");
     case "channels":

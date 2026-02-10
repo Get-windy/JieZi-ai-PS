@@ -5,11 +5,19 @@
  * - agent.list - 列出所有智能助手
  * - agent.modelAccounts.list - 获取智能助手的模型账号配置
  * - agent.modelAccounts.update - 更新智能助手的模型账号配置
+ * - agent.modelAccounts.bound - 获取智能助手绑定的模型账号
+ * - agent.modelAccounts.available - 获取可用但未绑定的模型账号
+ * - agent.modelAccounts.bind - 绑定模型账号到智能助手
+ * - agent.modelAccounts.unbind - 解绑智能助手的模型账号
  * - agent.channelPolicies.list - 获取智能助手的通道策略配置
  * - agent.channelPolicies.update - 更新智能助手的通道策略配置
+ * - agent.channelAccounts.list - 获取智能助手绑定的通道账号
+ * - agent.channelAccounts.add - 为智能助手添加通道账号绑定
+ * - agent.channelAccounts.remove - 移除智能助手的通道账号绑定
+ * - agent.channelAccounts.available - 获取可用但未绑定的通道账号
  */
 
-import type { AgentModelAccountsConfig } from "../../config/types.agents.js";
+import type { AgentModelAccountsConfig, AgentBinding } from "../../config/types.agents.js";
 import type {
   AgentChannelBindings,
   ChannelAccountBinding,
@@ -21,8 +29,10 @@ import {
   resolveAgentModelAccounts,
   listAgentModelAccounts,
 } from "../../agents/agent-scope.js";
+import { getChannelPlugin, listChannelPlugins } from "../../channels/plugins/index.js";
 import { listAgentEntries, findAgentEntryIndex } from "../../commands/agents.config.js";
 import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../config/config.js";
+import { listBindings } from "../../routing/bindings.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 
@@ -96,7 +106,7 @@ function validateChannelPoliciesConfig(config: any): void {
     throw new Error("bindings must be an array");
   }
 
-  const validPolicies = [
+  const validPolicies = new Set([
     "private",
     "monitor",
     "listen-only",
@@ -104,10 +114,10 @@ function validateChannelPoliciesConfig(config: any): void {
     "queue",
     "moderate",
     "echo",
-  ];
+  ]);
 
   // 验证默认策略
-  if (config.defaultPolicy && !validPolicies.includes(config.defaultPolicy.type)) {
+  if (config.defaultPolicy && !validPolicies.has(config.defaultPolicy.type)) {
     throw new Error(`Invalid defaultPolicy type: ${config.defaultPolicy.type}`);
   }
 
@@ -125,7 +135,7 @@ function validateChannelPoliciesConfig(config: any): void {
     if (!binding.policy || !binding.policy.type) {
       throw new Error("Binding must have a policy with type");
     }
-    if (!validPolicies.includes(binding.policy.type)) {
+    if (!validPolicies.has(binding.policy.type)) {
       throw new Error(`Invalid policy type: ${binding.policy.type}`);
     }
   }
@@ -368,6 +378,652 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const success = await updateAgentField(agentId, "channelBindings", config, respond);
     if (success) {
       respond(true, { success: true, agentId }, undefined);
+    }
+  },
+
+  /**
+   * agent.channelAccounts.list - 获取智能助手绑定的通道账号
+   */
+  "agent.channelAccounts.list": ({ params, respond }) => {
+    const agentId = String(params?.agentId ?? "").trim();
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+
+    const cfg = loadConfig();
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    const normalized = normalizeAgentId(agentId);
+    const bindings = listBindings(cfg);
+
+    // 筛选出该助手的绑定
+    const agentBindings = bindings.filter((b) => normalizeAgentId(b.agentId) === normalized);
+
+    // 按通道分组
+    const bindingsByChannel = new Map<string, Set<string>>();
+    for (const binding of agentBindings) {
+      if (!binding.match?.channel) {
+        continue;
+      }
+      const channelId = binding.match.channel;
+      const accountId = binding.match.accountId || "default";
+      if (!bindingsByChannel.has(channelId)) {
+        bindingsByChannel.set(channelId, new Set());
+      }
+      bindingsByChannel.get(channelId)!.add(accountId);
+    }
+
+    const result = Array.from(bindingsByChannel.entries()).map(([channelId, accountIds]) => ({
+      channelId,
+      accountIds: Array.from(accountIds),
+    }));
+
+    respond(true, { agentId, bindings: result }, undefined);
+  },
+
+  /**
+   * agent.channelAccounts.add - 为智能助手添加通道账号绑定
+   */
+  "agent.channelAccounts.add": async ({ params, respond }) => {
+    const agentId = String(params?.agentId ?? "").trim();
+    const channelId = String((params as any)?.channelId ?? "").trim();
+    const accountId = String((params as any)?.accountId ?? "").trim();
+
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+    if (!channelId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "channelId is required"));
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before updating"),
+      );
+      return;
+    }
+
+    const cfg = snapshot.config;
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    // 验证通道是否存在
+    const plugin = getChannelPlugin(channelId as any);
+    if (!plugin) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `Unknown channel: ${channelId}`),
+      );
+      return;
+    }
+
+    const normalized = normalizeAgentId(agentId);
+    const bindings = listBindings(cfg);
+
+    // 检查是否已经绑定
+    const existingBinding = bindings.find(
+      (b) =>
+        normalizeAgentId(b.agentId) === normalized &&
+        b.match?.channel === channelId &&
+        (b.match?.accountId || "default") === (accountId || "default"),
+    );
+
+    if (existingBinding) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `Binding already exists for ${channelId}:${accountId || "default"}`,
+        ),
+      );
+      return;
+    }
+
+    // 添加新绑定
+    const newBinding: AgentBinding = {
+      agentId,
+      match: {
+        channel: channelId,
+      },
+    };
+
+    if (accountId) {
+      newBinding.match.accountId = accountId;
+    }
+
+    const updatedConfig: OpenClawConfig = {
+      ...cfg,
+      bindings: [...bindings, newBinding],
+    };
+
+    try {
+      await writeConfigFile(updatedConfig);
+      respond(true, { success: true, agentId, channelId, accountId }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to save config: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * agent.channelAccounts.remove - 移除智能助手的通道账号绑定
+   */
+  "agent.channelAccounts.remove": async ({ params, respond }) => {
+    const agentId = String(params?.agentId ?? "").trim();
+    const channelId = String((params as any)?.channelId ?? "").trim();
+    const accountId = String((params as any)?.accountId ?? "").trim();
+
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+    if (!channelId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "channelId is required"));
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before updating"),
+      );
+      return;
+    }
+
+    const cfg = snapshot.config;
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    const normalized = normalizeAgentId(agentId);
+    const bindings = listBindings(cfg);
+
+    // 找到并移除绑定
+    const filteredBindings = bindings.filter(
+      (b) =>
+        !(
+          normalizeAgentId(b.agentId) === normalized &&
+          b.match?.channel === channelId &&
+          (b.match?.accountId || "default") === (accountId || "default")
+        ),
+    );
+
+    if (filteredBindings.length === bindings.length) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `Binding not found for ${channelId}:${accountId || "default"}`,
+        ),
+      );
+      return;
+    }
+
+    const updatedConfig: OpenClawConfig = {
+      ...cfg,
+      bindings: filteredBindings,
+    };
+
+    try {
+      await writeConfigFile(updatedConfig);
+      respond(true, { success: true, agentId, channelId, accountId }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to save config: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * agent.channelAccounts.available - 获取可用但未绑定的通道账号
+   */
+  "agent.channelAccounts.available": async ({ params, respond }) => {
+    const agentId = String(params?.agentId ?? "").trim();
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+
+    const cfg = loadConfig();
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    const normalized = normalizeAgentId(agentId);
+    const bindings = listBindings(cfg);
+
+    // 获取已绑定的通道账号
+    const boundAccounts = new Set<string>();
+    for (const binding of bindings) {
+      if (normalizeAgentId(binding.agentId) !== normalized) {
+        continue;
+      }
+      if (!binding.match?.channel) {
+        continue;
+      }
+      const key = `${binding.match.channel}:${binding.match.accountId || "default"}`;
+      boundAccounts.add(key);
+    }
+
+    // 获取所有可用的通道账号
+    const availableAccounts: Array<{
+      channelId: string;
+      accountId: string;
+      label: string;
+      configured: boolean;
+    }> = [];
+
+    const promises: Array<Promise<void>> = [];
+
+    for (const plugin of listChannelPlugins()) {
+      const channelId = plugin.id;
+      const accountIds = plugin.config.listAccountIds(cfg);
+
+      for (const accountId of accountIds) {
+        const key = `${channelId}:${accountId}`;
+        if (!boundAccounts.has(key)) {
+          const checkPromise = (async () => {
+            const account = plugin.config.resolveAccount(cfg, accountId);
+            let configured = true;
+            if (plugin.config.isConfigured) {
+              try {
+                configured = await plugin.config.isConfigured(account, cfg);
+              } catch {
+                configured = false;
+              }
+            }
+
+            const channelLabel = (plugin.meta as any).label || plugin.id;
+            availableAccounts.push({
+              channelId,
+              accountId,
+              label: `${channelLabel} - ${accountId}`,
+              configured,
+            });
+          })();
+          promises.push(checkPromise);
+        }
+      }
+    }
+
+    await Promise.all(promises);
+    respond(true, { agentId, accounts: availableAccounts }, undefined);
+  },
+
+  /**
+   * agent.modelAccounts.bound - 获取智能助手绑定的模型账号
+   */
+  "agent.modelAccounts.bound": ({ params, respond }) => {
+    const agentId = String(params?.agentId ?? "").trim();
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+
+    const cfg = loadConfig();
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    // 获取助手的modelAccounts配置
+    const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
+    const boundAccounts = modelAccounts?.accounts || [];
+    const defaultAccountId = modelAccounts?.defaultAccountId || "";
+
+    respond(true, { agentId, accounts: boundAccounts, defaultAccountId }, undefined);
+  },
+
+  /**
+   * agent.modelAccounts.available - 获取可用但未绑定的模型账号
+   */
+  "agent.modelAccounts.available": ({ params, respond }) => {
+    const agentId = String(params?.agentId ?? "").trim();
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+
+    const cfg = loadConfig();
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    // 获取所有可用的模型账号（从 models.providers 中获取）
+    const allModelAccounts = Object.keys(cfg.models?.providers ?? {});
+
+    // 获取已绑定的模型账号
+    const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
+    const boundSet = new Set(modelAccounts?.accounts || []);
+
+    // 过滤出未绑定的
+    const availableAccounts = allModelAccounts.filter((accountId) => !boundSet.has(accountId));
+
+    respond(true, { agentId, accounts: availableAccounts }, undefined);
+  },
+
+  /**
+   * agent.modelAccounts.bind - 绑定模型账号到智能助手
+   */
+  "agent.modelAccounts.bind": async ({ params, respond }) => {
+    const agentId = String(params?.agentId ?? "").trim();
+    const accountId = String((params as any)?.accountId ?? "").trim();
+
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+    if (!accountId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "accountId is required"));
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before updating"),
+      );
+      return;
+    }
+
+    const cfg = snapshot.config;
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    // 验证模型账号是否存在（从 models.providers 中检查）
+    const allModelAccounts = Object.keys(cfg.models?.providers ?? {});
+    if (!allModelAccounts.includes(accountId)) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `Unknown model account: ${accountId}`),
+      );
+      return;
+    }
+
+    // 获取当前配置
+    const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
+    const currentAccounts = modelAccounts?.accounts || [];
+
+    // 检查是否已绑定
+    if (currentAccounts.includes(accountId)) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `Model account already bound: ${accountId}`),
+      );
+      return;
+    }
+
+    // 添加到accounts列表
+    const updatedAccounts = [...currentAccounts, accountId];
+    const updatedConfig = {
+      ...modelAccounts,
+      accounts: updatedAccounts,
+      // 如果是第一个账号，设为默认
+      defaultAccountId: modelAccounts?.defaultAccountId || accountId,
+    };
+
+    const success = await updateAgentField(agentId, "modelAccounts", updatedConfig, respond);
+    if (success) {
+      respond(true, { success: true, agentId, accountId }, undefined);
+    }
+  },
+
+  /**
+   * agent.modelAccounts.unbind - 解绑智能助手的模型账号
+   */
+  "agent.modelAccounts.unbind": async ({ params, respond }) => {
+    const agentId = String(params?.agentId ?? "").trim();
+    const accountId = String((params as any)?.accountId ?? "").trim();
+
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+    if (!accountId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "accountId is required"));
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before updating"),
+      );
+      return;
+    }
+
+    const cfg = snapshot.config;
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    // 获取当前配置
+    const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
+    const currentAccounts = modelAccounts?.accounts || [];
+
+    // 检查是否已绑定
+    if (!currentAccounts.includes(accountId)) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `Model account not bound: ${accountId}`),
+      );
+      return;
+    }
+
+    // 从 accounts 列表中移除
+    const updatedAccounts = currentAccounts.filter((id) => id !== accountId);
+
+    // 如果移除的是默认账号，选择新的默认账号
+    let defaultAccountId = modelAccounts?.defaultAccountId;
+    if (defaultAccountId === accountId) {
+      defaultAccountId = updatedAccounts[0] || "";
+    }
+
+    const updatedConfig = {
+      ...modelAccounts,
+      accounts: updatedAccounts,
+      defaultAccountId,
+    };
+
+    const success = await updateAgentField(agentId, "modelAccounts", updatedConfig, respond);
+    if (success) {
+      respond(true, { success: true, agentId, accountId }, undefined);
+    }
+  },
+
+  /**
+   * agent.modelAccounts.config.get - 获取模型账号的配置（启用/停用、用量控制等）
+   */
+  "agent.modelAccounts.config.get": ({ params, respond }) => {
+    const agentId = String(params?.agentId ?? "").trim();
+    const accountId = String((params as any)?.accountId ?? "").trim();
+
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+    if (!accountId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "accountId is required"));
+      return;
+    }
+
+    const cfg = loadConfig();
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    // 获取助手的modelAccounts配置
+    const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
+    const accountConfigs = (modelAccounts as any)?.accountConfigs || {};
+    const accountConfig = accountConfigs[accountId] || {
+      enabled: true, // 默认启用
+      priority: 0,
+      schedule: null,
+      usageLimit: null,
+      healthCheck: null,
+    };
+
+    respond(true, { agentId, accountId, config: accountConfig }, undefined);
+  },
+
+  /**
+   * agent.modelAccounts.config.update - 更新模型账号配置
+   *
+   * 配置项包括：
+   * - enabled: boolean - 启用/停用
+   * - priority: number - 优先级（数字越大优先级越高）
+   * - schedule: { enabledHours: [start, end][], timezone?: string } - 定时启用/停用
+   * - usageLimit: { maxTokens: number, period: 'hour'|'day'|'month', autoDisable: boolean } - 用量控制
+   * - healthCheck: { errorThreshold: number, cooldownMinutes: number } - 健康检查
+   */
+  "agent.modelAccounts.config.update": async ({ params, respond }) => {
+    const agentId = String(params?.agentId ?? "").trim();
+    const accountId = String((params as any)?.accountId ?? "").trim();
+    const config = (params as any)?.config;
+
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+    if (!accountId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "accountId is required"));
+      return;
+    }
+    if (!config || typeof config !== "object") {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "config is required"));
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before updating"),
+      );
+      return;
+    }
+
+    const cfg = snapshot.config;
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    // 验证账号已绑定
+    const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
+    const boundAccounts = modelAccounts?.accounts || [];
+    if (!boundAccounts.includes(accountId)) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `Model account not bound: ${accountId}`),
+      );
+      return;
+    }
+
+    // 更新配置
+    const accountConfigs = (modelAccounts as any)?.accountConfigs || {};
+    const updatedConfig = {
+      ...modelAccounts,
+      accountConfigs: {
+        ...accountConfigs,
+        [accountId]: config,
+      },
+    };
+
+    const success = await updateAgentField(agentId, "modelAccounts", updatedConfig, respond);
+    if (success) {
+      respond(true, { success: true, agentId, accountId, config }, undefined);
+    }
+  },
+
+  /**
+   * agent.modelAccounts.config.toggle - 快速切换账号启用/停用状态
+   */
+  "agent.modelAccounts.config.toggle": async ({ params, respond }) => {
+    const agentId = String(params?.agentId ?? "").trim();
+    const accountId = String((params as any)?.accountId ?? "").trim();
+    const enabled = Boolean((params as any)?.enabled);
+
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+    if (!accountId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "accountId is required"));
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before updating"),
+      );
+      return;
+    }
+
+    const cfg = snapshot.config;
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    // 验证账号已绑定
+    const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
+    const boundAccounts = modelAccounts?.accounts || [];
+    if (!boundAccounts.includes(accountId)) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `Model account not bound: ${accountId}`),
+      );
+      return;
+    }
+
+    // 更新启用状态
+    const accountConfigs = (modelAccounts as any)?.accountConfigs || {};
+    const currentConfig = accountConfigs[accountId] || { enabled: true };
+    const updatedConfig = {
+      ...modelAccounts,
+      accountConfigs: {
+        ...accountConfigs,
+        [accountId]: {
+          ...currentConfig,
+          enabled,
+        },
+      },
+    };
+
+    const success = await updateAgentField(agentId, "modelAccounts", updatedConfig, respond);
+    if (success) {
+      respond(true, { success: true, agentId, accountId, enabled }, undefined);
     }
   },
 };

@@ -1,13 +1,49 @@
 services:
   openclaw-gateway:
+    container_name: openclaw-gateway
     image: ${OPENCLAW_IMAGE:-openclaw:local}
+    # Add necessary permission capabilities (for permission management)
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    # Optional: specify container run UID:GID (default 0:0 for init script to auto-fix permissions)
+    user: ${OPENCLAW_RUN_USER:-0:0}
     environment:
       HOME: /home/node
       TERM: xterm-256color
+      # Gateway configuration
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+      OPENCLAW_GATEWAY_BIND: ${OPENCLAW_GATEWAY_BIND:-lan}
+      OPENCLAW_GATEWAY_PORT: ${OPENCLAW_GATEWAY_PORT:-18789}
+      # Model configuration (optional)
+      MODEL_ID: ${MODEL_ID}
+      BASE_URL: ${BASE_URL}
+      API_KEY: ${API_KEY}
+      API_PROTOCOL: ${API_PROTOCOL:-openai-completions}
+      CONTEXT_WINDOW: ${CONTEXT_WINDOW:-200000}
+      MAX_TOKENS: ${MAX_TOKENS:-8192}
+      # Claude configuration (backward compatible)
       CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY}
       CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY}
       CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE}
+      # Chinese IM platforms configuration (optional)
+      FEISHU_APP_ID: ${FEISHU_APP_ID}
+      FEISHU_APP_SECRET: ${FEISHU_APP_SECRET}
+      DINGTALK_CLIENT_ID: ${DINGTALK_CLIENT_ID}
+      DINGTALK_CLIENT_SECRET: ${DINGTALK_CLIENT_SECRET}
+      DINGTALK_ROBOT_CODE: ${DINGTALK_ROBOT_CODE}
+      DINGTALK_CORP_ID: ${DINGTALK_CORP_ID}
+      DINGTALK_AGENT_ID: ${DINGTALK_AGENT_ID}
+      QQBOT_APP_ID: ${QQBOT_APP_ID}
+      QQBOT_CLIENT_SECRET: ${QQBOT_CLIENT_SECRET}
+      WECOM_TOKEN: ${WECOM_TOKEN}
+      WECOM_ENCODING_AES_KEY: ${WECOM_ENCODING_AES_KEY}
+      # Telegram configuration (optional)
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      # Workspace configuration
+      WORKSPACE: ${WORKSPACE:-/home/node/.openclaw/workspace}
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
       - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace

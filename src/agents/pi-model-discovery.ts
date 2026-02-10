@@ -5,9 +5,33 @@ let piCodingAgentModule: typeof import("@mariozechner/pi-coding-agent") | null =
 
 function getPiCodingAgent(): typeof import("@mariozechner/pi-coding-agent") {
   if (!piCodingAgentModule) {
-    // 使用同步 require 而不是异步 import
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    piCodingAgentModule = require("@mariozechner/pi-coding-agent");
+    try {
+      // 尝试使用 require 加载
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      piCodingAgentModule = require("@mariozechner/pi-coding-agent");
+    } catch (requireError) {
+      // 如果 require 失败，尝试从不同的路径加载
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const pkg = require("@mariozechner/pi-coding-agent/dist/index.js");
+        piCodingAgentModule = pkg;
+      } catch (distError) {
+        // 尝试加载默认导出
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const pkg = require("@mariozechner/pi-coding-agent");
+          piCodingAgentModule = pkg.default || pkg;
+        } catch (finalError) {
+          const errorMsg = [
+            "Failed to load @mariozechner/pi-coding-agent:",
+            `1. Direct require: ${requireError instanceof Error ? requireError.message : String(requireError)}`,
+            `2. Dist path: ${distError instanceof Error ? distError.message : String(distError)}`,
+            `3. Default export: ${finalError instanceof Error ? finalError.message : String(finalError)}`,
+          ].join("\n");
+          throw new Error(errorMsg, { cause: requireError });
+        }
+      }
+    }
   }
   return piCodingAgentModule!;
 }
@@ -45,13 +69,12 @@ export const ModelRegistry = new Proxy({} as any, {
 });
 
 // Compatibility helpers for pi-coding-agent 0.50+ (discover* helpers removed).
-export function discoverAuthStorage(agentDir: string): InstanceType<typeof AuthStorage> {
-  return new AuthStorage(path.join(agentDir, "auth.json"));
+export function discoverAuthStorage(agentDir: string): any {
+  const AS = getPiCodingAgent().AuthStorage;
+  return new AS(path.join(agentDir, "auth.json"));
 }
 
-export function discoverModels(
-  authStorage: InstanceType<typeof AuthStorage>,
-  agentDir: string,
-): InstanceType<typeof ModelRegistry> {
-  return new ModelRegistry(authStorage, path.join(agentDir, "models.json"));
+export function discoverModels(authStorage: any, agentDir: string): any {
+  const MR = getPiCodingAgent().ModelRegistry;
+  return new MR(authStorage, path.join(agentDir, "models.json"));
 }
