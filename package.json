@@ -3,7 +3,7 @@
   "version": "2026.2.6-3",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "",
   "bin": {
     "openclaw": "openclaw.mjs"
@@ -15,6 +15,7 @@
     "docs/",
     "extensions/",
     "LICENSE",
+    "NOTICE",
     "openclaw.mjs",
     "README-header.png",
     "README.md",
