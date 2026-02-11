@@ -476,6 +476,28 @@ export const AgentEntrySchema = z
       })
       .strict()
       .optional(),
+    // Phase 2: Channel Policies 配置（兼容字段）
+    channelPolicies: z
+      .object({
+        agentId: z.string().optional(),
+        policies: z.record(z.string(), z.unknown()).optional(),
+        defaultPolicy: z.unknown().optional(),
+        // 添加 bindings 字段支持
+        bindings: z
+          .array(
+            z
+              .object({
+                channelId: z.string(),
+                accountId: z.string(),
+                policy: z.string().optional(),
+                priority: z.number().optional(),
+              })
+              .strict(),
+          )
+          .optional(),
+      })
+      .strict()
+      .optional(),
     // Phase 3: Permissions 配置
     permissions: z
       .object({

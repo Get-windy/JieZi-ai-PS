@@ -171,7 +171,9 @@ const debouncedLoadUsage = (state: UsageState) => {
   }
   usageDateDebounceTimeout = window.setTimeout(() => void loadUsage(state), 400);
 };
+import { renderModelAccountConfigDialog } from "./views/agents.model-account-config-dialog.ts";
 import { renderAgents } from "./views/agents.ts";
+import { renderChannelPolicyDialog } from "./views/channel-policy-dialog.ts";
 import { renderChannels } from "./views/channels.ts";
 import { renderChat } from "./views/chat.ts";
 import { renderCollaboration } from "./views/collaboration.ts";
@@ -186,12 +188,10 @@ import { renderLogs } from "./views/logs.ts";
 import { renderMessageQueue } from "./views/message-queue.ts";
 import { renderModels } from "./views/models.ts";
 import { renderNodes } from "./views/nodes.ts";
-import { renderOrganizationChart } from "./views/organization-chart.ts";
+import { renderOrganizationPermissions } from "./views/organization-permissions.ts";
 import { renderOverview } from "./views/overview.ts";
-import { renderPermissionsManagement } from "./views/permissions-management.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
-import { renderSuperAdmin } from "./views/super-admin.ts";
 import { renderUsage } from "./views/usage.ts";
 
 const AVATAR_DATA_RE = /^data:/i;
@@ -1662,84 +1662,14 @@ export function renderApp(state: AppViewState) {
                   toggleAvailableAccountsExpanded(state);
                 },
                 onConfigurePolicy: async (channelId, accountId, currentPolicy) => {
-                  if (!resolvedAgentId) {
-                    return;
-                  }
-
-                  // 简单的 prompt 对话框选择策略
-                  const policyOptions = [
-                    "private - 私人模式",
-                    "monitor - 监控模式",
-                    "listen_only - 仅监听",
-                    "filter - 过滤模式",
-                    "scheduled - 定时响应",
-                    "forward - 转发模式",
-                    "smart_route - 智能路由",
-                    "broadcast - 广播模式",
-                    "round_robin - 负载均衡",
-                    "queue - 队列模式",
-                    "moderate - 审核模式",
-                    "echo - 日志模式",
-                  ];
-
-                  const selectedIndex = prompt(
-                    `为 ${channelId}:${accountId} 配置策略
-
-当前策略: ${currentPolicy}
-
-请输入策略编号 (0-11):
-` + policyOptions.map((opt, idx) => `${idx}. ${opt}`).join("\n"),
-                    "0",
-                  );
-
-                  if (selectedIndex === null) {
-                    return; // 取消
-                  }
-
-                  const index = parseInt(selectedIndex, 10);
-                  if (isNaN(index) || index < 0 || index >= policyOptions.length) {
-                    alert("无效的策略编号");
-                    return;
-                  }
-
-                  const policy = policyOptions[index].split(" - ")[0];
-
-                  try {
-                    const config = state.channelPoliciesConfig as any;
-                    if (!config) {
-                      return;
-                    }
-
-                    const bindings = Array.isArray(config.bindings) ? [...config.bindings] : [];
-                    const existingIndex = bindings.findIndex(
-                      (b: any) => b.channelId === channelId && b.accountId === accountId,
-                    );
-
-                    if (existingIndex >= 0) {
-                      // 更新现有绑定
-                      bindings[existingIndex] = {
-                        ...bindings[existingIndex],
-                        policy,
-                      };
-                    } else {
-                      // 添加新绑定
-                      bindings.push({
-                        channelId,
-                        accountId,
-                        policy,
-                      });
-                    }
-
-                    await saveChannelPolicies(state, resolvedAgentId, {
-                      ...config,
-                      bindings,
-                    } as any);
-
-                    // 重新加载配置
-                    await loadChannelPolicies(state, resolvedAgentId);
-                  } catch (err) {
-                    console.error("Failed to save channel policy:", err);
-                    alert(`保存失败: ${err instanceof Error ? err.message : String(err)}`);
+                  // 打开策略配置对话框
+                  if (resolvedAgentId) {
+                    state.configuringChannelPolicy = {
+                      agentId: resolvedAgentId,
+                      channelId,
+                      accountId,
+                      currentPolicy,
+                    };
                   }
                 },
                 onAddAgent: () => {
@@ -2432,131 +2362,98 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "organization-chart"
-            ? renderOrganizationChart({
-                loading: state.organizationDataLoading,
-                error: state.organizationDataError,
+          state.tab === "organization-permissions"
+            ? renderOrganizationPermissions({
+                loading: state.organizationDataLoading || state.permissionsConfigLoading,
+                error: state.organizationDataError || state.permissionsConfigError,
+                activeTab: state.orgPermActiveTab || "organization",
+                // 组织架构数据
                 organizationData: state.organizationData,
                 selectedNodeId: state.organizationChartSelectedNode,
                 viewMode: state.organizationChartViewMode,
-                onRefresh: () => {
-                  // TODO: 实现组织架构数据加载
-                  console.log("Load organization data");
+                organizationsLoading: state.organizationDataLoading,
+                organizationsError: state.organizationDataError,
+                // 权限配置数据
+                permissionsConfig: null, // TODO: 添加权限配置数据
+                permissionsLoading: state.permissionsConfigLoading,
+                permissionsSaving: state.permissionsConfigSaving,
+                selectedOrgForPermission: null,
+                selectedRole: null,
+                // 审批管理数据
+                approvalRequests: state.approvalRequests,
+                approvalsLoading: state.approvalRequestsLoading,
+                approvalStats: state.approvalStats,
+                approvalsFilter: {
+                  status: "all",
+                  priority: "all",
+                  type: "all",
+                  requester: "all",
+                  search: "",
                 },
+                selectedApprovals: new Set<string>(),
+                selectedApprovalDetail: null,
+                // 系统管理数据
+                superAdmins: state.superAdminsList || [],
+                superAdminsLoading: state.superAdminsLoading,
+                superAdminsError: state.superAdminsError,
+                systemRoles: [],
+                auditLogs: [],
+                // 回调函数
+                onRefresh: () => {
+                  const activeTab = state.orgPermActiveTab || "organization";
+                  if (activeTab === "organization") {
+                    console.log("Load organization data");
+                  } else if (activeTab === "permissions") {
+                    console.log("Load permissions config");
+                  } else if (activeTab === "approvals") {
+                    void loadApprovals(state);
+                    void loadApprovalStats(state);
+                  } else if (activeTab === "system") {
+                    void loadSuperAdmins(state);
+                  }
+                },
+                onTabChange: (tab) => {
+                  state.orgPermActiveTab = tab;
+                  if (tab === "organization") {
+                    console.log("Load organization data");
+                  } else if (tab === "permissions") {
+                    console.log("Load permissions config");
+                  } else if (tab === "approvals") {
+                    void loadApprovals(state);
+                    void loadApprovalStats(state);
+                  } else if (tab === "system") {
+                    void loadSuperAdmins(state);
+                  }
+                },
+                // 组织架构回调
                 onSelectNode: (nodeId) => {
                   state.organizationChartSelectedNode = nodeId;
                 },
                 onViewModeChange: (mode) => {
                   state.organizationChartViewMode = mode;
                 },
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "permissions-management"
-            ? renderPermissionsManagement({
-                loading: state.permissionsConfigLoading || state.approvalRequestsLoading,
-                error: state.permissionsConfigError,
-                activeTab: state.permissionsManagementActiveTab,
-                permissionsConfig: state.permissionsConfig,
-                configLoading: state.permissionsConfigLoading,
-                configSaving: state.permissionsConfigSaving,
-                approvalRequests: state.approvalRequests,
-                approvalsLoading: state.approvalRequestsLoading,
-                changeHistory: state.permissionsChangeHistory,
-                historyLoading: state.permissionsHistoryLoading,
-                onRefresh: () => {
-                  if (state.permissionsManagementActiveTab === "approvals") {
-                    void loadApprovals(state);
-                    void loadApprovalStats(state);
-                  } else if (state.permissionsManagementActiveTab === "config") {
-                    // TODO: 加载权限配置
-                    console.log("Load permissions config");
-                  } else if (state.permissionsManagementActiveTab === "history") {
-                    // TODO: 加载变更历史
-                    console.log("Load permissions history");
-                  }
-                },
-                onTabChange: (tab) => {
-                  state.permissionsManagementActiveTab = tab;
-                  // 切换 tab 时加载相应数据
-                  if (tab === "approvals") {
-                    void loadApprovals(state);
-                    void loadApprovalStats(state);
-                  } else if (tab === "config") {
-                    // TODO: 加载权限配置
-                    console.log("Load permissions config");
-                  } else if (tab === "history") {
-                    // TODO: 加载变更历史
-                    console.log("Load permissions history");
-                  }
-                },
-                onPermissionChange: (agentId, permission, granted) => {
-                  // TODO: 实现权限更改
-                  console.log("Permission change:", agentId, permission, granted);
-                },
-                onSaveConfig: () => {
-                  // TODO: 实现保存权限配置
-                  console.log("Save permissions config");
-                },
-                onApprovalAction: async (requestId, action, comment) => {
-                  try {
-                    // 将 "deny" 转换为 "reject" 以匹配 respondToApproval 的类型
-                    const approvalAction: "approve" | "reject" =
-                      action === "deny" ? "reject" : "approve";
-                    // 假设当前用户是 "admin"，实际应该从状态中获取
-                    await respondToApproval(state, requestId, "admin", approvalAction, comment);
-                  } catch (err) {
-                    console.error("Failed to respond to approval:", err);
-                  }
-                },
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "super-admin"
-            ? renderSuperAdmin({
-                loading: state.superAdminsLoading || state.notificationsLoading,
-                error: state.superAdminsError,
-                activeTab: state.superAdminActiveTab,
-                superAdminsList: state.superAdminsList,
-                superAdminsLoading: state.superAdminsLoading,
-                approvalRequests: state.approvalRequests,
-                approvalsLoading: state.approvalRequestsLoading,
-                notifications: state.superAdminNotifications,
-                notificationsLoading: state.notificationsLoading,
-                onRefresh: () => {
-                  if (state.superAdminActiveTab === "management") {
-                    void loadSuperAdmins(state);
-                  } else if (state.superAdminActiveTab === "approvals") {
-                    void loadApprovals(state);
-                    void loadApprovalStats(state);
-                  } else if (state.superAdminActiveTab === "notifications") {
-                    void loadNotifications(state);
-                  }
-                },
-                onTabChange: (tab) => {
-                  state.superAdminActiveTab = tab;
-                  // 切换 tab 时加载相应数据
-                  if (tab === "management") {
-                    void loadSuperAdmins(state);
-                  } else if (tab === "approvals") {
-                    void loadApprovals(state);
-                    void loadApprovalStats(state);
-                  } else if (tab === "notifications") {
-                    void loadNotifications(state);
-                  }
-                },
-                onAddSuperAdmin: (agentId) => {
-                  // TODO: 实现添加超级管理员
-                  console.log("Add super admin:", agentId);
-                },
-                onRemoveSuperAdmin: (agentId) => {
-                  // TODO: 实现移除超级管理员
-                  console.log("Remove super admin:", agentId);
-                },
+                onCreateOrganization: () => console.log("Create organization"),
+                onEditOrganization: (orgId) => console.log("Edit organization:", orgId),
+                onDeleteOrganization: (orgId) => console.log("Delete organization:", orgId),
+                onCreateTeam: () => console.log("Create team"),
+                onEditTeam: (teamId) => console.log("Edit team:", teamId),
+                onDeleteTeam: (teamId) => console.log("Delete team:", teamId),
+                onAssignMember: (teamId, memberId) =>
+                  console.log("Assign member:", teamId, memberId),
+                // 权限配置回调
+                onSelectOrgForPermission: (orgId) =>
+                  console.log("Select org for permission:", orgId),
+                onSelectRole: (roleId) => console.log("Select role:", roleId),
+                onPermissionChange: (target, permission, granted) =>
+                  console.log("Permission change:", target, permission, granted),
+                onSavePermissions: () => console.log("Save permissions"),
+                onCreateRole: () => console.log("Create role"),
+                onEditRole: (roleId) => console.log("Edit role:", roleId),
+                onDeleteRole: (roleId) => console.log("Delete role:", roleId),
+                onCreateTemplate: () => console.log("Create template"),
+                onApplyTemplate: (templateId, target) =>
+                  console.log("Apply template:", templateId, target),
+                // 审批管理回调
                 onApprovalAction: async (requestId, action, comment) => {
                   try {
                     const approvalAction: "approve" | "reject" =
@@ -2566,16 +2463,30 @@ export function renderApp(state: AppViewState) {
                     console.error("Failed to respond to approval:", err);
                   }
                 },
-                onMarkNotificationRead: (notificationId) => {
-                  // TODO: 实现标记通知为已读
-                  console.log("Mark notification as read:", notificationId);
-                },
+                onBatchApprove: (requestIds, comment) =>
+                  console.log("Batch approve:", requestIds, comment),
+                onBatchDeny: (requestIds, reason) => console.log("Batch deny:", requestIds, reason),
+                onFilterChange: (filter) => console.log("Filter change:", filter),
+                onSelectApproval: (requestId, selected) =>
+                  console.log("Select approval:", requestId, selected),
+                onSelectAllApprovals: () => console.log("Select all approvals"),
+                onDeselectAllApprovals: () => console.log("Deselect all approvals"),
+                onShowApprovalDetail: (request) => console.log("Show approval detail:", request),
+                // 系统管理回调
+                onCreateAdmin: () => console.log("Create admin"),
+                onEditAdmin: (adminId) => console.log("Edit admin:", adminId),
+                onActivateAdmin: (adminId) => console.log("Activate admin:", adminId),
+                onDeactivateAdmin: (adminId) => console.log("Deactivate admin:", adminId),
+                onCreateSystemRole: () => console.log("Create system role"),
+                onEditSystemRole: (roleId) => console.log("Edit system role:", roleId),
+                onDeleteSystemRole: (roleId) => console.log("Delete system role:", roleId),
               })
             : nothing
         }
       </main>
       ${renderExecApprovalPrompt(state)}
       ${renderGatewayUrlConfirmation(state)}
+      ${renderChannelPolicyDialog(state)}
     </div>
   `;
 }

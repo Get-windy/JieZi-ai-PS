@@ -240,6 +240,12 @@ export type AppViewState = {
   accountConfigs: Record<string, any>; // accountId -> ModelAccountConfig
   accountConfigsLoading: boolean;
   accountConfigsError: string | null;
+  // 模型账号配置对话框状态
+  configuringModelAccount: {
+    agentId: string;
+    accountId: string;
+    currentConfig: any;
+  } | null;
   channelPoliciesConfig: Record<string, unknown> | null;
   channelPoliciesLoading: boolean;
   channelPoliciesError: string | null;
@@ -247,6 +253,13 @@ export type AppViewState = {
   channelPoliciesSaveSuccess: boolean;
   editingPolicyBinding: { agentId: string; index: number; binding: any } | null;
   addingPolicyBinding: string | null;
+  // 策略配置对话框状态
+  configuringChannelPolicy: {
+    agentId: string;
+    channelId: string;
+    accountId: string;
+    currentPolicy: string;
+  } | null;
   // 通道账号绑定管理
   boundChannelAccounts: any[];
   boundChannelAccountsLoading: boolean;
@@ -389,6 +402,96 @@ export type AppViewState = {
   organizationData: any | null;
   organizationDataLoading: boolean;
   organizationDataError: string | null;
+  // 组织与权限管理统一状态
+  orgPermActiveTab: "organization" | "permissions" | "approvals" | "system";
+  // 组织管理状态
+  organizationsLoading: boolean;
+  organizationsSaving: boolean;
+  organizationsError: string | null;
+  editingOrganization: {
+    mode: "create" | "edit";
+    organization: {
+      id?: string;
+      name: string;
+      description: string;
+      parentId: string;
+    };
+  } | null;
+  // 团队管理状态
+  teamsLoading: boolean;
+  teamsSaving: boolean;
+  teamsError: string | null;
+  editingTeam: {
+    mode: "create" | "edit";
+    team: {
+      id?: string;
+      name: string;
+      description: string;
+      organizationId: string;
+      leaderId: string;
+    };
+  } | null;
+  // 成员分配状态
+  assigningMember: {
+    teamId: string;
+    availableMembers: Array<{ id: string; name: string }>;
+  } | null;
+  // 权限配置状态
+  selectedOrgForPermission: string | null;
+  selectedRole: string | null;
+  rolesLoading: boolean;
+  rolesSaving: boolean;
+  rolesError: string | null;
+  editingRole: {
+    mode: "create" | "edit";
+    role: {
+      id?: string;
+      name: string;
+      description: string;
+      permissions: string[];
+      level: number;
+    };
+  } | null;
+  // 权限模板状态
+  templatesLoading: boolean;
+  templatesSaving: boolean;
+  templatesError: string | null;
+  editingTemplate: {
+    mode: "create" | "edit";
+    template: {
+      id?: string;
+      name: string;
+      description: string;
+      permissions: string[];
+      targetType: "organization" | "role" | "agent";
+    };
+  } | null;
+  // 审批管理状态（增强）
+  approvalsFilterStatus: "all" | "pending" | "approved" | "denied" | "expired" | "cancelled";
+  approvalsFilterPriority: "all" | "low" | "normal" | "high" | "urgent";
+  approvalsFilterType: string;
+  approvalsFilterRequester: string;
+  approvalsFilterSearch: string;
+  selectedApprovals: Set<string>;
+  selectedApprovalDetail: any | null;
+  // 系统管理状态（增强）
+  systemRolesLoading: boolean;
+  systemRolesSaving: boolean;
+  systemRolesError: string | null;
+  systemRoles: any[];
+  editingSystemRole: any | null;
+  securityPoliciesLoading: boolean;
+  securityPoliciesSaving: boolean;
+  securityPolicies: any | null;
+  auditLogsLoading: boolean;
+  auditLogsError: string | null;
+  auditLogs: any[];
+  auditLogsFilter: {
+    startDate: string;
+    endDate: string;
+    userId: string;
+    action: string;
+  };
   // Phase 7: 超级管理员与审批系统状态
   superAdminActiveTab: "management" | "approvals" | "notifications";
   superAdminsList: any[];

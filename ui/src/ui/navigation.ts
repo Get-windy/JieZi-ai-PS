@@ -26,25 +26,15 @@ export const TAB_GROUPS = [
   },
   {
     label: "nav.agent",
-    tabs: [
-      "agents",
-      "organization-chart",
-      "permissions-management",
-      "collaboration",
-      "skills",
-      "nodes",
-      "super-admin",
-    ],
+    tabs: ["agents", "organization-permissions", "collaboration", "skills", "nodes"],
   },
-  { label: "nav.settings", tabs: ["bindings", "config", "debug", "logs"] },
+  { label: "nav.settings", tabs: ["config", "debug", "logs"] },
 ] as const;
 
 export type Tab =
   | "agents"
   | "collaboration"
-  | "organization-chart"
-  | "permissions-management"
-  | "super-admin"
+  | "organization-permissions"
   | "overview"
   | "message-queue"
   | "channels"
@@ -56,7 +46,6 @@ export type Tab =
   | "skills"
   | "nodes"
   | "chat"
-  | "bindings"
   | "config"
   | "debug"
   | "logs";
@@ -64,9 +53,7 @@ export type Tab =
 const TAB_PATHS: Record<Tab, string> = {
   agents: "/agents",
   collaboration: "/collaboration",
-  "organization-chart": "/organization-chart",
-  "permissions-management": "/permissions-management",
-  "super-admin": "/super-admin",
+  "organization-permissions": "/organization-permissions",
   overview: "/overview",
   "message-queue": "/message-queue",
   channels: "/channels",
@@ -78,7 +65,6 @@ const TAB_PATHS: Record<Tab, string> = {
   skills: "/skills",
   nodes: "/nodes",
   chat: "/chat",
-  bindings: "/bindings",
   config: "/config",
   debug: "/debug",
   logs: "/logs",
@@ -171,12 +157,8 @@ export function iconForTab(tab: Tab): IconName {
       return "folder";
     case "collaboration":
       return "folder";
-    case "organization-chart":
-      return "git-branch";
-    case "permissions-management":
+    case "organization-permissions":
       return "wrench";
-    case "super-admin":
-      return "shield";
     case "chat":
       return "messageSquare";
     case "overview":
@@ -197,8 +179,6 @@ export function iconForTab(tab: Tab): IconName {
       return "zap";
     case "nodes":
       return "monitor";
-    case "bindings":
-      return "git-branch";
     case "config":
       return "settings";
     case "debug":
@@ -218,12 +198,8 @@ export function titleForTab(tab: Tab) {
       return t("tab.agents");
     case "collaboration":
       return t("tab.collaboration");
-    case "organization-chart":
-      return t("tab.organization-chart");
-    case "permissions-management":
-      return t("tab.permissions-management");
-    case "super-admin":
-      return t("tab.super-admin");
+    case "organization-permissions":
+      return "组织与权限";
     case "overview":
       return t("tab.overview");
     case "channels":
@@ -244,8 +220,6 @@ export function titleForTab(tab: Tab) {
       return t("tab.nodes");
     case "chat":
       return t("tab.chat");
-    case "bindings":
-      return t("tab.bindings");
     case "config":
       return t("tab.config");
     case "debug":
@@ -265,12 +239,8 @@ export function subtitleForTab(tab: Tab) {
       return t("tab.agents.subtitle");
     case "collaboration":
       return t("tab.collaboration.subtitle");
-    case "organization-chart":
-      return t("tab.organization-chart.subtitle");
-    case "permissions-management":
-      return t("tab.permissions-management.subtitle");
-    case "super-admin":
-      return t("tab.super-admin.subtitle");
+    case "organization-permissions":
+      return "统一管理组织架构、权限配置、审批流程和系统设置";
     case "overview":
       return t("tab.overview.subtitle");
     case "channels":
@@ -291,8 +261,6 @@ export function subtitleForTab(tab: Tab) {
       return t("tab.nodes.subtitle");
     case "chat":
       return t("tab.chat.subtitle");
-    case "bindings":
-      return t("tab.bindings.subtitle");
     case "config":
       return t("tab.config.subtitle");
     case "debug":

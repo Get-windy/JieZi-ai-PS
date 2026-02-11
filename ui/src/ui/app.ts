@@ -411,6 +411,12 @@ export class OpenClawApp extends LitElement {
   @state() accountConfigs: Record<string, any> = {};
   @state() accountConfigsLoading = false;
   @state() accountConfigsError: string | null = null;
+  // 模型账号配置对话框状态
+  @state() configuringModelAccount: {
+    agentId: string;
+    accountId: string;
+    currentConfig: any;
+  } | null = null;
   @state() channelPoliciesConfig: ChannelPoliciesConfig | null = null;
   @state() channelPoliciesLoading = false;
   @state() channelPoliciesError: string | null = null;
@@ -418,6 +424,13 @@ export class OpenClawApp extends LitElement {
   @state() channelPoliciesSaveSuccess = false;
   @state() editingPolicyBinding: { agentId: string; index: number; binding: any } | null = null; // 正在配置的策略绑定
   @state() addingPolicyBinding: string | null = null; // 正在添加策略绑定的 agentId
+  // 策略配置对话框状态
+  @state() configuringChannelPolicy: {
+    agentId: string;
+    channelId: string;
+    accountId: string;
+    currentPolicy: string;
+  } | null = null;
   // 通道账号绑定管理
   @state() boundChannelAccounts: any[] = [];
   @state() boundChannelAccountsLoading = false;

@@ -8,7 +8,10 @@
  * - approvals.list/respond - 审批请求管理
  */
 
+import type { PermissionSubject } from "../../config/types.permissions.js";
 import type { GatewayServer } from "../server.js";
+import { permissionMiddleware } from "../../permissions/middleware.js";
+import { ErrorCodes, errorShape } from "../protocol/index.js";
 
 /**
  * 注册权限和审批相关的RPC方法
@@ -30,19 +33,50 @@ export function registerPermissionsRpcMethods(server: GatewayServer): void {
 async function handleGetPermissions(params: { agentId?: string }, context: any): Promise<any> {
   const { agentId } = params;
 
-  // TODO: 实现权限配置获取
-  // 1. 权限检查
-  // 2. 从权限系统（Phase 3）获取配置
-  // 3. 返回权限列表和约束条件
+  if (!agentId) {
+    throw errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required");
+  }
 
-  console.log(`[Phase5] Get permissions for agent: ${agentId || "all"}`);
+  // 验证操作员权限
+  const operator = context.operator as PermissionSubject | undefined;
+  if (!operator) {
+    throw errorShape(ErrorCodes.UNAUTHORIZED, "Operator information required");
+  }
 
-  // 临时返回空数据
+  // 验证操作员是否有权查看权限配置
+  const verification = await permissionMiddleware.verify({
+    subject: operator,
+    toolName: "permissions.get",
+    toolParams: { agentId },
+    agentId,
+    metadata: { action: "read" },
+  });
+
+  if (!verification.allowed) {
+    throw errorShape(ErrorCodes.PERMISSION_DENIED, verification.reason || "Permission denied");
+  }
+
+  console.log(`[Phase5] Get permissions for agent: ${agentId}`);
+
+  // 从配置中获取权限设置
+  const { loadConfig } = await import("../../config/config.js");
+  const { listAgentEntries } = await import("../../commands/agents.config.js");
+  const { normalizeAgentId } = await import("../../routing/session-key.js");
+
+  const config = loadConfig();
+  const agents = listAgentEntries(config);
+  const normalized = normalizeAgentId(agentId);
+  const agent = agents.find((a) => normalizeAgentId(a.id) === normalized);
+
+  if (!agent) {
+    throw errorShape(ErrorCodes.INVALID_REQUEST, `Agent not found: ${agentId}`);
+  }
+
+  const permissions = (agent as any).permissions || null;
+
   return {
     agentId,
-    permissions: [],
-    scope: [],
-    constraints: [],
+    permissions,
   };
 }
 
@@ -50,23 +84,51 @@ async function handleGetPermissions(params: { agentId?: string }, context: any):
  * 更新权限配置
  */
 async function handleUpdatePermission(
-  params: { agentId: string; permission: string; granted: boolean },
+  params: { agentId: string; config: any; reason?: string },
   context: any,
 ): Promise<{ success: boolean; requiresApproval?: boolean; requestId?: string }> {
-  const { agentId, permission, granted } = params;
+  const { agentId, config: newConfig, reason } = params;
 
-  // TODO: 实现权限更新
-  // 1. 权限检查 - 确保操作员有权修改权限
-  // 2. 检查是否需要审批（高级权限需要人类超级管理员审批）
-  // 3. 如果需要审批，创建审批请求
-  // 4. 如果不需要审批，直接更新权限配置
-  // 5. 记录权限变更历史
+  if (!agentId || !newConfig) {
+    throw errorShape(ErrorCodes.INVALID_REQUEST, "agentId and config are required");
+  }
 
-  console.log(
-    `[Phase5] Update permission: agent=${agentId}, permission=${permission}, granted=${granted}`,
-  );
+  // 验证操作员权限
+  const operator = context.operator as PermissionSubject | undefined;
+  if (!operator) {
+    throw errorShape(ErrorCodes.UNAUTHORIZED, "Operator information required");
+  }
 
-  // 临时实现
+  // 验证操作员是否有权修改权限
+  const verification = await permissionMiddleware.verify({
+    subject: operator,
+    toolName: "permissions.update",
+    toolParams: { agentId, config: newConfig },
+    agentId,
+    metadata: { action: "write", reason },
+  });
+
+  if (!verification.allowed) {
+    if (verification.requiresApproval) {
+      // 需要审批
+      return {
+        success: false,
+        requiresApproval: true,
+        requestId: verification.approvalId,
+      };
+    }
+    throw errorShape(ErrorCodes.PERMISSION_DENIED, verification.reason || "Permission denied");
+  }
+
+  console.log(`[Phase5] Update permission: agent=${agentId}`);
+
+  // 更新权限配置
+  const result = await permissionMiddleware.updatePermissions(agentId, newConfig, operator, reason);
+
+  if (!result.success) {
+    throw errorShape(ErrorCodes.UNAVAILABLE, result.error || "Failed to update permissions");
+  }
+
   return { success: true };
 }
 
@@ -79,20 +141,33 @@ async function handleGetPermissionsHistory(
 ): Promise<{ history: any[]; total: number }> {
   const { agentId, limit = 100, offset = 0 } = params;
 
-  // TODO: 实现权限历史查询
-  // 1. 权限检查
-  // 2. 从数据库或日志文件查询历史记录
-  // 3. 支持分页
+  // 验证操作员权限
+  const operator = context.operator as PermissionSubject | undefined;
+  if (!operator) {
+    throw errorShape(ErrorCodes.UNAUTHORIZED, "Operator information required");
+  }
+
+  // 验证操作员是否有权查看历史
+  const verification = await permissionMiddleware.verify({
+    subject: operator,
+    toolName: "permissions.history",
+    toolParams: { agentId },
+    agentId,
+    metadata: { action: "read" },
+  });
+
+  if (!verification.allowed) {
+    throw errorShape(ErrorCodes.PERMISSION_DENIED, verification.reason || "Permission denied");
+  }
 
   console.log(
     `[Phase5] Get permissions history: agent=${agentId}, limit=${limit}, offset=${offset}`,
   );
 
-  // 临时返回空数据
-  return {
-    history: [],
-    total: 0,
-  };
+  // 获取历史记录
+  const result = await permissionMiddleware.getHistory(agentId, limit, offset);
+
+  return result;
 }
 
 /**
@@ -100,25 +175,68 @@ async function handleGetPermissionsHistory(
  */
 async function handleListApprovals(
   params: {
+    agentId?: string;
     status?: "pending" | "approved" | "denied" | "timeout" | "cancelled";
     limit?: number;
     offset?: number;
   },
   context: any,
 ): Promise<{ requests: any[]; total: number }> {
-  const { status, limit = 100, offset = 0 } = params;
+  const { agentId, status, limit = 100, offset = 0 } = params;
 
-  // TODO: 实现审批请求列表查询
-  // 1. 权限检查 - 确保操作员有权查看审批请求
-  // 2. 从审批系统（Phase 3）查询请求
-  // 3. 支持状态筛选和分页
+  // 验证操作员权限
+  const operator = context.operator as PermissionSubject | undefined;
+  if (!operator) {
+    throw errorShape(ErrorCodes.UNAUTHORIZED, "Operator information required");
+  }
 
-  console.log(`[Phase5] List approvals: status=${status}, limit=${limit}, offset=${offset}`);
+  // 验证操作员是否有权查看审批请求
+  const verification = await permissionMiddleware.verify({
+    subject: operator,
+    toolName: "approvals.list",
+    toolParams: { agentId, status },
+    agentId,
+    metadata: { action: "read" },
+  });
 
-  // 临时返回空数据
+  if (!verification.allowed) {
+    throw errorShape(ErrorCodes.PERMISSION_DENIED, verification.reason || "Permission denied");
+  }
+
+  console.log(
+    `[Phase5] List approvals: agentId=${agentId}, status=${status}, limit=${limit}, offset=${offset}`,
+  );
+
+  // 从高级审批系统获取请求
+  const { advancedApprovalSystem } = await import("../../admin/advanced-approval.js");
+  let requests = advancedApprovalSystem.getPendingRequests();
+
+  // 按状态过滤
+  if (status && status !== "pending") {
+    const allRequests = Array.from((advancedApprovalSystem as any).requests.values());
+    const statusMap: Record<string, string> = {
+      approved: "approved",
+      denied: "rejected",
+      timeout: "expired",
+      cancelled: "cancelled",
+    };
+    const targetStatus = statusMap[status];
+    requests = allRequests.filter((r: any) => r.status === targetStatus);
+  }
+
+  // 按智能助手ID过滤
+  if (agentId) {
+    const { normalizeAgentId } = await import("../../routing/session-key.js");
+    const normalized = normalizeAgentId(agentId);
+    requests = requests.filter((r: any) => r.targetId === normalized);
+  }
+
+  const total = requests.length;
+  const paginated = requests.slice(offset, offset + limit);
+
   return {
-    requests: [],
-    total: 0,
+    requests: paginated,
+    total,
   };
 }
 
@@ -128,20 +246,47 @@ async function handleListApprovals(
 async function handleRespondApproval(
   params: { requestId: string; action: "approve" | "deny"; comment?: string },
   context: any,
-): Promise<{ success: boolean }> {
+): Promise<{ success: boolean; request?: any }> {
   const { requestId, action, comment } = params;
 
-  // TODO: 实现审批请求处理
-  // 1. 权限检查 - 确保操作员是人类超级管理员
-  // 2. 验证审批请求是否存在且状态为pending
-  // 3. 执行审批操作（批准或拒绝）
-  // 4. 如果批准，执行相应的权限变更
-  // 5. 记录审批历史
+  if (!requestId || !action) {
+    throw errorShape(ErrorCodes.INVALID_REQUEST, "requestId and action are required");
+  }
 
-  console.log(
-    `[Phase5] Respond approval: requestId=${requestId}, action=${action}, comment=${comment}`,
+  // 验证操作员权限
+  const operator = context.operator as PermissionSubject | undefined;
+  if (!operator) {
+    throw errorShape(ErrorCodes.UNAUTHORIZED, "Operator information required");
+  }
+
+  // 验证操作员是否有权处理审批（需要是超级管理员或指定审批者）
+  const verification = await permissionMiddleware.verify({
+    subject: operator,
+    toolName: "approvals.respond",
+    toolParams: { requestId, action },
+    metadata: { action: "write", comment },
+  });
+
+  if (!verification.allowed) {
+    throw errorShape(ErrorCodes.PERMISSION_DENIED, verification.reason || "Permission denied");
+  }
+
+  console.log(`[Phase5] Respond approval: requestId=${requestId}, action=${action}`);
+
+  // 处理审批
+  const result = await permissionMiddleware.processApproval(
+    requestId,
+    operator,
+    action === "approve",
+    comment,
   );
 
-  // 临时实现
-  return { success: true };
+  if (!result.success) {
+    throw errorShape(ErrorCodes.UNAVAILABLE, result.error || "Failed to process approval");
+  }
+
+  return {
+    success: true,
+    request: result.request,
+  };
 }
