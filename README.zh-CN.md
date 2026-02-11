@@ -52,6 +52,217 @@
 
 ### 📌 项目更新记录
 
+#### 2026年2月11日 - 组织权限管理系统完整实现与前端页面优化
+
+**🎯 核心功能完成：**
+
+**1. 权限验证与数据持久化（后端）**
+
+- ✅ **权限验证中间件** (src/permissions/middleware.ts, 517行)
+  - 统一权限验证接口：`verify()` 方法支持单次和批量验证
+  - 权限检查集成：集成 `PermissionChecker` 进行规则匹配
+  - 审批流程管理：集成 `ApprovalWorkflow` 处理需要审批的操作
+  - 配置持久化：通过 `writeConfigFile()` 保存权限配置到文件
+  - 历史记录追溯：所有权限变更记录到 `permissions-history.jsonl`
+  - 审计日志完整：自动记录所有权限检查到 `permissions-audit.jsonl`
+  - 数据持久化路径：
+    - `{dataDir}/permissions-history.jsonl` - 权限变更历史
+    - `{dataDir}/permissions-audit.jsonl` - 权限检查审计日志
+    - `openclaw.json` - 权限配置（agents.list[].permissions）
+
+- ✅ **Gateway RPC 权限集成** (src/gateway/rpc/permissions.ts)
+  - `permissions.get`: 获取权限配置 + 操作员身份验证
+  - `permissions.update`: 更新权限配置 + 审批流程支持
+  - `permissions.history`: 获取历史记录 + 分页查询
+  - `approvals.list`: 获取审批列表 + 状态/助手过滤
+  - `approvals.respond`: 处理审批 + 超级管理员权限检查
+  - 权限验证流程：
+    ```
+    客户端请求 → Gateway RPC Handler → 验证操作员身份 →
+    permissionMiddleware.verify() → PermissionChecker.check() →
+    匹配权限规则 → 检查条件约束 → 返回验证结果 →
+    需要审批? → 创建审批请求 / 允许? → 执行操作 + 记录审计
+    ```
+
+**2. 组织权限管理页面（前端）**
+
+- ✅ **统一管理界面** (ui/src/ui/views/organization-permissions.ts, 23.5KB)
+  - 四大标签页整合：组织架构、权限配置、审批管理、系统管理
+  - 完整的状态管理：统一管理所有子模块的加载、错误、数据状态
+  - 数据加载逻辑：与后端 RPC 方法完全集成
+  - 响应式交互：实时更新数据和UI反馈
+
+- ✅ **新增对话框组件**
+  - `organization-dialog.ts`: 组织管理对话框（164行）
+  - `team-dialog.ts`: 团队管理对话框（189行）
+  - `channel-policy-dialog.ts`: 通道策略配置对话框（7.1KB）
+  - `agents.model-account-config-dialog.ts`: 模型账号配置对话框（11.1KB）
+
+- ✅ **新增面板组件**
+  - `permissions-config-panel.ts`: 权限配置面板（290行）
+    - 支持组织级、角色级、助手级权限配置
+    - 权限模板管理：创建、编辑、删除、应用模板
+    - 权限分类展示：按功能模块分组显示权限项
+  - `approvals-panel.ts`: 审批管理面板（311行）
+    - 审批请求列表：支持过滤、搜索、批量操作
+    - 审批统计信息：总请求数、待审批数、通过率、平均响应时间
+    - 批量操作：批量通过、批量拒绝
+  - `system-management-panel.ts`: 系统管理面板（547行）
+    - 超级管理员管理：添加、编辑、激活、停用
+    - 系统角色配置：内置角色和自定义角色管理
+    - 安全策略设置：密码策略、会话策略、访问策略
+    - 审计日志查看：操作日志、过滤、导出
+
+- ✅ **控制器优化**
+  - `organization-permissions.ts`: 统一的状态管理控制器（554行）
+  - 集成所有子模块的数据加载和操作逻辑
+  - 错误处理和状态同步机制
+
+**3. UI 样式优化**
+
+- ✅ **专门样式文件** (ui/src/styles/organization-permissions.css, 784行)
+  - **对话框优化**（更紧凑的间距）
+    - 标题字体：16px（对话框）/ 15px（面板）/ 14px（卡片）
+    - 表单组间距：14px
+    - 输入框padding：8px 12px
+    - 标签字体：13px
+  - **按钮优化**（更紧凑的尺寸）
+    - 标准按钮：padding 7px 14px，字体 13px
+    - 小按钮：padding 5px 10px，字体 12px
+    - 统一的圆角和过渡效果
+  - **组件样式**
+    - 权限配置面板：分类标题、权限项卡片、复选框对齐
+    - 审批管理面板：过滤按钮、批量操作区域、请求卡片、状态徽章
+    - 系统管理面板：表格样式、角色卡片网格、统计卡片
+  - **响应式布局**
+    - 移动端适配（768px断点）
+    - 对话框自适应、网格布局响应式、卡片堆叠布局
+
+**4. 页面整合与优化**
+
+- ✅ **删除独立旧页面**（整合到统一界面）
+  - `organization-chart.ts`（446行）→ 整合到 organization-permissions
+  - `permissions-management.ts`（1204行）→ 整合到 organization-permissions
+  - `super-admin.ts`（665行）→ 整合到 organization-permissions
+  - 减少代码重复，统一交互体验
+
+- ✅ **移除 bindings 页面**
+  - 功能已被助手管理页面的通道配置完全接管
+  - 从导航菜单移除（navigation.ts）
+  - 更新 Tab 类型定义
+  - 清理相关路由和标题映射
+
+- ✅ **修复页面渲染问题**
+  - 添加缺失的视图导入：`renderSessions`, `renderSkills`, `renderUsage`
+  - 修复会话（sessions）页面无法打开的问题
+  - 修复成本分析（usage）页面无法打开的问题
+  - 修复技能（skills）页面无法打开的问题
+
+**5. 配置优化**
+
+- ✅ **Agent Runtime Schema 更新** (src/config/zod-schema.agent-runtime.ts)
+  - 添加 `permissions` 字段到 agent 配置
+  - 支持权限规则、角色、组、审批配置的验证
+  - 完整的类型安全和验证逻辑
+
+**📊 代码统计：**
+
+- 新增文件：11个（3,547行代码）
+  - `src/permissions/middleware.ts`（517行）
+  - `ui/src/styles/organization-permissions.css`（784行）
+  - `ui/src/ui/controllers/organization-permissions.ts`（554行）
+  - `ui/src/ui/views/organization-permissions.ts`（670行）
+  - `ui/src/ui/views/organization-dialog.ts`（164行）
+  - `ui/src/ui/views/team-dialog.ts`（189行）
+  - `ui/src/ui/views/permissions-config-panel.ts`（290行）
+  - `ui/src/ui/views/approvals-panel.ts`（311行）
+  - `ui/src/ui/views/system-management-panel.ts`（547行）
+  - `ui/src/ui/views/channel-policy-dialog.ts`（237行）
+  - `ui/src/ui/views/agents.model-account-config-dialog.ts`（284行）
+
+- 修改文件：8个（655行变更）
+  - `src/config/zod-schema.agent-runtime.ts`（+22行）
+  - `src/gateway/rpc/permissions.ts`（+207行，-66行）
+  - `ui/src/styles.css`（+1行）
+  - `ui/src/ui/app-render.ts`（+287行重构）
+  - `ui/src/ui/app-view-state.ts`（+103行）
+  - `ui/src/ui/app.ts`（+13行）
+  - `ui/src/ui/navigation.ts`（+1行，-9行）
+  - `ui/src/ui/views/agents.ts`（+470行重构）
+
+- 删除文件：3个（2,315行清理）
+  - `ui/src/ui/views/organization-chart.ts`（-446行）
+  - `ui/src/ui/views/permissions-management.ts`（-1204行）
+  - `ui/src/ui/views/super-admin.ts`（-665行）
+
+- **净增代码**：+1,887行（精简后）
+- **提交标识**：832a5fc13
+
+**🏗️ 技术架构：**
+
+- ✅ **权限验证流程**
+  - 多层验证：操作员身份 → 权限规则匹配 → 条件约束检查
+  - 审批集成：高权限操作自动触发审批流程
+  - 完整审计：所有权限检查记录到审计日志
+
+- ✅ **数据持久化**
+  - 配置文件：openclaw.json（权限配置）
+  - 历史文件：permissions-history.jsonl（变更追溯）
+  - 审计文件：permissions-audit.jsonl（访问日志）
+  - JSONL格式：支持追加写入，高效且可扩展
+
+- ✅ **前端架构**
+  - 统一状态管理：AppViewState 集中管理所有状态
+  - 组件化设计：对话框、面板、控制器独立可复用
+  - 响应式交互：实时数据更新和UI反馈
+
+**🔐 安全增强：**
+
+- ✅ 操作员身份验证：所有权限操作都需要验证操作员身份
+- ✅ 多层权限检查：规则匹配 + 条件约束双重验证
+- ✅ 审批流程保护：高权限操作需要人工审批
+- ✅ 完整审计追溯：所有权限检查和变更都有日志记录
+- ✅ 历史追溯机制：权限变更可追溯到操作员和时间
+- ✅ 错误隔离设计：验证失败不影响系统稳定性
+
+**✅ 构建状态：**
+
+- 构建成功：所有170个文件正常编译
+- 总大小：8672.51 kB
+- TypeScript 类型检查：通过（有 ESLint 警告但不影响功能）
+- 测试验证：
+  - [x] 权限验证中间件集成测试
+  - [x] Gateway RPC 方法调用测试
+  - [x] 前端页面渲染测试
+  - [x] UI 样式响应式测试
+  - [x] 构建流程验证通过
+
+**⚠️ 重要说明：**
+
+本次更新主要聚焦于：
+
+1. **权限系统完善**：实现了完整的权限验证、审批流程和数据持久化机制
+2. **页面整合优化**：将三个独立页面整合为统一的组织权限管理界面
+3. **UI体验提升**：优化了样式和间距，提供更紧凑、现代化的界面
+4. **功能修复**：修复了会话、成本分析、技能页面无法打开的问题
+5. **代码精简**：删除了冗余页面，减少了2315行代码，提高了可维护性
+
+建议在生产部署前验证：
+
+1. ✅ 测试权限验证是否正常工作（允许/拒绝/审批）
+2. ✅ 验证审批流程是否正确执行
+3. ✅ 检查权限历史和审计日志是否正确记录
+4. ✅ 测试所有页面是否能正常打开和交互
+5. ✅ 验证 UI 样式在不同屏幕尺寸下的显示效果
+6. ✅ 检查权限配置的持久化是否正常
+
+**📦 提交信息：**
+
+- 提交时间：2026年2月11日
+- 提交哈希：832a5fc13
+- 分支：localization-zh-CN
+- 推送仓库：Gitee (origin/localization-zh-CN)
+
 #### 2026年2月11日 - 智能助手通道和模型账号绑定管理完善
 
 **🎯 核心功能完成：**
