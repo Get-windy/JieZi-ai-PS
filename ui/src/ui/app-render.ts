@@ -1120,11 +1120,31 @@ export function renderApp(state: AppViewState) {
                 modelAccountsError: state.modelAccountsError,
                 modelAccountsSaving: (state as any).modelAccountsSaving || false,
                 modelAccountsSaveSuccess: (state as any).modelAccountsSaveSuccess || false,
+                // 模型账号绑定管理
+                boundModelAccounts: state.boundModelAccounts,
+                boundModelAccountsLoading: state.boundModelAccountsLoading,
+                boundModelAccountsError: state.boundModelAccountsError,
+                availableModelAccounts: state.availableModelAccounts,
+                availableModelAccountsLoading: state.availableModelAccountsLoading,
+                availableModelAccountsError: state.availableModelAccountsError,
+                availableModelAccountsExpanded: state.availableModelAccountsExpanded,
+                defaultModelAccountId: state.defaultModelAccountId,
+                modelAccountOperationError: state.modelAccountOperationError,
+                // 通道策略配置
                 channelPoliciesConfig: state.channelPoliciesConfig as any,
                 channelPoliciesLoading: state.channelPoliciesLoading,
                 channelPoliciesError: state.channelPoliciesError,
                 channelPoliciesSaving: (state as any).channelPoliciesSaving || false,
                 channelPoliciesSaveSuccess: (state as any).channelPoliciesSaveSuccess || false,
+                // 通道账号绑定管理
+                boundChannelAccounts: state.boundChannelAccounts,
+                boundChannelAccountsLoading: state.boundChannelAccountsLoading,
+                boundChannelAccountsError: state.boundChannelAccountsError,
+                availableChannelAccounts: state.availableChannelAccounts,
+                availableChannelAccountsLoading: state.availableChannelAccountsLoading,
+                availableChannelAccountsError: state.availableChannelAccountsError,
+                availableChannelAccountsExpanded: state.availableChannelAccountsExpanded,
+                channelAccountOperationError: state.channelAccountOperationError,
                 editingAgent: (state as any).editingAgent || null,
                 creatingAgent: (state as any).creatingAgent || false,
                 deletingAgent: (state as any).deletingAgent || false,
@@ -1193,6 +1213,9 @@ export function renderApp(state: AppViewState) {
                   }
                   if (panel === "channelPolicies" && resolvedAgentId) {
                     void loadChannelPolicies(state, resolvedAgentId);
+                    // 加载通道账号绑定管理数据
+                    void loadBoundChannelAccounts(state, resolvedAgentId);
+                    void loadAvailableChannelAccounts(state, resolvedAgentId);
                   }
                   // Phase 3: 加载权限配置（针对具体助手）
                   if (panel === "permissionsConfig" && resolvedAgentId) {
@@ -1637,6 +1660,87 @@ export function renderApp(state: AppViewState) {
                 },
                 onToggleAvailableChannelAccounts: () => {
                   toggleAvailableAccountsExpanded(state);
+                },
+                onConfigurePolicy: async (channelId, accountId, currentPolicy) => {
+                  if (!resolvedAgentId) {
+                    return;
+                  }
+
+                  // 简单的 prompt 对话框选择策略
+                  const policyOptions = [
+                    "private - 私人模式",
+                    "monitor - 监控模式",
+                    "listen_only - 仅监听",
+                    "filter - 过滤模式",
+                    "scheduled - 定时响应",
+                    "forward - 转发模式",
+                    "smart_route - 智能路由",
+                    "broadcast - 广播模式",
+                    "round_robin - 负载均衡",
+                    "queue - 队列模式",
+                    "moderate - 审核模式",
+                    "echo - 日志模式",
+                  ];
+
+                  const selectedIndex = prompt(
+                    `为 ${channelId}:${accountId} 配置策略
+
+当前策略: ${currentPolicy}
+
+请输入策略编号 (0-11):
+` + policyOptions.map((opt, idx) => `${idx}. ${opt}`).join("\n"),
+                    "0",
+                  );
+
+                  if (selectedIndex === null) {
+                    return; // 取消
+                  }
+
+                  const index = parseInt(selectedIndex, 10);
+                  if (isNaN(index) || index < 0 || index >= policyOptions.length) {
+                    alert("无效的策略编号");
+                    return;
+                  }
+
+                  const policy = policyOptions[index].split(" - ")[0];
+
+                  try {
+                    const config = state.channelPoliciesConfig as any;
+                    if (!config) {
+                      return;
+                    }
+
+                    const bindings = Array.isArray(config.bindings) ? [...config.bindings] : [];
+                    const existingIndex = bindings.findIndex(
+                      (b: any) => b.channelId === channelId && b.accountId === accountId,
+                    );
+
+                    if (existingIndex >= 0) {
+                      // 更新现有绑定
+                      bindings[existingIndex] = {
+                        ...bindings[existingIndex],
+                        policy,
+                      };
+                    } else {
+                      // 添加新绑定
+                      bindings.push({
+                        channelId,
+                        accountId,
+                        policy,
+                      });
+                    }
+
+                    await saveChannelPolicies(state, resolvedAgentId, {
+                      ...config,
+                      bindings,
+                    } as any);
+
+                    // 重新加载配置
+                    await loadChannelPolicies(state, resolvedAgentId);
+                  } catch (err) {
+                    console.error("Failed to save channel policy:", err);
+                    alert(`保存失败: ${err instanceof Error ? err.message : String(err)}`);
+                  }
                 },
                 onAddAgent: () => {
                   // TODO: 实现添加智能助手

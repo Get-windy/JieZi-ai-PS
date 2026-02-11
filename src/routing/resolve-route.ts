@@ -47,7 +47,8 @@ export type ResolvedAgentRoute = {
     | "binding.team"
     | "binding.account"
     | "binding.channel"
-    | "default";
+    | "default"
+    | "no-binding"; // 新增：表示没有找到绑定
 };
 
 export { DEFAULT_ACCOUNT_ID, DEFAULT_AGENT_ID } from "./session-key.js";
@@ -258,6 +259,34 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
   );
   if (anyAccountMatch) {
     return choose(anyAccountMatch.agentId, "binding.channel");
+  }
+
+  // 检查是否有任何绑定匹配当前通道账号
+  // 如果 bindings 为空，说明该通道账号未被绑定，应该拒绝
+  if (bindings.length === 0) {
+    // 没有找到任何绑定，返回特殊标记
+    // 调用方应该检查 matchedBy === "no-binding" 并拒绝消息
+    const placeholderAgent = resolveDefaultAgentId(input.cfg);
+    const sessionKey = buildAgentSessionKey({
+      agentId: placeholderAgent,
+      channel,
+      accountId,
+      peer,
+      dmScope,
+      identityLinks,
+    }).toLowerCase();
+    const mainSessionKey = buildAgentMainSessionKey({
+      agentId: placeholderAgent,
+      mainKey: DEFAULT_MAIN_KEY,
+    }).toLowerCase();
+    return {
+      agentId: placeholderAgent,
+      channel,
+      accountId,
+      sessionKey,
+      mainSessionKey,
+      matchedBy: "no-binding",
+    };
   }
 
   return choose(resolveDefaultAgentId(input.cfg), "default");

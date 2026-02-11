@@ -3,7 +3,7 @@
  * 智能助手模型账号和通道策略数据加载
  */
 
-import type { GatewayBrowserClient } from "../gateway.ts";
+import type { GatewayBrowserClient } from "../gateway-client.js";
 
 export type AgentPhase5State = {
   client: GatewayBrowserClient | null;
@@ -24,10 +24,18 @@ export type AgentPhase5State = {
  * 加载智能助手的模型账号配置
  */
 export async function loadModelAccounts(state: AgentPhase5State, agentId: string) {
+  console.log(
+    "[loadModelAccounts] Starting, client:",
+    state.client,
+    "call method:",
+    state.client?.call,
+  );
   if (!state.client || !state.connected) {
+    console.warn("[loadModelAccounts] Not connected or no client");
     return;
   }
   if (state.modelAccountsLoading) {
+    console.warn("[loadModelAccounts] Already loading");
     return;
   }
 
@@ -35,11 +43,14 @@ export async function loadModelAccounts(state: AgentPhase5State, agentId: string
   state.modelAccountsError = null;
 
   try {
-    const result = await state.client.request<Record<string, unknown>>("agent.modelAccounts.get", {
-      agentId,
-    });
-    if (result) {
-      state.modelAccountsConfig = result;
+    const response = await state.client.call<{
+      agentId: string;
+      config: Record<string, unknown> | null;
+    }>("agent.modelAccounts.list", { agentId });
+    if (response.ok && response.data?.config) {
+      state.modelAccountsConfig = response.data.config;
+    } else if (!response.ok) {
+      state.modelAccountsError = response.error?.message || "Failed to load model accounts";
     }
   } catch (err) {
     state.modelAccountsError = String(err);
@@ -63,12 +74,14 @@ export async function loadChannelPolicies(state: AgentPhase5State, agentId: stri
   state.channelPoliciesError = null;
 
   try {
-    const result = await state.client.request<Record<string, unknown>>(
-      "agent.channelPolicies.get",
-      { agentId },
-    );
-    if (result) {
-      state.channelPoliciesConfig = result;
+    const response = await state.client.call<{
+      agentId: string;
+      config: Record<string, unknown> | null;
+    }>("agent.channelPolicies.list", { agentId });
+    if (response.ok && response.data?.config) {
+      state.channelPoliciesConfig = response.data.config;
+    } else if (!response.ok) {
+      state.channelPoliciesError = response.error?.message || "Failed to load channel policies";
     }
   } catch (err) {
     state.channelPoliciesError = String(err);
@@ -94,17 +107,22 @@ export async function saveModelAccounts(
   state.modelAccountsSaveSuccess = false;
 
   try {
-    await state.client.request("agent.modelAccounts.update", {
+    const response = await state.client.call("agent.modelAccounts.update", {
       agentId,
       config,
     });
-    state.modelAccountsConfig = config;
-    state.modelAccountsSaveSuccess = true;
+    if (response.ok) {
+      state.modelAccountsConfig = config;
+      state.modelAccountsSaveSuccess = true;
 
-    // 3秒后清除成功提示
-    setTimeout(() => {
-      state.modelAccountsSaveSuccess = false;
-    }, 3000);
+      // 3秒后清除成功提示
+      setTimeout(() => {
+        state.modelAccountsSaveSuccess = false;
+      }, 3000);
+    } else {
+      state.modelAccountsError = response.error?.message || "Failed to save model accounts";
+      throw new Error(response.error?.message || "Failed to save model accounts");
+    }
   } catch (err) {
     state.modelAccountsError = String(err);
     throw err;
@@ -130,17 +148,22 @@ export async function saveChannelPolicies(
   state.channelPoliciesSaveSuccess = false;
 
   try {
-    await state.client.request("agent.channelPolicies.update", {
+    const response = await state.client.call("agent.channelPolicies.update", {
       agentId,
       config,
     });
-    state.channelPoliciesConfig = config;
-    state.channelPoliciesSaveSuccess = true;
+    if (response.ok) {
+      state.channelPoliciesConfig = config;
+      state.channelPoliciesSaveSuccess = true;
 
-    // 3秒后清除成功提示
-    setTimeout(() => {
-      state.channelPoliciesSaveSuccess = false;
-    }, 3000);
+      // 3秒后清除成功提示
+      setTimeout(() => {
+        state.channelPoliciesSaveSuccess = false;
+      }, 3000);
+    } else {
+      state.channelPoliciesError = response.error?.message || "Failed to save channel policies";
+      throw new Error(response.error?.message || "Failed to save channel policies");
+    }
   } catch (err) {
     state.channelPoliciesError = String(err);
     throw err;

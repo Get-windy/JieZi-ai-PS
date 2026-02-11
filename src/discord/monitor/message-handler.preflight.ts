@@ -232,6 +232,7 @@ export async function preflightDiscordMessage(
     // Pass parent peer for thread binding inheritance
     parentPeer: earlyThreadParentId ? { kind: "channel", id: earlyThreadParentId } : undefined,
   });
+
   const mentionRegexes = buildMentionRegexes(params.cfg, route.agentId);
   const explicitlyMentioned = Boolean(
     botId && message.mentionedUsers?.some((user: User) => user.id === botId),

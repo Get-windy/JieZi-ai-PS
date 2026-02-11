@@ -29,12 +29,19 @@ function validateModelAccounts(config: AgentModelAccountsConfig): {
 
   // 验证 accounts 字段
   if (!config.accounts || !Array.isArray(config.accounts)) {
-    errors.push("modelAccounts: 'accounts' must be a non-empty array");
+    errors.push("modelAccounts: 'accounts' must be an array");
     return { valid: false, errors };
   }
 
+  // 允许空的 accounts 数组（用户可能还没配置模型账号）
+  // 只在有账号时才验证后续逻辑
   if (config.accounts.length === 0) {
-    errors.push("modelAccounts: 'accounts' must contain at least one account ID");
+    // 空账号列表是允许的，但如果指定了 routingMode 则给出警告
+    if (config.routingMode === "manual" && config.defaultAccountId) {
+      errors.push("modelAccounts: cannot set 'defaultAccountId' when 'accounts' is empty");
+    }
+    // 空账号时不需要验证其他逻辑
+    return { valid: errors.length === 0, errors };
   }
 
   // 检查账号ID唯一性
@@ -97,6 +104,11 @@ function validateChannelBindings(config: AgentChannelBindings): {
   if (!config.bindings || !Array.isArray(config.bindings)) {
     errors.push("channelBindings: 'bindings' must be an array");
     return { valid: false, errors };
+  }
+
+  // 允许空的 bindings 数组（用户可能还没配置通道绑定）
+  if (config.bindings.length === 0) {
+    return { valid: true, errors };
   }
 
   // 检查绑定ID唯一性

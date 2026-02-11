@@ -458,9 +458,41 @@ export async function routeToOptimalModelAccount(
   config: AgentModelAccountsConfig,
   modelInfoGetter: (accountId: string) => Promise<ModelInfo | undefined>,
 ): Promise<RoutingResult> {
+  // 0. 先过滤仅保留已绑定且已启用的模型账号（核心检查）
+  const boundAndEnabledAccounts = config.accounts.filter((accountId) => {
+    // 查找账号配置
+    const accountConfig = config.accountConfigs?.find((cfg: any) => cfg.accountId === accountId);
+
+    if (!accountConfig) {
+      // 未找到配置，说明未绑定
+      return false;
+    }
+
+    // 检查是否启用（enabled 字段，默认为 true）
+    const enabled = accountConfig.enabled !== false;
+    if (!enabled) {
+      return false;
+    }
+
+    return true;
+  });
+
+  // 如果没有任何可用账号，抛出错误
+  if (boundAndEnabledAccounts.length === 0) {
+    throw new Error(
+      "No bound and enabled model accounts available for this agent. Please bind and enable at least one model account.",
+    );
+  }
+
+  // 创建过滤后的配置
+  const filteredConfig = {
+    ...config,
+    accounts: boundAndEnabledAccounts,
+  };
+
   // 1. 如果是手动模式，直接返回指定账号
-  if (config.routingMode === "manual") {
-    const accountId = config.defaultAccountId || config.accounts[0] || "default";
+  if (filteredConfig.routingMode === "manual") {
+    const accountId = filteredConfig.defaultAccountId || filteredConfig.accounts[0] || "default";
     return {
       accountId,
       reason: "手动模式：使用配置指定的默认账号",
@@ -469,14 +501,18 @@ export async function routeToOptimalModelAccount(
   }
 
   // 2. 智能路由模式：为所有账号打分
-  const scores = await scoreAllAccounts(message, context, config, modelInfoGetter);
+  const scores = await scoreAllAccounts(message, context, filteredConfig, modelInfoGetter);
 
   // 3. 选择最优账号
-  const selectedAccountId = selectOptimalAccount(scores, context, config.enableSessionPinning);
+  const selectedAccountId = selectOptimalAccount(
+    scores,
+    context,
+    filteredConfig.enableSessionPinning,
+  );
 
   if (!selectedAccountId) {
     // 如果都不可用，使用第一个作为兜底
-    const fallbackAccountId = config.accounts[0] || "default";
+    const fallbackAccountId = filteredConfig.accounts[0] || "default";
     return {
       accountId: fallbackAccountId,
       reason: "故障兜底：所有账号不可用，使用第一个账号作为兜底",

@@ -1059,6 +1059,19 @@ const translations: Record<Locale, Record<string, string>> = {
       "Form view can't safely edit some fields. Use Raw to avoid losing config entries.",
     "config.raw.label": "Raw JSON5",
 
+    // Error messages
+    "errors.channel.no_agent_bound":
+      "No agent bound to this channel. Please contact administrator to bind an agent.",
+    "errors.channel.already_bound":
+      "Channel account {channel}:{account} is already bound to agent '{agent}'. A channel account can only be bound to one agent.",
+    "errors.model.call_failed":
+      "Failed to call AI model. Please check your model configuration or try again later.",
+    "errors.model.unavailable": "AI model temporarily unavailable. Please try again later.",
+    "errors.model.timeout": "AI model request timed out. Please try again.",
+    "errors.model.rate_limit": "AI model rate limit exceeded. Please try again later.",
+    "errors.model.auth_failed": "AI model authentication failed. Please check your credentials.",
+    "errors.model.billing_failed": "AI model billing issue. Please check your account balance.",
+
     // Channel pages - common labels
     "channel.label.configured": "Configured",
     "channel.label.running": "Running",
@@ -2303,6 +2316,20 @@ const translations: Record<Locale, Record<string, string>> = {
     "bindings.empty_title": "No bindings configured",
     "bindings.empty_description": "Add your first binding to route messages to specific agents.",
     "bindings.add_first": "Add First Binding",
+
+    // Error messages
+    "errors.agentIdRequired": "Agent ID is required",
+    "errors.configRequired": "Configuration is required",
+    "errors.invalidConfig": "Invalid configuration",
+    "errors.accountIdRequired": "Account ID is required",
+    "errors.channelIdRequired": "Channel ID is required",
+    "errors.unknownAgent": "Unknown agent",
+    "errors.unknownModelAccount": "Unknown model account",
+    "errors.modelAccountAlreadyBound": "Model account already bound",
+    "errors.modelAccountNotBound": "Model account not bound",
+    "errors.invalidConfigFormat": "Invalid configuration format",
+    "errors.failedToUpdateChannelPolicies": "Failed to update channel policies",
+    "errors.configValidationFailed": "Configuration validation failed",
   },
   "zh-CN": {
     // 导航分组
@@ -3603,6 +3630,17 @@ const translations: Record<Locale, Record<string, string>> = {
     "config.warning.unsafe_form": "表单视图无法安全编辑某些字段。使用原始模式以避免丢失配置条目。",
     "config.raw.label": "原始 JSON5",
 
+    // 错误消息
+    "errors.channel.no_agent_bound": "此通道未绑定智能助手。请联系管理员绑定智能助手。",
+    "errors.channel.already_bound":
+      "通道账号 {channel}:{account} 已被智能助手 '{agent}' 绑定。一个通道账号只能绑定一个智能助手。",
+    "errors.model.call_failed": "AI模型调用失败。请检查您的模型配置或稍后重试。",
+    "errors.model.unavailable": "AI模型暂时不可用。请稍后重试。",
+    "errors.model.timeout": "AI模型请求超时。请重试。",
+    "errors.model.rate_limit": "AI模型请求频率超限。请稍后重试。",
+    "errors.model.auth_failed": "AI模型认证失败。请检查您的凭据。",
+    "errors.model.billing_failed": "AI模型账单问题。请检查您的账户余额。",
+
     // 通道页面 - 通用标签
     "channel.label.configured": "已配置",
     "channel.label.running": "运行中",
@@ -4628,6 +4666,20 @@ const translations: Record<Locale, Record<string, string>> = {
     "agents.channel_policies.policy.queue": "队列",
     "agents.channel_policies.policy.moderate": "审核",
     "agents.channel_policies.policy.echo": "回显",
+
+    // 错误信息
+    "errors.agentIdRequired": "请提供智能助手ID",
+    "errors.configRequired": "请提供配置信息",
+    "errors.invalidConfig": "配置信息无效",
+    "errors.accountIdRequired": "请提供账号ID",
+    "errors.channelIdRequired": "请提供通道ID",
+    "errors.unknownAgent": "未知的智能助手",
+    "errors.unknownModelAccount": "未知的模型账号",
+    "errors.modelAccountAlreadyBound": "模型账号已绑定",
+    "errors.modelAccountNotBound": "模型账号未绑定",
+    "errors.invalidConfigFormat": "配置格式无效",
+    "errors.failedToUpdateChannelPolicies": "更新通道策略失败",
+    "errors.configValidationFailed": "配置验证失败",
 
     // 组织架构图
     "organization_chart.title": "组织架构图",

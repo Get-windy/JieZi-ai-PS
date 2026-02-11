@@ -22,20 +22,20 @@ export type AgentChannelAccountsState = {
   client: GatewayBrowserClient | null;
 
   // 已绑定的通道账号
-  boundAccounts: ChannelAccountBinding[];
-  boundAccountsLoading: boolean;
-  boundAccountsError: string | null;
+  boundChannelAccounts: ChannelAccountBinding[];
+  boundChannelAccountsLoading: boolean;
+  boundChannelAccountsError: string | null;
 
   // 可用但未绑定的通道账号
-  availableAccounts: AvailableChannelAccount[];
-  availableAccountsLoading: boolean;
-  availableAccountsError: string | null;
-  availableAccountsExpanded: boolean; // 是否展开显示可用账号
+  availableChannelAccounts: AvailableChannelAccount[];
+  availableChannelAccountsLoading: boolean;
+  availableChannelAccountsError: string | null;
+  availableChannelAccountsExpanded: boolean; // 是否展开显示可用账号
 
   // 操作状态
   addingAccount: boolean;
   removingAccount: boolean;
-  operationError: string | null;
+  channelAccountOperationError: string | null;
 };
 
 /**
@@ -49,21 +49,21 @@ export async function loadBoundChannelAccounts(
     return;
   }
 
-  state.boundAccountsLoading = true;
-  state.boundAccountsError = null;
+  state.boundChannelAccountsLoading = true;
+  state.boundChannelAccountsError = null;
 
   try {
     const response = await state.client.call("agent.channelAccounts.list", { agentId });
 
     if (response.ok && response.data) {
-      state.boundAccounts = (response.data as any).bindings || [];
+      state.boundChannelAccounts = (response.data as any).bindings || [];
     } else {
-      state.boundAccountsError = response.error?.message || "Failed to load bound accounts";
+      state.boundChannelAccountsError = response.error?.message || "Failed to load bound accounts";
     }
   } catch (err) {
-    state.boundAccountsError = String(err);
+    state.boundChannelAccountsError = String(err);
   } finally {
-    state.boundAccountsLoading = false;
+    state.boundChannelAccountsLoading = false;
   }
 }
 
@@ -78,21 +78,22 @@ export async function loadAvailableChannelAccounts(
     return;
   }
 
-  state.availableAccountsLoading = true;
-  state.availableAccountsError = null;
+  state.availableChannelAccountsLoading = true;
+  state.availableChannelAccountsError = null;
 
   try {
     const response = await state.client.call("agent.channelAccounts.available", { agentId });
 
     if (response.ok && response.data) {
-      state.availableAccounts = (response.data as any).accounts || [];
+      state.availableChannelAccounts = (response.data as any).accounts || [];
     } else {
-      state.availableAccountsError = response.error?.message || "Failed to load available accounts";
+      state.availableChannelAccountsError =
+        response.error?.message || "Failed to load available accounts";
     }
   } catch (err) {
-    state.availableAccountsError = String(err);
+    state.availableChannelAccountsError = String(err);
   } finally {
-    state.availableAccountsLoading = false;
+    state.availableChannelAccountsLoading = false;
   }
 }
 
@@ -110,7 +111,7 @@ export async function addChannelAccountBinding(
   }
 
   state.addingAccount = true;
-  state.operationError = null;
+  state.channelAccountOperationError = null;
 
   try {
     const response = await state.client.call("agent.channelAccounts.add", {
@@ -124,10 +125,11 @@ export async function addChannelAccountBinding(
       await loadBoundChannelAccounts(state, agentId);
       await loadAvailableChannelAccounts(state, agentId);
     } else {
-      state.operationError = response.error?.message || "Failed to add channel account";
+      state.channelAccountOperationError =
+        response.error?.message || "Failed to add channel account";
     }
   } catch (err) {
-    state.operationError = String(err);
+    state.channelAccountOperationError = String(err);
   } finally {
     state.addingAccount = false;
   }
@@ -147,7 +149,7 @@ export async function removeChannelAccountBinding(
   }
 
   state.removingAccount = true;
-  state.operationError = null;
+  state.channelAccountOperationError = null;
 
   try {
     const response = await state.client.call("agent.channelAccounts.remove", {
@@ -161,10 +163,11 @@ export async function removeChannelAccountBinding(
       await loadBoundChannelAccounts(state, agentId);
       await loadAvailableChannelAccounts(state, agentId);
     } else {
-      state.operationError = response.error?.message || "Failed to remove channel account";
+      state.channelAccountOperationError =
+        response.error?.message || "Failed to remove channel account";
     }
   } catch (err) {
-    state.operationError = String(err);
+    state.channelAccountOperationError = String(err);
   } finally {
     state.removingAccount = false;
   }
@@ -174,5 +177,5 @@ export async function removeChannelAccountBinding(
  * 切换可用账号展开/折叠状态
  */
 export function toggleAvailableAccountsExpanded(state: AgentChannelAccountsState): void {
-  state.availableAccountsExpanded = !state.availableAccountsExpanded;
+  state.availableChannelAccountsExpanded = !state.availableChannelAccountsExpanded;
 }
