@@ -78,6 +78,124 @@ If you're merging code from upstream or updating `package.json`, please be aware
 
 ### 📌 项目更新记录 | Project Update Log
 
+#### 2026年2月11日 - 智能助手通道和模型账号绑定管理完善 | 2026-02-11 - Agent Channel & Model Account Binding Management Enhancement
+
+**🎯 核心功能完成 | Core Features Completed:**
+
+- ✅ **通道绑定门阀机制 | Channel Binding Gate Mechanism** (src/plugins/runtime/index.ts)
+  - 在系统与插件对接边界实现统一的绑定检查 | Unified binding check at system-plugin boundary
+  - 未绑定通道账号自动阻断并发送友好提示 | Auto-block unbound channels with friendly messages
+  - 确保所有通道（内置和外部插件）遵守绑定规则 | Enforce binding rules for all channels (built-in and external plugins)
+  - 采用 `dispatchReplyFromConfig` 包装器模式 | Wrapper pattern for `dispatchReplyFromConfig`
+  - 支持fail-safe机制 | Fail-safe mechanism with logging
+
+- ✅ **模型账号绑定规则 | Model Account Binding Rules** (src/agents/model-routing.ts)
+  - 在模型路由层过滤未绑定或未启用的账号 | Filter unbound/disabled accounts at routing layer
+  - `routeToOptimalModelAccount` 函数入口添加检查 | Added checks at function entry
+  - 支持账号级别的启用/停用控制 | Account-level enable/disable control
+  - 无可用账号时抛出明确错误 | Clear error message when no accounts available
+
+- ✅ **配置类型扩展 | Configuration Type Extension** (src/config/types.agents.ts)
+  - 在 `AgentModelAccountsConfig` 中添加 `accountConfigs` | Added `accountConfigs` field
+  - 支持存储账号的绑定和启用状态 | Store account binding and enable status
+  - 字段结构 | Field structure: `{ accountId: string; enabled?: boolean }`
+
+- ✅ **路由系统增强 | Routing System Enhancement** (src/routing/resolve-route.ts)
+  - 新增 `no-binding` 路由标记类型 | New `no-binding` route marker
+  - 优化绑定检查逻辑 | Optimized binding check logic
+  - 未找到绑定时返回标记 | Return marker when no binding found
+
+**🎨 UI界面改进 | UI Improvements:**
+
+- ✅ **通道账号管理界面 | Channel Account Management UI** (ui/src/ui/views/agents.ts)
+  - 添加启用/禁用切换开关 | Added enable/disable toggle switches
+  - 实现与模型账号一致的样式 | Consistent styling with model accounts
+  - 开关状态绑定 | Switch state bound to `account.enabled !== false`
+  - 完善配置策略按钮功能 | Enhanced policy configuration button
+  - 新增回调函数 | New callbacks:
+    - `onToggleChannelAccountEnabled(channelId, accountId, enabled)`
+    - `onConfigurePolicy(channelId, accountId, currentPolicy)`
+
+- ✅ **模型账号管理界面 | Model Account Management UI** (ui/src/ui/views/agents.ts)
+  - 添加 `accountConfigs` 参数支持 | Added `accountConfigs` parameter support
+  - 添加 `onToggleAccountEnabled` 回调 | Added `onToggleAccountEnabled` callback
+  - 修复 TypeScript 类型错误 | Fixed TypeScript type errors
+  - 完善账号配置数据结构 | Enhanced account config data structure
+
+- ✅ **控制器优化 | Controller Optimization**
+  - 优化通道账号控制器 | Optimized channel account controller (agent-channel-accounts.ts)
+  - 完善 Phase5 控制器 | Enhanced Phase5 controller (agent-phase5.ts)
+  - 统一错误处理和状态管理 | Unified error handling and state management
+
+- ✅ **国际化支持 | Internationalization** (ui/src/ui/i18n.ts)
+  - 新增绑定管理相关翻译 | New translations for binding management
+  - 完善错误提示的多语言支持 | Multi-language support for error messages
+
+**🔧 后端服务 | Backend Services:**
+
+- ✅ 完善智能助手管理服务 | Enhanced agent management service (agents-management.ts)
+- ✅ 优化配置集成逻辑 | Optimized config integration (phase-integration.ts)
+- ✅ 更新相关通道处理器 | Updated channel handlers:
+  - Discord 消息预检查 | Discord message preflight (message-handler.preflight.ts)
+  - Telegram 机器人上下文 | Telegram bot context (bot-message-context.ts)
+  - Web自动回复 | Web auto-reply (on-message.ts)
+
+**🏗️ 架构改进 | Architecture Improvements:**
+
+- ✅ **门阀在边界原则 | Gate-at-Boundary Principle**:
+  - 不在插件内部实现检查 | No checks inside plugins (uncontrollable)
+  - 在系统与插件对接边界统一执行 | Unified enforcement at system-plugin boundary
+  - 采用包装器模式拦截通信 | Wrapper pattern to intercept communications
+
+- ✅ **统一的绑定规则执行 | Unified Binding Rule Enforcement**:
+  - 通过 `resolveAgentRoute` 进行检查 | Check via `resolveAgentRoute`
+  - 门阀层检查 `matchedBy === 'no-binding'` | Gate layer checks `matchedBy === 'no-binding'`
+  - 使用 `dispatcher.sendFinalReply()` 发送错误 | Send errors via `dispatcher.sendFinalReply()`
+
+- ✅ **不依赖插件处理错误 | No Plugin Error Handling Dependency**:
+  - 门阀直接发送友好提示 | Gate directly sends friendly messages
+  - 不抛出异常，不依赖插件捕获 | No exceptions thrown, no plugin catch required
+  - 发送后阻断消息处理 | Block message processing after sending
+
+**📊 统计数据 | Statistics:**
+
+- 修改文件 | Modified files: 16 core files
+- 新增文件 | New files: 1 (ui/src/ui/gateway-client.ts)
+- 代码变更 | Code changes: +634 lines added / -160 lines removed
+- 净增代码 | Net increase: +474 lines
+- 提交标识 | Commit ID: 5995c80f6
+
+**🔐 安全增强 | Security Enhancement:**
+
+- ✅ 强制执行通道账号绑定规则 | Enforce channel account binding rules
+- ✅ 支持通道账号级别的启用/停用控制 | Account-level enable/disable control
+- ✅ 模型账号绑定检查 | Model account binding check
+- ✅ 统一的安全门阀层 | Unified security gate layer (no bypass possible)
+
+**⚠️ 重要说明 | Important Notice:**
+
+This update focuses on | 本次更新主要聚焦于：
+
+1. **通道安全加固 | Channel Security Hardening**: Unified channel binding gate mechanism
+2. **模型账号管理 | Model Account Management**: Enhanced binding and enable status management
+3. **UI完善 | UI Enhancement**: Enable/disable switches and configuration features
+4. **架构优化 | Architecture Optimization**: Gate-at-boundary design principle
+
+Recommended verification before production | 建议在生产部署前验证：
+
+1. ✅ Test unbound channel blocking | 测试未绑定通道被阻断
+2. ✅ Verify enable/disable switch functionality | 验证启用/停用开关功能
+3. ✅ Check model account routing | 检查模型账号路由
+4. ✅ Test external plugins cannot bypass gate | 测试外部插件无法绕过
+5. ✅ Verify error messages sent via channel | 验证错误消息发送
+
+**📦 提交信息 | Commit Information:**
+
+- 提交时间 | Commit date: 2026-02-11
+- 提交哈希 | Commit hash: 5995c80f6
+- 分支 | Branch: localization-zh-CN
+- 推送仓库 | Repositories: Gitee (origin) + GitHub (github)
+
 #### 2026年2月10日 - 控制面板UI完善与构建配置优化 | 2026-02-10 - Control Panel UI Enhancement & Build Configuration Optimization
 
 **🎯 核心功能完成 | Core Features Completed:**

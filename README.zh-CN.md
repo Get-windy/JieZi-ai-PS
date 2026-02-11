@@ -52,6 +52,124 @@
 
 ### 📌 项目更新记录
 
+#### 2026年2月11日 - 智能助手通道和模型账号绑定管理完善
+
+**🎯 核心功能完成：**
+
+- ✅ **通道绑定门阀机制** (src/plugins/runtime/index.ts)
+  - 在系统与插件对接边界实现统一的绑定检查
+  - 未绑定通道账号自动阻断并通过通道会话机制发送友好提示消息
+  - 确保所有通道（内置和外部插件）遵守绑定规则，外部插件无法绕过
+  - 采用 `dispatchReplyFromConfig` 包装器模式，拦截所有通道-智能助手通信
+  - 支持fail-safe机制：绑定检查失败时记录日志但不阻断
+
+- ✅ **模型账号绑定规则** (src/agents/model-routing.ts)
+  - 在模型路由层过滤未绑定或未启用的账号
+  - `routeToOptimalModelAccount` 函数入口添加绑定和启用检查
+  - 支持账号级别的启用/停用控制
+  - 无可用账号时抛出明确错误提示
+
+- ✅ **配置类型扩展** (src/config/types.agents.ts)
+  - 在 `AgentModelAccountsConfig` 类型中添加 `accountConfigs` 字段
+  - 支持存储账号的绑定和启用状态
+  - 字段结构：`{ accountId: string; enabled?: boolean }`
+
+- ✅ **路由系统增强** (src/routing/resolve-route.ts)
+  - 新增 `no-binding` 路由标记类型到 `ResolvedAgentRoute`
+  - 优化绑定检查逻辑，支持未绑定识别
+  - 未找到绑定时返回 `no-binding` 标记供门阀层拦截
+
+**🎨 UI界面改进：**
+
+- ✅ **通道账号管理界面** (ui/src/ui/views/agents.ts)
+  - 添加启用/禁用切换开关到绑定通道账号卡片
+  - 实现与模型账号一致的开关组件样式
+  - 开关状态绑定到 `account.enabled !== false`
+  - 完善配置策略按钮功能和回调传递
+  - 新增回调函数：
+    - `onToggleChannelAccountEnabled(channelId, accountId, enabled)`
+    - `onConfigurePolicy(channelId, accountId, currentPolicy)`
+
+- ✅ **模型账号管理界面** (ui/src/ui/views/agents.ts)
+  - 添加 `accountConfigs` 参数支持配置状态读取
+  - 添加 `onToggleAccountEnabled` 回调定义
+  - 修复 TypeScript 类型错误：补充缺失的参数类型定义
+  - 完善账号配置数据结构的类型安全
+
+- ✅ **控制器优化**
+  - 优化通道账号控制器逻辑 (ui/src/ui/controllers/agent-channel-accounts.ts)
+  - 完善 Phase5 控制器功能 (ui/src/ui/controllers/agent-phase5.ts)
+  - 统一错误处理和状态管理
+
+- ✅ **国际化支持** (ui/src/ui/i18n.ts)
+  - 新增绑定管理相关的中文翻译条目
+  - 完善错误提示的多语言支持
+
+**🔧 后端服务：**
+
+- ✅ 完善智能助手管理服务方法 (src/gateway/server-methods/agents-management.ts)
+- ✅ 优化配置集成逻辑 (src/config/phase-integration.ts)
+- ✅ 更新相关通道处理器：
+  - Discord 消息预检查处理器 (src/discord/monitor/message-handler.preflight.ts)
+  - Telegram 机器人消息上下文 (src/telegram/bot-message-context.ts)
+  - Web自动回复消息处理器 (src/web/auto-reply/monitor/on-message.ts)
+
+**🏗️ 架构改进：**
+
+- ✅ **门阀在边界原则**：
+  - 不在插件内部实现检查（外部插件行为无法控制）
+  - 在系统与插件对接的边界统一执行规则
+  - 采用包装器模式拦截所有通道与智能助手的通信
+
+- ✅ **统一的绑定规则执行机制**：
+  - 通过 `resolveAgentRoute` 进行绑定检查
+  - 门阀层检查 `matchedBy === 'no-binding'` 进行拦截
+  - 使用 `dispatcher.sendFinalReply()` 直接发送错误提示
+
+- ✅ **不依赖插件处理错误**：
+  - 门阀直接通过通道的会话机制发送友好提示
+  - 不抛出异常，不依赖插件捕获和处理
+  - 发送后返回结果，阻断消息继续处理
+
+**📊 统计数据：**
+
+- 修改文件：16个核心文件
+- 新增文件：1个 (ui/src/ui/gateway-client.ts)
+- 代码变更：+634行新增 / -160行删除
+- 净增代码：+474行
+- 提交标识：5995c80f6
+
+**🔐 安全增强：**
+
+- ✅ 强制执行通道账号绑定规则，防止未授权通道访问智能助手
+- ✅ 支持通道账号级别的启用/停用控制，提供细粒度访问控制
+- ✅ 模型账号绑定检查，确保仅使用授权的模型服务
+- ✅ 统一的安全门阀层，所有通道（内置和外部插件）无法绕过
+
+**⚠️ 重要说明：**
+
+本次更新主要聚焦于：
+
+1. **通道安全加固**：实现了统一的通道绑定门阀机制，确保未绑定通道无法与智能助手通信
+2. **模型账号管理**：完善了模型账号的绑定和启用状态管理
+3. **UI完善**：为通道账号和模型账号管理界面添加了启用/停用开关和配置功能
+4. **架构优化**：采用门阀在边界的设计原则，提高了系统的安全性和可维护性
+
+建议在生产部署前验证：
+
+1. ✅ 测试未绑定通道是否被正确阻断并收到友好提示
+2. ✅ 验证启用/停用开关功能是否正常工作
+3. ✅ 检查模型账号路由是否只使用已绑定且启用的账号
+4. ✅ 测试外部插件是否无法绕过门阀检查
+5. ✅ 验证错误提示消息是否通过通道正确发送
+
+**📦 提交信息：**
+
+- 提交时间：2026年2月11日
+- 提交哈希：5995c80f6
+- 分支：localization-zh-CN
+- 推送仓库：Gitee (origin/localization-zh-CN) + GitHub (github/localization-zh-CN)
+
 #### 2026年2月10日 - 控制面板UI完善与构建配置优化
 
 **🎯 核心功能完成：**
