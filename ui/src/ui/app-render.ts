@@ -12,6 +12,15 @@ import {
   removeChannelAccountBinding,
   toggleAvailableAccountsExpanded,
 } from "./controllers/agent-channel-accounts.ts";
+import {
+  createAgent,
+  updateAgent,
+  deleteAgent,
+  migrateAgentWorkspace,
+  getDefaultWorkspace,
+  setDefaultWorkspace,
+  setDefaultAgent,
+} from "./controllers/agent-crud.ts";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import {
@@ -1148,6 +1157,8 @@ export function renderApp(state: AppViewState) {
                 editingAgent: (state as any).editingAgent || null,
                 creatingAgent: (state as any).creatingAgent || false,
                 deletingAgent: (state as any).deletingAgent || false,
+                defaultWorkspaceRoot: (state as any).defaultWorkspaceRoot,
+                isNewAgent: (state as any).isNewAgent || false,
                 onRefresh: async () => {
                   await loadAgents(state);
                   const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
@@ -1175,6 +1186,26 @@ export function renderApp(state: AppViewState) {
                   }
                   if (state.agentsPanel === "skills") {
                     void loadAgentSkills(state, agentId);
+                  }
+                  // 如果当前在通道策略面板，重新加载通道配置数据
+                  if (state.agentsPanel === "channelPolicies") {
+                    void loadChannelPolicies(state, agentId);
+                    void loadBoundChannelAccounts(state, agentId);
+                    void loadAvailableChannelAccounts(state, agentId);
+                  }
+                  // 如果当前在模型账号面板，重新加载模型账号数据
+                  if (state.agentsPanel === "modelAccounts") {
+                    void loadModelAccounts(state, agentId);
+                    void loadBoundModelAccounts(state, agentId);
+                    void loadAvailableModelAccounts(state, agentId);
+                  }
+                  // 如果当前在权限配置面板，重新加载权限数据
+                  if (state.agentsPanel === "permissionsConfig") {
+                    void loadAgentPermissions(state, agentId);
+                  }
+                  // 如果当前在定时任务面板，重新加载 cron 数据
+                  if (state.agentsPanel === "cron") {
+                    void state.loadCron();
                   }
                 },
                 onSelectPanel: (panel) => {
@@ -1672,29 +1703,458 @@ export function renderApp(state: AppViewState) {
                     };
                   }
                 },
-                onAddAgent: () => {
-                  // TODO: 实现添加智能助手
-                  console.log("Add agent not implemented yet");
+                onAddAgent: async () => {
+                  // 加载默认工作区根目录
+                  try {
+                    const defaultWorkspaceRoot = await getDefaultWorkspace(state);
+                    // 打开新增智能助手对话框
+                    state.editingAgent = { id: "", name: "", workspace: "" };
+                    (state as any).isNewAgent = true; // 标记为新增模式
+                    (state as any).defaultWorkspaceRoot = defaultWorkspaceRoot;
+                  } catch (err) {
+                    console.error("Failed to load default workspace:", err);
+                    // 即使失败也允许创建助手
+                    state.editingAgent = { id: "", name: "", workspace: "" };
+                    (state as any).isNewAgent = true; // 标记为新增模式
+                  }
                 },
                 onEditAgent: (agentId) => {
-                  // TODO: 实现编辑智能助手
-                  console.log("Edit agent not implemented yet:", agentId);
+                  // 打开编辑智能助手对话框
+                  const agent = state.agentsList?.agents.find((a) => a.id === agentId);
+                  if (agent) {
+                    state.editingAgent = {
+                      id: agent.id,
+                      name: agent.name || "",
+                      // 使用后端返回的 workspace 字段
+                      workspace: agent.workspace || "",
+                    };
+                    (state as any).isNewAgent = false; // 编辑模式
+                  }
                 },
-                onDeleteAgent: (agentId) => {
-                  // TODO: 实现删除智能助手
-                  console.log("Delete agent not implemented yet:", agentId);
+                onDeleteAgent: async (agentId) => {
+                  const agent = state.agentsList?.agents.find((a) => a.id === agentId);
+                  const workspace = (agent as any)?.workspaceResolved || (agent as any)?.workspace;
+
+                  // 自定义对话框：二次确认并选择工作区操作
+                  const dialogHtml = `
+                    <div style="font-size: 14px;">
+                      <p style="margin: 0 0 16px 0; font-weight: 500;">确定要删除智能助手 "${agentId}" 吗？</p>
+                      ${
+                        workspace
+                          ? `
+                        <p style="margin: 0 0 12px 0; color: #666;">工作区：${workspace}</p>
+                        <div style="margin-bottom: 16px;">
+                          <p style="margin: 0 0 8px 0; font-weight: 500;">请选择工作区操作：</p>
+                          <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                            <input type="radio" name="workspace-action" value="keep" checked style="margin-right: 8px;">
+                            <span>保留工作区（文件不会被删除）</span>
+                          </label>
+                          <label style="display: block; cursor: pointer;">
+                            <input type="radio" name="workspace-action" value="delete" style="margin-right: 8px;">
+                            <span style="color: #ff5c5c;">清空工作区（删除所有文件）</span>
+                          </label>
+                        </div>
+                      `
+                          : ""
+                      }
+                      <p style="margin: 0; color: #999; font-size: 12px;">此操作不可恢复。</p>
+                    </div>
+                  `;
+
+                  // 创建自定义对话框
+                  const dialog = document.createElement("div");
+                  dialog.innerHTML = `
+                    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;">
+                      <div style="background: white; border-radius: 8px; padding: 24px; max-width: 480px; width: 90%;">
+                        ${dialogHtml}
+                        <div style="display: flex; gap: 12px; margin-top: 20px; justify-content: flex-end;">
+                          <button id="cancel-btn" style="padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer;">取消</button>
+                          <button id="confirm-btn" style="padding: 8px 16px; border: none; background: #ff5c5c; color: white; border-radius: 4px; cursor: pointer;">确认删除</button>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+
+                  document.body.appendChild(dialog);
+
+                  const closeDialog = () => document.body.removeChild(dialog);
+
+                  dialog.querySelector("#cancel-btn")!.addEventListener("click", closeDialog);
+                  dialog.querySelector("#confirm-btn")!.addEventListener("click", async () => {
+                    const deleteWorkspace =
+                      workspace &&
+                      (
+                        dialog.querySelector(
+                          'input[name="workspace-action"]:checked',
+                        ) as HTMLInputElement
+                      )?.value === "delete";
+                    closeDialog();
+
+                    try {
+                      const workspaceDeleted = await deleteAgent(state, agentId, deleteWorkspace);
+
+                      if (deleteWorkspace) {
+                        if (workspaceDeleted) {
+                          alert("删除成功，工作区已清空");
+                        } else {
+                          alert("助手已删除，但工作区删除失败，请手动删除文件夹：" + workspace);
+                        }
+                      } else {
+                        alert("删除成功，工作区已保留");
+                      }
+                    } catch (err) {
+                      console.error("Failed to delete agent:", err);
+                      alert("删除失败: " + (err instanceof Error ? err.message : String(err)));
+                    }
+                  });
                 },
-                onSaveAgent: () => {
-                  // TODO: 实现保存智能助手
-                  console.log("Save agent not implemented yet");
+                onSaveAgent: async () => {
+                  if (!state.editingAgent) {
+                    return;
+                  }
+                  // 验证输入
+                  if (!state.editingAgent.id?.trim()) {
+                    alert("请输入智能助手ID");
+                    return;
+                  }
+
+                  try {
+                    if ((state as any).isNewAgent) {
+                      // 创建新助手
+                      await createAgent(state, {
+                        id: state.editingAgent.id,
+                        name: state.editingAgent.name || state.editingAgent.id,
+                        workspace: state.editingAgent.workspace,
+                      });
+                      alert("创建成功");
+                    } else {
+                      // 更新助手
+                      await updateAgent(state, {
+                        id: state.editingAgent.id,
+                        name: state.editingAgent.name,
+                        workspace: state.editingAgent.workspace,
+                      });
+                      alert("保存成功");
+                    }
+                    // 关闭对话框
+                    state.editingAgent = null;
+                    (state as any).isNewAgent = false;
+                  } catch (err) {
+                    console.error("Failed to save agent:", err);
+                    alert("保存失败: " + (err instanceof Error ? err.message : String(err)));
+                  }
                 },
                 onCancelEdit: () => {
-                  // TODO: 实现取消编辑
-                  console.log("Cancel edit not implemented yet");
+                  // 关闭编辑对话框
+                  state.editingAgent = null;
+                  (state as any).isNewAgent = false;
                 },
                 onAgentFormChange: (field, value) => {
-                  // TODO: 实现表单更改
-                  console.log("Agent form change not implemented yet:", field, value);
+                  // 更新表单字段
+                  if (state.editingAgent) {
+                    state.editingAgent = {
+                      ...state.editingAgent,
+                      [field]: value,
+                    };
+                  }
+                },
+                onMigrateWorkspace: async (agentId) => {
+                  const agent = state.agentsList?.agents.find((a) => a.id === agentId);
+                  const currentWorkspace =
+                    (agent as any)?.workspaceResolved || (agent as any)?.workspace;
+
+                  // 创建迁移对话框
+                  const dialog = document.createElement("div");
+                  dialog.innerHTML = `
+                    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;">
+                      <div style="background: white; border-radius: 8px; padding: 24px; max-width: 560px; width: 90%;">
+                        <div style="font-size: 18px; font-weight: 600; margin-bottom: 16px;">迁移工作区</div>
+                        <div style="margin-bottom: 16px;">
+                          <div style="margin-bottom: 8px; color: #666;">当前工作区：</div>
+                          <div style="padding: 8px 12px; background: #f5f5f5; border-radius: 4px; font-family: monospace; word-break: break-all;">${currentWorkspace}</div>
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                          <label style="display: block; margin-bottom: 8px; font-weight: 500;">新工作区路径：</label>
+                          <div style="display: flex; gap: 8px;">
+                            <input id="new-workspace-input" type="text" style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px;" placeholder="输入新的工作区路径" />
+                            <button id="browse-btn" style="padding: 8px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer;">📁 浏览</button>
+                          </div>
+                          <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                            💡 提示：
+                            <ul style="margin: 4px 0 0 0; padding-left: 20px; color: #666;">
+                              <li>工作区文件将被复制到新路径</li>
+                              <li>如果目标目录已存在文件，将进行增量复制</li>
+                              <li>迁移成功后可选择是否删除原工作区</li>
+                            </ul>
+                          </div>
+                        </div>
+                        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                          <button id="cancel-migrate-btn" style="padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer;">取消</button>
+                          <button id="confirm-migrate-btn" style="padding: 8px 16px; border: none; background: #0066ff; color: white; border-radius: 4px; cursor: pointer;">开始迁移</button>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+
+                  document.body.appendChild(dialog);
+
+                  const closeDialog = () => document.body.removeChild(dialog);
+                  const inputEl = dialog.querySelector("#new-workspace-input") as HTMLInputElement;
+
+                  // 浏览按钮
+                  dialog.querySelector("#browse-btn")!.addEventListener("click", () => {
+                    const fileInput = document.createElement("input");
+                    fileInput.type = "file";
+                    fileInput.setAttribute("webkitdirectory", "");
+                    fileInput.setAttribute("directory", "");
+                    fileInput.onchange = (e: Event) => {
+                      const files = (e.target as HTMLInputElement).files;
+                      if (files && files.length > 0) {
+                        inputEl.value = files[0].webkitRelativePath.split("/")[0];
+                      }
+                    };
+                    fileInput.click();
+                  });
+
+                  dialog
+                    .querySelector("#cancel-migrate-btn")!
+                    .addEventListener("click", closeDialog);
+                  dialog
+                    .querySelector("#confirm-migrate-btn")!
+                    .addEventListener("click", async () => {
+                      const newWorkspace = inputEl.value.trim();
+                      if (!newWorkspace) {
+                        alert("请输入新的工作区路径");
+                        return;
+                      }
+
+                      if (newWorkspace === currentWorkspace) {
+                        alert("新路径与当前路径相同，无需迁移");
+                        return;
+                      }
+
+                      closeDialog();
+
+                      // 显示迁移进度提示
+                      const progressDialog = document.createElement("div");
+                      progressDialog.innerHTML = `
+                      <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10001;">
+                        <div style="background: white; border-radius: 8px; padding: 24px; text-align: center;">
+                          <div style="font-size: 16px; margin-bottom: 12px;">正在迁移工作区...</div>
+                          <div style="color: #666; font-size: 14px;">请稍候，正在复制文件</div>
+                        </div>
+                      </div>
+                    `;
+                      document.body.appendChild(progressDialog);
+
+                      try {
+                        const result = await migrateAgentWorkspace(state, agentId, newWorkspace);
+                        document.body.removeChild(progressDialog);
+
+                        if (result.migrated) {
+                          // 迁移成功，询问是否删除原工作区
+                          const confirmDialog = document.createElement("div");
+                          confirmDialog.innerHTML = `
+                          <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;">
+                            <div style="background: white; border-radius: 8px; padding: 24px; max-width: 480px; width: 90%;">
+                              <div style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #22c55e;">✅ 迁移成功</div>
+                              <div style="margin-bottom: 20px;">
+                                <div style="margin-bottom: 12px; padding: 12px; background: #f0fdf4; border-radius: 6px; border-left: 3px solid #22c55e;">
+                                  <div style="font-weight: 500; margin-bottom: 4px;">工作区已成功迁移</div>
+                                  <div style="font-size: 13px; color: #666; font-family: monospace;">
+                                    旧路径：${result.oldWorkspace}<br>
+                                    新路径：${result.newWorkspace}
+                                  </div>
+                                </div>
+                                <div style="padding: 12px; background: #fffbeb; border-radius: 6px; border-left: 3px solid #f59e0b;">
+                                  <div style="font-weight: 500; margin-bottom: 4px;">⚠️ 原工作区处理</div>
+                                  <div style="font-size: 13px; color: #666;">是否删除原工作区目录及其所有文件？</div>
+                                </div>
+                              </div>
+                              <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                                <button id="keep-old-btn" style="padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer;">保留原工作区</button>
+                                <button id="delete-old-btn" style="padding: 8px 16px; border: none; background: #ef4444; color: white; border-radius: 4px; cursor: pointer;">删除原工作区</button>
+                              </div>
+                            </div>
+                          </div>
+                        `;
+
+                          document.body.appendChild(confirmDialog);
+
+                          const closeConfirmDialog = () => document.body.removeChild(confirmDialog);
+
+                          confirmDialog
+                            .querySelector("#keep-old-btn")!
+                            .addEventListener("click", () => {
+                              closeConfirmDialog();
+                              // 刷新编辑状态
+                              if (state.editingAgent && state.editingAgent.id === agentId) {
+                                state.editingAgent.workspace = newWorkspace;
+                              }
+                            });
+
+                          confirmDialog
+                            .querySelector("#delete-old-btn")!
+                            .addEventListener("click", async () => {
+                              closeConfirmDialog();
+
+                              // 显示删除进度
+                              const deleteProgressDialog = document.createElement("div");
+                              deleteProgressDialog.innerHTML = `
+                            <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10001;">
+                              <div style="background: white; border-radius: 8px; padding: 24px; text-align: center;">
+                                <div style="font-size: 16px; margin-bottom: 12px;">正在删除原工作区...</div>
+                                <div style="color: #666; font-size: 14px;">请稍候</div>
+                              </div>
+                            </div>
+                          `;
+                              document.body.appendChild(deleteProgressDialog);
+
+                              try {
+                                // 调用后端API删除原工作区
+                                const deleteResult = await state.client!.request(
+                                  "agent.workspace.delete",
+                                  {
+                                    workspace: result.oldWorkspace,
+                                  },
+                                );
+
+                                document.body.removeChild(deleteProgressDialog);
+
+                                if (deleteResult && (deleteResult as any).success) {
+                                  alert("✅ 原工作区已成功删除");
+                                } else {
+                                  alert(
+                                    "⚠️ 原工作区删除失败，请手动删除：\n" + result.oldWorkspace,
+                                  );
+                                }
+                              } catch (err) {
+                                document.body.removeChild(deleteProgressDialog);
+                                console.error("Failed to delete old workspace:", err);
+                                alert(
+                                  "⚠️ 删除失败，请手动删除原工作区：\n" +
+                                    result.oldWorkspace +
+                                    "\n\n错误信息：" +
+                                    (err instanceof Error ? err.message : String(err)),
+                                );
+                              }
+
+                              // 刷新编辑状态
+                              if (state.editingAgent && state.editingAgent.id === agentId) {
+                                state.editingAgent.workspace = newWorkspace;
+                              }
+                            });
+                        } else {
+                          alert(
+                            `✅ 已更新工作区配置为：\n${result.newWorkspace}\n\n（原工作区不存在，未进行文件复制）`,
+                          );
+                          // 刷新编辑状态
+                          if (state.editingAgent && state.editingAgent.id === agentId) {
+                            state.editingAgent.workspace = newWorkspace;
+                          }
+                        }
+                      } catch (err) {
+                        document.body.removeChild(progressDialog);
+                        console.error("Failed to migrate workspace:", err);
+                        alert(
+                          "❌ 迁移失败：\n" + (err instanceof Error ? err.message : String(err)),
+                        );
+                      }
+                    });
+                },
+                onConfigureDefaultWorkspace: async () => {
+                  try {
+                    // 获取当前默认工作区
+                    const currentDefault = await getDefaultWorkspace(state);
+
+                    // 创建配置对话框
+                    const dialog = document.createElement("div");
+                    dialog.innerHTML = `
+                      <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;">
+                        <div style="background: white; border-radius: 8px; padding: 24px; max-width: 560px; width: 90%;">
+                          <div style="font-size: 18px; font-weight: 600; margin-bottom: 16px;">配置默认工作区根目录</div>
+                          <div style="margin-bottom: 20px;">
+                            <div style="margin-bottom: 8px; color: #666;">当前默认根目录：</div>
+                            <div style="padding: 8px 12px; background: #f5f5f5; border-radius: 4px; font-family: monospace; word-break: break-all; margin-bottom: 16px;">${currentDefault}</div>
+                            <label style="display: block; margin-bottom: 8px; font-weight: 500;">新的默认根目录：</label>
+                            <div style="display: flex; gap: 8px;">
+                              <input id="default-workspace-input" type="text" value="${currentDefault}" style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px;" placeholder="输入默认工作区根目录" />
+                              <button id="browse-default-btn" style="padding: 8px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer;">📁 浏览</button>
+                            </div>
+                            <div style="margin-top: 8px; font-size: 12px; color: #999;">💡 所有未指定工作区的助手将在此目录下自动生成工作区文件夹</div>
+                          </div>
+                          <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                            <button id="cancel-config-btn" style="padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer;">取消</button>
+                            <button id="confirm-config-btn" style="padding: 8px 16px; border: none; background: #0066ff; color: white; border-radius: 4px; cursor: pointer;">保存</button>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+
+                    document.body.appendChild(dialog);
+
+                    const closeDialog = () => document.body.removeChild(dialog);
+                    const inputEl = dialog.querySelector(
+                      "#default-workspace-input",
+                    ) as HTMLInputElement;
+
+                    // 浏览按钮
+                    dialog.querySelector("#browse-default-btn")!.addEventListener("click", () => {
+                      const fileInput = document.createElement("input");
+                      fileInput.type = "file";
+                      fileInput.setAttribute("webkitdirectory", "");
+                      fileInput.setAttribute("directory", "");
+                      fileInput.onchange = (e: Event) => {
+                        const files = (e.target as HTMLInputElement).files;
+                        if (files && files.length > 0) {
+                          inputEl.value = files[0].webkitRelativePath.split("/")[0];
+                        }
+                      };
+                      fileInput.click();
+                    });
+
+                    dialog
+                      .querySelector("#cancel-config-btn")!
+                      .addEventListener("click", closeDialog);
+                    dialog
+                      .querySelector("#confirm-config-btn")!
+                      .addEventListener("click", async () => {
+                        const newDefault = inputEl.value.trim();
+                        if (!newDefault) {
+                          alert("请输入默认工作区根目录");
+                          return;
+                        }
+
+                        closeDialog();
+
+                        try {
+                          await setDefaultWorkspace(state, newDefault);
+                          alert(`默认工作区根目录已更新为：\n${newDefault}`);
+                        } catch (err) {
+                          console.error("Failed to set default workspace:", err);
+                          alert("设置失败: " + (err instanceof Error ? err.message : String(err)));
+                        }
+                      });
+                  } catch (err) {
+                    console.error("Failed to load default workspace:", err);
+                    alert(
+                      "加载默认工作区失败: " + (err instanceof Error ? err.message : String(err)),
+                    );
+                  }
+                },
+                onSetDefaultAgent: async (agentId) => {
+                  // 二次确认
+                  if (!confirm(`确定将助手 "${agentId}" 设为默认助手吗？`)) {
+                    return;
+                  }
+
+                  try {
+                    await setDefaultAgent(state, agentId);
+                    alert(`已将 "${agentId}" 设为默认助手`);
+                  } catch (err) {
+                    console.error("Failed to set default agent:", err);
+                    alert("设置失败: " + (err instanceof Error ? err.message : String(err)));
+                  }
                 },
               })
             : nothing

@@ -198,6 +198,8 @@ export type AgentsProps = {
   editingAgent: { id: string; name?: string; workspace?: string } | null;
   creatingAgent: boolean;
   deletingAgent: boolean;
+  defaultWorkspaceRoot?: string; // 默认工作区根目录
+  isNewAgent?: boolean; // 是否是新增模式（区别于正在保存中的creatingAgent）
   // 回调函数
   onRefresh: () => void;
   onSelectAgent: (agentId: string) => void;
@@ -263,6 +265,9 @@ export type AgentsProps = {
   onSaveAgent: () => void;
   onCancelEdit: () => void;
   onAgentFormChange: (field: string, value: string) => void;
+  onMigrateWorkspace?: (agentId: string) => void;
+  onConfigureDefaultWorkspace?: () => void;
+  onSetDefaultAgent?: (agentId: string) => void; // 设置默认助手
 };
 
 const TOOL_SECTIONS = [
@@ -1487,6 +1492,18 @@ export function renderAgents(props: AgentsProps) {
             <div class="card-sub">${t("agents.configured_count").replace("{count}", String(agents.length))}</div>
           </div>
           <div style="display: flex; gap: 8px;">
+            <button 
+              class="btn btn--sm" 
+              ?disabled=${props.loading} 
+              @click=${() => {
+                if (props.onConfigureDefaultWorkspace) {
+                  props.onConfigureDefaultWorkspace();
+                }
+              }}
+              title="${t("agents.configure_default_workspace")}"
+            >
+              ⚙️
+            </button>
             <button class="btn btn--sm" ?disabled=${props.loading} @click=${props.onAddAgent}>
               ${t("agents.add_agent_short")}
             </button>
@@ -1548,6 +1565,7 @@ export function renderAgents(props: AgentsProps) {
                 props.agentIdentityById[selectedAgent.id] ?? null,
                 props.onDeleteAgent,
                 props.onEditAgent,
+                props.onSetDefaultAgent,
               )}
               ${renderAgentTabs(props.activePanel, (panel) => props.onSelectPanel(panel))}
               ${
@@ -1826,11 +1844,14 @@ function renderAgentHeader(
   agentIdentity: AgentIdentityResult | null,
   onDelete?: (agentId: string) => void,
   onEdit?: (agentId: string) => void,
+  onSetDefault?: (agentId: string) => void,
 ) {
   const badge = agentBadgeText(agent.id, defaultId);
   const displayName = normalizeAgentLabel(agent);
   const subtitle = agent.identity?.theme?.trim() || t("agents.subtitle_default");
   const emoji = resolveAgentEmoji(agent, agentIdentity);
+  const isDefault = agent.id === defaultId;
+
   return html`
     <section class="card agent-header">
       <div class="agent-header-main">
@@ -1846,6 +1867,20 @@ function renderAgentHeader(
         <div class="mono">${agent.id}</div>
         ${badge ? html`<span class="agent-pill">${badge}</span>` : nothing}
         ${
+          onSetDefault && !isDefault
+            ? html`
+          <button 
+            class="btn btn--sm" 
+            style="background: #4caf50; border-color: #4caf50; color: #ffffff;"
+            @click=${() => onSetDefault(agent.id)}
+            title="${t("agents.set_as_default")}"
+          >
+            ⭐ ${t("agents.set_as_default_short")}
+          </button>
+        `
+            : nothing
+        }
+        ${
           onEdit
             ? html`
           <button 
@@ -1858,20 +1893,28 @@ function renderAgentHeader(
             : nothing
         }
         ${
-          onDelete
+          onDelete && !isDefault
             ? html`
           <button 
-            class="btn btn--sm btn--danger" 
-            @click=${() => {
-              if (confirm(t("agents.delete_confirm").replace("{id}", agent.id))) {
-                onDelete(agent.id);
-              }
-            }}
+            class="btn btn--sm" 
+            style="background: #ff5c5c; border-color: #ff5c5c; color: #ffffff;"
+            @click=${() => onDelete(agent.id)}
           >
             ${t("agents.delete_agent")}
           </button>
         `
-            : nothing
+            : isDefault && onDelete
+              ? html`
+          <button 
+            class="btn btn--sm" 
+            style="background: #cccccc; border-color: #cccccc; color: #666666; cursor: not-allowed;"
+            disabled
+            title="${t("agents.cannot_delete_default")}"
+          >
+            ${t("agents.delete_agent")}
+          </button>
+        `
+              : nothing
         }
       </div>
     </section>
@@ -3024,9 +3067,47 @@ function renderAgentSkillRow(
 }
 
 function renderAgentEditModal(props: AgentsProps) {
-  const isNew = props.editingAgent?.id === "";
+  // 使用 isNewAgent 标志判断是否是新增模式，creatingAgent 表示正在保存中
+  const isNew = props.isNewAgent || false;
   const idPattern = /^[a-z0-9][a-z0-9-]*$/;
   const isValidId = props.editingAgent?.id && idPattern.test(props.editingAgent.id);
+
+  // 自动生成ID和工作区路径的辅助函数
+  const generateAgentId = () => {
+    const timestamp = Date.now().toString(36);
+    const random = Math.random().toString(36).substring(2, 7);
+    return `agent-${timestamp}-${random}`;
+  };
+
+  const generateWorkspacePath = (agentId: string) => {
+    // 使用配置的默认工作区根目录，如果没有则使用系统默认
+    const defaultRoot = props.defaultWorkspaceRoot || "~/.openclaw/workspace";
+    // 如果根目录已经包含 workspace 后缀，直接添加 agentId，否则添加 workspace-agentId
+    if (defaultRoot.endsWith("/workspace") || defaultRoot.endsWith("\\workspace")) {
+      return `${defaultRoot}-${agentId}`;
+    }
+    return `${defaultRoot}/workspace-${agentId}`;
+  };
+
+  // 判断工作区路径是否是自动生成的（包含当前或之前的agentId）
+  const isAutoGeneratedWorkspace = (workspace: string, currentId: string) => {
+    if (!workspace) {
+      return true;
+    }
+    // 检查是否包含workspace-前缀
+    return workspace.includes("/workspace-") || workspace.includes("\\workspace-");
+  };
+
+  // 如果是新建且ID为空，自动生成
+  if (isNew && !props.editingAgent?.id) {
+    const newId = generateAgentId();
+    setTimeout(() => {
+      if (props.onAgentFormChange) {
+        props.onAgentFormChange("id", newId);
+        props.onAgentFormChange("workspace", generateWorkspacePath(newId));
+      }
+    }, 0);
+  }
 
   return html`
     <section class="card" style="margin-bottom: 16px;">
@@ -3035,14 +3116,48 @@ function renderAgentEditModal(props: AgentsProps) {
       
       <div style="margin-top: 16px;">
         <div class="form-group" style="margin-bottom: 12px;">
-          <label class="form-label">${t("agents.agent_id")}</label>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label class="form-label">${t("agents.agent_id")}</label>
+            ${
+              isNew
+                ? html`
+                <button 
+                  type="button"
+                  class="btn btn--sm" 
+                  style="font-size: 12px; padding: 4px 8px;"
+                  @click=${() => {
+                    const newId = generateAgentId();
+                    props.onAgentFormChange("id", newId);
+                    // 只有当工作区是自动生成的才更新
+                    if (isAutoGeneratedWorkspace(props.editingAgent?.workspace || "", newId)) {
+                      props.onAgentFormChange("workspace", generateWorkspacePath(newId));
+                    }
+                  }}
+                >
+                  ${t("agents.regenerate_id")}
+                </button>
+              `
+                : nothing
+            }
+          </div>
           <input
             type="text"
             class="form-control"
             .value=${props.editingAgent?.id || ""}
             ?disabled=${!isNew}
             placeholder=${t("agents.agent_id_placeholder")}
-            @input=${(e: Event) => props.onAgentFormChange("id", (e.target as HTMLInputElement).value)}
+            @input=${(e: Event) => {
+              const newId = (e.target as HTMLInputElement).value;
+              props.onAgentFormChange("id", newId);
+              // ID改变时，只有当工作区是自动生成的才同步更新
+              if (
+                isNew &&
+                newId.trim() &&
+                isAutoGeneratedWorkspace(props.editingAgent?.workspace || "", newId)
+              ) {
+                props.onAgentFormChange("workspace", generateWorkspacePath(newId));
+              }
+            }}
           />
           <small class="form-text muted">${t("agents.agent_id_help")}</small>
           ${
@@ -3066,14 +3181,71 @@ function renderAgentEditModal(props: AgentsProps) {
         </div>
         
         <div class="form-group" style="margin-bottom: 16px;">
-          <label class="form-label">${t("agents.workspace_path")}</label>
-          <input
-            type="text"
-            class="form-control"
-            .value=${props.editingAgent?.workspace || ""}
-            placeholder=${t("agents.workspace_placeholder")}
-            @input=${(e: Event) => props.onAgentFormChange("workspace", (e.target as HTMLInputElement).value)}
-          />
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label class="form-label">${t("agents.workspace_path")}</label>
+            ${
+              !isNew && props.editingAgent?.workspace
+                ? html`
+                <button 
+                  type="button"
+                  class="btn btn--sm" 
+                  style="font-size: 12px; padding: 4px 8px;"
+                  @click=${() => {
+                    if (props.onMigrateWorkspace) {
+                      props.onMigrateWorkspace(props.editingAgent!.id);
+                    }
+                  }}
+                >
+                  ${t("agents.migrate_workspace")}
+                </button>
+              `
+                : nothing
+            }
+          </div>
+          <div style="display: flex; gap: 8px; flex-direction: column;">
+            <input
+              type="text"
+              class="form-control"
+              .value=${props.editingAgent?.workspace || ""}
+              placeholder=${t("agents.workspace_placeholder")}
+              @input=${(e: Event) => props.onAgentFormChange("workspace", (e.target as HTMLInputElement).value)}
+            />
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <small class="muted" style="flex: 1; min-width: 200px;">
+                💡 快捷路径：
+              </small>
+              <button 
+                type="button"
+                class="btn btn--sm" 
+                style="font-size: 0.75rem; padding: 2px 8px;"
+                @click=${() => {
+                  const homeDir = props.editingAgent?.workspace || "";
+                  const suggested = homeDir.includes("~")
+                    ? homeDir
+                    : `~/OpenClaw_Workspaces/${props.editingAgent?.id || "new-agent"}`;
+                  props.onAgentFormChange("workspace", suggested);
+                }}
+                title="使用用户主目录"
+              >
+                ~/OpenClaw_Workspaces
+              </button>
+              <button 
+                type="button"
+                class="btn btn--sm" 
+                style="font-size: 0.75rem; padding: 2px 8px;"
+                @click=${() => {
+                  props.onAgentFormChange(
+                    "workspace",
+                    `~/Documents/OpenClaw/${props.editingAgent?.id || "new-agent"}`,
+                  );
+                }}
+                title="使用文档目录"
+              >
+                ~/Documents/OpenClaw
+              </button>
+            </div>
+          </div>
+          <small class="form-text muted">${t("agents.workspace_help")} 支持 ~ 表示用户主目录，例如：~/OpenClaw_Workspaces/my-agent</small>
         </div>
         
         <div class="row" style="gap: 8px;">

@@ -174,7 +174,8 @@ export function resolveAgentWorkspaceDir(cfg: OpenClawConfig, agentId: string) {
   if (id === defaultAgentId) {
     const fallback = cfg.agents?.defaults?.workspace?.trim();
     if (fallback) {
-      return resolveUserPath(fallback);
+      // 默认助手的工作区 = 默认根目录 + 助手id
+      return path.join(resolveUserPath(fallback), id);
     }
     return resolveDefaultAgentWorkspaceDir(process.env);
   }

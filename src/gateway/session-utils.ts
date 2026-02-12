@@ -32,6 +32,7 @@ import {
   normalizeAgentId,
   normalizeMainKey,
   parseAgentSessionKey,
+  DEFAULT_AGENT_ID,
 } from "../routing/session-key.js";
 import { normalizeSessionDeliveryFields } from "../utils/delivery-context.js";
 import {
@@ -294,7 +295,7 @@ export function listAgentsForGateway(cfg: OpenClawConfig): {
   const scope = cfg.session?.scope ?? "per-sender";
   const configuredById = new Map<
     string,
-    { name?: string; identity?: GatewayAgentRow["identity"] }
+    { name?: string; workspace?: string; identity?: GatewayAgentRow["identity"] }
   >();
   for (const entry of cfg.agents?.list ?? []) {
     if (!entry?.id) {
@@ -315,6 +316,10 @@ export function listAgentsForGateway(cfg: OpenClawConfig): {
       : undefined;
     configuredById.set(normalizeAgentId(entry.id), {
       name: typeof entry.name === "string" && entry.name.trim() ? entry.name.trim() : undefined,
+      workspace:
+        typeof entry.workspace === "string" && entry.workspace.trim()
+          ? entry.workspace.trim()
+          : undefined,
       identity,
     });
   }
@@ -323,18 +328,39 @@ export function listAgentsForGateway(cfg: OpenClawConfig): {
       .map((entry) => (entry?.id ? normalizeAgentId(entry.id) : ""))
       .filter(Boolean),
   );
+  // 确保默认助手ID总是被包含（即使它不在 agents.list 中）
   const allowedIds = explicitIds.size > 0 ? new Set([...explicitIds, defaultId]) : null;
+  // 获取所有配置的助手ID（包括从磁盘扫描的）
   let agentIds = listConfiguredAgentIds(cfg).filter((id) =>
     allowedIds ? allowedIds.has(id) : true,
   );
+  // 如果 main 不在列表中但是系统默认助手，添加它
+  if (DEFAULT_AGENT_ID && !agentIds.includes(DEFAULT_AGENT_ID)) {
+    // 检查 main 是否是系统默认助手（当 agents.list 为空时）
+    const allAgents = cfg.agents?.list ?? [];
+    if (allAgents.length === 0 || defaultId === DEFAULT_AGENT_ID) {
+      agentIds = [DEFAULT_AGENT_ID, ...agentIds];
+    }
+  }
   if (mainKey && !agentIds.includes(mainKey)) {
     agentIds = [...agentIds, mainKey];
   }
   const agents = agentIds.map((id) => {
     const meta = configuredById.get(id);
+    // 如果助手不在 agents.list 中（如系统默认助手 main），从全局配置解析工作区路径
+    let workspace = meta?.workspace;
+    if (!workspace) {
+      // 使用 resolveAgentWorkspaceDir 动态解析工作区路径
+      try {
+        workspace = resolveAgentWorkspaceDir(cfg, id);
+      } catch {
+        // 解析失败，保持为 undefined
+      }
+    }
     return {
       id,
       name: meta?.name,
+      workspace,
       identity: meta?.identity,
     };
   });

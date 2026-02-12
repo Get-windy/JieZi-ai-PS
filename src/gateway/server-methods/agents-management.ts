@@ -17,6 +17,9 @@
  * - agent.channelAccounts.available - 获取可用但未绑定的通道账号
  */
 
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { AgentModelAccountsConfig, AgentBinding } from "../../config/types.agents.js";
 import type {
   AgentChannelBindings,
@@ -28,12 +31,14 @@ import {
   listAgentIds,
   resolveAgentModelAccounts,
   listAgentModelAccounts,
+  resolveAgentWorkspaceDir,
 } from "../../agents/agent-scope.js";
+import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
 import { getChannelPlugin, listChannelPlugins } from "../../channels/plugins/index.js";
 import { listAgentEntries, findAgentEntryIndex } from "../../commands/agents.config.js";
 import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../config/config.js";
 import { listBindings } from "../../routing/bindings.js";
-import { normalizeAgentId } from "../../routing/session-key.js";
+import { normalizeAgentId, DEFAULT_AGENT_ID } from "../../routing/session-key.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 
 /**
@@ -238,7 +243,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       id: agent.id,
       name: agent.name,
       default: agent.default || false,
-      workspace: agent.workspace,
+      workspace: agent.workspace, // 配置的工作区（可能为空）
+      workspaceResolved: resolveAgentWorkspaceDir(cfg, agent.id), // 实际解析后的工作区路径
       model: agent.model,
       modelAccountId: agent.modelAccountId,
       channelAccountIds: agent.channelAccountIds,
@@ -1032,6 +1038,675 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const success = await updateAgentField(agentId, "modelAccounts", updatedConfig, respond);
     if (success) {
       respond(true, { success: true, agentId, accountId, enabled }, undefined);
+    }
+  },
+
+  /**
+   * agent.create - 创建新的智能助手
+   */
+  "agent.create": async ({ params, respond }) => {
+    const id = String(params?.id ?? "").trim();
+    const name = String((params as any)?.name ?? "").trim();
+    const workspace = String((params as any)?.workspace ?? "").trim();
+
+    if (!id) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before creating agent"),
+      );
+      return;
+    }
+
+    const cfg = snapshot.config;
+    const normalized = normalizeAgentId(id);
+    const agents = listAgentEntries(cfg);
+
+    // 检查ID是否已存在
+    const existing = agents.find((a) => normalizeAgentId(a.id) === normalized);
+    if (existing) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `Agent ID already exists: ${id}`),
+      );
+      return;
+    }
+
+    // 创建新助手
+    const newAgent: any = {
+      id,
+      name: name || id,
+    };
+
+    if (workspace) {
+      newAgent.workspace = workspace;
+    }
+
+    // 添加到agents.list
+    const updatedConfig: OpenClawConfig = {
+      ...cfg,
+      agents: {
+        ...cfg.agents,
+        list: [...agents, newAgent],
+      },
+    };
+
+    // 创建工作区目录（在保存配置之前）
+    try {
+      const workspaceDir = resolveAgentWorkspaceDir(updatedConfig, id);
+      await fs.mkdir(workspaceDir, { recursive: true });
+    } catch (err) {
+      console.error(`Failed to create workspace directory for agent ${id}:`, err);
+      // 工作区创建失败不影响配置保存，继续执行
+    }
+
+    try {
+      await writeConfigFile(updatedConfig);
+      respond(true, { success: true, agent: newAgent }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to save config: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * agent.update - 更新智能助手信息
+   */
+  "agent.update": async ({ params, respond }) => {
+    const id = String(params?.id ?? "").trim();
+    const name =
+      (params as any)?.name !== undefined ? String((params as any).name).trim() : undefined;
+    const workspace =
+      (params as any)?.workspace !== undefined
+        ? String((params as any).workspace).trim()
+        : undefined;
+
+    if (!id) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before updating"),
+      );
+      return;
+    }
+
+    const cfg = snapshot.config;
+    const normalized = normalizeAgentId(id);
+    const agents = listAgentEntries(cfg);
+    const agentIndex = findAgentEntryIndex(agents, normalized);
+
+    if (agentIndex < 0) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent not found: ${id}`));
+      return;
+    }
+
+    // 更新助手信息
+    const updatedAgent = { ...agents[agentIndex] };
+    if (name !== undefined) {
+      updatedAgent.name = name;
+    }
+    if (workspace !== undefined) {
+      if (workspace) {
+        updatedAgent.workspace = workspace;
+      } else {
+        delete (updatedAgent as any).workspace;
+      }
+    }
+
+    agents[agentIndex] = updatedAgent;
+
+    const updatedConfig: OpenClawConfig = {
+      ...cfg,
+      agents: {
+        ...cfg.agents,
+        list: agents,
+      },
+    };
+
+    try {
+      await writeConfigFile(updatedConfig);
+      respond(true, { success: true, agent: updatedAgent }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to save config: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * agent.setDefault - 设置默认智能助手
+   */
+  "agent.setDefault": async ({ params, respond }) => {
+    const id = String(params?.id ?? "").trim();
+
+    if (!id) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before updating"),
+      );
+      return;
+    }
+
+    const cfg = snapshot.config;
+    const normalized = normalizeAgentId(id);
+    const agents = listAgentEntries(cfg);
+    let agentIndex = findAgentEntryIndex(agents, normalized);
+
+    // 如果助手不在 agents.list 中，添加进去（可能是默认助手 main）
+    if (agentIndex < 0) {
+      // 验证助手ID是否在系统中存在（包括 main 和从磁盘扫描的助手）
+      const allAgentIds = listAgentIds(cfg);
+      const isValidMainAgent = normalized === normalizeAgentId(DEFAULT_AGENT_ID);
+
+      // 允许：1) 在 agents.list 中的助手  2) 系统默认助手 main  3) 已存在的助手
+      if (!allAgentIds.includes(normalized) && !isValidMainAgent) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent not found: ${id}`));
+        return;
+      }
+
+      // 添加到 agents.list
+      agents.push({ id: normalized, name: id });
+      agentIndex = agents.length - 1;
+    }
+
+    // 移除所有其他助手的 default 标记（保证互斥）
+    const updatedAgents = agents.map((agent, idx) => {
+      if (idx === agentIndex) {
+        // 设置当前助手为默认
+        return { ...agent, default: true };
+      } else {
+        // 移除其他助手的默认标记
+        const updated = { ...agent };
+        delete (updated as any).default;
+        return updated;
+      }
+    });
+
+    const updatedConfig: OpenClawConfig = {
+      ...cfg,
+      agents: {
+        ...cfg.agents,
+        list: updatedAgents,
+      },
+    };
+
+    try {
+      await writeConfigFile(updatedConfig);
+      respond(true, { success: true, id }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to save config: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * agent.workspace.getDefaultRoot - 获取默认工作区根目录及路径建议
+   */
+  "agent.workspace.getDefaultRoot": async ({ params, respond }) => {
+    try {
+      const cfg = await loadConfig();
+      const defaultRoot = cfg.agents?.defaults?.workspace || resolveDefaultAgentWorkspaceDir();
+
+      respond(
+        true,
+        {
+          defaultRoot,
+          homeDir: os.homedir(),
+          suggestions: [
+            path.join(os.homedir(), "OpenClaw_Workspaces"),
+            path.join(os.homedir(), "Documents", "OpenClaw"),
+            defaultRoot,
+          ],
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to get default workspace root: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * agent.workspace.validate - 验证工作区路径
+   */
+  "agent.workspace.validate": async ({ params, respond }) => {
+    const workspacePath = String(params?.path ?? "").trim();
+
+    if (!workspacePath) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "path is required"));
+      return;
+    }
+
+    try {
+      const resolvedPath = path.resolve(workspacePath.replace(/^~/, os.homedir()));
+
+      // 检查路径是否存在
+      try {
+        const stat = await fs.stat(resolvedPath);
+        respond(
+          true,
+          {
+            valid: true,
+            exists: true,
+            isDirectory: stat.isDirectory(),
+            resolvedPath,
+            canCreate: false,
+          },
+          undefined,
+        );
+      } catch (err: any) {
+        // 路径不存在，检查是否可以创建
+        if (err.code === "ENOENT") {
+          const parentDir = path.dirname(resolvedPath);
+          try {
+            await fs.access(parentDir, fs.constants.W_OK);
+            respond(
+              true,
+              {
+                valid: true,
+                exists: false,
+                isDirectory: false,
+                resolvedPath,
+                canCreate: true,
+              },
+              undefined,
+            );
+          } catch {
+            respond(
+              true,
+              {
+                valid: false,
+                exists: false,
+                isDirectory: false,
+                resolvedPath,
+                canCreate: false,
+                error: "Parent directory does not exist or is not writable",
+              },
+              undefined,
+            );
+          }
+        } else {
+          throw err;
+        }
+      }
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to validate workspace path: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * agent.delete - 删除智能助手
+   */
+  "agent.delete": async ({ params, respond }) => {
+    const id = String(params?.id ?? "").trim();
+    const deleteWorkspace = Boolean((params as any)?.deleteWorkspace);
+
+    if (!id) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before deleting"),
+      );
+      return;
+    }
+
+    const cfg = snapshot.config;
+    const normalized = normalizeAgentId(id);
+    const agents = listAgentEntries(cfg);
+    const agentIndex = findAgentEntryIndex(agents, normalized);
+
+    if (agentIndex < 0) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent not found: ${id}`));
+      return;
+    }
+
+    // 检查是否是默认助手
+    if (agents[agentIndex].default) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Cannot delete default agent"),
+      );
+      return;
+    }
+
+    // 获取工作区路径（如果需要删除）
+    let workspaceDeleted = false;
+    if (deleteWorkspace) {
+      try {
+        const workspaceDir = resolveAgentWorkspaceDir(cfg, id);
+        await fs.rm(workspaceDir, { recursive: true, force: true });
+        workspaceDeleted = true;
+      } catch (err) {
+        console.error(`Failed to delete workspace for agent ${id}:`, err);
+        // 工作区删除失败不影响助手配置删除，继续执行
+      }
+    }
+
+    // 从列表中移除
+    const filteredAgents = agents.filter((_, idx) => idx !== agentIndex);
+
+    // 同时移除该助手的所有绑定
+    const bindings = listBindings(cfg);
+    const filteredBindings = bindings.filter((b) => normalizeAgentId(b.agentId) !== normalized);
+
+    const updatedConfig: OpenClawConfig = {
+      ...cfg,
+      agents: {
+        ...cfg.agents,
+        list: filteredAgents,
+      },
+      bindings: filteredBindings,
+    };
+
+    try {
+      await writeConfigFile(updatedConfig);
+      respond(true, { success: true, id, workspaceDeleted }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to save config: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * agent.workspace.migrate - 迁移智能助手工作区
+   */
+  "agent.workspace.migrate": async ({ params, respond }) => {
+    const id = String(params?.id ?? "").trim();
+    const newWorkspace = String((params as any)?.newWorkspace ?? "").trim();
+
+    if (!id) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
+      return;
+    }
+    if (!newWorkspace) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "newWorkspace is required"));
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before migrating"),
+      );
+      return;
+    }
+
+    const cfg = snapshot.config;
+    const normalized = normalizeAgentId(id);
+    const agents = listAgentEntries(cfg);
+    const agentIndex = findAgentEntryIndex(agents, normalized);
+
+    if (agentIndex < 0) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent not found: ${id}`));
+      return;
+    }
+
+    // 获取当前工作区路径
+    const oldWorkspace = resolveAgentWorkspaceDir(cfg, id);
+    const newWorkspacePath = path.resolve(newWorkspace);
+
+    // 检查新路径是否已存在
+    try {
+      const stat = await fs.stat(newWorkspacePath);
+      if (stat.isDirectory()) {
+        // 目标目录已存在，检查是否为空
+        const files = await fs.readdir(newWorkspacePath);
+        if (files.length > 0) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.INVALID_REQUEST, "Target workspace directory is not empty"),
+          );
+          return;
+        }
+      }
+    } catch (err) {
+      // 目录不存在，需要创建
+      await fs.mkdir(newWorkspacePath, { recursive: true });
+    }
+
+    // 复制文件
+    try {
+      // 检查源目录是否存在
+      try {
+        await fs.access(oldWorkspace);
+      } catch {
+        // 源目录不存在，只更新配置
+        const updatedAgent = {
+          ...agents[agentIndex],
+          workspace: newWorkspace,
+        };
+        agents[agentIndex] = updatedAgent;
+
+        const updatedConfig: OpenClawConfig = {
+          ...cfg,
+          agents: {
+            ...cfg.agents,
+            list: agents,
+          },
+        };
+
+        await writeConfigFile(updatedConfig);
+        respond(
+          true,
+          { success: true, id, oldWorkspace, newWorkspace, migrated: false },
+          undefined,
+        );
+        return;
+      }
+
+      // 复制所有文件
+      const copyDir = async (src: string, dest: string) => {
+        await fs.mkdir(dest, { recursive: true });
+        const entries = await fs.readdir(src, { withFileTypes: true });
+
+        for (const entry of entries) {
+          const srcPath = path.join(src, entry.name);
+          const destPath = path.join(dest, entry.name);
+
+          if (entry.isDirectory()) {
+            await copyDir(srcPath, destPath);
+          } else {
+            await fs.copyFile(srcPath, destPath);
+          }
+        }
+      };
+
+      await copyDir(oldWorkspace, newWorkspacePath);
+
+      // 更新配置
+      const updatedAgent = {
+        ...agents[agentIndex],
+        workspace: newWorkspace,
+      };
+      agents[agentIndex] = updatedAgent;
+
+      const updatedConfig: OpenClawConfig = {
+        ...cfg,
+        agents: {
+          ...cfg.agents,
+          list: agents,
+        },
+      };
+
+      await writeConfigFile(updatedConfig);
+      respond(true, { success: true, id, oldWorkspace, newWorkspace, migrated: true }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to migrate workspace: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * agent.workspace.getDefault - 获取默认工作区根目录
+   */
+  "agent.workspace.getDefault": ({ respond }) => {
+    const cfg = loadConfig();
+    const defaultWorkspace = cfg.agents?.defaults?.workspace || resolveDefaultAgentWorkspaceDir();
+    respond(true, { defaultWorkspace }, undefined);
+  },
+
+  /**
+   * agent.workspace.setDefault - 设置默认工作区根目录
+   */
+  "agent.workspace.setDefault": async ({ params, respond }) => {
+    const workspace = String(params?.workspace ?? "").trim();
+
+    if (!workspace) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "workspace is required"));
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before updating"),
+      );
+      return;
+    }
+
+    const cfg = snapshot.config;
+
+    // 验证路径是否有效
+    try {
+      const resolvedPath = path.resolve(workspace);
+      await fs.mkdir(resolvedPath, { recursive: true });
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `Invalid workspace path: ${String(err)}`),
+      );
+      return;
+    }
+
+    const updatedConfig: OpenClawConfig = {
+      ...cfg,
+      agents: {
+        ...cfg.agents,
+        defaults: {
+          ...cfg.agents?.defaults,
+          workspace,
+        },
+      },
+    };
+
+    try {
+      await writeConfigFile(updatedConfig);
+      respond(true, { success: true, workspace }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to save config: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * agent.workspace.delete - 删除工作区目录
+   */
+  "agent.workspace.delete": async ({ params, respond }) => {
+    const workspace = String(params?.workspace ?? "").trim();
+
+    if (!workspace) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "workspace is required"));
+      return;
+    }
+
+    try {
+      const resolvedPath = path.resolve(workspace);
+
+      // 安全检查：防止删除重要系统目录
+      const dangerousPaths = [
+        path.resolve("/"),
+        path.resolve(process.env.HOME || "~"),
+        path.resolve(process.env.USERPROFILE || "~"),
+        path.resolve("/usr"),
+        path.resolve("/bin"),
+        path.resolve("/etc"),
+        path.resolve("/var"),
+        path.resolve("/System"),
+        path.resolve("/Applications"),
+        path.resolve("C:\\\\Windows"),
+        path.resolve("C:\\\\Program Files"),
+      ];
+
+      if (
+        dangerousPaths.some(
+          (dangerous) =>
+            resolvedPath === dangerous || resolvedPath.startsWith(dangerous + path.sep),
+        )
+      ) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "Cannot delete system directory"),
+        );
+        return;
+      }
+
+      // 删除目录
+      await fs.rm(resolvedPath, { recursive: true, force: true });
+      respond(true, { success: true, workspace: resolvedPath }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete workspace: ${String(err)}`),
+      );
     }
   },
 };
