@@ -587,7 +587,7 @@ export async function runConfigureWizard(
     outro("配置完成。");
   } catch (err) {
     if (err instanceof WizardCancelledError) {
-      runtime.exit(0);
+      runtime.exit(1);
       return;
     }
     throw err;

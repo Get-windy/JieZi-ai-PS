@@ -1,2214 +1,20 @@
 import { html, svg, nothing } from "lit";
-import { t } from "../i18n.ts";
+import { formatDurationCompact } from "../../../../src/infra/format-time/format-duration.ts";
 import { extractQueryTerms, filterSessionsByQuery, parseToolSummary } from "../usage-helpers.ts";
+import { usageStylesString } from "./usageStyles.ts";
+import {
+  UsageSessionEntry,
+  UsageTotals,
+  UsageAggregates,
+  CostDailyEntry,
+  UsageColumnId,
+  TimeSeriesPoint,
+  SessionLogEntry,
+  SessionLogRole,
+  UsageProps,
+} from "./usageTypes.ts";
 
-// Inline styles for usage view (app uses light DOM, so static styles don't work)
-const usageStylesString = `
-  .usage-page-header {
-    margin: 4px 0 12px;
-  }
-  .usage-page-title {
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    margin-bottom: 4px;
-  }
-  .usage-page-subtitle {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin: 0 0 12px;
-  }
-  /* ===== FILTERS & HEADER ===== */
-  .usage-filters-inline {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  .usage-filters-inline select {
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg);
-    color: var(--text);
-    font-size: 13px;
-  }
-  .usage-filters-inline input[type="date"] {
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg);
-    color: var(--text);
-    font-size: 13px;
-  }
-  .usage-filters-inline input[type="text"] {
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg);
-    color: var(--text);
-    font-size: 13px;
-    min-width: 180px;
-  }
-  .usage-filters-inline .btn-sm {
-    padding: 6px 12px;
-    font-size: 14px;
-  }
-  .usage-refresh-indicator {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    background: rgba(255, 77, 77, 0.1);
-    border-radius: 4px;
-    font-size: 12px;
-    color: #ff4d4d;
-  }
-  .usage-refresh-indicator::before {
-    content: "";
-    width: 10px;
-    height: 10px;
-    border: 2px solid #ff4d4d;
-    border-top-color: transparent;
-    border-radius: 50%;
-    animation: usage-spin 0.6s linear infinite;
-  }
-  @keyframes usage-spin {
-    to { transform: rotate(360deg); }
-  }
-  .active-filters {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .filter-chip {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 8px 4px 12px;
-    background: var(--accent-subtle);
-    border: 1px solid var(--accent);
-    border-radius: 16px;
-    font-size: 12px;
-  }
-  .filter-chip-label {
-    color: var(--accent);
-    font-weight: 500;
-  }
-  .filter-chip-remove {
-    background: none;
-    border: none;
-    color: var(--accent);
-    cursor: pointer;
-    padding: 2px 4px;
-    font-size: 14px;
-    line-height: 1;
-    opacity: 0.7;
-    transition: opacity 0.15s;
-  }
-  .filter-chip-remove:hover {
-    opacity: 1;
-  }
-  .filter-clear-btn {
-    padding: 4px 10px !important;
-    font-size: 12px !important;
-    line-height: 1 !important;
-    margin-left: 8px;
-  }
-  .usage-query-bar {
-    display: grid;
-    grid-template-columns: minmax(220px, 1fr) auto;
-    gap: 10px;
-    align-items: center;
-    /* Keep the dropdown filter row from visually touching the query row. */
-    margin-bottom: 10px;
-  }
-  .usage-query-actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: nowrap;
-    justify-self: end;
-  }
-  .usage-query-actions .btn {
-    height: 34px;
-    padding: 0 14px;
-    border-radius: 999px;
-    font-weight: 600;
-    font-size: 13px;
-    line-height: 1;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    color: var(--text);
-    box-shadow: none;
-    transition: background 0.15s, border-color 0.15s, color 0.15s;
-  }
-  .usage-query-actions .btn:hover {
-    background: var(--bg);
-    border-color: var(--border-strong);
-  }
-  .usage-action-btn {
-    height: 34px;
-    padding: 0 14px;
-    border-radius: 999px;
-    font-weight: 600;
-    font-size: 13px;
-    line-height: 1;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    color: var(--text);
-    box-shadow: none;
-    transition: background 0.15s, border-color 0.15s, color 0.15s;
-  }
-  .usage-action-btn:hover {
-    background: var(--bg);
-    border-color: var(--border-strong);
-  }
-  .usage-primary-btn {
-    background: #ff4d4d;
-    color: #fff;
-    border-color: #ff4d4d;
-    box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
-  }
-  .btn.usage-primary-btn {
-    background: #ff4d4d !important;
-    border-color: #ff4d4d !important;
-    color: #fff !important;
-  }
-  .usage-primary-btn:hover {
-    background: #e64545;
-    border-color: #e64545;
-  }
-  .btn.usage-primary-btn:hover {
-    background: #e64545 !important;
-    border-color: #e64545 !important;
-  }
-  .usage-primary-btn:disabled {
-    background: rgba(255, 77, 77, 0.18);
-    border-color: rgba(255, 77, 77, 0.3);
-    color: #ff4d4d;
-    box-shadow: none;
-    cursor: default;
-    opacity: 1;
-  }
-  .usage-primary-btn[disabled] {
-    background: rgba(255, 77, 77, 0.18) !important;
-    border-color: rgba(255, 77, 77, 0.3) !important;
-    color: #ff4d4d !important;
-    opacity: 1 !important;
-  }
-  .usage-secondary-btn {
-    background: var(--bg-secondary);
-    color: var(--text);
-    border-color: var(--border);
-  }
-  .usage-query-input {
-    width: 100%;
-    min-width: 220px;
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg);
-    color: var(--text);
-    font-size: 13px;
-  }
-  .usage-query-suggestions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 6px;
-  }
-  .usage-query-suggestion {
-    padding: 4px 8px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    font-size: 11px;
-    color: var(--text);
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .usage-query-suggestion:hover {
-    background: var(--bg-hover);
-  }
-  .usage-filter-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-    margin-top: 14px;
-  }
-  details.usage-filter-select {
-    position: relative;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 6px 10px;
-    background: var(--bg);
-    font-size: 12px;
-    min-width: 140px;
-  }
-  details.usage-filter-select summary {
-    cursor: pointer;
-    list-style: none;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-    font-weight: 500;
-  }
-  details.usage-filter-select summary::-webkit-details-marker {
-    display: none;
-  }
-  .usage-filter-badge {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .usage-filter-popover {
-    position: absolute;
-    left: 0;
-    top: calc(100% + 6px);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
-    min-width: 220px;
-    z-index: 20;
-  }
-  .usage-filter-actions {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 8px;
-  }
-  .usage-filter-actions button {
-    border-radius: 999px;
-    padding: 4px 10px;
-    font-size: 11px;
-  }
-  .usage-filter-options {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    max-height: 200px;
-    overflow: auto;
-  }
-  .usage-filter-option {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-  }
-  .usage-query-hint {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .usage-query-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 6px;
-  }
-  .usage-query-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    font-size: 11px;
-  }
-  .usage-query-chip button {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 0;
-    line-height: 1;
-  }
-  .usage-header {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    background: var(--bg);
-  }
-  .usage-header.pinned {
-    position: sticky;
-    top: 12px;
-    z-index: 6;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
-  }
-  .usage-pin-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    font-size: 11px;
-    color: var(--text);
-    cursor: pointer;
-  }
-  .usage-pin-btn.active {
-    background: var(--accent-subtle);
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .usage-header-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-  .usage-header-title {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .usage-header-metrics {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-  .usage-metric-badge {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 6px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: transparent;
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .usage-metric-badge strong {
-    font-size: 12px;
-    color: var(--text);
-  }
-  .usage-controls {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-  .usage-controls .active-filters {
-    flex: 1 1 100%;
-  }
-  .usage-controls input[type="date"] {
-    min-width: 140px;
-  }
-  .usage-presets {
-    display: inline-flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-  .usage-presets .btn {
-    padding: 4px 8px;
-    font-size: 11px;
-  }
-  .usage-quick-filters {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  .usage-select {
-    min-width: 120px;
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg);
-    color: var(--text);
-    font-size: 12px;
-  }
-  .usage-export-menu summary {
-    cursor: pointer;
-    font-weight: 500;
-    color: var(--text);
-    list-style: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .usage-export-menu summary::-webkit-details-marker {
-    display: none;
-  }
-  .usage-export-menu {
-    position: relative;
-  }
-  .usage-export-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    font-size: 12px;
-  }
-  .usage-export-popover {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 6px);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 8px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
-    min-width: 160px;
-    z-index: 10;
-  }
-  .usage-export-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .usage-export-item {
-    text-align: left;
-    padding: 6px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    font-size: 12px;
-  }
-  .usage-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 12px;
-    margin-top: 12px;
-  }
-  .usage-summary-card {
-    padding: 12px;
-    border-radius: 8px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-  }
-  .usage-mosaic {
-    margin-top: 16px;
-    padding: 16px;
-  }
-  .usage-mosaic-header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 12px;
-  }
-  .usage-mosaic-title {
-    font-weight: 600;
-  }
-  .usage-mosaic-sub {
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-  .usage-mosaic-grid {
-    display: grid;
-    grid-template-columns: minmax(200px, 1fr) minmax(260px, 2fr);
-    gap: 16px;
-    align-items: start;
-  }
-  .usage-mosaic-section {
-    background: var(--bg-subtle);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px;
-  }
-  .usage-mosaic-section-title {
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .usage-mosaic-total {
-    font-size: 20px;
-    font-weight: 700;
-  }
-  .usage-daypart-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
-    gap: 8px;
-  }
-  .usage-daypart-cell {
-    border-radius: 8px;
-    padding: 10px;
-    color: var(--text);
-    background: rgba(255, 77, 77, 0.08);
-    border: 1px solid rgba(255, 77, 77, 0.2);
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .usage-daypart-label {
-    font-size: 12px;
-    font-weight: 600;
-  }
-  .usage-daypart-value {
-    font-size: 14px;
-  }
-  .usage-hour-grid {
-    display: grid;
-    grid-template-columns: repeat(24, minmax(6px, 1fr));
-    gap: 4px;
-  }
-  .usage-hour-cell {
-    height: 28px;
-    border-radius: 6px;
-    background: rgba(255, 77, 77, 0.1);
-    border: 1px solid rgba(255, 77, 77, 0.2);
-    cursor: pointer;
-    transition: border-color 0.15s, box-shadow 0.15s;
-  }
-  .usage-hour-cell.selected {
-    border-color: rgba(255, 77, 77, 0.8);
-    box-shadow: 0 0 0 2px rgba(255, 77, 77, 0.2);
-  }
-  .usage-hour-labels {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 6px;
-    margin-top: 8px;
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .usage-hour-legend {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-top: 10px;
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .usage-hour-legend span {
-    display: inline-block;
-    width: 14px;
-    height: 10px;
-    border-radius: 4px;
-    background: rgba(255, 77, 77, 0.15);
-    border: 1px solid rgba(255, 77, 77, 0.2);
-  }
-  .usage-calendar-labels {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(10px, 1fr));
-    gap: 6px;
-    font-size: 10px;
-    color: var(--text-muted);
-    margin-bottom: 6px;
-  }
-  .usage-calendar {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(10px, 1fr));
-    gap: 6px;
-  }
-  .usage-calendar-cell {
-    height: 18px;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 77, 77, 0.2);
-    background: rgba(255, 77, 77, 0.08);
-  }
-  .usage-calendar-cell.empty {
-    background: transparent;
-    border-color: transparent;
-  }
-  .usage-summary-title {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-bottom: 6px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .usage-info {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    margin-left: 6px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    font-size: 10px;
-    color: var(--text-muted);
-    cursor: help;
-  }
-  .usage-summary-value {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-strong);
-  }
-  .usage-summary-value.good {
-    color: #1f8f4e;
-  }
-  .usage-summary-value.warn {
-    color: #c57a00;
-  }
-  .usage-summary-value.bad {
-    color: #c9372c;
-  }
-  .usage-summary-hint {
-    font-size: 10px;
-    color: var(--text-muted);
-    cursor: help;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 0 6px;
-    line-height: 16px;
-    height: 16px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .usage-summary-sub {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 4px;
-  }
-  .usage-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .usage-list-item {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    font-size: 12px;
-    color: var(--text);
-    align-items: flex-start;
-  }
-  .usage-list-value {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
-    text-align: right;
-  }
-  .usage-list-sub {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .usage-list-item.button {
-    border: none;
-    background: transparent;
-    padding: 0;
-    text-align: left;
-    cursor: pointer;
-  }
-  .usage-list-item.button:hover {
-    color: var(--text-strong);
-  }
-  .usage-list-item .muted {
-    font-size: 11px;
-  }
-  .usage-error-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  .usage-error-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 8px;
-    align-items: center;
-    font-size: 12px;
-  }
-  .usage-error-date {
-    font-weight: 600;
-  }
-  .usage-error-rate {
-    font-variant-numeric: tabular-nums;
-  }
-  .usage-error-sub {
-    grid-column: 1 / -1;
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .usage-badges {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 8px;
-  }
-  .usage-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 2px 8px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    font-size: 11px;
-    background: var(--bg);
-    color: var(--text);
-  }
-  .usage-meta-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 12px;
-  }
-  .usage-meta-item {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 12px;
-  }
-  .usage-meta-item span {
-    color: var(--text-muted);
-    font-size: 11px;
-  }
-  .usage-insights-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-    margin-top: 12px;
-  }
-  .usage-insight-card {
-    padding: 14px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-  }
-  .usage-insight-title {
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .usage-insight-subtitle {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 6px;
-  }
-  /* ===== CHART TOGGLE ===== */
-  .chart-toggle {
-    display: flex;
-    background: var(--bg);
-    border-radius: 6px;
-    overflow: hidden;
-    border: 1px solid var(--border);
-  }
-  .chart-toggle .toggle-btn {
-    padding: 6px 14px;
-    font-size: 13px;
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .chart-toggle .toggle-btn:hover {
-    color: var(--text);
-  }
-  .chart-toggle .toggle-btn.active {
-    background: #ff4d4d;
-    color: white;
-  }
-  .chart-toggle.small .toggle-btn {
-    padding: 4px 8px;
-    font-size: 11px;
-  }
-  .sessions-toggle {
-    border-radius: 4px;
-  }
-  .sessions-toggle .toggle-btn {
-    border-radius: 4px;
-  }
-  .daily-chart-header {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 8px;
-    margin-bottom: 6px;
-  }
-
-  /* ===== DAILY BAR CHART ===== */
-  .daily-chart {
-    margin-top: 12px;
-  }
-  .daily-chart-bars {
-    display: flex;
-    align-items: flex-end;
-    height: 200px;
-    gap: 4px;
-    padding: 8px 4px 36px;
-  }
-  .daily-bar-wrapper {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    height: 100%;
-    justify-content: flex-end;
-    cursor: pointer;
-    position: relative;
-    border-radius: 4px 4px 0 0;
-    transition: background 0.15s;
-    min-width: 0;
-  }
-  .daily-bar-wrapper:hover {
-    background: var(--bg-hover);
-  }
-  .daily-bar-wrapper.selected {
-    background: var(--accent-subtle);
-  }
-  .daily-bar-wrapper.selected .daily-bar {
-    background: var(--accent);
-  }
-  .daily-bar {
-    width: 100%;
-    max-width: var(--bar-max-width, 32px);
-    background: #ff4d4d;
-    border-radius: 3px 3px 0 0;
-    min-height: 2px;
-    transition: all 0.15s;
-    overflow: hidden;
-  }
-  .daily-bar-wrapper:hover .daily-bar {
-    background: #cc3d3d;
-  }
-  .daily-bar-label {
-    position: absolute;
-    bottom: -28px;
-    font-size: 10px;
-    color: var(--text-muted);
-    white-space: nowrap;
-    text-align: center;
-    transform: rotate(-35deg);
-    transform-origin: top center;
-  }
-  .daily-bar-total {
-    position: absolute;
-    top: -16px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 10px;
-    color: var(--text-muted);
-    white-space: nowrap;
-  }
-  .daily-bar-tooltip {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 12px;
-    white-space: nowrap;
-    z-index: 100;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s;
-  }
-  .daily-bar-wrapper:hover .daily-bar-tooltip {
-    opacity: 1;
-  }
-
-  /* ===== COST/TOKEN BREAKDOWN BAR ===== */
-  .cost-breakdown {
-    margin-top: 18px;
-    padding: 16px;
-    background: var(--bg-secondary);
-    border-radius: 8px;
-  }
-  .cost-breakdown-header {
-    font-weight: 600;
-    font-size: 15px;
-    letter-spacing: -0.02em;
-    margin-bottom: 12px;
-    color: var(--text-strong);
-  }
-  .cost-breakdown-bar {
-    height: 28px;
-    background: var(--bg);
-    border-radius: 6px;
-    overflow: hidden;
-    display: flex;
-  }
-  .cost-segment {
-    height: 100%;
-    transition: width 0.3s ease;
-    position: relative;
-  }
-  .cost-segment.output {
-    background: #ef4444;
-  }
-  .cost-segment.input {
-    background: #f59e0b;
-  }
-  .cost-segment.cache-write {
-    background: #10b981;
-  }
-  .cost-segment.cache-read {
-    background: #06b6d4;
-  }
-  .cost-breakdown-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    margin-top: 12px;
-  }
-  .cost-breakdown-total {
-    margin-top: 10px;
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--text);
-    cursor: help;
-  }
-  .legend-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
-    flex-shrink: 0;
-  }
-  .legend-dot.output {
-    background: #ef4444;
-  }
-  .legend-dot.input {
-    background: #f59e0b;
-  }
-  .legend-dot.cache-write {
-    background: #10b981;
-  }
-  .legend-dot.cache-read {
-    background: #06b6d4;
-  }
-  .legend-dot.system {
-    background: #ff4d4d;
-  }
-  .legend-dot.skills {
-    background: #8b5cf6;
-  }
-  .legend-dot.tools {
-    background: #ec4899;
-  }
-  .legend-dot.files {
-    background: #f59e0b;
-  }
-  .cost-breakdown-note {
-    margin-top: 10px;
-    font-size: 11px;
-    color: var(--text-muted);
-    line-height: 1.4;
-  }
-
-  /* ===== SESSION BARS (scrollable list) ===== */
-  .session-bars {
-    margin-top: 16px;
-    max-height: 400px;
-    overflow-y: auto;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--bg);
-  }
-  .session-bar-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .session-bar-row:last-child {
-    border-bottom: none;
-  }
-  .session-bar-row:hover {
-    background: var(--bg-hover);
-  }
-  .session-bar-row.selected {
-    background: var(--accent-subtle);
-  }
-  .session-bar-label {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: 13px;
-    color: var(--text);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .session-bar-title {
-    /* Prefer showing the full name; wrap instead of truncating. */
-    white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
-  .session-bar-meta {
-    font-size: 10px;
-    color: var(--text-muted);
-    font-weight: 400;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .session-bar-track {
-    flex: 0 0 90px;
-    height: 6px;
-    background: var(--bg-secondary);
-    border-radius: 4px;
-    overflow: hidden;
-    opacity: 0.6;
-  }
-  .session-bar-fill {
-    height: 100%;
-    background: rgba(255, 77, 77, 0.7);
-    border-radius: 4px;
-    transition: width 0.3s ease;
-  }
-  .session-bar-value {
-    flex: 0 0 70px;
-    text-align: right;
-    font-size: 12px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-  }
-  .session-bar-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    flex: 0 0 auto;
-  }
-  .session-copy-btn {
-    height: 26px;
-    padding: 0 10px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: background 0.15s, border-color 0.15s, color 0.15s;
-  }
-  .session-copy-btn:hover {
-    background: var(--bg);
-    border-color: var(--border-strong);
-    color: var(--text);
-  }
-
-  /* ===== TIME SERIES CHART ===== */
-  .session-timeseries {
-    margin-top: 24px;
-    padding: 16px;
-    background: var(--bg-secondary);
-    border-radius: 8px;
-  }
-  .timeseries-header-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-  }
-  .timeseries-controls {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-  .timeseries-header {
-    font-weight: 600;
-    color: var(--text);
-  }
-  .timeseries-chart {
-    width: 100%;
-    overflow: hidden;
-  }
-  .timeseries-svg {
-    width: 100%;
-    height: auto;
-    display: block;
-  }
-  .timeseries-svg .axis-label {
-    font-size: 10px;
-    fill: var(--text-muted);
-  }
-  .timeseries-svg .ts-area {
-    fill: #ff4d4d;
-    fill-opacity: 0.1;
-  }
-  .timeseries-svg .ts-line {
-    fill: none;
-    stroke: #ff4d4d;
-    stroke-width: 2;
-  }
-  .timeseries-svg .ts-dot {
-    fill: #ff4d4d;
-    transition: r 0.15s, fill 0.15s;
-  }
-  .timeseries-svg .ts-dot:hover {
-    r: 5;
-  }
-  .timeseries-svg .ts-bar {
-    fill: #ff4d4d;
-    transition: fill 0.15s;
-  }
-  .timeseries-svg .ts-bar:hover {
-    fill: #cc3d3d;
-  }
-  .timeseries-svg .ts-bar.output { fill: #ef4444; }
-  .timeseries-svg .ts-bar.input { fill: #f59e0b; }
-  .timeseries-svg .ts-bar.cache-write { fill: #10b981; }
-  .timeseries-svg .ts-bar.cache-read { fill: #06b6d4; }
-  .timeseries-summary {
-    margin-top: 12px;
-    font-size: 13px;
-    color: var(--text-muted);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .timeseries-loading {
-    padding: 24px;
-    text-align: center;
-    color: var(--text-muted);
-  }
-
-  /* ===== SESSION LOGS ===== */
-  .session-logs {
-    margin-top: 24px;
-    background: var(--bg-secondary);
-    border-radius: 8px;
-    overflow: hidden;
-  }
-  .session-logs-header {
-    padding: 10px 14px;
-    font-weight: 600;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 13px;
-    background: var(--bg-secondary);
-  }
-  .session-logs-loading {
-    padding: 24px;
-    text-align: center;
-    color: var(--text-muted);
-  }
-  .session-logs-list {
-    max-height: 400px;
-    overflow-y: auto;
-  }
-  .session-log-entry {
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    background: var(--bg);
-  }
-  .session-log-entry:last-child {
-    border-bottom: none;
-  }
-  .session-log-entry.user {
-    border-left: 3px solid var(--accent);
-  }
-  .session-log-entry.assistant {
-    border-left: 3px solid var(--border-strong);
-  }
-  .session-log-meta {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    font-size: 11px;
-    color: var(--text-muted);
-    flex-wrap: wrap;
-  }
-  .session-log-role {
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 999px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-  }
-  .session-log-entry.user .session-log-role {
-    color: var(--accent);
-  }
-  .session-log-entry.assistant .session-log-role {
-    color: var(--text-muted);
-  }
-  .session-log-content {
-    font-size: 13px;
-    line-height: 1.5;
-    color: var(--text);
-    white-space: pre-wrap;
-    word-break: break-word;
-    background: var(--bg-secondary);
-    border-radius: 8px;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    max-height: 220px;
-    overflow-y: auto;
-  }
-
-  /* ===== CONTEXT WEIGHT BREAKDOWN ===== */
-  .context-weight-breakdown {
-    margin-top: 24px;
-    padding: 16px;
-    background: var(--bg-secondary);
-    border-radius: 8px;
-  }
-  .context-weight-breakdown .context-weight-header {
-    font-weight: 600;
-    font-size: 13px;
-    margin-bottom: 4px;
-    color: var(--text);
-  }
-  .context-weight-desc {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin: 0 0 12px 0;
-  }
-  .context-stacked-bar {
-    height: 24px;
-    background: var(--bg);
-    border-radius: 6px;
-    overflow: hidden;
-    display: flex;
-  }
-  .context-segment {
-    height: 100%;
-    transition: width 0.3s ease;
-  }
-  .context-segment.system {
-    background: #ff4d4d;
-  }
-  .context-segment.skills {
-    background: #8b5cf6;
-  }
-  .context-segment.tools {
-    background: #ec4899;
-  }
-  .context-segment.files {
-    background: #f59e0b;
-  }
-  .context-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    margin-top: 12px;
-  }
-  .context-total {
-    margin-top: 10px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-muted);
-  }
-  .context-details {
-    margin-top: 12px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
-  }
-  .context-details summary {
-    padding: 10px 14px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border);
-  }
-  .context-details[open] summary {
-    border-bottom: 1px solid var(--border);
-  }
-  .context-list {
-    max-height: 200px;
-    overflow-y: auto;
-  }
-  .context-list-header {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 14px;
-    font-size: 11px;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border);
-  }
-  .context-list-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 14px;
-    font-size: 12px;
-    border-bottom: 1px solid var(--border);
-  }
-  .context-list-item:last-child {
-    border-bottom: none;
-  }
-  .context-list-item .mono {
-    font-family: var(--font-mono);
-    color: var(--text);
-  }
-  .context-list-item .muted {
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-  }
-
-  /* ===== NO CONTEXT NOTE ===== */
-  .no-context-note {
-    margin-top: 24px;
-    padding: 16px;
-    background: var(--bg-secondary);
-    border-radius: 8px;
-    font-size: 13px;
-    color: var(--text-muted);
-    line-height: 1.5;
-  }
-
-  /* ===== TWO COLUMN LAYOUT ===== */
-  .usage-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 18px;
-    margin-top: 18px;
-    align-items: stretch;
-  }
-  .usage-grid-left {
-    display: flex;
-    flex-direction: column;
-  }
-  .usage-grid-right {
-    display: flex;
-    flex-direction: column;
-  }
-  
-  /* ===== LEFT CARD (Daily + Breakdown) ===== */
-  .usage-left-card {
-    /* inherits background, border, shadow from .card */
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-  .usage-left-card .daily-chart-bars {
-    flex: 1;
-    min-height: 200px;
-  }
-  .usage-left-card .sessions-panel-title {
-    font-weight: 600;
-    font-size: 14px;
-    margin-bottom: 12px;
-  }
-  
-  /* ===== COMPACT DAILY CHART ===== */
-  .daily-chart-compact {
-    margin-bottom: 16px;
-  }
-  .daily-chart-compact .sessions-panel-title {
-    margin-bottom: 8px;
-  }
-  .daily-chart-compact .daily-chart-bars {
-    height: 100px;
-    padding-bottom: 20px;
-  }
-  
-  /* ===== COMPACT COST BREAKDOWN ===== */
-  .cost-breakdown-compact {
-    padding: 0;
-    margin: 0;
-    background: transparent;
-    border-top: 1px solid var(--border);
-    padding-top: 12px;
-  }
-  .cost-breakdown-compact .cost-breakdown-header {
-    margin-bottom: 8px;
-  }
-  .cost-breakdown-compact .cost-breakdown-legend {
-    gap: 12px;
-  }
-  .cost-breakdown-compact .cost-breakdown-note {
-    display: none;
-  }
-  
-  /* ===== SESSIONS CARD ===== */
-  .sessions-card {
-    /* inherits background, border, shadow from .card */
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-  .sessions-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-  }
-  .sessions-card-title {
-    font-weight: 600;
-    font-size: 14px;
-  }
-  .sessions-card-count {
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-  .sessions-card-meta {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin: 8px 0 10px;
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-  .sessions-card-stats {
-    display: inline-flex;
-    gap: 12px;
-  }
-  .sessions-sort {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-  .sessions-sort select {
-    padding: 4px 8px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    color: var(--text);
-    font-size: 12px;
-  }
-  .sessions-action-btn {
-    height: 28px;
-    padding: 0 10px;
-    border-radius: 8px;
-    font-size: 12px;
-    line-height: 1;
-  }
-  .sessions-action-btn.icon {
-    width: 32px;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .sessions-card-hint {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-  }
-  .sessions-card .session-bars {
-    max-height: 280px;
-    background: var(--bg);
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    margin: 0;
-    overflow-y: auto;
-    padding: 8px;
-  }
-  .sessions-card .session-bar-row {
-    padding: 6px 8px;
-    border-radius: 6px;
-    margin-bottom: 3px;
-    border: 1px solid transparent;
-    transition: all 0.15s;
-  }
-  .sessions-card .session-bar-row:hover {
-    border-color: var(--border);
-    background: var(--bg-hover);
-  }
-  .sessions-card .session-bar-row.selected {
-    border-color: var(--accent);
-    background: var(--accent-subtle);
-    box-shadow: inset 0 0 0 1px rgba(255, 77, 77, 0.15);
-  }
-  .sessions-card .session-bar-label {
-    flex: 1 1 auto;
-    min-width: 140px;
-    font-size: 12px;
-  }
-  .sessions-card .session-bar-value {
-    flex: 0 0 60px;
-    font-size: 11px;
-    font-weight: 600;
-  }
-  .sessions-card .session-bar-track {
-    flex: 0 0 70px;
-    height: 5px;
-    opacity: 0.5;
-  }
-  .sessions-card .session-bar-fill {
-    background: rgba(255, 77, 77, 0.55);
-  }
-  .sessions-clear-btn {
-    margin-left: auto;
-  }
-  
-  /* ===== EMPTY DETAIL STATE ===== */
-  .session-detail-empty {
-    margin-top: 18px;
-    background: var(--bg-secondary);
-    border-radius: 8px;
-    border: 2px dashed var(--border);
-    padding: 32px;
-    text-align: center;
-  }
-  .session-detail-empty-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 8px;
-  }
-  .session-detail-empty-desc {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 16px;
-    line-height: 1.5;
-  }
-  .session-detail-empty-features {
-    display: flex;
-    justify-content: center;
-    gap: 24px;
-    flex-wrap: wrap;
-  }
-  .session-detail-empty-feature {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-  .session-detail-empty-feature .icon {
-    font-size: 16px;
-  }
-  
-  /* ===== SESSION DETAIL PANEL ===== */
-  .session-detail-panel {
-    margin-top: 12px;
-    /* inherits background, border-radius, shadow from .card */
-    border: 2px solid var(--accent) !important;
-  }
-  .session-detail-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
-    cursor: pointer;
-  }
-  .session-detail-header:hover {
-    background: var(--bg-hover);
-  }
-  .session-detail-title {
-    font-weight: 600;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .session-detail-header-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .session-close-btn {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    cursor: pointer;
-    padding: 2px 8px;
-    font-size: 16px;
-    line-height: 1;
-    border-radius: 4px;
-    transition: background 0.15s, color 0.15s;
-  }
-  .session-close-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text);
-    border-color: var(--accent);
-  }
-  .session-detail-stats {
-    display: flex;
-    gap: 10px;
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-  .session-detail-stats strong {
-    color: var(--text);
-    font-family: var(--font-mono);
-  }
-  .session-detail-content {
-    padding: 12px;
-  }
-  .session-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-  .session-summary-card {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px;
-    background: var(--bg-secondary);
-  }
-  .session-summary-title {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-bottom: 4px;
-  }
-  .session-summary-value {
-    font-size: 14px;
-    font-weight: 600;
-  }
-  .session-summary-meta {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 4px;
-  }
-  .session-detail-row {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-    /* Separate "Usage Over Time" from the summary + Top Tools/Model Mix cards above. */
-    margin-top: 12px;
-    margin-bottom: 10px;
-  }
-  .session-detail-bottom {
-    display: grid;
-    grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
-    gap: 10px;
-    align-items: stretch;
-  }
-  .session-detail-bottom .session-logs-compact {
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-  }
-  .session-detail-bottom .session-logs-compact .session-logs-list {
-    flex: 1 1 auto;
-    max-height: none;
-  }
-  .context-details-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    background: var(--bg);
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    padding: 12px;
-  }
-  .context-breakdown-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 10px;
-    margin-top: 8px;
-  }
-  .context-breakdown-card {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px;
-    background: var(--bg-secondary);
-  }
-  .context-breakdown-title {
-    font-size: 11px;
-    font-weight: 600;
-    margin-bottom: 6px;
-  }
-  .context-breakdown-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    font-size: 11px;
-  }
-  .context-breakdown-item {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .context-breakdown-more {
-    font-size: 10px;
-    color: var(--text-muted);
-    margin-top: 4px;
-  }
-  .context-breakdown-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-  .context-expand-btn {
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    color: var(--text-muted);
-    font-size: 11px;
-    padding: 4px 8px;
-    border-radius: 999px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .context-expand-btn:hover {
-    color: var(--text);
-    border-color: var(--border-strong);
-    background: var(--bg);
-  }
-  
-  /* ===== COMPACT TIMESERIES ===== */
-  .session-timeseries-compact {
-    background: var(--bg);
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    padding: 12px;
-    margin: 0;
-  }
-  .session-timeseries-compact .timeseries-header-row {
-    margin-bottom: 8px;
-  }
-  .session-timeseries-compact .timeseries-header {
-    font-size: 12px;
-  }
-  .session-timeseries-compact .timeseries-summary {
-    font-size: 11px;
-    margin-top: 8px;
-  }
-  
-  /* ===== COMPACT CONTEXT ===== */
-  .context-weight-compact {
-    background: var(--bg);
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    padding: 12px;
-    margin: 0;
-  }
-  .context-weight-compact .context-weight-header {
-    font-size: 12px;
-    margin-bottom: 4px;
-  }
-  .context-weight-compact .context-weight-desc {
-    font-size: 11px;
-    margin-bottom: 8px;
-  }
-  .context-weight-compact .context-stacked-bar {
-    height: 16px;
-  }
-  .context-weight-compact .context-legend {
-    font-size: 11px;
-    gap: 10px;
-    margin-top: 8px;
-  }
-  .context-weight-compact .context-total {
-    font-size: 11px;
-    margin-top: 6px;
-  }
-  .context-weight-compact .context-details {
-    margin-top: 8px;
-  }
-  .context-weight-compact .context-details summary {
-    font-size: 12px;
-    padding: 6px 10px;
-  }
-  
-  /* ===== COMPACT LOGS ===== */
-  .session-logs-compact {
-    background: var(--bg);
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    overflow: hidden;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-  }
-  .session-logs-compact .session-logs-header {
-    padding: 10px 12px;
-    font-size: 12px;
-  }
-  .session-logs-compact .session-logs-list {
-    max-height: none;
-    flex: 1 1 auto;
-    overflow: auto;
-  }
-  .session-logs-compact .session-log-entry {
-    padding: 8px 12px;
-  }
-  .session-logs-compact .session-log-content {
-    font-size: 12px;
-    max-height: 160px;
-  }
-  .session-log-tools {
-    margin-top: 6px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--bg-secondary);
-    padding: 6px 8px;
-    font-size: 11px;
-    color: var(--text);
-  }
-  .session-log-tools summary {
-    cursor: pointer;
-    list-style: none;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-weight: 600;
-  }
-  .session-log-tools summary::-webkit-details-marker {
-    display: none;
-  }
-  .session-log-tools-list {
-    margin-top: 6px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .session-log-tools-pill {
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 2px 8px;
-    font-size: 10px;
-    background: var(--bg);
-    color: var(--text);
-  }
-
-  /* ===== RESPONSIVE ===== */
-  @media (max-width: 900px) {
-    .usage-grid {
-      grid-template-columns: 1fr;
-    }
-    .session-detail-row {
-      grid-template-columns: 1fr;
-    }
-  }
-  @media (max-width: 600px) {
-    .session-bar-label {
-      flex: 0 0 100px;
-    }
-    .cost-breakdown-legend {
-      gap: 10px;
-    }
-    .legend-item {
-      font-size: 11px;
-    }
-    .daily-chart-bars {
-      height: 170px;
-      gap: 6px;
-      padding-bottom: 40px;
-    }
-    .daily-bar-label {
-      font-size: 8px;
-      bottom: -30px;
-      transform: rotate(-45deg);
-    }
-    .usage-mosaic-grid {
-      grid-template-columns: 1fr;
-    }
-    .usage-hour-grid {
-      grid-template-columns: repeat(12, minmax(10px, 1fr));
-    }
-    .usage-hour-cell {
-      height: 22px;
-    }
-  }
-`;
-
-export type UsageSessionEntry = {
-  key: string;
-  label?: string;
-  sessionId?: string;
-  updatedAt?: number;
-  agentId?: string;
-  channel?: string;
-  chatType?: string;
-  origin?: {
-    label?: string;
-    provider?: string;
-    surface?: string;
-    chatType?: string;
-    from?: string;
-    to?: string;
-    accountId?: string;
-    threadId?: string | number;
-  };
-  modelOverride?: string;
-  providerOverride?: string;
-  modelProvider?: string;
-  model?: string;
-  usage: {
-    input: number;
-    output: number;
-    cacheRead: number;
-    cacheWrite: number;
-    totalTokens: number;
-    totalCost: number;
-    inputCost?: number;
-    outputCost?: number;
-    cacheReadCost?: number;
-    cacheWriteCost?: number;
-    missingCostEntries: number;
-    firstActivity?: number;
-    lastActivity?: number;
-    durationMs?: number;
-    activityDates?: string[]; // YYYY-MM-DD dates when session had activity
-    dailyBreakdown?: Array<{ date: string; tokens: number; cost: number }>; // Per-day breakdown
-    dailyMessageCounts?: Array<{
-      date: string;
-      total: number;
-      user: number;
-      assistant: number;
-      toolCalls: number;
-      toolResults: number;
-      errors: number;
-    }>;
-    dailyLatency?: Array<{
-      date: string;
-      count: number;
-      avgMs: number;
-      p95Ms: number;
-      minMs: number;
-      maxMs: number;
-    }>;
-    dailyModelUsage?: Array<{
-      date: string;
-      provider?: string;
-      model?: string;
-      tokens: number;
-      cost: number;
-      count: number;
-    }>;
-    messageCounts?: {
-      total: number;
-      user: number;
-      assistant: number;
-      toolCalls: number;
-      toolResults: number;
-      errors: number;
-    };
-    toolUsage?: {
-      totalCalls: number;
-      uniqueTools: number;
-      tools: Array<{ name: string; count: number }>;
-    };
-    modelUsage?: Array<{
-      provider?: string;
-      model?: string;
-      count: number;
-      totals: UsageTotals;
-    }>;
-    latency?: {
-      count: number;
-      avgMs: number;
-      p95Ms: number;
-      minMs: number;
-      maxMs: number;
-    };
-  } | null;
-  contextWeight?: {
-    systemPrompt: { chars: number; projectContextChars: number; nonProjectContextChars: number };
-    skills: { promptChars: number; entries: Array<{ name: string; blockChars: number }> };
-    tools: {
-      listChars: number;
-      schemaChars: number;
-      entries: Array<{ name: string; summaryChars: number; schemaChars: number }>;
-    };
-    injectedWorkspaceFiles: Array<{
-      name: string;
-      path: string;
-      rawChars: number;
-      injectedChars: number;
-      truncated: boolean;
-    }>;
-  } | null;
-};
-
-export type UsageTotals = {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  totalTokens: number;
-  totalCost: number;
-  inputCost: number;
-  outputCost: number;
-  cacheReadCost: number;
-  cacheWriteCost: number;
-  missingCostEntries: number;
-};
-
-export type CostDailyEntry = UsageTotals & { date: string };
-
-export type UsageAggregates = {
-  messages: {
-    total: number;
-    user: number;
-    assistant: number;
-    toolCalls: number;
-    toolResults: number;
-    errors: number;
-  };
-  tools: {
-    totalCalls: number;
-    uniqueTools: number;
-    tools: Array<{ name: string; count: number }>;
-  };
-  byModel: Array<{
-    provider?: string;
-    model?: string;
-    count: number;
-    totals: UsageTotals;
-  }>;
-  byProvider: Array<{
-    provider?: string;
-    model?: string;
-    count: number;
-    totals: UsageTotals;
-  }>;
-  byAgent: Array<{ agentId: string; totals: UsageTotals }>;
-  byChannel: Array<{ channel: string; totals: UsageTotals }>;
-  latency?: {
-    count: number;
-    avgMs: number;
-    p95Ms: number;
-    minMs: number;
-    maxMs: number;
-  };
-  dailyLatency?: Array<{
-    date: string;
-    count: number;
-    avgMs: number;
-    p95Ms: number;
-    minMs: number;
-    maxMs: number;
-  }>;
-  modelDaily?: Array<{
-    date: string;
-    provider?: string;
-    model?: string;
-    tokens: number;
-    cost: number;
-    count: number;
-  }>;
-  daily: Array<{
-    date: string;
-    tokens: number;
-    cost: number;
-    messages: number;
-    toolCalls: number;
-    errors: number;
-  }>;
-};
-
-export type UsageColumnId =
-  | "channel"
-  | "agent"
-  | "provider"
-  | "model"
-  | "messages"
-  | "tools"
-  | "errors"
-  | "duration";
-
-export type TimeSeriesPoint = {
-  timestamp: number;
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  totalTokens: number;
-  cost: number;
-  cumulativeTokens: number;
-  cumulativeCost: number;
-};
-
-export type UsageProps = {
-  loading: boolean;
-  error: string | null;
-  startDate: string;
-  endDate: string;
-  sessions: UsageSessionEntry[];
-  sessionsLimitReached: boolean; // True if 1000 session cap was hit
-  totals: UsageTotals | null;
-  aggregates: UsageAggregates | null;
-  costDaily: CostDailyEntry[];
-  selectedSessions: string[]; // Support multiple session selection
-  selectedDays: string[]; // Support multiple day selection
-  selectedHours: number[]; // Support multiple hour selection
-  chartMode: "tokens" | "cost";
-  dailyChartMode: "total" | "by-type";
-  timeSeriesMode: "cumulative" | "per-turn";
-  timeSeriesBreakdownMode: "total" | "by-type";
-  timeSeries: { points: TimeSeriesPoint[] } | null;
-  timeSeriesLoading: boolean;
-  sessionLogs: SessionLogEntry[] | null;
-  sessionLogsLoading: boolean;
-  sessionLogsExpanded: boolean;
-  logFilterRoles: SessionLogRole[];
-  logFilterTools: string[];
-  logFilterHasTools: boolean;
-  logFilterQuery: string;
-  query: string;
-  queryDraft: string;
-  sessionSort: "tokens" | "cost" | "recent" | "messages" | "errors";
-  sessionSortDir: "asc" | "desc";
-  recentSessions: string[];
-  sessionsTab: "all" | "recent";
-  visibleColumns: UsageColumnId[];
-  timeZone: "local" | "utc";
-  contextExpanded: boolean;
-  headerPinned: boolean;
-  // 新增：供应商筛选和概览视图
-  filterProvider: string | null; // 当前筛选的供应商ID
-  showProviderOverview: boolean; // 是否显示供应商概览视图
-  onStartDateChange: (date: string) => void;
-  onEndDateChange: (date: string) => void;
-  onRefresh: () => void;
-  onTimeZoneChange: (zone: "local" | "utc") => void;
-  onToggleContextExpanded: () => void;
-  onToggleHeaderPinned: () => void;
-  onToggleSessionLogsExpanded: () => void;
-  onLogFilterRolesChange: (next: SessionLogRole[]) => void;
-  onLogFilterToolsChange: (next: string[]) => void;
-  onLogFilterHasToolsChange: (next: boolean) => void;
-  onLogFilterQueryChange: (next: string) => void;
-  onLogFilterClear: () => void;
-  onSelectSession: (key: string, shiftKey: boolean) => void;
-  onChartModeChange: (mode: "tokens" | "cost") => void;
-  onDailyChartModeChange: (mode: "total" | "by-type") => void;
-  onTimeSeriesModeChange: (mode: "cumulative" | "per-turn") => void;
-  onTimeSeriesBreakdownChange: (mode: "total" | "by-type") => void;
-  onSelectDay: (day: string, shiftKey: boolean) => void; // Support shift-click
-  onSelectHour: (hour: number, shiftKey: boolean) => void;
-  onClearDays: () => void;
-  onClearHours: () => void;
-  onClearSessions: () => void;
-  onClearFilters: () => void;
-  onQueryDraftChange: (query: string) => void;
-  onApplyQuery: () => void;
-  onClearQuery: () => void;
-  onSessionSortChange: (sort: "tokens" | "cost" | "recent" | "messages" | "errors") => void;
-  onSessionSortDirChange: (dir: "asc" | "desc") => void;
-  onSessionsTabChange: (tab: "all" | "recent") => void;
-  onToggleColumn: (column: UsageColumnId) => void;
-  // 新增：供应商选择回调
-  onSelectProvider: (providerId: string) => void; // 点击供应商卡片
-  onClearProviderFilter: () => void; // 清除供应商筛选
-};
-
-export type SessionLogEntry = {
-  timestamp: number;
-  role: "user" | "assistant" | "tool" | "toolResult";
-  content: string;
-  tokens?: number;
-  cost?: number;
-};
-
-export type SessionLogRole = SessionLogEntry["role"];
+export type { UsageColumnId, SessionLogEntry, SessionLogRole };
 
 // ~4 chars per token is a rough approximation
 const CHARS_PER_TOKEN = 4;
@@ -2294,15 +100,7 @@ type UsageMosaicStats = {
   weekdayTotals: Array<{ label: string; tokens: number }>;
 };
 
-const WEEKDAYS = [
-  t("usage.weekday.sun"),
-  t("usage.weekday.mon"),
-  t("usage.weekday.tue"),
-  t("usage.weekday.wed"),
-  t("usage.weekday.thu"),
-  t("usage.weekday.fri"),
-  t("usage.weekday.sat"),
-];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function getZonedHour(date: Date, zone: "local" | "utc"): number {
   return zone === "utc" ? date.getUTCHours() : date.getHours();
@@ -2390,12 +188,12 @@ function renderUsageMosaic(
       <div class="card usage-mosaic">
         <div class="usage-mosaic-header">
           <div>
-            <div class="usage-mosaic-title">${t("usage.activity_by_time")}</div>
-            <div class="usage-mosaic-sub">${t("usage.estimates_require_timestamps")}</div>
+            <div class="usage-mosaic-title">Activity by Time</div>
+            <div class="usage-mosaic-sub">Estimates require session timestamps.</div>
           </div>
-          <div class="usage-mosaic-total">${formatTokens(0)} ${t("usage.tokens_label")}</div>
+          <div class="usage-mosaic-total">${formatTokens(0)} tokens</div>
         </div>
-        <div class="muted" style="padding: 12px; text-align: center;">${t("usage.no_timeline_data")}</div>
+        <div class="muted" style="padding: 12px; text-align: center;">No timeline data yet.</div>
       </div>
     `;
   }
@@ -2407,16 +205,16 @@ function renderUsageMosaic(
     <div class="card usage-mosaic">
       <div class="usage-mosaic-header">
         <div>
-          <div class="usage-mosaic-title">${t("usage.activity_by_time")}</div>
+          <div class="usage-mosaic-title">Activity by Time</div>
           <div class="usage-mosaic-sub">
-            ${t("usage.activity_subtitle").replace("{zone}", timeZone === "utc" ? t("usage.timezone_utc") : t("usage.timezone_local"))}
+            Estimated from session spans (first/last activity). Time zone: ${timeZone === "utc" ? "UTC" : "Local"}.
           </div>
         </div>
-        <div class="usage-mosaic-total">${formatTokens(stats.totalTokens)} ${t("usage.tokens_label")}</div>
+        <div class="usage-mosaic-total">${formatTokens(stats.totalTokens)} tokens</div>
       </div>
       <div class="usage-mosaic-grid">
         <div class="usage-mosaic-section">
-          <div class="usage-mosaic-section-title">${t("usage.day_of_week")}</div>
+          <div class="usage-mosaic-section-title">Day of Week</div>
           <div class="usage-daypart-grid">
             ${stats.weekdayTotals.map((part) => {
               const intensity = Math.min(part.tokens / maxWeekday, 1);
@@ -2433,7 +231,7 @@ function renderUsageMosaic(
         </div>
         <div class="usage-mosaic-section">
           <div class="usage-mosaic-section-title">
-            <span>${t("usage.hours")}</span>
+            <span>Hours</span>
             <span class="usage-mosaic-sub">0 → 23</span>
           </div>
           <div class="usage-hour-grid">
@@ -2454,16 +252,16 @@ function renderUsageMosaic(
             })}
           </div>
           <div class="usage-hour-labels">
-            <span>${t("usage.midnight")}</span>
-            <span>${t("usage.4am")}</span>
-            <span>${t("usage.8am")}</span>
-            <span>${t("usage.noon")}</span>
-            <span>${t("usage.4pm")}</span>
-            <span>${t("usage.8pm")}</span>
+            <span>Midnight</span>
+            <span>4am</span>
+            <span>8am</span>
+            <span>Noon</span>
+            <span>4pm</span>
+            <span>8pm</span>
           </div>
           <div class="usage-hour-legend">
             <span></span>
-            ${t("usage.token_density")}
+            Low → High token density
           </div>
         </div>
       </div>
@@ -2477,19 +275,6 @@ function formatCost(n: number, decimals = 2): string {
 
 function formatIsoDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function formatDurationShort(ms?: number): string {
-  if (!ms || ms <= 0) {
-    return "0s";
-  }
-  if (ms >= 60_000) {
-    return `${Math.round(ms / 60000)}m`;
-  }
-  if (ms >= 1000) {
-    return `${Math.round(ms / 1000)}s`;
-  }
-  return `${Math.round(ms)}ms`;
 }
 
 function parseYmdDate(dateStr: string): Date | null {
@@ -2516,23 +301,6 @@ function formatFullDate(dateStr: string): string {
     return dateStr;
   }
   return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
-}
-
-function formatDurationMs(ms?: number): string {
-  if (!ms || ms <= 0) {
-    return "—";
-  }
-  const totalSeconds = Math.round(ms / 1000);
-  const seconds = totalSeconds % 60;
-  const minutes = Math.floor(totalSeconds / 60) % 60;
-  const hours = Math.floor(totalSeconds / 3600);
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-  return `${seconds}s`;
 }
 
 function downloadTextFile(filename: string, content: string, type = "text/plain") {
@@ -3233,8 +1001,8 @@ function renderDailyChartCompact(
   if (!daily.length) {
     return html`
       <div class="daily-chart-compact">
-        <div class="sessions-panel-title">${t("usage.daily_usage")}</div>
-        <div class="muted" style="padding: 20px; text-align: center">${t("usage.no_data")}</div>
+        <div class="sessions-panel-title">Daily Usage</div>
+        <div class="muted" style="padding: 20px; text-align: center">No data</div>
       </div>
     `;
   }
@@ -3255,16 +1023,16 @@ function renderDailyChartCompact(
             class="toggle-btn ${dailyChartMode === "total" ? "active" : ""}"
             @click=${() => onDailyChartModeChange("total")}
           >
-            ${t("usage.total_tab")}
+            Total
           </button>
           <button
             class="toggle-btn ${dailyChartMode === "by-type" ? "active" : ""}"
             @click=${() => onDailyChartModeChange("by-type")}
           >
-            ${t("usage.by_type_tab")}
+            By Type
           </button>
         </div>
-        <div class="card-title">${isTokenMode ? t("usage.daily_token_usage_title") : t("usage.daily_cost_usage_title")}</div>
+        <div class="card-title">Daily ${isTokenMode ? "Token" : "Cost"} Usage</div>
       </div>
       <div class="daily-chart">
         <div class="daily-chart-bars" style="--bar-max-width: ${barMaxWidth}px">
@@ -3296,16 +1064,16 @@ function renderDailyChartCompact(
               dailyChartMode === "by-type"
                 ? isTokenMode
                   ? [
-                      `${t("usage.output")} ${formatTokens(d.output)}`,
-                      `${t("usage.input")} ${formatTokens(d.input)}`,
-                      `${t("usage.cache_write")} ${formatTokens(d.cacheWrite)}`,
-                      `${t("usage.cache_read")} ${formatTokens(d.cacheRead)}`,
+                      `Output ${formatTokens(d.output)}`,
+                      `Input ${formatTokens(d.input)}`,
+                      `Cache write ${formatTokens(d.cacheWrite)}`,
+                      `Cache read ${formatTokens(d.cacheRead)}`,
                     ]
                   : [
-                      `${t("usage.output")} ${formatCost(d.outputCost ?? 0)}`,
-                      `${t("usage.input")} ${formatCost(d.inputCost ?? 0)}`,
-                      `${t("usage.cache_write")} ${formatCost(d.cacheWriteCost ?? 0)}`,
-                      `${t("usage.cache_read")} ${formatCost(d.cacheReadCost ?? 0)}`,
+                      `Output ${formatCost(d.outputCost ?? 0)}`,
+                      `Input ${formatCost(d.inputCost ?? 0)}`,
+                      `Cache write ${formatCost(d.cacheWriteCost ?? 0)}`,
+                      `Cache read ${formatCost(d.cacheReadCost ?? 0)}`,
                     ]
                 : [];
             const totalLabel = isTokenMode ? formatTokens(d.totalTokens) : formatCost(d.totalCost);
@@ -3372,7 +1140,7 @@ function renderCostBreakdownCompact(totals: UsageTotals, mode: "tokens" | "cost"
 
   return html`
     <div class="cost-breakdown cost-breakdown-compact">
-      <div class="cost-breakdown-header">${isTokenMode ? t("usage.tokens_by_type_title") : t("usage.cost_by_type_title")}</div>
+      <div class="cost-breakdown-header">${isTokenMode ? "Tokens" : "Cost"} by Type</div>
       <div class="cost-breakdown-bar">
         <div class="cost-segment output" style="width: ${(isTokenMode ? tokenPcts.output : breakdown.output.pct).toFixed(1)}%"
           title="Output: ${isTokenMode ? formatTokens(totals.output) : formatCost(breakdown.output.cost)}"></div>
@@ -3384,13 +1152,13 @@ function renderCostBreakdownCompact(totals: UsageTotals, mode: "tokens" | "cost"
           title="Cache Read: ${isTokenMode ? formatTokens(totals.cacheRead) : formatCost(breakdown.cacheRead.cost)}"></div>
       </div>
       <div class="cost-breakdown-legend">
-        <span class="legend-item"><span class="legend-dot output"></span>${t("usage.output")} ${isTokenMode ? formatTokens(totals.output) : formatCost(breakdown.output.cost)}</span>
-        <span class="legend-item"><span class="legend-dot input"></span>${t("usage.input")} ${isTokenMode ? formatTokens(totals.input) : formatCost(breakdown.input.cost)}</span>
-        <span class="legend-item"><span class="legend-dot cache-write"></span>${t("usage.cache_write")} ${isTokenMode ? formatTokens(totals.cacheWrite) : formatCost(breakdown.cacheWrite.cost)}</span>
-        <span class="legend-item"><span class="legend-dot cache-read"></span>${t("usage.cache_read")} ${isTokenMode ? formatTokens(totals.cacheRead) : formatCost(breakdown.cacheRead.cost)}</span>
+        <span class="legend-item"><span class="legend-dot output"></span>Output ${isTokenMode ? formatTokens(totals.output) : formatCost(breakdown.output.cost)}</span>
+        <span class="legend-item"><span class="legend-dot input"></span>Input ${isTokenMode ? formatTokens(totals.input) : formatCost(breakdown.input.cost)}</span>
+        <span class="legend-item"><span class="legend-dot cache-write"></span>Cache Write ${isTokenMode ? formatTokens(totals.cacheWrite) : formatCost(breakdown.cacheWrite.cost)}</span>
+        <span class="legend-item"><span class="legend-dot cache-read"></span>Cache Read ${isTokenMode ? formatTokens(totals.cacheRead) : formatCost(breakdown.cacheRead.cost)}</span>
       </div>
       <div class="cost-breakdown-total">
-        ${t("usage.total_label")}: ${isTokenMode ? formatTokens(totals.totalTokens) : formatCost(totals.totalCost)}
+        Total: ${isTokenMode ? formatTokens(totals.totalTokens) : formatCost(totals.totalCost)}
       </div>
     </div>
   `;
@@ -3400,27 +1168,10 @@ function renderInsightList(
   title: string,
   items: Array<{ label: string; value: string; sub?: string }>,
   emptyLabel: string,
-  actionButton?: { label: string; onClick: () => void },
 ) {
   return html`
     <div class="usage-insight-card">
-      <div class="usage-insight-title">
-        ${title}
-        ${
-          actionButton
-            ? html`
-          <button
-            class="btn btn-sm"
-            style="margin-left: auto; font-size: 12px; padding: 2px 8px;"
-            @click=${actionButton.onClick}
-            title=${actionButton.label}
-          >
-            ${actionButton.label}
-          </button>
-        `
-            : nothing
-        }
-      </div>
+      <div class="usage-insight-title">${title}</div>
       ${
         items.length === 0
           ? html`<div class="muted">${emptyLabel}</div>`
@@ -3441,110 +1192,6 @@ function renderInsightList(
             `
       }
     </div>
-  `;
-}
-
-/**
- * 渲染成本洞察与优化建议卡片
- */
-function renderCostInsights(
-  totals: UsageTotals | null,
-  aggregates: UsageAggregates,
-  stats: UsageInsightStats,
-  cacheHitRate: number,
-) {
-  if (!totals || aggregates.messages.total === 0) {
-    return nothing;
-  }
-
-  const insights: Array<{ type: "warning" | "info" | "success"; title: string; message: string }> =
-    [];
-
-  // 1. 检测高成本模型
-  const topModel = aggregates.byModel[0];
-  if (topModel && topModel.totals.totalCost > totals.totalCost * 0.5) {
-    insights.push({
-      type: "warning",
-      title: t("usage.high_cost_model"),
-      message: `${topModel.model ?? "unknown"} 账户总成本的 ${((topModel.totals.totalCost / totals.totalCost) * 100).toFixed(0)}%。${t("usage.consider_alternatives")}`,
-    });
-  }
-
-  // 2. 缓存优化机会
-  if (cacheHitRate < 0.3 && totals.input > 1000) {
-    insights.push({
-      type: "info",
-      title: t("usage.cache_optimization"),
-      message: t("usage.low_cache_hint"),
-    });
-  }
-
-  // 3. 高错误率警告
-  const errorRate = stats.errorRate;
-  if (errorRate > 0.05) {
-    insights.push({
-      type: "warning",
-      title: t("usage.error_rate_warning"),
-      message: t("usage.error_rate_hint"),
-    });
-  }
-
-  // 4. Token 效率分析
-  const avgTokens = aggregates.messages.total
-    ? Math.round(totals.totalTokens / aggregates.messages.total)
-    : 0;
-  if (avgTokens > 5000) {
-    insights.push({
-      type: "info",
-      title: t("usage.token_efficiency"),
-      message: `${t("usage.avg_tokens_per_message")}: ${formatTokens(avgTokens)}。考虑使用更精简的提示词或较小的模型。`,
-    });
-  }
-
-  if (insights.length === 0) {
-    return nothing;
-  }
-
-  return html`
-    <section class="card" style="margin-top: 16px; border-left: 3px solid var(--accent);">
-      <div class="card-title" style="display: flex; align-items: center; gap: 8px;">
-        💡 ${t("usage.cost_insights")}
-      </div>
-      <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
-        ${insights.map(
-          (insight) => html`
-            <div
-              style="
-                padding: 12px 16px;
-                border-radius: 8px;
-                background: ${
-                  insight.type === "warning"
-                    ? "rgba(255, 77, 77, 0.1)"
-                    : insight.type === "success"
-                      ? "rgba(16, 185, 129, 0.1)"
-                      : "rgba(59, 130, 246, 0.1)"
-                };
-                border-left: 3px solid ${
-                  insight.type === "warning"
-                    ? "#ff4d4d"
-                    : insight.type === "success"
-                      ? "#10b981"
-                      : "#3b82f6"
-                };
-              "
-            >
-              <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px;">
-                ${insight.type === "warning" ? "⚠️" : insight.type === "success" ? "✅" : "ℹ️"}
-                ${insight.title}
-              </div>
-              <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
-                ${insight.message}
-              </div>
-            </div>
-          `,
-        )}
-      </div>
-    </section>
   `;
 }
 
@@ -3606,12 +1253,17 @@ function renderUsageInsights(
     stats.throughputCostPerMin !== undefined
       ? `${formatCost(stats.throughputCostPerMin, 4)} / min`
       : "—";
-  const avgDurationLabel = stats.durationCount > 0 ? formatDurationShort(stats.avgDurationMs) : "—";
-  const cacheHint = t("usage.cache_hit_hint");
-  const errorHint = t("usage.error_rate_formula_hint");
-  const throughputHint = t("usage.throughput_hint");
-  const tokensHint = t("usage.avg_tokens_hint");
-  const costHint = showCostHint ? t("usage.avg_cost_hint_missing") : t("usage.avg_cost_hint");
+  const avgDurationLabel =
+    stats.durationCount > 0
+      ? (formatDurationCompact(stats.avgDurationMs, { spaced: true }) ?? "—")
+      : "—";
+  const cacheHint = "Cache hit rate = cache read / (input + cache read). Higher is better.";
+  const errorHint = "Error rate = errors / total messages. Lower is better.";
+  const throughputHint = "Throughput shows tokens per minute over active time. Higher is better.";
+  const tokensHint = "Average tokens per message in this range.";
+  const costHint = showCostHint
+    ? "Average cost per message when providers report costs. Cost data is missing for some or all sessions in this range."
+    : "Average cost per message when providers report costs.";
 
   const errorDays = aggregates.daily
     .filter((day) => day.messages > 0 && day.errors > 0)
@@ -3631,17 +1283,17 @@ function renderUsageInsights(
   const topModels = aggregates.byModel.slice(0, 5).map((entry) => ({
     label: entry.model ?? "unknown",
     value: formatCost(entry.totals.totalCost),
-    sub: `${formatTokens(entry.totals.totalTokens)} · ${entry.count} ${t("usage.msgs")}`,
+    sub: `${formatTokens(entry.totals.totalTokens)} · ${entry.count} msgs`,
   }));
   const topProviders = aggregates.byProvider.slice(0, 5).map((entry) => ({
     label: entry.provider ?? "unknown",
     value: formatCost(entry.totals.totalCost),
-    sub: `${formatTokens(entry.totals.totalTokens)} · ${entry.count} ${t("usage.msgs")}`,
+    sub: `${formatTokens(entry.totals.totalTokens)} · ${entry.count} msgs`,
   }));
   const topTools = aggregates.tools.tools.slice(0, 6).map((tool) => ({
     label: tool.name,
     value: `${tool.count}`,
-    sub: t("usage.calls"),
+    sub: "calls",
   }));
   const topAgents = aggregates.byAgent.slice(0, 5).map((entry) => ({
     label: entry.agentId,
@@ -3655,65 +1307,62 @@ function renderUsageInsights(
   }));
 
   return html`
-    <!-- 成本洞察与优化建议 -->
-    ${renderCostInsights(totals, aggregates, stats, cacheHitRate)}
-    
     <section class="card" style="margin-top: 16px;">
-      <div class="card-title">${t("usage.usage_overview")}</div>
+      <div class="card-title">Usage Overview</div>
       <div class="usage-summary-grid">
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            ${t("usage.messages")}
-            <span class="usage-summary-hint" title="${t("usage.messages_hint")}">?</span>
+            Messages
+            <span class="usage-summary-hint" title="Total user + assistant messages in range.">?</span>
           </div>
           <div class="usage-summary-value">${aggregates.messages.total}</div>
           <div class="usage-summary-sub">
-            ${aggregates.messages.user} ${t("usage.user")} · ${aggregates.messages.assistant} ${t("usage.assistant")}
+            ${aggregates.messages.user} user · ${aggregates.messages.assistant} assistant
           </div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            ${t("usage.tool_calls")}
-            <span class="usage-summary-hint" title="${t("usage.tool_calls_hint")}">?</span>
+            Tool Calls
+            <span class="usage-summary-hint" title="Total tool call count across sessions.">?</span>
           </div>
           <div class="usage-summary-value">${aggregates.tools.totalCalls}</div>
-          <div class="usage-summary-sub">${aggregates.tools.uniqueTools} ${t("usage.tools_used")}</div>
+          <div class="usage-summary-sub">${aggregates.tools.uniqueTools} tools used</div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            ${t("usage.errors")}
-            <span class="usage-summary-hint" title="${t("usage.errors_hint")}">?</span>
+            Errors
+            <span class="usage-summary-hint" title="Total message/tool errors in range.">?</span>
           </div>
           <div class="usage-summary-value">${aggregates.messages.errors}</div>
-          <div class="usage-summary-sub">${aggregates.messages.toolResults} ${t("usage.tool_results")}</div>
+          <div class="usage-summary-sub">${aggregates.messages.toolResults} tool results</div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            ${t("usage.avg_tokens_msg")}
+            Avg Tokens / Msg
             <span class="usage-summary-hint" title=${tokensHint}>?</span>
           </div>
           <div class="usage-summary-value">${formatTokens(avgTokens)}</div>
-          <div class="usage-summary-sub">${t("usage.across_messages").replace("{count}", String(aggregates.messages.total || 0))}</div>
+          <div class="usage-summary-sub">Across ${aggregates.messages.total || 0} messages</div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            ${t("usage.avg_cost_msg")}
+            Avg Cost / Msg
             <span class="usage-summary-hint" title=${costHint}>?</span>
           </div>
           <div class="usage-summary-value">${formatCost(avgCost, 4)}</div>
-          <div class="usage-summary-sub">${formatCost(totals.totalCost)} ${t("usage.total")}</div>
+          <div class="usage-summary-sub">${formatCost(totals.totalCost)} total</div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            ${t("usage.sessions")}
-            <span class="usage-summary-hint" title="${t("usage.sessions_hint")}">?</span>
+            Sessions
+            <span class="usage-summary-hint" title="Distinct sessions in the range.">?</span>
           </div>
           <div class="usage-summary-value">${sessionCount}</div>
-          <div class="usage-summary-sub">${t("usage.of_in_range").replace("{count}", String(totalSessions))}</div>
+          <div class="usage-summary-sub">of ${totalSessions} in range</div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            ${t("usage.throughput")}
+            Throughput
             <span class="usage-summary-hint" title=${throughputHint}>?</span>
           </div>
           <div class="usage-summary-value">${throughputLabel}</div>
@@ -3721,102 +1370,33 @@ function renderUsageInsights(
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            ${t("usage.error_rate")}
+            Error Rate
             <span class="usage-summary-hint" title=${errorHint}>?</span>
           </div>
           <div class="usage-summary-value ${errorRatePct > 5 ? "bad" : errorRatePct > 1 ? "warn" : "good"}">${errorRatePct.toFixed(2)}%</div>
           <div class="usage-summary-sub">
-            ${aggregates.messages.errors} ${t("usage.errors_count")} · ${avgDurationLabel} ${t("usage.avg_session")}
+            ${aggregates.messages.errors} errors · ${avgDurationLabel} avg session
           </div>
         </div>
         <div class="usage-summary-card">
           <div class="usage-summary-title">
-            ${t("usage.cache_hit_rate")}
+            Cache Hit Rate
             <span class="usage-summary-hint" title=${cacheHint}>?</span>
           </div>
           <div class="usage-summary-value ${cacheHitRate > 0.6 ? "good" : cacheHitRate > 0.3 ? "warn" : "bad"}">${cacheHitLabel}</div>
           <div class="usage-summary-sub">
-            ${formatTokens(totals.cacheRead)} ${t("usage.cached")} · ${formatTokens(cacheBase)} ${t("usage.prompt")}
+            ${formatTokens(totals.cacheRead)} cached · ${formatTokens(cacheBase)} prompt
           </div>
         </div>
       </div>
       <div class="usage-insights-grid">
-        ${renderInsightList(t("usage.top_models"), topModels, t("usage.no_model_data"), {
-          label: t("usage.view_model_config"),
-          onClick: () => {
-            // Navigate to models page
-            const baseP = window.location.pathname.split("/usage")[0] || "";
-            window.location.href = `${baseP}/models`;
-          },
-        })}
-        ${renderInsightList(t("usage.top_providers"), topProviders, t("usage.no_provider_data"), {
-          label: t("usage.go_to_models"),
-          onClick: () => {
-            const baseP = window.location.pathname.split("/usage")[0] || "";
-            window.location.href = `${baseP}/models`;
-          },
-        })}
-        ${renderInsightList(t("usage.top_tools"), topTools, t("usage.no_tool_calls"))}
-        ${renderInsightList(t("usage.top_agents"), topAgents, t("usage.no_agent_data"))}
-        ${renderInsightList(t("usage.top_channels"), topChannels, t("usage.no_channel_data"))}
-        ${renderPeakErrorList(t("usage.peak_error_days"), errorDays, t("usage.no_error_data"))}
-        ${renderPeakErrorList(t("usage.peak_error_hours"), errorHours, t("usage.no_error_data"))}
-      </div>
-    </section>
-    
-    <!-- 供应商和模型分组详情 -->
-    <section class="card" style="margin-top: 16px;">
-      <div class="card-title">
-        ${t("usage.provider_breakdown")} & ${t("usage.model_breakdown")}
-      </div>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 16px;">
-        <!-- 供应商分组 -->
-        <div style="background: var(--bg-secondary); border-radius: 8px; padding: 16px;">
-          <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-strong);">
-            ${t("usage.provider_breakdown")}
-          </div>
-          <div class="usage-list">
-            ${aggregates.byProvider.map(
-              (entry, index) => html`
-                <div class="usage-list-item" style="padding: 8px 0; ${index === 0 ? "border-top: 1px solid var(--border);" : ""}">
-                  <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
-                    <span style="font-weight: 500;">${entry.provider ?? "unknown"}</span>
-                    <span style="font-size: 11px; color: var(--text-muted);">
-                      ${formatTokens(entry.totals.totalTokens)} · ${entry.count} ${t("usage.messages_count")}
-                    </span>
-                  </div>
-                  <span style="font-weight: 600; color: var(--accent);">
-                    ${formatCost(entry.totals.totalCost)}
-                  </span>
-                </div>
-              `,
-            )}
-          </div>
-        </div>
-        
-        <!-- 模型分组 -->
-        <div style="background: var(--bg-secondary); border-radius: 8px; padding: 16px;">
-          <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-strong);">
-            ${t("usage.model_breakdown")}
-          </div>
-          <div class="usage-list" style="max-height: 400px; overflow-y: auto;">
-            ${aggregates.byModel.map(
-              (entry, index) => html`
-                <div class="usage-list-item" style="padding: 8px 0; ${index === 0 ? "border-top: 1px solid var(--border);" : ""}">
-                  <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
-                    <span style="font-weight: 500;">${entry.model ?? "unknown"}</span>
-                    <span style="font-size: 11px; color: var(--text-muted);">
-                      ${entry.provider ? `${entry.provider} · ` : ""}${formatTokens(entry.totals.totalTokens)} · ${entry.count} ${t("usage.messages_count")}
-                    </span>
-                  </div>
-                  <span style="font-weight: 600; color: var(--accent);">
-                    ${formatCost(entry.totals.totalCost)}
-                  </span>
-                </div>
-              `,
-            )}
-          </div>
-        </div>
+        ${renderInsightList("Top Models", topModels, "No model data")}
+        ${renderInsightList("Top Providers", topProviders, "No provider data")}
+        ${renderInsightList("Top Tools", topTools, "No tool calls")}
+        ${renderInsightList("Top Agents", topAgents, "No agent data")}
+        ${renderInsightList("Top Channels", topChannels, "No channel data")}
+        ${renderPeakErrorList("Peak Error Days", errorDays, "No error data")}
+        ${renderPeakErrorList("Peak Error Hours", errorHours, "No error data")}
       </div>
     </section>
   `;
@@ -3881,7 +1461,7 @@ function renderSessionsCard(
       parts.push(`errors:${s.usage.messageCounts.errors}`);
     }
     if (showColumn("duration") && s.usage?.durationMs) {
-      parts.push(`dur:${formatDurationMs(s.usage.durationMs)}`);
+      parts.push(`dur:${formatDurationCompact(s.usage.durationMs, { spaced: true }) ?? "—"}`);
     }
     return parts;
   };
@@ -3940,46 +1520,46 @@ function renderSessionsCard(
   return html`
     <div class="card sessions-card">
       <div class="sessions-card-header">
-        <div class="card-title">${t("usage.sessions")}</div>
+        <div class="card-title">Sessions</div>
         <div class="sessions-card-count">
-          ${sessions.length} ${t("usage.shown")}${totalSessions !== sessions.length ? ` · ${totalSessions} ${t("usage.total")}` : ""}
+          ${sessions.length} shown${totalSessions !== sessions.length ? ` · ${totalSessions} total` : ""}
         </div>
       </div>
       <div class="sessions-card-meta">
         <div class="sessions-card-stats">
-          <span>${isTokenMode ? formatTokens(avgValue) : formatCost(avgValue)} ${t("usage.sessions_avg").replace("{count}", "")}</span>
-          <span>${totalErrors} ${t("usage.errors_count")}</span>
+          <span>${isTokenMode ? formatTokens(avgValue) : formatCost(avgValue)} avg</span>
+          <span>${totalErrors} errors</span>
         </div>
         <div class="chart-toggle small">
           <button
             class="toggle-btn ${sessionsTab === "all" ? "active" : ""}"
             @click=${() => onSessionsTabChange("all")}
           >
-            ${t("usage.all_tab")}
+            All
           </button>
           <button
             class="toggle-btn ${sessionsTab === "recent" ? "active" : ""}"
             @click=${() => onSessionsTabChange("recent")}
           >
-            ${t("usage.recently_viewed")}
+            Recently viewed
           </button>
         </div>
         <label class="sessions-sort">
-          <span>${t("usage.sort")}</span>
+          <span>Sort</span>
           <select
             @change=${(e: Event) => onSessionSortChange((e.target as HTMLSelectElement).value as typeof sessionSort)}
           >
-            <option value="cost" ?selected=${sessionSort === "cost"}>${t("usage.sort_cost")}</option>
-            <option value="errors" ?selected=${sessionSort === "errors"}>${t("usage.sort_errors")}</option>
-            <option value="messages" ?selected=${sessionSort === "messages"}>${t("usage.sort_messages")}</option>
-            <option value="recent" ?selected=${sessionSort === "recent"}>${t("usage.sort_recent")}</option>
-            <option value="tokens" ?selected=${sessionSort === "tokens"}>${t("usage.sort_tokens")}</option>
+            <option value="cost" ?selected=${sessionSort === "cost"}>Cost</option>
+            <option value="errors" ?selected=${sessionSort === "errors"}>Errors</option>
+            <option value="messages" ?selected=${sessionSort === "messages"}>Messages</option>
+            <option value="recent" ?selected=${sessionSort === "recent"}>Recent</option>
+            <option value="tokens" ?selected=${sessionSort === "tokens"}>Tokens</option>
           </select>
         </label>
         <button
           class="btn btn-sm sessions-action-btn icon"
           @click=${() => onSessionSortDirChange(sessionSortDir === "desc" ? "asc" : "desc")}
-          title=${sessionSortDir === "desc" ? t("usage.descending") : t("usage.ascending")}
+          title=${sessionSortDir === "desc" ? "Descending" : "Ascending"}
         >
           ${sessionSortDir === "desc" ? "↓" : "↑"}
         </button>
@@ -3987,7 +1567,7 @@ function renderSessionsCard(
           selectedCount > 0
             ? html`
                 <button class="btn btn-sm sessions-action-btn sessions-clear-btn" @click=${onClearSessions}>
-                  ${t("usage.clear_selection")}
+                  Clear Selection
                 </button>
               `
             : nothing
@@ -3997,7 +1577,7 @@ function renderSessionsCard(
         sessionsTab === "recent"
           ? recentEntries.length === 0
             ? html`
-                <div class="muted" style="padding: 20px; text-align: center">${t("usage.no_recent_sessions")}</div>
+                <div class="muted" style="padding: 20px; text-align: center">No recent sessions</div>
               `
             : html`
                 <div class="session-bars" style="max-height: 220px; margin-top: 6px;">
@@ -4020,13 +1600,13 @@ function renderSessionsCard(
                         <div class="session-bar-actions">
                           <button
                             class="session-copy-btn"
-                            title="${t("usage.copy")}"
+                            title="Copy session name"
                             @click=${(e: MouseEvent) => {
                               e.stopPropagation();
                               void copySessionName(s);
                             }}
                           >
-                            ${t("usage.copy")}
+                            Copy
                           </button>
                           <div class="session-bar-value">${isTokenMode ? formatTokens(value) : formatCost(value)}</div>
                         </div>
@@ -4037,7 +1617,7 @@ function renderSessionsCard(
               `
           : sessions.length === 0
             ? html`
-                <div class="muted" style="padding: 20px; text-align: center">${t("usage.no_sessions_shown")}</div>
+                <div class="muted" style="padding: 20px; text-align: center">No sessions in range</div>
               `
             : html`
                 <div class="session-bars">
@@ -4061,13 +1641,13 @@ function renderSessionsCard(
                         <div class="session-bar-actions">
                           <button
                             class="session-copy-btn"
-                            title="${t("usage.copy")}"
+                            title="Copy session name"
                             @click=${(e: MouseEvent) => {
                               e.stopPropagation();
                               void copySessionName(s);
                             }}
                           >
-                            ${t("usage.copy")}
+                            Copy
                           </button>
                           <div class="session-bar-value">${isTokenMode ? formatTokens(value) : formatCost(value)}</div>
                         </div>
@@ -4102,13 +1682,13 @@ function renderSessionsCard(
                         <div class="session-bar-actions">
                           <button
                             class="session-copy-btn"
-                            title="${t("usage.copy")}"
+                            title="Copy session name"
                             @click=${(e: MouseEvent) => {
                               e.stopPropagation();
                               void copySessionName(s);
                             }}
                           >
-                            ${t("usage.copy")}
+                            Copy
                           </button>
                           <div class="session-bar-value">${isTokenMode ? formatTokens(value) : formatCost(value)}</div>
                         </div>
@@ -4185,7 +1765,7 @@ function renderSessionSummary(session: UsageSessionEntry) {
       </div>
       <div class="session-summary-card">
         <div class="session-summary-title">Duration</div>
-        <div class="session-summary-value">${formatDurationMs(usage.durationMs)}</div>
+        <div class="session-summary-value">${formatDurationCompact(usage.durationMs, { spaced: true }) ?? "—"}</div>
         <div class="session-summary-meta">${formatTs(usage.firstActivity)} → ${formatTs(usage.lastActivity)}</div>
       </div>
     </div>
@@ -4304,7 +1884,7 @@ function renderTimeSeriesCompact(
   if (!timeSeries || timeSeries.points.length < 2) {
     return html`
       <div class="session-timeseries-compact">
-        <div class="muted" style="padding: 20px; text-align: center">${t("usage.no_timeline_data")}</div>
+        <div class="muted" style="padding: 20px; text-align: center">No timeline data</div>
       </div>
     `;
   }
@@ -4443,10 +2023,10 @@ function renderTimeSeriesCompact(
             `${formatTokens(val)} tokens`,
           ];
           if (breakdownByType) {
-            tooltipLines.push(`${t("usage.output")} ${formatTokens(p.output)}`);
-            tooltipLines.push(`${t("usage.input")} ${formatTokens(p.input)}`);
-            tooltipLines.push(`${t("usage.cache_write")} ${formatTokens(p.cacheWrite)}`);
-            tooltipLines.push(`${t("usage.cache_read")} ${formatTokens(p.cacheRead)}`);
+            tooltipLines.push(`Output ${formatTokens(p.output)}`);
+            tooltipLines.push(`Input ${formatTokens(p.input)}`);
+            tooltipLines.push(`Cache write ${formatTokens(p.cacheWrite)}`);
+            tooltipLines.push(`Cache read ${formatTokens(p.cacheRead)}`);
           }
           const tooltip = tooltipLines.join(" · ");
           if (!breakdownByType) {
@@ -4476,7 +2056,7 @@ function renderTimeSeriesCompact(
         breakdownByType
           ? html`
               <div style="margin-top: 8px;">
-                <div class="card-title" style="font-size: 12px; margin-bottom: 6px;">${t("usage.tokens_by_type_title")}</div>
+                <div class="card-title" style="font-size: 12px; margin-bottom: 6px;">Tokens by Type</div>
                 <div class="cost-breakdown-bar" style="height: 18px;">
                   <div class="cost-segment output" style="width: ${pct(sumOutput, totalTypeTokens).toFixed(1)}%"></div>
                   <div class="cost-segment input" style="width: ${pct(sumInput, totalTypeTokens).toFixed(1)}%"></div>
@@ -4485,19 +2065,19 @@ function renderTimeSeriesCompact(
                 </div>
                 <div class="cost-breakdown-legend">
                   <div class="legend-item" title="Assistant output tokens">
-                    <span class="legend-dot output"></span>${t("usage.output")} ${formatTokens(sumOutput)}
+                    <span class="legend-dot output"></span>Output ${formatTokens(sumOutput)}
                   </div>
                   <div class="legend-item" title="User + tool input tokens">
-                    <span class="legend-dot input"></span>${t("usage.input")} ${formatTokens(sumInput)}
+                    <span class="legend-dot input"></span>Input ${formatTokens(sumInput)}
                   </div>
                   <div class="legend-item" title="Tokens written to cache">
-                    <span class="legend-dot cache-write"></span>${t("usage.cache_write")} ${formatTokens(sumCacheWrite)}
+                    <span class="legend-dot cache-write"></span>Cache Write ${formatTokens(sumCacheWrite)}
                   </div>
                   <div class="legend-item" title="Tokens read from cache">
-                    <span class="legend-dot cache-read"></span>${t("usage.cache_read")} ${formatTokens(sumCacheRead)}
+                    <span class="legend-dot cache-read"></span>Cache Read ${formatTokens(sumCacheRead)}
                   </div>
                 </div>
-                <div class="cost-breakdown-total">${t("usage.total_label")}: ${formatTokens(totalTypeTokens)}</div>
+                <div class="cost-breakdown-total">Total: ${formatTokens(totalTypeTokens)}</div>
               </div>
             `
           : nothing
@@ -4842,180 +2422,6 @@ function renderSessionLogsCompact(
   `;
 }
 
-/**
- * 渲染供应商概览卡片（按供应商聚合的使用情况）
- */
-function renderProviderOverviewCards(
-  providers: Array<{
-    provider?: string;
-    model?: string;
-    count: number;
-    totals: UsageTotals;
-  }>,
-  onSelectProvider: (providerId: string) => void,
-  chartMode: "tokens" | "cost",
-) {
-  const isTokenMode = chartMode === "tokens";
-
-  // 按token/cost降序排列
-  const sortedProviders = [...providers].toSorted((a, b) => {
-    const valA = isTokenMode ? a.totals.totalTokens : a.totals.totalCost;
-    const valB = isTokenMode ? b.totals.totalTokens : b.totals.totalCost;
-    return valB - valA;
-  });
-
-  if (sortedProviders.length === 0) {
-    return html`
-      <div style="padding: 60px 20px; text-align: center; color: var(--text-muted);">
-        <p style="font-size: 16px; margin: 0;">${t("usage.no_provider_data")}</p>
-      </div>
-    `;
-  }
-
-  return html`
-    <div style="
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 16px;
-      margin-top: 20px;
-    ">
-      ${sortedProviders.map((entry) => {
-        const providerId = entry.provider || "unknown";
-        const providerLabel = providerId || t("usage.unknown_provider");
-        const tokens = entry.totals.totalTokens;
-        const cost = entry.totals.totalCost;
-        const sessionCount = entry.count;
-        const inputTokens = entry.totals.input;
-        const outputTokens = entry.totals.output;
-        const cacheRead = entry.totals.cacheRead;
-        const cacheWrite = entry.totals.cacheWrite;
-
-        return html`
-          <div 
-            class="card" 
-            style="
-              cursor: pointer;
-              transition: all 0.2s ease;
-              border: 2px solid var(--border);
-              padding: 20px;
-            "
-            @click=${() => onSelectProvider(providerId)}
-            @mouseenter=${(e: MouseEvent) => {
-              const card = e.currentTarget as HTMLElement;
-              card.style.borderColor = "var(--accent)";
-              card.style.transform = "translateY(-2px)";
-              card.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.1)";
-            }}
-            @mouseleave=${(e: MouseEvent) => {
-              const card = e.currentTarget as HTMLElement;
-              card.style.borderColor = "var(--border)";
-              card.style.transform = "translateY(0)";
-              card.style.boxShadow = "none";
-            }}
-          >
-            <!-- 供应商名称 -->
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
-              <div style="
-                width: 48px;
-                height: 48px;
-                border-radius: 12px;
-                background: var(--accent-subtle);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 24px;
-              ">
-                🤖
-              </div>
-              <div style="flex: 1;">
-                <div style="font-size: 18px; font-weight: 600; margin-bottom: 4px;">
-                  ${providerLabel}
-                </div>
-                <div style="font-size: 13px; color: var(--text-muted);">
-                  ${sessionCount} ${sessionCount > 1 ? t("usage.sessions_badge_plural") : t("usage.sessions_badge")}
-                </div>
-              </div>
-            </div>
-
-            <!-- 主要指标 -->
-            <div style="
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 12px;
-              padding: 16px;
-              background: var(--bg-secondary);
-              border-radius: 8px;
-              margin-bottom: 12px;
-            ">
-              <div>
-                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">
-                  ${t("usage.total_tokens")}
-                </div>
-                <div style="font-size: 20px; font-weight: 700; color: var(--accent);">
-                  ${formatTokens(tokens)}
-                </div>
-              </div>
-              <div>
-                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">
-                  ${t("usage.total_cost")}
-                </div>
-                <div style="font-size: 20px; font-weight: 700; color: #ff4d4d;">
-                  $${formatCost(cost)}
-                </div>
-              </div>
-            </div>
-
-            <!-- Token细分 -->
-            <div style="font-size: 13px; color: var(--text-muted); line-height: 1.8;">
-              <div style="display: flex; justify-content: space-between;">
-                <span>${t("usage.input_tokens")}</span>
-                <span style="font-weight: 500; color: var(--text);">${formatTokens(inputTokens)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between;">
-                <span>${t("usage.output_tokens")}</span>
-                <span style="font-weight: 500; color: var(--text);">${formatTokens(outputTokens)}</span>
-              </div>
-              ${
-                cacheRead > 0
-                  ? html`
-                <div style="display: flex; justify-content: space-between;">
-                  <span>${t("usage.cache_read")}</span>
-                  <span style="font-weight: 500; color: var(--text);">${formatTokens(cacheRead)}</span>
-                </div>
-              `
-                  : nothing
-              }
-              ${
-                cacheWrite > 0
-                  ? html`
-                <div style="display: flex; justify-content: space-between;">
-                  <span>${t("usage.cache_write")}</span>
-                  <span style="font-weight: 500; color: var(--text);">${formatTokens(cacheWrite)}</span>
-                </div>
-              `
-                  : nothing
-              }
-            </div>
-
-            <!-- 查看详情提示 -->
-            <div style="
-              margin-top: 16px;
-              padding-top: 16px;
-              border-top: 1px solid var(--border);
-              text-align: center;
-              font-size: 13px;
-              color: var(--accent);
-              font-weight: 500;
-            ">
-              ${t("usage.click_to_view_details")} →
-            </div>
-          </div>
-        `;
-      })}
-    </div>
-  `;
-}
-
 export function renderUsage(props: UsageProps) {
   // Show loading skeleton if loading and no data yet
   if (props.loading && !props.totals) {
@@ -5034,7 +2440,7 @@ export function renderUsage(props: UsageProps) {
         <div class="row" style="justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
           <div style="flex: 1; min-width: 250px;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 2px;">
-              <div class="card-title" style="margin: 0;">${t("usage.token_usage")}</div>
+              <div class="card-title" style="margin: 0;">Token Usage</div>
               <span style="
                 display: inline-flex;
                 align-items: center;
@@ -5053,14 +2459,14 @@ export function renderUsage(props: UsageProps) {
                   border-radius: 50%;
                   animation: initial-spin 0.6s linear infinite;
                 "></span>
-                ${t("usage.loading")}
+                Loading
               </span>
             </div>
           </div>
           <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
             <div style="display: flex; gap: 8px; align-items: center;">
               <input type="date" .value=${props.startDate} disabled style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 13px; opacity: 0.6;" />
-              <span style="color: var(--text-muted);">${t("usage.date_to")}</span>
+              <span style="color: var(--text-muted);">to</span>
               <input type="date" .value=${props.endDate} disabled style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 13px; opacity: 0.6;" />
             </div>
           </div>
@@ -5316,9 +2722,9 @@ export function renderUsage(props: UsageProps) {
           0
       : false);
   const datePresets = [
-    { label: t("usage.preset_today"), days: 1 },
-    { label: t("usage.preset_7d"), days: 7 },
-    { label: t("usage.preset_30d"), days: 30 },
+    { label: "Today", days: 1 },
+    { label: "7d", days: 7 },
+    { label: "30d", days: 30 },
   ];
   const applyPreset = (days: number) => {
     const end = new Date();
@@ -5360,7 +2766,7 @@ export function renderUsage(props: UsageProps) {
             selectedCount > 0
               ? html`<span class="usage-filter-badge">${selectedCount}</span>`
               : html`
-                  <span class="usage-filter-badge">${t("usage.filter_all")}</span>
+                  <span class="usage-filter-badge">All</span>
                 `
           }
         </summary>
@@ -5375,7 +2781,7 @@ export function renderUsage(props: UsageProps) {
               }}
               ?disabled=${allSelected}
             >
-              ${t("usage.select_all")}
+              Select All
             </button>
             <button
               class="btn btn-sm"
@@ -5386,7 +2792,7 @@ export function renderUsage(props: UsageProps) {
               }}
               ?disabled=${selectedCount === 0}
             >
-              ${t("usage.clear")}
+              Clear
             </button>
           </div>
           <div class="usage-filter-options">
@@ -5422,25 +2828,25 @@ export function renderUsage(props: UsageProps) {
     <style>${usageStylesString}</style>
 
     <section class="usage-page-header">
-      <div class="usage-page-title">${t("usage.page_title")}</div>
-      <div class="usage-page-subtitle">${t("usage.page_subtitle")}</div>
+      <div class="usage-page-title">Usage</div>
+      <div class="usage-page-subtitle">See where tokens go, when sessions spike, and what drives cost.</div>
     </section>
 
     <section class="card usage-header ${props.headerPinned ? "pinned" : ""}">
       <div class="usage-header-row">
         <div class="usage-header-title">
-          <div class="card-title" style="margin: 0;">${t("usage.filters_title")}</div>
+          <div class="card-title" style="margin: 0;">Filters</div>
           ${
             props.loading
               ? html`
-                  <span class="usage-refresh-indicator">${t("usage.loading")}</span>
+                  <span class="usage-refresh-indicator">Loading</span>
                 `
               : nothing
           }
           ${
             isEmpty
               ? html`
-                  <span class="usage-query-hint">${t("usage.select_date_hint")}</span>
+                  <span class="usage-query-hint">Select a date range and click Refresh to load usage.</span>
                 `
               : nothing
           }
@@ -5450,24 +2856,24 @@ export function renderUsage(props: UsageProps) {
             displayTotals
               ? html`
                 <span class="usage-metric-badge">
-                  <strong>${formatTokens(displayTotals.totalTokens)}</strong> ${t("usage.tokens_badge")}
+                  <strong>${formatTokens(displayTotals.totalTokens)}</strong> tokens
                 </span>
                 <span class="usage-metric-badge">
-                  <strong>${formatCost(displayTotals.totalCost)}</strong> ${t("usage.cost_badge")}
+                  <strong>${formatCost(displayTotals.totalCost)}</strong> cost
                 </span>
                 <span class="usage-metric-badge">
                   <strong>${displaySessionCount}</strong>
-                  ${displaySessionCount !== 1 ? t("usage.sessions_badge_plural") : t("usage.sessions_badge")}
+                  session${displaySessionCount !== 1 ? "s" : ""}
                 </span>
               `
               : nothing
           }
           <button
             class="usage-pin-btn ${props.headerPinned ? "active" : ""}"
-            title=${props.headerPinned ? t("usage.unpin_filters") : t("usage.pin_filters")}
+            title=${props.headerPinned ? "Unpin filters" : "Pin filters"}
             @click=${props.onToggleHeaderPinned}
           >
-            ${props.headerPinned ? t("usage.pinned") : t("usage.pin")}
+            ${props.headerPinned ? "Pinned" : "Pin"}
           </button>
           <details
             class="usage-export-menu"
@@ -5486,7 +2892,7 @@ export function renderUsage(props: UsageProps) {
               window.addEventListener("click", onClick, true);
             }}
           >
-            <summary class="usage-export-button">${t("usage.export")} ▾</summary>
+            <summary class="usage-export-button">Export ▾</summary>
             <div class="usage-export-popover">
               <div class="usage-export-list">
                 <button
@@ -5566,7 +2972,7 @@ export function renderUsage(props: UsageProps) {
             title="Start Date"
             @change=${(e: Event) => props.onStartDateChange((e.target as HTMLInputElement).value)}
           />
-          <span style="color: var(--text-muted);">${t("usage.date_to")}</span>
+          <span style="color: var(--text-muted);">to</span>
           <input
             type="date"
             .value=${props.endDate}
@@ -5579,21 +2985,21 @@ export function renderUsage(props: UsageProps) {
             @change=${(e: Event) =>
               props.onTimeZoneChange((e.target as HTMLSelectElement).value as "local" | "utc")}
           >
-            <option value="local">${t("usage.timezone_local")}</option>
-            <option value="utc">${t("usage.timezone_utc")}</option>
+            <option value="local">Local</option>
+            <option value="utc">UTC</option>
           </select>
           <div class="chart-toggle">
             <button
               class="toggle-btn ${isTokenMode ? "active" : ""}"
               @click=${() => props.onChartModeChange("tokens")}
             >
-              ${t("usage.mode_tokens")}
+              Tokens
             </button>
             <button
               class="toggle-btn ${!isTokenMode ? "active" : ""}"
               @click=${() => props.onChartModeChange("cost")}
             >
-              ${t("usage.mode_cost")}
+              Cost
             </button>
           </div>
           <button
@@ -5601,7 +3007,7 @@ export function renderUsage(props: UsageProps) {
             @click=${props.onRefresh}
             ?disabled=${props.loading}
           >
-            ${t("usage.refresh")}
+            Refresh
           </button>
         </div>
         
@@ -5613,7 +3019,7 @@ export function renderUsage(props: UsageProps) {
             class="usage-query-input"
             type="text"
             .value=${props.queryDraft}
-            placeholder="${t("usage.filter_placeholder")}"
+            placeholder="Filter sessions (e.g. key:agent:main:cron* model:gpt-4o has:errors minTokens:2000)"
             @input=${(e: Event) => props.onQueryDraftChange((e.target as HTMLInputElement).value)}
             @keydown=${(e: KeyboardEvent) => {
               if (e.key === "Enter") {
@@ -5628,32 +3034,30 @@ export function renderUsage(props: UsageProps) {
               @click=${props.onApplyQuery}
               ?disabled=${props.loading || (!hasDraftQuery && !hasQuery)}
             >
-              ${t("usage.filter_client_side")}
+              Filter (client-side)
             </button>
             ${
               hasDraftQuery || hasQuery
-                ? html`<button class="btn btn-sm usage-action-btn usage-secondary-btn" @click=${props.onClearQuery}>${t("usage.clear")}</button>`
+                ? html`<button class="btn btn-sm usage-action-btn usage-secondary-btn" @click=${props.onClearQuery}>Clear</button>`
                 : nothing
             }
             <span class="usage-query-hint">
               ${
                 hasQuery
-                  ? t("usage.sessions_match")
-                      .replace("{filtered}", String(filteredSessions.length))
-                      .replace("{total}", String(totalSessions))
-                  : t("usage.sessions_in_range_count").replace("{count}", String(totalSessions))
+                  ? `${filteredSessions.length} of ${totalSessions} sessions match`
+                  : `${totalSessions} sessions in range`
               }
             </span>
           </div>
         </div>
         <div class="usage-filter-row">
-          ${renderFilterSelect("agent", t("usage.filter_agent"), agentOptions)}
-          ${renderFilterSelect("channel", t("usage.filter_channel"), channelOptions)}
-          ${renderFilterSelect("provider", t("usage.filter_provider"), providerOptions)}
-          ${renderFilterSelect("model", t("usage.filter_model"), modelOptions)}
-          ${renderFilterSelect("tool", t("usage.filter_tools"), toolOptions)}
+          ${renderFilterSelect("agent", "Agent", agentOptions)}
+          ${renderFilterSelect("channel", "Channel", channelOptions)}
+          ${renderFilterSelect("provider", "Provider", providerOptions)}
+          ${renderFilterSelect("model", "Model", modelOptions)}
+          ${renderFilterSelect("tool", "Tool", toolOptions)}
           <span class="usage-query-hint">
-            ${t("usage.tip_use_filters")}
+            Tip: use filters or click bars to filter days.
           </span>
         </div>
         ${
@@ -5728,110 +3132,88 @@ export function renderUsage(props: UsageProps) {
       }
     </section>
 
+    ${renderUsageInsights(
+      displayTotals,
+      activeAggregates,
+      insightStats,
+      hasMissingCost,
+      buildPeakErrorHours(aggregateSessions, props.timeZone),
+      displaySessionCount,
+      totalSessions,
+    )}
+
+    ${renderUsageMosaic(aggregateSessions, props.timeZone, props.selectedHours, props.onSelectHour)}
+
+    <!-- Two-column layout: Daily+Breakdown on left, Sessions on right -->
+    <div class="usage-grid">
+      <div class="usage-grid-left">
+        <div class="card usage-left-card">
+          ${renderDailyChartCompact(
+            filteredDaily,
+            props.selectedDays,
+            props.chartMode,
+            props.dailyChartMode,
+            props.onDailyChartModeChange,
+            props.onSelectDay,
+          )}
+          ${displayTotals ? renderCostBreakdownCompact(displayTotals, props.chartMode) : nothing}
+        </div>
+      </div>
+      <div class="usage-grid-right">
+        ${renderSessionsCard(
+          filteredSessions,
+          props.selectedSessions,
+          props.selectedDays,
+          isTokenMode,
+          props.sessionSort,
+          props.sessionSortDir,
+          props.recentSessions,
+          props.sessionsTab,
+          props.onSelectSession,
+          props.onSessionSortChange,
+          props.onSessionSortDirChange,
+          props.onSessionsTabChange,
+          props.visibleColumns,
+          totalSessions,
+          props.onClearSessions,
+        )}
+      </div>
+    </div>
+
+    <!-- Session Detail Panel (when selected) or Empty State -->
     ${
-      // 如果显示供应商概览视图，只显示供应商卡片
-      props.showProviderOverview
-        ? html`
-            <section class="card">
-              <div class="card-title" style="margin-bottom: 16px;">
-                ${t("usage.provider_overview_title")}
-              </div>
-              <div style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px;">
-                ${t("usage.provider_overview_subtitle")}
-              </div>
-              ${renderProviderOverviewCards(
-                props.aggregates?.byProvider ?? [],
-                props.onSelectProvider,
-                props.chartMode,
-              )}
-            </section>
-          `
-        : html`
-            <!-- 原有的会话列表视图 -->
-            ${renderUsageInsights(
-              displayTotals,
-              activeAggregates,
-              insightStats,
-              hasMissingCost,
-              buildPeakErrorHours(aggregateSessions, props.timeZone),
-              displaySessionCount,
-              totalSessions,
-            )}
-
-            ${renderUsageMosaic(aggregateSessions, props.timeZone, props.selectedHours, props.onSelectHour)}
-
-            <!-- Two-column layout: Daily+Breakdown on left, Sessions on right -->
-            <div class="usage-grid">
-              <div class="usage-grid-left">
-                <div class="card usage-left-card">
-                  ${renderDailyChartCompact(
-                    filteredDaily,
-                    props.selectedDays,
-                    props.chartMode,
-                    props.dailyChartMode,
-                    props.onDailyChartModeChange,
-                    props.onSelectDay,
-                  )}
-                  ${displayTotals ? renderCostBreakdownCompact(displayTotals, props.chartMode) : nothing}
-                </div>
-              </div>
-              <div class="usage-grid-right">
-                ${renderSessionsCard(
-                  filteredSessions,
-                  props.selectedSessions,
-                  props.selectedDays,
-                  isTokenMode,
-                  props.sessionSort,
-                  props.sessionSortDir,
-                  props.recentSessions,
-                  props.sessionsTab,
-                  props.onSelectSession,
-                  props.onSessionSortChange,
-                  props.onSessionSortDirChange,
-                  props.onSessionsTabChange,
-                  props.visibleColumns,
-                  totalSessions,
-                  props.onClearSessions,
-                )}
-              </div>
-            </div>
-
-            <!-- Session Detail Panel (when selected) or Empty State -->
-            ${
-              primarySelectedEntry
-                ? renderSessionDetailPanel(
-                    primarySelectedEntry,
-                    props.timeSeries,
-                    props.timeSeriesLoading,
-                    props.timeSeriesMode,
-                    props.onTimeSeriesModeChange,
-                    props.timeSeriesBreakdownMode,
-                    props.onTimeSeriesBreakdownChange,
-                    props.startDate,
-                    props.endDate,
-                    props.selectedDays,
-                    props.sessionLogs,
-                    props.sessionLogsLoading,
-                    props.sessionLogsExpanded,
-                    props.onToggleSessionLogsExpanded,
-                    {
-                      roles: props.logFilterRoles,
-                      tools: props.logFilterTools,
-                      hasTools: props.logFilterHasTools,
-                      query: props.logFilterQuery,
-                    },
-                    props.onLogFilterRolesChange,
-                    props.onLogFilterToolsChange,
-                    props.onLogFilterHasToolsChange,
-                    props.onLogFilterQueryChange,
-                    props.onLogFilterClear,
-                    props.contextExpanded,
-                    props.onToggleContextExpanded,
-                    props.onClearSessions,
-                  )
-                : renderEmptyDetailState()
-            }
-          `
+      primarySelectedEntry
+        ? renderSessionDetailPanel(
+            primarySelectedEntry,
+            props.timeSeries,
+            props.timeSeriesLoading,
+            props.timeSeriesMode,
+            props.onTimeSeriesModeChange,
+            props.timeSeriesBreakdownMode,
+            props.onTimeSeriesBreakdownChange,
+            props.startDate,
+            props.endDate,
+            props.selectedDays,
+            props.sessionLogs,
+            props.sessionLogsLoading,
+            props.sessionLogsExpanded,
+            props.onToggleSessionLogsExpanded,
+            {
+              roles: props.logFilterRoles,
+              tools: props.logFilterTools,
+              hasTools: props.logFilterHasTools,
+              query: props.logFilterQuery,
+            },
+            props.onLogFilterRolesChange,
+            props.onLogFilterToolsChange,
+            props.onLogFilterHasToolsChange,
+            props.onLogFilterQueryChange,
+            props.onLogFilterClear,
+            props.contextExpanded,
+            props.onToggleContextExpanded,
+            props.onClearSessions,
+          )
+        : renderEmptyDetailState()
     }
   `;
 }
