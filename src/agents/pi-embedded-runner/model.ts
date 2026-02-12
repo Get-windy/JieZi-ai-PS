@@ -124,7 +124,7 @@ const ANTIGRAVITY_OPUS_45_TEMPLATES = ["claude-opus-4-5-thinking", "claude-opus-
 function resolveAntigravityOpus46ForwardCompatModel(
   provider: string,
   modelId: string,
-  modelRegistry: ModelRegistry,
+  modelRegistry: InstanceType<typeof ModelRegistry>,
 ): Model<Api> | undefined {
   if (normalizeProviderId(provider) !== "google-antigravity") {
     return undefined;
