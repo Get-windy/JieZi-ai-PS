@@ -685,6 +685,7 @@ export function renderApp(state: AppViewState) {
                     (p: any) => p.id === id,
                   );
                   if (provider) {
+                    state.addingProvider = true; // 显示模态框
                     state.providerForm = {
                       selectedTemplateId: (provider as any).templateId || null,
                       id: (provider as any).id,
