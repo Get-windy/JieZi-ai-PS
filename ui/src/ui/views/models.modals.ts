@@ -74,12 +74,25 @@ export function renderAuthEditModal(props: ModelsProps) {
   const isNew = !auth.authId;
   const providerLabel = resolveProviderLabel(props.snapshot, auth.provider);
 
+  // 检查是否有未保存的内容
+  const hasUnsavedContent = auth.name || auth.apiKey || auth.baseUrl;
+
+  const handleCancelAuth = () => {
+    if (hasUnsavedContent && isNew) {
+      if (confirm("您有未保存的内容，确定要关闭吗？")) {
+        props.onCancelAuthEdit();
+      }
+    } else {
+      props.onCancelAuthEdit();
+    }
+  };
+
   return html`
-    <div class="modal-overlay" @click=${() => props.onCancelAuthEdit()}>
+    <div class="modal-overlay" @click=${handleCancelAuth}>
       <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>${providerLabel} - ${isNew ? t("models.add_auth_title") : t("models.edit_auth")}</h2>
-          <button class="btn-icon" @click=${() => props.onCancelAuthEdit()}>&times;</button>
+          <button class="btn-icon" @click=${handleCancelAuth}>&times;</button>
         </div>
         
         <div class="modal-body" style="padding: 24px;">
@@ -124,7 +137,7 @@ export function renderAuthEditModal(props: ModelsProps) {
         </div>
         
         <div class="modal-footer">
-          <button class="btn" @click=${() => props.onCancelAuthEdit()}>
+          <button class="btn" @click=${handleCancelAuth}>
             ${t("models.cancel")}
           </button>
           <button
@@ -404,12 +417,25 @@ export function renderModelConfigModal(props: ModelsProps) {
   // 新增模型时，检查是否填写了模型名称
   const canSave = isNewModel ? hasAuth && config.modelName.trim().length > 0 : true;
 
+  // 检查是否有未保存的内容
+  const hasUnsavedContent = isNewModel && (config.modelName || config.authId || config.nickname);
+
+  const handleCancelModelConfig = () => {
+    if (hasUnsavedContent) {
+      if (confirm("您有未保存的内容，确定要关闭吗？")) {
+        props.onCancelModelConfigEdit();
+      }
+    } else {
+      props.onCancelModelConfigEdit();
+    }
+  };
+
   return html`
-    <div class="modal-overlay" @click=${() => props.onCancelModelConfigEdit()}>
+    <div class="modal-overlay" @click=${handleCancelModelConfig}>
       <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>${isNewModel ? t("models.add_model") : `${t("models.model_config")} - ${config.modelName}`}</h2>
-          <button class="btn-icon" @click=${() => props.onCancelModelConfigEdit()}>&times;</button>
+          <button class="btn-icon" @click=${handleCancelModelConfig}>&times;</button>
         </div>
         
         <div class="modal-body" style="padding: 24px;">
@@ -571,7 +597,7 @@ export function renderModelConfigModal(props: ModelsProps) {
         </div>
         
         <div class="modal-footer">
-          <button class="btn" @click=${() => props.onCancelModelConfigEdit()}>
+          <button class="btn" @click=${handleCancelModelConfig}>
             ${t("models.cancel")}
           </button>
           <button
@@ -764,12 +790,26 @@ export function renderAddProviderModal(
   const apiTemplates = (props.snapshot as any)?.apiTemplates || [];
   const selectedTemplate = apiTemplates.find((t: any) => t.id === form.selectedTemplateId);
 
+  // 检查是否有未保存的内容
+  const hasUnsavedContent =
+    form.id || form.name || form.website || (form.defaultBaseUrl && form.defaultBaseUrl !== "");
+
+  const handleOverlayClick = () => {
+    if (hasUnsavedContent) {
+      if (confirm("您有未保存的内容，确定要关闭吗？")) {
+        props.onCancelProviderEdit();
+      }
+    } else {
+      props.onCancelProviderEdit();
+    }
+  };
+
   return html`
-    <div class="modal-overlay" @click=${() => props.onCancelProviderEdit()}>
+    <div class="modal-overlay" @click=${handleOverlayClick}>
       <div class="modal-content modal-content--large" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>${isEditing ? `✏️ ${t("models.edit_provider")}` : `➕ ${t("models.add_provider")}`}</h2>
-          <button class="btn-icon" @click=${() => props.onCancelProviderEdit()}>&times;</button>
+          <button class="btn-icon" @click=${handleOverlayClick}>&times;</button>
         </div>
         
         <div class="modal-body" style="padding: 32px;">
@@ -922,7 +962,7 @@ export function renderAddProviderModal(
         </div>
         
         <div class="modal-footer">
-          <button class="btn" @click=${() => props.onCancelProviderEdit()}>
+          <button class="btn" @click=${handleOverlayClick}>
             ${t("models.cancel")}
           </button>
           <button
