@@ -178,6 +178,13 @@ export function setTab(host: SettingsHost, next: Tab) {
       stopModelsAutoRefresh();
     });
   }
+  // 解析 usage 页面的 URL 参数
+  if (next === "usage" && typeof window !== "undefined") {
+    const url = new URL(window.location.href);
+    const provider = url.searchParams.get("provider")?.trim() || null;
+    (host as any).usageFilterProvider = provider;
+    (host as any).usageShowProviderOverview = !provider; // 没有provider时显示概览
+  }
   void refreshActiveTab(host);
   syncUrlWithTab(host, next, false);
 }
@@ -376,6 +383,13 @@ export function onPopState(host: SettingsHost) {
     });
   }
 
+  // 解析 usage 页面的 provider 参数
+  if (resolved === "usage") {
+    const provider = url.searchParams.get("provider")?.trim() || null;
+    (host as any).usageFilterProvider = provider;
+    (host as any).usageShowProviderOverview = !provider; // 没有provider时显示概览
+  }
+
   setTabFromRoute(host, resolved);
 }
 
@@ -458,7 +472,7 @@ export async function loadChannelsTab(host: SettingsHost) {
 }
 
 export async function loadModelsTab(host: SettingsHost) {
-  await Promise.all([loadModels(host as unknown as OpenClawApp, true)]);
+  [await loadModels(host as unknown as OpenClawApp, true)];
   setTimeout(() => {
     void loadModels(host as unknown as OpenClawApp, false);
   }, 200);

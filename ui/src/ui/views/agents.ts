@@ -32,7 +32,6 @@ export type AgentsPanel =
   | "files"
   | "tools"
   | "skills"
-  | "channels"
   | "cron"
   | "modelAccounts"
   | "channelPolicies"
@@ -64,8 +63,8 @@ export type ModelAccountsConfig = {
  * Phase 5: 通道策略配置类型（Phase 2 多通道协作）
  */
 export type ChannelPoliciesConfig = {
-  bindings: ChannelBinding[];
-  defaultPolicy: ChannelPolicy;
+  bindings?: ChannelBinding[];
+  defaultPolicy?: ChannelPolicy;
 };
 
 export type ChannelBinding = {
@@ -153,6 +152,9 @@ export type AgentsProps = {
   onUnbindModelAccount?: (accountId: string) => void;
   onToggleAvailableModelAccounts?: () => void;
   onSetDefaultModelAccount?: (accountId: string) => void;
+  onConfigureModelAccount?: (accountId: string, currentConfig: any) => void;
+  onToggleModelAccountEnabled?: (accountId: string, enabled: boolean) => void;
+  accountConfigs?: Record<string, any>;
   channelPoliciesConfig: ChannelPoliciesConfig | null;
   channelPoliciesLoading: boolean;
   channelPoliciesError: string | null;
@@ -239,6 +241,8 @@ export type AgentsProps = {
   onAddChannelAccount?: (channelId: string, accountId: string) => void;
   onRemoveChannelAccount?: (channelId: string, accountId: string) => void;
   onToggleAvailableChannelAccounts?: () => void;
+  onToggleChannelAccountEnabled?: (channelId: string, accountId: string, enabled: boolean) => void;
+  onConfigurePolicy?: (channelId: string, accountId: string, currentPolicy: string) => void;
   // Phase 3: 权限管理回调
   onPermissionsRefresh?: (agentId: string) => void;
   onPermissionsTabChange?: (tab: "config" | "approvals" | "history") => void;
@@ -780,12 +784,18 @@ function renderAgentModelAccounts(params: {
   availableModelAccountsExpanded: boolean;
   defaultModelAccountId: string;
   modelAccountOperationError: string | null;
+  accountConfigs?: Record<
+    string,
+    { enabled?: boolean; priority?: number; schedule?: any; usageLimit?: any; healthCheck?: any }
+  >;
   // 回调
   onChange?: (agentId: string, config: ModelAccountsConfig) => void;
   onBindModelAccount?: (accountId: string) => void;
   onUnbindModelAccount?: (accountId: string) => void;
   onToggleAvailableModelAccounts?: () => void;
   onSetDefaultModelAccount?: (accountId: string) => void;
+  onToggleAccountEnabled?: (accountId: string, enabled: boolean) => void;
+  onConfigureModelAccount?: (accountId: string, currentConfig: any) => void;
 }) {
   if (params.loading || params.boundModelAccountsLoading) {
     return html`
@@ -930,8 +940,7 @@ function renderAgentModelAccounts(params: {
                           <button
                             class="btn btn--sm"
                             @click=${() => {
-                              // TODO: 打开配置对话框
-                              alert("配置面板开发中...");
+                              params.onConfigureModelAccount?.(accountId, accountConfig || {});
                             }}
                           >
                             配置
@@ -1116,9 +1125,23 @@ function renderAgentChannelPolicies(params: {
   error: string | null;
   saving: boolean;
   saveSuccess: boolean;
+  // 通道账号绑定管理相关
+  boundChannelAccounts?: any[];
+  boundChannelAccountsLoading?: boolean;
+  boundChannelAccountsError?: string | null;
+  availableChannelAccounts?: any[];
+  availableChannelAccountsLoading?: boolean;
+  availableChannelAccountsError?: string | null;
+  availableChannelAccountsExpanded?: boolean;
+  channelAccountOperationError?: string | null;
   onChange?: (agentId: string, config: ChannelPoliciesConfig) => void;
   onEditPolicyBinding?: (agentId: string, index: number, binding: ChannelBinding) => void;
   onAddPolicyBinding?: (agentId: string) => void;
+  onAddChannelAccount?: (channelId: string, accountId: string) => void;
+  onRemoveChannelAccount?: (channelId: string, accountId: string) => void;
+  onToggleAvailableChannelAccounts?: () => void;
+  onToggleChannelAccountEnabled?: (channelId: string, accountId: string, enabled: boolean) => void;
+  onConfigurePolicy?: (channelId: string, accountId: string, currentPolicy: string) => void;
 }) {
   if (params.loading) {
     return html`
@@ -1138,15 +1161,11 @@ function renderAgentChannelPolicies(params: {
     `;
   }
 
-  const config = params.config;
-  if (!config) {
-    return html`
-      <section class="card">
-        <div class="card-title">${t("agents.channel_policies.title")}</div>
-        <div class="empty">${t("agents.channel_policies.no_config")}</div>
-      </section>
-    `;
-  }
+  // 如果没有配置，初始化一个默认配置
+  const config = params.config || {
+    defaultPolicy: "private" as any,
+    bindings: [],
+  };
 
   const policyOptions: Array<{ value: string; label: string; description: string }> = [
     {
@@ -1236,8 +1255,9 @@ function renderAgentChannelPolicies(params: {
             @change=${(e: Event) => {
               if (params.onChange) {
                 const target = e.target as HTMLSelectElement;
+                // 保留 bindings，只更新 defaultPolicy
                 params.onChange(params.agentId, {
-                  ...config,
+                  bindings: config.bindings || [],
                   defaultPolicy: target.value as any,
                 });
               }
@@ -1257,65 +1277,179 @@ function renderAgentChannelPolicies(params: {
         </div>
       </div>
 
-      <!-- 通道绑定列表 -->
-      <div style="margin-top: 24px;">
-        <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <div class="label">${t("agents.channel_policies.bindings")} (${config.bindings?.length || 0})</div>
-          <button class="btn btn--sm" ?disabled=${!params.onChange} @click=${() => {
-            if (params.onAddPolicyBinding) {
-              params.onAddPolicyBinding(params.agentId);
-            }
-          }}>
-            + 添加绑定
-          </button>
-        </div>
-        <div class="list" style="margin-top: 8px;">
+      <!-- 通道账号绑定管理 -->
+      <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border);">
+        <div class="card-title" style="font-size: 1rem; margin-bottom: 8px;">🔗 通道账号绑定管理</div>
+        <div class="card-sub" style="margin-bottom: 16px;">绑定通道账号并为每个通道配置策略</div>
+        
+        <!-- 已绑定的通道账号（包含策略信息） -->
+        <div style="margin-top: 16px;">
+          <div class="label">已绑定的通道账号 (${params.boundChannelAccounts?.length || 0})</div>
           ${
-            Array.isArray(config.bindings) && config.bindings.length > 0
-              ? config.bindings.map(
-                  (binding: any, index: number) => html`
-                <div class="list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 4px; background: var(--bg-1); margin-bottom: 8px;">
-                  <div style="flex: 1;">
-                    <div class="mono" style="font-weight: 500;">${binding.channelId}</div>
-                    ${binding.accountId ? html`<div class="muted" style="font-size: 0.875rem; margin-top: 2px;">${binding.accountId}</div>` : nothing}
+            params.boundChannelAccountsLoading
+              ? html`
+                  <div class="loading" style="margin-top: 8px">加载中...</div>
+                `
+              : params.boundChannelAccountsError
+                ? html`<div class="error" style="margin-top: 8px;">${params.boundChannelAccountsError}</div>`
+                : params.boundChannelAccounts && params.boundChannelAccounts.length > 0
+                  ? html`
+                  <div class="list" style="margin-top: 8px;">
+                    ${params.boundChannelAccounts.map((account: any) => {
+                      // 查找是否有配置的策略
+                      const bindingConfig = config.bindings?.find(
+                        (b: any) =>
+                          b.channelId === account.channelId && b.accountId === account.accountId,
+                      );
+                      const policy = bindingConfig?.policy || config.defaultPolicy || "private";
+
+                      return html`
+                        <div class="list-item" style="padding: 16px; border-radius: 6px; background: var(--bg-1); margin-bottom: 12px;">
+                          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div style="flex: 1;">
+                              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                <!-- 启用/禁用开关 -->
+                                <label class="switch" style="margin: 0;">
+                                  <input 
+                                    type="checkbox" 
+                                    ?checked=${account.enabled !== false}
+                                    @change=${(e: Event) => {
+                                      const checked = (e.target as HTMLInputElement).checked;
+                                      params.onToggleChannelAccountEnabled?.(
+                                        account.channelId,
+                                        account.accountId,
+                                        checked,
+                                      );
+                                    }}
+                                  />
+                                  <span class="slider"></span>
+                                </label>
+                                
+                                <div>
+                                  <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="mono" style="font-weight: 500; font-size: 1rem;">${account.channelId}</span>
+                                    <span class="muted" style="font-size: 0.875rem;">/</span>
+                                    <span class="muted" style="font-size: 0.875rem;">${account.accountId}</span>
+                                  </div>
+                                  <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                                    <span style="font-size: 0.875rem; color: var(--text-3);">当前策略：</span>
+                                    <span class="agent-pill">${policyOptions.find((p) => p.value === policy)?.label || policy}</span>
+                                    ${
+                                      !bindingConfig
+                                        ? html`
+                                            <span class="muted" style="font-size: 0.75rem">(使用默认策略)</span>
+                                          `
+                                        : nothing
+                                    }
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                              <button 
+                                class="btn btn--sm"
+                                @click=${() => {
+                                  if (params.onConfigurePolicy) {
+                                    params.onConfigurePolicy(
+                                      account.channelId,
+                                      account.accountId,
+                                      policy,
+                                    );
+                                  }
+                                }}
+                              >
+                                配置策略
+                              </button>
+                              <button 
+                                class="btn btn--sm"
+                                style="color: var(--color-danger);"
+                                @click=${() => {
+                                  if (
+                                    params.onRemoveChannelAccount &&
+                                    confirm(
+                                      `确定要解绑 ${account.channelId}/${account.accountId} 吗？`,
+                                    )
+                                  ) {
+                                    params.onRemoveChannelAccount(
+                                      account.channelId,
+                                      account.accountId,
+                                    );
+                                  }
+                                }}
+                              >
+                                解绑
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      `;
+                    })}
                   </div>
-                  <div style="display: flex; gap: 8px; align-items: center;">
-                    <span class="agent-pill">${t(`agents.channel_policies.policy.${binding.policy}`)}</span>
-                    <button 
-                      class="btn btn--sm"
-                      @click=${() => {
-                        if (params.onEditPolicyBinding) {
-                          params.onEditPolicyBinding(params.agentId, index, binding);
-                        }
-                      }}
-                    >
-                      配置
-                    </button>
-                    <button 
-                      class="btn btn--sm"
-                      style="color: var(--color-danger);"
-                      ?disabled=${!params.onChange}
-                      @click=${() => {
-                        if (params.onChange && confirm("确定要删除该绑定吗？")) {
-                          const newBindings = [...config.bindings];
-                          newBindings.splice(index, 1);
-                          params.onChange(params.agentId, {
-                            ...config,
-                            bindings: newBindings,
-                          });
-                        }
-                      }}
-                    >
-                      删除
-                    </button>
-                  </div>
-                </div>
-              `,
-                )
-              : html`<div class="muted">${t("agents.channel_policies.no_bindings")}</div>`
+                `
+                  : html`
+                      <div class="muted" style="margin-top: 8px">暂无绑定的通道账号</div>
+                    `
           }
         </div>
+
+        <!-- 可用的通道账号 -->
+        <div style="margin-top: 20px;">
+          <div class="row" style="justify-content: space-between; align-items: center;">
+            <div class="label">可用的通道账号</div>
+            <button 
+              class="btn btn--sm"
+              @click=${() => params.onToggleAvailableChannelAccounts?.()}
+            >
+              ${params.availableChannelAccountsExpanded ? "收起" : "展开"}
+            </button>
+          </div>
+          ${
+            params.availableChannelAccountsExpanded
+              ? params.availableChannelAccountsLoading
+                ? html`
+                    <div class="loading" style="margin-top: 8px">加载中...</div>
+                  `
+                : params.availableChannelAccountsError
+                  ? html`<div class="error" style="margin-top: 8px;">${params.availableChannelAccountsError}</div>`
+                  : params.availableChannelAccounts && params.availableChannelAccounts.length > 0
+                    ? html`
+                    <div class="list" style="margin-top: 8px;">
+                      ${params.availableChannelAccounts.map(
+                        (account: any) => html`
+                        <div class="list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 4px; background: var(--bg-1); margin-bottom: 8px;">
+                          <div style="flex: 1;">
+                            <div class="mono" style="font-weight: 500;">${account.channelId}</div>
+                            <div class="muted" style="font-size: 0.875rem; margin-top: 2px;">${account.accountId}</div>
+                          </div>
+                          <button 
+                            class="btn btn--sm primary"
+                            @click=${() => {
+                              if (params.onAddChannelAccount) {
+                                params.onAddChannelAccount(account.channelId, account.accountId);
+                              }
+                            }}
+                          >
+                            绑定
+                          </button>
+                        </div>
+                      `,
+                      )}
+                    </div>
+                  `
+                    : html`
+                        <div class="muted" style="margin-top: 8px">没有可用的通道账号</div>
+                      `
+              : nothing
+          }
+        </div>
+
+        ${
+          params.channelAccountOperationError
+            ? html`<div class="error" style="margin-top: 12px;">${params.channelAccountOperationError}</div>`
+            : nothing
+        }
       </div>
+
 
       <!-- 策略说明 -->
       <details style="margin-top: 24px; padding: 16px; border: 1px solid var(--border); border-radius: 6px;">
@@ -1494,41 +1628,6 @@ export function renderAgents(props: AgentsProps) {
                   : nothing
               }
               ${
-                props.activePanel === "channels"
-                  ? renderAgentChannels({
-                      agent: selectedAgent,
-                      defaultId,
-                      configForm: props.configForm,
-                      agentFilesList: props.agentFilesList,
-                      agentIdentity: props.agentIdentityById[selectedAgent.id] ?? null,
-                      boundAccounts: props.boundChannelAccounts || [],
-                      boundAccountsLoading: props.boundChannelAccountsLoading || false,
-                      boundAccountsError: props.boundChannelAccountsError || null,
-                      availableAccounts: props.availableChannelAccounts || [],
-                      availableAccountsLoading: props.availableChannelAccountsLoading || false,
-                      availableAccountsError: props.availableChannelAccountsError || null,
-                      availableAccountsExpanded: props.availableChannelAccountsExpanded || false,
-                      operationError: props.channelAccountOperationError || null,
-                      onRefresh: props.onChannelsRefresh,
-                      onAddAccount: (channelId, accountId) => {
-                        if (props.onAddChannelAccount) {
-                          props.onAddChannelAccount(channelId, accountId);
-                        }
-                      },
-                      onRemoveAccount: (channelId, accountId) => {
-                        if (props.onRemoveChannelAccount) {
-                          props.onRemoveChannelAccount(channelId, accountId);
-                        }
-                      },
-                      onToggleAvailableAccounts: () => {
-                        if (props.onToggleAvailableChannelAccounts) {
-                          props.onToggleAvailableChannelAccounts();
-                        }
-                      },
-                    })
-                  : nothing
-              }
-              ${
                 props.activePanel === "cron"
                   ? renderAgentCron({
                       agent: selectedAgent,
@@ -1595,51 +1694,72 @@ export function renderAgents(props: AgentsProps) {
                       error: props.channelPoliciesError,
                       saving: props.channelPoliciesSaving,
                       saveSuccess: props.channelPoliciesSaveSuccess,
+                      // 通道账号绑定管理
+                      boundChannelAccounts: props.boundChannelAccounts,
+                      boundChannelAccountsLoading: props.boundChannelAccountsLoading,
+                      boundChannelAccountsError: props.boundChannelAccountsError,
+                      availableChannelAccounts: props.availableChannelAccounts,
+                      availableChannelAccountsLoading: props.availableChannelAccountsLoading,
+                      availableChannelAccountsError: props.availableChannelAccountsError,
+                      availableChannelAccountsExpanded: props.availableChannelAccountsExpanded,
+                      channelAccountOperationError: props.channelAccountOperationError,
                       onChange: props.onChannelPoliciesChange,
                       onEditPolicyBinding: props.onEditPolicyBinding,
                       onAddPolicyBinding: props.onAddPolicyBinding,
+                      onAddChannelAccount: (channelId, accountId) => {
+                        if (props.onAddChannelAccount) {
+                          props.onAddChannelAccount(channelId, accountId);
+                        }
+                      },
+                      onRemoveChannelAccount: (channelId, accountId) => {
+                        if (props.onRemoveChannelAccount) {
+                          props.onRemoveChannelAccount(channelId, accountId);
+                        }
+                      },
+                      onToggleAvailableChannelAccounts: () => {
+                        if (props.onToggleAvailableChannelAccounts) {
+                          props.onToggleAvailableChannelAccounts();
+                        }
+                      },
+                      onToggleChannelAccountEnabled: (channelId, accountId, enabled) => {
+                        if (props.onToggleChannelAccountEnabled) {
+                          props.onToggleChannelAccountEnabled(channelId, accountId, enabled);
+                        }
+                      },
+                      onConfigurePolicy: (channelId, accountId, currentPolicy) => {
+                        if (props.onConfigurePolicy) {
+                          props.onConfigurePolicy(channelId, accountId, currentPolicy);
+                        }
+                      },
                     })
                   : nothing
               }
               ${
                 props.activePanel === "permissionsConfig"
-                  ? renderPermissionsManagement({
-                      loading: props.permissionsLoading || false,
-                      error: props.permissionsError || null,
-                      activeTab: props.permissionsActiveTab || "config",
-                      permissionsConfig: props.permissionsConfig || null,
-                      configLoading: props.permissionsConfigLoading || false,
-                      configSaving: props.permissionsConfigSaving || false,
-                      approvalRequests: props.approvalRequests || [],
-                      approvalsLoading: props.approvalsLoading || false,
-                      approvalStats: props.approvalStats || null,
-                      approvalsFilter: props.approvalsFilter || {
-                        status: "all",
-                        priority: "all",
-                        type: "all",
-                        requester: "all",
-                        search: "",
+                  ? renderAgentPermissionsConfig({
+                      agent: selectedAgent,
+                      configForm: props.configForm,
+                      configLoading: props.configLoading,
+                      configSaving: props.configSaving,
+                      configDirty: props.configDirty,
+                      permissionsConfig: props.permissionsConfig,
+                      permissionsLoading: props.permissionsConfigLoading || false,
+                      permissionsSaving: props.permissionsConfigSaving || false,
+                      onPermissionChange: (permission, granted) => {
+                        if (props.onPermissionChange) {
+                          props.onPermissionChange(selectedAgent.id, permission, granted);
+                        }
                       },
-                      selectedApprovals: props.selectedApprovals || new Set(),
-                      selectedApprovalDetail: props.selectedApprovalDetail || null,
-                      changeHistory: props.permissionChangeHistory || [],
-                      historyLoading: props.permissionHistoryLoading || false,
-                      onRefresh: () => props.onPermissionsRefresh?.(selectedAgent.id),
-                      onTabChange: (tab) => props.onPermissionsTabChange?.(tab),
-                      onPermissionChange: (agentId, permission, granted) =>
-                        props.onPermissionChange?.(agentId, permission, granted),
-                      onSaveConfig: () => props.onPermissionsSaveConfig?.(selectedAgent.id),
-                      onApprovalAction: (requestId, action, comment) =>
-                        props.onApprovalAction?.(requestId, action, comment),
-                      onBatchApprove: (requestIds, comment) =>
-                        props.onBatchApprove?.(requestIds, comment),
-                      onBatchDeny: (requestIds, reason) => props.onBatchDeny?.(requestIds, reason),
-                      onFilterChange: (filter) => props.onApprovalsFilterChange?.(filter),
-                      onSelectApproval: (requestId, selected) =>
-                        props.onSelectApproval?.(requestId, selected),
-                      onSelectAll: () => props.onSelectAllApprovals?.(),
-                      onDeselectAll: () => props.onDeselectAllApprovals?.(),
-                      onShowApprovalDetail: (request) => props.onShowApprovalDetail?.(request),
+                      onSave: () => {
+                        if (props.onPermissionsSaveConfig) {
+                          props.onPermissionsSaveConfig(selectedAgent.id);
+                        }
+                      },
+                      onRefresh: () => {
+                        if (props.onPermissionsRefresh) {
+                          props.onPermissionsRefresh(selectedAgent.id);
+                        }
+                      },
                     })
                   : nothing
               }
@@ -1655,6 +1775,7 @@ export function renderAgents(props: AgentsProps) {
             agentId: props.editingPolicyBinding?.agentId || props.addingPolicyBinding || "",
             binding: props.editingPolicyBinding?.binding || null,
             index: props.editingPolicyBinding?.index,
+            channelsSnapshot: props.channelsSnapshot, // 传递通道快照
             onChange: (field: string, value: any) => {
               // 修改编辑中的绑定对象
               if (props.editingPolicyBinding) {
@@ -1763,10 +1884,9 @@ function renderAgentTabs(active: AgentsPanel, onSelect: (panel: AgentsPanel) => 
     { id: "files", label: () => t("agents.tab.files") },
     { id: "tools", label: () => t("agents.tab.tools") },
     { id: "skills", label: () => t("agents.tab.skills") },
-    { id: "channels", label: () => t("agents.tab.channels") },
     { id: "cron", label: () => t("agents.tab.cron") },
     { id: "modelAccounts", label: () => t("agents.tab.model_accounts") },
-    { id: "channelPolicies", label: () => t("agents.tab.channel_policies") },
+    { id: "channelPolicies", label: () => "通道配置" },
     { id: "permissionsConfig", label: () => t("agents.tab.permissions") },
   ];
   return html`
@@ -2117,181 +2237,6 @@ function summarizeChannelAccounts(accounts: ChannelAccountSnapshot[]) {
     configured,
     enabled,
   };
-}
-
-function renderAgentChannels(params: {
-  agent: AgentsListResult["agents"][number];
-  defaultId: string | null;
-  configForm: Record<string, unknown> | null;
-  agentFilesList: AgentsFilesListResult | null;
-  agentIdentity: AgentIdentityResult | null;
-  // 已绑定的通道账号
-  boundAccounts: any[];
-  boundAccountsLoading: boolean;
-  boundAccountsError: string | null;
-  // 可用但未绑定的通道账号
-  availableAccounts: any[];
-  availableAccountsLoading: boolean;
-  availableAccountsError: string | null;
-  availableAccountsExpanded: boolean;
-  operationError: string | null;
-  // 回调函数
-  onRefresh: () => void;
-  onAddAccount: (channelId: string, accountId: string) => void;
-  onRemoveAccount: (channelId: string, accountId: string) => void;
-  onToggleAvailableAccounts: () => void;
-}) {
-  const context = buildAgentContext(
-    params.agent,
-    params.configForm,
-    params.agentFilesList,
-    params.defaultId,
-    params.agentIdentity,
-  );
-
-  return html`
-    <section class="grid grid-cols-2">
-      ${renderAgentContextCard(context, t("agents.context.subtitle_channels"))}
-      <section class="card">
-        <div class="row" style="justify-content: space-between;">
-          <div>
-            <div class="card-title">通道账号绑定</div>
-            <div class="card-sub">管理此助手可以使用的通道账号</div>
-          </div>
-          <button class="btn btn--sm" ?disabled=${params.boundAccountsLoading} @click=${params.onRefresh}>
-            ${params.boundAccountsLoading ? "刷新中..." : "刷新"}
-          </button>
-        </div>
-
-        ${
-          params.operationError
-            ? html`<div class="callout danger" style="margin-top: 12px;">${params.operationError}</div>`
-            : nothing
-        }
-        ${
-          params.boundAccountsError
-            ? html`<div class="callout danger" style="margin-top: 12px;">${params.boundAccountsError}</div>`
-            : nothing
-        }
-
-        <!-- 已绑定的通道账号 -->
-        <div style="margin-top: 20px;">
-          <div class="label">已绑定的通道账号 (${params.boundAccounts.length})</div>
-          ${
-            params.boundAccountsLoading
-              ? html`
-                  <div class="loading" style="margin-top: 8px">加载中...</div>
-                `
-              : params.boundAccounts.length === 0
-                ? html`
-                    <div class="muted" style="margin-top: 8px">还没有绑定任何通道账号</div>
-                  `
-                : html`
-                  <div class="list" style="margin-top: 8px;">
-                    ${params.boundAccounts.map(
-                      (binding: any) => html`
-                        <div class="card" style="margin-bottom: 8px; padding: 12px;">
-                          <div class="row" style="justify-content: space-between; align-items: center;">
-                            <div>
-                              <div class="list-title">${binding.channelId}</div>
-                              <div class="list-sub">
-                                ${binding.accountIds.length} 个账号: ${binding.accountIds.join(", ")}
-                              </div>
-                            </div>
-                          </div>
-                          <!-- 账号列表 -->
-                          <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px;">
-                            ${binding.accountIds.map(
-                              (accountId: string) => html`
-                                <div class="row" style="align-items: center; gap: 8px; padding: 4px 8px; background: var(--bg-1); border-radius: 4px;">
-                                  <span class="mono" style="font-size: 0.875rem;">${accountId}</span>
-                                  <button
-                                    class="btn btn--sm"
-                                    style="color: var(--color-danger); padding: 2px 6px; font-size: 0.75rem;"
-                                    @click=${() => {
-                                      if (
-                                        confirm(
-                                          `确定要移除 ${binding.channelId}:${accountId} 的绑定吗？`,
-                                        )
-                                      ) {
-                                        params.onRemoveAccount(binding.channelId, accountId);
-                                      }
-                                    }}
-                                  >
-                                    移除
-                                  </button>
-                                </div>
-                              `,
-                            )}
-                          </div>
-                        </div>
-                      `,
-                    )}
-                  </div>
-                `
-          }
-        </div>
-
-        <!-- 可用但未绑定的通道账号（折叠） -->
-        <div style="margin-top: 24px;">
-          <div class="row" style="justify-content: space-between; align-items: center;">
-            <div class="label">可用的通道账号</div>
-            <button class="btn btn--sm" @click=${params.onToggleAvailableAccounts}>
-              ${params.availableAccountsExpanded ? "收起" : "展开"}
-            </button>
-          </div>
-
-          ${
-            params.availableAccountsExpanded
-              ? html`
-                <div style="margin-top: 12px;">
-                  ${
-                    params.availableAccountsError
-                      ? html`<div class="callout danger">${params.availableAccountsError}</div>`
-                      : nothing
-                  }
-                  ${
-                    params.availableAccountsLoading
-                      ? html`
-                          <div class="loading">加载中...</div>
-                        `
-                      : params.availableAccounts.length === 0
-                        ? html`
-                            <div class="muted">没有可用的通道账号</div>
-                          `
-                        : html`
-                          <div class="list">
-                            ${params.availableAccounts.map(
-                              (account: any) => html`
-                                <div class="list-item" style="display: flex; justify-content: space-between; align-items: center;">
-                                  <div>
-                                    <div class="list-title">${account.label}</div>
-                                    <div class="list-sub mono">
-                                      ${account.channelId}:${account.accountId}
-                                      ${account.configured ? "" : " - 未配置"}
-                                    </div>
-                                  </div>
-                                  <button
-                                    class="btn btn--sm"
-                                    ?disabled=${!account.configured}
-                                    @click=${() => params.onAddAccount(account.channelId, account.accountId)}
-                                  >
-                                    + 添加
-                                  </button>
-                                </div>
-                              `,
-                            )}
-                          </div>
-                        `
-                  }
-                </div>
-              `
-              : nothing
-          }
-        </div>
-      </section>
-    </section>
-  `;
 }
 
 function renderAgentCron(params: {
@@ -3144,6 +3089,197 @@ function renderAgentEditModal(props: AgentsProps) {
           </button>
         </div>
       </div>
+    </section>
+  `;
+}
+
+/**
+ * 渲染助手权限配置面板
+ */
+function renderAgentPermissionsConfig(params: {
+  agent: AgentsListResult["agents"][number];
+  configForm: Record<string, unknown> | null;
+  configLoading: boolean;
+  configSaving: boolean;
+  configDirty: boolean;
+  permissionsConfig: any;
+  permissionsLoading: boolean;
+  permissionsSaving: boolean;
+  onPermissionChange: (permission: string, granted: boolean) => void;
+  onSave: () => void;
+  onRefresh: () => void;
+}) {
+  // 定义权限分类和权限项
+  const permissionCategories = [
+    {
+      id: "tools",
+      label: "工具权限",
+      icon: "⚙️",
+      permissions: [
+        { id: "tools.read", name: "文件读取", description: "允许读取文件系统" },
+        { id: "tools.write", name: "文件写入", description: "允许写入文件系统" },
+        { id: "tools.edit", name: "文件编辑", description: "允许编辑文件" },
+        { id: "tools.exec", name: "命令执行", description: "允许执行系统命令" },
+        { id: "tools.web_search", name: "网络搜索", description: "允许进行网络搜索" },
+        { id: "tools.web_fetch", name: "网络抓取", description: "允许抓取网页内容" },
+      ],
+    },
+    {
+      id: "communication",
+      label: "通信权限",
+      icon: "💬",
+      permissions: [
+        { id: "comm.send_message", name: "发送消息", description: "允许发送消息到通道" },
+        { id: "comm.read_message", name: "读取消息", description: "允许读取通道消息" },
+        { id: "comm.manage_channels", name: "管理通道", description: "允许管理通道配置" },
+      ],
+    },
+    {
+      id: "data",
+      label: "数据权限",
+      icon: "🗄️",
+      permissions: [
+        { id: "data.read", name: "数据读取", description: "允许读取数据库" },
+        { id: "data.write", name: "数据写入", description: "允许写入数据库" },
+        { id: "data.delete", name: "数据删除", description: "允许删除数据" },
+        { id: "data.export", name: "数据导出", description: "允许导出数据" },
+      ],
+    },
+    {
+      id: "admin",
+      label: "管理权限",
+      icon: "👑",
+      permissions: [
+        { id: "admin.create_agent", name: "创建助手", description: "允许创建新助手" },
+        { id: "admin.modify_agent", name: "修改助手", description: "允许修改助手配置" },
+        { id: "admin.delete_agent", name: "删除助手", description: "允许删除助手" },
+        { id: "admin.manage_permissions", name: "权限管理", description: "允许管理其他助手权限" },
+      ],
+    },
+  ];
+
+  // 获取当前权限状态
+  const getPermissionStatus = (permissionId: string): boolean => {
+    if (!params.permissionsConfig || !params.permissionsConfig.permissions) {
+      return false;
+    }
+    const permission = params.permissionsConfig.permissions.find((p: any) => p.id === permissionId);
+    return permission ? permission.granted : false;
+  };
+
+  return html`
+    <section class="card">
+      <div class="row" style="justify-content: space-between; align-items: center;">
+        <div>
+          <div class="card-title">权限配置</div>
+          <div class="card-sub">管理此助手的系统权限和访问控制</div>
+        </div>
+        <div class="row" style="gap: 8px;">
+          <button
+            class="btn btn--sm"
+            ?disabled=${params.permissionsLoading}
+            @click=${params.onRefresh}
+          >
+            ${params.permissionsLoading ? "刷新中..." : "刷新"}
+          </button>
+          <button
+            class="btn btn--sm btn--primary"
+            ?disabled=${params.permissionsSaving || !params.configDirty}
+            @click=${params.onSave}
+          >
+            ${params.permissionsSaving ? "保存中..." : "保存配置"}
+          </button>
+        </div>
+      </div>
+
+      ${
+        params.permissionsLoading
+          ? html`
+              <div class="loading" style="margin-top: 16px">加载中...</div>
+            `
+          : nothing
+      }
+
+      ${
+        !params.permissionsLoading
+          ? html`
+        <div style="margin-top: 24px;">
+          <!-- 权限级别概览 -->
+          <div class="card" style="padding: 16px; margin-bottom: 20px; background: var(--bg-1);">
+            <div class="row" style="justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-weight: 500; margin-bottom: 4px;">权限级别</div>
+                <div class="muted" style="font-size: 0.875rem;">当前助手的全局权限等级</div>
+              </div>
+              <div style="display: flex; gap: 12px; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                  <input type="radio" name="permission-level-${params.agent.id}" value="0" />
+                  <span>受限 (Level 0)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                  <input type="radio" name="permission-level-${params.agent.id}" value="1" checked />
+                  <span>标准 (Level 1)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                  <input type="radio" name="permission-level-${params.agent.id}" value="2" />
+                  <span>管理员 (Level 2)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- 权限分类列表 -->
+          ${permissionCategories.map(
+            (category) => html`
+              <details class="card" style="margin-bottom: 16px;" open>
+                <summary style="cursor: pointer; padding: 16px; display: flex; align-items: center; gap: 12px; font-weight: 500;">
+                  <span style="font-size: 1.5rem;">${category.icon}</span>
+                  <div style="flex: 1;">
+                    <div>${category.label}</div>
+                    <div class="muted" style="font-size: 0.875rem; font-weight: 400;">共 ${category.permissions.length} 项权限</div>
+                  </div>
+                </summary>
+                <div style="padding: 0 16px 16px;">
+                  ${category.permissions.map((permission) => {
+                    const isGranted = getPermissionStatus(permission.id);
+                    return html`
+                        <div class="list-item" style="padding: 12px; border-radius: 6px; background: var(--bg-1); margin-bottom: 8px;">
+                          <div class="row" style="justify-content: space-between; align-items: center;">
+                            <div style="flex: 1;">
+                              <div style="font-weight: 500; margin-bottom: 4px;">${permission.name}</div>
+                              <div class="muted" style="font-size: 0.875rem;">${permission.description}</div>
+                            </div>
+                            <label class="switch" style="margin-left: 16px;">
+                              <input
+                                type="checkbox"
+                                ?checked=${isGranted}
+                                @change=${(e: Event) => {
+                                  const target = e.target as HTMLInputElement;
+                                  params.onPermissionChange(permission.id, target.checked);
+                                }}
+                              />
+                              <span class="slider"></span>
+                            </label>
+                          </div>
+                        </div>
+                      `;
+                  })}
+                </div>
+              </details>
+            `,
+          )}
+        </div>
+      `
+          : nothing
+      }
+
+      ${
+        params.configDirty
+          ? html`
+              <div class="callout info" style="margin-top: 16px">⚠️ 配置已修改，请点击"保存配置"按钮保存更改</div>
+            `
+          : nothing
+      }
     </section>
   `;
 }

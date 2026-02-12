@@ -52,183 +52,463 @@
 
 ### 📌 项目更新记录
 
-#### 2026年2月9日 - 增强式集成 OpenClaw-Docker-CN-IM 优秀功能
+#### 2026年2月11日 - 组织权限管理系统完整实现与前端页面优化
 
-**🎯 主要更新：**
+**🎯 核心功能完成：**
 
-- ✅ **Docker 优化增强**
-  - 添加中文字体支持（fonts-noto-cjk, fonts-noto-color-emoji）
-  - 集成浏览器自动化（chromium + Playwright 环境变量）
-  - 添加权限管理工具（gosu, tini）
-  - 集成实用工具集（bash, git, jq, python3, socat, websockify）
-  - 创建智能初始化脚本（init.sh）
-  - 添加 Linux capabilities 支持（CHOWN, SETUID, SETGID, DAC_OVERRIDE）
+**1. 权限验证与数据持久化（后端）**
 
-- ✅ **环境变量配置系统**
-  - 新增 .env.example 模板文件（65 行完整配置）
-  - 支持所有中国 IM 平台配置（飞书、钉钉、企业微信、QQ机器人）
-  - 基于环境变量的动态配置生成
-  - AI 模型配置支持（OpenAI 和 Claude 协议）
-  - Docker 镜像和运行参数配置
+- ✅ **权限验证中间件** (src/permissions/middleware.ts, 517行)
+  - 统一权限验证接口：`verify()` 方法支持单次和批量验证
+  - 权限检查集成：集成 `PermissionChecker` 进行规则匹配
+  - 审批流程管理：集成 `ApprovalWorkflow` 处理需要审批的操作
+  - 配置持久化：通过 `writeConfigFile()` 保存权限配置到文件
+  - 历史记录追溯：所有权限变更记录到 `permissions-history.jsonl`
+  - 审计日志完整：自动记录所有权限检查到 `permissions-audit.jsonl`
+  - 数据持久化路径：
+    - `{dataDir}/permissions-history.jsonl` - 权限变更历史
+    - `{dataDir}/permissions-audit.jsonl` - 权限检查审计日志
+    - `openclaw.json` - 权限配置（agents.list[].permissions）
 
-- ✅ **智能初始化脚本**
-  - init.sh（350 行）实现智能容器初始化
-  - 权限预检查和自动修复机制
-  - 动态生成 openclaw.json 配置文件
-  - 条件性启用 IM 平台（基于环境变量）
-  - 优雅关闭信号处理（SIGTERM, SIGINT, SIGQUIT）
-  - gosu 用户切换机制
+- ✅ **Gateway RPC 权限集成** (src/gateway/rpc/permissions.ts)
+  - `permissions.get`: 获取权限配置 + 操作员身份验证
+  - `permissions.update`: 更新权限配置 + 审批流程支持
+  - `permissions.history`: 获取历史记录 + 分页查询
+  - `approvals.list`: 获取审批列表 + 状态/助手过滤
+  - `approvals.respond`: 处理审批 + 超级管理员权限检查
+  - 权限验证流程：
+    ```
+    客户端请求 → Gateway RPC Handler → 验证操作员身份 →
+    permissionMiddleware.verify() → PermissionChecker.check() →
+    匹配权限规则 → 检查条件约束 → 返回验证结果 →
+    需要审批? → 创建审批请求 / 允许? → 执行操作 + 记录审计
+    ```
 
-- ✅ **国际化系统增强**
-  - i18n/types.ts：新增 24 个翻译键类型定义
-  - i18n/translations.ts：新增 48 行中英文双语翻译
-  - 中国 IM 平台翻译（飞书、钉钉、QQ机器人、企业微信）
-  - Docker 初始化消息翻译（16 个键）
-  - 保持 TypeScript 类型安全
+**2. 组织权限管理页面（前端）**
 
-- ✅ **Web UI 智能助手功能完善**
-  - 新增控制器：agent-channel-accounts.ts（通道账号管理）
-  - 新增控制器：agent-model-accounts.ts（模型账号管理）
-  - 增强 Agents 视图：完整的账号管理界面
-  - Gateway 方法扩展：listAgentAvailableChannelAccounts
-  - Gateway 方法扩展：listAgentAvailableModelAccounts
-  - 支持通道账号选择和配置
-  - 支持模型账号选择和绑定
-  - 添加账号状态显示和验证
-  - 新增 7 个 UI 翻译键（账号管理相关）
+- ✅ **统一管理界面** (ui/src/ui/views/organization-permissions.ts, 23.5KB)
+  - 四大标签页整合：组织架构、权限配置、审批管理、系统管理
+  - 完整的状态管理：统一管理所有子模块的加载、错误、数据状态
+  - 数据加载逻辑：与后端 RPC 方法完全集成
+  - 响应式交互：实时更新数据和UI反馈
 
-**📊 统计数据：**
+- ✅ **新增对话框组件**
+  - `organization-dialog.ts`: 组织管理对话框（164行）
+  - `team-dialog.ts`: 团队管理对话框（189行）
+  - `channel-policy-dialog.ts`: 通道策略配置对话框（7.1KB）
+  - `agents.model-account-config-dialog.ts`: 模型账号配置对话框（11.1KB）
 
-- 新增文件：3个
-  - init.sh（智能初始化脚本，350 行）
-  - ui/src/ui/controllers/agent-channel-accounts.ts（通道账号管理）
-  - ui/src/ui/controllers/agent-model-accounts.ts（模型账号管理）
-- 修改文件：12个
-  - .env.example（新增 65 行环境变量配置）
-  - Dockerfile（Docker 优化增强）
-  - docker-compose.yml（服务编排配置增强）
-  - src/gateway/server-methods-list.ts（Gateway 方法注册）
-  - src/gateway/server-methods/agents-management.ts（接口扩展）
-  - src/i18n/translations.ts（新增 48 行翻译）
-  - src/i18n/types.ts（新增 24 个类型定义）
-  - ui/src/ui/app-render.ts（UI 渲染逻辑更新）
-  - ui/src/ui/app-view-state.ts（UI 状态管理）
-  - ui/src/ui/app.ts（应用主逻辑）
-  - ui/src/ui/i18n.ts（UI 国际化改进）
-  - ui/src/ui/views/agents.ts（Agents 视图增强）
-- 新增代码行数：约 2,700+ 行
-- Docker 配置增强：3个文件
-- 环境变量支持：44个新变量
-- 翻译键新增：24个（共 48 行翻译）
-- Gateway 接口新增：2个
-- UI 控制器新增：2个
-- 提交标识：dce48ea2f
+- ✅ **新增面板组件**
+  - `permissions-config-panel.ts`: 权限配置面板（290行）
+    - 支持组织级、角色级、助手级权限配置
+    - 权限模板管理：创建、编辑、删除、应用模板
+    - 权限分类展示：按功能模块分组显示权限项
+  - `approvals-panel.ts`: 审批管理面板（311行）
+    - 审批请求列表：支持过滤、搜索、批量操作
+    - 审批统计信息：总请求数、待审批数、通过率、平均响应时间
+    - 批量操作：批量通过、批量拒绝
+  - `system-management-panel.ts`: 系统管理面板（547行）
+    - 超级管理员管理：添加、编辑、激活、停用
+    - 系统角色配置：内置角色和自定义角色管理
+    - 安全策略设置：密码策略、会话策略、访问策略
+    - 审计日志查看：操作日志、过滤、导出
 
-**🔧 技术改进：**
+- ✅ **控制器优化**
+  - `organization-permissions.ts`: 统一的状态管理控制器（554行）
+  - 集成所有子模块的数据加载和操作逻辑
+  - 错误处理和状态同步机制
 
-- ✅ 保留优秀的 i18n 架构（优于参考项目的硬编码中文方案）
-- ✅ Docker 权限管理优化（自动检测和修复）
-- ✅ 环境变量驱动配置（无需手动修改代码）
-- ✅ 智能配置生成系统（基于环境变量动态生成）
-- ✅ 类型安全保障（完整 TypeScript 支持）
-- ✅ 向后兼容（所有新功能都是可选的）
-- ✅ 优雅容器初始化和关闭（信号处理）
+**3. UI 样式优化**
 
-**🔄 集成优势：**
+- ✅ **专门样式文件** (ui/src/styles/organization-permissions.css, 784行)
+  - **对话框优化**（更紧凑的间距）
+    - 标题字体：16px（对话框）/ 15px（面板）/ 14px（卡片）
+    - 表单组间距：14px
+    - 输入框padding：8px 12px
+    - 标签字体：13px
+  - **按钮优化**（更紧凑的尺寸）
+    - 标准按钮：padding 7px 14px，字体 13px
+    - 小按钮：padding 5px 10px，字体 12px
+    - 统一的圆角和过渡效果
+  - **组件样式**
+    - 权限配置面板：分类标题、权限项卡片、复选框对齐
+    - 审批管理面板：过滤按钮、批量操作区域、请求卡片、状态徽章
+    - 系统管理面板：表格样式、角色卡片网格、统计卡片
+  - **响应式布局**
+    - 移动端适配（768px断点）
+    - 对话框自适应、网格布局响应式、卡片堆叠布局
 
-本次集成借鉴了 OpenClaw-Docker-CN-IM 项目的优秀功能，同时保持了我们项目的技术优势：
+**4. 页面整合与优化**
 
-1. **i18n 架构**：我们的专业国际化系统远优于参考项目的硬编码中文
-   - 支持语言切换
-   - TypeScript 类型安全
-   - 集中管理，易于维护
-   - 可扩展性强
+- ✅ **删除独立旧页面**（整合到统一界面）
+  - `organization-chart.ts`（446行）→ 整合到 organization-permissions
+  - `permissions-management.ts`（1204行）→ 整合到 organization-permissions
+  - `super-admin.ts`（665行）→ 整合到 organization-permissions
+  - 减少代码重复，统一交互体验
 
-2. **Docker 优化**：集成了参考项目的 Docker 优化
-   - 权限自动修复
-   - 智能初始化
-   - 优雅关闭处理
-   - 中文字体和浏览器支持
+- ✅ **移除 bindings 页面**
+  - 功能已被助手管理页面的通道配置完全接管
+  - 从导航菜单移除（navigation.ts）
+  - 更新 Tab 类型定义
+  - 清理相关路由和标题映射
 
-3. **IM 平台支持**：支持所有中国 IM 平台
-   - 飞书（Feishu）
-   - 钉钉（DingTalk）
-   - 企业微信（WeCom）
-   - QQ机器人（QQ Bot）
+- ✅ **修复页面渲染问题**
+  - 添加缺失的视图导入：`renderSessions`, `renderSkills`, `renderUsage`
+  - 修复会话（sessions）页面无法打开的问题
+  - 修复成本分析（usage）页面无法打开的问题
+  - 修复技能（skills）页面无法打开的问题
 
-4. **类型安全**：完整的 TypeScript 类型定义
-   - 避免运行时错误
-   - 更好的 IDE 支持
-   - 代码可维护性提升
+**5. 配置优化**
 
-5. **环境变量驱动**：通过 .env 文件轻松配置
-   - 无需修改代码
-   - 支持多环境配置
-   - 配置模板清晰完整
+- ✅ **Agent Runtime Schema 更新** (src/config/zod-schema.agent-runtime.ts)
+  - 添加 `permissions` 字段到 agent 配置
+  - 支持权限规则、角色、组、审批配置的验证
+  - 完整的类型安全和验证逻辑
 
-**🔍 技术栈确认：**
+**📊 代码统计：**
 
-经过详细检查，确认以下工具在项目中的集成状态：
+- 新增文件：11个（3,547行代码）
+  - `src/permissions/middleware.ts`（517行）
+  - `ui/src/styles/organization-permissions.css`（784行）
+  - `ui/src/ui/controllers/organization-permissions.ts`（554行）
+  - `ui/src/ui/views/organization-permissions.ts`（670行）
+  - `ui/src/ui/views/organization-dialog.ts`（164行）
+  - `ui/src/ui/views/team-dialog.ts`（189行）
+  - `ui/src/ui/views/permissions-config-panel.ts`（290行）
+  - `ui/src/ui/views/approvals-panel.ts`（311行）
+  - `ui/src/ui/views/system-management-panel.ts`（547行）
+  - `ui/src/ui/views/channel-policy-dialog.ts`（237行）
+  - `ui/src/ui/views/agents.model-account-config-dialog.ts`（284行）
 
-- ✅ **Playwright**：完全集成用于浏览器自动化
-  - 版本：playwright-core: 1.58.2
-  - 相关文件：63个
-  - 功能完整，开箱即用
+- 修改文件：8个（655行变更）
+  - `src/config/zod-schema.agent-runtime.ts`（+22行）
+  - `src/gateway/rpc/permissions.ts`（+207行，-66行）
+  - `ui/src/styles.css`（+1行）
+  - `ui/src/ui/app-render.ts`（+287行重构）
+  - `ui/src/ui/app-view-state.ts`（+103行）
+  - `ui/src/ui/app.ts`（+13行）
+  - `ui/src/ui/navigation.ts`（+1行，-9行）
+  - `ui/src/ui/views/agents.ts`（+470行重构）
 
-- ✅ **中文 TTS**：完全集成语音合成功能
-  - 版本：node-edge-tts: ^1.2.10
-  - 支持中文语音
-  - 基于 Edge TTS 免费服务
-  - 完整的 tts.ts 模块（1200+ 行）
+- 删除文件：3个（2,315行清理）
+  - `ui/src/ui/views/organization-chart.ts`（-446行）
+  - `ui/src/ui/views/permissions-management.ts`（-1204行）
+  - `ui/src/ui/views/super-admin.ts`（-665行）
 
-- ⚠️ **OpenCode AI**：作为模型提供商集成
-  - 仅作为 LLM API 提供商
-  - 非独立的 AI 代码助手工具
-  - 用法与 OpenAI、Claude 等提供商相同
+- **净增代码**：+1,887行（精简后）
+- **提交标识**：832a5fc13
 
-**📦 文件变更详情：**
+**🏗️ 技术架构：**
 
-```
-.env.example                                    # 环境变量模板（新增 65 行）
-Dockerfile                                      # Docker 镜像构建配置增强
-docker-compose.yml                              # 服务编排配置增强
-init.sh                                         # 智能初始化脚本（新增 350 行）
-src/gateway/server-methods-list.ts              # Gateway 方法注册
-src/gateway/server-methods/agents-management.ts # 智能助手管理接口扩展
-src/i18n/translations.ts                        # 翻译内容（新增 48 行）
-src/i18n/types.ts                               # 翻译键类型定义（新增 24 个）
-ui/src/ui/app-render.ts                         # UI 渲染逻辑更新
-ui/src/ui/app-view-state.ts                    # UI 状态管理更新
-ui/src/ui/app.ts                                # 应用主逻辑更新
-ui/src/ui/controllers/agent-channel-accounts.ts # 通道账号管理控制器（新增）
-ui/src/ui/controllers/agent-model-accounts.ts   # 模型账号管理控制器（新增）
-ui/src/ui/i18n.ts                               # UI 国际化改进
-ui/src/ui/views/agents.ts                       # Agents 视图增强
-```
+- ✅ **权限验证流程**
+  - 多层验证：操作员身份 → 权限规则匹配 → 条件约束检查
+  - 审批集成：高权限操作自动触发审批流程
+  - 完整审计：所有权限检查记录到审计日志
+
+- ✅ **数据持久化**
+  - 配置文件：openclaw.json（权限配置）
+  - 历史文件：permissions-history.jsonl（变更追溯）
+  - 审计文件：permissions-audit.jsonl（访问日志）
+  - JSONL格式：支持追加写入，高效且可扩展
+
+- ✅ **前端架构**
+  - 统一状态管理：AppViewState 集中管理所有状态
+  - 组件化设计：对话框、面板、控制器独立可复用
+  - 响应式交互：实时数据更新和UI反馈
+
+**🔐 安全增强：**
+
+- ✅ 操作员身份验证：所有权限操作都需要验证操作员身份
+- ✅ 多层权限检查：规则匹配 + 条件约束双重验证
+- ✅ 审批流程保护：高权限操作需要人工审批
+- ✅ 完整审计追溯：所有权限检查和变更都有日志记录
+- ✅ 历史追溯机制：权限变更可追溯到操作员和时间
+- ✅ 错误隔离设计：验证失败不影响系统稳定性
+
+**✅ 构建状态：**
+
+- 构建成功：所有170个文件正常编译
+- 总大小：8672.51 kB
+- TypeScript 类型检查：通过（有 ESLint 警告但不影响功能）
+- 测试验证：
+  - [x] 权限验证中间件集成测试
+  - [x] Gateway RPC 方法调用测试
+  - [x] 前端页面渲染测试
+  - [x] UI 样式响应式测试
+  - [x] 构建流程验证通过
 
 **⚠️ 重要说明：**
 
-本次更新采用"增强式集成"策略，在保留我们优秀的 i18n 架构的同时，精心采纳了 OpenClaw-Docker-CN-IM 项目的最佳功能。所有 Docker 优化、IM 平台支持和智能初始化功能现已可用。
+本次更新主要聚焦于：
 
-**建议在生产环境部署前进行以下测试：**
+1. **权限系统完善**：实现了完整的权限验证、审批流程和数据持久化机制
+2. **页面整合优化**：将三个独立页面整合为统一的组织权限管理界面
+3. **UI体验提升**：优化了样式和间距，提供更紧凑、现代化的界面
+4. **功能修复**：修复了会话、成本分析、技能页面无法打开的问题
+5. **代码精简**：删除了冗余页面，减少了2315行代码，提高了可维护性
 
-1. ✅ 验证 Docker 构建：`docker build -t openclaw:local .`
-2. ✅ 测试环境变量配置：复制 .env.example 为 .env 并填写
-3. ✅ 测试容器启动：`docker-compose up`
-4. ✅ 验证权限自动修复功能
-5. ✅ 测试 IM 平台连接（如果已配置）
-6. ✅ 检查中文字体显示
-7. ✅ 验证账号管理界面功能
+建议在生产部署前验证：
 
-**📦 备份信息：**
+1. ✅ 测试权限验证是否正常工作（允许/拒绝/审批）
+2. ✅ 验证审批流程是否正确执行
+3. ✅ 检查权限历史和审计日志是否正确记录
+4. ✅ 测试所有页面是否能正常打开和交互
+5. ✅ 验证 UI 样式在不同屏幕尺寸下的显示效果
+6. ✅ 检查权限配置的持久化是否正常
 
-- 备份日期：2026年2月9日
-- 修改文件数：15个（12个修改，3个新增）
-- 推送仓库：Gitee (origin) + GitHub (github)
-- Git 分支：localization-zh-CN → main
-- 提交备注："feat: 增强式集成 OpenClaw-Docker-CN-IM 优秀功能"
+**📦 提交信息：**
 
----
+- 提交时间：2026年2月11日
+- 提交哈希：832a5fc13
+- 分支：localization-zh-CN
+- 推送仓库：Gitee (origin/localization-zh-CN)
+
+#### 2026年2月11日 - 智能助手通道和模型账号绑定管理完善
+
+**🎯 核心功能完成：**
+
+- ✅ **通道绑定门阀机制** (src/plugins/runtime/index.ts)
+  - 在系统与插件对接边界实现统一的绑定检查
+  - 未绑定通道账号自动阻断并通过通道会话机制发送友好提示消息
+  - 确保所有通道（内置和外部插件）遵守绑定规则，外部插件无法绕过
+  - 采用 `dispatchReplyFromConfig` 包装器模式，拦截所有通道-智能助手通信
+  - 支持fail-safe机制：绑定检查失败时记录日志但不阻断
+
+- ✅ **模型账号绑定规则** (src/agents/model-routing.ts)
+  - 在模型路由层过滤未绑定或未启用的账号
+  - `routeToOptimalModelAccount` 函数入口添加绑定和启用检查
+  - 支持账号级别的启用/停用控制
+  - 无可用账号时抛出明确错误提示
+
+- ✅ **配置类型扩展** (src/config/types.agents.ts)
+  - 在 `AgentModelAccountsConfig` 类型中添加 `accountConfigs` 字段
+  - 支持存储账号的绑定和启用状态
+  - 字段结构：`{ accountId: string; enabled?: boolean }`
+
+- ✅ **路由系统增强** (src/routing/resolve-route.ts)
+  - 新增 `no-binding` 路由标记类型到 `ResolvedAgentRoute`
+  - 优化绑定检查逻辑，支持未绑定识别
+  - 未找到绑定时返回 `no-binding` 标记供门阀层拦截
+
+**🎨 UI界面改进：**
+
+- ✅ **通道账号管理界面** (ui/src/ui/views/agents.ts)
+  - 添加启用/禁用切换开关到绑定通道账号卡片
+  - 实现与模型账号一致的开关组件样式
+  - 开关状态绑定到 `account.enabled !== false`
+  - 完善配置策略按钮功能和回调传递
+  - 新增回调函数：
+    - `onToggleChannelAccountEnabled(channelId, accountId, enabled)`
+    - `onConfigurePolicy(channelId, accountId, currentPolicy)`
+
+- ✅ **模型账号管理界面** (ui/src/ui/views/agents.ts)
+  - 添加 `accountConfigs` 参数支持配置状态读取
+  - 添加 `onToggleAccountEnabled` 回调定义
+  - 修复 TypeScript 类型错误：补充缺失的参数类型定义
+  - 完善账号配置数据结构的类型安全
+
+- ✅ **控制器优化**
+  - 优化通道账号控制器逻辑 (ui/src/ui/controllers/agent-channel-accounts.ts)
+  - 完善 Phase5 控制器功能 (ui/src/ui/controllers/agent-phase5.ts)
+  - 统一错误处理和状态管理
+
+- ✅ **国际化支持** (ui/src/ui/i18n.ts)
+  - 新增绑定管理相关的中文翻译条目
+  - 完善错误提示的多语言支持
+
+**🔧 后端服务：**
+
+- ✅ 完善智能助手管理服务方法 (src/gateway/server-methods/agents-management.ts)
+- ✅ 优化配置集成逻辑 (src/config/phase-integration.ts)
+- ✅ 更新相关通道处理器：
+  - Discord 消息预检查处理器 (src/discord/monitor/message-handler.preflight.ts)
+  - Telegram 机器人消息上下文 (src/telegram/bot-message-context.ts)
+  - Web自动回复消息处理器 (src/web/auto-reply/monitor/on-message.ts)
+
+**🏗️ 架构改进：**
+
+- ✅ **门阀在边界原则**：
+  - 不在插件内部实现检查（外部插件行为无法控制）
+  - 在系统与插件对接的边界统一执行规则
+  - 采用包装器模式拦截所有通道与智能助手的通信
+
+- ✅ **统一的绑定规则执行机制**：
+  - 通过 `resolveAgentRoute` 进行绑定检查
+  - 门阀层检查 `matchedBy === 'no-binding'` 进行拦截
+  - 使用 `dispatcher.sendFinalReply()` 直接发送错误提示
+
+- ✅ **不依赖插件处理错误**：
+  - 门阀直接通过通道的会话机制发送友好提示
+  - 不抛出异常，不依赖插件捕获和处理
+  - 发送后返回结果，阻断消息继续处理
+
+**📊 统计数据：**
+
+- 修改文件：16个核心文件
+- 新增文件：1个 (ui/src/ui/gateway-client.ts)
+- 代码变更：+634行新增 / -160行删除
+- 净增代码：+474行
+- 提交标识：5995c80f6
+
+**🔐 安全增强：**
+
+- ✅ 强制执行通道账号绑定规则，防止未授权通道访问智能助手
+- ✅ 支持通道账号级别的启用/停用控制，提供细粒度访问控制
+- ✅ 模型账号绑定检查，确保仅使用授权的模型服务
+- ✅ 统一的安全门阀层，所有通道（内置和外部插件）无法绕过
+
+**⚠️ 重要说明：**
+
+本次更新主要聚焦于：
+
+1. **通道安全加固**：实现了统一的通道绑定门阀机制，确保未绑定通道无法与智能助手通信
+2. **模型账号管理**：完善了模型账号的绑定和启用状态管理
+3. **UI完善**：为通道账号和模型账号管理界面添加了启用/停用开关和配置功能
+4. **架构优化**：采用门阀在边界的设计原则，提高了系统的安全性和可维护性
+
+建议在生产部署前验证：
+
+1. ✅ 测试未绑定通道是否被正确阻断并收到友好提示
+2. ✅ 验证启用/停用开关功能是否正常工作
+3. ✅ 检查模型账号路由是否只使用已绑定且启用的账号
+4. ✅ 测试外部插件是否无法绕过门阀检查
+5. ✅ 验证错误提示消息是否通过通道正确发送
+
+**📦 提交信息：**
+
+- 提交时间：2026年2月11日
+- 提交哈希：5995c80f6
+- 分支：localization-zh-CN
+- 推送仓库：Gitee (origin/localization-zh-CN) + GitHub (github/localization-zh-CN)
+
+#### 2026年2月10日 - 控制面板UI完善与构建配置优化
+
+**🎯 核心功能完成：**
+
+- ✅ **智能体管理页面增强** (app-render.ts)
+  - 新增通道策略配置UI：支持可视化配置智能体的通道使用策略
+  - 实现策略引擎集成：动态渲染策略条件和操作配置
+  - 添加策略测试功能：支持实时测试策略规则的匹配效果
+  - 优化智能体卡片展示：改进技能、工具、通道的可视化呈现
+  - 代码改动：+329行，整合了通道策略管理功能
+
+- ✅ **通道策略对话框** (agents.channel-policy-dialog.ts)
+  - 实现完整的策略CRUD操作：创建、编辑、删除通道策略
+  - 添加策略条件构建器：支持多种条件类型（消息内容、用户ID、时间段、消息类型等）
+  - 实现策略操作配置：支持路由到指定通道、自动回复、静默处理等多种操作
+  - 添加策略优先级管理：支持拖拽排序调整策略执行顺序
+  - 策略测试功能：实时测试输入消息是否匹配策略规则
+  - 代码改动：+84行，提供完整的策略配置界面
+
+- ✅ **使用统计页面** (usage.ts)
+  - 新增详细的Token使用统计：按模型、智能体、时间维度展示使用情况
+  - 实现成本分析功能：自动计算并展示API调用成本（支持多种模型价格）
+  - 添加使用趋势图表：可视化展示Token使用量和成本变化趋势
+  - 支持数据导出：导出统计数据为CSV格式供进一步分析
+  - 时间范围筛选：支持按日、周、月查看使用统计
+  - 代码改动：+356行，完整的使用分析系统
+
+- ✅ **设置页面优化** (app-settings.ts)
+  - 增强模型配置界面：改进模型路由和选择器的配置体验
+  - 添加通道策略管理入口：方便快速访问策略配置功能
+  - 优化配置保存流程：添加保存状态反馈和错误处理
+  - 代码改动：+14行
+
+- ✅ **国际化支持完善** (i18n.ts)
+  - 完善中文翻译：添加所有新增UI组件的中文文案
+  - 新增术语翻译：
+    - "Channel Policies" → "通道策略"
+    - "Policy Engine" → "策略引擎"
+    - "Usage Statistics" → "使用统计"
+    - "Token Usage" → "Token使用量"
+    - "Cost Analysis" → "成本分析"
+    - "Trend Chart" → "趋势图表"
+  - 统一术语翻译：规范化技术术语的中文表达
+  - 改进翻译质量：优化用户体验相关的文案表达
+  - 代码改动：+14行
+
+- ✅ **构建配置优化**
+  - **配置Gitee镜像源** (package.json)：
+    - 添加 `node-llama-cpp` 的Gitee镜像：`https://gitee.com/CozyNook/node-llama-cpp.git#v3.15.1`
+    - 使用 pnpm overrides 机制指定镜像地址
+    - 从 peerDependencies 中移除 `node-llama-cpp`，避免版本冲突
+    - 解决国内安装时GitHub网络慢的问题
+  - **修复tsdown构建错误** (tsdown.config.ts)：
+    - 添加 external 配置排除原生模块：`/^@reflink\//` 和 `/\.node$/`
+    - 解决 rolldown 尝试打包二进制文件导致的 "stream did not contain valid UTF-8" 错误
+    - 确保原生模块在运行时动态加载而非被打包
+  - **优化UI构建配置** (ui/package.json)：
+    - 将硬编码的vite路径改为动态命令：`"build": "vite build"`
+    - 解决依赖更新后哈希值变化导致的路径失效问题
+    - pnpm 会自动通过 node_modules/.bin 解析正确的vite路径
+
+- ✅ **新增核心模块**
+  - **policy-engine-manager.ts**：通道策略引擎核心模块
+    - 支持策略规则的解析、匹配和执行
+    - 实现多种条件类型：消息内容匹配、用户过滤、时间段判断等
+    - 支持多种策略操作：路由、回复、转发、静默等
+    - 提供策略测试接口供UI调用
+    - 与现有通道系统无缝集成
+
+**📊 统计数据：**
+
+- 修改文件：12个
+  - package.json：Gitee镜像配置
+  - pnpm-lock.yaml：依赖更新
+  - tsdown.config.ts：构建配置优化
+  - ui/package.json：vite路径优化
+  - ui/src/ui/app-render.ts：+329行
+  - ui/src/ui/app-settings.ts：+14行
+  - ui/src/ui/app.ts：+2行
+  - ui/src/ui/i18n.ts：+14行
+  - ui/src/ui/views/agents.channel-policy-dialog.ts：+84行
+  - ui/src/ui/views/agents.ts：+1行
+  - ui/src/ui/views/models.ts：+26行
+  - ui/src/ui/views/usage.ts：+356行
+- 新增文件：1个
+  - src/channels/policy-engine-manager.ts：策略引擎核心
+- 新增代码行数：~956行
+- 删除代码行数：~1,198行（主要是pnpm-lock.yaml优化）
+- 提交标识：789418903
+
+**🔧 技术改进：**
+
+- ✅ 解决Windows环境构建问题：使用Node.js版本脚本替代bash脚本
+- ✅ 优化依赖管理：通过pnpm overrides解决node-llama-cpp安装问题
+- ✅ 改进构建性能：优化tsdown配置减少不必要的模块打包
+- ✅ 增强UI动态性：使用动态命令路径提高构建稳定性
+- ✅ 完善策略引擎：提供灵活的通道路由和消息处理能力
+- ✅ 优化用户体验：增强统计分析和策略配置的可视化
+
+**🔄 构建测试结果：**
+
+- ✅ 项目构建成功：使用 tsdown/rolldown 生成 170 个文件，总计 8.67 MB
+- ✅ UI构建成功：生成前端资源到 `dist/control-ui/`
+- ✅ 依赖安装正常：使用Gitee镜像源成功安装 node-llama-cpp
+- ✅ 控制面板功能正常：所有新增页面和功能测试通过
+- ✅ 国际化完整：中文界面显示正常
+
+**⚠️ 重要说明：**
+
+本次更新主要聚焦于：
+
+1. **控制面板UI完善**：完成了通道策略、使用统计等核心管理功能的前端界面
+2. **构建配置优化**：解决了Windows环境下的构建问题和依赖安装问题
+3. **用户体验提升**：增强了可视化配置和数据分析能力
+
+建议在生产部署前验证：
+
+1. ✅ 测试通道策略配置功能
+2. ✅ 验证使用统计数据准确性
+3. ✅ 检查中文界面显示是否正常
+4. ✅ 测试构建流程在Windows环境下的稳定性
+
+**📦 提交信息：**
+
+- 提交时间：2026年2月10日
+- 提交哈希：789418903
+- 分支：localization-zh-CN
+- 推送仓库：Gitee (origin/localization-zh-CN)
 
 #### 2026年2月9日 - 权限管理与培训系统核心功能完成
 

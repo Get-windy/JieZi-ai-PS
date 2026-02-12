@@ -27,6 +27,14 @@ export type AgentModelAccountsConfig = {
   /** 可用模型账号列表（引用 auth.profiles 中的 ID） */
   accounts: string[];
 
+  /** 账号配置（绑定、启用/停用状态） */
+  accountConfigs?: Array<{
+    /** 账号 ID */
+    accountId: string;
+    /** 是否启用（默认 true） */
+    enabled?: boolean;
+  }>;
+
   /** 路由模式：manual(手动) 或 smart(智能路由) */
   routingMode: "manual" | "smart";
 

@@ -1,0 +1,57 @@
+JieZi-ai-PS Project
+Copyright 2026 JieZi Project Contributors
+
+This product includes software developed by the JieZi Project.
+
+================================================================================
+
+This product contains code derived from OpenClaw:
+  * LICENSE: MIT License
+  * Copyright (c) 2025 Peter Steinberger
+  * Homepage: https://github.com/openclaw/openclaw
+
+================================================================================
+
+THIRD-PARTY COMPONENTS AND DEPENDENCIES
+
+This project includes or depends on the following third-party components,
+each with its own license:
+
+1. Apple Device Identifiers Database
+   * Location: apps/macos/Sources/OpenClaw/Resources/DeviceModels/
+   * License: MIT License
+   * Copyright (c) 2021 Kyle Seongwoo Jun
+   * Repository: https://github.com/kyle-seongwoo-jun/apple-device-identifiers
+   * See: apps/macos/Sources/OpenClaw/Resources/DeviceModels/LICENSE.apple-device-identifiers.txt
+
+2. Lit (Web Components Framework)
+   * License: BSD-3-Clause
+   * Used in: ui/ directory
+   * Homepage: https://lit.dev/
+
+3. Node.js Dependencies
+   The project uses numerous npm packages, each with its own license.
+   Run `pnpm licenses list` to see the complete list of dependencies and their licenses.
+   Major dependencies include:
+   - Express (MIT)
+   - Discord API Types (Apache-2.0)
+   - Grammy (MIT)
+   - TypeScript (Apache-2.0)
+   - And many others (see package.json for full list)
+
+4. Other Bundled Code
+   Some bundled JavaScript files (e.g., a2ui.bundle.js) may contain code
+   from MIT-licensed projects. See individual file headers for details.
+
+================================================================================
+
+For the complete license text of third-party components, please refer to:
+- Individual LICENSE files in component directories
+- The `node_modules` directory after installing dependencies
+- Component documentation and repository links
+
+================================================================================
+
+Note: This NOTICE file is provided for informational purposes.
+The licenses of third-party components remain in full effect as specified
+by their respective copyright holders.

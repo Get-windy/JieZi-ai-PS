@@ -320,7 +320,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
   "agent.channelPolicies.list": ({ params, respond }) => {
     const agentId = String(params?.agentId ?? "").trim();
     if (!agentId) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "errors.agentIdRequired"));
       return;
     }
 
@@ -344,13 +344,13 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
   "agent.channelPolicies.update": async ({ params, respond }) => {
     const agentId = String(params?.agentId ?? "").trim();
     if (!agentId) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "errors.agentIdRequired"));
       return;
     }
 
     const config = (params as any)?.config;
     if (!config) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "config is required"));
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "errors.configRequired"));
       return;
     }
 
@@ -368,13 +368,13 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         undefined,
         errorShape(
           ErrorCodes.INVALID_REQUEST,
-          `Invalid config: ${String(err instanceof Error ? err.message : err)}`,
+          `errors.invalidConfig: ${String(err instanceof Error ? err.message : err)}`,
         ),
       );
       return;
     }
 
-    // 更新配置
+    // 更新配置（使用channelBindings字段）
     const success = await updateAgentField(agentId, "channelBindings", config, respond);
     if (success) {
       respond(true, { success: true, agentId }, undefined);
@@ -402,24 +402,13 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     // 筛选出该助手的绑定
     const agentBindings = bindings.filter((b) => normalizeAgentId(b.agentId) === normalized);
 
-    // 按通道分组
-    const bindingsByChannel = new Map<string, Set<string>>();
-    for (const binding of agentBindings) {
-      if (!binding.match?.channel) {
-        continue;
-      }
-      const channelId = binding.match.channel;
-      const accountId = binding.match.accountId || "default";
-      if (!bindingsByChannel.has(channelId)) {
-        bindingsByChannel.set(channelId, new Set());
-      }
-      bindingsByChannel.get(channelId)!.add(accountId);
-    }
-
-    const result = Array.from(bindingsByChannel.entries()).map(([channelId, accountIds]) => ({
-      channelId,
-      accountIds: Array.from(accountIds),
-    }));
+    // 扩展为平铺列表，每个 channelId:accountId 组合为一个条目
+    const result = agentBindings
+      .filter((b) => b.match?.channel)
+      .map((b) => ({
+        channelId: b.match!.channel,
+        accountId: b.match!.accountId || "default",
+      }));
 
     respond(true, { agentId, bindings: result }, undefined);
   },
@@ -470,7 +459,28 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const normalized = normalizeAgentId(agentId);
     const bindings = listBindings(cfg);
 
-    // 检查是否已经绑定
+    // 检查该通道账号是否已被其他助手绑定（排他性绑定）
+    const otherAgentBinding = bindings.find(
+      (b) =>
+        normalizeAgentId(b.agentId) !== normalized &&
+        b.match?.channel === channelId &&
+        (b.match?.accountId || "default") === (accountId || "default"),
+    );
+
+    if (otherAgentBinding) {
+      const otherAgentId = otherAgentBinding.agentId;
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `Channel account ${channelId}:${accountId || "default"} is already bound to agent "${otherAgentId}". A channel account can only be bound to one agent.`,
+        ),
+      );
+      return;
+    }
+
+    // 检查当前助手是否已经绑定该通道账号
     const existingBinding = bindings.find(
       (b) =>
         normalizeAgentId(b.agentId) === normalized &&
@@ -611,17 +621,14 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const normalized = normalizeAgentId(agentId);
     const bindings = listBindings(cfg);
 
-    // 获取已绑定的通道账号
-    const boundAccounts = new Set<string>();
+    // 获取所有已被绑定的通道账号（包括其他助手绑定的）
+    const allBoundAccounts = new Set<string>();
     for (const binding of bindings) {
-      if (normalizeAgentId(binding.agentId) !== normalized) {
-        continue;
-      }
       if (!binding.match?.channel) {
         continue;
       }
       const key = `${binding.match.channel}:${binding.match.accountId || "default"}`;
-      boundAccounts.add(key);
+      allBoundAccounts.add(key);
     }
 
     // 获取所有可用的通道账号
@@ -640,7 +647,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
       for (const accountId of accountIds) {
         const key = `${channelId}:${accountId}`;
-        if (!boundAccounts.has(key)) {
+        // 排除所有已被任何助手绑定的通道账号（排他性绑定）
+        if (!allBoundAccounts.has(key)) {
           const checkPromise = (async () => {
             const account = plugin.config.resolveAccount(cfg, accountId);
             let configured = true;

@@ -104,6 +104,21 @@ import {
   clearQueue,
 } from "./controllers/message-queue.ts";
 import {
+  loadModels,
+  saveAuth,
+  deleteAuth,
+  setDefaultAuth,
+  testAuth,
+  refreshAuthBalance,
+  fetchAvailableModels,
+  saveModelConfig,
+  deleteModelConfig,
+  toggleModelConfig,
+  addProvider,
+  updateProvider,
+  deleteProvider,
+} from "./controllers/models.ts";
+import {
   loadActiveSessions,
   loadMessageFlows,
   loadForwardingRules,
@@ -144,6 +159,7 @@ import {
 } from "./controllers/skills.ts";
 import { loadSuperAdmins, loadNotifications } from "./controllers/super-admin.ts";
 import { loadUsage, loadSessionTimeSeries, loadSessionLogs } from "./controllers/usage.ts";
+import { t } from "./i18n.js";
 import { icons } from "./icons.ts";
 import { normalizeBasePath, TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
 
@@ -155,7 +171,9 @@ const debouncedLoadUsage = (state: UsageState) => {
   }
   usageDateDebounceTimeout = window.setTimeout(() => void loadUsage(state), 400);
 };
+import { renderModelAccountConfigDialog } from "./views/agents.model-account-config-dialog.ts";
 import { renderAgents } from "./views/agents.ts";
+import { renderChannelPolicyDialog } from "./views/channel-policy-dialog.ts";
 import { renderChannels } from "./views/channels.ts";
 import { renderChat } from "./views/chat.ts";
 import { renderCollaboration } from "./views/collaboration.ts";
@@ -168,13 +186,12 @@ import { renderGroups } from "./views/groups.ts";
 import { renderInstances } from "./views/instances.ts";
 import { renderLogs } from "./views/logs.ts";
 import { renderMessageQueue } from "./views/message-queue.ts";
+import { renderModels } from "./views/models.ts";
 import { renderNodes } from "./views/nodes.ts";
-import { renderOrganizationChart } from "./views/organization-chart.ts";
+import { renderOrganizationPermissions } from "./views/organization-permissions.ts";
 import { renderOverview } from "./views/overview.ts";
-import { renderPermissionsManagement } from "./views/permissions-management.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
-import { renderSuperAdmin } from "./views/super-admin.ts";
 import { renderUsage } from "./views/usage.ts";
 
 const AVATAR_DATA_RE = /^data:/i;
@@ -268,7 +285,7 @@ export function renderApp(state: AppViewState) {
                 }}
                 aria-expanded=${!isGroupCollapsed}
               >
-                <span class="nav-label__text">${group.label}</span>
+                <span class="nav-label__text">${t(group.label)}</span>
                 <span class="nav-label__chevron">${isGroupCollapsed ? "+" : "−"}</span>
               </button>
               <div class="nav-group__items">
@@ -277,23 +294,41 @@ export function renderApp(state: AppViewState) {
             </div>
           `;
         })}
-        <div class="nav-group nav-group--links">
-          <div class="nav-label nav-label--static">
-            <span class="nav-label__text">Resources</span>
-          </div>
-          <div class="nav-group__items">
-            <a
-              class="nav-item nav-item--external"
-              href="https://docs.openclaw.ai"
-              target="_blank"
-              rel="noreferrer"
-              title="Docs (opens in new tab)"
-            >
-              <span class="nav-item__icon" aria-hidden="true">${icons.book}</span>
-              <span class="nav-item__text">Docs</span>
-            </a>
-          </div>
-        </div>
+        ${(() => {
+          const resourcesLabel = "nav.resources";
+          const isResourcesCollapsed = state.settings.navGroupsCollapsed[resourcesLabel] ?? false;
+          return html`
+            <div class="nav-group nav-group--links ${isResourcesCollapsed ? "nav-group--collapsed" : ""}">
+              <button
+                class="nav-label"
+                @click=${() => {
+                  const next = { ...state.settings.navGroupsCollapsed };
+                  next[resourcesLabel] = !isResourcesCollapsed;
+                  state.applySettings({
+                    ...state.settings,
+                    navGroupsCollapsed: next,
+                  });
+                }}
+                aria-expanded=${!isResourcesCollapsed}
+              >
+                <span class="nav-label__text">${t(resourcesLabel)}</span>
+                <span class="nav-label__chevron">${isResourcesCollapsed ? "+" : "−"}</span>
+              </button>
+              <div class="nav-group__items">
+                <a
+                  class="nav-item nav-item--external"
+                  href="https://docs.openclaw.ai"
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Docs (opens in new tab)"
+                >
+                  <span class="nav-item__icon" aria-hidden="true">${icons.book}</span>
+                  <span class="nav-item__text">Docs</span>
+                </a>
+              </div>
+            </div>
+          `;
+        })()}
       </aside>
       <main class="content ${isChat ? "content--chat" : ""}">
         <section class="content-header">
@@ -459,6 +494,252 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
+          state.tab === "models"
+            ? renderModels({
+                snapshot: state.modelsSnapshot,
+                loading: state.modelsLoading,
+                error: state.modelsError,
+                managingAuthProvider: state.managingAuthProvider,
+                editingAuth: state.editingAuth,
+                viewingAuth: state.viewingAuth,
+                managingModelsProvider: state.managingModelsProvider,
+                editingModelConfig: state.editingModelConfig,
+                addingProvider: state.addingProvider,
+                viewingProviderId: state.viewingProviderId,
+                providerForm: state.providerForm,
+                onRefresh: () => loadModels(state, false),
+                onManageAuths: (provider) => {
+                  state.managingAuthProvider = provider;
+                },
+                onAddAuth: (provider) => {
+                  state.editingAuth = {
+                    provider,
+                    name: "",
+                    apiKey: "",
+                    baseUrl: "",
+                  };
+                },
+                onEditAuth: (authId) => {
+                  const auth = Object.values(state.modelsSnapshot?.auths ?? {})
+                    .flat()
+                    .find((a) => a.authId === authId);
+                  if (auth) {
+                    state.editingAuth = {
+                      authId: auth.authId,
+                      provider: auth.provider,
+                      name: auth.name,
+                      apiKey: "",
+                      baseUrl: auth.baseUrl,
+                    };
+                  }
+                },
+                onDeleteAuth: async (authId) => {
+                  if (confirm("确定要删除此认证吗？")) {
+                    await deleteAuth(state, authId);
+                  }
+                },
+                onSetDefaultAuth: async (authId) => {
+                  await setDefaultAuth(state, authId);
+                },
+                onSaveAuth: async (params) => {
+                  await saveAuth(state, params);
+                  state.editingAuth = null;
+                  state.managingAuthProvider = null;
+                },
+                onCancelAuthEdit: () => {
+                  state.editingAuth = null;
+                  state.viewingAuth = null;
+                  state.managingAuthProvider = null;
+                },
+                onTestAuth: async (authId) => {
+                  const result = await testAuth(state, authId);
+                  alert(result.success ? "连接成功！" : `连接失败: ${result.message}`);
+                },
+                onRefreshAuthBalance: async (authId) => {
+                  await refreshAuthBalance(state, authId);
+                },
+                onManageModels: (provider) => {
+                  state.managingModelsProvider = provider;
+                },
+                onCloseModelsList: () => {
+                  state.managingModelsProvider = null;
+                },
+                onAddModelConfig: (authId, modelName) => {
+                  const auth = Object.values(state.modelsSnapshot?.auths ?? {})
+                    .flat()
+                    .find((a) => a.authId === authId);
+                  if (auth) {
+                    state.editingModelConfig = {
+                      authId,
+                      provider: auth.provider,
+                      modelName,
+                      enabled: true,
+                    };
+                  }
+                },
+                onEditModelConfig: (configId) => {
+                  const config = Object.values(state.modelsSnapshot?.modelConfigs ?? {})
+                    .flat()
+                    .find((c) => c.configId === configId);
+                  if (config) {
+                    state.editingModelConfig = {
+                      configId: config.configId,
+                      authId: config.authId,
+                      provider: config.provider,
+                      modelName: config.modelName,
+                      nickname: config.nickname,
+                      enabled: config.enabled,
+                      temperature: config.temperature,
+                      topP: config.topP,
+                      maxTokens: config.maxTokens,
+                      frequencyPenalty: config.frequencyPenalty,
+                      systemPrompt: config.systemPrompt,
+                      conversationRounds: config.conversationRounds,
+                      maxIterations: config.maxIterations,
+                      usageLimits: config.usageLimits,
+                    };
+                  }
+                },
+                onDeleteModelConfig: async (configId) => {
+                  if (confirm("确定要删除此模型配置吗？")) {
+                    await deleteModelConfig(state, configId);
+                  }
+                },
+                onToggleModelConfig: async (configId, enabled) => {
+                  await toggleModelConfig(state, configId, enabled);
+                },
+                onRefreshAuthModels: async (authId) => {
+                  state.importableModels = null;
+                  state.importingAuthId = authId;
+                  const models = await fetchAvailableModels(state, authId);
+                  const existingConfigs =
+                    Object.values(state.modelsSnapshot?.modelConfigs ?? {})
+                      .flat()
+                      .filter((c) => c.authId === authId) ?? [];
+                  state.importableModels = models.map((modelName) => {
+                    const existing = existingConfigs.find((c) => c.modelName === modelName);
+                    return {
+                      modelName,
+                      isConfigured: !!existing,
+                      isEnabled: existing?.enabled ?? false,
+                      isDeprecated: false,
+                      configId: existing?.configId,
+                    };
+                  });
+                },
+                onImportModels: async (authId, modelNames) => {
+                  const auth = Object.values(state.modelsSnapshot?.auths ?? {})
+                    .flat()
+                    .find((a) => a.authId === authId);
+                  if (auth) {
+                    for (const modelName of modelNames) {
+                      await saveModelConfig(state, {
+                        authId,
+                        provider: auth.provider,
+                        modelName,
+                        enabled: true,
+                      });
+                    }
+                  }
+                  state.selectedImportModels.clear();
+                  state.importableModels = null;
+                  state.importingAuthId = null;
+                },
+                onSaveModelConfig: async (params) => {
+                  await saveModelConfig(state, params);
+                  state.editingModelConfig = null;
+                },
+                onCancelModelConfigEdit: () => {
+                  state.editingModelConfig = null;
+                  state.importableModels = null;
+                  state.importingAuthId = null;
+                  state.selectedImportModels.clear();
+                },
+                onAddProvider: () => {
+                  state.addingProvider = true;
+                  state.providerForm = {
+                    selectedTemplateId: null,
+                    id: "",
+                    name: "",
+                    icon: "🤖",
+                    website: "",
+                    defaultBaseUrl: "",
+                    apiKeyPlaceholder: "请输入API密钥",
+                  };
+                },
+                onViewProvider: (id) => {
+                  state.viewingProviderId = id;
+                },
+                onEditProvider: (id) => {
+                  // 从 providerInstances 中查找供应商
+                  const provider = state.modelsSnapshot?.providerInstances?.find(
+                    (p: any) => p.id === id,
+                  );
+                  if (provider) {
+                    state.providerForm = {
+                      selectedTemplateId: (provider as any).templateId || null,
+                      id: (provider as any).id,
+                      name: (provider as any).name,
+                      icon: (provider as any).icon || "🤖",
+                      website: (provider as any).website || "",
+                      defaultBaseUrl: (provider as any).defaultBaseUrl || "",
+                      apiKeyPlaceholder: (provider as any).apiKeyPlaceholder || "请输入API密钥",
+                      isEditing: true,
+                      originalId: (provider as any).id,
+                    };
+                  }
+                },
+                onTemplateSelect: (templateId) => {
+                  if (state.providerForm) {
+                    const template = state.modelsSnapshot?.providerTemplates?.find(
+                      (t) => t.id === templateId,
+                    );
+                    if (template) {
+                      state.providerForm = {
+                        ...state.providerForm,
+                        selectedTemplateId: templateId,
+                        id: template.id,
+                        name: template.name,
+                        icon: template.icon || "🤖",
+                        website: template.website || "",
+                        defaultBaseUrl: template.defaultBaseUrl || "",
+                        apiKeyPlaceholder: template.apiKeyPlaceholder || "请输入API密钥",
+                      };
+                    }
+                  }
+                },
+                onProviderFormChange: (patch) => {
+                  if (state.providerForm) {
+                    state.providerForm = {
+                      ...state.providerForm,
+                      ...patch,
+                    };
+                  }
+                },
+                onSaveProvider: async (params) => {
+                  if (state.providerForm?.isEditing) {
+                    await updateProvider(state, params);
+                  } else {
+                    await addProvider(state, params);
+                  }
+                  state.addingProvider = false;
+                  state.providerForm = null;
+                },
+                onDeleteProvider: async (id) => {
+                  await deleteProvider(state, id);
+                },
+                onCancelProviderEdit: () => {
+                  state.addingProvider = false;
+                  state.providerForm = null;
+                },
+                onCancelProviderView: () => {
+                  state.viewingProviderId = null;
+                },
+              })
+            : nothing
+        }
+
+        ${
           state.tab === "instances"
             ? renderInstances({
                 loading: state.presenceLoading,
@@ -533,6 +814,9 @@ export function renderApp(state: AppViewState) {
                 timeZone: state.usageTimeZone,
                 contextExpanded: state.usageContextExpanded,
                 headerPinned: state.usageHeaderPinned,
+                // 供应商筛选和概览视图
+                filterProvider: state.usageFilterProvider,
+                showProviderOverview: state.usageShowProviderOverview,
                 onStartDateChange: (date) => {
                   state.usageStartDate = date;
                   state.usageSelectedDays = [];
@@ -753,6 +1037,17 @@ export function renderApp(state: AppViewState) {
                   state.usageTimeSeries = null;
                   state.usageSessionLogs = null;
                 },
+                // 供应商选择回调
+                onSelectProvider: (providerId) => {
+                  // 跳转到该供应商的详细视图
+                  const baseP = window.location.pathname.split("/usage")[0] || "";
+                  window.location.href = `${baseP}/usage?provider=${providerId}`;
+                },
+                onClearProviderFilter: () => {
+                  // 清除供应商筛选，返回概览视图
+                  const baseP = window.location.pathname.split("/usage")[0] || "";
+                  window.location.href = `${baseP}/usage`;
+                },
               })
             : nothing
         }
@@ -825,11 +1120,31 @@ export function renderApp(state: AppViewState) {
                 modelAccountsError: state.modelAccountsError,
                 modelAccountsSaving: (state as any).modelAccountsSaving || false,
                 modelAccountsSaveSuccess: (state as any).modelAccountsSaveSuccess || false,
+                // 模型账号绑定管理
+                boundModelAccounts: state.boundModelAccounts,
+                boundModelAccountsLoading: state.boundModelAccountsLoading,
+                boundModelAccountsError: state.boundModelAccountsError,
+                availableModelAccounts: state.availableModelAccounts,
+                availableModelAccountsLoading: state.availableModelAccountsLoading,
+                availableModelAccountsError: state.availableModelAccountsError,
+                availableModelAccountsExpanded: state.availableModelAccountsExpanded,
+                defaultModelAccountId: state.defaultModelAccountId,
+                modelAccountOperationError: state.modelAccountOperationError,
+                // 通道策略配置
                 channelPoliciesConfig: state.channelPoliciesConfig as any,
                 channelPoliciesLoading: state.channelPoliciesLoading,
                 channelPoliciesError: state.channelPoliciesError,
                 channelPoliciesSaving: (state as any).channelPoliciesSaving || false,
                 channelPoliciesSaveSuccess: (state as any).channelPoliciesSaveSuccess || false,
+                // 通道账号绑定管理
+                boundChannelAccounts: state.boundChannelAccounts,
+                boundChannelAccountsLoading: state.boundChannelAccountsLoading,
+                boundChannelAccountsError: state.boundChannelAccountsError,
+                availableChannelAccounts: state.availableChannelAccounts,
+                availableChannelAccountsLoading: state.availableChannelAccountsLoading,
+                availableChannelAccountsError: state.availableChannelAccountsError,
+                availableChannelAccountsExpanded: state.availableChannelAccountsExpanded,
+                channelAccountOperationError: state.channelAccountOperationError,
                 editingAgent: (state as any).editingAgent || null,
                 creatingAgent: (state as any).creatingAgent || false,
                 deletingAgent: (state as any).deletingAgent || false,
@@ -898,6 +1213,9 @@ export function renderApp(state: AppViewState) {
                   }
                   if (panel === "channelPolicies" && resolvedAgentId) {
                     void loadChannelPolicies(state, resolvedAgentId);
+                    // 加载通道账号绑定管理数据
+                    void loadBoundChannelAccounts(state, resolvedAgentId);
+                    void loadAvailableChannelAccounts(state, resolvedAgentId);
                   }
                   // Phase 3: 加载权限配置（针对具体助手）
                   if (panel === "permissionsConfig" && resolvedAgentId) {
@@ -1342,6 +1660,17 @@ export function renderApp(state: AppViewState) {
                 },
                 onToggleAvailableChannelAccounts: () => {
                   toggleAvailableAccountsExpanded(state);
+                },
+                onConfigurePolicy: async (channelId, accountId, currentPolicy) => {
+                  // 打开策略配置对话框
+                  if (resolvedAgentId) {
+                    state.configuringChannelPolicy = {
+                      agentId: resolvedAgentId,
+                      channelId,
+                      accountId,
+                      currentPolicy,
+                    };
+                  }
                 },
                 onAddAgent: () => {
                   // TODO: 实现添加智能助手
@@ -2033,131 +2362,98 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "organization-chart"
-            ? renderOrganizationChart({
-                loading: state.organizationDataLoading,
-                error: state.organizationDataError,
+          state.tab === "organization-permissions"
+            ? renderOrganizationPermissions({
+                loading: state.organizationDataLoading || state.permissionsConfigLoading,
+                error: state.organizationDataError || state.permissionsConfigError,
+                activeTab: state.orgPermActiveTab || "organization",
+                // 组织架构数据
                 organizationData: state.organizationData,
                 selectedNodeId: state.organizationChartSelectedNode,
                 viewMode: state.organizationChartViewMode,
-                onRefresh: () => {
-                  // TODO: 实现组织架构数据加载
-                  console.log("Load organization data");
+                organizationsLoading: state.organizationDataLoading,
+                organizationsError: state.organizationDataError,
+                // 权限配置数据
+                permissionsConfig: null, // TODO: 添加权限配置数据
+                permissionsLoading: state.permissionsConfigLoading,
+                permissionsSaving: state.permissionsConfigSaving,
+                selectedOrgForPermission: null,
+                selectedRole: null,
+                // 审批管理数据
+                approvalRequests: state.approvalRequests,
+                approvalsLoading: state.approvalRequestsLoading,
+                approvalStats: state.approvalStats,
+                approvalsFilter: {
+                  status: "all",
+                  priority: "all",
+                  type: "all",
+                  requester: "all",
+                  search: "",
                 },
+                selectedApprovals: new Set<string>(),
+                selectedApprovalDetail: null,
+                // 系统管理数据
+                superAdmins: state.superAdminsList || [],
+                superAdminsLoading: state.superAdminsLoading,
+                superAdminsError: state.superAdminsError,
+                systemRoles: [],
+                auditLogs: [],
+                // 回调函数
+                onRefresh: () => {
+                  const activeTab = state.orgPermActiveTab || "organization";
+                  if (activeTab === "organization") {
+                    console.log("Load organization data");
+                  } else if (activeTab === "permissions") {
+                    console.log("Load permissions config");
+                  } else if (activeTab === "approvals") {
+                    void loadApprovals(state);
+                    void loadApprovalStats(state);
+                  } else if (activeTab === "system") {
+                    void loadSuperAdmins(state);
+                  }
+                },
+                onTabChange: (tab) => {
+                  state.orgPermActiveTab = tab;
+                  if (tab === "organization") {
+                    console.log("Load organization data");
+                  } else if (tab === "permissions") {
+                    console.log("Load permissions config");
+                  } else if (tab === "approvals") {
+                    void loadApprovals(state);
+                    void loadApprovalStats(state);
+                  } else if (tab === "system") {
+                    void loadSuperAdmins(state);
+                  }
+                },
+                // 组织架构回调
                 onSelectNode: (nodeId) => {
                   state.organizationChartSelectedNode = nodeId;
                 },
                 onViewModeChange: (mode) => {
                   state.organizationChartViewMode = mode;
                 },
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "permissions-management"
-            ? renderPermissionsManagement({
-                loading: state.permissionsConfigLoading || state.approvalRequestsLoading,
-                error: state.permissionsConfigError,
-                activeTab: state.permissionsManagementActiveTab,
-                permissionsConfig: state.permissionsConfig,
-                configLoading: state.permissionsConfigLoading,
-                configSaving: state.permissionsConfigSaving,
-                approvalRequests: state.approvalRequests,
-                approvalsLoading: state.approvalRequestsLoading,
-                changeHistory: state.permissionsChangeHistory,
-                historyLoading: state.permissionsHistoryLoading,
-                onRefresh: () => {
-                  if (state.permissionsManagementActiveTab === "approvals") {
-                    void loadApprovals(state);
-                    void loadApprovalStats(state);
-                  } else if (state.permissionsManagementActiveTab === "config") {
-                    // TODO: 加载权限配置
-                    console.log("Load permissions config");
-                  } else if (state.permissionsManagementActiveTab === "history") {
-                    // TODO: 加载变更历史
-                    console.log("Load permissions history");
-                  }
-                },
-                onTabChange: (tab) => {
-                  state.permissionsManagementActiveTab = tab;
-                  // 切换 tab 时加载相应数据
-                  if (tab === "approvals") {
-                    void loadApprovals(state);
-                    void loadApprovalStats(state);
-                  } else if (tab === "config") {
-                    // TODO: 加载权限配置
-                    console.log("Load permissions config");
-                  } else if (tab === "history") {
-                    // TODO: 加载变更历史
-                    console.log("Load permissions history");
-                  }
-                },
-                onPermissionChange: (agentId, permission, granted) => {
-                  // TODO: 实现权限更改
-                  console.log("Permission change:", agentId, permission, granted);
-                },
-                onSaveConfig: () => {
-                  // TODO: 实现保存权限配置
-                  console.log("Save permissions config");
-                },
-                onApprovalAction: async (requestId, action, comment) => {
-                  try {
-                    // 将 "deny" 转换为 "reject" 以匹配 respondToApproval 的类型
-                    const approvalAction: "approve" | "reject" =
-                      action === "deny" ? "reject" : "approve";
-                    // 假设当前用户是 "admin"，实际应该从状态中获取
-                    await respondToApproval(state, requestId, "admin", approvalAction, comment);
-                  } catch (err) {
-                    console.error("Failed to respond to approval:", err);
-                  }
-                },
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "super-admin"
-            ? renderSuperAdmin({
-                loading: state.superAdminsLoading || state.notificationsLoading,
-                error: state.superAdminsError,
-                activeTab: state.superAdminActiveTab,
-                superAdminsList: state.superAdminsList,
-                superAdminsLoading: state.superAdminsLoading,
-                approvalRequests: state.approvalRequests,
-                approvalsLoading: state.approvalRequestsLoading,
-                notifications: state.superAdminNotifications,
-                notificationsLoading: state.notificationsLoading,
-                onRefresh: () => {
-                  if (state.superAdminActiveTab === "management") {
-                    void loadSuperAdmins(state);
-                  } else if (state.superAdminActiveTab === "approvals") {
-                    void loadApprovals(state);
-                    void loadApprovalStats(state);
-                  } else if (state.superAdminActiveTab === "notifications") {
-                    void loadNotifications(state);
-                  }
-                },
-                onTabChange: (tab) => {
-                  state.superAdminActiveTab = tab;
-                  // 切换 tab 时加载相应数据
-                  if (tab === "management") {
-                    void loadSuperAdmins(state);
-                  } else if (tab === "approvals") {
-                    void loadApprovals(state);
-                    void loadApprovalStats(state);
-                  } else if (tab === "notifications") {
-                    void loadNotifications(state);
-                  }
-                },
-                onAddSuperAdmin: (agentId) => {
-                  // TODO: 实现添加超级管理员
-                  console.log("Add super admin:", agentId);
-                },
-                onRemoveSuperAdmin: (agentId) => {
-                  // TODO: 实现移除超级管理员
-                  console.log("Remove super admin:", agentId);
-                },
+                onCreateOrganization: () => console.log("Create organization"),
+                onEditOrganization: (orgId) => console.log("Edit organization:", orgId),
+                onDeleteOrganization: (orgId) => console.log("Delete organization:", orgId),
+                onCreateTeam: () => console.log("Create team"),
+                onEditTeam: (teamId) => console.log("Edit team:", teamId),
+                onDeleteTeam: (teamId) => console.log("Delete team:", teamId),
+                onAssignMember: (teamId, memberId) =>
+                  console.log("Assign member:", teamId, memberId),
+                // 权限配置回调
+                onSelectOrgForPermission: (orgId) =>
+                  console.log("Select org for permission:", orgId),
+                onSelectRole: (roleId) => console.log("Select role:", roleId),
+                onPermissionChange: (target, permission, granted) =>
+                  console.log("Permission change:", target, permission, granted),
+                onSavePermissions: () => console.log("Save permissions"),
+                onCreateRole: () => console.log("Create role"),
+                onEditRole: (roleId) => console.log("Edit role:", roleId),
+                onDeleteRole: (roleId) => console.log("Delete role:", roleId),
+                onCreateTemplate: () => console.log("Create template"),
+                onApplyTemplate: (templateId, target) =>
+                  console.log("Apply template:", templateId, target),
+                // 审批管理回调
                 onApprovalAction: async (requestId, action, comment) => {
                   try {
                     const approvalAction: "approve" | "reject" =
@@ -2167,16 +2463,30 @@ export function renderApp(state: AppViewState) {
                     console.error("Failed to respond to approval:", err);
                   }
                 },
-                onMarkNotificationRead: (notificationId) => {
-                  // TODO: 实现标记通知为已读
-                  console.log("Mark notification as read:", notificationId);
-                },
+                onBatchApprove: (requestIds, comment) =>
+                  console.log("Batch approve:", requestIds, comment),
+                onBatchDeny: (requestIds, reason) => console.log("Batch deny:", requestIds, reason),
+                onFilterChange: (filter) => console.log("Filter change:", filter),
+                onSelectApproval: (requestId, selected) =>
+                  console.log("Select approval:", requestId, selected),
+                onSelectAllApprovals: () => console.log("Select all approvals"),
+                onDeselectAllApprovals: () => console.log("Deselect all approvals"),
+                onShowApprovalDetail: (request) => console.log("Show approval detail:", request),
+                // 系统管理回调
+                onCreateAdmin: () => console.log("Create admin"),
+                onEditAdmin: (adminId) => console.log("Edit admin:", adminId),
+                onActivateAdmin: (adminId) => console.log("Activate admin:", adminId),
+                onDeactivateAdmin: (adminId) => console.log("Deactivate admin:", adminId),
+                onCreateSystemRole: () => console.log("Create system role"),
+                onEditSystemRole: (roleId) => console.log("Edit system role:", roleId),
+                onDeleteSystemRole: (roleId) => console.log("Delete system role:", roleId),
               })
             : nothing
         }
       </main>
       ${renderExecApprovalPrompt(state)}
       ${renderGatewayUrlConfirmation(state)}
+      ${renderChannelPolicyDialog(state)}
     </div>
   `;
 }

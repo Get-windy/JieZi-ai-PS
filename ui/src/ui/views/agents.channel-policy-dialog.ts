@@ -1,4 +1,5 @@
 import { html } from "lit";
+import type { ChannelsStatusSnapshot } from "../types.ts";
 import type { ChannelBinding, ChannelPolicy } from "./agents.ts";
 import { t } from "../i18n.ts";
 
@@ -9,6 +10,7 @@ export function renderPolicyBindingDialog(params: {
   agentId: string;
   binding: ChannelBinding | null; // null 表示新增模式
   index?: number;
+  channelsSnapshot: ChannelsStatusSnapshot | null; // 添加通道快照参数
   onChange: (field: string, value: any) => void;
   onSave: () => void;
   onCancel: () => void;
@@ -18,6 +20,39 @@ export function renderPolicyBindingDialog(params: {
     policy: "private" as ChannelPolicy,
   };
   const isNew = params.binding === null;
+
+  // 从 channelsSnapshot 提取可用通道和账号
+  const availableChannels: Array<{
+    id: string;
+    label: string;
+    accounts: Array<{ id: string; label: string }>;
+  }> = [];
+
+  if (params.channelsSnapshot?.channels) {
+    for (const [channelId, channelData] of Object.entries(params.channelsSnapshot.channels)) {
+      const accounts: Array<{ id: string; label: string }> = [];
+
+      // 提取该通道的所有账号
+      if ((channelData as any).accounts && typeof (channelData as any).accounts === "object") {
+        for (const [accountId, accountData] of Object.entries((channelData as any).accounts)) {
+          accounts.push({
+            id: accountId,
+            label: (accountData as any).label || accountId,
+          });
+        }
+      }
+
+      availableChannels.push({
+        id: channelId,
+        label: (channelData as any).label || channelId,
+        accounts,
+      });
+    }
+  }
+
+  // 当前选中通道的账号列表
+  const currentChannelAccounts =
+    availableChannels.find((c) => c.id === binding.channelId)?.accounts || [];
 
   const policyOptions: Array<{ value: ChannelPolicy; label: string; description: string }> = [
     {
@@ -353,25 +388,63 @@ export function renderPolicyBindingDialog(params: {
           
           <div style="margin-top: 20px;">
             <div class="form-group" style="margin-bottom: 12px;">
-              <label class="form-label">通道 ID</label>
-              <input
-                type="text"
+              <label class="form-label">通道</label>
+              <select
                 class="form-control"
                 .value=${binding.channelId}
-                placeholder="例：discord, telegram, whatsapp"
-                @input=${(e: Event) => params.onChange("channelId", (e.target as HTMLInputElement).value)}
-              />
+                @change=${(e: Event) => {
+                  const newChannelId = (e.target as HTMLSelectElement).value;
+                  params.onChange("channelId", newChannelId);
+                  // 切换通道时清空账号选择
+                  params.onChange("accountId", "");
+                }}
+              >
+                <option value="">请选择通道...</option>
+                ${availableChannels.map(
+                  (channel) => html`
+                  <option value=${channel.id} ?selected=${binding.channelId === channel.id}>
+                    ${channel.label} (${channel.id})
+                  </option>
+                `,
+                )}
+              </select>
+              ${
+                availableChannels.length === 0
+                  ? html`
+                      <small class="form-text muted" style="margin-top: 4px; color: #f59e0b">
+                        ⚠️ 暂无可用通道，请先配置通道账号
+                      </small>
+                    `
+                  : html``
+              }
             </div>
             
             <div class="form-group" style="margin-bottom: 12px;">
-              <label class="form-label">账号 ID（可选）</label>
-              <input
-                type="text"
+              <label class="form-label">账号（可选）</label>
+              <select
                 class="form-control"
                 .value=${binding.accountId || ""}
-                placeholder="例：account-123"
-                @input=${(e: Event) => params.onChange("accountId", (e.target as HTMLInputElement).value)}
-              />
+                ?disabled=${!binding.channelId || currentChannelAccounts.length === 0}
+                @change=${(e: Event) => params.onChange("accountId", (e.target as HTMLSelectElement).value)}
+              >
+                <option value="">默认账号</option>
+                ${currentChannelAccounts.map(
+                  (account) => html`
+                  <option value=${account.id} ?selected=${binding.accountId === account.id}>
+                    ${account.label} (${account.id})
+                  </option>
+                `,
+                )}
+              </select>
+              ${
+                binding.channelId && currentChannelAccounts.length === 0
+                  ? html`
+                      <small class="form-text muted" style="margin-top: 4px; color: #f59e0b">
+                        ⚠️ 该通道暂无配置账号
+                      </small>
+                    `
+                  : html``
+              }
             </div>
             
             <div class="form-group" style="margin-bottom: 12px;">

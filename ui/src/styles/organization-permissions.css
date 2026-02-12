@@ -1,0 +1,783 @@
+/**
+ * 组织与权限管理页面样式
+ * 紧凑、现代化的设计风格
+ */
+
+/* ===========================================
+   对话框优化 - 更紧凑的间距
+   =========================================== */
+
+.modal-dialog {
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  max-width: 600px;
+  width: 100%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  animation: slide-up 0.2s var(--ease-out);
+  border: 1px solid var(--border);
+}
+
+.modal-dialog h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-strong);
+  letter-spacing: -0.02em;
+}
+
+.modal-dialog .form-group {
+  margin-bottom: 14px;
+}
+
+.modal-dialog .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.modal-dialog label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+.modal-dialog input,
+.modal-dialog select,
+.modal-dialog textarea {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--text);
+  transition: all 0.2s ease;
+}
+
+.modal-dialog input:focus,
+.modal-dialog select:focus,
+.modal-dialog textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.modal-dialog textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.modal-dialog .panel-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* ===========================================
+   按钮优化 - 更紧凑的尺寸
+   =========================================== */
+
+.btn {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.btn--primary {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.btn--primary:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.btn--danger {
+  background: var(--error);
+  color: white;
+  border-color: var(--error);
+}
+
+.btn--danger:hover {
+  background: var(--error-hover);
+  border-color: var(--error-hover);
+}
+
+/* ===========================================
+   权限配置面板
+   =========================================== */
+
+.permissions-config-panel {
+  max-width: 100%;
+}
+
+.permission-category {
+  margin-bottom: 20px;
+}
+
+.permission-category:last-child {
+  margin-bottom: 0;
+}
+
+.permission-category h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 10px 0;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+
+.permission-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.permission-item {
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+}
+
+.permission-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.permission-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.permission-description {
+  margin: 6px 0 0 24px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* ===========================================
+   审批管理面板
+   =========================================== */
+
+.approvals-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.approvals-filter {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.filter-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.filter-btn.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--primary-bg);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-lg);
+}
+
+.batch-actions span {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.requests-header {
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.request-card {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: all 0.2s ease;
+}
+
+.request-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.request-card.pending {
+  border-left: 3px solid var(--warning);
+}
+
+.request-card.approved {
+  border-left: 3px solid var(--success);
+}
+
+.request-card.rejected {
+  border-left: 3px solid var(--error);
+}
+
+.request-select {
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+}
+
+.request-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.request-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.request-type {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--primary-bg);
+  color: var(--primary);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.request-status {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.request-status.pending {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.request-status.approved {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.request-status.rejected {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+.request-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 6px 0;
+  color: var(--text-strong);
+}
+
+.request-description {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.request-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.request-meta span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.request-review {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.request-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+/* ===========================================
+   系统管理面板
+   =========================================== */
+
+.super-admins-panel,
+.system-roles-panel,
+.security-policy-panel,
+.audit-logs-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.panel-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-strong);
+}
+
+.admins-table,
+.logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admins-table thead,
+.logs-table thead {
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
+.admins-table th,
+.logs-table th {
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-strong);
+  border-bottom: 1px solid var(--border);
+}
+
+.admins-table td,
+.logs-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.admins-table tr,
+.logs-table tr {
+  background: var(--card);
+  transition: background 0.2s ease;
+}
+
+.admins-table tr:hover,
+.logs-table tr:hover {
+  background: var(--bg-hover);
+}
+
+.admins-table .actions,
+.logs-table .actions {
+  display: flex;
+  gap: 6px;
+}
+
+.status-badge,
+.result-badge {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-badge.active {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.status-badge.inactive {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+.result-badge.success {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.result-badge.failure {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+.roles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.role-card {
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: all 0.2s ease;
+}
+
+.role-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.role-card.built-in {
+  border-color: var(--primary);
+  background: var(--primary-bg);
+}
+
+.role-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.role-header h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-strong);
+}
+
+.built-in-badge {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--primary);
+  color: white;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.role-description {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.role-stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.role-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.policy-section {
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 16px;
+}
+
+.policy-section:last-child {
+  margin-bottom: 0;
+}
+
+.policy-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  color: var(--text-strong);
+}
+
+/* ===========================================
+   权限模板
+   =========================================== */
+
+.permission-templates {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.templates-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.templates-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-strong);
+}
+
+.templates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.template-card {
+  padding: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: all 0.2s ease;
+}
+
+.template-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.template-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.template-header h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-strong);
+}
+
+.template-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.template-description {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.template-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ===========================================
+   审批统计信息
+   =========================================== */
+
+.approval-statistics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.stat-card .stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-strong);
+  margin-bottom: 4px;
+}
+
+.stat-card .stat-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* ===========================================
+   加载和错误状态
+   =========================================== */
+
+.loading,
+.empty-state,
+.error {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.error {
+  color: var(--error);
+}
+
+/* ===========================================
+   响应式优化
+   =========================================== */
+
+@media (max-width: 768px) {
+  .modal-dialog {
+    max-width: 95vw;
+    max-height: 95vh;
+  }
+
+  .roles-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .approval-statistics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .request-card {
+    flex-direction: column;
+  }
+
+  .request-actions {
+    flex-direction: row;
+    justify-content: flex-start;
+    width: 100%;
+  }
+}

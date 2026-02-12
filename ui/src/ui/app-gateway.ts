@@ -26,7 +26,7 @@ import {
 } from "./controllers/exec-approval.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadSessions } from "./controllers/sessions.ts";
-import { GatewayBrowserClient } from "./gateway.ts";
+import { GatewayBrowserClient } from "./gateway-client.js";
 
 type GatewayHost = {
   settings: UiSettings;
