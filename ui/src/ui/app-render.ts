@@ -700,8 +700,8 @@ export function renderApp(state: AppViewState) {
                 },
                 onTemplateSelect: (templateId) => {
                   if (state.providerForm) {
-                    const template = state.modelsSnapshot?.providerTemplates?.find(
-                      (t) => t.id === templateId,
+                    const template = (state.modelsSnapshot as any)?.apiTemplates?.find(
+                      (t: any) => t.id === templateId,
                     );
                     if (template) {
                       state.providerForm = {
@@ -1570,7 +1570,7 @@ export function renderApp(state: AppViewState) {
                     await saveChannelPolicies(state, agentId, {
                       ...config,
                       bindings,
-                    } as any);
+                    });
 
                     // 关闭对话框
                     state.editingPolicyBinding = null;
@@ -1597,7 +1597,7 @@ export function renderApp(state: AppViewState) {
                   ? (agentId, permission, granted) => {
                       // 更新权限配置
                       if (state.permissionsConfig) {
-                        const config = state.permissionsConfig as any;
+                        const config = state.permissionsConfig;
                         // 更新权限状态
                         // TODO: 实现权限更新逻辑
                         console.log("Permission change:", agentId, permission, granted);
