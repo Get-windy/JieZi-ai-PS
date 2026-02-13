@@ -522,11 +522,17 @@ export function renderApp(state: AppViewState) {
                   state.managingAuthProvider = provider;
                 },
                 onAddAuth: (provider) => {
+                  // 从 providerInstances 获取供应商的默认 Base URL
+                  const providerInstance = state.modelsSnapshot?.providerInstances?.find(
+                    (p: any) => p.id === provider,
+                  );
+                  const defaultBaseUrl = (providerInstance as any)?.defaultBaseUrl || "";
+
                   state.editingAuth = {
                     provider,
                     name: "",
                     apiKey: "",
-                    baseUrl: "",
+                    baseUrl: defaultBaseUrl, // 默认填入供应商的 Base URL
                   };
                 },
                 onEditAuth: (authId) => {
