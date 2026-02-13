@@ -328,8 +328,27 @@ function renderProviderLabel(
 }
 
 function resolveProviderLabel(snapshot: ModelsStatusSnapshot | null, providerId: string): string {
+  // 1. 优先从 providerInstances 读取用户设置的名称
+  const providerInstance = (snapshot?.providerInstances as any[])?.find(
+    (p: any) => p.id === providerId,
+  );
+  if (providerInstance?.name) {
+    return providerInstance.name;
+  }
+
+  // 2. 向下兼容：从 providerMeta 查找
   const meta = snapshot?.providerMeta?.find((m) => m.id === providerId);
-  return meta?.label ?? snapshot?.providerLabels?.[providerId] ?? providerId;
+  if (meta?.label) {
+    return meta.label;
+  }
+
+  // 3. 向下兼容：从 providerLabels 查找
+  if (snapshot?.providerLabels?.[providerId]) {
+    return snapshot.providerLabels[providerId];
+  }
+
+  // 4. 最后回退到显示 ID
+  return providerId;
 }
 
 function getProviderIcon(providerId: string, snapshot: ModelsStatusSnapshot | null): string {

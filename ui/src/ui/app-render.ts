@@ -120,6 +120,7 @@ import {
   testAuth,
   refreshAuthBalance,
   fetchAvailableModels,
+  refreshAuthModels,
   saveModelConfig,
   deleteModelConfig,
   toggleModelConfig,
@@ -620,21 +621,11 @@ export function renderApp(state: AppViewState) {
                 onRefreshAuthModels: async (authId) => {
                   state.importableModels = null;
                   state.importingAuthId = authId;
-                  const models = await fetchAvailableModels(state, authId);
-                  const existingConfigs =
-                    Object.values(state.modelsSnapshot?.modelConfigs ?? {})
-                      .flat()
-                      .filter((c) => c.authId === authId) ?? [];
-                  state.importableModels = models.map((modelName) => {
-                    const existing = existingConfigs.find((c) => c.modelName === modelName);
-                    return {
-                      modelName,
-                      isConfigured: !!existing,
-                      isEnabled: existing?.enabled ?? false,
-                      isDeprecated: false,
-                      configId: existing?.configId,
-                    };
-                  });
+                  // 使用 refreshAuthModels 从平台查询可用模型列表
+                  const models = await refreshAuthModels(state, authId);
+                  state.importableModels = models;
+                  // 刷新完成后重新加载模型数据以更新界面
+                  await loadModels(state, false);
                 },
                 onImportModels: async (authId, modelNames) => {
                   const auth = Object.values(state.modelsSnapshot?.auths ?? {})

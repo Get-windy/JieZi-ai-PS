@@ -101,6 +101,19 @@ type ModelConfig = {
   };
 };
 
+// 辅助函数：掩码 API Key（用于安全显示）
+function maskApiKey(apiKey: string): string {
+  const trimmed = apiKey.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.length <= 16) {
+    return trimmed; // 短密钥直接返回
+  }
+  // 格式：前8位 + **** + 后4位
+  return `${trimmed.slice(0, 8)}****${trimmed.slice(-4)}`;
+}
+
 // 存储结构
 type ModelManagementStorage = {
   // API模板库（预置的，不存储，由代码提供）
@@ -465,10 +478,18 @@ async function updateAuth(params: {
   for (const provider in storage.auths) {
     const auth = storage.auths[provider]?.find((a) => a.authId === params.authId);
     if (auth) {
-      if (params.name !== undefined) auth.name = params.name;
-      if (params.apiKey !== undefined) auth.apiKey = params.apiKey;
-      if (params.baseUrl !== undefined) auth.baseUrl = params.baseUrl;
-      if (params.enabled !== undefined) auth.enabled = params.enabled;
+      if (params.name !== undefined) {
+        auth.name = params.name;
+      }
+      if (params.apiKey !== undefined) {
+        auth.apiKey = params.apiKey;
+      }
+      if (params.baseUrl !== undefined) {
+        auth.baseUrl = params.baseUrl;
+      }
+      if (params.enabled !== undefined) {
+        auth.enabled = params.enabled;
+      }
 
       await saveModelManagement(storage);
       return;
@@ -584,17 +605,36 @@ async function updateModelConfig(params: {
       // 记录是否修改了 enabled 状态
       const enabledChanged = params.enabled !== undefined && model.enabled !== params.enabled;
 
-      if (params.nickname !== undefined) model.nickname = params.nickname;
-      if (params.enabled !== undefined) model.enabled = params.enabled;
-      if (params.temperature !== undefined) model.temperature = params.temperature;
-      if (params.topP !== undefined) model.topP = params.topP;
-      if (params.maxTokens !== undefined) model.maxTokens = params.maxTokens;
-      if (params.frequencyPenalty !== undefined) model.frequencyPenalty = params.frequencyPenalty;
-      if (params.systemPrompt !== undefined) model.systemPrompt = params.systemPrompt;
-      if (params.conversationRounds !== undefined)
+      if (params.nickname !== undefined) {
+        model.nickname = params.nickname;
+      }
+      if (params.enabled !== undefined) {
+        model.enabled = params.enabled;
+      }
+      if (params.temperature !== undefined) {
+        model.temperature = params.temperature;
+      }
+      if (params.topP !== undefined) {
+        model.topP = params.topP;
+      }
+      if (params.maxTokens !== undefined) {
+        model.maxTokens = params.maxTokens;
+      }
+      if (params.frequencyPenalty !== undefined) {
+        model.frequencyPenalty = params.frequencyPenalty;
+      }
+      if (params.systemPrompt !== undefined) {
+        model.systemPrompt = params.systemPrompt;
+      }
+      if (params.conversationRounds !== undefined) {
         model.conversationRounds = params.conversationRounds;
-      if (params.maxIterations !== undefined) model.maxIterations = params.maxIterations;
-      if (params.usageLimits !== undefined) model.usageLimits = params.usageLimits;
+      }
+      if (params.maxIterations !== undefined) {
+        model.maxIterations = params.maxIterations;
+      }
+      if (params.usageLimits !== undefined) {
+        model.usageLimits = params.usageLimits;
+      }
 
       await saveModelManagement(storage);
 
@@ -652,7 +692,7 @@ export async function isModelEnabled(provider: string, modelName: string): Promi
     }
 
     // 返回模型的启用状态
-    return modelConfig.enabled === true;
+    return modelConfig.enabled;
   } catch (err) {
     // 发生错误时，默认允许使用（向后兼容）
     console.error(`[Models] Failed to check model enabled status:`, err);
@@ -879,7 +919,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
         ...internationalProviders.filter((p) => providerSet.has(p)),
         ...Array.from(providerSet)
           .filter((p) => !domesticProviders.includes(p) && !internationalProviders.includes(p))
-          .sort(),
+          .toSorted(),
       ];
 
       // 供应商显示名称
@@ -976,7 +1016,15 @@ export const modelsHandlers: GatewayRequestHandlers = {
           providerLabels,
           providers: {}, // 旧数据结构，保留向后兼容
           // 新的数据结构
-          auths: storage.auths,
+          auths: Object.fromEntries(
+            Object.entries(storage.auths).map(([provider, authList]) => [
+              provider,
+              authList.map((auth) => ({
+                ...auth,
+                apiKey: maskApiKey(auth.apiKey), // 安全掩码显示
+              })),
+            ]),
+          ),
           modelConfigs: storage.models,
           defaultAuthId: storage.defaultAuthId,
           // API模板库（预置）
@@ -1095,12 +1143,24 @@ export const modelsHandlers: GatewayRequestHandlers = {
       }
 
       // 更新字段
-      if (name !== undefined) provider.name = name;
-      if (icon !== undefined) provider.icon = icon;
-      if (website !== undefined) provider.website = website;
-      if (templateId !== undefined) provider.templateId = templateId;
-      if (defaultBaseUrl !== undefined) provider.defaultBaseUrl = defaultBaseUrl;
-      if (apiKeyPlaceholder !== undefined) provider.apiKeyPlaceholder = apiKeyPlaceholder;
+      if (name !== undefined) {
+        provider.name = name;
+      }
+      if (icon !== undefined) {
+        provider.icon = icon;
+      }
+      if (website !== undefined) {
+        provider.website = website;
+      }
+      if (templateId !== undefined) {
+        provider.templateId = templateId;
+      }
+      if (defaultBaseUrl !== undefined) {
+        provider.defaultBaseUrl = defaultBaseUrl;
+      }
+      if (apiKeyPlaceholder !== undefined) {
+        provider.apiKeyPlaceholder = apiKeyPlaceholder;
+      }
 
       await saveModelManagement(storage);
 
@@ -1291,7 +1351,9 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       for (const provider in storage.auths) {
         auth = storage.auths[provider]?.find((a) => a.authId === authId);
-        if (auth) break;
+        if (auth) {
+          break;
+        }
       }
 
       if (!auth) {
@@ -1321,7 +1383,9 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       for (const provider in storage.auths) {
         auth = storage.auths[provider]?.find((a) => a.authId === authId);
-        if (auth) break;
+        if (auth) {
+          break;
+        }
       }
 
       if (!auth) {
@@ -1465,7 +1529,9 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       for (const provider in storage.auths) {
         auth = storage.auths[provider]?.find((a) => a.authId === authId);
-        if (auth) break;
+        if (auth) {
+          break;
+        }
       }
 
       if (!auth) {

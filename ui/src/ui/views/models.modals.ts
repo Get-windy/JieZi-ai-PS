@@ -74,6 +74,14 @@ export function renderAuthEditModal(props: ModelsProps) {
   const isNew = !auth.authId;
   const providerLabel = resolveProviderLabel(props.snapshot, auth.provider);
 
+  // 获取原始认证信息（用于重复值检测和显示掩码）
+  const originalAuth = !isNew
+    ? Object.values(props.snapshot?.auths ?? {})
+        .flat()
+        .find((a) => a.authId === auth.authId)
+    : null;
+  const originalMaskedApiKey = originalAuth?.apiKey || ""; // 后端返回的是已掩码的值
+
   // 检查是否有未保存的内容
   const hasUnsavedContent = auth.name || auth.apiKey || auth.baseUrl;
 
@@ -85,6 +93,31 @@ export function renderAuthEditModal(props: ModelsProps) {
     } else {
       props.onCancelAuthEdit();
     }
+  };
+
+  // 保存时的验证和提示
+  const handleSave = () => {
+    if (!auth.name || (isNew && !auth.apiKey)) {
+      return;
+    }
+
+    // 检查：是否输入了与原掩码值相同的 API Key（重复值检测）
+    if (!isNew && auth.apiKey && auth.apiKey === originalMaskedApiKey) {
+      alert("请勿输入掩码显示的值，如需修改请输入完整的新 API Key，或留空保持原值不变。");
+      return;
+    }
+
+    // 检查：编辑时修改 API Key 的警告（只有当用户输入了新值时）
+    if (!isNew && auth.apiKey && auth.apiKey !== originalMaskedApiKey) {
+      const confirmed = confirm(
+        `⚠️ 修改 API Key 将导致使用该认证的所有模型配置失效，需要重新测试连接。\n\n确定要继续修改吗？`,
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    props.onSaveAuth(auth);
   };
 
   return html`
@@ -111,15 +144,33 @@ export function renderAuthEditModal(props: ModelsProps) {
           
           <div style="margin-bottom: 16px;">
             <label style="display: block; margin-bottom: 4px; font-weight: 500;">${t("models.api_key")}</label>
+            ${
+              !isNew && originalMaskedApiKey
+                ? html`
+              <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; padding: 6px 10px; background: var(--bg-elevated); border-radius: 4px; font-family: monospace;">
+                当前值：${originalMaskedApiKey}
+              </div>
+            `
+                : nothing
+            }
             <input 
               type="password" 
               class="input" 
-              placeholder="sk-..."
+              placeholder="${isNew ? "sk-..." : "留空则保持原密钥不变"}"
               .value=${auth.apiKey}
               @input=${(e: Event) => {
                 auth.apiKey = (e.target as HTMLInputElement).value;
               }}
             />
+            ${
+              isNew
+                ? nothing
+                : html`
+                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px">
+                      留空则保持原 API Key 不变
+                    </div>
+                  `
+            }
           </div>
           
           <div style="margin-bottom: 16px;">
@@ -143,12 +194,8 @@ export function renderAuthEditModal(props: ModelsProps) {
           <button
             class="btn btn--primary"
             style="background: #ff5c5c; border-color: #ff5c5c; color: #ffffff;"
-            ?disabled=${!auth.name || !auth.apiKey}
-            @click=${() => {
-              if (auth.name && auth.apiKey) {
-                props.onSaveAuth(auth);
-              }
-            }}
+            ?disabled=${!auth.name || (isNew && !auth.apiKey)}
+            @click=${handleSave}
           >
             ${t("models.save")}
           </button>
@@ -778,6 +825,7 @@ export function renderAddProviderModal(
       apiKeyPlaceholder: string;
       isEditing?: boolean; // 是否为编辑模式
       originalId?: string; // 编辑时的原始 ID
+      showApiImport?: boolean; // API 示例导入状态
     } | null;
   },
 ) {
@@ -789,6 +837,99 @@ export function renderAddProviderModal(
   const isEditing = form.isEditing || false;
   const apiTemplates = (props.snapshot as any)?.apiTemplates || [];
   const selectedTemplate = apiTemplates.find((t: any) => t.id === form.selectedTemplateId);
+
+  // API 示例导入状态（从 form 中读取）
+  const showApiImport = form.showApiImport || false;
+
+  // 切换导入状态
+  const toggleApiImport = () => {
+    props.onProviderFormChange({ showApiImport: !showApiImport });
+  };
+
+  // 解析 API 调用示例（支持 curl 命令）
+  const parseApiSample = (sample: string) => {
+    try {
+      // 提取 URL
+      const urlMatch = sample.match(/["']?(https?:\/\/[^\s"']+)["']?/);
+      if (!urlMatch) {
+        alert("❌ 无法识别 URL，请检查输入的示例代码");
+        return;
+      }
+
+      const fullUrl = urlMatch[1];
+      const url = new URL(fullUrl);
+
+      // 提取 Base URL（去掉路径和查询参数）
+      const baseUrl = `${url.protocol}//${url.host}`;
+
+      // 提取 Provider ID（从域名推断）
+      let providerId = "";
+      let providerName = "";
+
+      // 常见供应商域名映射
+      const domainMap: Record<string, { id: string; name: string }> = {
+        "openai.com": { id: "openai", name: "OpenAI" },
+        "api.openai.com": { id: "openai", name: "OpenAI" },
+        "anthropic.com": { id: "anthropic", name: "Anthropic" },
+        "api.anthropic.com": { id: "anthropic", name: "Anthropic" },
+        "bigmodel.cn": { id: "zhipu", name: "智谱 AI" },
+        "open.bigmodel.cn": { id: "zhipu", name: "智谱 AI" },
+        "deepseek.com": { id: "deepseek", name: "DeepSeek" },
+        "api.deepseek.com": { id: "deepseek", name: "DeepSeek" },
+        "moonshot.cn": { id: "moonshot", name: "月之暗面" },
+        "api.moonshot.cn": { id: "moonshot", name: "月之暗面" },
+        "dashscope.aliyuncs.com": { id: "qianwen", name: "阿里千问" },
+        "generativelanguage.googleapis.com": { id: "google", name: "Google Gemini" },
+      };
+
+      // 查找匹配的供应商
+      for (const [domain, info] of Object.entries(domainMap)) {
+        if (url.host.includes(domain)) {
+          providerId = info.id;
+          providerName = info.name;
+          break;
+        }
+      }
+
+      // 如果没有匹配，使用域名作为 ID
+      if (!providerId) {
+        const hostParts = url.host.split(".");
+        providerId = hostParts[hostParts.length - 2] || "custom";
+        providerName = providerId.charAt(0).toUpperCase() + providerId.slice(1);
+      }
+
+      // 提取 API Key 占位符（从 Authorization header）
+      let apiKeyPlaceholder = "请输入API密钥";
+      const authMatch = sample.match(/Authorization[:\s]+Bearer\s+([^\s"']+)/);
+      if (authMatch) {
+        const authValue = authMatch[1];
+        if (authValue.startsWith("sk-")) {
+          apiKeyPlaceholder = "sk-...";
+        } else if (authValue.toLowerCase().includes("key")) {
+          apiKeyPlaceholder = "your-api-key";
+        }
+      }
+
+      // 更新表单
+      form.id = providerId;
+      form.name = providerName;
+      form.defaultBaseUrl = baseUrl;
+      form.apiKeyPlaceholder = apiKeyPlaceholder;
+      form.selectedTemplateId = "openai-compatible"; // 默认使用 OpenAI 兼容模板
+
+      props.onProviderFormChange({
+        id: providerId,
+        name: providerName,
+        defaultBaseUrl: baseUrl,
+        apiKeyPlaceholder: apiKeyPlaceholder,
+        showApiImport: false, // 关闭导入面板
+      });
+
+      alert(`✅ 成功解析！\n\n供应商：${providerName}\nBase URL：${baseUrl}`);
+    } catch (err) {
+      alert(`❌ 解析失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
   // 检查是否有未保存的内容
   const hasUnsavedContent =
@@ -813,6 +954,68 @@ export function renderAddProviderModal(
         </div>
         
         <div class="modal-body" style="padding: 32px;">
+          <!-- API 示例导入 -->
+          ${
+            !isEditing
+              ? html`
+            <div style="margin-bottom: 24px; padding: 16px; background: var(--bg-elevated); border-radius: 8px;">
+              <div class="row" style="align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                <div>
+                  <h3 style="font-size: 14px; font-weight: 600; margin: 0;">💡 快速导入</h3>
+                  <p style="font-size: 12px; color: var(--text-secondary); margin: 4px 0 0 0;">
+                    粘贴 API 调用示例（如 curl 命令），自动提取供应商信息
+                  </p>
+                </div>
+                <button 
+                  class="btn btn--sm"
+                  style="font-size: 12px; padding: 6px 12px;"
+                  @click=${toggleApiImport}
+                >
+                  ${showApiImport ? "✖ 关闭" : "➕ 展开"}
+                </button>
+              </div>
+              
+              ${
+                showApiImport
+                  ? html`
+                <div style="margin-top: 12px;">
+                  <textarea
+                    class="input"
+                    style="min-height: 120px; font-family: monospace; font-size: 12px;"
+                    placeholder="示例：curl -X POST 'https://open.bigmodel.cn/api/paas/v4/chat/completions' -H 'Authorization: Bearer your-api-key' ..."
+                  ></textarea>
+                  <div class="row" style="gap: 8px; margin-top: 8px;">
+                    <button 
+                      class="btn btn--primary btn--sm"
+                      style="background: #ff5c5c; border-color: #ff5c5c; font-size: 12px; padding: 6px 14px;"
+                      @click=${() => {
+                        const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
+                        if (textarea) {
+                          parseApiSample(textarea.value);
+                        }
+                      }}
+                    >
+                      ✨ 解析并填充
+                    </button>
+                    <button 
+                      class="btn btn--sm"
+                      style="font-size: 12px; padding: 6px 12px;"
+                      @click=${() => {
+                        props.onProviderFormChange({ showApiImport: false });
+                      }}
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              `
+                  : nothing
+              }
+            </div>
+          `
+              : nothing
+          }
+          
           <!-- 模板选择 -->
           <div style="margin-bottom: 24px;">
             <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">${t("models.select_template")}</h3>
