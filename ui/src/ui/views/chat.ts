@@ -12,6 +12,7 @@ import {
 import { normalizeMessage, normalizeRoleForGrouping } from "../chat/message-normalizer.ts";
 import { icons } from "../icons.ts";
 import { t } from "../i18n.ts";
+import { detectTextDirection } from "../text-direction.ts";
 import { renderMarkdownSidebar } from "./markdown-sidebar.ts";
 import "../components/resizable-divider.ts";
 
@@ -87,7 +88,7 @@ function renderCompactionIndicator(status: CompactionIndicatorStatus | null | un
   if (status.active) {
     return html`
       <div class="compaction-indicator compaction-indicator--active" role="status" aria-live="polite">
-        ${icons.loader} ${t("chat.compacting")}
+        ${icons.loader} Compacting context...
       </div>
     `;
   }
@@ -98,7 +99,7 @@ function renderCompactionIndicator(status: CompactionIndicatorStatus | null | un
     if (elapsed < COMPACTION_TOAST_DURATION_MS) {
       return html`
         <div class="compaction-indicator compaction-indicator--complete" role="status" aria-live="polite">
-          ${icons.check} ${t("chat.compacted")}
+          ${icons.check} Context compacted
         </div>
       `;
     }
@@ -165,13 +166,13 @@ function renderAttachmentPreview(props: ChatProps) {
           <div class="chat-attachment">
             <img
               src=${att.dataUrl}
-              alt="${t("chat.attachment.preview")}"
+              alt="Attachment preview"
               class="chat-attachment__img"
             />
             <button
               class="chat-attachment__remove"
               type="button"
-              aria-label="${t("chat.attachment.remove")}"
+              aria-label="Remove attachment"
               @click=${() => {
                 const next = (props.attachments ?? []).filter((a) => a.id !== att.id);
                 props.onAttachmentsChange?.(next);
@@ -201,9 +202,9 @@ export function renderChat(props: ChatProps) {
   const hasAttachments = (props.attachments?.length ?? 0) > 0;
   const composePlaceholder = props.connected
     ? hasAttachments
-      ? t("chat.placeholder.with_attachments")
-      : t("chat.placeholder.connected")
-    : t("chat.placeholder.disconnected");
+      ? "Add a message or paste more images..."
+      : "Message (↩ to send, Shift+↩ for line breaks, paste images)"
+    : "Connect to the gateway to start chatting…";
 
   const splitRatio = props.splitRatio ?? 0.6;
   const sidebarOpen = Boolean(props.sidebarOpen && props.onCloseSidebar);
@@ -376,6 +377,7 @@ export function renderChat(props: ChatProps) {
             <textarea
               ${ref((el) => el && adjustTextareaHeight(el as HTMLTextAreaElement))}
               .value=${props.draft}
+              dir=${detectTextDirection(props.draft)}
               ?disabled=${!props.connected}
               @keydown=${(e: KeyboardEvent) => {
                 if (e.key !== "Enter") {
