@@ -141,6 +141,7 @@ export type AppViewState = {
   modelsLoading: boolean;
   modelsSnapshot: import("./types.ts").ModelsStatusSnapshot | null;
   modelsError: string | null;
+  modelsLastSuccess: number | null;
   testingAuthId: string | null;
   managingAuthProvider: string | null;
   editingAuth: {

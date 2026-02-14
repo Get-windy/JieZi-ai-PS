@@ -39,8 +39,6 @@ import {
   respondToApproval as respondToPermissionApproval,
   batchApproveRequests,
   batchDenyRequests,
-  cancelApprovalRequest,
-  loadPermissionHistory,
 } from "./controllers/agent-permissions.ts";
 import {
   loadModelAccounts,
@@ -54,7 +52,6 @@ import {
   loadApprovals,
   loadApprovalStats,
   respondToApproval,
-  cancelApproval,
 } from "./controllers/approvals.ts";
 import { loadChannels } from "./controllers/channels.ts";
 import { loadChatHistory } from "./controllers/chat.ts";
@@ -88,9 +85,6 @@ import {
   updateExecApprovalsFormValue,
 } from "./controllers/exec-approvals.ts";
 import {
-  loadFriends,
-  loadFriendRequests,
-  addFriend,
   confirmFriend,
   removeFriend,
   loadMessages,
