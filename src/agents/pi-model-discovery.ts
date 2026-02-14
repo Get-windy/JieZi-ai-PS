@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 
 // 使用 createRequire 创建 require 函数以兼容 ESM 模块
-const require = createRequire(import.meta.url);
+const _require = createRequire(import.meta.url);
 
 // 延迟导入以避免顶层 await 导致的问题
 let piCodingAgentModule: any = null;
