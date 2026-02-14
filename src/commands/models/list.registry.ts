@@ -1,6 +1,8 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { AuthProfileStore } from "../../agents/auth-profiles.js";
-import type { ModelRegistry } from "../../agents/pi-model-discovery.js";
+import { ModelRegistry } from "../../agents/pi-model-discovery.js";
+
+type ModelRegistryInstance = InstanceType<typeof ModelRegistry>;
 import type { OpenClawConfig } from "../../config/config.js";
 import type { ModelRow } from "./list.types.js";
 import { resolveOpenClawAgentDir } from "../../agents/agent-paths.js";
@@ -84,7 +86,7 @@ function validateAvailableModels(availableModels: unknown): Model<Api>[] {
   return availableModels as Model<Api>[];
 }
 
-function loadAvailableModels(registry: ModelRegistry): Model<Api>[] {
+function loadAvailableModels(registry: ModelRegistryInstance): Model<Api>[] {
   let availableModels: unknown;
   try {
     availableModels = registry.getAvailable();
@@ -139,7 +141,7 @@ type SynthesizedForwardCompat = {
 
 function appendAntigravityForwardCompatModels(
   models: Model<Api>[],
-  modelRegistry: ModelRegistry,
+  modelRegistry: ModelRegistryInstance,
 ): { models: Model<Api>[]; synthesizedForwardCompat: SynthesizedForwardCompat[] } {
   const nextModels = [...models];
   const synthesizedForwardCompat: SynthesizedForwardCompat[] = [];

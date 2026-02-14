@@ -1,5 +1,7 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
-import type { ModelRegistry } from "../../agents/pi-model-discovery.js";
+import { ModelRegistry } from "../../agents/pi-model-discovery.js";
+
+type ModelRegistryInstance = InstanceType<typeof ModelRegistry>;
 import type { RuntimeEnv } from "../../runtime.js";
 import type { ModelRow } from "./list.types.js";
 import { ensureAuthProfileStore } from "../../agents/auth-profiles.js";
@@ -36,7 +38,7 @@ export async function modelsListCommand(
   })();
 
   let models: Model<Api>[] = [];
-  let modelRegistry: ModelRegistry | undefined;
+  let modelRegistry: ModelRegistryInstance | undefined;
   let availableKeys: Set<string> | undefined;
   let availabilityErrorMessage: string | undefined;
   try {

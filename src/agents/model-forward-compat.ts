@@ -1,5 +1,7 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
-import type { ModelRegistry } from "./pi-model-discovery.js";
+import { ModelRegistry } from "./pi-model-discovery.js";
+
+type ModelRegistryInstance = InstanceType<typeof ModelRegistry>;
 import { DEFAULT_CONTEXT_TOKENS } from "./defaults.js";
 import { normalizeModelCompat } from "./model-compat.js";
 import { normalizeProviderId } from "./model-selection.js";
@@ -41,7 +43,7 @@ export const ANTIGRAVITY_OPUS_46_FORWARD_COMPAT_CANDIDATES = [
 function resolveOpenAICodexGpt53FallbackModel(
   provider: string,
   modelId: string,
-  modelRegistry: ModelRegistry,
+  modelRegistry: ModelRegistryInstance,
 ): Model<Api> | undefined {
   const normalizedProvider = normalizeProviderId(provider);
   const trimmedModelId = modelId.trim();
@@ -81,7 +83,7 @@ function resolveOpenAICodexGpt53FallbackModel(
 function resolveAnthropicOpus46ForwardCompatModel(
   provider: string,
   modelId: string,
-  modelRegistry: ModelRegistry,
+  modelRegistry: ModelRegistryInstance,
 ): Model<Api> | undefined {
   const normalizedProvider = normalizeProviderId(provider);
   if (normalizedProvider !== "anthropic") {
@@ -128,7 +130,7 @@ function resolveAnthropicOpus46ForwardCompatModel(
 function resolveZaiGlm5ForwardCompatModel(
   provider: string,
   modelId: string,
-  modelRegistry: ModelRegistry,
+  modelRegistry: ModelRegistryInstance,
 ): Model<Api> | undefined {
   if (normalizeProviderId(provider) !== "zai") {
     return undefined;
@@ -168,7 +170,7 @@ function resolveZaiGlm5ForwardCompatModel(
 function resolveAntigravityOpus46ForwardCompatModel(
   provider: string,
   modelId: string,
-  modelRegistry: ModelRegistry,
+  modelRegistry: ModelRegistryInstance,
 ): Model<Api> | undefined {
   const normalizedProvider = normalizeProviderId(provider);
   if (normalizedProvider !== "google-antigravity") {
@@ -229,7 +231,7 @@ function resolveAntigravityOpus46ForwardCompatModel(
 export function resolveForwardCompatModel(
   provider: string,
   modelId: string,
-  modelRegistry: ModelRegistry,
+  modelRegistry: ModelRegistryInstance,
 ): Model<Api> | undefined {
   return (
     resolveOpenAICodexGpt53FallbackModel(provider, modelId, modelRegistry) ??
