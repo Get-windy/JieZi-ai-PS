@@ -187,6 +187,7 @@ export async function deliverOutboundPayloads(params: {
   gifPlayback?: boolean;
   abortSignal?: AbortSignal;
   bestEffort?: boolean;
+  silent?: boolean;
   onError?: (err: unknown, payload: NormalizedOutboundPayload) => void;
   onPayload?: (payload: NormalizedOutboundPayload) => void;
   mirror?: {

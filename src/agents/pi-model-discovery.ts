@@ -73,6 +73,9 @@ export const AuthStorage = new Proxy(function AuthStorageProxy() {} as any, {
   },
 });
 
+// 导出类型
+export type AuthStorage = InstanceType<ReturnType<typeof getPiCodingAgentSync>["AuthStorage"]>;
+
 export const ModelRegistry = new Proxy(function ModelRegistryProxy() {} as any, {
   get(_target, prop) {
     const MR = getPiCodingAgentSync().ModelRegistry;
@@ -83,6 +86,9 @@ export const ModelRegistry = new Proxy(function ModelRegistryProxy() {} as any, 
     return new MR(...(args as [any, string]));
   },
 });
+
+// 导出类型
+export type ModelRegistry = InstanceType<ReturnType<typeof getPiCodingAgentSync>["ModelRegistry"]>;
 
 // Compatibility helpers for pi-coding-agent 0.50+ (discover* helpers removed).
 export function discoverAuthStorage(agentDir: string): any {
