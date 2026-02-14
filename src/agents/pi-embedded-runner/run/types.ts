@@ -8,10 +8,10 @@ import type { InputProvenance } from "../../../sessions/input-provenance.js";
 import type { ExecElevatedDefaults, ExecToolDefaults } from "../../bash-tools.js";
 import type { MessagingToolSend } from "../../pi-embedded-messaging.js";
 import type { BlockReplyChunking, ToolResultFormat } from "../../pi-embedded-subscribe.js";
+import type { AuthStorage, ModelRegistry } from "../../pi-model-discovery.js";
 import type { SkillSnapshot } from "../../skills.js";
 import type { NormalizedUsage } from "../../usage.js";
 import type { ClientToolDefinition } from "./params.js";
-import { AuthStorage, ModelRegistry } from "../../pi-model-discovery.js";
 
 export type EmbeddedRunAttemptParams = {
   sessionId: string;

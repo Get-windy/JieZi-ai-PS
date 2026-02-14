@@ -30,15 +30,15 @@ A2UI bundle up to date; skipping.
 [34mℹ[39m Build start
 [34mℹ[39m [2mdist\[22m[1mwarning-filter.js[22m  [2m1.74 kB[22m [2m│ gzip: 0.65 kB[22m
 [34mℹ[39m 1 files, total: 1.74 kB
-[32m✔[39m Build complete in [32m542ms[39m
+[32m✔[39m Build complete in [32m549ms[39m
 [34mℹ[39m [2mdist\plugin-sdk\[22m[1mindex.js[22m                        [2m655.23 kB[22m [2m│ gzip: 150.05 kB[22m
-[34mℹ[39m [2mdist\plugin-sdk\[22mmodels-DMg2033e.js              [2m378.17 kB[22m [2m│ gzip:  74.43 kB[22m
-[34mℹ[39m [2mdist\plugin-sdk\[22mmodel-selection-qk-URT-m.js     [2m150.71 kB[22m [2m│ gzip:  35.85 kB[22m
+[34mℹ[39m [2mdist\plugin-sdk\[22mmodels-DYiMMXxN.js              [2m378.17 kB[22m [2m│ gzip:  74.43 kB[22m
+[34mℹ[39m [2mdist\plugin-sdk\[22mmodel-selection-jnP9rjfx.js     [2m150.71 kB[22m [2m│ gzip:  35.85 kB[22m
 [34mℹ[39m [2mdist\plugin-sdk\[22mpi-model-discovery-CW7r2fNw.js  [2m  2.59 kB[22m [2m│ gzip:   0.91 kB[22m
-[34mℹ[39m [2mdist\plugin-sdk\[22mpi-auth-json-zF0N8YSM.js        [2m  2.53 kB[22m [2m│ gzip:   1.03 kB[22m
+[34mℹ[39m [2mdist\plugin-sdk\[22mpi-auth-json-DZ9unhVx.js        [2m  2.53 kB[22m [2m│ gzip:   1.03 kB[22m
 [34mℹ[39m [2mdist\plugin-sdk\[22mrolldown-runtime-Cbj13DAv.js    [2m  0.42 kB[22m [2m│ gzip:   0.28 kB[22m
-[34mℹ[39m 6 files, total: 1189.64 kB
-[32m✔[39m Build complete in [32m734ms[39m
+[34mℹ[39m 6 files, total: 1189.65 kB
+[32m✔[39m Build complete in [32m738ms[39m
 [34mℹ[39m [2mdist\[22m[1mextensionAPI.js[22m                   [2m   1.60 kB[22m [2m│ gzip:  0.67 kB[22m
 [34mℹ[39m [2mdist\[22mpi-embedded-Dt5-wYD-.js           [2m2346.85 kB[22m
 [34mℹ[39m [2mdist\[22mconfig-BFvgzfrP.js                [2m 322.74 kB[22m [2m│ gzip: 65.06 kB[22m
@@ -83,7 +83,7 @@ A2UI bundle up to date; skipping.
 [34mℹ[39m [2mdist\[22mtranscript-events-D0S_0vSE.js     [2m   0.59 kB[22m [2m│ gzip:  0.29 kB[22m
 [34mℹ[39m [2mdist\[22mrolldown-runtime-Cbj13DAv.js      [2m   0.42 kB[22m [2m│ gzip:  0.28 kB[22m
 [34mℹ[39m 43 files, total: 3888.74 kB
-[32m✔[39m Build complete in [32m886ms[39m
+[32m✔[39m Build complete in [32m874ms[39m
 [34mℹ[39m [2mdist\[22m[1mbundled\boot-md\handler.js[22m                [2m  35.80 kB[22m [2m│ gzip:  9.21 kB[22m
 [34mℹ[39m [2mdist\[22m[1mbundled\soul-evil\handler.js[22m              [2m   6.92 kB[22m [2m│ gzip:  2.29 kB[22m
 [34mℹ[39m [2mdist\[22m[1mbundled\session-memory\handler.js[22m         [2m   6.44 kB[22m [2m│ gzip:  2.43 kB[22m
@@ -159,7 +159,7 @@ A2UI bundle up to date; skipping.
 [34mℹ[39m [2mdist\[22mconfig-DJPHD66x.js                        [2m   0.41 kB[22m [2m│ gzip:  0.25 kB[22m
 [34mℹ[39m [2mdist\[22mlegacy-names-CN9YCPx5.js                  [2m   0.26 kB[22m [2m│ gzip:  0.17 kB[22m
 [34mℹ[39m 74 files, total: 3973.35 kB
-[32m✔[39m Build complete in [32m913ms[39m
+[32m✔[39m Build complete in [32m923ms[39m
 [34mℹ[39m Granting execute permission to [4mdist\index.js[24m
 [34mℹ[39m Granting execute permission to [4mdist\entry.js[24m
 [34mℹ[39m [2mdist\[22m[1mindex.js[22m                            [2m 235.84 kB[22m [2m│ gzip: 50.82 kB[22m
@@ -407,7 +407,7 @@ src\gateway\sessions-resolve.ts (13:2) [MISSING_EXPORT] Warning: "pruneLegacySto
     │ Note: If you meant to import a type rather than a value, make sure to add the `type` modifier (e.g. `import { type Foo } from './session-utils.js'`).
 ────╯
 
-[32m✔[39m Build complete in [32m1261ms[39m
+[32m✔[39m Build complete in [32m1226ms[39m
 [34mℹ[39m [2mdist\[22m[1mentry.js[22m                            [2m  56.57 kB[22m [2m│ gzip: 15.60 kB[22m
 [34mℹ[39m [2mdist\[22mreply-Yov7A709.js                   [2m2103.44 kB[22m
 [34mℹ[39m [2mdist\[22mgateway-cli-Dkrc24pk.js             [2m1119.34 kB[22m
@@ -668,7 +668,7 @@ src\gateway\sessions-resolve.ts (13:2) [MISSING_EXPORT] Warning: "pruneLegacySto
     │ Note: If you meant to import a type rather than a value, make sure to add the `type` modifier (e.g. `import { type Foo } from './session-utils.js'`).
 ────╯
 
-[32m✔[39m Build complete in [32m1299ms[39m
+[32m✔[39m Build complete in [32m1259ms[39m
 
 > openclaw@2026.2.13 build:plugin-sdk:dts I:\JieZI\JieZi-ai-PS
 > tsc -p tsconfig.plugin-sdk.dts.json
