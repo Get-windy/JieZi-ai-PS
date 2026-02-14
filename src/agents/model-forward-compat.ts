@@ -1,5 +1,5 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
-import { ModelRegistry } from "./pi-model-discovery.js";
+import type { ModelRegistry } from "./pi-model-discovery.js";
 
 type ModelRegistryInstance = InstanceType<typeof ModelRegistry>;
 import { DEFAULT_CONTEXT_TOKENS } from "./defaults.js";
