@@ -137,18 +137,32 @@ export async function setDefaultAuth(state: ModelsState, authId: string) {
 /**
  * 测试认证连接
  */
-export async function testAuth(state: ModelsState, authId: string) {
+export async function testAuth(
+  state: ModelsState,
+  authId: string,
+): Promise<{
+  ok: boolean;
+  message?: string;
+  responseTime?: number;
+  status?: number;
+  error?: string;
+}> {
   if (!state.client || !state.connected) {
-    return { success: false, message: "Not connected" };
+    return { ok: false, message: "Not connected" };
   }
   try {
-    const res = await state.client.request<{ success: boolean; message?: string }>(
-      "models.auth.test",
-      { authId },
-    );
-    return res;
+    const res = await state.client.request<{
+      ok: boolean;
+      message?: string;
+      responseTime?: number;
+      status?: number;
+      error?: string;
+    }>("models.auth.test", { authId });
+    // 刷新数据以更新认证状态
+    await loadModels(state, false);
+    return res || { ok: false, message: "未知错误" };
   } catch (err) {
-    return { success: false, message: String(err) };
+    return { ok: false, message: String(err) };
   }
 }
 
@@ -431,8 +445,23 @@ export async function deleteProvider(state: ModelsState, id: string, cascade: bo
       authCount: res?.authCount,
       modelCount: res?.modelCount,
     };
-  } catch (err) {
+  } catch (err: any) {
+    // 当后端返回 error 时，尝试从错误中提取数据
+    // 错误格式：{ message: string, data?: any }
+    if (err?.data) {
+      const data = err.data;
+      if (data.requiresCascade) {
+        return {
+          success: false,
+          requiresCascade: data.requiresCascade,
+          authCount: data.authCount,
+          modelCount: data.modelCount,
+        };
+      }
+    }
+
+    // 其他错误
     state.modelsError = String(err);
-    throw err;
+    return { success: false };
   }
 }

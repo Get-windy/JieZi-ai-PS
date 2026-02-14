@@ -2,6 +2,7 @@ import type { AgentCommandOpts } from "./agent/types.js";
 import {
   listAgentIds,
   resolveAgentDir,
+  resolveAgentModelAccounts,
   resolveAgentModelFallbacksOverride,
   resolveAgentModelPrimary,
   resolveAgentSkillsFilter,
@@ -19,6 +20,7 @@ import {
   isCliProvider,
   modelKey,
   resolveConfiguredModelRef,
+  resolveModelAccountForSession,
   resolveThinkingDefault,
 } from "../agents/model-selection.js";
 import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
@@ -317,6 +319,52 @@ export async function agentCommand(
         model = storedModelOverride;
       }
     }
+
+    // === 【关键修复】检查智能助手是否配置了 modelAccounts 智能路由 ===
+    // 优先使用 modelAccounts 配置中的模型，而不是传统的 model 配置
+    const modelAccountsConfig = resolveAgentModelAccounts(cfg, sessionAgentId);
+    if (modelAccountsConfig && modelAccountsConfig.accounts.length > 0) {
+      // 加载模型目录（如果还没有加载）
+      if (!modelCatalog) {
+        modelCatalog = await loadModelCatalog({ config: cfg });
+      }
+
+      try {
+        // 调用智能路由逻辑
+        const routingResult = await resolveModelAccountForSession({
+          cfg,
+          agentId: sessionAgentId,
+          message: body,
+          sessionContext: {
+            sessionId,
+            agentId: sessionAgentId,
+            messageHistory: [], // 简化：不传递历史消息
+            currentPinnedAccountId: sessionEntry?.modelAccountId,
+          },
+          catalog: modelCatalog,
+        });
+
+        if (routingResult) {
+          // 成功路由，使用新的模型
+          provider = routingResult.modelRef.provider;
+          model = routingResult.modelRef.model;
+          console.log(
+            `[agent] Using modelAccounts routing: ${routingResult.accountId} -> ${provider}/${model}`,
+          );
+          console.log(`[agent] Routing reason: ${routingResult.reason}`);
+        } else {
+          // 路由失败，记录日志但继续使用默认模型
+          console.log(
+            `[agent] modelAccounts routing returned null, falling back to default: ${provider}/${model}`,
+          );
+        }
+      } catch (routingError) {
+        // 路由异常，记录日志但继续使用默认模型
+        console.error(`[agent] modelAccounts routing error:`, routingError);
+        console.log(`[agent] Falling back to default model: ${provider}/${model}`);
+      }
+    }
+
     if (sessionEntry) {
       const authProfileId = sessionEntry.authProfileOverride;
       if (authProfileId) {

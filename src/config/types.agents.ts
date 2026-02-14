@@ -21,15 +21,16 @@ export type AgentModelConfig =
 
 /**
  * 智能助手模型账号路由配置
- * 支持一个智能助手绑定多个模型账号，并根据问题复杂度、模型能力、成本等因素智能选择最优账号
+ * 支持一个智能助手绑定多个模型，并根据问题复杂度、模型能力、成本等因素智能选择最优模型
  */
 export type AgentModelAccountsConfig = {
-  /** 可用模型账号列表（引用 auth.profiles 中的 ID） */
+  /** 可用模型列表（格式：providerId/modelName，如 "zhipu/glm-4-plus"）
+   * 注意：这里存储的是模型标识，底层会自动解析对应的认证账号 */
   accounts: string[];
 
   /** 账号配置（绑定、启用/停用状态） */
   accountConfigs?: Array<{
-    /** 账号 ID */
+    /** 模型标识（格式：providerId/modelName） */
     accountId: string;
     /** 是否启用（默认 true） */
     enabled?: boolean;
@@ -66,10 +67,10 @@ export type AgentModelAccountsConfig = {
     };
   };
 
-  /** 手动指定时的默认账号 */
+  /** 手动指定时的默认模型（格式：providerId/modelName） */
   defaultAccountId?: string;
 
-  /** 是否启用会话级别模型账号固定（避免频繁切换） */
+  /** 是否启用会话级别模型固定（避免频繁切换） */
   enableSessionPinning?: boolean;
 };
 

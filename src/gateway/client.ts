@@ -327,7 +327,15 @@ export class GatewayClient {
         if (parsed.ok) {
           pending.resolve(parsed.payload);
         } else {
-          pending.reject(new Error(parsed.error?.message ?? "unknown error"));
+          // 创建错误对象，并附加 payload 数据
+          const error: Error & { data?: unknown } = new Error(
+            parsed.error?.message ?? "unknown error",
+          );
+          // 如果有 payload 数据，附加到错误对象上
+          if (parsed.payload !== undefined) {
+            error.data = parsed.payload;
+          }
+          pending.reject(error);
         }
       }
     } catch (err) {

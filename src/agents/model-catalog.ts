@@ -8,7 +8,11 @@ export type ModelCatalogEntry = {
   provider: string;
   contextWindow?: number;
   reasoning?: boolean;
-  input?: Array<"text" | "image">;
+  input?: Array<"text" | "image" | "audio" | "video">;
+  // 模态和专业领域元数据（可选，用于更精确的路由）
+  supportedModalities?: Array<"text" | "image" | "audio" | "video" | "code">;
+  specializations?: Array<string>; // 专业领域标签
+  tags?: string[]; // 通用标签
 };
 
 type DiscoveredModel = {

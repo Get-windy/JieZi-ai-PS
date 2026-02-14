@@ -10,6 +10,7 @@ export type ModelsProps = {
   snapshot: ModelsStatusSnapshot | null;
   loading: boolean;
   error: string | null;
+  testingAuthId: string | null; // 正在测试的认证ID
 
   // ============ 认证管理状态 ============
   managingAuthProvider: string | null; // 当前管理认证的供应商ID
@@ -50,6 +51,17 @@ export type ModelsProps = {
     };
   } | null;
 
+  // ============ 导入模型状态 ============
+  importableModels: Array<{
+    modelName: string;
+    isConfigured: boolean;
+    isEnabled: boolean;
+    isDeprecated: boolean;
+  }> | null;
+  importingAuthId: string | null; // 正在导入模型的认证ID
+  importingProvider: string | null; // 正在导入模型的供应商ID
+  selectedImportModels: Set<string>; // 选中的待导入模型
+
   // ============ 认证操作回调 ============
   onManageAuths: (provider: string) => void; // 打开认证管理弹窗
   onAddAuth: (provider: string) => void; // 添加认证
@@ -78,6 +90,8 @@ export type ModelsProps = {
   onToggleModelConfig: (configId: string, enabled: boolean) => void; // 启用/禁用模型
   onRefreshAuthModels: (authId: string) => void; // 刷新认证的可用模型列表
   onImportModels: (authId: string, modelNames: string[]) => void; // 批量导入模型
+  onToggleImportModel: (modelName: string) => void; // 切换模型选中状态
+  onCancelImport: () => void; // 取消导入
   onSaveModelConfig: (params: {
     configId?: string;
     authId: string;

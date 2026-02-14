@@ -207,6 +207,11 @@ export function renderAuthEditModal(props: ModelsProps) {
 
 function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
   const statusColor = auth.status?.valid ? "green" : "gray";
+  // 检查是否正在测试
+  const isTesting = (props as any).testingAuthId === auth.authId;
+  const lastTest = auth.status?.lastChecked
+    ? formatAgo(Date.now() - auth.status.lastChecked)
+    : null;
 
   return html`
     <div class="card" style="padding: 20px;">
@@ -239,10 +244,28 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
             `
                 : nothing
             }
+            ${
+              lastTest && auth.status
+                ? html`
+              <div class="card-sub" style="margin-top: 4px; font-size: 11px; color: ${auth.status.valid ? "var(--success)" : "var(--text-secondary)"}">
+                ${auth.status.valid ? t("models.test_status_valid") : t("models.test_status_invalid")} · ${t("models.last_test")}: ${lastTest}
+                ${auth.status.error ? html` · ${auth.status.error}` : nothing}
+              </div>
+            `
+                : nothing
+            }
           </div>
         </div>
         <div class="row" style="gap: 10px; flex-shrink: 0;">
            <button 
+            class="btn btn--sm" 
+            style="padding: 8px 14px; font-size: 13px; ${isTesting ? "opacity: 0.6;" : ""}"
+            ?disabled=${isTesting}
+            @click=${() => (props as any).onTestAuth?.(auth.authId)}
+          >
+            ${isTesting ? "🔄 " + t("models.testing") : "✅ " + t("models.test")}
+          </button>
+          <button 
             class="btn btn--sm" 
             style="padding: 8px 14px; font-size: 13px;"
             @click=${() => props.onEditAuth(auth.authId)}
@@ -300,9 +323,44 @@ export function renderModelsListModal(props: ModelsProps) {
         </div>
         
         <div class="modal-body" style="padding: 32px;">
-          ${auths.map((auth) => {
-            const authModels = modelConfigs.filter((m) => m.authId === auth.authId);
-            return html`
+          ${
+            auths.length === 0
+              ? html`
+              <div style="margin-bottom: 32px;">
+                <div class="row" style="margin-bottom: 16px; justify-content: space-between; align-items: center;">
+                  <h3 style="font-size: 16px; font-weight: 600; margin: 0; color: var(--text-secondary);">
+                    🔑 ${t("models.no_auth_yet")}
+                  </h3>
+                  <div class="row" style="gap: 8px;">
+                    <button 
+                      class="btn btn--sm" 
+                      style="font-size: 13px; padding: 8px 14px;"
+                      @click=${() => {
+                        // 无认证时，使用供应商默认配置刷新
+                        props.onRefreshAuthModels(null);
+                      }}
+                    >
+                      🔄 ${t("models.view_available_models")}
+                    </button>
+                    <button 
+                      class="btn btn--sm btn--primary" 
+                      @click=${() => {
+                        props.onAddAuth(providerId);
+                      }}
+                    >
+                      ➕ ${t("models.add_auth")}
+                    </button>
+                  </div>
+                </div>
+                
+                <div class="muted" style="padding: 20px; text-align: center; font-size: 13px; background: var(--bg-secondary); border-radius: 8px;">
+                  ${t("models.no_auth_hint")}
+                </div>
+              </div>
+            `
+              : auths.map((auth) => {
+                  const authModels = modelConfigs.filter((m) => m.authId === auth.authId);
+                  return html`
               <div style="margin-bottom: 32px;">
                 <div class="row" style="margin-bottom: 16px; justify-content: space-between; align-items: center;">
                   <h3 style="font-size: 16px; font-weight: 600; margin: 0;">
@@ -341,7 +399,8 @@ export function renderModelsListModal(props: ModelsProps) {
                 }
               </div>
             `;
-          })}
+                })
+          }
         </div>
         
         <div class="modal-footer">
@@ -841,6 +900,17 @@ export function renderAddProviderModal(
   // API 示例导入状态（从 form 中读取）
   const showApiImport = form.showApiImport || false;
 
+  // 添加模式：'code-import' | 'manual'
+  const addMode = (form as any).addMode || "code-import";
+
+  // 代码导入步骤：'input' | 'confirm'
+  const importStep = (form as any).importStep || "input";
+
+  // 切换添加模式
+  const switchAddMode = (mode: "code-import" | "manual") => {
+    props.onProviderFormChange({ addMode: mode, importStep: "input" });
+  };
+
   // 切换导入状态
   const toggleApiImport = () => {
     props.onProviderFormChange({ showApiImport: !showApiImport });
@@ -859,21 +929,75 @@ export function renderAddProviderModal(
       const fullUrl = urlMatch[1];
       const url = new URL(fullUrl);
 
-      // 提取 Base URL（去掉路径和查询参数）
-      const baseUrl = `${url.protocol}//${url.host}`;
+      // 提取 Base URL（保留路径，但去掉最后的端点）
+      let baseUrl = `${url.protocol}//${url.host}`;
+
+      // 如果有路径，保留到倒数第二个斜杠
+      if (url.pathname && url.pathname !== "/") {
+        const pathParts = url.pathname.split("/").filter((p) => p);
+        // 移除最后一个路径段（通常是端点名，如 chat/completions、completions 等）
+        if (pathParts.length > 0) {
+          pathParts.pop(); // 移除最后一段
+          if (pathParts.length > 0) {
+            baseUrl += "/" + pathParts.join("/");
+          }
+        }
+      }
 
       // 提取 Provider ID（从域名推断）
       let providerId = "";
       let providerName = "";
 
       // 常见供应商域名映射
-      const domainMap: Record<string, { id: string; name: string }> = {
+      const domainMap: Record<string, { id: string; name: string; knownModels?: string[] }> = {
         "openai.com": { id: "openai", name: "OpenAI" },
         "api.openai.com": { id: "openai", name: "OpenAI" },
         "anthropic.com": { id: "anthropic", name: "Anthropic" },
         "api.anthropic.com": { id: "anthropic", name: "Anthropic" },
-        "bigmodel.cn": { id: "zhipu", name: "智谱 AI" },
-        "open.bigmodel.cn": { id: "zhipu", name: "智谱 AI" },
+        "bigmodel.cn": {
+          id: "zhipu",
+          name: "智谱 AI",
+          knownModels: [
+            "glm-5-plus",
+            "glm-5",
+            "glm-4-plus",
+            "glm-4-0520",
+            "glm-4",
+            "glm-4-air",
+            "glm-4-airx",
+            "glm-4-flash",
+            "glm-4-flashx",
+            "glm-4v-plus",
+            "glm-4v",
+            "glm-3-turbo",
+            "cogview-3-plus",
+            "cogview-3",
+            "embedding-3",
+            "embedding-2",
+          ],
+        },
+        "open.bigmodel.cn": {
+          id: "zhipu",
+          name: "智谱 AI",
+          knownModels: [
+            "glm-5-plus",
+            "glm-5",
+            "glm-4-plus",
+            "glm-4-0520",
+            "glm-4",
+            "glm-4-air",
+            "glm-4-airx",
+            "glm-4-flash",
+            "glm-4-flashx",
+            "glm-4v-plus",
+            "glm-4v",
+            "glm-3-turbo",
+            "cogview-3-plus",
+            "cogview-3",
+            "embedding-3",
+            "embedding-2",
+          ],
+        },
         "deepseek.com": { id: "deepseek", name: "DeepSeek" },
         "api.deepseek.com": { id: "deepseek", name: "DeepSeek" },
         "moonshot.cn": { id: "moonshot", name: "月之暗面" },
@@ -883,10 +1007,12 @@ export function renderAddProviderModal(
       };
 
       // 查找匹配的供应商
+      let knownModels: string[] | undefined;
       for (const [domain, info] of Object.entries(domainMap)) {
         if (url.host.includes(domain)) {
           providerId = info.id;
           providerName = info.name;
+          knownModels = info.knownModels;
           break;
         }
       }
@@ -910,6 +1036,47 @@ export function renderAddProviderModal(
         }
       }
 
+      // 提取 JSON Body 中的模型名称和默认参数
+      let extractedModel: string | undefined;
+      let defaultParams: Record<string, any> = {};
+
+      // 尝试解析 JSON 数据
+      const jsonMatch = sample.match(/-d\s+['"]({[\s\S]*?})['"]/);
+      if (jsonMatch) {
+        try {
+          // 清理 JSON 字符串（移除多余的空白和换行）
+          const jsonStr = jsonMatch[1].replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+          const jsonData = JSON.parse(jsonStr);
+
+          // 提取模型名称
+          if (jsonData.model && typeof jsonData.model === "string") {
+            extractedModel = jsonData.model;
+          }
+
+          // 提取默认参数
+          if (jsonData.temperature !== undefined) {
+            defaultParams.temperature = jsonData.temperature;
+          }
+          if (jsonData.max_tokens !== undefined) {
+            defaultParams.maxTokens = jsonData.max_tokens;
+          }
+          if (jsonData.top_p !== undefined) {
+            defaultParams.topP = jsonData.top_p;
+          }
+        } catch (err) {
+          console.warn("[parseApiSample] Failed to parse JSON body:", err);
+        }
+      }
+
+      // 如果提取到了模型名称，将其添加到 knownModels 列表中
+      if (extractedModel && knownModels) {
+        // 确保提取的模型在列表的首位（推荐使用）
+        knownModels = [extractedModel, ...knownModels.filter((m) => m !== extractedModel)];
+      } else if (extractedModel) {
+        // 如果没有预设的 knownModels，创建一个只包含提取模型的列表
+        knownModels = [extractedModel];
+      }
+
       // 更新表单
       form.id = providerId;
       form.name = providerName;
@@ -922,14 +1089,241 @@ export function renderAddProviderModal(
         name: providerName,
         defaultBaseUrl: baseUrl,
         apiKeyPlaceholder: apiKeyPlaceholder,
-        showApiImport: false, // 关闭导入面板
+        knownModels: knownModels, // 传递已知模型列表
+        selectedTemplateId: "openai-compatible", // 设置模板ID
+        importStep: "confirm", // 进入确认步骤
       });
-
-      alert(`✅ 成功解析！\n\n供应商：${providerName}\nBase URL：${baseUrl}`);
     } catch (err) {
       alert(`❌ 解析失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
+
+  // 渲染代码导入模式 - 步骤1：输入
+  const renderCodeImportStep1 = () => html`
+    <div style="display: grid; gap: 24px;">
+      <!-- 使用说明 -->
+      <div style="padding: 16px; background: var(--bg-elevated); border-radius: 8px; border-left: 4px solid #ff5c5c;">
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--text-primary);">
+          📝 如何使用？
+        </div>
+        <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
+          1. 从模型供应商官网复制 API 调用示例（curl 命令）<br/>
+          2. 粘贴到下方输入框<br/>
+          3. 点击“解析并继续”，系统将自动提取：<br/>
+          &nbsp;&nbsp;&nbsp;• 供应商基本信息（URL、认证方式）<br/>
+          &nbsp;&nbsp;&nbsp;• 模型名称和推荐配置<br/>
+          &nbsp;&nbsp;&nbsp;• 默认参数（temperature、max_tokens 等）
+        </div>
+      </div>
+      
+      <!-- 供应商名称输入 -->
+      <div>
+        <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 14px;">
+          🏯 模型供应商名称 <span style="color: #ff5c5c;">*</span>
+        </label>
+        <input 
+          type="text" 
+          class="input"
+          placeholder="例如：智谱 AI、DeepSeek、月之暗面等"
+          .value=${form.name || ""}
+          @input=${(e: Event) => {
+            const newName = (e.target as HTMLInputElement).value;
+            form.name = newName;
+            props.onProviderFormChange({ name: newName });
+          }}
+        />
+        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+          请输入供应商的显示名称，将用于界面显示
+        </div>
+      </div>
+
+      <!-- 示例代码输入 -->
+      <div>
+        <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 14px;">
+          💻 示例代码 <span style="color: #ff5c5c;">*</span>
+        </label>
+        <textarea
+          id="code-import-textarea"
+          class="input"
+          style="min-height: 180px; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; line-height: 1.5;"
+          placeholder="粘贴 curl 命令示例，例如：&#10;&#10;curl -X POST 'https://open.bigmodel.cn/api/paas/v4/chat/completions' \&#10;  -H 'Authorization: Bearer your-api-key' \&#10;  -H 'Content-Type: application/json' \&#10;  -d '{\"model\": \"glm-5\", ...}'"
+        ></textarea>
+        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+          支持 curl 命令格式，系统将自动识别 URL、认证方式、模型名称和默认参数
+        </div>
+      </div>
+
+      <!-- 按钮区域 -->
+      <div class="row" style="gap: 12px; justify-content: flex-end;">
+        <button 
+          class="btn"
+          @click=${handleOverlayClick}
+        >
+          取消
+        </button>
+        <button 
+          class="btn btn--primary"
+          style="background: #ff5c5c; border-color: #ff5c5c; color: #ffffff;"
+          @click=${() => {
+            if (!form.name || !form.name.trim()) {
+              alert("请输入模型供应商名称");
+              return;
+            }
+            const textarea = document.querySelector("#code-import-textarea") as HTMLTextAreaElement;
+            if (!textarea || !textarea.value.trim()) {
+              alert("请粘贴 API 调用示例代码");
+              return;
+            }
+            parseApiSample(textarea.value);
+          }}
+        >
+          ✨ 解析并继续
+        </button>
+      </div>
+    </div>
+  `;
+
+  // 渲染代码导入模式 - 步骤2：确认
+  const renderCodeImportStep2 = () => html`
+    <div style="display: grid; gap: 20px;">
+      <!-- 成功提示 -->
+      <div style="padding: 16px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; color: #155724;">
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">
+          ✅ 解析成功！
+        </div>
+        <div style="font-size: 13px;">
+          请确认以下信息是否正确，您可以修改任何字段
+        </div>
+      </div>
+
+      <!-- 供应商信息表单 -->
+      <div style="display: grid; gap: 16px;">
+        <!-- 供应商 ID -->
+        <div>
+          <label style="display: block; margin-bottom: 4px; font-weight: 500;">
+            ${t("models.provider_id")} <span style="color: #ff5c5c;">*</span>
+          </label>
+          <input 
+            type="text" 
+            class="input" 
+            placeholder="${t("models.provider_id_placeholder")}"
+            .value=${form.id}
+            @input=${(e: Event) => {
+              const newId = (e.target as HTMLInputElement).value
+                .toLowerCase()
+                .replace(/[^a-z0-9-]/g, "");
+              form.id = newId;
+              props.onProviderFormChange({ id: newId });
+            }}
+          />
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+            只能包含小写字母、数字和连字符
+          </div>
+        </div>
+
+        <!-- 供应商名称 -->
+        <div>
+          <label style="display: block; margin-bottom: 4px; font-weight: 500;">
+            ${t("models.provider_name")} <span style="color: #ff5c5c;">*</span>
+          </label>
+          <input 
+            type="text" 
+            class="input" 
+            placeholder="${t("models.provider_name_placeholder")}"
+            .value=${form.name}
+            @input=${(e: Event) => {
+              const newName = (e.target as HTMLInputElement).value;
+              form.name = newName;
+              props.onProviderFormChange({ name: newName });
+            }}
+          />
+        </div>
+
+        <!-- Base URL -->
+        <div>
+          <label style="display: block; margin-bottom: 4px; font-weight: 500;">
+            ${t("models.provider_base_url")} <span style="color: #ff5c5c;">*</span>
+          </label>
+          <input 
+            type="url" 
+            class="input" 
+            placeholder="${t("models.provider_base_url_placeholder")}"
+            .value=${form.defaultBaseUrl}
+            @input=${(e: Event) => {
+              const newBaseUrl = (e.target as HTMLInputElement).value;
+              form.defaultBaseUrl = newBaseUrl;
+              props.onProviderFormChange({ defaultBaseUrl: newBaseUrl });
+            }}
+          />
+        </div>
+
+        <!-- 图标和网站 -->
+        <div class="row" style="gap: 16px; align-items: flex-start;">
+          <div style="flex: 1; max-width: 200px;">
+            <label style="display: block; margin-bottom: 8px; font-weight: 500;">
+              ${t("models.provider_icon")}
+            </label>
+            <icon-picker
+              .value=${form.icon || "🤖"}
+              .onChange=${(value: string) => {
+                form.icon = value;
+                props.onProviderFormChange({ icon: value });
+              }}
+            ></icon-picker>
+          </div>
+          <div style="flex: 1;">
+            <label style="display: block; margin-bottom: 4px; font-weight: 500;">
+              ${t("models.provider_website")}
+            </label>
+            <input 
+              type="url" 
+              class="input" 
+              placeholder="${t("models.provider_website_placeholder")}"
+              .value=${form.website || ""}
+              @input=${(e: Event) => {
+                const newWebsite = (e.target as HTMLInputElement).value;
+                form.website = newWebsite;
+                props.onProviderFormChange({ website: newWebsite });
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- 按钮区域 -->
+      <div class="row" style="gap: 12px; justify-content: flex-end;">
+        <button 
+          class="btn"
+          @click=${() => {
+            props.onProviderFormChange({ importStep: "input" });
+          }}
+        >
+          ← 返回上一步
+        </button>
+        <button 
+          class="btn btn--primary"
+          style="background: #ff5c5c; border-color: #ff5c5c; color: #ffffff;"
+          ?disabled=${!form.id || !form.name || !form.defaultBaseUrl}
+          @click=${() => {
+            if (!form.id || !form.name || !form.defaultBaseUrl) {
+              return;
+            }
+            props.onSaveProvider({
+              id: form.id,
+              name: form.name,
+              icon: form.icon || "🤖",
+              website: form.website || "",
+              templateId: form.selectedTemplateId || "openai-compatible",
+              defaultBaseUrl: form.defaultBaseUrl,
+              apiKeyPlaceholder: form.apiKeyPlaceholder || "请输入API密钥",
+            });
+          }}
+        >
+          ✔️ 确认添加
+        </button>
+      </div>
+    </div>
+  `;
 
   // 检查是否有未保存的内容
   const hasUnsavedContent =
@@ -954,68 +1348,65 @@ export function renderAddProviderModal(
         </div>
         
         <div class="modal-body" style="padding: 32px;">
-          <!-- API 示例导入 -->
+          <!-- 标签页切换（仅在新增模式下显示） -->
           ${
             !isEditing
               ? html`
-            <div style="margin-bottom: 24px; padding: 16px; background: var(--bg-elevated); border-radius: 8px;">
-              <div class="row" style="align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                <div>
-                  <h3 style="font-size: 14px; font-weight: 600; margin: 0;">💡 快速导入</h3>
-                  <p style="font-size: 12px; color: var(--text-secondary); margin: 4px 0 0 0;">
-                    粘贴 API 调用示例（如 curl 命令），自动提取供应商信息
-                  </p>
-                </div>
-                <button 
-                  class="btn btn--sm"
-                  style="font-size: 12px; padding: 6px 12px;"
-                  @click=${toggleApiImport}
+            <div style="margin-bottom: 24px; border-bottom: 2px solid var(--bg-elevated);">
+              <div class="row" style="gap: 0;">
+                <button
+                  class="btn"
+                  style="
+                    flex: 1;
+                    border-radius: 0;
+                    border: none;
+                    border-bottom: 3px solid ${addMode === "code-import" ? "#ff5c5c" : "transparent"};
+                    background: ${addMode === "code-import" ? "var(--bg-elevated)" : "transparent"};
+                    font-weight: ${addMode === "code-import" ? "600" : "400"};
+                    color: ${addMode === "code-import" ? "var(--text-primary)" : "var(--text-secondary)"};
+                    padding: 12px 24px;
+                    transition: all 0.2s ease;
+                  "
+                  @click=${() => switchAddMode("code-import")}
                 >
-                  ${showApiImport ? "✖ 关闭" : "➕ 展开"}
+                  💡 通过示例代码导入
+                </button>
+                <button
+                  class="btn"
+                  style="
+                    flex: 1;
+                    border-radius: 0;
+                    border: none;
+                    border-bottom: 3px solid ${addMode === "manual" ? "#ff5c5c" : "transparent"};
+                    background: ${addMode === "manual" ? "var(--bg-elevated)" : "transparent"};
+                    font-weight: ${addMode === "manual" ? "600" : "400"};
+                    color: ${addMode === "manual" ? "var(--text-primary)" : "var(--text-secondary)"};
+                    padding: 12px 24px;
+                    transition: all 0.2s ease;
+                  "
+                  @click=${() => switchAddMode("manual")}
+                >
+                  ✏️ 手动输入
                 </button>
               </div>
-              
-              ${
-                showApiImport
-                  ? html`
-                <div style="margin-top: 12px;">
-                  <textarea
-                    class="input"
-                    style="min-height: 120px; font-family: monospace; font-size: 12px;"
-                    placeholder="示例：curl -X POST 'https://open.bigmodel.cn/api/paas/v4/chat/completions' -H 'Authorization: Bearer your-api-key' ..."
-                  ></textarea>
-                  <div class="row" style="gap: 8px; margin-top: 8px;">
-                    <button 
-                      class="btn btn--primary btn--sm"
-                      style="background: #ff5c5c; border-color: #ff5c5c; font-size: 12px; padding: 6px 14px;"
-                      @click=${() => {
-                        const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
-                        if (textarea) {
-                          parseApiSample(textarea.value);
-                        }
-                      }}
-                    >
-                      ✨ 解析并填充
-                    </button>
-                    <button 
-                      class="btn btn--sm"
-                      style="font-size: 12px; padding: 6px 12px;"
-                      @click=${() => {
-                        props.onProviderFormChange({ showApiImport: false });
-                      }}
-                    >
-                      取消
-                    </button>
-                  </div>
-                </div>
-              `
-                  : nothing
-              }
             </div>
           `
               : nothing
           }
           
+          <!-- 代码导入模式 -->
+          ${
+            !isEditing && addMode === "code-import"
+              ? html`
+            ${importStep === "input" ? renderCodeImportStep1() : renderCodeImportStep2()}
+          `
+              : nothing
+          }
+          
+          <!-- 手动输入模式或编辑模式 -->
+          ${
+            isEditing || addMode === "manual"
+              ? html`
           <!-- 模板选择 -->
           <div style="margin-bottom: 24px;">
             <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">${t("models.select_template")}</h3>
@@ -1162,6 +1553,9 @@ export function renderAddProviderModal(
               </div>
             </div>
           </div>
+          `
+              : nothing
+          }
         </div>
         
         <div class="modal-footer">

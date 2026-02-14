@@ -62,7 +62,7 @@ export function getModelRegistrySync() {
 
 // 为了向后兼容，保持旧的导出名称但使用 getter
 // 注意：这些 Proxy 导出需要模块已经被加载
-export const AuthStorage = new Proxy({} as any, {
+export const AuthStorage = new Proxy(function AuthStorageProxy() {} as any, {
   get(_target, prop) {
     const AS = getPiCodingAgentSync().AuthStorage;
     return AS[prop as keyof typeof AS];
@@ -73,7 +73,7 @@ export const AuthStorage = new Proxy({} as any, {
   },
 });
 
-export const ModelRegistry = new Proxy({} as any, {
+export const ModelRegistry = new Proxy(function ModelRegistryProxy() {} as any, {
   get(_target, prop) {
     const MR = getPiCodingAgentSync().ModelRegistry;
     return MR[prop as keyof typeof MR];

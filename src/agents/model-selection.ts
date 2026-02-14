@@ -485,62 +485,16 @@ export async function resolveModelAccountForSession(params: {
     return null;
   }
 
-  // 2. 构建模型信息获取函数
-  const modelInfoGetter = async (accountId: string): Promise<ModelInfo | undefined> => {
-    // 从 auth.profiles 中查找账号信息
-    const authProfile = params.cfg.auth?.profiles?.[accountId];
-
-    if (!authProfile) {
-      return undefined;
-    }
-
-    // 获取账号关联的模型 ID
-    const modelId =
-      (authProfile as { model?: string }).model ??
-      (authProfile as { defaultModel?: string }).defaultModel;
-
-    if (!modelId) {
-      return undefined;
-    }
-
-    // 解析模型引用
-    const modelRef = parseModelRef(modelId, DEFAULT_PROVIDER);
-    if (!modelRef) {
-      return undefined;
-    }
-
-    // 从目录中查找模型信息
-    const catalogEntry = params.catalog.find(
-      (entry) => entry.provider === modelRef.provider && entry.id === modelRef.model,
-    );
-
-    if (!catalogEntry) {
-      // 如果目录中没有，使用默认值
-      return {
-        id: modelId,
-        contextWindow: 128000, // 默认值
-        supportsTools: true,
-        supportsVision: false,
-        reasoningLevel: 2, // 中级
-        inputPrice: 0.003, // 默认价格（每 1K tokens，美元）
-        outputPrice: 0.015,
-      };
-    }
-
-    // 构建 ModelInfo
-    return {
-      id: modelId,
-      contextWindow: catalogEntry.contextWindow ?? 128000,
-      supportsTools: true, // 假设所有模型都支持工具调用（需要根据实际情况调整）
-      supportsVision: catalogEntry.input?.includes("image") ?? false,
-      reasoningLevel: catalogEntry.reasoning ? 3 : 2, // 如果支持推理则为高级，否则为中级
-      inputPrice: 0.003, // 默认价格（需要从配置或其他地方获取实际价格）
-      outputPrice: 0.015,
-    };
-  };
-
-  // 3. 调用智能路由引擎
+  // 2. 从新的模型管理系统加载数据并构建模型信息获取函数
   try {
+    const { loadModelManagement } = await import("../gateway/server-methods/models.js");
+    const { createModelInfoGetter, getProviderAndModelFromAccountId } =
+      await import("./model-info-getter.js");
+
+    const storage = await loadModelManagement();
+    const modelInfoGetter = createModelInfoGetter(storage, params.catalog);
+
+    // 3. 调用智能路由引擎
     const routingResult = await routeToOptimalModelAccount(
       params.message,
       params.sessionContext,
@@ -548,25 +502,25 @@ export async function resolveModelAccountForSession(params: {
       modelInfoGetter,
     );
 
-    // 4. 获取选中账号的模型引用
-    const authProfile = params.cfg.auth?.profiles?.[routingResult.accountId];
+    // 4. 从新的模型管理系统获取选中账号的模型信息
+    const providerAndModel = getProviderAndModelFromAccountId(routingResult.accountId, storage);
 
-    if (!authProfile) {
+    if (!providerAndModel) {
+      console.error(
+        `[model-selection] Failed to get provider and model for account: ${routingResult.accountId}`,
+      );
       return null;
     }
 
-    const modelId =
-      (authProfile as { model?: string }).model ??
-      (authProfile as { defaultModel?: string }).defaultModel;
+    const modelRef: ModelRef = {
+      provider: providerAndModel.provider,
+      model: providerAndModel.model,
+    };
 
-    if (!modelId) {
-      return null;
-    }
-
-    const modelRef = parseModelRef(modelId, DEFAULT_PROVIDER);
-    if (!modelRef) {
-      return null;
-    }
+    console.log(
+      `[model-selection] Smart routing selected: ${routingResult.accountId} -> ${modelRef.provider}/${modelRef.model}`,
+    );
+    console.log(`[model-selection] Routing reason: ${routingResult.reason}`);
 
     return {
       accountId: routingResult.accountId,
@@ -575,6 +529,7 @@ export async function resolveModelAccountForSession(params: {
     };
   } catch (error) {
     console.error(`[model-selection] 智能路由失败: ${String(error)}`);
+    console.error(`[model-selection] Error stack:`, error);
     return null;
   }
 }

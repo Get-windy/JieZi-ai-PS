@@ -239,8 +239,12 @@ describe("scoreAllAccounts", () => {
     };
 
     const modelInfoGetter = async (accountId: string): Promise<ModelInfo | undefined> => {
-      if (accountId === "account1") return basicModel;
-      if (accountId === "account2") return advancedModel;
+      if (accountId === "account1") {
+        return basicModel;
+      }
+      if (accountId === "account2") {
+        return advancedModel;
+      }
       return undefined;
     };
 
@@ -257,7 +261,9 @@ describe("scoreAllAccounts", () => {
     };
 
     const modelInfoGetter = async (accountId: string): Promise<ModelInfo | undefined> => {
-      if (accountId === "account1") return basicModel;
+      if (accountId === "account1") {
+        return basicModel;
+      }
       return undefined;
     };
 
@@ -306,6 +312,8 @@ describe("selectOptimalAccount", () => {
       capabilityScore: 90,
       costScore: 80,
       speedScore: 70,
+      specializationScore: 80,
+      modalityScore: 90,
       available: true,
     },
     {
@@ -315,6 +323,8 @@ describe("selectOptimalAccount", () => {
       capabilityScore: 70,
       costScore: 50,
       speedScore: 60,
+      specializationScore: 70,
+      modalityScore: 80,
       available: true,
     },
   ];
@@ -343,6 +353,8 @@ describe("selectOptimalAccount", () => {
         capabilityScore: 0,
         costScore: 0,
         speedScore: 0,
+        specializationScore: 0,
+        modalityScore: 0,
         available: false,
       },
     ];
@@ -376,6 +388,8 @@ describe("handleFailover", () => {
       capabilityScore: 90,
       costScore: 80,
       speedScore: 70,
+      specializationScore: 80,
+      modalityScore: 90,
       available: true,
     },
     {
@@ -385,6 +399,8 @@ describe("handleFailover", () => {
       capabilityScore: 70,
       costScore: 50,
       speedScore: 60,
+      specializationScore: 70,
+      modalityScore: 80,
       available: true,
     },
     {
@@ -394,6 +410,8 @@ describe("handleFailover", () => {
       capabilityScore: 60,
       costScore: 40,
       speedScore: 50,
+      specializationScore: 60,
+      modalityScore: 70,
       available: true,
     },
   ];
@@ -465,8 +483,12 @@ describe("routeToOptimalModelAccount", () => {
     };
 
     const modelInfoGetter = async (accountId: string): Promise<ModelInfo | undefined> => {
-      if (accountId === "cheap-account") return basicModel;
-      if (accountId === "expensive-account") return advancedModel;
+      if (accountId === "cheap-account") {
+        return basicModel;
+      }
+      if (accountId === "expensive-account") {
+        return advancedModel;
+      }
       return undefined;
     };
 

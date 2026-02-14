@@ -412,8 +412,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const result = agentBindings
       .filter((b) => b.match?.channel)
       .map((b) => ({
-        channelId: b.match!.channel,
-        accountId: b.match!.accountId || "default",
+        channelId: b.match.channel,
+        accountId: b.match.accountId || "default",
       }));
 
     respond(true, { agentId, bindings: result }, undefined);
@@ -684,9 +684,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
   },
 
   /**
-   * agent.modelAccounts.bound - 获取智能助手绑定的模型账号
+   * agent.modelAccounts.bound - 获取智能助手绑定的模型（带详细信息）
+   * 返回模型列表，而不是认证账号
    */
-  "agent.modelAccounts.bound": ({ params, respond }) => {
+  "agent.modelAccounts.bound": async ({ params, respond }) => {
     const agentId = String(params?.agentId ?? "").trim();
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
@@ -700,16 +701,75 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
     // 获取助手的modelAccounts配置
     const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
-    const boundAccounts = modelAccounts?.accounts || [];
+    const boundAccounts = modelAccounts?.accounts || []; // 现在存储的是 providerId/modelName
     const defaultAccountId = modelAccounts?.defaultAccountId || "";
 
-    respond(true, { agentId, accounts: boundAccounts, defaultAccountId }, undefined);
+    try {
+      // 从新的模型管理系统获取模型详情
+      const { loadModelManagement } = await import("./models.js");
+      const storage = await loadModelManagement();
+
+      // 构建模型详情列表
+      const modelDetails = boundAccounts.map((modelId) => {
+        // 解析模型id：providerId/modelName
+        const [providerId, modelName] = modelId.split("/");
+        if (!providerId || !modelName) {
+          return {
+            modelId,
+            providerId: "",
+            modelName: modelId,
+            displayName: modelId,
+            providerName: "",
+            enabled: false,
+          };
+        }
+
+        // 查找模型配置
+        const modelList = storage.models[providerId] || [];
+        const model = modelList.find(
+          (m) => m.modelName === modelName && m.enabled && !m.deprecated,
+        );
+        const provider = storage.providers.find((p: any) => p.id === providerId);
+
+        // 检查认证是否启用
+        let authEnabled = false;
+        if (model) {
+          const authList = storage.auths[providerId] || [];
+          const auth = authList.find((a: any) => a.authId === model.authId);
+          authEnabled = auth?.enabled ?? false;
+        }
+
+        return {
+          modelId, // providerId/modelName
+          providerId,
+          modelName,
+          displayName: model?.nickname || modelName, // 优先显示昵称
+          providerName: provider?.name || providerId,
+          enabled: !!model && authEnabled, // 模型存在且认证启用
+        };
+      });
+
+      respond(
+        true,
+        {
+          agentId,
+          accounts: boundAccounts, // modelId 列表
+          modelDetails, // 模型详情
+          defaultAccountId,
+        },
+        undefined,
+      );
+    } catch (err) {
+      // 如果无法获取详情，返回基本信息
+      respond(true, { agentId, accounts: boundAccounts, defaultAccountId }, undefined);
+    }
   },
 
   /**
-   * agent.modelAccounts.available - 获取可用但未绑定的模型账号
+   * agent.modelAccounts.available - 获取可用但未绑定的模型
+   * 返回模型列表（providerId/modelName），而不是认证账号
    */
-  "agent.modelAccounts.available": ({ params, respond }) => {
+  "agent.modelAccounts.available": async ({ params, respond }) => {
     const agentId = String(params?.agentId ?? "").trim();
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
@@ -721,32 +781,86 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    // 获取所有可用的模型账号（从 models.providers 中获取）
-    const allModelAccounts = Object.keys(cfg.models?.providers ?? {});
+    try {
+      // 从新的模型管理系统获取所有启用的模型
+      const { loadModelManagement } = await import("./models.js");
+      const storage = await loadModelManagement();
 
-    // 获取已绑定的模型账号
-    const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
-    const boundSet = new Set(modelAccounts?.accounts || []);
+      // 收集所有启用且可用的模型（带详情）
+      const allModelsWithDetails: Array<{
+        modelId: string; // providerId/modelName
+        providerId: string;
+        modelName: string;
+        displayName: string;
+        providerName: string;
+      }> = [];
 
-    // 过滤出未绑定的
-    const availableAccounts = allModelAccounts.filter((accountId) => !boundSet.has(accountId));
+      for (const [providerId, modelList] of Object.entries(storage.models)) {
+        const provider = storage.providers.find((p: any) => p.id === providerId);
+        const authList = storage.auths[providerId] || [];
 
-    respond(true, { agentId, accounts: availableAccounts }, undefined);
+        for (const model of modelList) {
+          // 1. 模型必须启用且未废弃
+          if (!model.enabled || model.deprecated) {
+            continue;
+          }
+
+          // 2. 该模型对应的认证必须启用
+          const auth = authList.find((a: any) => a.authId === model.authId);
+          if (!auth || !auth.enabled) {
+            continue;
+          }
+
+          const modelId = `${providerId}/${model.modelName}`;
+          const displayName = `${provider?.name || providerId} - ${model.nickname || model.modelName}`;
+
+          allModelsWithDetails.push({
+            modelId,
+            providerId,
+            modelName: model.modelName,
+            displayName,
+            providerName: provider?.name || providerId,
+          });
+        }
+      }
+
+      // 获取已绑定的模型
+      const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
+      const boundSet = new Set(modelAccounts?.accounts || []);
+
+      // 过滤出未绑定的
+      const availableModelsWithDetails = allModelsWithDetails.filter(
+        (model) => !boundSet.has(model.modelId),
+      );
+
+      respond(
+        true,
+        {
+          agentId,
+          accounts: availableModelsWithDetails.map((m) => m.modelId),
+          modelDetails: availableModelsWithDetails, // 模型详情（含友好名称）
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
   },
 
   /**
-   * agent.modelAccounts.bind - 绑定模型账号到智能助手
+   * agent.modelAccounts.bind - 绑定模型到智能助手
+   * 绑定的是模型（providerId/modelName），而不是认证账号
    */
   "agent.modelAccounts.bind": async ({ params, respond }) => {
     const agentId = String(params?.agentId ?? "").trim();
-    const accountId = String((params as any)?.accountId ?? "").trim();
+    const modelId = String((params as any)?.accountId ?? "").trim(); // 兼容旧参数名
 
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
       return;
     }
-    if (!accountId) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "accountId is required"));
+    if (!modelId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "modelId is required"));
       return;
     }
 
@@ -765,59 +879,116 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    // 验证模型账号是否存在（从 models.providers 中检查）
-    const allModelAccounts = Object.keys(cfg.models?.providers ?? {});
-    if (!allModelAccounts.includes(accountId)) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `Unknown model account: ${accountId}`),
-      );
-      return;
-    }
+    try {
+      // 验证模型是否存在（从新的模型管理系统检查）
+      const { loadModelManagement } = await import("./models.js");
+      const storage = await loadModelManagement();
 
-    // 获取当前配置
-    const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
-    const currentAccounts = modelAccounts?.accounts || [];
+      // 解析 modelId 格式：providerId/modelName
+      const [providerId, modelName] = modelId.split("/");
+      if (!providerId || !modelName) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Invalid model ID format: ${modelId}, expected: providerId/modelName`,
+          ),
+        );
+        return;
+      }
 
-    // 检查是否已绑定
-    if (currentAccounts.includes(accountId)) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `Model account already bound: ${accountId}`),
-      );
-      return;
-    }
+      // 检查模型是否存在且启用
+      const modelList = storage.models[providerId] || [];
+      const model = modelList.find((m) => m.modelName === modelName);
+      if (!model) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Unknown model: ${modelId}`),
+        );
+        return;
+      }
 
-    // 添加到accounts列表
-    const updatedAccounts = [...currentAccounts, accountId];
-    const updatedConfig = {
-      ...modelAccounts,
-      accounts: updatedAccounts,
-      // 如果是第一个账号，设为默认
-      defaultAccountId: modelAccounts?.defaultAccountId || accountId,
-    };
+      if (!model.enabled) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Model is disabled: ${modelId}`),
+        );
+        return;
+      }
 
-    const success = await updateAgentField(agentId, "modelAccounts", updatedConfig, respond);
-    if (success) {
-      respond(true, { success: true, agentId, accountId }, undefined);
+      if (model.deprecated) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Model is deprecated: ${modelId}`),
+        );
+        return;
+      }
+
+      // 检查该模型对应的认证是否启用
+      const authList = storage.auths[providerId] || [];
+      const auth = authList.find((a: any) => a.authId === model.authId);
+      if (!auth || !auth.enabled) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Model's authentication is not available: ${modelId}`,
+          ),
+        );
+        return;
+      }
+
+      // 获取当前配置
+      const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
+      const currentAccounts = modelAccounts?.accounts || [];
+
+      // 检查是否已绑定
+      if (currentAccounts.includes(modelId)) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Model already bound: ${modelId}`),
+        );
+        return;
+      }
+
+      // 添加到accounts列表
+      const updatedAccounts = [...currentAccounts, modelId];
+      const updatedConfig = {
+        ...modelAccounts,
+        accounts: updatedAccounts,
+        // 如果是第一个模型，设为默认
+        defaultAccountId: modelAccounts?.defaultAccountId || modelId,
+      };
+
+      const success = await updateAgentField(agentId, "modelAccounts", updatedConfig, respond);
+      if (success) {
+        respond(true, { success: true, agentId, modelId }, undefined);
+      }
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }
   },
 
   /**
-   * agent.modelAccounts.unbind - 解绑智能助手的模型账号
+   * agent.modelAccounts.unbind - 解绑智能助手的模型
+   * 解绑的是模型（providerId/modelName）
    */
   "agent.modelAccounts.unbind": async ({ params, respond }) => {
     const agentId = String(params?.agentId ?? "").trim();
-    const accountId = String((params as any)?.accountId ?? "").trim();
+    const modelId = String((params as any)?.accountId ?? "").trim(); // 兼容旧参数名
 
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
       return;
     }
-    if (!accountId) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "accountId is required"));
+    if (!modelId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "modelId is required"));
       return;
     }
 
@@ -841,21 +1012,21 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const currentAccounts = modelAccounts?.accounts || [];
 
     // 检查是否已绑定
-    if (!currentAccounts.includes(accountId)) {
+    if (!currentAccounts.includes(modelId)) {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `Model account not bound: ${accountId}`),
+        errorShape(ErrorCodes.INVALID_REQUEST, `Model not bound: ${modelId}`),
       );
       return;
     }
 
     // 从 accounts 列表中移除
-    const updatedAccounts = currentAccounts.filter((id) => id !== accountId);
+    const updatedAccounts = currentAccounts.filter((id) => id !== modelId);
 
-    // 如果移除的是默认账号，选择新的默认账号
+    // 如果移除的是默认模型，选择新的默认模型
     let defaultAccountId = modelAccounts?.defaultAccountId;
-    if (defaultAccountId === accountId) {
+    if (defaultAccountId === modelId) {
       defaultAccountId = updatedAccounts[0] || "";
     }
 
@@ -867,7 +1038,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
     const success = await updateAgentField(agentId, "modelAccounts", updatedConfig, respond);
     if (success) {
-      respond(true, { success: true, agentId, accountId }, undefined);
+      respond(true, { success: true, agentId, modelId }, undefined);
     }
   },
 

@@ -138,22 +138,35 @@ export type AgentsProps = {
   modelAccountsError: string | null;
   modelAccountsSaving: boolean;
   modelAccountsSaveSuccess: boolean;
-  // 模型账号绑定管理
+  // 模型绑定管理
   boundModelAccounts?: string[];
+  boundModelDetails?: Array<{
+    modelId: string;
+    displayName: string;
+    providerName: string;
+    modelName: string;
+    enabled: boolean;
+  }>;
   boundModelAccountsLoading?: boolean;
   boundModelAccountsError?: string | null;
   availableModelAccounts?: string[];
+  availableModelDetails?: Array<{
+    modelId: string;
+    displayName: string;
+    providerName: string;
+    modelName: string;
+  }>;
   availableModelAccountsLoading?: boolean;
   availableModelAccountsError?: string | null;
   availableModelAccountsExpanded?: boolean;
   defaultModelAccountId?: string;
   modelAccountOperationError?: string | null;
-  onBindModelAccount?: (accountId: string) => void;
-  onUnbindModelAccount?: (accountId: string) => void;
+  onBindModelAccount?: (modelId: string) => void;
+  onUnbindModelAccount?: (modelId: string) => void;
   onToggleAvailableModelAccounts?: () => void;
-  onSetDefaultModelAccount?: (accountId: string) => void;
-  onConfigureModelAccount?: (accountId: string, currentConfig: any) => void;
-  onToggleModelAccountEnabled?: (accountId: string, enabled: boolean) => void;
+  onSetDefaultModelAccount?: (modelId: string) => void;
+  onConfigureModelAccount?: (modelId: string, currentConfig: any) => void;
+  onToggleModelAccountEnabled?: (modelId: string, enabled: boolean) => void;
   accountConfigs?: Record<string, any>;
   channelPoliciesConfig: ChannelPoliciesConfig | null;
   channelPoliciesLoading: boolean;
@@ -770,7 +783,7 @@ function matchesList(name: string, list?: string[]) {
 }
 
 /**
- * Phase 5: 渲染模型配置面板（模型账号绑定 + 智能路由）
+ * Phase 5: 渲染模型配置面板（模型绑定 + 智能路由）
  */
 function renderAgentModelAccounts(params: {
   agentId: string;
@@ -779,11 +792,24 @@ function renderAgentModelAccounts(params: {
   error: string | null;
   saving: boolean;
   saveSuccess: boolean;
-  // 模型账号绑定管理
+  // 模型绑定管理
   boundModelAccounts: string[];
+  boundModelDetails?: Array<{
+    modelId: string;
+    displayName: string;
+    providerName: string;
+    modelName: string;
+    enabled: boolean;
+  }>;
   boundModelAccountsLoading: boolean;
   boundModelAccountsError: string | null;
   availableModelAccounts: string[];
+  availableModelDetails?: Array<{
+    modelId: string;
+    displayName: string;
+    providerName: string;
+    modelName: string;
+  }>;
   availableModelAccountsLoading: boolean;
   availableModelAccountsError: string | null;
   availableModelAccountsExpanded: boolean;
@@ -848,18 +874,20 @@ function renderAgentModelAccounts(params: {
           : nothing
       }
 
-      <!-- Part 1: 模型账号连接管理 -->
+      <!-- Part 1: 模型管理 -->
       <div style="margin-top: 20px;">
-        <div class="label">已绑定的模型账号 (${boundCount})</div>
+        <div class="label">已绑定的模型 (${boundCount})</div>
         ${
           boundCount === 0
             ? html`
-                <div class="muted" style="margin-top: 8px">还没有绑定任何模型账号</div>
+                <div class="muted" style="margin-top: 8px">还没有绑定任何模型</div>
               `
             : html`
               <div class="list" style="margin-top: 8px;">
-                ${params.boundModelAccounts.map((accountId: string) => {
-                  const accountConfig = params.accountConfigs?.[accountId];
+                ${params.boundModelAccounts.map((modelId: string) => {
+                  const modelDetail = params.boundModelDetails?.find((m) => m.modelId === modelId);
+                  const displayName = modelDetail?.displayName || modelId;
+                  const accountConfig = params.accountConfigs?.[modelId];
                   const enabled = accountConfig?.enabled !== false; // 默认启用
                   const priority = accountConfig?.priority ?? 0;
                   const hasSchedule = !!accountConfig?.schedule;
@@ -876,7 +904,7 @@ function renderAgentModelAccounts(params: {
                               ?checked=${enabled}
                               @change=${(e: Event) => {
                                 const checked = (e.target as HTMLInputElement).checked;
-                                params.onToggleAccountEnabled?.(accountId, checked);
+                                params.onToggleAccountEnabled?.(modelId, checked);
                               }}
                             />
                             <span class="slider"></span>
@@ -884,9 +912,9 @@ function renderAgentModelAccounts(params: {
                           
                           <div style="flex: 1;">
                             <div style="display: flex; align-items: center; gap: 8px;">
-                              <span class="mono" style="font-weight: 500;">${accountId}</span>
+                              <span style="font-weight: 500;">${displayName}</span>
                               ${
-                                accountId === params.defaultModelAccountId
+                                modelId === params.defaultModelAccountId
                                   ? html`
                                       <span class="agent-pill">默认</span>
                                     `
@@ -930,12 +958,12 @@ function renderAgentModelAccounts(params: {
                         </div>
                         <div style="display: flex; gap: 8px;">
                           ${
-                            accountId !== params.defaultModelAccountId &&
+                            modelId !== params.defaultModelAccountId &&
                             params.onSetDefaultModelAccount
                               ? html`
                                 <button 
                                   class="btn btn--sm"
-                                  @click=${() => params.onSetDefaultModelAccount!(accountId)}
+                                  @click=${() => params.onSetDefaultModelAccount!(modelId)}
                                 >
                                   设为默认
                                 </button>
@@ -945,7 +973,7 @@ function renderAgentModelAccounts(params: {
                           <button
                             class="btn btn--sm"
                             @click=${() => {
-                              params.onConfigureModelAccount?.(accountId, accountConfig || {});
+                              params.onConfigureModelAccount?.(modelId, accountConfig || {});
                             }}
                           >
                             配置
@@ -954,14 +982,14 @@ function renderAgentModelAccounts(params: {
                             class="btn btn--sm"
                             style="color: var(--color-danger);"
                             ?disabled=${boundCount === 1}
-                            title=${boundCount === 1 ? "至少需要保留一个模型账号" : ""}
+                            title=${boundCount === 1 ? "至少需要保留一个模型" : ""}
                             @click=${() => {
                               if (
                                 boundCount > 1 &&
                                 params.onUnbindModelAccount &&
-                                confirm(`确定要移除 ${accountId} 吗？`)
+                                confirm(`确定要移除 ${displayName} 吗？`)
                               ) {
-                                params.onUnbindModelAccount(accountId);
+                                params.onUnbindModelAccount(modelId);
                               }
                             }}
                           >
@@ -976,10 +1004,10 @@ function renderAgentModelAccounts(params: {
         }
       </div>
 
-      <!-- 可用但未绑定的模型账号（折叠） -->
+      <!-- 可用但未绑定的模型（折叠） -->
       <div style="margin-top: 24px;">
         <div class="row" style="justify-content: space-between; align-items: center;">
-          <div class="label">可用的模型账号</div>
+          <div class="label">可用的模型</div>
           <button class="btn btn--sm" @click=${() => params.onToggleAvailableModelAccounts?.()}>
             ${params.availableModelAccountsExpanded ? "收起" : "展开"}
           </button>
@@ -1001,23 +1029,27 @@ function renderAgentModelAccounts(params: {
                       `
                     : params.availableModelAccounts.length === 0
                       ? html`
-                          <div class="muted">没有可用的模型账号</div>
+                          <div class="muted">没有可用的模型</div>
                         `
                       : html`
                         <div class="list">
-                          ${params.availableModelAccounts.map(
-                            (accountId: string) => html`
-                              <div class="list-item" style="display: flex; justify-content: space-between; align-items: center;">
-                                <span class="mono">${accountId}</span>
-                                <button
-                                  class="btn btn--sm"
-                                  @click=${() => params.onBindModelAccount?.(accountId)}
-                                >
-                                  + 添加
-                                </button>
-                              </div>
-                            `,
-                          )}
+                          ${params.availableModelAccounts.map((modelId: string) => {
+                            const modelDetail = params.availableModelDetails?.find(
+                              (m) => m.modelId === modelId,
+                            );
+                            const displayName = modelDetail?.displayName || modelId;
+                            return html`
+                                <div class="list-item" style="display: flex; justify-content: space-between; align-items: center;">
+                                  <span>${displayName}</span>
+                                  <button
+                                    class="btn btn--sm"
+                                    @click=${() => params.onBindModelAccount?.(modelId)}
+                                  >
+                                    + 添加
+                                  </button>
+                                </div>
+                              `;
+                          })}
                         </div>
                       `
                 }
@@ -1027,14 +1059,14 @@ function renderAgentModelAccounts(params: {
         }
       </div>
 
-      <!-- Part 2: 智能路由配置（只在有多个模型账号时显示） -->
+      <!-- Part 2: 智能路由配置（只在有多个模型时显示） -->
       ${
         hasMultipleAccounts && config
           ? html`
             <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-1);">
               <div class="label">智能路由配置</div>
               <div class="muted" style="font-size: 0.875rem; margin-top: 4px;">
-                当绑定多个模型账号时，可配置智能路由策略自动选择最佳模型
+                当绑定多个模型时，可配置智能路由策略自动选择最佳模型
               </div>
               
               <div style="margin-top: 16px;">
@@ -1110,7 +1142,7 @@ function renderAgentModelAccounts(params: {
             ? html`
                 <div style="margin-top: 24px; padding: 12px; border-radius: 6px; background: var(--bg-1)">
                   <div class="muted" style="font-size: 0.875rem">
-                    💡 提示：绑定多个模型账号后，可以配置智能路由策略，让系统自动选择最佳模型。
+                    💡 提示：绑定多个模型后，可以配置智能路由策略，让系统自动选择最佳模型。
                   </div>
                 </div>
               `
@@ -1671,23 +1703,25 @@ export function renderAgents(props: AgentsProps) {
                       saving: props.modelAccountsSaving,
                       saveSuccess: props.modelAccountsSaveSuccess,
                       boundModelAccounts: props.boundModelAccounts || [],
+                      boundModelDetails: props.boundModelDetails || [],
                       boundModelAccountsLoading: props.boundModelAccountsLoading || false,
                       boundModelAccountsError: props.boundModelAccountsError || null,
                       availableModelAccounts: props.availableModelAccounts || [],
+                      availableModelDetails: props.availableModelDetails || [],
                       availableModelAccountsLoading: props.availableModelAccountsLoading || false,
                       availableModelAccountsError: props.availableModelAccountsError || null,
                       availableModelAccountsExpanded: props.availableModelAccountsExpanded || false,
                       defaultModelAccountId: props.defaultModelAccountId || "",
                       modelAccountOperationError: props.modelAccountOperationError || null,
                       onChange: props.onModelAccountsChange,
-                      onBindModelAccount: (accountId) => {
+                      onBindModelAccount: (modelId) => {
                         if (props.onBindModelAccount) {
-                          props.onBindModelAccount(accountId);
+                          props.onBindModelAccount(modelId);
                         }
                       },
-                      onUnbindModelAccount: (accountId) => {
+                      onUnbindModelAccount: (modelId) => {
                         if (props.onUnbindModelAccount) {
-                          props.onUnbindModelAccount(accountId);
+                          props.onUnbindModelAccount(modelId);
                         }
                       },
                       onToggleAvailableModelAccounts: () => {
@@ -1695,9 +1729,9 @@ export function renderAgents(props: AgentsProps) {
                           props.onToggleAvailableModelAccounts();
                         }
                       },
-                      onSetDefaultModelAccount: (accountId) => {
+                      onSetDefaultModelAccount: (modelId) => {
                         if (props.onSetDefaultModelAccount) {
-                          props.onSetDefaultModelAccount(accountId);
+                          props.onSetDefaultModelAccount(modelId);
                         }
                       },
                     })

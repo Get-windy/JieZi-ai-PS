@@ -509,11 +509,16 @@ export function renderApp(state: AppViewState) {
                 snapshot: state.modelsSnapshot,
                 loading: state.modelsLoading,
                 error: state.modelsError,
+                testingAuthId: state.testingAuthId,
                 managingAuthProvider: state.managingAuthProvider,
                 editingAuth: state.editingAuth,
                 viewingAuth: state.viewingAuth,
                 managingModelsProvider: state.managingModelsProvider,
                 editingModelConfig: state.editingModelConfig,
+                importableModels: state.importableModels,
+                importingAuthId: state.importingAuthId,
+                importingProvider: state.importingProvider,
+                selectedImportModels: state.selectedImportModels,
                 addingProvider: state.addingProvider,
                 viewingProviderId: state.viewingProviderId,
                 providerForm: state.providerForm,
@@ -568,8 +573,17 @@ export function renderApp(state: AppViewState) {
                   state.managingAuthProvider = null;
                 },
                 onTestAuth: async (authId) => {
-                  const result = await testAuth(state, authId);
-                  alert(result.success ? "连接成功！" : `连接失败: ${result.message}`);
+                  state.testingAuthId = authId;
+                  try {
+                    const result = await testAuth(state, authId);
+                    if (result.ok) {
+                      alert(`✅ 连接成功！\n响应时间：${result.responseTime || 0}ms`);
+                    } else {
+                      alert(`❌ 连接失败\n${result.error || result.message || "未知错误"}`);
+                    }
+                  } finally {
+                    state.testingAuthId = null;
+                  }
                 },
                 onRefreshAuthBalance: async (authId) => {
                   await refreshAuthBalance(state, authId);
@@ -627,11 +641,73 @@ export function renderApp(state: AppViewState) {
                 onRefreshAuthModels: async (authId) => {
                   state.importableModels = null;
                   state.importingAuthId = authId;
-                  // 使用 refreshAuthModels 从平台查询可用模型列表
-                  const models = await refreshAuthModels(state, authId);
-                  state.importableModels = models;
-                  // 刷新完成后重新加载模型数据以更新界面
-                  await loadModels(state, false);
+                  state.selectedImportModels.clear();
+
+                  // 获取供应商ID
+                  const auth = Object.values(state.modelsSnapshot?.auths ?? {})
+                    .flat()
+                    .find((a) => a.authId === authId);
+
+                  if (auth) {
+                    state.importingProvider = auth.provider;
+                  }
+
+                  try {
+                    // 使用 refreshAuthModels 从平台查询可用模型列表
+                    console.log("[Models] Calling refreshAuthModels, authId:", authId);
+                    const models = await refreshAuthModels(state, authId);
+                    console.log("[Models] Got models:", models.length, models);
+
+                    // 检查是否成功获取到模型
+                    if (models.length === 0) {
+                      // 读取失败（API调用失败或供应商不支持）
+                      alert(
+                        "❌ 无法从供应商平台获取模型列表\n\n" +
+                          "可能原因：\n" +
+                          "1. 该供应商不支持自动获取模型列表\n" +
+                          "2. API Key 权限不足\n" +
+                          "3. Base URL 配置错误\n" +
+                          "4. 网络连接问题\n\n" +
+                          "建议：请手动添加模型",
+                      );
+                      state.importableModels = null;
+                      state.importingAuthId = null;
+                      state.importingProvider = null;
+                      return;
+                    }
+
+                    // 统计新模型数量
+                    const newModelsCount = models.filter((m) => !m.isConfigured).length;
+
+                    if (newModelsCount === 0) {
+                      // 读取成功但没有新模型
+                      alert(
+                        "\u2705 \u5237\u65b0\u6210\u529f\n\n" +
+                          `\u4ece\u5e73\u53f0\u83b7\u53d6\u5230 ${models.length} \u4e2a\u6a21\u578b\uff0c\u4f46\u5168\u90e8\u5df2\u6dfb\u52a0\u3002\n\n` +
+                          "\u5982\u9700\u4fee\u6539\u73b0\u6709\u6a21\u578b\u914d\u7f6e\uff0c\u8bf7\u70b9\u51fb\u6a21\u578b\u5361\u7247\u4e0a\u7684\u914d\u7f6e\u6309\u94ae\u3002",
+                      );
+                      state.importableModels = null;
+                      state.importingAuthId = null;
+                      state.importingProvider = null;
+                      return;
+                    }
+
+                    // 有新模型，显示导入窗口
+                    state.importableModels = models;
+
+                    // 刷新完成后重新加载模型数据以更新界面
+                    await loadModels(state, false);
+                  } catch (err) {
+                    // 捕获异常，明确是读取失败
+                    alert(
+                      "❌ 刷新模型列表失败\n\n" +
+                        `错误信息：${String(err)}\n\n` +
+                        "请检查网络连接和认证配置",
+                    );
+                    state.importableModels = null;
+                    state.importingAuthId = null;
+                    state.importingProvider = null;
+                  }
                 },
                 onImportModels: async (authId, modelNames) => {
                   const auth = Object.values(state.modelsSnapshot?.auths ?? {})
@@ -650,6 +726,20 @@ export function renderApp(state: AppViewState) {
                   state.selectedImportModels.clear();
                   state.importableModels = null;
                   state.importingAuthId = null;
+                  state.importingProvider = null;
+                },
+                onToggleImportModel: (modelName) => {
+                  if (state.selectedImportModels.has(modelName)) {
+                    state.selectedImportModels.delete(modelName);
+                  } else {
+                    state.selectedImportModels.add(modelName);
+                  }
+                },
+                onCancelImport: () => {
+                  state.importableModels = null;
+                  state.importingAuthId = null;
+                  state.importingProvider = null;
+                  state.selectedImportModels.clear();
                 },
                 onSaveModelConfig: async (params) => {
                   await saveModelConfig(state, params);
@@ -733,7 +823,48 @@ export function renderApp(state: AppViewState) {
                   state.providerForm = null;
                 },
                 onDeleteProvider: async (id) => {
-                  await deleteProvider(state, id);
+                  // 获取供应商信息
+                  const providerInstance = (state.modelsSnapshot?.providerInstances as any[])?.find(
+                    (p: any) => p.id === id,
+                  );
+                  const providerName = providerInstance?.name || id;
+
+                  // 第一次尝试删除（不级联）
+                  const result = await deleteProvider(state, id, false);
+
+                  if (result.success) {
+                    // 删除成功
+                    return;
+                  }
+
+                  // 如果需要级联删除，弹出确认对话框
+                  if (result.requiresCascade) {
+                    const authCount = result.authCount || 0;
+                    const modelCount = result.modelCount || 0;
+
+                    let message = `确定要删除供应商「${providerName}」吗？\n\n`;
+                    message += `该供应商下有：\n`;
+                    if (authCount > 0) {
+                      message += `• ${authCount} 个认证配置\n`;
+                    }
+                    if (modelCount > 0) {
+                      message += `• ${modelCount} 个模型配置\n`;
+                    }
+                    message += `\n删除供应商将同时删除以上所有关联数据，此操作不可撤销！`;
+
+                    if (confirm(message)) {
+                      // 用户确认，执行级联删除
+                      const cascadeResult = await deleteProvider(state, id, true);
+                      if (cascadeResult.success) {
+                        alert(`✅ 已成功删除供应商「${providerName}」及其所有关联数据`);
+                      } else {
+                        alert(`❌ 删除失败，请稍后重试`);
+                      }
+                    }
+                  } else {
+                    // 其他错误
+                    alert(`❌ 删除供应商「${providerName}」失败，请稍后重试`);
+                  }
                 },
                 onCancelProviderEdit: () => {
                   state.addingProvider = false;

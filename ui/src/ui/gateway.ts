@@ -280,7 +280,13 @@ export class GatewayBrowserClient {
       if (res.ok) {
         pending.resolve(res.payload);
       } else {
-        pending.reject(new Error(res.error?.message ?? "request failed"));
+        // 创建错误对象，并附加 payload 数据
+        const error: Error & { data?: unknown } = new Error(res.error?.message ?? "request failed");
+        // 如果有 payload 数据，附加到错误对象上
+        if (res.payload !== undefined) {
+          error.data = res.payload;
+        }
+        pending.reject(error);
       }
       return;
     }

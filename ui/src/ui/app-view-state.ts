@@ -137,6 +137,66 @@ export type AppViewState = {
   showAllChannelsModal: boolean;
   debuggingChannel: { channelId: string; accountId?: string } | null;
   editingChannelGlobalConfig: string | null;
+  // 模型管理状态
+  modelsLoading: boolean;
+  modelsSnapshot: import("./types.ts").ModelsStatusSnapshot | null;
+  modelsError: string | null;
+  testingAuthId: string | null;
+  managingAuthProvider: string | null;
+  editingAuth: {
+    authId?: string;
+    provider: string;
+    name: string;
+    apiKey: string;
+    baseUrl?: string;
+  } | null;
+  viewingAuth: {
+    authId: string;
+    provider: string;
+  } | null;
+  managingModelsProvider: string | null;
+  editingModelConfig: {
+    configId?: string;
+    authId: string;
+    provider: string;
+    modelName: string;
+    nickname?: string;
+    enabled: boolean;
+    temperature?: number;
+    topP?: number;
+    maxTokens?: number;
+    frequencyPenalty?: number;
+    systemPrompt?: string;
+    conversationRounds?: number;
+    maxIterations?: number;
+    usageLimits?: {
+      maxRequestsPerDay?: number;
+      maxTokensPerRequest?: number;
+    };
+  } | null;
+  importableModels: Array<{
+    modelName: string;
+    isConfigured: boolean;
+    isEnabled: boolean;
+    isDeprecated: boolean;
+    configId?: string;
+  }> | null;
+  importingAuthId: string | null;
+  importingProvider: string | null;
+  selectedImportModels: Set<string>;
+  addingProvider: boolean;
+  viewingProviderId: string | null;
+  providerForm: {
+    selectedTemplateId: string | null;
+    id: string;
+    name: string;
+    icon: string;
+    website: string;
+    defaultBaseUrl: string;
+    apiKeyPlaceholder: string;
+    isEditing?: boolean;
+    originalId?: string;
+  } | null;
   presenceLoading: boolean;
   presenceEntries: PresenceEntry[];
   presenceError: string | null;
