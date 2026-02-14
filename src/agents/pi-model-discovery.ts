@@ -1,11 +1,6 @@
-import { createRequire } from "node:module";
 import path from "node:path";
 
-// 使用 createRequire 创建 require 函数以兼容 ESM 模块
-const _require = createRequire(import.meta.url);
-
 // 延迟导入以避免顶层 await 导致的问题
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let piCodingAgentModule: any = null;
 
 /**
@@ -63,8 +58,7 @@ export function getModelRegistrySync() {
 
 // 为了向后兼容，保持旧的导出名称但使用 getter
 // 注意：这些 Proxy 导出需要模块已经被加载
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const AuthStorage = new Proxy(function AuthStorageProxy() {} as any, {
+export const AuthStorage = new Proxy({} as any, {
   get(_target, prop) {
     const AS = getPiCodingAgentSync().AuthStorage;
     return AS[prop as keyof typeof AS];
@@ -75,33 +69,23 @@ export const AuthStorage = new Proxy(function AuthStorageProxy() {} as any, {
   },
 });
 
-// 导出类型
-export type AuthStorage = InstanceType<ReturnType<typeof getPiCodingAgentSync>["AuthStorage"]>;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const ModelRegistry = new Proxy(function ModelRegistryProxy() {} as any, {
+export const ModelRegistry = new Proxy({} as any, {
   get(_target, prop) {
     const MR = getPiCodingAgentSync().ModelRegistry;
     return MR[prop as keyof typeof MR];
   },
   construct(_target, args) {
     const MR = getPiCodingAgentSync().ModelRegistry;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return new MR(...(args as [any, string]));
   },
 });
 
-// 导出类型
-export type ModelRegistry = InstanceType<ReturnType<typeof getPiCodingAgentSync>["ModelRegistry"]>;
-
 // Compatibility helpers for pi-coding-agent 0.50+ (discover* helpers removed).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function discoverAuthStorage(agentDir: string): any {
   const AS = getPiCodingAgentSync().AuthStorage;
   return new AS(path.join(agentDir, "auth.json"));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function discoverModels(authStorage: any, agentDir: string): any {
   const MR = getPiCodingAgentSync().ModelRegistry;
   return new MR(authStorage, path.join(agentDir, "models.json"));
