@@ -16,6 +16,15 @@ const external = [
   /^@mariozechner\/pi-tui$/,
 ];
 
+// 禁用 chunkOptimization 解决 __exportAll is not a function 错误
+// 参考: https://github.com/rolldown/rolldown/issues/8184
+// 该选项会尝试将公共模块直接插入现有 chunk，可能导致循环依赖
+const inputOptions = {
+  experimental: {
+    chunkOptimization: false,
+  },
+};
+
 export default defineConfig([
   {
     entry: "src/index.ts",
@@ -23,6 +32,7 @@ export default defineConfig([
     external,
     fixedExtension: false,
     platform: "node",
+    inputOptions,
   },
   {
     entry: "src/entry.ts",
@@ -30,6 +40,7 @@ export default defineConfig([
     external,
     fixedExtension: false,
     platform: "node",
+    inputOptions,
   },
   {
     entry: "src/infra/warning-filter.ts",
@@ -37,6 +48,7 @@ export default defineConfig([
     external,
     fixedExtension: false,
     platform: "node",
+    inputOptions,
   },
   {
     entry: "src/plugin-sdk/index.ts",
@@ -45,6 +57,7 @@ export default defineConfig([
     external,
     fixedExtension: false,
     platform: "node",
+    inputOptions,
   },
   {
     entry: "src/extensionAPI.ts",
@@ -52,6 +65,7 @@ export default defineConfig([
     external,
     fixedExtension: false,
     platform: "node",
+    inputOptions,
   },
   {
     entry: ["src/hooks/bundled/*/handler.ts", "src/hooks/llm-slug-generator.ts"],
@@ -59,5 +73,6 @@ export default defineConfig([
     external,
     fixedExtension: false,
     platform: "node",
+    inputOptions,
   },
 ]);
