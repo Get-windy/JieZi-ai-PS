@@ -29,6 +29,8 @@ export type ResolveAgentRouteInput = {
   parentPeer?: RoutePeer | null;
   guildId?: string | null;
   teamId?: string | null;
+  /** Discord member role IDs — used for role-based agent routing. */
+  memberRoleIds?: string[];
 };
 
 export type ResolvedAgentRoute = {
@@ -43,6 +45,7 @@ export type ResolvedAgentRoute = {
   matchedBy:
     | "binding.peer"
     | "binding.peer.parent"
+    | "binding.guild+roles"
     | "binding.guild"
     | "binding.team"
     | "binding.account"

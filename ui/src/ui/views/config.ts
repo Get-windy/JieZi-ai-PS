@@ -5,7 +5,6 @@ import { analyzeConfigSchema, renderConfigForm, SECTION_META } from "./config-fo
 import {
   hintForPath,
   humanize,
-  translateFieldLabel,
   schemaType,
   type JsonSchema,
 } from "./config-form.shared.ts";
@@ -310,7 +309,7 @@ function resolveSectionMeta(
     return meta;
   }
   return {
-    label: schema?.title ?? translateFieldLabel(key),
+    label: schema?.title ?? humanize(key),
     description: schema?.description ?? "",
   };
 }
@@ -326,7 +325,7 @@ function resolveSubsections(params: {
   }
   const entries = Object.entries(schema.properties).map(([subKey, node]) => {
     const hint = hintForPath([key, subKey], uiHints);
-    const label = hint?.label ?? node.title ?? translateFieldLabel(subKey);
+    const label = hint?.label ?? node.title ?? humanize(subKey);
     const description = hint?.help ?? node.description ?? "";
     const order = hint?.order ?? 50;
     return { key: subKey, label, description, order };
@@ -409,7 +408,7 @@ export function renderConfig(props: ConfigProps) {
   const knownKeys = new Set(SECTIONS.map((s) => s.key));
   const extraSections = Object.keys(schemaProps)
     .filter((k) => !knownKeys.has(k))
-    .map((k) => ({ key: k, label: () => translateFieldLabel(k) }));
+    .map((k) => ({ key: k, label: () => humanize(k) }));
 
   const allSections = [...availableSections, ...extraSections];
 

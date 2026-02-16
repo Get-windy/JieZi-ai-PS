@@ -30,23 +30,37 @@ export type ModelAccountConfig = {
   } | null;
 };
 
+/**
+ * 模型详情类型
+ */
+export type ModelDetail = {
+  modelId: string; // providerId/modelName
+  providerId: string;
+  modelName: string;
+  displayName: string; // 友好显示名称
+  providerName: string;
+  enabled?: boolean; // 只在绑定列表中有
+};
+
 export type AgentModelAccountsState = {
   client: GatewayBrowserClient | null;
 
-  // 已绑定的模型账号
+  // 已绑定的模型
   boundModelAccounts: string[];
+  boundModelDetails: ModelDetail[]; // 新增：模型详情
   boundModelAccountsLoading: boolean;
   boundModelAccountsError: string | null;
   defaultModelAccountId: string;
 
-  // 可用但未绑定的模型账号
+  // 可用但未绑定的模型
   availableModelAccounts: string[];
+  availableModelDetails: ModelDetail[]; // 新增：模型详情
   availableModelAccountsLoading: boolean;
   availableModelAccountsError: string | null;
-  availableModelAccountsExpanded: boolean; // 是否展开显示可用账号
+  availableModelAccountsExpanded: boolean; // 是否展开显示可用模型
 
-  // 账号配置管理
-  accountConfigs: Record<string, ModelAccountConfig>; // accountId -> config
+  // 模型配置管理
+  accountConfigs: Record<string, ModelAccountConfig>; // modelId -> config
   accountConfigsLoading: boolean;
   accountConfigsError: string | null;
 
@@ -55,7 +69,7 @@ export type AgentModelAccountsState = {
 };
 
 /**
- * 加载助手已绑定的模型账号
+ * 加载助手已绑定的模型
  */
 export async function loadBoundModelAccounts(
   state: AgentModelAccountsState,
@@ -73,10 +87,10 @@ export async function loadBoundModelAccounts(
 
     if (response.ok && response.data) {
       state.boundModelAccounts = (response.data as any).accounts || [];
+      state.boundModelDetails = (response.data as any).modelDetails || [];
       state.defaultModelAccountId = (response.data as any).defaultAccountId || "";
     } else {
-      state.boundModelAccountsError =
-        response.error?.message || "Failed to load bound model accounts";
+      state.boundModelAccountsError = response.error?.message || "Failed to load bound models";
     }
   } catch (err) {
     state.boundModelAccountsError = String(err);
@@ -86,7 +100,7 @@ export async function loadBoundModelAccounts(
 }
 
 /**
- * 加载可用但未绑定的模型账号
+ * 加载可用但未绑定的模型
  */
 export async function loadAvailableModelAccounts(
   state: AgentModelAccountsState,
@@ -104,9 +118,10 @@ export async function loadAvailableModelAccounts(
 
     if (response.ok && response.data) {
       state.availableModelAccounts = (response.data as any).accounts || [];
+      state.availableModelDetails = (response.data as any).modelDetails || [];
     } else {
       state.availableModelAccountsError =
-        response.error?.message || "Failed to load available model accounts";
+        response.error?.message || "Failed to load available models";
     }
   } catch (err) {
     state.availableModelAccountsError = String(err);
@@ -116,12 +131,12 @@ export async function loadAvailableModelAccounts(
 }
 
 /**
- * 绑定模型账号
+ * 绑定模型
  */
 export async function bindModelAccount(
   state: AgentModelAccountsState,
   agentId: string,
-  accountId: string,
+  modelId: string,
 ): Promise<void> {
   if (!state.client) {
     return;
@@ -132,7 +147,7 @@ export async function bindModelAccount(
   try {
     const response = await state.client.call("agent.modelAccounts.bind", {
       agentId,
-      accountId,
+      accountId: modelId, // 后端兼容旧参数名
     });
 
     if (response.ok) {
@@ -140,7 +155,7 @@ export async function bindModelAccount(
       await loadBoundModelAccounts(state, agentId);
       await loadAvailableModelAccounts(state, agentId);
     } else {
-      state.modelAccountOperationError = response.error?.message || "Failed to bind model account";
+      state.modelAccountOperationError = response.error?.message || "Failed to bind model";
     }
   } catch (err) {
     state.modelAccountOperationError = String(err);
@@ -148,12 +163,12 @@ export async function bindModelAccount(
 }
 
 /**
- * 解绑模型账号
+ * 解绑模型
  */
 export async function unbindModelAccount(
   state: AgentModelAccountsState,
   agentId: string,
-  accountId: string,
+  modelId: string,
 ): Promise<void> {
   if (!state.client) {
     return;
@@ -164,7 +179,7 @@ export async function unbindModelAccount(
   try {
     const response = await state.client.call("agent.modelAccounts.unbind", {
       agentId,
-      accountId,
+      accountId: modelId, // 后端兼容旧参数名
     });
 
     if (response.ok) {
@@ -172,8 +187,7 @@ export async function unbindModelAccount(
       await loadBoundModelAccounts(state, agentId);
       await loadAvailableModelAccounts(state, agentId);
     } else {
-      state.modelAccountOperationError =
-        response.error?.message || "Failed to unbind model account";
+      state.modelAccountOperationError = response.error?.message || "Failed to unbind model";
     }
   } catch (err) {
     state.modelAccountOperationError = String(err);
@@ -181,12 +195,12 @@ export async function unbindModelAccount(
 }
 
 /**
- * 设置默认模型账号
+ * 设置默认模型
  */
 export async function setDefaultModelAccount(
   state: AgentModelAccountsState,
   agentId: string,
-  accountId: string,
+  modelId: string,
 ): Promise<void> {
   if (!state.client) {
     return;
@@ -204,10 +218,10 @@ export async function setDefaultModelAccount(
 
     const currentConfig = (getResponse.data as any).config || {};
 
-    // 更新默认账号
+    // 更新默认模型
     const updatedConfig = {
       ...currentConfig,
-      defaultAccountId: accountId,
+      defaultAccountId: modelId,
     };
 
     const updateResponse = await state.client.call("agent.modelAccounts.update", {
@@ -216,7 +230,7 @@ export async function setDefaultModelAccount(
     });
 
     if (updateResponse.ok) {
-      state.defaultModelAccountId = accountId;
+      state.defaultModelAccountId = modelId;
     } else {
       state.modelAccountOperationError =
         updateResponse.error?.message || "Failed to set default account";
@@ -227,19 +241,19 @@ export async function setDefaultModelAccount(
 }
 
 /**
- * 切换可用账号展开/折叠状态
+ * 切换可用模型展开/折叠状态
  */
 export function toggleAvailableModelAccountsExpanded(state: AgentModelAccountsState): void {
   state.availableModelAccountsExpanded = !state.availableModelAccountsExpanded;
 }
 
 /**
- * 加载账号配置
+ * 加载模型配置
  */
 export async function loadAccountConfig(
   state: AgentModelAccountsState,
   agentId: string,
-  accountId: string,
+  modelId: string,
 ): Promise<void> {
   if (!state.client) {
     return;
@@ -251,17 +265,17 @@ export async function loadAccountConfig(
   try {
     const response = await state.client.call("agent.modelAccounts.config.get", {
       agentId,
-      accountId,
+      accountId: modelId,
     });
 
     if (response.ok && response.data) {
       const config = (response.data as any).config;
       state.accountConfigs = {
         ...state.accountConfigs,
-        [accountId]: config,
+        [modelId]: config,
       };
     } else {
-      state.accountConfigsError = response.error?.message || "Failed to load account config";
+      state.accountConfigsError = response.error?.message || "Failed to load model config";
     }
   } catch (err) {
     state.accountConfigsError = String(err);
@@ -271,7 +285,7 @@ export async function loadAccountConfig(
 }
 
 /**
- * 批量加载所有绑定账号的配置
+ * 批量加载所有绑定模型的配置
  */
 export async function loadAllAccountConfigs(
   state: AgentModelAccountsState,
@@ -285,14 +299,14 @@ export async function loadAllAccountConfigs(
   state.accountConfigsError = null;
 
   try {
-    const promises = state.boundModelAccounts.map(async (accountId) => {
+    const promises = state.boundModelAccounts.map(async (modelId) => {
       const response = await state.client!.call("agent.modelAccounts.config.get", {
         agentId,
-        accountId,
+        accountId: modelId,
       });
 
       if (response.ok && response.data) {
-        return { accountId, config: (response.data as any).config };
+        return { modelId, config: (response.data as any).config };
       }
       return null;
     });
@@ -302,7 +316,7 @@ export async function loadAllAccountConfigs(
 
     for (const result of results) {
       if (result) {
-        configs[result.accountId] = result.config;
+        configs[result.modelId] = result.config;
       }
     }
 
@@ -315,12 +329,12 @@ export async function loadAllAccountConfigs(
 }
 
 /**
- * 更新账号配置
+ * 更新模型配置
  */
 export async function updateAccountConfig(
   state: AgentModelAccountsState,
   agentId: string,
-  accountId: string,
+  modelId: string,
   config: ModelAccountConfig,
 ): Promise<void> {
   if (!state.client) {
@@ -332,7 +346,7 @@ export async function updateAccountConfig(
   try {
     const response = await state.client.call("agent.modelAccounts.config.update", {
       agentId,
-      accountId,
+      accountId: modelId,
       config,
     });
 
@@ -340,11 +354,10 @@ export async function updateAccountConfig(
       // 更新本地状态
       state.accountConfigs = {
         ...state.accountConfigs,
-        [accountId]: config,
+        [modelId]: config,
       };
     } else {
-      state.modelAccountOperationError =
-        response.error?.message || "Failed to update account config";
+      state.modelAccountOperationError = response.error?.message || "Failed to update model config";
     }
   } catch (err) {
     state.modelAccountOperationError = String(err);
@@ -352,12 +365,12 @@ export async function updateAccountConfig(
 }
 
 /**
- * 快速切换账号启用/停用状态
+ * 快速切换模型启用/停用状态
  */
 export async function toggleAccountEnabled(
   state: AgentModelAccountsState,
   agentId: string,
-  accountId: string,
+  modelId: string,
   enabled: boolean,
 ): Promise<void> {
   if (!state.client) {
@@ -369,13 +382,13 @@ export async function toggleAccountEnabled(
   try {
     const response = await state.client.call("agent.modelAccounts.config.toggle", {
       agentId,
-      accountId,
+      accountId: modelId,
       enabled,
     });
 
     if (response.ok) {
       // 更新本地状态
-      const currentConfig = state.accountConfigs[accountId] || {
+      const currentConfig = state.accountConfigs[modelId] || {
         enabled: true,
         priority: 0,
         schedule: null,
@@ -385,7 +398,7 @@ export async function toggleAccountEnabled(
 
       state.accountConfigs = {
         ...state.accountConfigs,
-        [accountId]: {
+        [modelId]: {
           ...currentConfig,
           enabled,
         },

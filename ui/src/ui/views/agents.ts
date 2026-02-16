@@ -138,22 +138,35 @@ export type AgentsProps = {
   modelAccountsError: string | null;
   modelAccountsSaving: boolean;
   modelAccountsSaveSuccess: boolean;
-  // 模型账号绑定管理
+  // 模型绑定管理
   boundModelAccounts?: string[];
+  boundModelDetails?: Array<{
+    modelId: string;
+    displayName: string;
+    providerName: string;
+    modelName: string;
+    enabled: boolean;
+  }>;
   boundModelAccountsLoading?: boolean;
   boundModelAccountsError?: string | null;
   availableModelAccounts?: string[];
+  availableModelDetails?: Array<{
+    modelId: string;
+    displayName: string;
+    providerName: string;
+    modelName: string;
+  }>;
   availableModelAccountsLoading?: boolean;
   availableModelAccountsError?: string | null;
   availableModelAccountsExpanded?: boolean;
   defaultModelAccountId?: string;
   modelAccountOperationError?: string | null;
-  onBindModelAccount?: (accountId: string) => void;
-  onUnbindModelAccount?: (accountId: string) => void;
+  onBindModelAccount?: (modelId: string) => void;
+  onUnbindModelAccount?: (modelId: string) => void;
   onToggleAvailableModelAccounts?: () => void;
-  onSetDefaultModelAccount?: (accountId: string) => void;
-  onConfigureModelAccount?: (accountId: string, currentConfig: any) => void;
-  onToggleModelAccountEnabled?: (accountId: string, enabled: boolean) => void;
+  onSetDefaultModelAccount?: (modelId: string) => void;
+  onConfigureModelAccount?: (modelId: string, currentConfig: any) => void;
+  onToggleModelAccountEnabled?: (modelId: string, enabled: boolean) => void;
   accountConfigs?: Record<string, any>;
   channelPoliciesConfig: ChannelPoliciesConfig | null;
   channelPoliciesLoading: boolean;
@@ -198,6 +211,8 @@ export type AgentsProps = {
   editingAgent: { id: string; name?: string; workspace?: string } | null;
   creatingAgent: boolean;
   deletingAgent: boolean;
+  defaultWorkspaceRoot?: string; // 默认工作区根目录
+  isNewAgent?: boolean; // 是否是新增模式（区别于正在保存中的creatingAgent）
   // 回调函数
   onRefresh: () => void;
   onSelectAgent: (agentId: string) => void;
@@ -263,6 +278,9 @@ export type AgentsProps = {
   onSaveAgent: () => void;
   onCancelEdit: () => void;
   onAgentFormChange: (field: string, value: string) => void;
+  onMigrateWorkspace?: (agentId: string) => void;
+  onConfigureDefaultWorkspace?: () => void;
+  onSetDefaultAgent?: (agentId: string) => void; // 设置默认助手
 };
 
 const TOOL_SECTIONS = [
@@ -765,7 +783,7 @@ function matchesList(name: string, list?: string[]) {
 }
 
 /**
- * Phase 5: 渲染模型配置面板（模型账号绑定 + 智能路由）
+ * Phase 5: 渲染模型配置面板（模型绑定 + 智能路由）
  */
 function renderAgentModelAccounts(params: {
   agentId: string;
@@ -774,11 +792,24 @@ function renderAgentModelAccounts(params: {
   error: string | null;
   saving: boolean;
   saveSuccess: boolean;
-  // 模型账号绑定管理
+  // 模型绑定管理
   boundModelAccounts: string[];
+  boundModelDetails?: Array<{
+    modelId: string;
+    displayName: string;
+    providerName: string;
+    modelName: string;
+    enabled: boolean;
+  }>;
   boundModelAccountsLoading: boolean;
   boundModelAccountsError: string | null;
   availableModelAccounts: string[];
+  availableModelDetails?: Array<{
+    modelId: string;
+    displayName: string;
+    providerName: string;
+    modelName: string;
+  }>;
   availableModelAccountsLoading: boolean;
   availableModelAccountsError: string | null;
   availableModelAccountsExpanded: boolean;
@@ -843,18 +874,20 @@ function renderAgentModelAccounts(params: {
           : nothing
       }
 
-      <!-- Part 1: 模型账号连接管理 -->
+      <!-- Part 1: 模型管理 -->
       <div style="margin-top: 20px;">
-        <div class="label">已绑定的模型账号 (${boundCount})</div>
+        <div class="label">已绑定的模型 (${boundCount})</div>
         ${
           boundCount === 0
             ? html`
-                <div class="muted" style="margin-top: 8px">还没有绑定任何模型账号</div>
+                <div class="muted" style="margin-top: 8px">还没有绑定任何模型</div>
               `
             : html`
               <div class="list" style="margin-top: 8px;">
-                ${params.boundModelAccounts.map((accountId: string) => {
-                  const accountConfig = params.accountConfigs?.[accountId];
+                ${params.boundModelAccounts.map((modelId: string) => {
+                  const modelDetail = params.boundModelDetails?.find((m) => m.modelId === modelId);
+                  const displayName = modelDetail?.displayName || modelId;
+                  const accountConfig = params.accountConfigs?.[modelId];
                   const enabled = accountConfig?.enabled !== false; // 默认启用
                   const priority = accountConfig?.priority ?? 0;
                   const hasSchedule = !!accountConfig?.schedule;
@@ -871,7 +904,7 @@ function renderAgentModelAccounts(params: {
                               ?checked=${enabled}
                               @change=${(e: Event) => {
                                 const checked = (e.target as HTMLInputElement).checked;
-                                params.onToggleAccountEnabled?.(accountId, checked);
+                                params.onToggleAccountEnabled?.(modelId, checked);
                               }}
                             />
                             <span class="slider"></span>
@@ -879,9 +912,9 @@ function renderAgentModelAccounts(params: {
                           
                           <div style="flex: 1;">
                             <div style="display: flex; align-items: center; gap: 8px;">
-                              <span class="mono" style="font-weight: 500;">${accountId}</span>
+                              <span style="font-weight: 500;">${displayName}</span>
                               ${
-                                accountId === params.defaultModelAccountId
+                                modelId === params.defaultModelAccountId
                                   ? html`
                                       <span class="agent-pill">默认</span>
                                     `
@@ -925,12 +958,12 @@ function renderAgentModelAccounts(params: {
                         </div>
                         <div style="display: flex; gap: 8px;">
                           ${
-                            accountId !== params.defaultModelAccountId &&
+                            modelId !== params.defaultModelAccountId &&
                             params.onSetDefaultModelAccount
                               ? html`
                                 <button 
                                   class="btn btn--sm"
-                                  @click=${() => params.onSetDefaultModelAccount!(accountId)}
+                                  @click=${() => params.onSetDefaultModelAccount!(modelId)}
                                 >
                                   设为默认
                                 </button>
@@ -940,7 +973,7 @@ function renderAgentModelAccounts(params: {
                           <button
                             class="btn btn--sm"
                             @click=${() => {
-                              params.onConfigureModelAccount?.(accountId, accountConfig || {});
+                              params.onConfigureModelAccount?.(modelId, accountConfig || {});
                             }}
                           >
                             配置
@@ -949,14 +982,14 @@ function renderAgentModelAccounts(params: {
                             class="btn btn--sm"
                             style="color: var(--color-danger);"
                             ?disabled=${boundCount === 1}
-                            title=${boundCount === 1 ? "至少需要保留一个模型账号" : ""}
+                            title=${boundCount === 1 ? "至少需要保留一个模型" : ""}
                             @click=${() => {
                               if (
                                 boundCount > 1 &&
                                 params.onUnbindModelAccount &&
-                                confirm(`确定要移除 ${accountId} 吗？`)
+                                confirm(`确定要移除 ${displayName} 吗？`)
                               ) {
-                                params.onUnbindModelAccount(accountId);
+                                params.onUnbindModelAccount(modelId);
                               }
                             }}
                           >
@@ -971,10 +1004,10 @@ function renderAgentModelAccounts(params: {
         }
       </div>
 
-      <!-- 可用但未绑定的模型账号（折叠） -->
+      <!-- 可用但未绑定的模型（折叠） -->
       <div style="margin-top: 24px;">
         <div class="row" style="justify-content: space-between; align-items: center;">
-          <div class="label">可用的模型账号</div>
+          <div class="label">可用的模型</div>
           <button class="btn btn--sm" @click=${() => params.onToggleAvailableModelAccounts?.()}>
             ${params.availableModelAccountsExpanded ? "收起" : "展开"}
           </button>
@@ -996,23 +1029,27 @@ function renderAgentModelAccounts(params: {
                       `
                     : params.availableModelAccounts.length === 0
                       ? html`
-                          <div class="muted">没有可用的模型账号</div>
+                          <div class="muted">没有可用的模型</div>
                         `
                       : html`
                         <div class="list">
-                          ${params.availableModelAccounts.map(
-                            (accountId: string) => html`
-                              <div class="list-item" style="display: flex; justify-content: space-between; align-items: center;">
-                                <span class="mono">${accountId}</span>
-                                <button
-                                  class="btn btn--sm"
-                                  @click=${() => params.onBindModelAccount?.(accountId)}
-                                >
-                                  + 添加
-                                </button>
-                              </div>
-                            `,
-                          )}
+                          ${params.availableModelAccounts.map((modelId: string) => {
+                            const modelDetail = params.availableModelDetails?.find(
+                              (m) => m.modelId === modelId,
+                            );
+                            const displayName = modelDetail?.displayName || modelId;
+                            return html`
+                                <div class="list-item" style="display: flex; justify-content: space-between; align-items: center;">
+                                  <span>${displayName}</span>
+                                  <button
+                                    class="btn btn--sm"
+                                    @click=${() => params.onBindModelAccount?.(modelId)}
+                                  >
+                                    + 添加
+                                  </button>
+                                </div>
+                              `;
+                          })}
                         </div>
                       `
                 }
@@ -1022,14 +1059,14 @@ function renderAgentModelAccounts(params: {
         }
       </div>
 
-      <!-- Part 2: 智能路由配置（只在有多个模型账号时显示） -->
+      <!-- Part 2: 智能路由配置（只在有多个模型时显示） -->
       ${
         hasMultipleAccounts && config
           ? html`
             <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-1);">
               <div class="label">智能路由配置</div>
               <div class="muted" style="font-size: 0.875rem; margin-top: 4px;">
-                当绑定多个模型账号时，可配置智能路由策略自动选择最佳模型
+                当绑定多个模型时，可配置智能路由策略自动选择最佳模型
               </div>
               
               <div style="margin-top: 16px;">
@@ -1105,7 +1142,7 @@ function renderAgentModelAccounts(params: {
             ? html`
                 <div style="margin-top: 24px; padding: 12px; border-radius: 6px; background: var(--bg-1)">
                   <div class="muted" style="font-size: 0.875rem">
-                    💡 提示：绑定多个模型账号后，可以配置智能路由策略，让系统自动选择最佳模型。
+                    💡 提示：绑定多个模型后，可以配置智能路由策略，让系统自动选择最佳模型。
                   </div>
                 </div>
               `
@@ -1487,6 +1524,18 @@ export function renderAgents(props: AgentsProps) {
             <div class="card-sub">${t("agents.configured_count").replace("{count}", String(agents.length))}</div>
           </div>
           <div style="display: flex; gap: 8px;">
+            <button 
+              class="btn btn--sm" 
+              ?disabled=${props.loading} 
+              @click=${() => {
+                if (props.onConfigureDefaultWorkspace) {
+                  props.onConfigureDefaultWorkspace();
+                }
+              }}
+              title="${t("agents.configure_default_workspace")}"
+            >
+              ⚙️
+            </button>
             <button class="btn btn--sm" ?disabled=${props.loading} @click=${props.onAddAgent}>
               ${t("agents.add_agent_short")}
             </button>
@@ -1548,6 +1597,7 @@ export function renderAgents(props: AgentsProps) {
                 props.agentIdentityById[selectedAgent.id] ?? null,
                 props.onDeleteAgent,
                 props.onEditAgent,
+                props.onSetDefaultAgent,
               )}
               ${renderAgentTabs(props.activePanel, (panel) => props.onSelectPanel(panel))}
               ${
@@ -1653,23 +1703,25 @@ export function renderAgents(props: AgentsProps) {
                       saving: props.modelAccountsSaving,
                       saveSuccess: props.modelAccountsSaveSuccess,
                       boundModelAccounts: props.boundModelAccounts || [],
+                      boundModelDetails: props.boundModelDetails || [],
                       boundModelAccountsLoading: props.boundModelAccountsLoading || false,
                       boundModelAccountsError: props.boundModelAccountsError || null,
                       availableModelAccounts: props.availableModelAccounts || [],
+                      availableModelDetails: props.availableModelDetails || [],
                       availableModelAccountsLoading: props.availableModelAccountsLoading || false,
                       availableModelAccountsError: props.availableModelAccountsError || null,
                       availableModelAccountsExpanded: props.availableModelAccountsExpanded || false,
                       defaultModelAccountId: props.defaultModelAccountId || "",
                       modelAccountOperationError: props.modelAccountOperationError || null,
                       onChange: props.onModelAccountsChange,
-                      onBindModelAccount: (accountId) => {
+                      onBindModelAccount: (modelId) => {
                         if (props.onBindModelAccount) {
-                          props.onBindModelAccount(accountId);
+                          props.onBindModelAccount(modelId);
                         }
                       },
-                      onUnbindModelAccount: (accountId) => {
+                      onUnbindModelAccount: (modelId) => {
                         if (props.onUnbindModelAccount) {
-                          props.onUnbindModelAccount(accountId);
+                          props.onUnbindModelAccount(modelId);
                         }
                       },
                       onToggleAvailableModelAccounts: () => {
@@ -1677,9 +1729,9 @@ export function renderAgents(props: AgentsProps) {
                           props.onToggleAvailableModelAccounts();
                         }
                       },
-                      onSetDefaultModelAccount: (accountId) => {
+                      onSetDefaultModelAccount: (modelId) => {
                         if (props.onSetDefaultModelAccount) {
-                          props.onSetDefaultModelAccount(accountId);
+                          props.onSetDefaultModelAccount(modelId);
                         }
                       },
                     })
@@ -1826,11 +1878,14 @@ function renderAgentHeader(
   agentIdentity: AgentIdentityResult | null,
   onDelete?: (agentId: string) => void,
   onEdit?: (agentId: string) => void,
+  onSetDefault?: (agentId: string) => void,
 ) {
   const badge = agentBadgeText(agent.id, defaultId);
   const displayName = normalizeAgentLabel(agent);
   const subtitle = agent.identity?.theme?.trim() || t("agents.subtitle_default");
   const emoji = resolveAgentEmoji(agent, agentIdentity);
+  const isDefault = agent.id === defaultId;
+
   return html`
     <section class="card agent-header">
       <div class="agent-header-main">
@@ -1846,6 +1901,20 @@ function renderAgentHeader(
         <div class="mono">${agent.id}</div>
         ${badge ? html`<span class="agent-pill">${badge}</span>` : nothing}
         ${
+          onSetDefault && !isDefault
+            ? html`
+          <button 
+            class="btn btn--sm" 
+            style="background: #4caf50; border-color: #4caf50; color: #ffffff;"
+            @click=${() => onSetDefault(agent.id)}
+            title="${t("agents.set_as_default")}"
+          >
+            ⭐ ${t("agents.set_as_default_short")}
+          </button>
+        `
+            : nothing
+        }
+        ${
           onEdit
             ? html`
           <button 
@@ -1858,20 +1927,28 @@ function renderAgentHeader(
             : nothing
         }
         ${
-          onDelete
+          onDelete && !isDefault
             ? html`
           <button 
-            class="btn btn--sm btn--danger" 
-            @click=${() => {
-              if (confirm(t("agents.delete_confirm").replace("{id}", agent.id))) {
-                onDelete(agent.id);
-              }
-            }}
+            class="btn btn--sm" 
+            style="background: #ff5c5c; border-color: #ff5c5c; color: #ffffff;"
+            @click=${() => onDelete(agent.id)}
           >
             ${t("agents.delete_agent")}
           </button>
         `
-            : nothing
+            : isDefault && onDelete
+              ? html`
+          <button 
+            class="btn btn--sm" 
+            style="background: #cccccc; border-color: #cccccc; color: #666666; cursor: not-allowed;"
+            disabled
+            title="${t("agents.cannot_delete_default")}"
+          >
+            ${t("agents.delete_agent")}
+          </button>
+        `
+              : nothing
         }
       </div>
     </section>
@@ -3024,9 +3101,47 @@ function renderAgentSkillRow(
 }
 
 function renderAgentEditModal(props: AgentsProps) {
-  const isNew = props.editingAgent?.id === "";
+  // 使用 isNewAgent 标志判断是否是新增模式，creatingAgent 表示正在保存中
+  const isNew = props.isNewAgent || false;
   const idPattern = /^[a-z0-9][a-z0-9-]*$/;
   const isValidId = props.editingAgent?.id && idPattern.test(props.editingAgent.id);
+
+  // 自动生成ID和工作区路径的辅助函数
+  const generateAgentId = () => {
+    const timestamp = Date.now().toString(36);
+    const random = Math.random().toString(36).substring(2, 7);
+    return `agent-${timestamp}-${random}`;
+  };
+
+  const generateWorkspacePath = (agentId: string) => {
+    // 使用配置的默认工作区根目录，如果没有则使用系统默认
+    const defaultRoot = props.defaultWorkspaceRoot || "~/.openclaw/workspace";
+    // 如果根目录已经包含 workspace 后缀，直接添加 agentId，否则添加 workspace-agentId
+    if (defaultRoot.endsWith("/workspace") || defaultRoot.endsWith("\\workspace")) {
+      return `${defaultRoot}-${agentId}`;
+    }
+    return `${defaultRoot}/workspace-${agentId}`;
+  };
+
+  // 判断工作区路径是否是自动生成的（包含当前或之前的agentId）
+  const isAutoGeneratedWorkspace = (workspace: string, currentId: string) => {
+    if (!workspace) {
+      return true;
+    }
+    // 检查是否包含workspace-前缀
+    return workspace.includes("/workspace-") || workspace.includes("\\workspace-");
+  };
+
+  // 如果是新建且ID为空，自动生成
+  if (isNew && !props.editingAgent?.id) {
+    const newId = generateAgentId();
+    setTimeout(() => {
+      if (props.onAgentFormChange) {
+        props.onAgentFormChange("id", newId);
+        props.onAgentFormChange("workspace", generateWorkspacePath(newId));
+      }
+    }, 0);
+  }
 
   return html`
     <section class="card" style="margin-bottom: 16px;">
@@ -3035,14 +3150,48 @@ function renderAgentEditModal(props: AgentsProps) {
       
       <div style="margin-top: 16px;">
         <div class="form-group" style="margin-bottom: 12px;">
-          <label class="form-label">${t("agents.agent_id")}</label>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label class="form-label">${t("agents.agent_id")}</label>
+            ${
+              isNew
+                ? html`
+                <button 
+                  type="button"
+                  class="btn btn--sm" 
+                  style="font-size: 12px; padding: 4px 8px;"
+                  @click=${() => {
+                    const newId = generateAgentId();
+                    props.onAgentFormChange("id", newId);
+                    // 只有当工作区是自动生成的才更新
+                    if (isAutoGeneratedWorkspace(props.editingAgent?.workspace || "", newId)) {
+                      props.onAgentFormChange("workspace", generateWorkspacePath(newId));
+                    }
+                  }}
+                >
+                  ${t("agents.regenerate_id")}
+                </button>
+              `
+                : nothing
+            }
+          </div>
           <input
             type="text"
             class="form-control"
             .value=${props.editingAgent?.id || ""}
             ?disabled=${!isNew}
             placeholder=${t("agents.agent_id_placeholder")}
-            @input=${(e: Event) => props.onAgentFormChange("id", (e.target as HTMLInputElement).value)}
+            @input=${(e: Event) => {
+              const newId = (e.target as HTMLInputElement).value;
+              props.onAgentFormChange("id", newId);
+              // ID改变时，只有当工作区是自动生成的才同步更新
+              if (
+                isNew &&
+                newId.trim() &&
+                isAutoGeneratedWorkspace(props.editingAgent?.workspace || "", newId)
+              ) {
+                props.onAgentFormChange("workspace", generateWorkspacePath(newId));
+              }
+            }}
           />
           <small class="form-text muted">${t("agents.agent_id_help")}</small>
           ${
@@ -3066,14 +3215,71 @@ function renderAgentEditModal(props: AgentsProps) {
         </div>
         
         <div class="form-group" style="margin-bottom: 16px;">
-          <label class="form-label">${t("agents.workspace_path")}</label>
-          <input
-            type="text"
-            class="form-control"
-            .value=${props.editingAgent?.workspace || ""}
-            placeholder=${t("agents.workspace_placeholder")}
-            @input=${(e: Event) => props.onAgentFormChange("workspace", (e.target as HTMLInputElement).value)}
-          />
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label class="form-label">${t("agents.workspace_path")}</label>
+            ${
+              !isNew && props.editingAgent?.workspace
+                ? html`
+                <button 
+                  type="button"
+                  class="btn btn--sm" 
+                  style="font-size: 12px; padding: 4px 8px;"
+                  @click=${() => {
+                    if (props.onMigrateWorkspace) {
+                      props.onMigrateWorkspace(props.editingAgent!.id);
+                    }
+                  }}
+                >
+                  ${t("agents.migrate_workspace")}
+                </button>
+              `
+                : nothing
+            }
+          </div>
+          <div style="display: flex; gap: 8px; flex-direction: column;">
+            <input
+              type="text"
+              class="form-control"
+              .value=${props.editingAgent?.workspace || ""}
+              placeholder=${t("agents.workspace_placeholder")}
+              @input=${(e: Event) => props.onAgentFormChange("workspace", (e.target as HTMLInputElement).value)}
+            />
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <small class="muted" style="flex: 1; min-width: 200px;">
+                💡 快捷路径：
+              </small>
+              <button 
+                type="button"
+                class="btn btn--sm" 
+                style="font-size: 0.75rem; padding: 2px 8px;"
+                @click=${() => {
+                  const homeDir = props.editingAgent?.workspace || "";
+                  const suggested = homeDir.includes("~")
+                    ? homeDir
+                    : `~/OpenClaw_Workspaces/${props.editingAgent?.id || "new-agent"}`;
+                  props.onAgentFormChange("workspace", suggested);
+                }}
+                title="使用用户主目录"
+              >
+                ~/OpenClaw_Workspaces
+              </button>
+              <button 
+                type="button"
+                class="btn btn--sm" 
+                style="font-size: 0.75rem; padding: 2px 8px;"
+                @click=${() => {
+                  props.onAgentFormChange(
+                    "workspace",
+                    `~/Documents/OpenClaw/${props.editingAgent?.id || "new-agent"}`,
+                  );
+                }}
+                title="使用文档目录"
+              >
+                ~/Documents/OpenClaw
+              </button>
+            </div>
+          </div>
+          <small class="form-text muted">${t("agents.workspace_help")} 支持 ~ 表示用户主目录，例如：~/OpenClaw_Workspaces/my-agent</small>
         </div>
         
         <div class="row" style="gap: 8px;">

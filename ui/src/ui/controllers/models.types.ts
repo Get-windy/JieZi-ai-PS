@@ -8,4 +8,5 @@ export type ModelsState = {
   modelsSnapshot: ModelsStatusSnapshot | null;
   modelsError: string | null;
   modelsLastSuccess: number | null;
+  testingAuthId: string | null; // 正在测试的认证ID
 };

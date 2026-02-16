@@ -24,18 +24,10 @@ export type AgentPhase5State = {
  * 加载智能助手的模型账号配置
  */
 export async function loadModelAccounts(state: AgentPhase5State, agentId: string) {
-  console.log(
-    "[loadModelAccounts] Starting, client:",
-    state.client,
-    "call method:",
-    state.client?.call,
-  );
   if (!state.client || !state.connected) {
-    console.warn("[loadModelAccounts] Not connected or no client");
     return;
   }
   if (state.modelAccountsLoading) {
-    console.warn("[loadModelAccounts] Already loading");
     return;
   }
 

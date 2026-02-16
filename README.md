@@ -78,6 +78,162 @@ If you're merging code from upstream or updating `package.json`, please be aware
 
 ### 📌 项目更新记录 | Project Update Log
 
+#### 2026年2月12日 - 智能助手管理页面功能完善与体验优化 | 2026-02-12 - Agent Management Page Feature Enhancements & UX Optimization
+
+**🎯 核心功能改进 | Core Feature Improvements:**
+
+**1. 助手管理基础功能完善 | Enhanced Agent Management Core Features**
+
+- ✅ **默认助手互斥切换机制 | Mutual Exclusive Default Agent Mechanism**
+  - 实现系统唯一默认助手逻辑 | Implemented system-wide single default agent logic
+  - 添加「设为默认助手」按钮 | Added "Set as Default Agent" button (⭐ icon)
+  - 自动将未在列表的助手添加到 agents.list | Automatically add unlisted agents (e.g. main) to agents.list
+  - 支持系统初始化助手设置为默认 | Support setting system-initialized agents (main) as default
+
+- ✅ **助手创建优化 | Agent Creation Optimization**
+  - 修复创建助手后默认助手核心文件出错 | Fixed core file error when creating new agents
+  - 移除创建后自动选中逻辑 | Removed auto-selection after creation to avoid affecting existing default
+  - 优化助手列表查询 | Optimized agent list query to ensure main agent is always visible
+
+- ✅ **工作区路径修复 | Workspace Path Fix**
+  - 修复助手编辑时工作区路径未加载 | Fixed workspace path not loading when editing agents
+  - 后端GatewayAgentRow类型添加workspace字段 | Added workspace field to backend GatewayAgentRow type
+  - 正确显示系统初始化助手的工作区路径 | Correctly display workspace path for system-initialized agent (main)
+  - 修复默认助手工作区路径生成逻辑 | Fixed default agent workspace path generation logic
+
+**2. 通道账号绑定功能修复 | Channel Account Binding Fix 🔧**
+
+- ✅ **数据格式转换实现 | Data Format Conversion Implementation** (ui/src/ui/controllers/agent-channel-accounts.ts)
+  - **问题 | Problem**: 绑定通道账号后显示数量为0，通信无法接通 | After binding channel accounts, count shows 0 and communication fails
+  - **原因 | Root Cause**: 后端返回平铺列表，前端期望分组格式 | Backend returns flat list, frontend expects grouped format
+    - Backend: `[{channelId: "telegram", accountId: "acc1"}, {channelId: "telegram", accountId: "acc2"}]`
+    - Frontend needs: `[{channelId: "telegram", accountIds: ["acc1", "acc2"]}]`
+  - **解决方案 | Solution**:
+    - 在loadBoundChannelAccounts函数中添加数据转换逻辑 | Added data conversion logic in loadBoundChannelAccounts function
+    - 使用Map按channelId分组聚合accountIds | Used Map to group and aggregate accountIds by channelId
+    - 转换为前端期望的数组格式 | Convert to frontend-expected array format
+    - 通道账号绑定状态实时同步更新 | Real-time sync of channel account binding status
+
+**3. 助手切换时标签页刷新优化 | Agent Switch Tab Refresh Optimization ⚡**
+
+- ✅ **完整的标签页刷新机制 | Complete Tab Refresh Mechanism** (ui/src/ui/app-render.ts)
+  - **问题 | Problem**: 切换助手后部分标签页显示旧助手数据 | Some tabs (especially channel config) still show old agent data after switching
+  - **修复范围 | Fix Scope** (8 tabs):
+    - ✅ **overview**: 通过loadAgentIdentity刷新助手身份信息 | Refresh agent identity via loadAgentIdentity
+    - ✅ **files**: 调用loadAgentFiles加载助手文件列表 | Call loadAgentFiles to load agent file list
+    - ✅ **tools**: 响应式获取助手配置工具 | Reactively fetch agent configured tools
+    - ✅ **skills**: 调用loadAgentSkills加载技能报告 | Call loadAgentSkills to load skill report
+    - ✅ **cron** (定时任务): 调用state.loadCron()刷新 | Call state.loadCron() to refresh [NEW]
+    - ✅ **modelAccounts** (模型配置): 刷新模型账号绑定数据 | Refresh model account binding data [NEW]
+    - ✅ **channelPolicies** (通道配置): 刷新通道策略和账号绑定 | Refresh channel policies and account bindings [NEW]
+    - ✅ **permissionsConfig** (权限配置): 调用loadAgentPermissions刷新 | Call loadAgentPermissions to refresh [NEW]
+  - **实现方式 | Implementation**:
+    - 在onSelectAgent回调中添加完整的刷新判断逻辑 | Added complete refresh logic in onSelectAgent callback
+    - 根据当前state.agentsPanel的值调用相应的加载函数 | Invoke corresponding load functions based on current state.agentsPanel value
+    - 确保切换助手时所有标签页数据一致 | Ensure all tab data is consistent with selected agent when switching
+
+**4. 默认助手设置功能 | Default Agent Setting Feature**
+
+- ✅ **后端RPC方法 | Backend RPC Method** (src/gateway/server-methods/agents-management.ts)
+  - 新增agent.setDefault RPC方法 | Added agent.setDefault RPC method
+  - 实现助手默认标记互斥逻辑 | Implemented agent default marking mutual exclusion logic
+  - 自动将未在列表的助手添加到agents.list | Automatically add unlisted agents to agents.list
+  - 支持系统默认助手(main)设置 | Support setting system default agent (main)
+  - 完善助手验证逻辑 | Enhanced agent validation logic
+
+- ✅ **前端交互优化 | Frontend Interaction Optimization** (ui/src/ui/views/agents.ts)
+  - 添加「设为默认助手」按钮到助手表头 | Added "Set as Default Agent" button to agent header
+  - 实现二次确认对话框 | Implemented double confirmation dialog (prevent accidental operations)
+  - 传递onSetDefaultAgent回调 | Pass onSetDefaultAgent callback
+  - 优化按钮样式和交互反馈 | Optimized button styles and interaction feedback
+
+**5. 国际化支持完善 | Internationalization Support Enhancement**
+
+- ✅ **新增翻译条目 | New Translation Entries** (ui/src/ui/i18n.ts)
+  - `agents.set_as_default`: "设为默认助手" / "Set as Default Agent"
+  - `agents.set_as_default_short`: "设为默认" / "Set Default"
+  - 完善助手管理相关的多语言支持 | Enhanced multilingual support for agent management
+
+**📝 技术实现细节 | Technical Implementation Details:**
+
+**后端改动 | Backend Changes:**
+
+- **agents-management.ts** (+679 lines)
+  - 新增agent.setDefault RPC方法(互斥逻辑) | Added agent.setDefault RPC method (mutual exclusion logic)
+  - 优化助手列表查询，支持main助手显示 | Optimized agent list query to support main agent display
+  - 完善助手验证逻辑和错误处理 | Enhanced agent validation logic and error handling
+
+- **session-utils.ts** (+28 lines)
+  - 修复listAgentsForGateway函数 | Fixed listAgentsForGateway function
+  - 动态解析工作区路径(resolveAgentWorkspaceDir) | Dynamically resolve workspace path (resolveAgentWorkspaceDir)
+  - 确保main助手始终可见 | Ensure main agent is always visible
+
+- **agent-scope.ts** (+3 lines)
+  - 修复默认助手工作区路径计算 | Fixed default agent workspace path calculation
+  - `resolveUserPath(fallback)` 改为 `path.join(resolveUserPath(fallback), id)` | Changed to path.join format
+
+**前端改动 | Frontend Changes:**
+
+- **app-render.ts** (+490 lines)
+  - 优化onSelectAgent回调，添加所有8个标签页刷新逻辑 | Optimized onSelectAgent callback, added refresh logic for all 8 tabs
+  - 新墜onSetDefaultAgent回调(二次确认对话框) | Added onSetDefaultAgent callback (double confirmation dialog)
+  - 修复助手编辑时工作区路径加载 | Fixed workspace path loading when editing agents
+
+- **agent-channel-accounts.ts** (+23 lines)
+  - 修复loadBoundChannelAccounts数据分组逻辑 | Fixed loadBoundChannelAccounts data grouping logic
+  - 实现平铺数据到分组数据的转换 | Implemented conversion from flat data to grouped data (Map aggregation)
+
+- **agent-crud.ts** (+199 lines, new file)
+  - 新墜setDefaultAgent函数 | Added setDefaultAgent function
+  - 移除创建助手后自动选中逻辑 | Removed auto-selection after creating agent
+  - 完善助手CRUD操作封装 | Enhanced agent CRUD operation encapsulation
+
+- **agents.ts** (+210 lines)
+  - 添加「设为默认」按钮到助手表头 | Added "Set as Default" button to agent header
+  - 传递onSetDefaultAgent回调 | Pass onSetDefaultAgent callback
+  - 优化按钮样式和交互体验 | Optimized button styles and interaction experience
+
+**🐛 修复的问题 | Fixed Issues:**
+
+1. ❌ 创建助手后默认助手核心文件出错 | Default agent core file error after creating agent → ✅ 已修复 | Fixed (removed auto-selection logic)
+2. ❌ 助手编辑时工作区路径显示为空 | Workspace path empty when editing agent → ✅ 已修复 | Fixed (added workspace field)
+3. ❌ main助手无法设置为默认 | Cannot set main agent as default → ✅ 已修复 | Fixed (supported system agents)
+4. ❌ 通道账号绑定后显示数量为0 | Channel account count shows 0 after binding → ✅ 已修复 | Fixed (data format conversion)
+5. ❌ 切换助手后标签页未刷新 | Tabs not refreshed after switching agent → ✅ 已修复 | Fixed (complete refresh logic)
+
+**📊 代码统计 | Code Statistics:**
+
+- 修改文件 | Modified files: 9 个核心文件 | 9 core files
+- 新增代码 | Added code: +1,611 行 | +1,611 lines
+- 删除代码 | Deleted code: -39 行 | -39 lines
+- 净增代码 | Net addition: +1,572 行 | +1,572 lines
+- 提交标识 | Commit ID: 03aa78385
+
+**🔍 影响范围 | Impact Scope:**
+
+- ✅ 助手管理核心功能 | Core agent management features (创建、编辑、默认设置 | create, edit, default setting)
+- ✅ 通道账号绑定模块 | Channel account binding module (数据格式转换 | data format conversion)
+- ✅ 前端状态管理与刷新 | Frontend state management & refresh (8个标签页 | 8 tabs)
+- ✅ 默认助手互斥逻辑 | Default agent mutual exclusion logic (系统唯一默认 | system-wide single default)
+- ✅ 数据同步与显示 | Data sync & display (实时更新 | real-time update)
+
+**✅ 测试建议 | Testing Recommendations:**
+
+1. ✅ 创建新助手，验证默认助手不受影响 | Create new agent, verify default agent not affected
+2. ✅ 设置不同助手为默认，验证互斥逻辑 | Set different agents as default, verify mutual exclusion
+3. ✅ 绑定通道账号，验证数量显示和通信状态 | Bind channel accounts, verify count display and communication status
+4. ✅ 切换助手，验证所有8个标签页数据正确刷新 | Switch agents, verify all 8 tabs refresh correctly
+5. ✅ 编辑助手，验证工作区路径正确显示 | Edit agent, verify workspace path displays correctly
+
+**📦 提交信息 | Commit Information:**
+
+- 提交时间 | Commit Date: 2026年2月12日 | 2026-02-12
+- 提交哈希 | Commit Hash: 03aa78385
+- 分支 | Branch: localization-zh-CN
+- 推送仓库 | Pushed to: Gitee (origin/localization-zh-CN)
+
+---
+
 #### 2026年2月11日 - 组织权限管理系统完整实现 | 2026-02-11 - Complete Organization Permissions Management System Implementation
 
 **🎯 核心功能完成 | Core Features Completed:**

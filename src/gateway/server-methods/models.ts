@@ -14,6 +14,106 @@ import {
 // 模型管理配置文件路径
 const MODEL_MANAGEMENT_FILE = path.join(STATE_DIR, "model-management.json");
 
+// ============ 供应商默认模型列表 ============
+
+/**
+ * 为各供应商预定义的已知模型列表
+ * 用于在供应商不支持 /models 端点时提供默认模型列表
+ */
+const PROVIDER_KNOWN_MODELS: Record<string, string[]> = {
+  // OpenAI
+  openai: [
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-4-turbo",
+    "gpt-4",
+    "gpt-3.5-turbo",
+    "o1",
+    "o1-mini",
+    "o1-preview",
+  ],
+
+  // Anthropic
+  anthropic: [
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-sonnet-20240620",
+    "claude-3-5-haiku-20241022",
+    "claude-3-opus-20240229",
+    "claude-3-sonnet-20240229",
+    "claude-3-haiku-20240307",
+  ],
+
+  // Google Gemini
+  google: [
+    "gemini-2.0-flash-exp",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-8b",
+    "gemini-1.0-pro",
+  ],
+
+  // DeepSeek
+  deepseek: ["deepseek-chat", "deepseek-reasoner", "deepseek-coder"],
+
+  // 智谱 AI
+  zhipu: [
+    "glm-5",
+    "glm-5-plus",
+    "glm-5-air",
+    "glm-4-plus",
+    "glm-4-0520",
+    "glm-4-air",
+    "glm-4-airx",
+    "glm-4-long",
+    "glm-4-flash",
+    "glm-4-flashx",
+    "glm-4v",
+    "glm-4v-plus",
+    "glm-3-turbo",
+  ],
+
+  // 通义千问（阿里云）
+  "qwen-portal": [
+    "coder-model",
+    "vision-model",
+    "qwen-plus",
+    "qwen-turbo",
+    "qwen-max",
+    "qwen-long",
+  ],
+
+  // 阿里通义（DashScope）
+  alibaba: ["qwen-plus", "qwen-turbo", "qwen-max", "qwen-long", "qwen-coder-plus"],
+
+  // Moonshot（月之暗面）
+  moonshot: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+
+  // MiniMax（海螺AI）
+  minimax: ["abab6.5s-chat", "abab6.5-chat", "abab5.5-chat"],
+
+  // 百度文心
+  baidu: ["ernie-4.0-8k", "ernie-3.5-8k", "ernie-speed-8k", "ernie-lite-8k"],
+
+  // Mistral
+  mistral: [
+    "mistral-large-latest",
+    "mistral-medium-latest",
+    "mistral-small-latest",
+    "open-mistral-7b",
+  ],
+
+  // Groq
+  groq: [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-70b-versatile",
+    "mixtral-8x7b-32768",
+    "gemma2-9b-it",
+  ],
+
+  // xAI
+  xai: ["grok-beta", "grok-vision-beta"],
+};
+
 // ============ 新的数据结构 ============
 
 // 供应商API模板（预置的API对接类型）
@@ -34,8 +134,8 @@ type ProviderApiTemplate = {
   }[];
 };
 
-// 用户的供应商实例（用户添加的供应商）
-type ProviderInstance = {
+// 用户的供应商实例（用户添加的供应商）（导出供其他模块使用）
+export type ProviderInstance = {
   id: string; // 供应商实例ID（唯一标识，用户自定义）
   name: string; // 供应商名称（用户自定义）
   icon?: string; // 图标emoji
@@ -45,10 +145,13 @@ type ProviderInstance = {
   apiKeyPlaceholder?: string; // API Key输入提示
   custom: boolean; // 是否完全自定义（非基于模板）
   createdAt: number; // 创建时间
+
+  // 已知模型列表（可选，用于没有标准端点的供应商）
+  knownModels?: string[];
 };
 
-// 供应商认证配置
-type ProviderAuth = {
+// 供应商认证配置（导出供其他模块使用）
+export type ProviderAuth = {
   authId: string; // 认证ID（自动生成）
   name: string; // 认证昵称（必填，用户自定义）
   provider: string; // 供应商ID
@@ -101,8 +204,21 @@ type ModelConfig = {
   };
 };
 
-// 存储结构
-type ModelManagementStorage = {
+// 辅助函数：掩码 API Key（用于安全显示）
+function maskApiKey(apiKey: string): string {
+  const trimmed = apiKey.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.length <= 16) {
+    return trimmed; // 短密钥直接返回
+  }
+  // 格式：前8位 + **** + 后4位
+  return `${trimmed.slice(0, 8)}****${trimmed.slice(-4)}`;
+}
+
+// 存储结构（导出供其他模块使用）
+export type ModelManagementStorage = {
   // API模板库（预置的，不存储，由代码提供）
   // apiTemplates 不需要存储
 
@@ -253,12 +369,39 @@ const DEFAULT_PROVIDERS: ProviderInstance[] = [
     custom: false,
     createdAt: 0,
   },
+  {
+    id: "zhipu",
+    name: "智谱 AI (GLM)",
+    icon: "🧠",
+    website: "https://open.bigmodel.cn",
+    templateId: "openai-compatible",
+    defaultBaseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    apiKeyPlaceholder: "...",
+    custom: false,
+    createdAt: 0,
+    // 智谱不支持 /models 端点，预配置已知模型列表
+    knownModels: [
+      "glm-5",
+      "glm-5-plus",
+      "glm-5-air",
+      "glm-4-plus",
+      "glm-4-0520",
+      "glm-4-air",
+      "glm-4-airx",
+      "glm-4-long",
+      "glm-4-flash",
+      "glm-4-flashx",
+      "glm-4v",
+      "glm-4v-plus",
+      "glm-3-turbo",
+    ],
+  },
 ];
 
 // ============ 存储管理函数 ============
 
-// 加载模型管理配置
-async function loadModelManagement(): Promise<ModelManagementStorage> {
+// 加载模型管理配置（导出供其他模块使用）
+export async function loadModelManagement(): Promise<ModelManagementStorage> {
   try {
     const content = await fs.readFile(MODEL_MANAGEMENT_FILE, "utf-8");
     const storage = JSON.parse(content) as ModelManagementStorage;
@@ -307,6 +450,18 @@ async function loadModelManagement(): Promise<ModelManagementStorage> {
         if (!provider.website && defaultProvider.website) {
           provider.website = defaultProvider.website;
           needsSave = true;
+        }
+      }
+
+      // ✅ 新增：自动补充缺失的 knownModels 配置
+      if (!provider.knownModels || provider.knownModels.length === 0) {
+        const defaultModels = PROVIDER_KNOWN_MODELS[provider.id];
+        if (defaultModels && defaultModels.length > 0) {
+          provider.knownModels = [...defaultModels];
+          needsSave = true;
+          console.log(
+            `[Models] Auto-added knownModels for provider: ${provider.id} (${defaultModels.length} models)`,
+          );
         }
       }
     }
@@ -415,6 +570,221 @@ async function migrateFromLegacyConfig(): Promise<ModelManagementStorage> {
   return storage;
 }
 
+// ============ 认证连接测试函数 ============
+
+// 测试超时时间（10秒）
+const TEST_TIMEOUT_MS = 10000;
+
+// OpenAI 兼容 API 测试
+async function testOpenAIConnection(params: {
+  baseUrl: string;
+  apiKey: string;
+  modelName?: string; // 可选：仅在需要测试具体模型时使用
+}): Promise<{ ok: boolean; status?: number; error?: string }> {
+  try {
+    // 优先测试 /models 端点（不需要模型名称，更通用）
+    const modelsEndpoint = params.baseUrl.endsWith("/")
+      ? `${params.baseUrl}models`
+      : `${params.baseUrl}/models`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+
+    const modelsResponse = await fetch(modelsEndpoint, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${params.apiKey}`,
+      },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (modelsResponse.ok) {
+      return { ok: true, status: modelsResponse.status };
+    }
+
+    // 如果 /models 不可用且提供了模型名称，尝试 chat 请求
+    if (params.modelName) {
+      const endpoint = params.baseUrl.endsWith("/")
+        ? `${params.baseUrl}chat/completions`
+        : `${params.baseUrl}/chat/completions`;
+
+      const controller2 = new AbortController();
+      const timeoutId2 = setTimeout(() => controller2.abort(), TEST_TIMEOUT_MS);
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${params.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: params.modelName,
+          messages: [{ role: "user", content: "测试连接" }],
+          max_tokens: 5,
+        }),
+        signal: controller2.signal,
+      });
+
+      clearTimeout(timeoutId2);
+
+      if (response.ok) {
+        return { ok: true, status: response.status };
+      }
+
+      const errorText = await response.text();
+      let errorMessage = `HTTP ${response.status}`;
+
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.error?.message || errorData.message || errorMessage;
+      } catch {
+        if (errorText.length < 200) {
+          errorMessage = errorText;
+        }
+      }
+
+      return { ok: false, status: response.status, error: errorMessage };
+    }
+
+    // 没有模型名称且 /models 失败，返回错误
+    const errorText = await modelsResponse.text();
+    let errorMessage = `HTTP ${modelsResponse.status}`;
+
+    try {
+      const errorData = JSON.parse(errorText);
+      errorMessage = errorData.error?.message || errorData.message || errorMessage;
+    } catch {
+      if (errorText.length < 200) {
+        errorMessage = errorText;
+      }
+    }
+
+    return { ok: false, status: modelsResponse.status, error: errorMessage };
+  } catch (err) {
+    if ((err as Error).name === "AbortError") {
+      return { ok: false, error: "请求超时（10秒）" };
+    }
+    return { ok: false, error: String(err) };
+  }
+}
+
+// Anthropic API 测试
+async function testAnthropicConnection(params: {
+  baseUrl: string;
+  apiKey: string;
+  modelName: string;
+}): Promise<{ ok: boolean; status?: number; error?: string }> {
+  try {
+    const endpoint = params.baseUrl.endsWith("/")
+      ? `${params.baseUrl}messages`
+      : `${params.baseUrl}/messages`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": params.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: params.modelName,
+        max_tokens: 10,
+        messages: [{ role: "user", content: "测试连接" }],
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      return { ok: true, status: response.status };
+    }
+
+    const errorText = await response.text();
+    let errorMessage = `HTTP ${response.status}`;
+
+    try {
+      const errorData = JSON.parse(errorText);
+      errorMessage = errorData.error?.message || errorData.message || errorMessage;
+    } catch {
+      if (errorText.length < 200) {
+        errorMessage = errorText;
+      }
+    }
+
+    return { ok: false, status: response.status, error: errorMessage };
+  } catch (err) {
+    if ((err as Error).name === "AbortError") {
+      return { ok: false, error: "请求超时（10秒）" };
+    }
+    return { ok: false, error: String(err) };
+  }
+}
+
+// Google Gemini API 测试
+async function testGoogleGeminiConnection(params: {
+  baseUrl: string;
+  apiKey: string;
+  modelName: string;
+}): Promise<{ ok: boolean; status?: number; error?: string }> {
+  try {
+    const endpoint = params.baseUrl.endsWith("/")
+      ? `${params.baseUrl}models/${params.modelName}:generateContent?key=${params.apiKey}`
+      : `${params.baseUrl}/models/${params.modelName}:generateContent?key=${params.apiKey}`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: "测试连接" }],
+          },
+        ],
+        generationConfig: {
+          maxOutputTokens: 10,
+        },
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      return { ok: true, status: response.status };
+    }
+
+    const errorText = await response.text();
+    let errorMessage = `HTTP ${response.status}`;
+
+    try {
+      const errorData = JSON.parse(errorText);
+      errorMessage = errorData.error?.message || errorData.message || errorMessage;
+    } catch {
+      if (errorText.length < 200) {
+        errorMessage = errorText;
+      }
+    }
+
+    return { ok: false, status: response.status, error: errorMessage };
+  } catch (err) {
+    if ((err as Error).name === "AbortError") {
+      return { ok: false, error: "请求超时（10秒）" };
+    }
+    return { ok: false, error: String(err) };
+  }
+}
+
 // ============ 认证管理函数 ============
 
 // 添加认证
@@ -465,10 +835,18 @@ async function updateAuth(params: {
   for (const provider in storage.auths) {
     const auth = storage.auths[provider]?.find((a) => a.authId === params.authId);
     if (auth) {
-      if (params.name !== undefined) auth.name = params.name;
-      if (params.apiKey !== undefined) auth.apiKey = params.apiKey;
-      if (params.baseUrl !== undefined) auth.baseUrl = params.baseUrl;
-      if (params.enabled !== undefined) auth.enabled = params.enabled;
+      if (params.name !== undefined) {
+        auth.name = params.name;
+      }
+      if (params.apiKey !== undefined) {
+        auth.apiKey = params.apiKey;
+      }
+      if (params.baseUrl !== undefined) {
+        auth.baseUrl = params.baseUrl;
+      }
+      if (params.enabled !== undefined) {
+        auth.enabled = params.enabled;
+      }
 
       await saveModelManagement(storage);
       return;
@@ -584,17 +962,36 @@ async function updateModelConfig(params: {
       // 记录是否修改了 enabled 状态
       const enabledChanged = params.enabled !== undefined && model.enabled !== params.enabled;
 
-      if (params.nickname !== undefined) model.nickname = params.nickname;
-      if (params.enabled !== undefined) model.enabled = params.enabled;
-      if (params.temperature !== undefined) model.temperature = params.temperature;
-      if (params.topP !== undefined) model.topP = params.topP;
-      if (params.maxTokens !== undefined) model.maxTokens = params.maxTokens;
-      if (params.frequencyPenalty !== undefined) model.frequencyPenalty = params.frequencyPenalty;
-      if (params.systemPrompt !== undefined) model.systemPrompt = params.systemPrompt;
-      if (params.conversationRounds !== undefined)
+      if (params.nickname !== undefined) {
+        model.nickname = params.nickname;
+      }
+      if (params.enabled !== undefined) {
+        model.enabled = params.enabled;
+      }
+      if (params.temperature !== undefined) {
+        model.temperature = params.temperature;
+      }
+      if (params.topP !== undefined) {
+        model.topP = params.topP;
+      }
+      if (params.maxTokens !== undefined) {
+        model.maxTokens = params.maxTokens;
+      }
+      if (params.frequencyPenalty !== undefined) {
+        model.frequencyPenalty = params.frequencyPenalty;
+      }
+      if (params.systemPrompt !== undefined) {
+        model.systemPrompt = params.systemPrompt;
+      }
+      if (params.conversationRounds !== undefined) {
         model.conversationRounds = params.conversationRounds;
-      if (params.maxIterations !== undefined) model.maxIterations = params.maxIterations;
-      if (params.usageLimits !== undefined) model.usageLimits = params.usageLimits;
+      }
+      if (params.maxIterations !== undefined) {
+        model.maxIterations = params.maxIterations;
+      }
+      if (params.usageLimits !== undefined) {
+        model.usageLimits = params.usageLimits;
+      }
 
       await saveModelManagement(storage);
 
@@ -652,7 +1049,7 @@ export async function isModelEnabled(provider: string, modelName: string): Promi
     }
 
     // 返回模型的启用状态
-    return modelConfig.enabled === true;
+    return modelConfig.enabled;
   } catch (err) {
     // 发生错误时，默认允许使用（向后兼容）
     console.error(`[Models] Failed to check model enabled status:`, err);
@@ -715,14 +1112,174 @@ export async function checkModelAvailability(
 
 // ============ 查询可用模型 ============
 
+/**
+ * 根据 Base URL 识别供应商类型，返回对应的 knownModels
+ */
+function inferKnownModelsByBaseUrl(baseUrl: string): string[] | null {
+  if (!baseUrl) {
+    return null;
+  }
+
+  const url = baseUrl.toLowerCase();
+
+  // OpenAI
+  if (url.includes("api.openai.com")) {
+    return PROVIDER_KNOWN_MODELS["openai"];
+  }
+
+  // Anthropic
+  if (url.includes("api.anthropic.com") || url.includes("anthropic")) {
+    return PROVIDER_KNOWN_MODELS["anthropic"];
+  }
+
+  // Google Gemini
+  if (url.includes("generativelanguage.googleapis.com") || url.includes("gemini")) {
+    return PROVIDER_KNOWN_MODELS["google"];
+  }
+
+  // DeepSeek
+  if (url.includes("deepseek.com") || url.includes("deepseek")) {
+    return PROVIDER_KNOWN_MODELS["deepseek"];
+  }
+
+  // 智谱 AI
+  if (url.includes("bigmodel.cn") || url.includes("zhipu")) {
+    return PROVIDER_KNOWN_MODELS["zhipu"];
+  }
+
+  // 通义千问（阿里云）
+  if (url.includes("portal.qwen.ai") || url.includes("qwen-portal")) {
+    return PROVIDER_KNOWN_MODELS["qwen-portal"];
+  }
+
+  // 阿里通义（DashScope）
+  if (url.includes("dashscope.aliyun.com") || url.includes("aliyun")) {
+    return PROVIDER_KNOWN_MODELS["alibaba"];
+  }
+
+  // Moonshot
+  if (url.includes("moonshot.cn") || url.includes("kimi")) {
+    return PROVIDER_KNOWN_MODELS["moonshot"];
+  }
+
+  // MiniMax
+  if (url.includes("minimax") || url.includes("hailuo")) {
+    return PROVIDER_KNOWN_MODELS["minimax"];
+  }
+
+  // 百度文心
+  if (url.includes("baidu") || url.includes("ernie")) {
+    return PROVIDER_KNOWN_MODELS["baidu"];
+  }
+
+  // Mistral
+  if (url.includes("mistral")) {
+    return PROVIDER_KNOWN_MODELS["mistral"];
+  }
+
+  // Groq
+  if (url.includes("groq")) {
+    return PROVIDER_KNOWN_MODELS["groq"];
+  }
+
+  // xAI
+  if (url.includes("x.ai") || url.includes("grok")) {
+    return PROVIDER_KNOWN_MODELS["xai"];
+  }
+
+  return null;
+}
+
 // 查询认证可用的模型列表
 async function fetchAvailableModels(auth: ProviderAuth): Promise<string[]> {
   try {
-    // 根据不同供应商调用不同的API
+    const storage = await loadModelManagement();
     const baseUrl = auth.baseUrl || getDefaultBaseUrl(auth.provider);
+
+    // 查找供应商实例，获取其模板ID和已知模型列表
+    const providerInstance = storage.providers.find((p) => p.id === auth.provider);
+
+    // 优先使用供应商实例配置的 knownModels
+    if (providerInstance?.knownModels && providerInstance.knownModels.length > 0) {
+      return providerInstance.knownModels;
+    }
+
+    const templateId = providerInstance?.templateId || "openai-compatible";
+
+    // 根据模板ID选择查询策略
+    switch (templateId) {
+      case "openai-compatible": {
+        // OpenAI 兼容格式：尝试使用标准的 /v1/models 端点
+        const models = await fetchModelsFromOpenAIEndpoint(baseUrl, auth.apiKey);
+
+        // 如果获取失败，尝试根据 baseUrl 推断供应商类型
+        if (models.length === 0) {
+          const inferredModels = inferKnownModelsByBaseUrl(baseUrl);
+          if (inferredModels) {
+            console.log(
+              `[Models] Inferred ${inferredModels.length} models from baseUrl: ${baseUrl}`,
+            );
+            return inferredModels;
+          }
+        }
+
+        return models;
+      }
+
+      case "anthropic-compatible":
+        // Anthropic 没有模型列表端点，返回预定义的模型
+        return getAnthropicKnownModels();
+
+      case "google-gemini":
+        // Google Gemini 没有标准的模型列表端点
+        return getGoogleGeminiKnownModels();
+
+      case "custom": {
+        // 自定义供应商：尝试 OpenAI 格式，失败则根据 baseUrl 推断
+        const models = await fetchModelsFromOpenAIEndpoint(baseUrl, auth.apiKey);
+
+        if (models.length === 0) {
+          const inferredModels = inferKnownModelsByBaseUrl(baseUrl);
+          if (inferredModels) {
+            console.log(
+              `[Models] Inferred ${inferredModels.length} models from baseUrl for custom provider: ${baseUrl}`,
+            );
+            return inferredModels;
+          }
+        }
+
+        return models;
+      }
+
+      default: {
+        // 未知模板：尝试 OpenAI 格式
+        const models = await fetchModelsFromOpenAIEndpoint(baseUrl, auth.apiKey);
+
+        if (models.length === 0) {
+          const inferredModels = inferKnownModelsByBaseUrl(baseUrl);
+          if (inferredModels) {
+            console.log(
+              `[Models] Inferred ${inferredModels.length} models from baseUrl: ${baseUrl}`,
+            );
+            return inferredModels;
+          }
+        }
+
+        return models;
+      }
+    }
+  } catch (err) {
+    console.error(`[Models] Failed to fetch models for ${auth.provider}:`, err);
+    return [];
+  }
+}
+
+// 从 OpenAI 兼容端点查询模型列表
+async function fetchModelsFromOpenAIEndpoint(baseUrl: string, apiKey: string): Promise<string[]> {
+  try {
     const response = await fetch(`${baseUrl}/models`, {
       headers: {
-        Authorization: `Bearer ${auth.apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
       },
     });
 
@@ -731,10 +1288,32 @@ async function fetchAvailableModels(auth: ProviderAuth): Promise<string[]> {
       return (data.data || []).map((m) => m.id);
     }
   } catch (err) {
-    console.error(`[Models] Failed to fetch models for ${auth.provider}:`, err);
+    console.error(`[Models] Failed to fetch models from ${baseUrl}/models:`, err);
   }
-
   return [];
+}
+
+// Anthropic 的已知模型列表
+function getAnthropicKnownModels(): string[] {
+  return [
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-sonnet-20240620",
+    "claude-3-5-haiku-20241022",
+    "claude-3-opus-20240229",
+    "claude-3-sonnet-20240229",
+    "claude-3-haiku-20240307",
+  ];
+}
+
+// Google Gemini 的已知模型列表
+function getGoogleGeminiKnownModels(): string[] {
+  return [
+    "gemini-2.0-flash-exp",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-8b",
+    "gemini-1.0-pro",
+  ];
 }
 
 // 获取供应商默认 Base URL
@@ -879,7 +1458,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
         ...internationalProviders.filter((p) => providerSet.has(p)),
         ...Array.from(providerSet)
           .filter((p) => !domesticProviders.includes(p) && !internationalProviders.includes(p))
-          .sort(),
+          .toSorted(),
       ];
 
       // 供应商显示名称
@@ -976,7 +1555,15 @@ export const modelsHandlers: GatewayRequestHandlers = {
           providerLabels,
           providers: {}, // 旧数据结构，保留向后兼容
           // 新的数据结构
-          auths: storage.auths,
+          auths: Object.fromEntries(
+            Object.entries(storage.auths).map(([provider, authList]) => [
+              provider,
+              authList.map((auth) => ({
+                ...auth,
+                apiKey: maskApiKey(auth.apiKey), // 安全掩码显示
+              })),
+            ]),
+          ),
           modelConfigs: storage.models,
           defaultAuthId: storage.defaultAuthId,
           // API模板库（预置）
@@ -1015,7 +1602,16 @@ export const modelsHandlers: GatewayRequestHandlers = {
   // 添加自定义供应商
   "models.providers.add": async ({ params, respond }) => {
     try {
-      const { id, name, icon, website, templateId, defaultBaseUrl, apiKeyPlaceholder } = params as {
+      const {
+        id,
+        name,
+        icon,
+        website,
+        templateId,
+        defaultBaseUrl,
+        apiKeyPlaceholder,
+        knownModels,
+      } = params as {
         id: string;
         name: string;
         icon?: string;
@@ -1023,6 +1619,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
         templateId?: string; // 基于的模板ID（可选）
         defaultBaseUrl: string;
         apiKeyPlaceholder?: string;
+        knownModels?: string[]; // 已知模型列表（可选）
       };
 
       if (!id || !name || !defaultBaseUrl) {
@@ -1056,6 +1653,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
         apiKeyPlaceholder,
         custom: !templateId, // 没有templateId则是完全自定义
         createdAt: Date.now(),
+        knownModels, // 已知模型列表
       };
 
       storage.providers.push(provider);
@@ -1071,7 +1669,16 @@ export const modelsHandlers: GatewayRequestHandlers = {
   // 更新供应商
   "models.providers.update": async ({ params, respond }) => {
     try {
-      const { id, name, icon, website, templateId, defaultBaseUrl, apiKeyPlaceholder } = params as {
+      const {
+        id,
+        name,
+        icon,
+        website,
+        templateId,
+        defaultBaseUrl,
+        apiKeyPlaceholder,
+        knownModels,
+      } = params as {
         id: string;
         name?: string;
         icon?: string;
@@ -1079,6 +1686,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
         templateId?: string;
         defaultBaseUrl?: string;
         apiKeyPlaceholder?: string;
+        knownModels?: string[]; // 已知模型列表（可选）
       };
 
       if (!id) {
@@ -1095,12 +1703,27 @@ export const modelsHandlers: GatewayRequestHandlers = {
       }
 
       // 更新字段
-      if (name !== undefined) provider.name = name;
-      if (icon !== undefined) provider.icon = icon;
-      if (website !== undefined) provider.website = website;
-      if (templateId !== undefined) provider.templateId = templateId;
-      if (defaultBaseUrl !== undefined) provider.defaultBaseUrl = defaultBaseUrl;
-      if (apiKeyPlaceholder !== undefined) provider.apiKeyPlaceholder = apiKeyPlaceholder;
+      if (name !== undefined) {
+        provider.name = name;
+      }
+      if (icon !== undefined) {
+        provider.icon = icon;
+      }
+      if (website !== undefined) {
+        provider.website = website;
+      }
+      if (templateId !== undefined) {
+        provider.templateId = templateId;
+      }
+      if (defaultBaseUrl !== undefined) {
+        provider.defaultBaseUrl = defaultBaseUrl;
+      }
+      if (apiKeyPlaceholder !== undefined) {
+        provider.apiKeyPlaceholder = apiKeyPlaceholder;
+      }
+      if (knownModels !== undefined) {
+        provider.knownModels = knownModels;
+      }
 
       await saveModelManagement(storage);
 
@@ -1291,7 +1914,9 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       for (const provider in storage.auths) {
         auth = storage.auths[provider]?.find((a) => a.authId === authId);
-        if (auth) break;
+        if (auth) {
+          break;
+        }
       }
 
       if (!auth) {
@@ -1321,7 +1946,9 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       for (const provider in storage.auths) {
         auth = storage.auths[provider]?.find((a) => a.authId === authId);
-        if (auth) break;
+        if (auth) {
+          break;
+        }
       }
 
       if (!auth) {
@@ -1465,7 +2092,9 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       for (const provider in storage.auths) {
         auth = storage.auths[provider]?.find((a) => a.authId === authId);
-        if (auth) break;
+        if (auth) {
+          break;
+        }
       }
 
       if (!auth) {
@@ -1524,6 +2153,112 @@ export const modelsHandlers: GatewayRequestHandlers = {
       });
 
       respond(true, { models, total: models.length }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+
+  // 测试认证连接
+  "models.auth.test": async ({ params, respond }) => {
+    try {
+      const { authId, modelName } = params as {
+        authId: string;
+        modelName?: string; // 可选：测试指定模型，如果不提供则使用通用测试
+      };
+
+      if (!authId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Missing authId"));
+        return;
+      }
+
+      const storage = await loadModelManagement();
+      let auth: ProviderAuth | undefined;
+
+      // 查找认证
+      for (const provider in storage.auths) {
+        auth = storage.auths[provider]?.find((a) => a.authId === authId);
+        if (auth) {
+          break;
+        }
+      }
+
+      if (!auth) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Auth not found"));
+        return;
+      }
+
+      // 获取供应商配置
+      const providerInstance = storage.providers.find((p) => p.id === auth.provider);
+      const baseUrl = auth.baseUrl || providerInstance?.defaultBaseUrl || "";
+      const templateId = providerInstance?.templateId || "openai-compatible";
+
+      if (!baseUrl) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "Base URL not configured"),
+        );
+        return;
+      }
+
+      // 根据模板类型选择测试方法
+      let result: { ok: boolean; status?: number; error?: string; responseTime?: number };
+
+      const startTime = Date.now();
+
+      // 选择默认测试模型：优先使用供应商的 knownModels 的第一个
+      let defaultTestModel = "gpt-4o-mini";
+      if (providerInstance?.knownModels && providerInstance.knownModels.length > 0) {
+        defaultTestModel = providerInstance.knownModels[0];
+      }
+
+      if (templateId === "anthropic-compatible") {
+        // Anthropic 测试
+        result = await testAnthropicConnection({
+          baseUrl,
+          apiKey: auth.apiKey,
+          modelName: modelName || "claude-3-5-sonnet-20241022",
+        });
+      } else if (templateId === "google-gemini") {
+        // Google Gemini 测试（使用API Key作为query参数）
+        result = await testGoogleGeminiConnection({
+          baseUrl,
+          apiKey: auth.apiKey,
+          modelName: modelName || "gemini-1.5-flash",
+        });
+      } else {
+        // OpenAI 兼容测试（默认）
+        result = await testOpenAIConnection({
+          baseUrl,
+          apiKey: auth.apiKey,
+          modelName: modelName || defaultTestModel,
+        });
+      }
+
+      result.responseTime = Date.now() - startTime;
+
+      // 更新认证状态
+      auth.status = {
+        valid: result.ok,
+        lastChecked: Date.now(),
+        error: result.error,
+      };
+
+      await saveModelManagement(storage);
+
+      respond(
+        true,
+        {
+          ok: result.ok,
+          status: result.status,
+          error: result.error,
+          responseTime: result.responseTime,
+          message: result.ok
+            ? `连接成功！响应时间：${result.responseTime}ms`
+            : `连接失败：${result.error || "未知错误"}`,
+        },
+        undefined,
+      );
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }

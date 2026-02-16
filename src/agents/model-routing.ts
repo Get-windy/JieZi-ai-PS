@@ -14,6 +14,39 @@ import type { AgentModelAccountsConfig } from "../config/types.agents.js";
 // ==================== 类型定义 ====================
 
 /**
+ * 模型专业领域（Specialization）
+ */
+export type ModelSpecialization =
+  | "general" // 通用模型
+  | "coding" // 编程专用（如 DeepSeek-Coder、CodeLlama）
+  | "math" // 数学推理（如 MathGPT）
+  | "vision" // 视觉专用（如 GPT-4V）
+  | "multimodal" // 多模态（如 Gemini、GPT-4o）
+  | "reasoning" // 深度推理（如 o1、o3）
+  | "creative" // 创作生成（如 Claude、文心一言）
+  | "translation" // 翻译专用
+  | "embedding" // 向量嵌入
+  | "speech"; // 语音处理
+
+/**
+ * 数据模态类型（Modality）
+ */
+export type DataModality = "text" | "image" | "audio" | "video" | "code";
+
+/**
+ * 任务领域分类
+ */
+export type TaskDomain =
+  | "general" // 通用问答
+  | "coding" // 编程任务
+  | "math" // 数学计算
+  | "creative" // 创意写作
+  | "analysis" // 数据分析
+  | "translation" // 翻译任务
+  | "vision" // 视觉理解
+  | "reasoning"; // 深度推理
+
+/**
  * 会话上下文信息
  */
 export type SessionContext = {
@@ -31,6 +64,10 @@ export type SessionContext = {
   needsReasoning?: boolean;
   /** 已固定的模型账号（会话级别固定） */
   pinnedAccountId?: string;
+  /** 任务领域（自动检测或手动指定） */
+  taskDomain?: TaskDomain;
+  /** 需要的数据模态 */
+  requiredModalities?: DataModality[];
 };
 
 /**
@@ -53,6 +90,12 @@ export type ModelInfo = {
   outputPrice: number;
   /** 平均响应速度（秒） */
   avgResponseTime?: number;
+  /** 模型专业领域（可多选） */
+  specializations?: ModelSpecialization[];
+  /** 支持的数据模态 */
+  supportedModalities?: DataModality[];
+  /** 领域能力评分 (0-100，按领域分类) */
+  domainScores?: Partial<Record<TaskDomain, number>>;
 };
 
 /**
@@ -71,6 +114,10 @@ export type AccountScore = {
   costScore: number;
   /** 响应速度分 */
   speedScore: number;
+  /** 专业领域匹配分 */
+  specializationScore: number;
+  /** 模态匹配分 */
+  modalityScore: number;
   /** 模型信息 */
   modelInfo?: ModelInfo;
   /** 是否可用 */
@@ -88,6 +135,232 @@ export type RoutingResult = {
   /** 评分详情 */
   scores: AccountScore[];
 };
+
+// ==================== 任务领域检测 ====================
+
+/**
+ * 自动检测任务领域
+ *
+ * 基于消息内容和上下文特征判断任务类型
+ *
+ * @param message - 用户消息内容
+ * @param context - 会话上下文
+ * @returns 任务领域
+ */
+export function detectTaskDomain(message: string, context: SessionContext): TaskDomain {
+  // 如果上下文已经指定了任务领域，直接使用
+  if (context.taskDomain) {
+    return context.taskDomain;
+  }
+
+  const lowerMessage = message.toLowerCase();
+
+  // 编程任务检测
+  if (
+    context.hasCode ||
+    lowerMessage.includes("代码") ||
+    lowerMessage.includes("code") ||
+    lowerMessage.includes("编程") ||
+    lowerMessage.includes("程序") ||
+    lowerMessage.includes("debug") ||
+    lowerMessage.includes("bug") ||
+    lowerMessage.includes("function") ||
+    lowerMessage.includes("class") ||
+    /\b(python|java|javascript|typescript|c\+\+|rust|go)\b/i.test(message)
+  ) {
+    return "coding";
+  }
+
+  // 视觉任务检测
+  if (
+    context.hasImages ||
+    lowerMessage.includes("图片") ||
+    lowerMessage.includes("图像") ||
+    lowerMessage.includes("image") ||
+    lowerMessage.includes("看图") ||
+    lowerMessage.includes("识别") ||
+    lowerMessage.includes("这是什么")
+  ) {
+    return "vision";
+  }
+
+  // 数学任务检测
+  if (
+    lowerMessage.includes("计算") ||
+    lowerMessage.includes("数学") ||
+    lowerMessage.includes("方程") ||
+    lowerMessage.includes("solve") ||
+    lowerMessage.includes("math") ||
+    /[\d+\-*/()=]+/.test(message) || // 包含数学表达式
+    lowerMessage.includes("微积分") ||
+    lowerMessage.includes("矩阵")
+  ) {
+    return "math";
+  }
+
+  // 翻译任务检测
+  if (
+    lowerMessage.includes("翻译") ||
+    lowerMessage.includes("translate") ||
+    lowerMessage.includes("英译中") ||
+    lowerMessage.includes("中译英")
+  ) {
+    return "translation";
+  }
+
+  // 创意写作检测
+  if (
+    lowerMessage.includes("写一篇") ||
+    lowerMessage.includes("创作") ||
+    lowerMessage.includes("诗") ||
+    lowerMessage.includes("故事") ||
+    lowerMessage.includes("文章") ||
+    lowerMessage.includes("小说")
+  ) {
+    return "creative";
+  }
+
+  // 深度推理检测
+  if (
+    context.needsReasoning ||
+    lowerMessage.includes("推理") ||
+    lowerMessage.includes("分析") ||
+    lowerMessage.includes("为什么") ||
+    lowerMessage.includes("如何解决") ||
+    lowerMessage.length > 300 // 长问题通常需要深度推理
+  ) {
+    return "reasoning";
+  }
+
+  // 数据分析检测
+  if (
+    lowerMessage.includes("数据") ||
+    lowerMessage.includes("统计") ||
+    lowerMessage.includes("分析")
+  ) {
+    return "analysis";
+  }
+
+  // 默认为通用任务
+  return "general";
+}
+
+// ==================== 模态匹配评估 ====================
+
+/**
+ * 评估模型对所需模态的支持程度
+ *
+ * @param context - 会话上下文
+ * @param modelInfo - 模型信息
+ * @returns 模态匹配分数 (0-100)
+ */
+export function assessModalityMatch(context: SessionContext, modelInfo: ModelInfo): number {
+  // 确定需要的模态
+  const requiredModalities: DataModality[] = context.requiredModalities || [];
+
+  // 自动检测模态需求
+  if (context.hasImages && !requiredModalities.includes("image")) {
+    requiredModalities.push("image");
+  }
+  if (context.hasCode && !requiredModalities.includes("code")) {
+    requiredModalities.push("code");
+  }
+  if (!context.hasImages && !context.hasCode && !requiredModalities.includes("text")) {
+    requiredModalities.push("text");
+  }
+
+  // 如果没有指定支持的模态，假设支持 text
+  const supportedModalities = modelInfo.supportedModalities || ["text"];
+
+  // 计算匹配度
+  if (requiredModalities.length === 0) {
+    // 没有特殊模态要求，给默认分
+    return 80;
+  }
+
+  let matchedCount = 0;
+  for (const required of requiredModalities) {
+    if (supportedModalities.includes(required)) {
+      matchedCount++;
+    }
+  }
+
+  // 计算匹配率
+  const matchRate = matchedCount / requiredModalities.length;
+
+  // 如果有必需模态不支持，严重扣分
+  if (matchRate < 1.0) {
+    // 图像模态是硬性要求
+    if (requiredModalities.includes("image") && !supportedModalities.includes("image")) {
+      return 0;
+    }
+    // 音频/视频模态也是硬性要求
+    if (requiredModalities.includes("audio") && !supportedModalities.includes("audio")) {
+      return 0;
+    }
+    if (requiredModalities.includes("video") && !supportedModalities.includes("video")) {
+      return 0;
+    }
+  }
+
+  return Math.round(matchRate * 100);
+}
+
+// ==================== 专业领域匹配评估 ====================
+
+/**
+ * 评估模型专业领域与任务的匹配度
+ *
+ * @param taskDomain - 任务领域
+ * @param modelInfo - 模型信息
+ * @returns 专业领域匹配分数 (0-100)
+ */
+export function assessSpecializationMatch(taskDomain: TaskDomain, modelInfo: ModelInfo): number {
+  // 如果模型提供了领域评分，直接使用
+  if (modelInfo.domainScores && modelInfo.domainScores[taskDomain] !== undefined) {
+    return modelInfo.domainScores[taskDomain];
+  }
+
+  // 如果没有专业领域标记，假设是通用模型
+  const specializations = modelInfo.specializations || ["general"];
+
+  // 任务领域到专业领域的映射
+  const domainToSpecialization: Record<TaskDomain, ModelSpecialization[]> = {
+    general: ["general", "multimodal"],
+    coding: ["coding", "general"],
+    math: ["math", "reasoning", "general"],
+    creative: ["creative", "general"],
+    analysis: ["reasoning", "general"],
+    translation: ["translation", "general"],
+    vision: ["vision", "multimodal"],
+    reasoning: ["reasoning", "general"],
+  };
+
+  // 获取任务对应的专业领域
+  const preferredSpecs = domainToSpecialization[taskDomain] || ["general"];
+
+  // 计算匹配度
+  for (let i = 0; i < preferredSpecs.length; i++) {
+    const spec = preferredSpecs[i];
+    if (specializations.includes(spec)) {
+      // 完全匹配：100分
+      if (i === 0) {
+        return 100;
+      }
+      // 次优匹配：降级评分
+      return 100 - i * 20;
+    }
+  }
+
+  // 没有匹配的专业领域
+  // 通用模型可以处理所有任务，但效果一般
+  if (specializations.includes("general")) {
+    return 60; // 通用模型给及格分
+  }
+
+  // 专业领域不匹配，给低分但不是0分
+  return 30;
+}
 
 // ==================== 复杂度评估 ====================
 
@@ -331,13 +604,19 @@ export async function scoreAllAccounts(
   // 1. 评估问题复杂度
   const complexity = assessComplexity(message, context);
 
-  // 2. 获取权重配置（使用默认值）
-  const complexityWeight = config.smartRouting?.complexityWeight ?? 40;
-  const capabilityWeight = config.smartRouting?.capabilityWeight ?? 30;
-  const costWeight = config.smartRouting?.costWeight ?? 20;
-  const speedWeight = config.smartRouting?.speedWeight ?? 10;
+  // 2. 检测任务领域
+  const taskDomain = detectTaskDomain(message, context);
 
-  // 3. 为每个账号打分
+  // 3. 获取权重配置（使用默认值）
+  const complexityWeight = config.smartRouting?.complexityWeight ?? 30;
+  const capabilityWeight = config.smartRouting?.capabilityWeight ?? 20;
+  const costWeight = config.smartRouting?.costWeight ?? 15;
+  const speedWeight = config.smartRouting?.speedWeight ?? 10;
+  // 新增权重：专业领域和模态匹配
+  const specializationWeight = 15; // 专业领域匹配权重
+  const modalityWeight = 10; // 模态匹配权重
+
+  // 4. 为每个账号打分
   const scores: AccountScore[] = await Promise.all(
     config.accounts.map(async (accountId) => {
       // 获取模型信息
@@ -351,6 +630,8 @@ export async function scoreAllAccounts(
           capabilityScore: 0,
           costScore: 0,
           speedScore: 0,
+          specializationScore: 0,
+          modalityScore: 0,
           available: false,
         };
       }
@@ -358,8 +639,11 @@ export async function scoreAllAccounts(
       // 能力匹配分数
       const capabilityScore = matchCapabilities(complexity, modelInfo, context);
 
-      // 如果能力匹配分数为 0（不支持必需功能），直接标记为不可用
-      if (capabilityScore === 0) {
+      // 模态匹配分数
+      const modalityScore = assessModalityMatch(context, modelInfo);
+
+      // 如果能力匹配分数为 0（不支持必需功能）或模态不匹配，直接标记为不可用
+      if (capabilityScore === 0 || modalityScore === 0) {
         return {
           accountId,
           totalScore: 0,
@@ -367,10 +651,15 @@ export async function scoreAllAccounts(
           capabilityScore: 0,
           costScore: 0,
           speedScore: 0,
+          specializationScore: 0,
+          modalityScore: 0,
           modelInfo,
           available: false,
         };
       }
+
+      // 专业领域匹配分数
+      const specializationScore = assessSpecializationMatch(taskDomain, modelInfo);
 
       // 成本分数
       const costScore = config.smartRouting?.enableCostOptimization
@@ -383,12 +672,14 @@ export async function scoreAllAccounts(
       // 复杂度匹配分数（复杂度越低越好）
       const complexityScore = 100 - complexity * 10;
 
-      // 综合打分
+      // 综合打分（加入专业领域和模态权重）
       const totalScore =
         capabilityScore * (capabilityWeight / 100) +
         costScore * (costWeight / 100) +
         speedScore * (speedWeight / 100) +
-        complexityScore * (complexityWeight / 100);
+        complexityScore * (complexityWeight / 100) +
+        specializationScore * (specializationWeight / 100) +
+        modalityScore * (modalityWeight / 100);
 
       return {
         accountId,
@@ -397,13 +688,15 @@ export async function scoreAllAccounts(
         capabilityScore,
         costScore,
         speedScore,
+        specializationScore,
+        modalityScore,
         modelInfo,
         available: true,
       };
     }),
   );
 
-  // 4. 按总分排序（从高到低）
+  // 5. 按总分排序（从高到低）
   scores.sort((a, b) => b.totalScore - a.totalScore);
 
   return scores;
@@ -463,9 +756,11 @@ export async function routeToOptimalModelAccount(
     // 查找账号配置
     const accountConfig = config.accountConfigs?.find((cfg: any) => cfg.accountId === accountId);
 
+    // 【修复】如果没有找到 accountConfig，说明这个账号没有被单独配置过
+    // 但只要它在 accounts 列表里，就说明它是绑定的，默认应该是启用的
     if (!accountConfig) {
-      // 未找到配置，说明未绑定
-      return false;
+      // 已绑定但未配置的账号，默认启用
+      return true;
     }
 
     // 检查是否启用（enabled 字段，默认为 true）

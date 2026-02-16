@@ -8,6 +8,7 @@ import {
   renderAuthEditModal,
   renderModelsListModal,
   renderModelConfigModal,
+  renderImportModelsModal,
   renderAddProviderModal,
   renderViewProviderModal,
 } from "./models.modals.js";
@@ -101,6 +102,7 @@ export function renderModels(
     ${renderAuthEditModal(props)}
     ${renderModelsListModal(props)}
     ${renderModelConfigModal(props)}
+    ${renderImportModelsModal(props as any)}
     ${renderAddProviderModal(props as any)}
     ${renderViewProviderModal(props as any)}
   `;
@@ -297,8 +299,8 @@ function renderProvider(providerId: string, props: ModelsProps) {
             }
             <!-- 删除供应商按钮 -->
             <button 
-              class="btn btn--sm btn--danger" 
-              style="font-size: 13px; padding: 8px 16px;"
+              class="btn btn--sm" 
+              style="font-size: 13px; padding: 8px 16px; background: #dc3545; border-color: #dc3545; color: #ffffff; font-weight: 500;"
               @click=${() => {
                 if (
                   confirm(`${t("models.delete_provider_confirm").replace("{name}", providerLabel)}`)
@@ -328,8 +330,27 @@ function renderProviderLabel(
 }
 
 function resolveProviderLabel(snapshot: ModelsStatusSnapshot | null, providerId: string): string {
+  // 1. 优先从 providerInstances 读取用户设置的名称
+  const providerInstance = (snapshot?.providerInstances as any[])?.find(
+    (p: any) => p.id === providerId,
+  );
+  if (providerInstance?.name) {
+    return providerInstance.name;
+  }
+
+  // 2. 向下兼容：从 providerMeta 查找
   const meta = snapshot?.providerMeta?.find((m) => m.id === providerId);
-  return meta?.label ?? snapshot?.providerLabels?.[providerId] ?? providerId;
+  if (meta?.label) {
+    return meta.label;
+  }
+
+  // 3. 向下兼容：从 providerLabels 查找
+  if (snapshot?.providerLabels?.[providerId]) {
+    return snapshot.providerLabels[providerId];
+  }
+
+  // 4. 最后回退到显示 ID
+  return providerId;
 }
 
 function getProviderIcon(providerId: string, snapshot: ModelsStatusSnapshot | null): string {

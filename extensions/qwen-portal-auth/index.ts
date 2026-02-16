@@ -49,7 +49,7 @@ const qwenPortalPlugin = {
           label: "Qwen OAuth",
           hint: "Device code login",
           kind: "device_code",
-          run: async (ctx) => {
+          run: async (ctx: ProviderAuthContext) => {
             const progress = ctx.prompter.progress(t('wizard.oauth.qwen.starting'));
             try {
               const result = await loginQwenPortalOAuth({

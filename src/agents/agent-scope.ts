@@ -8,6 +8,7 @@ import {
   parseAgentSessionKey,
 } from "../routing/session-key.js";
 import { resolveUserPath } from "../utils.js";
+import { normalizeSkillFilter } from "./skills/filter.js";
 import { resolveDefaultAgentWorkspaceDir } from "./workspace.js";
 
 export { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
@@ -129,12 +130,7 @@ export function resolveAgentSkillsFilter(
   cfg: OpenClawConfig,
   agentId: string,
 ): string[] | undefined {
-  const raw = resolveAgentConfig(cfg, agentId)?.skills;
-  if (!raw) {
-    return undefined;
-  }
-  const normalized = raw.map((entry) => String(entry).trim()).filter(Boolean);
-  return normalized.length > 0 ? normalized : [];
+  return normalizeSkillFilter(resolveAgentConfig(cfg, agentId)?.skills);
 }
 
 export function resolveAgentModelPrimary(cfg: OpenClawConfig, agentId: string): string | undefined {
@@ -164,6 +160,22 @@ export function resolveAgentModelFallbacksOverride(
   return Array.isArray(raw.fallbacks) ? raw.fallbacks : undefined;
 }
 
+export function resolveEffectiveModelFallbacks(params: {
+  cfg: OpenClawConfig;
+  agentId: string;
+  hasSessionModelOverride: boolean;
+}): string[] | undefined {
+  const agentFallbacksOverride = resolveAgentModelFallbacksOverride(params.cfg, params.agentId);
+  if (!params.hasSessionModelOverride) {
+    return agentFallbacksOverride;
+  }
+  const defaultFallbacks =
+    typeof params.cfg.agents?.defaults?.model === "object"
+      ? (params.cfg.agents.defaults.model.fallbacks ?? [])
+      : [];
+  return agentFallbacksOverride ?? defaultFallbacks;
+}
+
 export function resolveAgentWorkspaceDir(cfg: OpenClawConfig, agentId: string) {
   const id = normalizeAgentId(agentId);
   const configured = resolveAgentConfig(cfg, id)?.workspace?.trim();
@@ -174,7 +186,8 @@ export function resolveAgentWorkspaceDir(cfg: OpenClawConfig, agentId: string) {
   if (id === defaultAgentId) {
     const fallback = cfg.agents?.defaults?.workspace?.trim();
     if (fallback) {
-      return resolveUserPath(fallback);
+      // 默认助手的工作区 = 默认根目录 + 助手id
+      return path.join(resolveUserPath(fallback), id);
     }
     return resolveDefaultAgentWorkspaceDir(process.env);
   }

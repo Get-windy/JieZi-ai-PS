@@ -56,7 +56,28 @@ export async function loadBoundChannelAccounts(
     const response = await state.client.call("agent.channelAccounts.list", { agentId });
 
     if (response.ok && response.data) {
-      state.boundChannelAccounts = (response.data as any).bindings || [];
+      const bindings = (response.data as any).bindings || [];
+
+      // 将后端返回的平铺列表转换为按通道分组的格式
+      // 后端返回：[{ channelId: "telegram", accountId: "acc1" }, { channelId: "telegram", accountId: "acc2" }]
+      // 前端需要：[{ channelId: "telegram", accountIds: ["acc1", "acc2"] }]
+      const groupedByChannel = new Map<string, string[]>();
+
+      for (const binding of bindings) {
+        const channelId = binding.channelId;
+        const accountId = binding.accountId || "default";
+
+        if (!groupedByChannel.has(channelId)) {
+          groupedByChannel.set(channelId, []);
+        }
+
+        groupedByChannel.get(channelId)!.push(accountId);
+      }
+
+      // 转换为数组格式
+      state.boundChannelAccounts = Array.from(groupedByChannel.entries()).map(
+        ([channelId, accountIds]) => ({ channelId, accountIds }),
+      );
     } else {
       state.boundChannelAccountsError = response.error?.message || "Failed to load bound accounts";
     }
