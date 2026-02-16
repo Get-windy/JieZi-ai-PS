@@ -52,6 +52,101 @@
 
 ### 📌 项目更新记录
 
+#### 2026年2月14日 - 合并上游最新更新 (v2026.2.16)
+
+**🔄 上游同步：**
+
+- ✅ **同步提交数**：30+ commits (a50638eea..7aa7b04fb)
+- ✅ **解决冲突数**：25个文件（全部手动解决）
+- ✅ **版本更新**：2026.2.16
+
+**🐛 主要Bug修复（来自上游）：**
+
+1. **Telegram消息分割修复**
+   - 修复 block streaming 模式下消息分割问题
+   - 当 streamMode 关闭时停止消息分割
+   - 提交：`c62b90a2b`
+
+2. **Memory集合隔离修复**
+   - 修复 memory/qmd 模块的集合隔离问题
+   - 每个 agent 的托管集合独立隔离
+   - 提交：`b32ae6fa0`
+
+3. **安全修复**
+   - Line webhook 认证缺失时改为fail closed策略
+   - 提交：`beb77229c`
+
+4. **配置哈希修复**
+   - 替换弃用的SHA-1哈希算法
+   - Sandbox配置哈希保留数组顺序
+   - 提交：`559c8d993`, `41ded303b`
+
+5. **测试优化**
+   - 重新平衡测试套件分布（isolated unit test lane）
+   - 优化进程超时阈值（稳定emit guard）
+   - 加速test:fast测试速度
+   - 隔离Telegram、Slack、Git hooks等测试套件
+
+**📦 依赖更新：**
+
+- ✅ `qs`: 6.14.1 → 6.14.2
+- ✅ `tar`: 7.5.7 → 7.5.9
+
+**🔧 本地保留（Windows兼容性）：**
+
+1. **Windows构建兼容性修改**
+   - `package.json`: 所有bash脚本改为Node.js版本
+   - `scripts/run-node.mjs`: 直接使用node执行tsdown
+   - `.npmrc`: 官方源配置（确保RC版本包完整）
+
+2. **汉化内容完整保留**
+   - `README.md`: 中文文档
+   - UI界面文件: `cron.ts`, `overview.ts`, `skills.ts`
+   - 向导文件: `onboarding.ts`, `configure.wizard.ts`
+   - 命令文件: `onboard-hooks.ts`
+
+3. **本地配置保留**
+   - hono版本覆盖配置 (4.11.8)
+   - 其他自定义依赖覆盖
+
+**⚙️ 冲突解决策略：**
+
+- **测试文件（8个）**：接受上游版本（新增测试）
+- **汉化文件**：保留本地版本（完整汉化）
+- **配置文件**：手动合并（本地修改 + 上游更新）
+- **代码文件**：优先接受上游bug修复
+
+**⚠️ 已知问题：**
+
+1. **TypeScript类型声明编译警告**（不影响运行）
+   - `MISSING_EXPORT` 警告：7个未导出的函数
+     - `killSession` (bash-tools.shared.ts)
+     - `canonicalizeSpawnedByForAgent` (session-utils.ts)
+     - `pruneLegacyStoreKeys` (session-utils.ts)
+     - `archiveSessionTranscripts` (session-utils.ts)
+   - **影响范围**：仅影响 `pnpm build:plugin-sdk:dts`
+   - **运行时影响**：无，主程序构建成功
+
+2. **上游TypeScript编译错误**（5个错误）
+   - `src/agents/bash-tools.exec.ts`: 3个错误
+   - `src/agents/model-forward-compat.ts`: 1个错误
+   - `src/plugins/runtime/index.ts`: 1个错误
+   - **说明**：这些是上游合并后引入的问题，需要上游修复
+
+**✅ 测试状态：**
+
+- ✅ A2UI bundle 构建成功（rolldown v1.0.0-rc.2）
+- ✅ 主程序构建成功（306 files, 7755.10 kB）
+- ✅ Git推送成功（origin/localization-zh-CN）
+- ⚠️ 类型声明生成失败（不影响运行）
+
+**🔗 相关提交：**
+
+- 合并提交：`1494bc706`
+- Windows修复：`ec89a34ac`
+- 上游远程：`github.com/openclaw/openclaw`
+- 上游分支：`upstream/main` (7aa7b04fb)
+
 #### 2026年2月12日 - 智能助手管理页面功能完善与体验优化
 
 **🎯 核心功能改进：**
