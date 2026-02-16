@@ -49,7 +49,6 @@ import {
   chunkString,
   clampWithDefault,
   coerceEnv,
-  killSession,
   readEnvInt,
   resolveSandboxWorkdir,
   resolveWorkdir,
@@ -185,7 +184,6 @@ export type ExecToolDefaults = {
   sessionKey?: string;
   messageProvider?: string;
   notifyOnExit?: boolean;
-  notifyOnExitEmptySuccess?: boolean;
   cwd?: string;
 };
 
@@ -639,7 +637,10 @@ async function runExecProcess(opts: {
 
   const onTimeout = () => {
     timedOut = true;
-    killSession(session);
+    // Kill the process
+    if (session.child) {
+      session.child.kill("SIGTERM");
+    }
     if (!timeoutFinalizeTimer) {
       timeoutFinalizeTimer = setTimeout(() => {
         finalizeTimeout();
@@ -798,7 +799,11 @@ async function runExecProcess(opts: {
     startedAt,
     pid: session.pid ?? undefined,
     promise,
-    kill: () => killSession(session),
+    kill: () => {
+      if (session.child) {
+        session.child.kill("SIGTERM");
+      }
+    },
   };
 }
 
@@ -820,7 +825,7 @@ export function createExecTool(
   const defaultPathPrepend = normalizePathPrepend(defaults?.pathPrepend);
   const safeBins = resolveSafeBins(defaults?.safeBins);
   const notifyOnExit = defaults?.notifyOnExit !== false;
-  const notifyOnExitEmptySuccess = defaults?.notifyOnExitEmptySuccess === true;
+  const notifyOnExitEmptySuccess = false;
   const notifySessionKey = defaults?.sessionKey?.trim() || undefined;
   const approvalRunningNoticeMs = resolveApprovalRunningNoticeMs(defaults?.approvalRunningNoticeMs);
   // Derive agentId only when sessionKey is an agent session key.
@@ -1482,7 +1487,6 @@ export function createExecTool(
                 maxOutput,
                 pendingMaxOutput,
                 notifyOnExit: false,
-                notifyOnExitEmptySuccess: false,
                 scopeKey: defaults?.scopeKey,
                 sessionKey: notifySessionKey,
                 timeoutSec: effectiveTimeout,
@@ -1607,7 +1611,6 @@ export function createExecTool(
       const usePty = params.pty === true && !sandbox;
       const run = await runExecProcess({
         command: params.command,
-        execCommand: execCommandOverride,
         workdir,
         env,
         sandbox,
@@ -1617,7 +1620,6 @@ export function createExecTool(
         maxOutput,
         pendingMaxOutput,
         notifyOnExit,
-        notifyOnExitEmptySuccess,
         scopeKey: defaults?.scopeKey,
         sessionKey: notifySessionKey,
         timeoutSec: effectiveTimeout,

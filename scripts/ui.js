@@ -59,6 +59,7 @@ function run(cmd, args) {
     cwd: cwd,
     stdio: "inherit",
     env: process.env,
+    shell: process.platform === "win32",
   });
   child.on("exit", (code, signal) => {
     if (signal) {
@@ -73,6 +74,7 @@ function runSync(cmd, args, envOverride) {
     cwd: uiDir,
     stdio: "inherit",
     env: envOverride ?? process.env,
+    shell: process.platform === "win32",
   });
   if (result.signal) {
     process.exit(1);
