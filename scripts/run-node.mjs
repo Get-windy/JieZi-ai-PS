@@ -8,7 +8,7 @@ const args = process.argv.slice(2);
 const env = { ...process.env };
 const cwd = process.cwd();
 const compiler = "tsdown";
-const compilerArgs = ["exec", compiler, "--no-clean"];
+const compilerArgs = ["node_modules/tsdown/dist/run.mjs", "--no-clean"];
 
 const distRoot = path.join(cwd, "dist");
 const distEntry = path.join(distRoot, "/entry.js");
@@ -215,10 +215,7 @@ if (!shouldBuild()) {
   runNode();
 } else {
   logRunner("Building TypeScript (dist is stale).");
-  const buildCmd = process.platform === "win32" ? "cmd.exe" : "pnpm";
-  const buildArgs =
-    process.platform === "win32" ? ["/d", "/s", "/c", "pnpm", ...compilerArgs] : compilerArgs;
-  const build = spawn(buildCmd, buildArgs, {
+  const build = spawn(process.execPath, compilerArgs, {
     cwd,
     env,
     stdio: "inherit",

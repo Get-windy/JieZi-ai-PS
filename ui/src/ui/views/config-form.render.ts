@@ -6,7 +6,6 @@ import { renderNode } from "./config-form.node.ts";
 import {
   hintForPath,
   humanize,
-  translateFieldLabel,
   schemaType,
   type JsonSchema,
 } from "./config-form.shared.ts";
