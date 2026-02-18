@@ -22,6 +22,7 @@ import {
   validateChannelsStatusParams,
 } from "../protocol/index.js";
 import { formatForLog } from "../ws-log.js";
+import { loadAllChannelPairingRequests } from "../../channels/pairing-requests.js";
 
 type ChannelLogoutPayload = {
   channel: ChannelId;
@@ -214,6 +215,7 @@ export const channelsHandlers: GatewayRequestHandlers = {
       channels: {} as Record<string, unknown>,
       channelAccounts: {} as Record<string, unknown>,
       channelDefaultAccountId: {} as Record<string, unknown>,
+      channelPairingRequests: loadAllChannelPairingRequests(), // 新增：配对请求
     };
     const channelsMap = payload.channels as Record<string, unknown>;
     const accountsMap = payload.channelAccounts as Record<string, unknown>;

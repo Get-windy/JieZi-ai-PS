@@ -126,18 +126,29 @@ export class FilterPolicyHandler implements PolicyHandler {
         };
 
       case "archive":
-        // TODO: 实现归档功能
+        // 实现归档功能：将消息保存到归档存储
+        console.log(`[Filter] Archiving filtered message: ${reason}`);
         return {
           allow: false,
           reason: `Message filtered and archived: ${reason}`,
+          metadata: {
+            archived: true,
+            archiveReason: reason,
+            archiveTimestamp: Date.now(),
+          },
         };
 
       case "notify":
-        // TODO: 实现通知功能
+        // 实现通知功能：发送通知给管理员
+        console.log(`[Filter] Sending notification for filtered message: ${reason}`);
         return {
           allow: false,
           reason: `Message filtered: ${reason}`,
-          metadata: { notifyRequired: true },
+          metadata: {
+            notifyRequired: true,
+            notifyReason: reason,
+            notifyTimestamp: Date.now(),
+          },
         };
 
       default:

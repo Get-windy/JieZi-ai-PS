@@ -51,6 +51,7 @@ export type ChannelsProps = {
   showAllChannelsModal: boolean; // 显示所有通道弹窗
   debuggingChannel: { channelId: string; accountId?: string } | null; // 调试状态
   editingChannelGlobalConfig: string | null; // 正在编辑全局配置的通道ID
+  showPairingModal: boolean; // 显示配对请求模态框
   onRefresh: (probe: boolean) => void;
   onWhatsAppStart: (force: boolean) => void;
   onWhatsAppWait: () => void;
@@ -81,6 +82,12 @@ export type ChannelsProps = {
   onEditChannelGlobalConfig: (channelId: string) => void; // 编辑通道全局配置
   onCancelChannelGlobalConfig: () => void; // 取消编辑全局配置
   onSaveChannelGlobalConfig: () => void; // 保存全局配置
+  // 配对管理回调
+  onShowPairingModal: () => void; // 显示配对请求模态框
+  onClosePairingModal: () => void; // 关闭配对请求模态框
+  onApproveAllPairing: () => void; // 批准所有配对请求
+  onApprovePairing?: (channelId: string, code: string) => Promise<void>; // 批准配对
+  onRejectPairing?: (channelId: string, code: string) => Promise<void>; // 拒绝配对
 };
 
 export type ChannelsChannelData = {

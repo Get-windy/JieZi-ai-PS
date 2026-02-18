@@ -1,3 +1,19 @@
+// 通道配对请求类型
+export type ChannelPairingRequest = {
+  id: string;
+  code: string;
+  createdAt: string;
+  lastSeenAt: string;
+  meta?: Record<string, string>;
+};
+
+export type ChannelUiMetaEntry = {
+  id: string;
+  label: string;
+  detailLabel: string;
+  systemImage?: string;
+};
+
 export type ChannelsStatusSnapshot = {
   ts: number;
   channelOrder: string[];
@@ -9,13 +25,7 @@ export type ChannelsStatusSnapshot = {
   channels: Record<string, unknown>;
   channelAccounts: Record<string, ChannelAccountSnapshot[]>;
   channelDefaultAccountId: Record<string, string>;
-};
-
-export type ChannelUiMetaEntry = {
-  id: string;
-  label: string;
-  detailLabel: string;
-  systemImage?: string;
+  channelPairingRequests?: Record<string, ChannelPairingRequest[]>; // 新增：通道配对请求
 };
 
 export const CRON_CHANNEL_LAST = "last";

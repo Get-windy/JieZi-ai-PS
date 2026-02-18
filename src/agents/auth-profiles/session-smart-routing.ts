@@ -17,6 +17,85 @@ import {
 import { clearSessionAuthProfileOverride } from "./session-override.js";
 
 /**
+ * 检测消息中是否包含图片
+ * 支持多种格式：
+ * - Markdown 图片：![alt](url)
+ * - HTML 图片：<img src="url">
+ * - 图片 URL ：.png, .jpg, .jpeg, .gif, .webp, .svg
+ * - Base64 图片：data:image/
+ */
+function detectImages(message: string): boolean {
+  // Markdown 图片格式
+  if (/!\[.*?\]\(.*?\)/g.test(message)) {
+    return true;
+  }
+  // HTML img 标签
+  if (/<img\s+[^>]*src=["'].*?["'][^>]*>/gi.test(message)) {
+    return true;
+  }
+  // 图片文件格式 URL
+  if (/\.(png|jpe?g|gif|webp|svg|bmp|ico)(\?|$|#)/gi.test(message)) {
+    return true;
+  }
+  // Base64 图片
+  if (/data:image\//i.test(message)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 基于消息内容判断是否需要工具调用
+ * 检测常见的需要工具调用的关键词：
+ * - 搜索相关：search, find, lookup, query
+ * - 计算相关：calculate, compute, math
+ * - 文件操作：file, read, write, save
+ * - API 调用：api, fetch, get data, retrieve
+ * - 代码执行：execute, run code
+ */
+function detectToolsNeeded(message: string): boolean {
+  const toolKeywords = [
+    // 搜索
+    "search",
+    "find",
+    "lookup",
+    "query",
+    "搜索",
+    "查找",
+    "查询",
+    // 计算
+    "calculate",
+    "compute",
+    "math",
+    "计算",
+    // 文件
+    "file",
+    "read",
+    "write",
+    "save",
+    "文件",
+    "读取",
+    "写入",
+    "保存",
+    // API
+    "api",
+    "fetch",
+    "get data",
+    "retrieve",
+    "获取数据",
+    // 代码执行
+    "execute",
+    "run code",
+    "run script",
+    "执行",
+    "运行代码",
+  ];
+
+  const lowerMessage = message.toLowerCase();
+  return toolKeywords.some((keyword) => lowerMessage.includes(keyword.toLowerCase()));
+}
+
+/**
  * 使用智能路由引擎解析会话的模型账号
  *
  * 此函数检查智能助手是否配置了智能路由，如果配置了则调用路由引擎选择最优账号。
@@ -87,8 +166,8 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
     sessionId: sessionEntry?.sessionId ?? sessionKey ?? "unknown",
     historyTurns: sessionEntry?.totalTokens ? Math.floor(sessionEntry.totalTokens / 1000) : 0,
     hasCode: message.includes("```") || message.includes("code"),
-    hasImages: false, // TODO: 检测消息中是否包含图片
-    needsTools: false, // TODO: 基于消息内容判断是否需要工具
+    hasImages: detectImages(message), // 检测消息中是否包含图片
+    needsTools: detectToolsNeeded(message), // 基于消息内容判断是否需要工具
     needsReasoning: message.length > 200, // 简单启发式：长消息可能需要推理
     pinnedAccountId: sessionEntry?.authProfileOverride,
   };

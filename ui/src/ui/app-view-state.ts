@@ -137,6 +137,7 @@ export type AppViewState = {
   showAllChannelsModal: boolean;
   debuggingChannel: { channelId: string; accountId?: string } | null;
   editingChannelGlobalConfig: string | null;
+  showPairingModal: boolean; // 配对请求模态框
   // 模型管理状态
   modelsLoading: boolean;
   modelsSnapshot: import("./types.ts").ModelsStatusSnapshot | null;

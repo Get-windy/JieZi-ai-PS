@@ -407,6 +407,7 @@ export function renderApp(state: AppViewState) {
                 showAllChannelsModal: state.showAllChannelsModal,
                 debuggingChannel: state.debuggingChannel,
                 editingChannelGlobalConfig: state.editingChannelGlobalConfig,
+                showPairingModal: state.showPairingModal,
                 onRefresh: (probe) => loadChannels(state, probe),
                 onWhatsAppStart: (force) => state.handleWhatsAppStart(force),
                 onWhatsAppWait: () => state.handleWhatsAppWait(),
@@ -492,6 +493,104 @@ export function renderApp(state: AppViewState) {
                 onSaveChannelGlobalConfig: () => {
                   // TODO: 保存全局配置
                   state.editingChannelGlobalConfig = null;
+                },
+                // 配对管理回调
+                onShowPairingModal: () => {
+                  state.showPairingModal = true;
+                },
+                onClosePairingModal: () => {
+                  state.showPairingModal = false;
+                },
+                onApproveAllPairing: async () => {
+                  const pairingRequests = state.channelsSnapshot?.channelPairingRequests ?? {};
+                  const allRequests: Array<{ channelId: string; code: string }> = [];
+                  
+                  // 收集所有配对请求
+                  for (const [channelId, requests] of Object.entries(pairingRequests)) {
+                    for (const req of requests) {
+                      allRequests.push({ channelId, code: req.code });
+                    }
+                  }
+                  
+                  if (allRequests.length === 0) {
+                    alert("ℹ️ 没有待处理的配对请求");
+                    return;
+                  }
+                  
+                  if (!confirm(`确定要批准所有 ${allRequests.length} 个配对请求吗？`)) {
+                    return;
+                  }
+                  
+                  let successCount = 0;
+                  let failCount = 0;
+                  
+                  // 逐个批准
+                  for (const { channelId, code } of allRequests) {
+                    try {
+                      const result = await state.client?.request("pairing.approve", {
+                        channel: channelId,
+                        code: code,
+                        notify: true,
+                      });
+                      if (result && result.success) {
+                        successCount++;
+                      } else {
+                        failCount++;
+                      }
+                    } catch (err) {
+                      console.error(`Failed to approve ${channelId}/${code}:`, err);
+                      failCount++;
+                    }
+                  }
+                  
+                  // 刷新数据
+                  await loadChannels(state, true);
+                  
+                  // 显示结果
+                  if (failCount === 0) {
+                    alert(`✅ 成功批准所有 ${successCount} 个配对请求！`);
+                  } else {
+                    alert(`✅ 成功 ${successCount} 个\n❌ 失败 ${failCount} 个`);
+                  }
+                },
+                onApprovePairing: async (channelId, code) => {
+                  console.log("Approve pairing:", channelId, code);
+                  if (confirm(`确定要批准通道 ${channelId} 的配对请求（配对码：${code}）吗？`)) {
+                    try {
+                      const result = await state.client?.request("pairing.approve", {
+                        channel: channelId,
+                        code: code,
+                        notify: true,
+                      });
+                      if (result && result.success) {
+                        await loadChannels(state, true);
+                        alert("✅ 配对请求已批准！");
+                      } else {
+                        alert(`❌ 批准失败：${result?.error || "未知错误"}`);
+                      }
+                    } catch (err) {
+                      alert(`❌ 批准失败：${String(err)}`);
+                    }
+                  }
+                },
+                onRejectPairing: async (channelId, code) => {
+                  console.log("Reject pairing:", channelId, code);
+                  if (confirm(`确定要拒绝通道 ${channelId} 的配对请求（配对码：${code}）吗？`)) {
+                    try {
+                      const result = await state.client?.request("pairing.reject", {
+                        channel: channelId,
+                        code: code,
+                      });
+                      if (result && result.success) {
+                        await loadChannels(state, true);
+                        alert("✅ 配对请求已拒绝！");
+                      } else {
+                        alert(`❌ 拒绝失败：${result?.error || "未知错误"}`);
+                      }
+                    } catch (err) {
+                      alert(`❌ 拒绝失败：${String(err)}`);
+                    }
+                  }
                 },
               })
             : nothing

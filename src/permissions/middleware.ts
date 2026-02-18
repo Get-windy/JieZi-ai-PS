@@ -21,7 +21,7 @@ import type { ApprovalRequest } from "./approval.js";
 import type { PermissionCheckContext, PermissionCheckResult } from "./checker.js";
 import { listAgentEntries, findAgentEntryIndex } from "../commands/agents.config.js";
 import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../config/config.js";
-import { getDataDirectory } from "../paths.js";
+import { STATE_DIR } from "../config/paths.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { ApprovalWorkflow } from "./approval.js";
 import { PermissionChecker } from "./checker.js";
@@ -74,7 +74,7 @@ export class PermissionMiddleware {
   private auditPath: string;
 
   constructor() {
-    const dataDir = getDataDirectory();
+    const dataDir = STATE_DIR;
     this.historyPath = join(dataDir, "permissions-history.jsonl");
     this.auditPath = join(dataDir, "permissions-audit.jsonl");
   }

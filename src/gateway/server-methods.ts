@@ -7,6 +7,8 @@ import { agentsHandlers } from "./server-methods/agents.js";
 import { assessmentHandlers } from "./server-methods/assessment-rpc.js";
 import { browserHandlers } from "./server-methods/browser.js";
 import { channelPoliciesHandlers } from "./server-methods/channel-policies.js";
+import { channelManagerHandlers } from "./server-methods/channel-manager.js";
+import { policyIntegrationHandlers } from "./server-methods/policy-integration.js";
 import { channelsHandlers } from "./server-methods/channels.js";
 import { chatHandlers } from "./server-methods/chat.js";
 import { configHandlers } from "./server-methods/config.js";
@@ -42,6 +44,8 @@ import { skillsHandlers } from "./server-methods/skills.js";
 import { storageHandlers } from "./server-methods/storage.js";
 import { systemHandlers } from "./server-methods/system.js";
 import { talkHandlers } from "./server-methods/talk.js";
+import { tasksRpc } from "./server-methods/tasks-rpc.js";
+import { meetingsRpc } from "./server-methods/meetings-rpc.js";
 import { trainingPlanHandlers } from "./server-methods/training-plan-rpc.js";
 import { trainingMethods } from "./server-methods/training.js";
 import { ttsHandlers } from "./server-methods/tts.js";
@@ -50,6 +54,7 @@ import { usageHandlers } from "./server-methods/usage.js";
 import { voicewakeHandlers } from "./server-methods/voicewake.js";
 import { webHandlers } from "./server-methods/web.js";
 import { wizardHandlers } from "./server-methods/wizard.js";
+import { pairingHandlers } from "./server-methods/pairing.js";
 
 const ADMIN_SCOPE = "operator.admin";
 const READ_SCOPE = "operator.read";
@@ -163,6 +168,14 @@ const READ_METHODS = new Set([
   "channel.policy.get",
   "channel.policy.list",
   "channel.policy.status",
+  // Channel Manager - Read
+  "channels.bindings.list",
+  "channels.bindings.get",
+  "channels.bindings.findByChannel",
+  "channels.defaultPolicy.get",
+  // Policy Integration - Read
+  "policy.middleware.status",
+  "policy.scheduler.queueStatus",
   // Agent2Agent - Read
   "agent2agent.getHistory",
   "agent2agent.getStatistics",
@@ -188,6 +201,12 @@ const READ_METHODS = new Set([
   "mentorship.mentors",
   // Lifecycle - Read
   "lifecycle.getState",
+  // Tasks & Meetings - Read
+  "task.get",
+  "task.list",
+  "meeting.get",
+  "meeting.list",
+  "meeting.notes.get",
   "lifecycle.getHistory",
   "lifecycle.getStatistics",
   "lifecycle.batchGetStates",
@@ -390,6 +409,9 @@ const WRITE_METHODS = new Set([
   "reports.generate.skills",
   "reports.generate.comprehensive",
   "reports.export",
+  // Pairing - Write
+  "pairing.approve",
+  "pairing.reject",
 ]);
 
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {
@@ -517,6 +539,8 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...trainingPlanHandlers,
   ...assessmentHandlers,
   ...channelPoliciesHandlers,
+  ...channelManagerHandlers,
+  ...policyIntegrationHandlers,
   ...humanAuthHandlers,
   ...dataScopeHandlers,
   ...mentorshipHandlers,
@@ -525,6 +549,9 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...phase6IntegrationHandlers,
   ...phase7AdminHandlers,
   ...reportsHandlers,
+  ...tasksRpc,
+  ...meetingsRpc,
+  ...pairingHandlers,
 };
 
 export async function handleGatewayRequest(

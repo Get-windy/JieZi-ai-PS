@@ -13,6 +13,11 @@ export type ModelCatalogEntry = {
   supportedModalities?: Array<"text" | "image" | "audio" | "video" | "code">;
   specializations?: Array<string>; // 专业领域标签
   tags?: string[]; // 通用标签
+  // 价格信息（可选）
+  pricing?: {
+    input?: number; // 输入价格（美元/百万tokens）
+    output?: number; // 输出价格（美元/百万tokens）
+  };
 };
 
 type DiscoveredModel = {
@@ -22,6 +27,10 @@ type DiscoveredModel = {
   contextWindow?: number;
   reasoning?: boolean;
   input?: Array<"text" | "image">;
+  pricing?: {
+    input?: number;
+    output?: number;
+  };
 };
 
 type PiSdkModule = typeof import("./pi-model-discovery.js");
@@ -131,7 +140,19 @@ export async function loadModelCatalog(params?: {
             : undefined;
         const reasoning = typeof entry?.reasoning === "boolean" ? entry.reasoning : undefined;
         const input = Array.isArray(entry?.input) ? entry.input : undefined;
-        models.push({ id, name, provider, contextWindow, reasoning, input });
+        
+        // 获取价格信息
+        const pricing =
+          entry?.pricing && typeof entry.pricing === "object"
+            ? {
+                input:
+                  typeof entry.pricing.input === "number" ? entry.pricing.input : undefined,
+                output:
+                  typeof entry.pricing.output === "number" ? entry.pricing.output : undefined,
+              }
+            : undefined;
+        
+        models.push({ id, name, provider, contextWindow, reasoning, input, pricing });
       }
       applyOpenAICodexSparkFallback(models);
 

@@ -167,4 +167,82 @@ export const friendsHandlers: GatewayRequestHandlers = {
       respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }
   },
+
+  /**
+   * 更新好友信息（昵称、标签、分组）
+   */
+  "friends.update": async ({ params, respond }) => {
+    const { agentId, friendId, nickname, tags, group, remark } = params || {};
+
+    if (!agentId || typeof agentId !== "string") {
+      respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Missing agentId"));
+      return;
+    }
+    if (!friendId || typeof friendId !== "string") {
+      respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Missing friendId"));
+      return;
+    }
+
+    try {
+      const updates: any = {};
+      if (nickname !== undefined) updates.nickname = String(nickname);
+      if (tags !== undefined && Array.isArray(tags)) {
+        updates.tags = tags.map((t: any) => String(t));
+      }
+      if (group !== undefined) updates.group = String(group);
+      if (remark !== undefined) updates.remark = String(remark);
+
+      const relation = groupManager.updateFriendInfo(agentId, friendId, updates);
+      respond(true, { success: true, relation }, undefined);
+    } catch (err) {
+      respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+
+  /**
+   * 智能推荐好友
+   */
+  "friends.recommend": async ({ params, respond }) => {
+    const { agentId, limit } = params || {};
+
+    if (!agentId || typeof agentId !== "string") {
+      respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Missing agentId"));
+      return;
+    }
+
+    try {
+      const limitNum = typeof limit === "number" ? Math.min(limit, 50) : 10;
+      const recommendations = groupManager.recommendFriends(agentId, limitNum);
+      respond(true, { recommendations, total: recommendations.length }, undefined);
+    } catch (err) {
+      respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+
+  /**
+   * 获取好友详细信息
+   */
+  "friends.detail": async ({ params, respond }) => {
+    const { agentId, friendId } = params || {};
+
+    if (!agentId || typeof agentId !== "string") {
+      respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Missing agentId"));
+      return;
+    }
+    if (!friendId || typeof friendId !== "string") {
+      respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Missing friendId"));
+      return;
+    }
+
+    try {
+      const detail = groupManager.getFriendDetail(agentId, friendId);
+      if (!detail) {
+        respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, "Friend relation not found"));
+        return;
+      }
+      respond(true, detail, undefined);
+    } catch (err) {
+      respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
 };

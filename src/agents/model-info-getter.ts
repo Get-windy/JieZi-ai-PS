@@ -262,8 +262,9 @@ export function createModelInfoGetter(
         supportsTools: true, // 假设所有模型都支持工具调用
         supportsVision: catalogEntry.input?.includes("image") ?? false,
         reasoningLevel: catalogEntry.reasoning ? 3 : 2,
-        inputPrice: 0.003, // TODO: 从配置或API获取实际价格
-        outputPrice: 0.015,
+        // 使用目录中的价格信息，如果没有则使用默认值
+        inputPrice: catalogEntry.pricing?.input ?? 0.003,
+        outputPrice: catalogEntry.pricing?.output ?? 0.015,
         // 添加模态和专业领域信息
         supportedModalities: detectSupportedModalities(catalogEntry, providerId, modelName),
         specializations: detectSpecializations(providerId, modelName, catalogEntry),

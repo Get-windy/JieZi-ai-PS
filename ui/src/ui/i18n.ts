@@ -106,6 +106,16 @@ const translations: Record<Locale, Record<string, string>> = {
     "theme.light.aria": "Light theme",
     "theme.dark.aria": "Dark theme",
 
+    // Pairing requests
+    "pairing.pending_requests": "You have {count} pending pairing request(s)",
+    "pairing.view_all": "View All",
+    "pairing.approve_all": "Approve All",
+    "pairing.requests": "Pairing Requests",
+    "pairing.approve": "Approve",
+    "pairing.reject": "Reject",
+    "pairing.all_requests": "All Pairing Requests",
+    "pairing.no_requests": "No pending pairing requests",
+
     // Instances page
     "instances.title": "Connected Instances",
     "instances.subtitle": "Presence beacons from the gateway and clients.",
@@ -2430,6 +2440,16 @@ const translations: Record<Locale, Record<string, string>> = {
     "tab.chat.subtitle": "直接 Gateway 聊天会话，用于快速干预。",
     "tab.bindings.subtitle": "配置通道和会话的智能助手路由规则。",
 
+    // 配对请求
+    "pairing.pending_requests": "您有 {count} 个待批准的配对请求",
+    "pairing.view_all": "查看全部",
+    "pairing.approve_all": "全部批准",
+    "pairing.requests": "配对请求",
+    "pairing.approve": "批准",
+    "pairing.reject": "拒绝",
+    "pairing.all_requests": "所有配对请求",
+    "pairing.no_requests": "暂无待处理的配对请求",
+
     // 绑定配置页面
     "bindings.title": "绑定配置",
     "bindings.subtitle": "配置智能助手与通道账号的路由规则",
@@ -4749,12 +4769,30 @@ export function getLocale(): Locale {
 /**
  * 翻译函数
  * @param key 翻译键
- * @param fallback 备用文本（可选）
+ * @param fallbackOrParams 备用文本或模板变量参数
  * @returns 翻译后的文本
  */
-export function t(key: string, fallback?: string): string {
+export function t(key: string, fallbackOrParams?: string | Record<string, unknown>): string {
   const dict = translations[currentLocale];
-  return dict?.[key] ?? fallback ?? key;
+  let text: string;
+  let params: Record<string, unknown> | undefined;
+
+  // 判断第二个参数是字符串（fallback）还是对象（params）
+  if (typeof fallbackOrParams === "string") {
+    text = dict?.[key] ?? fallbackOrParams ?? key;
+  } else {
+    text = dict?.[key] ?? key;
+    params = fallbackOrParams;
+  }
+
+  // 如果有模板变量参数，进行替换
+  if (params) {
+    Object.entries(params).forEach(([paramKey, value]) => {
+      text = text.replace(new RegExp(`\{${paramKey}\}`, "g"), String(value));
+    });
+  }
+
+  return text;
 }
 
 /**

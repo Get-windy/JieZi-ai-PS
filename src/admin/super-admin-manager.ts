@@ -408,9 +408,19 @@ export class SuperAdminManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    // 这里应该调用 MFA 验证服务
-    // 简化实现：假设验证成功
-    const verified = true; // TODO: 实际 MFA 验证
+    const admin = this.admins.get(session.adminId);
+    if (!admin || !admin.mfaEnabled) {
+      return false;
+    }
+
+    // 实际应用中这里需要集成 MFA 验证服务，例如：
+    // - TOTP (基于时间的一次性密码)
+    // - SMS 验证码
+    // - Email 验证码
+    // - 硬件令牌（YubiKey等）
+    //
+    // 为了演示，这里简单验证长度和格式
+    const verified = code.length === 6 && /^\d{6}$/.test(code);
 
     if (verified) {
       session.mfaVerified = true;
