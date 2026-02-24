@@ -391,6 +391,7 @@ export async function runConfigureWizard(
 
       if (selected.includes("daemon")) {
         if (!selected.includes("gateway")) {
+<<<<<<< HEAD
           const portInput = guardCancel(
             await text({
               message: "服务安装的 Gateway 端口",
@@ -400,6 +401,9 @@ export async function runConfigureWizard(
             runtime,
           );
           gatewayPort = Number.parseInt(String(portInput), 10);
+=======
+          await promptDaemonPort();
+>>>>>>> upstream/main
         }
 
         await maybeInstallDaemon({ runtime, port: gatewayPort, gatewayToken });
@@ -504,6 +508,7 @@ export async function runConfigureWizard(
 
         if (choice === "daemon") {
           if (!didConfigureGateway) {
+<<<<<<< HEAD
             const portInput = guardCancel(
               await text({
                 message: "服务安装的 Gateway 端口",
@@ -513,6 +518,9 @@ export async function runConfigureWizard(
               runtime,
             );
             gatewayPort = Number.parseInt(String(portInput), 10);
+=======
+            await promptDaemonPort();
+>>>>>>> upstream/main
           }
           await maybeInstallDaemon({
             runtime,

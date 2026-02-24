@@ -67,6 +67,7 @@ function resolveNpmCliJs() {
   return null;
 }
 
+function packToArchive({
 async function packToArchive({
   pkgDir,
   outDir,
@@ -865,6 +866,7 @@ describe("installPluginFromDir", () => {
       return;
     }
 
+<<<<<<< HEAD
     const calls = run.mock.calls.filter((c) => Array.isArray(c[0]) && c[0][0] === "npm");
     expect(calls.length).toBe(1);
     const first = calls[0];
@@ -874,5 +876,102 @@ describe("installPluginFromDir", () => {
     const [argv, opts] = first;
     expect(argv).toEqual(["npm", "install", "--omit=dev", "--silent", "--ignore-scripts"]);
     expect(opts?.cwd).toBe(res.targetDir);
+=======
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(res.targetDir, "package.json"), "utf-8"),
+    ) as {
+      devDependencies?: Record<string, string>;
+    };
+    expect(manifest.devDependencies?.openclaw).toBeUndefined();
+    expect(manifest.devDependencies?.vitest).toBe("^3.0.0");
+  });
+});
+
+describe("installPluginFromNpmSpec", () => {
+  it("uses --ignore-scripts for npm pack and cleans up temp dir", async () => {
+    const stateDir = makeTempDir();
+
+    const extensionsDir = path.join(stateDir, "extensions");
+    fs.mkdirSync(extensionsDir, { recursive: true });
+
+    const run = vi.mocked(runCommandWithTimeout);
+    const voiceCallArchiveBuffer = await VOICE_CALL_ARCHIVE_V1_BUFFER_PROMISE;
+
+    let packTmpDir = "";
+    const packedName = "voice-call-0.0.1.tgz";
+    run.mockImplementation(async (argv, opts) => {
+      if (argv[0] === "npm" && argv[1] === "pack") {
+        packTmpDir = String(typeof opts === "number" ? "" : (opts.cwd ?? ""));
+        fs.writeFileSync(path.join(packTmpDir, packedName), voiceCallArchiveBuffer);
+        return {
+          code: 0,
+          stdout: JSON.stringify([
+            {
+              id: "@openclaw/voice-call@0.0.1",
+              name: "@openclaw/voice-call",
+              version: "0.0.1",
+              filename: packedName,
+              integrity: "sha512-plugin-test",
+              shasum: "pluginshasum",
+            },
+          ]),
+          stderr: "",
+          signal: null,
+          killed: false,
+          termination: "exit",
+        };
+      }
+      throw new Error(`unexpected command: ${argv.join(" ")}`);
+    });
+
+    const result = await installPluginFromNpmSpec({
+      spec: "@openclaw/voice-call@0.0.1",
+      extensionsDir,
+      logger: { info: () => {}, warn: () => {} },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.npmResolution?.resolvedSpec).toBe("@openclaw/voice-call@0.0.1");
+    expect(result.npmResolution?.integrity).toBe("sha512-plugin-test");
+
+    expectSingleNpmPackIgnoreScriptsCall({
+      calls: run.mock.calls,
+      expectedSpec: "@openclaw/voice-call@0.0.1",
+    });
+
+    expect(packTmpDir).not.toBe("");
+    expect(fs.existsSync(packTmpDir)).toBe(false);
+  });
+
+  it("rejects non-registry npm specs", async () => {
+    await expectUnsupportedNpmSpec((spec) => installPluginFromNpmSpec({ spec }));
+  });
+
+  it("aborts when integrity drift callback rejects the fetched artifact", async () => {
+    const run = vi.mocked(runCommandWithTimeout);
+    mockNpmPackMetadataResult(run, {
+      id: "@openclaw/voice-call@0.0.1",
+      name: "@openclaw/voice-call",
+      version: "0.0.1",
+      filename: "voice-call-0.0.1.tgz",
+      integrity: "sha512-new",
+      shasum: "newshasum",
+    });
+
+    const onIntegrityDrift = vi.fn(async () => false);
+    const result = await installPluginFromNpmSpec({
+      spec: "@openclaw/voice-call@0.0.1",
+      expectedIntegrity: "sha512-old",
+      onIntegrityDrift,
+    });
+    expectIntegrityDriftRejected({
+      onIntegrityDrift,
+      result,
+      expectedIntegrity: "sha512-old",
+      actualIntegrity: "sha512-new",
+    });
+>>>>>>> upstream/main
   });
 });
