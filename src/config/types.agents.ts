@@ -126,6 +126,8 @@ export type AgentConfig = {
     /** Auto-prune overrides for this agent. */
     prune?: SandboxPruneSettings;
   };
+  /** Optional per-agent stream params (e.g. cacheRetention, temperature). */
+  params?: Record<string, unknown>;
   tools?: AgentToolsConfig;
 };
 

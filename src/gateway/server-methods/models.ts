@@ -4,12 +4,16 @@ import type { GatewayRequestHandlers } from "./types.js";
 import { resetModelCatalogCacheForTest } from "../../agents/model-catalog.js";
 import { loadConfig } from "../../config/config.js";
 import { STATE_DIR } from "../../config/paths.js";
+import { DEFAULT_PROVIDER } from "../../agents/defaults.js";
+import { buildAllowedModelSet } from "../../agents/model-selection.js";
+import { loadConfig } from "../../config/config.js";
 import {
   ErrorCodes,
   errorShape,
   formatValidationErrors,
   validateModelsListParams,
 } from "../protocol/index.js";
+import type { GatewayRequestHandlers } from "./types.js";
 
 // 模型管理配置文件路径
 const MODEL_MANAGEMENT_FILE = path.join(STATE_DIR, "model-management.json");
@@ -1438,6 +1442,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
     }
 
     try {
+<<<<<<< HEAD
       const models = await context.loadGatewayModelCatalog();
       const storage = await loadModelManagement();
 
@@ -1925,6 +1930,16 @@ export const modelsHandlers: GatewayRequestHandlers = {
       }
 
       const models = await fetchAvailableModels(auth);
+=======
+      const catalog = await context.loadGatewayModelCatalog();
+      const cfg = loadConfig();
+      const { allowedCatalog } = buildAllowedModelSet({
+        cfg,
+        catalog,
+        defaultProvider: DEFAULT_PROVIDER,
+      });
+      const models = allowedCatalog.length > 0 ? allowedCatalog : catalog;
+>>>>>>> upstream/main
       respond(true, { models }, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));

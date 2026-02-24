@@ -1,12 +1,8 @@
-import type { InboundMessageContext } from "../../channels/policies/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { FinalizedMsgContext } from "../templating.js";
-import type { GetReplyOptions, ReplyPayload } from "../types.js";
-import type { ReplyDispatcher, ReplyDispatchKind } from "./reply-dispatcher.js";
 import { resolveSessionAgentId } from "../../agents/agent-scope.js";
-import { getPolicyEngine } from "../../channels/policy-integration.js";
+import type { OpenClawConfig } from "../../config/config.js";
 import { loadSessionStore, resolveStorePath } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
+import { createInternalHookEvent, triggerInternalHook } from "../../hooks/internal-hooks.js";
 import { isDiagnosticsEnabled } from "../../infra/diagnostic-events.js";
 import {
   logMessageProcessed,
@@ -16,8 +12,11 @@ import {
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { maybeApplyTtsToPayload, normalizeTtsAutoMode, resolveTtsConfig } from "../../tts/tts.js";
 import { getReplyFromConfig } from "../reply.js";
+import type { FinalizedMsgContext } from "../templating.js";
+import type { GetReplyOptions, ReplyPayload } from "../types.js";
 import { formatAbortReplyText, tryFastAbortFromMessage } from "./abort.js";
 import { shouldSkipDuplicateInbound } from "./inbound-dedupe.js";
+import type { ReplyDispatcher, ReplyDispatchKind } from "./reply-dispatcher.js";
 import { isRoutableChannel, routeReply } from "./route-reply.js";
 
 const AUDIO_PLACEHOLDER_RE = /^<media:audio>(\s*\([^)]*\))?$/i;
@@ -147,120 +146,28 @@ export async function dispatchReplyFromConfig(params: {
     return { queuedFinal: false, counts: dispatcher.getQueuedCounts() };
   }
 
-  // Phase 2: 应用入站策略检查
-  const agentId = resolveSessionAgentId({ sessionKey: ctx.SessionKey, config: cfg });
-  const channelId = (ctx.OriginatingChannel ?? ctx.Surface ?? ctx.Provider ?? "").toLowerCase();
-  const accountId = ctx.AccountId;
-
-  if (agentId && channelId && accountId) {
-    const policyEngine = getPolicyEngine(agentId);
-
-    if (policyEngine) {
-      const policy = policyEngine.getPolicy(channelId);
-
-      if (policy) {
-        // 构造策略上下文
-        const policyContext = {
-          agentId,
-          channelId,
-          accountId,
-          message:
-            typeof ctx.BodyForCommands === "string"
-              ? ctx.BodyForCommands
-              : typeof ctx.RawBody === "string"
-                ? ctx.RawBody
-                : typeof ctx.Body === "string"
-                  ? ctx.Body
-                  : "",
-          senderId: ctx.From,
-          timestamp:
-            typeof ctx.Timestamp === "number" && Number.isFinite(ctx.Timestamp)
-              ? ctx.Timestamp
-              : Date.now(),
-          metadata: {
-            provider: ctx.Provider,
-            surface: ctx.Surface,
-            threadId: ctx.MessageThreadId,
-            senderId: ctx.SenderId,
-            senderName: ctx.SenderName,
-            senderUsername: ctx.SenderUsername,
-            messageId:
-              ctx.MessageSidFull ?? ctx.MessageSid ?? ctx.MessageSidFirst ?? ctx.MessageSidLast,
-            to: ctx.To ?? ctx.OriginatingTo,
-          },
-        };
-
-        try {
-          logVerbose(
-            `dispatch: checking policy for agent=${agentId}, channel=${channelId}, policy=${policy.type}`,
-          );
-          const policyResult = await policyEngine.execute(policyContext);
-
-          logVerbose(
-            `dispatch: policy result: allow=${policyResult.allow}, reason=${policyResult.reason ?? "none"}`,
-          );
-
-          // 如果策略不允许消息通过
-          if (!policyResult.allow) {
-            logVerbose(
-              `dispatch: message blocked by policy: ${policyResult.reason ?? "no reason"}`,
-            );
-            recordProcessed("skipped", { reason: `policy: ${policyResult.reason ?? "blocked"}` });
-            return { queuedFinal: false, counts: dispatcher.getQueuedCounts() };
-          }
-
-          // 如果策略转换了消息内容
-          if (
-            policyResult.transformedMessage &&
-            typeof policyResult.transformedMessage === "string"
-          ) {
-            // 更新消息内容
-            if (typeof ctx.Body === "string") {
-              ctx.Body = policyResult.transformedMessage;
-            }
-            if (typeof ctx.BodyForCommands === "string") {
-              ctx.BodyForCommands = policyResult.transformedMessage;
-            }
-            if (typeof ctx.RawBody === "string") {
-              ctx.RawBody = policyResult.transformedMessage;
-            }
-            logVerbose(`dispatch: message transformed by policy`);
-          }
-        } catch (err) {
-          logVerbose(`dispatch: policy check error: ${String(err)}`);
-          // 策略检查失败时继续处理消息（fail-safe）
-        }
-      } else {
-        logVerbose(
-          `dispatch: no policy found for agent=${agentId}, channel=${channelId}, allowing by default`,
-        );
-      }
-    } else {
-      logVerbose(`dispatch: no policy engine for agent=${agentId}, allowing by default`);
-    }
-  }
-
   const inboundAudio = isInboundAudioContext(ctx);
   const sessionTtsAuto = resolveSessionTtsAuto(ctx, cfg);
   const hookRunner = getGlobalHookRunner();
-  if (hookRunner?.hasHooks("message_received")) {
-    const timestamp =
-      typeof ctx.Timestamp === "number" && Number.isFinite(ctx.Timestamp)
-        ? ctx.Timestamp
-        : undefined;
-    const messageIdForHook =
-      ctx.MessageSidFull ?? ctx.MessageSid ?? ctx.MessageSidFirst ?? ctx.MessageSidLast;
-    const content =
-      typeof ctx.BodyForCommands === "string"
-        ? ctx.BodyForCommands
-        : typeof ctx.RawBody === "string"
-          ? ctx.RawBody
-          : typeof ctx.Body === "string"
-            ? ctx.Body
-            : "";
-    const channelId = (ctx.OriginatingChannel ?? ctx.Surface ?? ctx.Provider ?? "").toLowerCase();
-    const conversationId = ctx.OriginatingTo ?? ctx.To ?? ctx.From ?? undefined;
 
+  // Extract message context for hooks (plugin and internal)
+  const timestamp =
+    typeof ctx.Timestamp === "number" && Number.isFinite(ctx.Timestamp) ? ctx.Timestamp : undefined;
+  const messageIdForHook =
+    ctx.MessageSidFull ?? ctx.MessageSid ?? ctx.MessageSidFirst ?? ctx.MessageSidLast;
+  const content =
+    typeof ctx.BodyForCommands === "string"
+      ? ctx.BodyForCommands
+      : typeof ctx.RawBody === "string"
+        ? ctx.RawBody
+        : typeof ctx.Body === "string"
+          ? ctx.Body
+          : "";
+  const channelId = (ctx.OriginatingChannel ?? ctx.Surface ?? ctx.Provider ?? "").toLowerCase();
+  const conversationId = ctx.OriginatingTo ?? ctx.To ?? ctx.From ?? undefined;
+
+  // Trigger plugin hooks (fire-and-forget)
+  if (hookRunner?.hasHooks("message_received")) {
     void hookRunner
       .runMessageReceived(
         {
@@ -288,8 +195,35 @@ export async function dispatchReplyFromConfig(params: {
         },
       )
       .catch((err) => {
-        logVerbose(`dispatch-from-config: message_received hook failed: ${String(err)}`);
+        logVerbose(`dispatch-from-config: message_received plugin hook failed: ${String(err)}`);
       });
+  }
+
+  // Bridge to internal hooks (HOOK.md discovery system) - refs #8807
+  if (sessionKey) {
+    void triggerInternalHook(
+      createInternalHookEvent("message", "received", sessionKey, {
+        from: ctx.From ?? "",
+        content,
+        timestamp,
+        channelId,
+        accountId: ctx.AccountId,
+        conversationId,
+        messageId: messageIdForHook,
+        metadata: {
+          to: ctx.To,
+          provider: ctx.Provider,
+          surface: ctx.Surface,
+          threadId: ctx.MessageThreadId,
+          senderId: ctx.SenderId,
+          senderName: ctx.SenderName,
+          senderUsername: ctx.SenderUsername,
+          senderE164: ctx.SenderE164,
+        },
+      }),
+    ).catch((err) => {
+      logVerbose(`dispatch-from-config: message_received internal hook failed: ${String(err)}`);
+    });
   }
 
   // Check if we should route replies to originating channel instead of dispatcher.
@@ -388,30 +322,45 @@ export async function dispatchReplyFromConfig(params: {
 
     const shouldSendToolSummaries = ctx.ChatType !== "group" && ctx.CommandSource !== "native";
 
+    const resolveToolDeliveryPayload = (payload: ReplyPayload): ReplyPayload | null => {
+      if (shouldSendToolSummaries) {
+        return payload;
+      }
+      // Group/native flows intentionally suppress tool summary text, but media-only
+      // tool results (for example TTS audio) must still be delivered.
+      const hasMedia = Boolean(payload.mediaUrl) || (payload.mediaUrls?.length ?? 0) > 0;
+      if (!hasMedia) {
+        return null;
+      }
+      return { ...payload, text: undefined };
+    };
+
     const replyResult = await (params.replyResolver ?? getReplyFromConfig)(
       ctx,
       {
         ...params.replyOptions,
-        onToolResult: shouldSendToolSummaries
-          ? (payload: ReplyPayload) => {
-              const run = async () => {
-                const ttsPayload = await maybeApplyTtsToPayload({
-                  payload,
-                  cfg,
-                  channel: ttsChannel,
-                  kind: "tool",
-                  inboundAudio,
-                  ttsAuto: sessionTtsAuto,
-                });
-                if (shouldRouteToOriginating) {
-                  await sendPayloadAsync(ttsPayload, undefined, false);
-                } else {
-                  dispatcher.sendToolResult(ttsPayload);
-                }
-              };
-              return run();
+        onToolResult: (payload: ReplyPayload) => {
+          const run = async () => {
+            const ttsPayload = await maybeApplyTtsToPayload({
+              payload,
+              cfg,
+              channel: ttsChannel,
+              kind: "tool",
+              inboundAudio,
+              ttsAuto: sessionTtsAuto,
+            });
+            const deliveryPayload = resolveToolDeliveryPayload(ttsPayload);
+            if (!deliveryPayload) {
+              return;
             }
-          : undefined,
+            if (shouldRouteToOriginating) {
+              await sendPayloadAsync(deliveryPayload, undefined, false);
+            } else {
+              dispatcher.sendToolResult(deliveryPayload);
+            }
+          };
+          return run();
+        },
         onBlockReply: (payload: ReplyPayload, context) => {
           const run = async () => {
             // Accumulate block text for TTS generation after streaming

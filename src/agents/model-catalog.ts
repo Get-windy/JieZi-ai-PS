@@ -1,6 +1,9 @@
 import { type OpenClawConfig, loadConfig } from "../config/config.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveOpenClawAgentDir } from "./agent-paths.js";
 import { ensureOpenClawModelsJson } from "./models-config.js";
+
+const log = createSubsystemLogger("model-catalog");
 
 export type ModelCatalogEntry = {
   id: string;
@@ -8,16 +11,7 @@ export type ModelCatalogEntry = {
   provider: string;
   contextWindow?: number;
   reasoning?: boolean;
-  input?: Array<"text" | "image" | "audio" | "video">;
-  // 模态和专业领域元数据（可选，用于更精确的路由）
-  supportedModalities?: Array<"text" | "image" | "audio" | "video" | "code">;
-  specializations?: Array<string>; // 专业领域标签
-  tags?: string[]; // 通用标签
-  // 价格信息（可选）
-  pricing?: {
-    input?: number; // 输入价格（美元/百万tokens）
-    output?: number; // 输出价格（美元/百万tokens）
-  };
+  input?: Array<"text" | "image">;
 };
 
 type DiscoveredModel = {
@@ -27,10 +21,6 @@ type DiscoveredModel = {
   contextWindow?: number;
   reasoning?: boolean;
   input?: Array<"text" | "image">;
-  pricing?: {
-    input?: number;
-    output?: number;
-  };
 };
 
 type PiSdkModule = typeof import("./pi-model-discovery.js");
@@ -80,6 +70,14 @@ export function __setModelCatalogImportForTest(loader?: () => Promise<PiSdkModul
   importPiSdk = loader ?? defaultImportPiSdk;
 }
 
+function createAuthStorage(AuthStorageLike: unknown, path: string) {
+  const withFactory = AuthStorageLike as { create?: (path: string) => unknown };
+  if (typeof withFactory.create === "function") {
+    return withFactory.create(path);
+  }
+  return new (AuthStorageLike as { new (path: string): unknown })(path);
+}
+
 export async function loadModelCatalog(params?: {
   config?: OpenClawConfig;
   useCache?: boolean;
@@ -112,17 +110,19 @@ export async function loadModelCatalog(params?: {
       // we must not poison the cache with a rejected promise (otherwise all channel handlers
       // will keep failing until restart).
       const piSdk = await importPiSdk();
-      // 预加载 pi-coding-agent 模块
-      await piSdk.preloadPiCodingAgent();
       const agentDir = resolveOpenClawAgentDir();
       const { join } = await import("node:path");
-      // 使用同步 API，因为模块已经预加载
-      const authStorage = new piSdk.AuthStorage(join(agentDir, "auth.json"));
-      const registry = new piSdk.ModelRegistry(authStorage, join(agentDir, "models.json")) as
-        | {
-            getAll: () => Array<DiscoveredModel>;
-          }
-        | Array<DiscoveredModel>;
+      const authStorage = createAuthStorage(piSdk.AuthStorage, join(agentDir, "auth.json"));
+      const registry = new (piSdk.ModelRegistry as unknown as {
+        new (
+          authStorage: unknown,
+          modelsFile: string,
+        ):
+          | Array<DiscoveredModel>
+          | {
+              getAll: () => Array<DiscoveredModel>;
+            };
+      })(authStorage, join(agentDir, "models.json"));
       const entries = Array.isArray(registry) ? registry : registry.getAll();
       for (const entry of entries) {
         const id = String(entry?.id ?? "").trim();
@@ -140,19 +140,7 @@ export async function loadModelCatalog(params?: {
             : undefined;
         const reasoning = typeof entry?.reasoning === "boolean" ? entry.reasoning : undefined;
         const input = Array.isArray(entry?.input) ? entry.input : undefined;
-        
-        // 获取价格信息
-        const pricing =
-          entry?.pricing && typeof entry.pricing === "object"
-            ? {
-                input:
-                  typeof entry.pricing.input === "number" ? entry.pricing.input : undefined,
-                output:
-                  typeof entry.pricing.output === "number" ? entry.pricing.output : undefined,
-              }
-            : undefined;
-        
-        models.push({ id, name, provider, contextWindow, reasoning, input, pricing });
+        models.push({ id, name, provider, contextWindow, reasoning, input });
       }
       applyOpenAICodexSparkFallback(models);
 
@@ -165,7 +153,7 @@ export async function loadModelCatalog(params?: {
     } catch (error) {
       if (!hasLoggedModelCatalogError) {
         hasLoggedModelCatalogError = true;
-        console.warn(`[model-catalog] Failed to load model catalog: ${String(error)}`);
+        log.warn(`Failed to load model catalog: ${String(error)}`);
       }
       // Don't poison the cache on transient dependency/filesystem issues.
       modelCatalogPromise = null;

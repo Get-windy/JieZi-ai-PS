@@ -1,5 +1,4 @@
 import { createRequire } from "node:module";
-import type { PluginRuntime } from "./types.js";
 import { resolveEffectiveMessagesConfig, resolveHumanDelayConfig } from "../../agents/identity.js";
 import { createMemoryGetTool, createMemorySearchTool } from "../../agents/tools/memory-tool.js";
 import { handleSlackAction } from "../../agents/tools/slack-actions.js";
@@ -139,6 +138,7 @@ import {
 } from "../../web/auth-store.js";
 import { loadWebMedia } from "../../web/media.js";
 import { formatNativeDependencyHint } from "./native-deps.js";
+import type { PluginRuntime } from "./types.js";
 
 let cachedVersion: string | null = null;
 
@@ -239,286 +239,215 @@ function loadWhatsAppActions() {
 export function createPluginRuntime(): PluginRuntime {
   return {
     version: resolveVersion(),
-    config: {
-      loadConfig,
-      writeConfigFile,
+    config: createRuntimeConfig(),
+    system: createRuntimeSystem(),
+    media: createRuntimeMedia(),
+    tts: { textToSpeechTelephony },
+    tools: createRuntimeTools(),
+    channel: createRuntimeChannel(),
+    logging: createRuntimeLogging(),
+    state: { resolveStateDir },
+  };
+}
+
+function createRuntimeConfig(): PluginRuntime["config"] {
+  return {
+    loadConfig,
+    writeConfigFile,
+  };
+}
+
+function createRuntimeSystem(): PluginRuntime["system"] {
+  return {
+    enqueueSystemEvent,
+    runCommandWithTimeout,
+    formatNativeDependencyHint,
+  };
+}
+
+function createRuntimeMedia(): PluginRuntime["media"] {
+  return {
+    loadWebMedia,
+    detectMime,
+    mediaKindFromMime,
+    isVoiceCompatibleAudio,
+    getImageMetadata,
+    resizeToJpeg,
+  };
+}
+
+function createRuntimeTools(): PluginRuntime["tools"] {
+  return {
+    createMemoryGetTool,
+    createMemorySearchTool,
+    registerMemoryCli,
+  };
+}
+
+function createRuntimeChannel(): PluginRuntime["channel"] {
+  return {
+    text: {
+      chunkByNewline,
+      chunkMarkdownText,
+      chunkMarkdownTextWithMode,
+      chunkText,
+      chunkTextWithMode,
+      resolveChunkMode,
+      resolveTextChunkLimit,
+      hasControlCommand,
+      resolveMarkdownTableMode,
+      convertMarkdownTables,
     },
-    system: {
-      enqueueSystemEvent,
-      runCommandWithTimeout,
-      formatNativeDependencyHint,
+    reply: {
+      dispatchReplyWithBufferedBlockDispatcher,
+      createReplyDispatcherWithTyping,
+      resolveEffectiveMessagesConfig,
+      resolveHumanDelayConfig,
+      dispatchReplyFromConfig,
+      finalizeInboundContext,
+      formatAgentEnvelope,
+      /** @deprecated Prefer `BodyForAgent` + structured user-context blocks (do not build plaintext envelopes for prompts). */
+      formatInboundEnvelope,
+      resolveEnvelopeFormatOptions,
+    },
+    routing: {
+      resolveAgentRoute,
+    },
+    pairing: {
+      buildPairingReply,
+      readAllowFromStore: readChannelAllowFromStore,
+      upsertPairingRequest: upsertChannelPairingRequest,
     },
     media: {
-      loadWebMedia,
-      detectMime,
-      mediaKindFromMime,
-      isVoiceCompatibleAudio,
-      getImageMetadata,
-      resizeToJpeg,
+      fetchRemoteMedia,
+      saveMediaBuffer,
     },
-    tts: {
-      textToSpeechTelephony,
+    activity: {
+      record: recordChannelActivity,
+      get: getChannelActivity,
     },
-    tools: {
-      createMemoryGetTool,
-      createMemorySearchTool,
-      registerMemoryCli,
+    session: {
+      resolveStorePath,
+      readSessionUpdatedAt,
+      recordSessionMetaFromInbound,
+      recordInboundSession,
+      updateLastRoute,
     },
-    channel: {
-      text: {
-        chunkByNewline,
-        chunkMarkdownText,
-        chunkMarkdownTextWithMode,
-        chunkText,
-        chunkTextWithMode,
-        resolveChunkMode,
-        resolveTextChunkLimit,
-        hasControlCommand,
-        resolveMarkdownTableMode,
-        convertMarkdownTables,
-      },
-      reply: {
-        dispatchReplyWithBufferedBlockDispatcher,
-        createReplyDispatcherWithTyping,
-        resolveEffectiveMessagesConfig,
-        resolveHumanDelayConfig,
-        /**
-         * 带门阀检查的 dispatchReplyFromConfig 包装器
-         *
-         * 这是所有通道（内置和插件）与智能助手通信的统一入口
-         * 在这里强制执行通道绑定门阀检查
-         */
-        dispatchReplyFromConfig: async (params) => {
-          const { ctx, cfg, dispatcher } = params;
-          const logger = getChildLogger({ module: "channel-gate" });
-
-          // ========== 通道绑定门阀检查 ==========
-          // 这是通道与智能助手之间的门阀
-          // 所有通道（内置和插件）都必须通过这个门阀
-          const originatingChannel = (
-            ctx.OriginatingChannel ??
-            ctx.Surface ??
-            ctx.Provider ??
-            ""
-          ).toLowerCase();
-          const originatingAccountId = ctx.AccountId ?? "default";
-
-          if (originatingChannel) {
-            try {
-              // 进行绑定检查
-              const bindingCheck = resolveAgentRoute({
-                cfg,
-                channel: originatingChannel,
-                accountId: originatingAccountId,
-                peer: {
-                  kind: ctx.ChatType === "group" ? "group" : "direct",
-                  id: ctx.From ?? "unknown",
-                },
-              });
-
-              // 门阀检查：如果未绑定，阻断消息并发送友好提示
-              if (bindingCheck.matchedBy === "no-binding") {
-                logger.warn(
-                  {
-                    channel: originatingChannel,
-                    accountId: originatingAccountId,
-                    matchedBy: bindingCheck.matchedBy,
-                  },
-                  `Channel gate: blocking ${originatingChannel}:${originatingAccountId} - not bound to any agent`,
-                );
-
-                // 通过通道的会话机制发送友好提示
-                const errorMessage =
-                  "该通道账号未绑定智能助手，请联系系统管理员解决。\n\nThis channel account is not bound to any intelligent assistant. Please contact the system administrator.";
-
-                try {
-                  // 使用 dispatcher 发送错误消息
-                  dispatcher.sendFinalReply({ text: errorMessage });
-                  await dispatcher.waitForIdle();
-
-                  logger.debug(
-                    { channel: originatingChannel, accountId: originatingAccountId },
-                    "Channel gate: sent binding error message to channel",
-                  );
-                } catch (sendErr) {
-                  logger.warn(
-                    { error: String(sendErr), channel: originatingChannel },
-                    "Channel gate: failed to send binding error message",
-                  );
-                }
-
-                // 返回结果，表示消息已被阻断
-                return {
-                  queuedFinal: true,
-                  counts: dispatcher.getQueuedCounts(),
-                };
-              }
-
-              logger.debug(
-                {
-                  channel: originatingChannel,
-                  accountId: originatingAccountId,
-                  matchedBy: bindingCheck.matchedBy,
-                  agentId: bindingCheck.agentId,
-                },
-                `Channel gate: passed ${originatingChannel}:${originatingAccountId} -> agent ${bindingCheck.agentId}`,
-              );
-            } catch (err) {
-              // 绑定检查失败，记录但不阻断（fail-safe）
-              logger.debug(`Channel gate: binding check error (allowing): ${String(err)}`);
-            }
-          }
-          // ========== 门阀检查通过，调用原始函数 ==========
-
-          return dispatchReplyFromConfig(params);
-        },
-        finalizeInboundContext,
-        formatAgentEnvelope,
-        /** @deprecated Prefer `BodyForAgent` + structured user-context blocks (do not build plaintext envelopes for prompts). */
-        formatInboundEnvelope,
-        resolveEnvelopeFormatOptions,
-      },
-      routing: {
-        resolveAgentRoute: (input) => {
-          return resolveAgentRoute(input);
-        },
-      },
-      pairing: {
-        buildPairingReply,
-        readAllowFromStore: readChannelAllowFromStore,
-        upsertPairingRequest: upsertChannelPairingRequest,
-      },
-      media: {
-        fetchRemoteMedia,
-        saveMediaBuffer,
-      },
-      activity: {
-        record: recordChannelActivity,
-        get: getChannelActivity,
-      },
-      session: {
-        resolveStorePath,
-        readSessionUpdatedAt,
-        recordSessionMetaFromInbound,
-        recordInboundSession,
-        updateLastRoute,
-      },
-      mentions: {
-        buildMentionRegexes,
-        matchesMentionPatterns,
-        matchesMentionWithExplicit,
-      },
-      reactions: {
-        shouldAckReaction,
-        removeAckReactionAfterReply,
-      },
-      groups: {
-        resolveGroupPolicy: resolveChannelGroupPolicy,
-        resolveRequireMention: resolveChannelGroupRequireMention,
-      },
-      debounce: {
-        createInboundDebouncer,
-        resolveInboundDebounceMs,
-      },
-      commands: {
-        resolveCommandAuthorizedFromAuthorizers,
-        isControlCommandMessage,
-        shouldComputeCommandAuthorized,
-        shouldHandleTextCommands,
-      },
-      discord: {
-        messageActions: discordMessageActions,
-        auditChannelPermissions: auditDiscordChannelPermissions,
-        listDirectoryGroupsLive: listDiscordDirectoryGroupsLive,
-        listDirectoryPeersLive: listDiscordDirectoryPeersLive,
-        probeDiscord,
-        resolveChannelAllowlist: resolveDiscordChannelAllowlist,
-        resolveUserAllowlist: resolveDiscordUserAllowlist,
-        sendMessageDiscord,
-        sendPollDiscord,
-        monitorDiscordProvider,
-      },
-      slack: {
-        listDirectoryGroupsLive: listSlackDirectoryGroupsLive,
-        listDirectoryPeersLive: listSlackDirectoryPeersLive,
-        probeSlack,
-        resolveChannelAllowlist: resolveSlackChannelAllowlist,
-        resolveUserAllowlist: resolveSlackUserAllowlist,
-        sendMessageSlack,
-        monitorSlackProvider,
-        handleSlackAction,
-      },
-      telegram: {
-        auditGroupMembership: auditTelegramGroupMembership,
-        collectUnmentionedGroupIds: collectTelegramUnmentionedGroupIds,
-        probeTelegram,
-        resolveTelegramToken,
-        sendMessageTelegram,
-        sendPollTelegram,
-        monitorTelegramProvider,
-        messageActions: telegramMessageActions,
-      },
-      signal: {
-        probeSignal,
-        sendMessageSignal,
-        monitorSignalProvider,
-        messageActions: signalMessageActions,
-      },
-      imessage: {
-        monitorIMessageProvider,
-        probeIMessage,
-        sendMessageIMessage,
-      },
-      whatsapp: {
-        getActiveWebListener,
-        getWebAuthAgeMs,
-        logoutWeb,
-        logWebSelfId,
-        readWebSelfId,
-        webAuthExists,
-        sendMessageWhatsApp: sendMessageWhatsAppLazy,
-        sendPollWhatsApp: sendPollWhatsAppLazy,
-        loginWeb: loginWebLazy,
-        startWebLoginWithQr: startWebLoginWithQrLazy,
-        waitForWebLogin: waitForWebLoginLazy,
-        monitorWebChannel: monitorWebChannelLazy,
-        handleWhatsAppAction: handleWhatsAppActionLazy,
-        createLoginTool: createWhatsAppLoginTool,
-      },
-      line: {
-        listLineAccountIds,
-        resolveDefaultLineAccountId,
-        resolveLineAccount,
-        normalizeAccountId: normalizeLineAccountId,
-        probeLineBot,
-        sendMessageLine,
-        pushMessageLine,
-        pushMessagesLine,
-        pushFlexMessage,
-        pushTemplateMessage,
-        pushLocationMessage,
-        pushTextMessageWithQuickReplies,
-        createQuickReplyItems,
-        buildTemplateMessageFromPayload,
-        monitorLineProvider,
-      },
+    mentions: {
+      buildMentionRegexes,
+      matchesMentionPatterns,
+      matchesMentionWithExplicit,
     },
-    logging: {
-      shouldLogVerbose,
-      getChildLogger: (bindings, opts) => {
-        const logger = getChildLogger(bindings, {
-          level: opts?.level ? normalizeLogLevel(opts.level) : undefined,
-        });
-        return {
-          debug: (message) => logger.debug?.(message),
-          info: (message) => logger.info(message),
-          warn: (message) => logger.warn(message),
-          error: (message) => logger.error(message),
-        };
-      },
+    reactions: {
+      shouldAckReaction,
+      removeAckReactionAfterReply,
     },
-    state: {
-      resolveStateDir,
+    groups: {
+      resolveGroupPolicy: resolveChannelGroupPolicy,
+      resolveRequireMention: resolveChannelGroupRequireMention,
+    },
+    debounce: {
+      createInboundDebouncer,
+      resolveInboundDebounceMs,
+    },
+    commands: {
+      resolveCommandAuthorizedFromAuthorizers,
+      isControlCommandMessage,
+      shouldComputeCommandAuthorized,
+      shouldHandleTextCommands,
+    },
+    discord: {
+      messageActions: discordMessageActions,
+      auditChannelPermissions: auditDiscordChannelPermissions,
+      listDirectoryGroupsLive: listDiscordDirectoryGroupsLive,
+      listDirectoryPeersLive: listDiscordDirectoryPeersLive,
+      probeDiscord,
+      resolveChannelAllowlist: resolveDiscordChannelAllowlist,
+      resolveUserAllowlist: resolveDiscordUserAllowlist,
+      sendMessageDiscord,
+      sendPollDiscord,
+      monitorDiscordProvider,
+    },
+    slack: {
+      listDirectoryGroupsLive: listSlackDirectoryGroupsLive,
+      listDirectoryPeersLive: listSlackDirectoryPeersLive,
+      probeSlack,
+      resolveChannelAllowlist: resolveSlackChannelAllowlist,
+      resolveUserAllowlist: resolveSlackUserAllowlist,
+      sendMessageSlack,
+      monitorSlackProvider,
+      handleSlackAction,
+    },
+    telegram: {
+      auditGroupMembership: auditTelegramGroupMembership,
+      collectUnmentionedGroupIds: collectTelegramUnmentionedGroupIds,
+      probeTelegram,
+      resolveTelegramToken,
+      sendMessageTelegram,
+      sendPollTelegram,
+      monitorTelegramProvider,
+      messageActions: telegramMessageActions,
+    },
+    signal: {
+      probeSignal,
+      sendMessageSignal,
+      monitorSignalProvider,
+      messageActions: signalMessageActions,
+    },
+    imessage: {
+      monitorIMessageProvider,
+      probeIMessage,
+      sendMessageIMessage,
+    },
+    whatsapp: {
+      getActiveWebListener,
+      getWebAuthAgeMs,
+      logoutWeb,
+      logWebSelfId,
+      readWebSelfId,
+      webAuthExists,
+      sendMessageWhatsApp: sendMessageWhatsAppLazy,
+      sendPollWhatsApp: sendPollWhatsAppLazy,
+      loginWeb: loginWebLazy,
+      startWebLoginWithQr: startWebLoginWithQrLazy,
+      waitForWebLogin: waitForWebLoginLazy,
+      monitorWebChannel: monitorWebChannelLazy,
+      handleWhatsAppAction: handleWhatsAppActionLazy,
+      createLoginTool: createWhatsAppLoginTool,
+    },
+    line: {
+      listLineAccountIds,
+      resolveDefaultLineAccountId,
+      resolveLineAccount,
+      normalizeAccountId: normalizeLineAccountId,
+      probeLineBot,
+      sendMessageLine,
+      pushMessageLine,
+      pushMessagesLine,
+      pushFlexMessage,
+      pushTemplateMessage,
+      pushLocationMessage,
+      pushTextMessageWithQuickReplies,
+      createQuickReplyItems,
+      buildTemplateMessageFromPayload,
+      monitorLineProvider,
+    },
+  };
+}
+
+function createRuntimeLogging(): PluginRuntime["logging"] {
+  return {
+    shouldLogVerbose,
+    getChildLogger: (bindings, opts) => {
+      const logger = getChildLogger(bindings, {
+        level: opts?.level ? normalizeLogLevel(opts.level) : undefined,
+      });
+      return {
+        debug: (message) => logger.debug?.(message),
+        info: (message) => logger.info(message),
+        warn: (message) => logger.warn(message),
+        error: (message) => logger.error(message),
+      };
     },
   };
 }
