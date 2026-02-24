@@ -56,6 +56,7 @@
     "canvas:a2ui:bundle": "node scripts/bundle-a2ui.mjs",
     "check": "pnpm format:check && pnpm tsgo && pnpm lint",
     "check:docs": "pnpm format:docs:check && pnpm lint:docs && pnpm docs:check-links",
+    "check:health": "node --import tsx src-local/health-check.ts",
     "check:loc": "node --import tsx scripts/check-ts-max-loc.ts --max 500",
     "deadcode:ci": "pnpm deadcode:report:ci:knip && pnpm deadcode:report:ci:ts-prune && pnpm deadcode:report:ci:ts-unused",
     "deadcode:knip": "pnpm dlx knip --no-progress",

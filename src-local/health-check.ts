@@ -8,9 +8,8 @@
  * 3. 检查本地功能的依赖和配置是否正确
  */
 
-import { existsSync } from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import fs from "node:fs";
+import path from "node:path";
 
 // 本地功能关键文件清单
 const LOCAL_FEATURE_FILES = {
@@ -63,8 +62,8 @@ export function checkLocalFeatures(): HealthCheckResult {
   // 检查所有本地功能文件
   for (const [category, files] of Object.entries(LOCAL_FEATURE_FILES)) {
     for (const file of files) {
-      const filePath = resolve(projectRoot, file);
-      if (!existsSync(filePath)) {
+      const filePath = path.resolve(projectRoot, file);
+      if (!fs.existsSync(filePath)) {
         missingFiles.push(file);
         console.warn(`⚠️  [健康检查] 本地功能文件缺失: ${file}`);
       }
@@ -99,9 +98,9 @@ export function checkLocalFeatures(): HealthCheckResult {
  */
 export function checkI18nConfig(): HealthCheckResult {
   const projectRoot = process.cwd();
-  const i18nIndexPath = resolve(projectRoot, "i18n/index.ts");
+  const i18nIndexPath = path.resolve(projectRoot, "i18n/index.ts");
   
-  if (!existsSync(i18nIndexPath)) {
+  if (!fs.existsSync(i18nIndexPath)) {
     return {
       success: false,
       message: "i18n/index.ts 不存在！国际化扩展功能可能无法正常工作。",
@@ -123,9 +122,9 @@ export function checkI18nConfig(): HealthCheckResult {
  */
 export function checkGitProtection(): HealthCheckResult {
   const projectRoot = process.cwd();
-  const gitattributesPath = resolve(projectRoot, ".gitattributes");
+  const gitattributesPath = path.resolve(projectRoot, ".gitattributes");
   
-  if (!existsSync(gitattributesPath)) {
+  if (!fs.existsSync(gitattributesPath)) {
     return {
       success: false,
       message: ".gitattributes 文件不存在！本地代码可能在下次合并时被覆盖。",
@@ -203,3 +202,7 @@ export function runHealthCheck(): void {
 
 // 导出所有检查函数
 export default runHealthCheck;
+
+// 如果直接运行此文件，执行健康检查
+// tsx 在加载模块时会自动执行，不需要额外判断
+runHealthCheck();
