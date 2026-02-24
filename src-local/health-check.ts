@@ -16,10 +16,20 @@ import { fileURLToPath } from "url";
 const LOCAL_FEATURE_FILES = {
   // 国际化系统
   i18n: [
-    "i18n-local/index.ts",
-    "i18n-local/frontend/views/overview.ts",
-    "i18n-local/frontend/views/usage.ts",
-    "i18n-local/locales/zh-CN-extra.ts",
+    "i18n/index.ts",
+    "i18n/frontend/views/overview.ts",
+    "i18n/frontend/views/usage.ts",
+    "i18n/frontend/views/usage-render-overview.ts",
+    "i18n/locales/zh-CN-extra.ts",
+    "i18n/locales/zh-TW-extra.ts",
+    "i18n/locales/pt-BR-extra.ts",
+  ],
+  
+  // 翻译增强
+  translations: [
+    "ui/src/i18n/locales/zh-CN.ts",
+    "ui/src/i18n/locales/zh-TW.ts",
+    "ui/src/i18n/locales/pt-BR.ts",
   ],
   
   // 本地后端功能
@@ -85,17 +95,17 @@ export function checkLocalFeatures(): HealthCheckResult {
 }
 
 /**
- * 检查 i18n-local 配置
+ * 检查 i18n 配置
  */
 export function checkI18nConfig(): HealthCheckResult {
   const projectRoot = process.cwd();
-  const i18nIndexPath = resolve(projectRoot, "i18n-local/index.ts");
+  const i18nIndexPath = resolve(projectRoot, "i18n/index.ts");
   
   if (!existsSync(i18nIndexPath)) {
     return {
       success: false,
-      message: "i18n-local/index.ts 不存在！国际化功能可能无法正常工作。",
-      details: "这是国际化系统的核心文件，必须存在。",
+      message: "i18n/index.ts 不存在！国际化扩展功能可能无法正常工作。",
+      details: "这是国际化扩展系统的核心文件。",
     };
   }
   
@@ -125,7 +135,10 @@ export function checkGitProtection(): HealthCheckResult {
         "# 本地开发目录 - 保护我们的代码",
         "/src-local/** merge=ours",
         "/ui-local/** merge=ours",
-        "/i18n-local/** merge=ours",
+        "/i18n/** merge=ours",
+        "/ui/src/i18n/locales/zh-CN.ts merge=ours",
+        "/ui/src/i18n/locales/zh-TW.ts merge=ours",
+        "/ui/src/i18n/locales/pt-BR.ts merge=ours",
       ].join("\n"),
     };
   }
