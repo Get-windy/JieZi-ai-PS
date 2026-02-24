@@ -400,9 +400,24 @@ export class OpenClawApp extends LitElement {
   @state() modelAccountsSaveSuccess = false;
   // 模型账号绑定管理
   @state() boundModelAccounts: string[] = [];
+  @state() boundModelDetails: Array<{
+    modelId: string;
+    providerId: string;
+    modelName: string;
+    displayName: string;
+    providerName: string;
+    enabled?: boolean;
+  }> = [];
   @state() boundModelAccountsLoading = false;
   @state() boundModelAccountsError: string | null = null;
   @state() availableModelAccounts: string[] = [];
+  @state() availableModelDetails: Array<{
+    modelId: string;
+    providerId: string;
+    modelName: string;
+    displayName: string;
+    providerName: string;
+  }> = [];
   @state() availableModelAccountsLoading = false;
   @state() availableModelAccountsError: string | null = null;
   @state() availableModelAccountsExpanded = false;

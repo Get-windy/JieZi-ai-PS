@@ -290,9 +290,24 @@ export type AppViewState = {
   modelAccountsSaveSuccess: boolean;
   // 模型账号绑定管理
   boundModelAccounts: string[];
+  boundModelDetails: Array<{
+    modelId: string;
+    providerId: string;
+    modelName: string;
+    displayName: string;
+    providerName: string;
+    enabled?: boolean;
+  }>;
   boundModelAccountsLoading: boolean;
   boundModelAccountsError: string | null;
   availableModelAccounts: string[];
+  availableModelDetails: Array<{
+    modelId: string;
+    providerId: string;
+    modelName: string;
+    displayName: string;
+    providerName: string;
+  }>;
   availableModelAccountsLoading: boolean;
   availableModelAccountsError: string | null;
   availableModelAccountsExpanded: boolean;

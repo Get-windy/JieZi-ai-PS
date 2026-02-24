@@ -1353,9 +1353,11 @@ export function renderApp(state: AppViewState) {
                 modelAccountsSaveSuccess: (state as any).modelAccountsSaveSuccess || false,
                 // 模型账号绑定管理
                 boundModelAccounts: state.boundModelAccounts,
+                boundModelDetails: state.boundModelDetails,
                 boundModelAccountsLoading: state.boundModelAccountsLoading,
                 boundModelAccountsError: state.boundModelAccountsError,
                 availableModelAccounts: state.availableModelAccounts,
+                availableModelDetails: state.availableModelDetails,
                 availableModelAccountsLoading: state.availableModelAccountsLoading,
                 availableModelAccountsError: state.availableModelAccountsError,
                 availableModelAccountsExpanded: state.availableModelAccountsExpanded,
