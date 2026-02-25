@@ -11,6 +11,8 @@ M	src/styles/components.css
 M	src/styles/layout.css
 A	src/styles/organization-permissions.css
 A	src/styles/phase5.css
+M	src/ui/app-chat.ts
+M	src/ui/app-gateway.node.test.ts
 M	src/ui/app-gateway.ts
 M	src/ui/app-render.helpers.ts
 M	src/ui/app-render.ts
@@ -20,6 +22,8 @@ M	src/ui/app-view-state.ts
 M	src/ui/app.ts
 M	src/ui/assistant-identity.ts
 M	src/ui/chat/grouped-render.ts
+M	src/ui/chat/message-extract.ts
+M	src/ui/chat/message-normalizer.ts
 A	src/ui/components/icon-picker.ts
 A	src/ui/controllers/agent-channel-accounts.ts
 A	src/ui/controllers/agent-crud.ts
@@ -29,6 +33,8 @@ A	src/ui/controllers/agent-phase5.ts
 A	src/ui/controllers/approvals.ts
 A	src/ui/controllers/channel-pairing.ts
 M	src/ui/controllers/channels.ts
+M	src/ui/controllers/control-ui-bootstrap.test.ts
+M	src/ui/controllers/control-ui-bootstrap.ts
 A	src/ui/controllers/friends.ts
 A	src/ui/controllers/groups.ts
 A	src/ui/controllers/message-queue.ts
@@ -42,6 +48,7 @@ M	src/ui/controllers/skills.ts
 A	src/ui/controllers/storage.ts
 A	src/ui/controllers/super-admin.ts
 A	src/ui/controllers/training.ts
+M	src/ui/device-auth.ts
 M	src/ui/format.ts
 A	src/ui/gateway-client.ts
 M	src/ui/gateway.ts
@@ -49,9 +56,12 @@ A	src/ui/i18n.ts
 M	src/ui/icons.ts
 M	src/ui/navigation.ts
 M	src/ui/storage.ts
+M	src/ui/tool-display.ts
 M	src/ui/types.ts
 M	src/ui/ui-types.ts
 A	src/ui/views/agent-chat-hub.ts
+M	src/ui/views/agents-panels-tools-skills.ts
+M	src/ui/views/agents-utils.ts
 A	src/ui/views/agents.channel-policy-dialog.ts
 A	src/ui/views/agents.model-account-config-dialog.ts
 M	src/ui/views/agents.ts
@@ -89,6 +99,9 @@ A	src/ui/views/monitor.ts
 A	src/ui/views/organization-dialog.ts
 A	src/ui/views/organization-management.ts
 A	src/ui/views/organization-permissions.ts
+M	src/ui/views/overview-hints.ts
+M	src/ui/views/overview.node.test.ts
+M	src/ui/views/overview.ts
 A	src/ui/views/permissions-config-panel.ts
 A	src/ui/views/scenarios.ts
 A	src/ui/views/session-storage.ts
@@ -99,3 +112,7 @@ A	src/ui/views/system-management-panel.ts
 A	src/ui/views/task-kanban.ts
 A	src/ui/views/team-dialog.ts
 A	src/ui/views/training.ts
+M	src/ui/views/usage-metrics.ts
+M	src/ui/views/usage-render-details.ts
+M	src/ui/views/usage-render-overview.ts
+M	vite.config.ts
