@@ -2,7 +2,7 @@ import { html, nothing } from "lit";
 import type { AppViewState } from "./app-view-state.ts";
 import type { OpenClawApp } from "./app.ts";
 import type { UsageState } from "./controllers/usage.ts";
-import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
+import { parseAgentSessionKey } from "../../../upstream/src/routing/session-key.js";
 import { refreshChatAvatar } from "./app-chat.ts";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
 import {
