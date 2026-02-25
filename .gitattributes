@@ -1,1 +1,26 @@
 * text=auto eol=lf
+CLAUDE.md -text
+src/gateway/server-methods/CLAUDE.md -text
+
+# 三层架构重构：保护本地开发代码
+# 上游代码目录 - 允许上游覆盖
+/src/** merge=theirs
+/ui/src/ui/** merge=theirs
+/ui/src/i18n/lib/** merge=theirs
+/ui/src/i18n/locales/en.ts merge=theirs
+
+# 本地开发目录 - 保护我们的代码
+/src-local/** merge=ours
+/ui-local/** merge=ours
+/i18n/** merge=ours
+
+# 翻译文件 - 使用我们的版本（因为我们加了很多翻译）
+/ui/src/i18n/locales/zh-CN.ts merge=ours
+/ui/src/i18n/locales/zh-TW.ts merge=ours
+/ui/src/i18n/locales/pt-BR.ts merge=ours
+
+# 文档维护策略
+/docs/upstream/** merge=theirs
+/docs/local/** merge=ours
+/README.md merge=ours
+/README.zh-CN.md merge=ours

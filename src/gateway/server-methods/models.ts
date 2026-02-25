@@ -4,6 +4,8 @@ import type { GatewayRequestHandlers } from "./types.js";
 import { resetModelCatalogCacheForTest } from "../../agents/model-catalog.js";
 import { loadConfig } from "../../config/config.js";
 import { STATE_DIR } from "../../config/paths.js";
+import { DEFAULT_PROVIDER } from "../../agents/defaults.js";
+import { buildAllowedModelSet } from "../../agents/model-selection.js";
 import {
   ErrorCodes,
   errorShape,

@@ -2084,34 +2084,16 @@ function renderAgentOverview(params: {
         <div class="label">${t("agents.overview.model_selection")}</div>
         <div class="row" style="gap: 12px; flex-wrap: wrap;">
           <label class="field" style="min-width: 260px; flex: 1;">
-<<<<<<< HEAD
             <span>${t("agents.overview.primary_model_label")}</span>
-=======
-            <span>Primary model${isDefault ? " (default)" : ""}</span>
->>>>>>> upstream/main
             <select
               .value=${effectivePrimary ?? ""}
               ?disabled=${!configForm || configLoading || configSaving}
               @change=${(e: Event) =>
                 onModelChange(agent.id, (e.target as HTMLSelectElement).value || null)}
             >
-<<<<<<< HEAD
               <option value="">
                 ${defaultPrimary ? t("agents.overview.inherit_default_with").replace("{model}", defaultPrimary) : t("agents.overview.inherit_default")}
               </option>
-=======
-              ${
-                isDefault
-                  ? nothing
-                  : html`
-                      <option value="">
-                        ${
-                          defaultPrimary ? `Inherit default (${defaultPrimary})` : "Inherit default"
-                        }
-                      </option>
-                    `
-              }
->>>>>>> upstream/main
               ${buildModelOptions(configForm, effectivePrimary ?? undefined)}
             </select>
           </label>

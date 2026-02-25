@@ -1,5 +1,3 @@
-import type { MsgContext } from "../templating.js";
-import type { GetReplyOptions, ReplyPayload } from "../types.js";
 import {
   resolveAgentDir,
   resolveAgentWorkspaceDir,
@@ -9,13 +7,15 @@ import {
 import { resolveModelRefFromString } from "../../agents/model-selection.js";
 import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
 import { DEFAULT_AGENT_WORKSPACE_DIR, ensureAgentWorkspace } from "../../agents/workspace.js";
-import { policyEngineManager } from "../../channels/policy-integration.js";
+import { resolveChannelModelOverride } from "../../channels/model-overrides.js";
 import { type OpenClawConfig, loadConfig } from "../../config/config.js";
 import { applyLinkUnderstanding } from "../../link-understanding/apply.js";
 import { applyMediaUnderstanding } from "../../media-understanding/apply.js";
 import { defaultRuntime } from "../../runtime.js";
 import { resolveCommandAuthorization } from "../command-auth.js";
+import type { MsgContext } from "../templating.js";
 import { SILENT_REPLY_TOKEN } from "../tokens.js";
+import type { GetReplyOptions, ReplyPayload } from "../types.js";
 import { resolveDefaultModel } from "./directive-handling.js";
 import { resolveReplyDirectives } from "./get-reply-directives.js";
 import { handleInlineActions } from "./get-reply-inline-actions.js";
@@ -122,38 +122,6 @@ export async function getReplyFromConfig(
 
   const finalized = finalizeInboundContext(ctx);
 
-  // Phase 2: 通道策略检查
-  const policyEngine = policyEngineManager.getEngine(agentId);
-  if (policyEngine) {
-    const channelId = ctx.Surface || ctx.Provider || "unknown";
-    const accountId = ctx.AccountId || "default";
-
-    const policyResult = await policyEngine.execute({
-      agentId,
-      channelId,
-      accountId,
-      message: ctx.Body,
-      senderId: ctx.SenderId,
-      isGroup:
-        ctx.ChatType === "group" || ctx.ChatType === "supergroup" || Boolean(ctx.GroupSubject),
-      timestamp: ctx.Timestamp || Date.now(),
-    });
-
-    // 如果策略拒绝消息
-    if (!policyResult.allow) {
-      // 清理打字状态
-      typing.cleanup();
-
-      // 静默拒绝（策略引擎不支持自动回复）
-      return undefined;
-    }
-
-    // 如果策略转换了消息内容
-    if (policyResult.transformedMessage !== undefined) {
-      finalized.Body = policyResult.transformedMessage;
-    }
-  }
-
   if (!isFastTestEnv) {
     await applyMediaUnderstanding({
       ctx: finalized,
@@ -211,6 +179,36 @@ export async function getReplyFromConfig(
     defaultModel,
     aliasIndex,
   });
+
+  const channelModelOverride = resolveChannelModelOverride({
+    cfg,
+    channel:
+      groupResolution?.channel ??
+      sessionEntry.channel ??
+      sessionEntry.origin?.provider ??
+      (typeof finalized.OriginatingChannel === "string"
+        ? finalized.OriginatingChannel
+        : undefined) ??
+      finalized.Provider,
+    groupId: groupResolution?.id ?? sessionEntry.groupId,
+    groupChannel: sessionEntry.groupChannel ?? sessionCtx.GroupChannel ?? finalized.GroupChannel,
+    groupSubject: sessionEntry.subject ?? sessionCtx.GroupSubject ?? finalized.GroupSubject,
+    parentSessionKey: sessionCtx.ParentSessionKey,
+  });
+  const hasSessionModelOverride = Boolean(
+    sessionEntry.modelOverride?.trim() || sessionEntry.providerOverride?.trim(),
+  );
+  if (!hasResolvedHeartbeatModelOverride && !hasSessionModelOverride && channelModelOverride) {
+    const resolved = resolveModelRefFromString({
+      raw: channelModelOverride.model,
+      defaultProvider,
+      aliasIndex,
+    });
+    if (resolved) {
+      provider = resolved.ref.provider;
+      model = resolved.ref.model;
+    }
+  }
 
   const directiveResult = await resolveReplyDirectives({
     ctx: finalized,

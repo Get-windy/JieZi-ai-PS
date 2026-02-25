@@ -6,6 +6,15 @@ import type { MsgContext } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveApiKeyForProvider } from "../agents/model-auth.js";
 import { fetchRemoteMedia } from "../media/fetch.js";
+import path from "node:path";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveApiKeyForProvider } from "../agents/model-auth.js";
+import type { MsgContext } from "../auto-reply/templating.js";
+import type { OpenClawConfig } from "../config/config.js";
+import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
+import { fetchRemoteMedia } from "../media/fetch.js";
+import { withEnvAsync } from "../test-utils/env.js";
+import { clearMediaUnderstandingBinaryCacheForTests } from "./runner.js";
 
 vi.mock("../agents/model-auth.js", () => ({
   resolveApiKeyForProvider: vi.fn(async () => ({
@@ -40,6 +49,16 @@ describe("applyMediaUnderstanding", () => {
   beforeEach(() => {
     mockedResolveApiKey.mockClear();
     mockedFetchRemoteMedia.mockReset();
+  beforeAll(async () => {
+    const baseDir = resolvePreferredOpenClawTmpDir();
+    await fs.mkdir(baseDir, { recursive: true });
+    suiteTempMediaRootDir = await fs.mkdtemp(path.join(baseDir, TEMP_MEDIA_PREFIX));
+    ({ applyMediaUnderstanding } = await import("./apply.js"));
+  });
+
+  beforeEach(() => {
+    mockedResolveApiKey.mockClear();
+    mockedFetchRemoteMedia.mockClear();
     mockedFetchRemoteMedia.mockResolvedValue({
       buffer: Buffer.from([0, 255, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
       contentType: "audio/ogg",
@@ -122,6 +141,45 @@ describe("applyMediaUnderstanding", () => {
           transcribeAudio: async () => ({ text: "transcribed text" }),
         },
       },
+    clearMediaUnderstandingBinaryCacheForTests();
+  });
+
+  afterAll(async () => {
+    if (!suiteTempMediaRootDir) {
+      return;
+    }
+    await fs.rm(suiteTempMediaRootDir, { recursive: true, force: true });
+    suiteTempMediaRootDir = "";
+  });
+
+  it("sets Transcript and replaces Body when audio transcription succeeds", async () => {
+    const ctx = await createAudioCtx();
+    const result = await applyMediaUnderstanding({
+      ctx,
+      cfg: createGroqAudioConfig(),
+      providers: createGroqProviders(),
+    });
+
+    expect(result.appliedAudio).toBe(true);
+    expectTranscriptApplied({
+      ctx,
+      transcript: "transcribed text",
+      body: "[Audio]\nTranscript:\ntranscribed text",
+      commandBody: "transcribed text",
+    });
+    expect((ctx as unknown as { BodyForAgent?: string }).BodyForAgent).toBe(ctx.Body);
+  });
+
+  it("skips file blocks for text-like audio when transcription succeeds", async () => {
+    const ctx = await createAudioCtx({
+      fileName: "data.mp3",
+      mediaType: "audio/mpeg",
+      content: '"a","b"\n"1","2"',
+    });
+    const result = await applyMediaUnderstanding({
+      ctx,
+      cfg: createGroqAudioConfig(),
+      providers: createGroqProviders(),
     });
 
     expect(result.appliedAudio).toBe(true);
