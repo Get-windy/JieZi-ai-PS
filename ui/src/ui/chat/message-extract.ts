@@ -1,5 +1,5 @@
-import { stripInboundMetadata } from "../../../upstream/src/auto-reply/reply/strip-inbound-meta.js";
-import { stripEnvelope } from "../../../upstream/src/shared/chat-envelope.js";
+import { stripInboundMetadata } from "../../../../upstream/src/auto-reply/reply/strip-inbound-meta.js";
+import { stripEnvelope } from "../../../../upstream/src/shared/chat-envelope.js";
 import { stripThinkingTags } from "../format.ts";
 
 const textCache = new WeakMap<object, string | null>();

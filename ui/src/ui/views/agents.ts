@@ -15,7 +15,7 @@ import {
   expandToolGroups,
   normalizeToolName,
   resolveToolProfilePolicy,
-} from "../../../upstream/src/agents/tool-policy.js";
+} from "../../../../upstream/src/agents/tool-policy.js";
 import { formatAgo } from "../format.ts";
 import { t } from "../i18n.js";
 import {
