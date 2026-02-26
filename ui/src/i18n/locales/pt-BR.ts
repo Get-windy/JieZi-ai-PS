@@ -59,6 +59,7 @@ export const pt_BR: TranslationMap = {
       wsUrl: "URL WebSocket",
       token: "Token do Gateway",
       password: "Senha (não armazenada)",
+      passwordPlaceholder: "senha do sistema ou compartilhada",
       sessionKey: "Chave de Sessão Padrão",
       language: "Idioma",
       connectHint: "Clique em Conectar para aplicar as alterações de conexão.",
@@ -123,7 +124,8 @@ export const pt_BR: TranslationMap = {
   },
   usage: {
     title: "Uso",
-    subtitle: "Veja para onde vão os tokens, quando as sessões aumentam e o que impulsiona os custos.",
+    subtitle:
+      "Veja para onde vão os tokens, quando as sessões aumentam e o que impulsiona os custos.",
     filters: "Filtros",
     loading: "Carregando",
     selectDateRange: "Selecione um intervalo de datas e clique em Atualizar para carregar o uso.",
@@ -147,7 +149,8 @@ export const pt_BR: TranslationMap = {
     tokensBtn: "Tokens",
     costBtn: "Custo",
     refresh: "Atualizar",
-    filterSessions: "Filtrar sessões (ex: key:agent:main:cron* model:gpt-4o has:errors minTokens:2000)",
+    filterSessions:
+      "Filtrar sessões (ex: key:agent:main:cron* model:gpt-4o has:errors minTokens:2000)",
     filterClientSide: "Filtrar (lado do cliente)",
     clear: "Limpar",
     sessionsMatch: "{filtered} de {total} sessões correspondem",

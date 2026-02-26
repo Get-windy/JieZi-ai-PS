@@ -233,7 +233,7 @@ export function renderOverview(props: OverviewProps) {
                       const v = (e.target as HTMLInputElement).value;
                       props.onPasswordChange(v);
                     }}
-                    placeholder="system or shared password"
+                    placeholder=${t("overview.access.passwordPlaceholder")}
                   />
                 </label>
               `

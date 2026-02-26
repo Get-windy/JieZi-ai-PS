@@ -59,6 +59,7 @@ export const zh_TW: TranslationMap = {
       wsUrl: "WebSocket URL",
       token: "網關令牌",
       password: "密碼 (不存儲)",
+      passwordPlaceholder: "系統密碼或共享密碼",
       sessionKey: "默認會話密鑰",
       language: "語言",
       connectHint: "點擊連接以應用連接更改。",

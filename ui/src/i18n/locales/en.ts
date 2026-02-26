@@ -59,6 +59,7 @@ export const en: TranslationMap = {
       wsUrl: "WebSocket URL",
       token: "Gateway Token",
       password: "Password (not stored)",
+      passwordPlaceholder: "system or shared password",
       sessionKey: "Default Session Key",
       language: "Language",
       connectHint: "Click Connect to apply connection changes.",
@@ -145,7 +146,8 @@ export const en: TranslationMap = {
     tokensBtn: "Tokens",
     costBtn: "Cost",
     refresh: "Refresh",
-    filterSessions: "Filter sessions (e.g. key:agent:main:cron* model:gpt-4o has:errors minTokens:2000)",
+    filterSessions:
+      "Filter sessions (e.g. key:agent:main:cron* model:gpt-4o has:errors minTokens:2000)",
     filterClientSide: "Filter (client-side)",
     clear: "Clear",
     sessionsMatch: "{filtered} of {total} sessions match",
