@@ -1,4 +1,7 @@
 import { en } from "../locales/en.ts";
+import { pt_BR } from "../locales/pt-BR.ts";
+import { zh_CN } from "../locales/zh-CN.ts";
+import { zh_TW } from "../locales/zh-TW.ts";
 import type { Locale, TranslationMap } from "./types.ts";
 
 type Subscriber = (locale: Locale) => void;
@@ -11,7 +14,12 @@ export function isSupportedLocale(value: string | null | undefined): value is Lo
 
 class I18nManager {
   private locale: Locale = "en";
-  private translations: Record<Locale, TranslationMap> = { en } as Record<Locale, TranslationMap>;
+  private translations: Record<Locale, TranslationMap> = {
+    en,
+    "zh-CN": zh_CN,
+    "zh-TW": zh_TW,
+    "pt-BR": pt_BR,
+  };
   private subscribers: Set<Subscriber> = new Set();
 
   constructor() {
@@ -41,26 +49,6 @@ class I18nManager {
   public async setLocale(locale: Locale) {
     if (this.locale === locale) {
       return;
-    }
-
-    // Lazy load translations if needed
-    if (!this.translations[locale]) {
-      try {
-        let module: Record<string, TranslationMap>;
-        if (locale === "zh-CN") {
-          module = await import("../locales/zh-CN.ts");
-        } else if (locale === "zh-TW") {
-          module = await import("../locales/zh-TW.ts");
-        } else if (locale === "pt-BR") {
-          module = await import("../locales/pt-BR.ts");
-        } else {
-          return;
-        }
-        this.translations[locale] = module[locale.replace("-", "_")];
-      } catch (e) {
-        console.error(`Failed to load locale: ${locale}`, e);
-        return;
-      }
     }
 
     this.locale = locale;
