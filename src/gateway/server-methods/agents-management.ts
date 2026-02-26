@@ -743,7 +743,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           modelId, // providerId/modelName
           providerId,
           modelName,
-          displayName: model?.nickname || modelName, // 优先显示昵称
+          displayName: `${provider?.name || providerId} - ${model?.nickname || modelName}`, // 与 available 格式保持一致
           providerName: provider?.name || providerId,
           enabled: !!model && authEnabled, // 模型存在且认证启用
         };
