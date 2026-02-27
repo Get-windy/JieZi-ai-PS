@@ -603,6 +603,7 @@ export function renderApp(state: AppViewState) {
                 loading: state.modelsLoading,
                 error: state.modelsError,
                 testingAuthId: state.testingAuthId,
+                oauthReauth: state.oauthReauth, // OAuth重认证状态
                 managingAuthProvider: state.managingAuthProvider,
                 editingAuth: state.editingAuth,
                 viewingAuth: state.viewingAuth,
@@ -682,18 +683,57 @@ export function renderApp(state: AppViewState) {
                   await refreshAuthBalance(state, authId);
                 },
                 onReauth: async (authId, provider) => {
+                  console.log('[OAuth Reauth] Button clicked', { authId, provider });
                   try {
                     const { startOAuthReauth } = await import("./controllers/models.js");
+                    const { startDeviceCodeAuth } = await import("./utils/oauth-manager.js");
+                    
+                    console.log('[OAuth Reauth] Starting reauth...');
                     const result = await startOAuthReauth(state, authId);
+                    console.log('[OAuth Reauth] Result:', result);
+                    
                     if (result) {
-                      state.oauthReauth = {
-                        ...result,
-                        isPolling: false,
-                      };
+                      // 使用通用OAuth管理器
+                      await startDeviceCodeAuth(
+                        {
+                          deviceCode: result.deviceCode,
+                          verificationUrl: result.verificationUrl,
+                          userCode: result.userCode,
+                          expiresIn: result.expiresIn,
+                          interval: result.interval,
+                          authId: result.authId,
+                          provider: result.provider,
+                          verifier: result.verifier,
+                        },
+                        {
+                          onPollRequest: async (params) => {
+                            const pollResult = await state.client?.request('models.auth.poll', params);
+                            return pollResult || { status: 'pending' };
+                          },
+                          onSuccess: async () => {
+                            alert('✅ OAuth授权成功！');
+                            await loadModels(state, false);
+                          },
+                          onError: (error) => {
+                            alert(`❌ 授权失败：${error}`);
+                          },
+                          onCancel: () => {
+                            console.log('[OAuth Reauth] User cancelled');
+                          },
+                        },
+                        {
+                          windowWidth: 600,
+                          windowHeight: 700,
+                          pollInterval: result.interval * 1000,
+                          maxAttempts: Math.floor(result.expiresIn / result.interval),
+                        }
+                      );
                     } else {
+                      console.error('[OAuth Reauth] No result returned');
                       alert("⚠️ 启动重认证失败，请稍后重试");
                     }
                   } catch (err) {
+                    console.error('[OAuth Reauth] Error:', err);
                     alert(`❌ 启动重认证失败：${String(err)}`);
                   }
                 },

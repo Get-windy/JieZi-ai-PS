@@ -286,6 +286,18 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
             >
               🔄 重新认证
             </button>
+          ` : authType === "oauth" ? html`
+            <button 
+              class="btn btn--sm" 
+              style="padding: 8px 14px; font-size: 13px; background: #4CAF50; color: white;"
+              @click=${() => {
+                console.log('[DEBUG] OAuth Debug Button Clicked', { authId: auth.authId, provider: auth.provider });
+                (props as any).onReauth?.(auth.authId, auth.provider);
+              }}
+              title="调试OAuth重认证功能"
+            >
+              🐛 OAuth调试
+            </button>
           ` : nothing}
            <button 
             class="btn btn--sm" 
@@ -1777,15 +1789,18 @@ export function renderViewProviderModal(
 
 export function renderOAuthReauthModal(props: ModelsProps) {
   const reauth = (props as any).oauthReauth;
+  console.log('[renderOAuthReauthModal] Called with oauthReauth:', reauth);
   if (!reauth) {
+    console.log('[renderOAuthReauthModal] No reauth data, returning nothing');
     return nothing;
   }
 
   const { authId, provider, deviceCode, userCode, verificationUrl, isPolling, error } = reauth;
+  console.log('[renderOAuthReauthModal] Rendering modal with:', { authId, provider, userCode, verificationUrl });
 
   return html`
-    <div class="modal-overlay" @click=${() => (props as any).onCancelOAuthReauth?.()}>
-      <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
+    <div class="modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 9999;" @click=${() => (props as any).onCancelOAuthReauth?.()}>
+      <div class="modal-content" style="position: relative; background: var(--bg-primary); border-radius: 12px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>🔐 OAuth 重新认证 - ${provider}</h2>
           <button class="btn-icon" @click=${() => (props as any).onCancelOAuthReauth?.()}>&times;</button>

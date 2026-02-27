@@ -106,7 +106,6 @@ export function renderModels(
     ${renderImportModelsModal(props as any)}
     ${renderAddProviderModal(props as any)}
     ${renderViewProviderModal(props as any)}
-    ${renderOAuthReauthModal(props)}
   `;
 }
 
