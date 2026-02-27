@@ -212,6 +212,14 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
   const lastTest = auth.status?.lastChecked
     ? formatAgo(Date.now() - auth.status.lastChecked)
     : null;
+  
+  // 检测OAuth过期（通过error信息判断）
+  const error = auth.status?.error || "";
+  const isOAuthExpired = error.toLowerCase().includes("expired") || 
+                         error.toLowerCase().includes("refresh") || 
+                         error.toLowerCase().includes("invalid access token");
+  const isQwenOAuth = auth.apiKey.startsWith("qwen-oauth") || 
+                      (auth as any).provider === "qwen-portal";
 
   return html`
     <div class="card" style="padding: 20px;">
@@ -250,6 +258,19 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
               <div class="card-sub" style="margin-top: 4px; font-size: 11px; color: ${auth.status.valid ? "var(--success)" : "var(--text-secondary)"}">
                 ${auth.status.valid ? t("models.test_status_valid") : t("models.test_status_invalid")} · ${t("models.last_test")}: ${lastTest}
                 ${auth.status.error ? html` · ${auth.status.error}` : nothing}
+              </div>
+            `
+                : nothing
+            }
+            ${
+              isOAuthExpired && isQwenOAuth
+                ? html`
+              <div class="card-sub" style="margin-top: 6px; padding: 8px; background: rgba(255, 92, 92, 0.1); border-left: 3px solid #ff5c5c; font-size: 12px; border-radius: 4px;">
+                <div style="font-weight: 600; color: #ff5c5c; margin-bottom: 4px;">⚠️ OAuth 认证已过期</div>
+                <div style="color: var(--text-secondary); margin-bottom: 6px;">请重新运行认证命令以刷新Token：</div>
+                <code style="display: block; padding: 6px 8px; background: var(--bg-secondary); border-radius: 4px; font-size: 11px; color: var(--accent); user-select: all;">
+                  openclaw models auth login --provider qwen-portal
+                </code>
               </div>
             `
                 : nothing
