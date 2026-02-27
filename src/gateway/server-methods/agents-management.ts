@@ -29,7 +29,7 @@ import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
 import { getChannelPlugin, listChannelPlugins } from "../../channels/plugins/index.js";
 import { listAgentEntries, findAgentEntryIndex } from "../../commands/agents.config.js";
 import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../config/config.js";
-import type { AgentBinding } from "../../config/types.agents.js";
+import type { AgentBinding, AgentConfig } from "../../config/types.agents.js";
 import type { AgentChannelBindings } from "../../config/types.channel-bindings.js";
 import type { OpenClawConfig } from "../../config/types.js";
 import { listBindings } from "../../routing/bindings.js";
@@ -62,34 +62,45 @@ function validateModelAccountsConfig(config: unknown): void {
     throw new Error("Invalid config format");
   }
 
-  if (!Array.isArray(config.accounts)) {
+  const cfg = config as Record<string, unknown>;
+  if (!Array.isArray(cfg.accounts)) {
     throw new Error("accounts must be an array");
   }
 
   const validRoutingModes = ["manual", "smart"];
-  if (!validRoutingModes.includes(config.routingMode)) {
-    throw new Error(`Invalid routingMode: ${config.routingMode}`);
+  if (!validRoutingModes.includes(cfg.routingMode as string)) {
+    throw new Error(`Invalid routingMode: ${String(cfg.routingMode)}`);
   }
 
   // 验证智能路由配置
-  if (config.routingMode === "smart" && config.smartRouting) {
-    const sr = config.smartRouting;
+  if (cfg.routingMode === "smart" && cfg.smartRouting) {
+    const sr = cfg.smartRouting as Record<string, unknown>;
     if (
       sr.complexityWeight !== undefined &&
-      (sr.complexityWeight < 0 || sr.complexityWeight > 100)
+      (typeof sr.complexityWeight !== "number" ||
+        sr.complexityWeight < 0 ||
+        sr.complexityWeight > 100)
     ) {
       throw new Error("complexityWeight must be between 0 and 100");
     }
     if (
       sr.capabilityWeight !== undefined &&
-      (sr.capabilityWeight < 0 || sr.capabilityWeight > 100)
+      (typeof sr.capabilityWeight !== "number" ||
+        sr.capabilityWeight < 0 ||
+        sr.capabilityWeight > 100)
     ) {
       throw new Error("capabilityWeight must be between 0 and 100");
     }
-    if (sr.costWeight !== undefined && (sr.costWeight < 0 || sr.costWeight > 100)) {
+    if (
+      sr.costWeight !== undefined &&
+      (typeof sr.costWeight !== "number" || sr.costWeight < 0 || sr.costWeight > 100)
+    ) {
       throw new Error("costWeight must be between 0 and 100");
     }
-    if (sr.speedWeight !== undefined && (sr.speedWeight < 0 || sr.speedWeight > 100)) {
+    if (
+      sr.speedWeight !== undefined &&
+      (typeof sr.speedWeight !== "number" || sr.speedWeight < 0 || sr.speedWeight > 100)
+    ) {
       throw new Error("speedWeight must be between 0 and 100");
     }
   }
@@ -103,7 +114,8 @@ function validateChannelPoliciesConfig(config: unknown): void {
     throw new Error("Invalid config format");
   }
 
-  if (!Array.isArray(config.bindings)) {
+  const cfg = config as Record<string, unknown>;
+  if (!Array.isArray(cfg.bindings)) {
     throw new Error("bindings must be an array");
   }
 
@@ -118,12 +130,13 @@ function validateChannelPoliciesConfig(config: unknown): void {
   ]);
 
   // 验证默认策略
-  if (config.defaultPolicy && !validPolicies.has(config.defaultPolicy.type)) {
-    throw new Error(`Invalid defaultPolicy type: ${config.defaultPolicy.type}`);
+  const defaultPolicy = cfg.defaultPolicy as { type?: string } | undefined;
+  if (defaultPolicy && !validPolicies.has(defaultPolicy.type as string)) {
+    throw new Error(`Invalid defaultPolicy type: ${defaultPolicy.type}`);
   }
 
   // 验证每个绑定
-  for (const binding of config.bindings) {
+  for (const binding of cfg.bindings as Array<Record<string, unknown>>) {
     if (!binding.id) {
       throw new Error("Binding must have an ID");
     }
@@ -133,11 +146,12 @@ function validateChannelPoliciesConfig(config: unknown): void {
     if (!binding.accountId) {
       throw new Error("Binding must have an accountId");
     }
-    if (!binding.policy || !binding.policy.type) {
+    const policy = binding.policy as { type?: string } | undefined;
+    if (!policy || !policy.type) {
       throw new Error("Binding must have a policy with type");
     }
-    if (!validPolicies.has(binding.policy.type)) {
-      throw new Error(`Invalid policy type: ${binding.policy.type}`);
+    if (!validPolicies.has(policy.type)) {
+      throw new Error(`Invalid policy type: ${policy.type}`);
     }
   }
 }
@@ -1266,7 +1280,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       ...cfg,
       agents: {
         ...cfg.agents,
-        list: [...agents, newAgent],
+        list: [...agents, newAgent as AgentConfig],
       },
     };
 
