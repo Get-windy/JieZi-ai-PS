@@ -6,7 +6,9 @@
 import { ensureAuthProfileStore, type AuthProfileStore } from "../auth-profiles.js";
 import type { OAuthCredentials } from "./oauth.js";
 import { refreshQwenPortalCredentials } from "../../providers/qwen-portal-oauth.js";
-import { log } from "../../log.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
+
+const log = createSubsystemLogger("oauth-refresh");
 
 // 配置常量
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 每6小时检查一次
