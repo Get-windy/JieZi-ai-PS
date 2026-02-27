@@ -222,6 +222,18 @@ export class OpenClawApp extends LitElement {
     authId: string;
     provider: string;
   } | null = null;
+  @state() testingAuthId: string | null = null; // 正在测试的认证ID
+  @state() oauthReauth: {
+    authId: string;
+    provider: string;
+    deviceCode: string;
+    userCode: string;
+    verificationUrl: string;
+    expiresIn: number;
+    interval: number;
+    isPolling: boolean;
+    error?: string;
+  } | null = null; // OAuth重认证状态
 
   // 模型列表状态
   @state() managingModelsProvider: string | null = null;

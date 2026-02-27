@@ -681,6 +681,31 @@ export function renderApp(state: AppViewState) {
                 onRefreshAuthBalance: async (authId) => {
                   await refreshAuthBalance(state, authId);
                 },
+                onReauth: async (authId, provider) => {
+                  try {
+                    const { startOAuthReauth } = await import("./controllers/models.js");
+                    const result = await startOAuthReauth(state, authId);
+                    if (result) {
+                      state.oauthReauth = {
+                        ...result,
+                        isPolling: false,
+                      };
+                    } else {
+                      alert("⚠️ 启动重认证失败，请稍后重试");
+                    }
+                  } catch (err) {
+                    alert(`❌ 启动重认证失败：${String(err)}`);
+                  }
+                },
+                onStartOAuthPolling: async (authId) => {
+                  if (!state.oauthReauth) return;
+                  state.oauthReauth = { ...state.oauthReauth, isPolling: true };
+                  // TODO: 实现轮询逻辑
+                  alert("🕑 轮询功能待实现，请手动刷新页面查看状态");
+                },
+                onCancelOAuthReauth: () => {
+                  state.oauthReauth = null;
+                },
                 onManageModels: (provider) => {
                   state.managingModelsProvider = provider;
                 },
