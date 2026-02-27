@@ -691,6 +691,17 @@ export async function startGatewayServer(
     }
   }
 
+  // 启动OAuth Token自动刷新守护进程
+  if (!minimalTestGateway) {
+    try {
+      const { oauthRefreshDaemon } = await import("../agents/auth-profiles/oauth-refresh-daemon.js");
+      oauthRefreshDaemon.start();
+      log.info("OAuth refresh daemon started");
+    } catch (err) {
+      log.warn(`OAuth refresh daemon failed to start: ${String(err)}`);
+    }
+  }
+
   const configReloader = minimalTestGateway
     ? { stop: async () => {} }
     : (() => {
@@ -762,6 +773,15 @@ export async function startGatewayServer(
 
   return {
     close: async (opts) => {
+      // 停止OAuth刷新守护进程
+      try {
+        const { oauthRefreshDaemon } = await import("../agents/auth-profiles/oauth-refresh-daemon.js");
+        oauthRefreshDaemon.stop();
+        log.info("OAuth refresh daemon stopped");
+      } catch (err) {
+        log.warn(`OAuth refresh daemon failed to stop: ${String(err)}`);
+      }
+
       // Run gateway_stop plugin hook before shutdown
       await runGlobalGatewayStopSafely({
         event: { reason: opts?.reason ?? "gateway stopping" },
