@@ -42,8 +42,8 @@ export async function logGatewayStartup(params: {
     params.log.warn(warning);
   }
 
-  // Auto-open Control UI in browser if enabled
-  const autoOpen = params.cfg.gateway?.controlUi?.autoOpen ?? false;
+  // Auto-open Control UI in browser if enabled (默认值改为 true)
+  const autoOpen = params.cfg.gateway?.controlUi?.autoOpen ?? true; // 修改：默认为 true
   const controlUiEnabled = params.cfg.gateway?.controlUi?.enabled ?? true;
   if (autoOpen && controlUiEnabled) {
     const { resolveGatewayPort } = await import("../config/config.js");

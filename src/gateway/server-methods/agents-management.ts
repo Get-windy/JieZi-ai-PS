@@ -20,26 +20,22 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AgentModelAccountsConfig, AgentBinding } from "../../config/types.agents.js";
-import type {
-  AgentChannelBindings,
-  ChannelAccountBinding,
-} from "../../config/types.channel-bindings.js";
-import type { OpenClawConfig } from "../../config/types.js";
-import type { GatewayRequestHandlers, RespondFn } from "./types.js";
 import {
   listAgentIds,
   resolveAgentModelAccounts,
-  listAgentModelAccounts,
   resolveAgentWorkspaceDir,
 } from "../../agents/agent-scope.js";
 import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
 import { getChannelPlugin, listChannelPlugins } from "../../channels/plugins/index.js";
 import { listAgentEntries, findAgentEntryIndex } from "../../commands/agents.config.js";
 import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../config/config.js";
+import type { AgentBinding } from "../../config/types.agents.js";
+import type { AgentChannelBindings } from "../../config/types.channel-bindings.js";
+import type { OpenClawConfig } from "../../config/types.js";
 import { listBindings } from "../../routing/bindings.js";
 import { normalizeAgentId, DEFAULT_AGENT_ID } from "../../routing/session-key.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
+import type { GatewayRequestHandlers, RespondFn } from "./types.js";
 
 /**
  * 验证智能助手ID是否存在
@@ -61,7 +57,7 @@ function validateAgentId(agentId: string, cfg: OpenClawConfig, respond: RespondF
 /**
  * 验证模型账号配置
  */
-function validateModelAccountsConfig(config: any): void {
+function validateModelAccountsConfig(config: unknown): void {
   if (!config || typeof config !== "object") {
     throw new Error("Invalid config format");
   }
@@ -102,7 +98,7 @@ function validateModelAccountsConfig(config: any): void {
 /**
  * 验证通道策略配置
  */
-function validateChannelPoliciesConfig(config: any): void {
+function validateChannelPoliciesConfig(config: unknown): void {
   if (!config || typeof config !== "object") {
     throw new Error("Invalid config format");
   }
@@ -162,7 +158,7 @@ function getAgentChannelBindings(
   }
 
   // 从agent配置中提取channelBindings
-  return (agent as any).channelBindings || null;
+  return (agent as { channelBindings?: AgentChannelBindings }).channelBindings || null;
 }
 
 /**
@@ -171,7 +167,7 @@ function getAgentChannelBindings(
 async function updateAgentField(
   agentId: string,
   fieldName: string,
-  fieldValue: any,
+  fieldValue: unknown,
   respond: RespondFn,
 ): Promise<boolean> {
   const snapshot = await readConfigFileSnapshot();
@@ -246,8 +242,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       workspace: agent.workspace, // 配置的工作区（可能为空）
       workspaceResolved: resolveAgentWorkspaceDir(cfg, agent.id), // 实际解析后的工作区路径
       model: agent.model,
-      modelAccountId: agent.modelAccountId,
-      channelAccountIds: agent.channelAccountIds,
+      // 注意：modelAccountId 和 channelAccountIds 是旧字段，已废弃
+      modelAccountId: (agent as unknown as { modelAccountId?: string }).modelAccountId,
+      channelAccountIds: (agent as unknown as { channelAccountIds?: string[] }).channelAccountIds,
     }));
 
     respond(true, { agents: result }, undefined);
@@ -257,7 +254,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.modelAccounts.list - 获取智能助手的模型账号配置
    */
   "agent.modelAccounts.list": ({ params, respond }) => {
-    const agentId = String(params?.agentId ?? "").trim();
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
       return;
@@ -281,13 +278,13 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.modelAccounts.update - 更新智能助手的模型账号配置
    */
   "agent.modelAccounts.update": async ({ params, respond }) => {
-    const agentId = String(params?.agentId ?? "").trim();
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
       return;
     }
 
-    const config = (params as any)?.config;
+    const config = (params as { config?: unknown })?.config;
     if (!config) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "config is required"));
       return;
@@ -324,7 +321,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.channelPolicies.list - 获取智能助手的通道策略配置
    */
   "agent.channelPolicies.list": ({ params, respond }) => {
-    const agentId = String(params?.agentId ?? "").trim();
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "errors.agentIdRequired"));
       return;
@@ -348,13 +345,13 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.channelPolicies.update - 更新智能助手的通道策略配置
    */
   "agent.channelPolicies.update": async ({ params, respond }) => {
-    const agentId = String(params?.agentId ?? "").trim();
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "errors.agentIdRequired"));
       return;
     }
 
-    const config = (params as any)?.config;
+    const config = (params as { config?: unknown })?.config;
     if (!config) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "errors.configRequired"));
       return;
@@ -391,7 +388,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.channelAccounts.list - 获取智能助手绑定的通道账号
    */
   "agent.channelAccounts.list": ({ params, respond }) => {
-    const agentId = String(params?.agentId ?? "").trim();
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
       return;
@@ -423,9 +420,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.channelAccounts.add - 为智能助手添加通道账号绑定
    */
   "agent.channelAccounts.add": async ({ params, respond }) => {
-    const agentId = String((params as any)?.agentId ?? "").trim();
-    const channelId = String((params as any)?.channelId ?? "").trim();
-    const accountId = String((params as any)?.accountId ?? "").trim();
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
+    const channelId = String((params as { channelId?: string | number })?.channelId ?? "").trim();
+    const accountId = String((params as { accountId?: string | number })?.accountId ?? "").trim();
 
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
@@ -452,7 +449,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     }
 
     // 验证通道是否存在
-    const plugin = getChannelPlugin(channelId as any);
+    const plugin = getChannelPlugin(channelId);
     if (!plugin) {
       respond(
         false,
@@ -539,9 +536,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.channelAccounts.remove - 移除智能助手的通道账号绑定
    */
   "agent.channelAccounts.remove": async ({ params, respond }) => {
-    const agentId = String((params as any)?.agentId ?? "").trim();
-    const channelId = String((params as any)?.channelId ?? "").trim();
-    const accountId = String((params as any)?.accountId ?? "").trim();
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
+    const channelId = String((params as { channelId?: string | number })?.channelId ?? "").trim();
+    const accountId = String((params as { accountId?: string | number })?.accountId ?? "").trim();
 
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
@@ -613,7 +610,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.channelAccounts.available - 获取可用但未绑定的通道账号
    */
   "agent.channelAccounts.available": async ({ params, respond }) => {
-    const agentId = String((params as any)?.agentId ?? "").trim();
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
       return;
@@ -624,7 +621,6 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const normalized = normalizeAgentId(agentId);
     const bindings = listBindings(cfg);
 
     // 获取所有已被绑定的通道账号（包括其他助手绑定的）
@@ -666,7 +662,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
               }
             }
 
-            const channelLabel = (plugin.meta as any).label || plugin.id;
+            const channelLabel = (plugin.meta as { label?: string }).label || plugin.id;
             availableAccounts.push({
               channelId,
               accountId,
@@ -688,7 +684,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * 返回模型列表，而不是认证账号
    */
   "agent.modelAccounts.bound": async ({ params, respond }) => {
-    const agentId = String(params?.agentId ?? "").trim();
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
       return;
@@ -729,13 +725,13 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         const model = modelList.find(
           (m) => m.modelName === modelName && m.enabled && !m.deprecated,
         );
-        const provider = storage.providers.find((p: any) => p.id === providerId);
+        const provider = storage.providers.find((p: { id: string }) => p.id === providerId);
 
         // 检查认证是否启用
         let authEnabled = false;
         if (model) {
           const authList = storage.auths[providerId] || [];
-          const auth = authList.find((a: any) => a.authId === model.authId);
+          const auth = authList.find((a: { authId: string }) => a.authId === model.authId);
           authEnabled = auth?.enabled ?? false;
         }
 
@@ -743,7 +739,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           modelId, // providerId/modelName
           providerId,
           modelName,
-          displayName: `${provider?.name || providerId} - ${model?.nickname || modelName}`, // 与 available 格式保持一致
+          displayName: model?.nickname || modelName, // 优先显示昵称
           providerName: provider?.name || providerId,
           enabled: !!model && authEnabled, // 模型存在且认证启用
         };
@@ -759,7 +755,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         },
         undefined,
       );
-    } catch (err) {
+    } catch {
       // 如果无法获取详情，返回基本信息
       respond(true, { agentId, accounts: boundAccounts, defaultAccountId }, undefined);
     }
@@ -770,7 +766,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * 返回模型列表（providerId/modelName），而不是认证账号
    */
   "agent.modelAccounts.available": async ({ params, respond }) => {
-    const agentId = String(params?.agentId ?? "").trim();
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
       return;
@@ -796,7 +792,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       }> = [];
 
       for (const [providerId, modelList] of Object.entries(storage.models)) {
-        const provider = storage.providers.find((p: any) => p.id === providerId);
+        const provider = storage.providers.find((p: { id: string }) => p.id === providerId);
         const authList = storage.auths[providerId] || [];
 
         for (const model of modelList) {
@@ -806,7 +802,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           }
 
           // 2. 该模型对应的认证必须启用
-          const auth = authList.find((a: any) => a.authId === model.authId);
+          const auth = authList.find((a: { authId: string }) => a.authId === model.authId);
           if (!auth || !auth.enabled) {
             continue;
           }
@@ -852,8 +848,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * 绑定的是模型（providerId/modelName），而不是认证账号
    */
   "agent.modelAccounts.bind": async ({ params, respond }) => {
-    const agentId = String(params?.agentId ?? "").trim();
-    const modelId = String((params as any)?.accountId ?? "").trim(); // 兼容旧参数名
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
+    const modelId = String((params as { accountId?: string | number })?.accountId ?? "").trim(); // 兼容旧参数名
 
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
@@ -930,7 +926,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
       // 检查该模型对应的认证是否启用
       const authList = storage.auths[providerId] || [];
-      const auth = authList.find((a: any) => a.authId === model.authId);
+      const auth = authList.find(
+        (a: unknown) => (a as { authId?: string })?.authId === model.authId,
+      );
       if (!auth || !auth.enabled) {
         respond(
           false,
@@ -980,8 +978,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * 解绑的是模型（providerId/modelName）
    */
   "agent.modelAccounts.unbind": async ({ params, respond }) => {
-    const agentId = String(params?.agentId ?? "").trim();
-    const modelId = String((params as any)?.accountId ?? "").trim(); // 兼容旧参数名
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
+    const modelId = String((params as { accountId?: string | number })?.accountId ?? "").trim(); // 兼容旧参数名
 
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
@@ -1046,8 +1044,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.modelAccounts.config.get - 获取模型账号的配置（启用/停用、用量控制等）
    */
   "agent.modelAccounts.config.get": ({ params, respond }) => {
-    const agentId = String(params?.agentId ?? "").trim();
-    const accountId = String((params as any)?.accountId ?? "").trim();
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
+    const accountId = String((params as { accountId?: string | number })?.accountId ?? "").trim();
 
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
@@ -1065,7 +1063,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
     // 获取助手的modelAccounts配置
     const modelAccounts = resolveAgentModelAccounts(cfg, agentId);
-    const accountConfigs = (modelAccounts as any)?.accountConfigs || {};
+    const accountConfigs =
+      (modelAccounts as { accountConfigs?: Record<string, unknown> })?.accountConfigs || {};
     const accountConfig = accountConfigs[accountId] || {
       enabled: true, // 默认启用
       priority: 0,
@@ -1088,9 +1087,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * - healthCheck: { errorThreshold: number, cooldownMinutes: number } - 健康检查
    */
   "agent.modelAccounts.config.update": async ({ params, respond }) => {
-    const agentId = String(params?.agentId ?? "").trim();
-    const accountId = String((params as any)?.accountId ?? "").trim();
-    const config = (params as any)?.config;
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
+    const accountId = String((params as { accountId?: string | number })?.accountId ?? "").trim();
+    const config = (params as { config?: unknown })?.config;
 
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
@@ -1133,7 +1132,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     }
 
     // 更新配置
-    const accountConfigs = (modelAccounts as any)?.accountConfigs || {};
+    const accountConfigs =
+      (modelAccounts as { accountConfigs?: Record<string, unknown> })?.accountConfigs || {};
     const updatedConfig = {
       ...modelAccounts,
       accountConfigs: {
@@ -1152,9 +1152,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.modelAccounts.config.toggle - 快速切换账号启用/停用状态
    */
   "agent.modelAccounts.config.toggle": async ({ params, respond }) => {
-    const agentId = String(params?.agentId ?? "").trim();
-    const accountId = String((params as any)?.accountId ?? "").trim();
-    const enabled = Boolean((params as any)?.enabled);
+    const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
+    const accountId = String((params as { accountId?: string | number })?.accountId ?? "").trim();
+    const enabled = Boolean((params as { enabled?: unknown })?.enabled);
 
     if (!agentId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
@@ -1193,7 +1193,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     }
 
     // 更新启用状态
-    const accountConfigs = (modelAccounts as any)?.accountConfigs || {};
+    const accountConfigs =
+      (modelAccounts as { accountConfigs?: Record<string, unknown> })?.accountConfigs || {};
     const currentConfig = accountConfigs[accountId] || { enabled: true };
     const updatedConfig = {
       ...modelAccounts,
@@ -1216,9 +1217,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.create - 创建新的智能助手
    */
   "agent.create": async ({ params, respond }) => {
-    const id = String((params as any)?.id ?? "").trim();
-    const name = String((params as any)?.name ?? "").trim();
-    const workspace = String((params as any)?.workspace ?? "").trim();
+    const id = String((params as { id?: string | number })?.id ?? "").trim();
+    const name = String((params as { name?: string | number })?.name ?? "").trim();
+    const workspace = String((params as { workspace?: string | number })?.workspace ?? "").trim();
 
     if (!id) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
@@ -1251,7 +1252,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     }
 
     // 创建新助手
-    const newAgent: any = {
+    const newAgent: Record<string, unknown> = {
       id,
       name: name || id,
     };
@@ -1294,12 +1295,19 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.update - 更新智能助手信息
    */
   "agent.update": async ({ params, respond }) => {
-    const id = String((params as any)?.id ?? "").trim();
+    type UpdateParams = {
+      id?: string | number;
+      name?: string | number;
+      workspace?: string | number;
+    };
+    const id = String((params as UpdateParams)?.id ?? "").trim();
     const name =
-      (params as any)?.name !== undefined ? String((params as any).name).trim() : undefined;
+      (params as UpdateParams)?.name !== undefined
+        ? String((params as UpdateParams).name).trim()
+        : undefined;
     const workspace =
-      (params as any)?.workspace !== undefined
-        ? String((params as any).workspace).trim()
+      (params as UpdateParams)?.workspace !== undefined
+        ? String((params as UpdateParams).workspace).trim()
         : undefined;
 
     if (!id) {
@@ -1336,7 +1344,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       if (workspace) {
         updatedAgent.workspace = workspace;
       } else {
-        delete (updatedAgent as any).workspace;
+        delete (updatedAgent as Record<string, unknown>).workspace;
       }
     }
 
@@ -1366,7 +1374,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.setDefault - 设置默认智能助手
    */
   "agent.setDefault": async ({ params, respond }) => {
-    const id = String((params as any)?.id ?? "").trim();
+    const id = String((params as { id?: string | number })?.id ?? "").trim();
 
     if (!id) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
@@ -1413,7 +1421,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       } else {
         // 移除其他助手的默认标记
         const updated = { ...agent };
-        delete (updated as any).default;
+        delete (updated as Record<string, unknown>).default;
         return updated;
       }
     });
@@ -1441,7 +1449,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
   /**
    * agent.workspace.getDefaultRoot - 获取默认工作区根目录及路径建议
    */
-  "agent.workspace.getDefaultRoot": async ({ params, respond }) => {
+  "agent.workspace.getDefaultRoot": async ({ respond }) => {
     try {
       const cfg = loadConfig();
       const defaultRoot = cfg.agents?.defaults?.workspace || resolveDefaultAgentWorkspaceDir();
@@ -1472,7 +1480,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.workspace.validate - 验证工作区路径
    */
   "agent.workspace.validate": async ({ params, respond }) => {
-    const workspacePath = String((params as any)?.path ?? "").trim();
+    const workspacePath = String((params as { path?: string | number })?.path ?? "").trim();
 
     if (!workspacePath) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "path is required"));
@@ -1496,9 +1504,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           },
           undefined,
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
         // 路径不存在，检查是否可以创建
-        if (err.code === "ENOENT") {
+        if ((err as { code?: string })?.code === "ENOENT") {
           const parentDir = path.dirname(resolvedPath);
           try {
             await fs.access(parentDir, fs.constants.W_OK);
@@ -1544,8 +1552,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.delete - 删除智能助手
    */
   "agent.delete": async ({ params, respond }) => {
-    const id = String((params as any)?.id ?? "").trim();
-    const deleteWorkspace = Boolean((params as any)?.deleteWorkspace);
+    const id = String((params as { id?: string | number })?.id ?? "").trim();
+    const deleteWorkspace = Boolean((params as { deleteWorkspace?: unknown })?.deleteWorkspace);
 
     if (!id) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
@@ -1627,8 +1635,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.workspace.migrate - 迁移智能助手工作区
    */
   "agent.workspace.migrate": async ({ params, respond }) => {
-    const id = String((params as any)?.id ?? "").trim();
-    const newWorkspace = String((params as any)?.newWorkspace ?? "").trim();
+    const id = String((params as { id?: string | number })?.id ?? "").trim();
+    const newWorkspace = String(
+      (params as { newWorkspace?: string | number })?.newWorkspace ?? "",
+    ).trim();
 
     if (!id) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
@@ -1678,7 +1688,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           return;
         }
       }
-    } catch (err) {
+    } catch {
       // 目录不存在，需要创建
       await fs.mkdir(newWorkspacePath, { recursive: true });
     }
@@ -1771,7 +1781,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.workspace.setDefault - 设置默认工作区根目录
    */
   "agent.workspace.setDefault": async ({ params, respond }) => {
-    const workspace = String((params as any)?.workspace ?? "").trim();
+    const workspace = String((params as { workspace?: string | number })?.workspace ?? "").trim();
 
     if (!workspace) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "workspace is required"));
@@ -1830,7 +1840,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.workspace.delete - 删除工作区目录
    */
   "agent.workspace.delete": async ({ params, respond }) => {
-    const workspace = String((params as any)?.workspace ?? "").trim();
+    const workspace = String((params as { workspace?: string | number })?.workspace ?? "").trim();
 
     if (!workspace) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "workspace is required"));

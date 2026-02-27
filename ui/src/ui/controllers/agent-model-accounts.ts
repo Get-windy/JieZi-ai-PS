@@ -86,9 +86,15 @@ export async function loadBoundModelAccounts(
     const response = await state.client.call("agent.modelAccounts.bound", { agentId });
 
     if (response.ok && response.data) {
-      state.boundModelAccounts = (response.data as any).accounts || [];
-      state.boundModelDetails = (response.data as any).modelDetails || [];
-      state.defaultModelAccountId = (response.data as any).defaultAccountId || "";
+      // 创建新数组引用以触发 Lit 响应式更新
+      const data = response.data as unknown as {
+        accounts?: string[];
+        modelDetails?: ModelDetail[];
+        defaultAccountId?: string;
+      };
+      state.boundModelAccounts = [...(data.accounts || [])];
+      state.boundModelDetails = [...(data.modelDetails || [])];
+      state.defaultModelAccountId = data.defaultAccountId || "";
     } else {
       state.boundModelAccountsError = response.error?.message || "Failed to load bound models";
     }
@@ -117,8 +123,13 @@ export async function loadAvailableModelAccounts(
     const response = await state.client.call("agent.modelAccounts.available", { agentId });
 
     if (response.ok && response.data) {
-      state.availableModelAccounts = (response.data as any).accounts || [];
-      state.availableModelDetails = (response.data as any).modelDetails || [];
+      // 创建新数组引用以触发 Lit 响应式更新
+      const data = response.data as unknown as {
+        accounts?: string[];
+        modelDetails?: ModelDetail[];
+      };
+      state.availableModelAccounts = [...(data.accounts || [])];
+      state.availableModelDetails = [...(data.modelDetails || [])];
     } else {
       state.availableModelAccountsError =
         response.error?.message || "Failed to load available models";
@@ -147,13 +158,15 @@ export async function bindModelAccount(
   try {
     const response = await state.client.call("agent.modelAccounts.bind", {
       agentId,
-      accountId: modelId, // 后端兼容旧参数名
+      accountId: modelId,
     });
 
     if (response.ok) {
       // 重新加载绑定列表和可用列表
-      await loadBoundModelAccounts(state, agentId);
-      await loadAvailableModelAccounts(state, agentId);
+      await Promise.all([
+        loadBoundModelAccounts(state, agentId),
+        loadAvailableModelAccounts(state, agentId),
+      ]);
     } else {
       state.modelAccountOperationError = response.error?.message || "Failed to bind model";
     }
@@ -184,8 +197,10 @@ export async function unbindModelAccount(
 
     if (response.ok) {
       // 重新加载绑定列表和可用列表
-      await loadBoundModelAccounts(state, agentId);
-      await loadAvailableModelAccounts(state, agentId);
+      await Promise.all([
+        loadBoundModelAccounts(state, agentId),
+        loadAvailableModelAccounts(state, agentId),
+      ]);
     } else {
       state.modelAccountOperationError = response.error?.message || "Failed to unbind model";
     }
@@ -216,7 +231,11 @@ export async function setDefaultModelAccount(
       return;
     }
 
-    const currentConfig = (getResponse.data as any).config || {};
+    const currentConfig =
+      ((getResponse.data as unknown as { config?: unknown })?.config as Record<
+        string,
+        ModelAccountConfig
+      >) || {};
 
     // 更新默认模型
     const updatedConfig = {
@@ -269,11 +288,13 @@ export async function loadAccountConfig(
     });
 
     if (response.ok && response.data) {
-      const config = (response.data as any).config;
-      state.accountConfigs = {
-        ...state.accountConfigs,
-        [modelId]: config,
-      };
+      const config = (response.data as unknown as { config?: ModelAccountConfig })?.config;
+      if (config) {
+        state.accountConfigs = {
+          ...state.accountConfigs,
+          [modelId]: config,
+        };
+      }
     } else {
       state.accountConfigsError = response.error?.message || "Failed to load model config";
     }
@@ -306,7 +327,10 @@ export async function loadAllAccountConfigs(
       });
 
       if (response.ok && response.data) {
-        return { modelId, config: (response.data as any).config };
+        const config = (response.data as unknown as { config?: ModelAccountConfig })?.config;
+        if (config) {
+          return { modelId, config };
+        }
       }
       return null;
     });

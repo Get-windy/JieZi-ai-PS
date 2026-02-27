@@ -1,7 +1,7 @@
 /**
  * 本地功能健康检查模块
  * 在服务启动时自动检测本地开发功能是否完整
- * 
+ *
  * 作用：
  * 1. 合并上游代码后，自动检测本地功能是否被意外覆盖
  * 2. 启动时验证关键本地功能文件是否存在
@@ -23,21 +23,20 @@ const LOCAL_FEATURE_FILES = {
     "i18n/locales/zh-TW-extra.ts",
     "i18n/locales/pt-BR-extra.ts",
   ],
-  
+
   // 翻译增强
   translations: [
     "ui/src/i18n/locales/zh-CN.ts",
     "ui/src/i18n/locales/zh-TW.ts",
     "ui/src/i18n/locales/pt-BR.ts",
   ],
-  
+
   // 本地后端功能
   backend: [
     "src-local/health-check.ts", // 本文件
-    // 如果有其他本地功能，在这里添加
-    // "src-local/gateway/auto-open-browser.ts",
+    "src/gateway/server-startup-log.ts", // 自动打开浏览器功能（覆盖上游）
   ],
-  
+
   // 本地前端功能
   frontend: [
     // "ui-local/src/ui/views/organization-management.ts",
@@ -58,9 +57,9 @@ export function checkLocalFeatures(): HealthCheckResult {
   // 获取项目根目录
   const projectRoot = process.cwd();
   const missingFiles: string[] = [];
-  
+
   // 检查所有本地功能文件
-  for (const [category, files] of Object.entries(LOCAL_FEATURE_FILES)) {
+  for (const [_category, files] of Object.entries(LOCAL_FEATURE_FILES)) {
     for (const file of files) {
       const filePath = path.resolve(projectRoot, file);
       if (!fs.existsSync(filePath)) {
@@ -69,7 +68,7 @@ export function checkLocalFeatures(): HealthCheckResult {
       }
     }
   }
-  
+
   if (missingFiles.length > 0) {
     return {
       success: false,
@@ -82,11 +81,11 @@ export function checkLocalFeatures(): HealthCheckResult {
         "3. 运行 'git status' 查看更改详情",
         "",
         `缺失的文件 (${missingFiles.length}个)：`,
-        ...missingFiles.map(f => `  - ${f}`),
+        ...missingFiles.map((f) => `  - ${f}`),
       ].join("\n"),
     };
   }
-  
+
   return {
     success: true,
     message: "✅ 本地功能完整性检查通过",
@@ -99,7 +98,7 @@ export function checkLocalFeatures(): HealthCheckResult {
 export function checkI18nConfig(): HealthCheckResult {
   const projectRoot = process.cwd();
   const i18nIndexPath = path.resolve(projectRoot, "i18n/index.ts");
-  
+
   if (!fs.existsSync(i18nIndexPath)) {
     return {
       success: false,
@@ -107,10 +106,10 @@ export function checkI18nConfig(): HealthCheckResult {
       details: "这是国际化扩展系统的核心文件。",
     };
   }
-  
+
   // 可以进一步检查文件内容是否包含关键代码
   // 例如：检查是否导出了 t 函数和 i18n 对象
-  
+
   return {
     success: true,
     message: "✅ 国际化配置检查通过",
@@ -123,7 +122,7 @@ export function checkI18nConfig(): HealthCheckResult {
 export function checkGitProtection(): HealthCheckResult {
   const projectRoot = process.cwd();
   const gitattributesPath = path.resolve(projectRoot, ".gitattributes");
-  
+
   if (!fs.existsSync(gitattributesPath)) {
     return {
       success: false,
@@ -141,7 +140,7 @@ export function checkGitProtection(): HealthCheckResult {
       ].join("\n"),
     };
   }
-  
+
   return {
     success: true,
     message: "✅ Git 保护配置存在",
@@ -155,20 +154,20 @@ export function runHealthCheck(): void {
   console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log("🔍 JieZi AI-PS 本地功能健康检查");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-  
+
   const checks = [
     { name: "本地功能文件", fn: checkLocalFeatures },
     { name: "国际化配置", fn: checkI18nConfig },
     { name: "Git保护配置", fn: checkGitProtection },
   ];
-  
+
   let allPassed = true;
   const failedChecks: string[] = [];
-  
+
   for (const check of checks) {
     console.log(`检查 ${check.name}...`);
     const result = check.fn();
-    
+
     if (result.success) {
       console.log(result.message);
     } else {
@@ -181,15 +180,15 @@ export function runHealthCheck(): void {
     }
     console.log("");
   }
-  
+
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   if (allPassed) {
     console.log("✅ 所有检查通过！本地功能完整。\n");
   } else {
     console.error("❌ 检查失败！以下功能存在问题：");
-    failedChecks.forEach(name => console.error(`   - ${name}`));
+    failedChecks.forEach((name) => console.error(`   - ${name}`));
     console.error("\n⚠️  建议：立即检查并修复上述问题，避免功能异常。\n");
-    
+
     // 在开发模式下，如果检查失败，给出明显警告但不退出
     // 在生产模式下，可以选择退出进程
     if (process.env.NODE_ENV === "production") {

@@ -250,14 +250,17 @@ export function resolveAgentModelAccounts(
   cfg: OpenClawConfig,
   agentId: string,
 ): AgentModelAccountsConfig | undefined {
-  const agentConfig = resolveAgentConfig(cfg, agentId);
-  if (!agentConfig) {
+  // 直接从 agent entry 读取，而不是从 resolveAgentConfig 返回的结果
+  // 因为 resolveAgentConfig 只返回预定义的字段
+  const id = normalizeAgentId(agentId);
+  const entry = resolveAgentEntry(cfg, id);
+  if (!entry) {
     return undefined;
   }
 
-  // 从 agentConfig 中读取 modelAccounts 配置
-  // 注意：这个配置字段需要在 AgentConfig 类型中定义
-  const modelAccounts = (agentConfig as any).modelAccounts as AgentModelAccountsConfig | undefined;
+  // 从 entry 中读取 modelAccounts 配置
+  const modelAccounts = (entry as unknown as { modelAccounts?: AgentModelAccountsConfig })
+    .modelAccounts;
 
   return modelAccounts;
 }
