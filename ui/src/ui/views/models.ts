@@ -11,6 +11,7 @@ import {
   renderImportModelsModal,
   renderAddProviderModal,
   renderViewProviderModal,
+  renderOAuthReauthModal,
 } from "./models.modals.js";
 
 /**
@@ -105,6 +106,7 @@ export function renderModels(
     ${renderImportModelsModal(props as any)}
     ${renderAddProviderModal(props as any)}
     ${renderViewProviderModal(props as any)}
+    ${renderOAuthReauthModal(props)}
   `;
 }
 

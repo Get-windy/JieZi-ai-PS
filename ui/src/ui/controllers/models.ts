@@ -465,3 +465,91 @@ export async function deleteProvider(state: ModelsState, id: string, cascade: bo
     return { success: false };
   }
 }
+
+// ============ OAuth重认证函数 ============
+
+/**
+ * 获取认证健康状态
+ */
+export async function getAuthStatus(
+  state: ModelsState,
+  authId: string,
+): Promise<{
+  authId: string;
+  provider: string;
+  type: "oauth" | "api_key" | "token";
+  status: "ok" | "expiring" | "expired" | "unknown";
+  expiresAt?: number;
+  canRefresh: boolean;
+  remainingMs?: number;
+} | null> {
+  if (!state.client || !state.connected) {
+    return null;
+  }
+  try {
+    const res = await state.client.request<any>("models.auth.status", { authId });
+    return res;
+  } catch (err) {
+    console.error("Failed to get auth status:", err);
+    return null;
+  }
+}
+
+/**
+ * 手动刷新OAuth Token
+ */
+export async function refreshAuthToken(
+  state: ModelsState,
+  authId: string,
+  force: boolean = false,
+): Promise<{
+  refreshed: boolean;
+  expiresAt?: number;
+  remainingMs?: number;
+  message?: string;
+}> {
+  if (!state.client || !state.connected) {
+    return { refreshed: false, message: "Not connected" };
+  }
+  try {
+    const res = await state.client.request<any>("models.auth.refresh", { authId, force });
+    
+    // 刷新成功后重新加载数据
+    if (res?.refreshed) {
+      await loadModels(state, false);
+    }
+    
+    return res || { refreshed: false };
+  } catch (err) {
+    console.error("Failed to refresh auth token:", err);
+    return { refreshed: false, message: String(err) };
+  }
+}
+
+/**
+ * 启动OAuth重认证流程
+ */
+export async function startOAuthReauth(
+  state: ModelsState,
+  authId: string,
+): Promise<{
+  deviceCode: string;
+  userCode: string;
+  verificationUrl: string;
+  expiresIn: number;
+  interval: number;
+  provider: string;
+  authId: string;
+} | null> {
+  if (!state.client || !state.connected) {
+    return null;
+  }
+  try {
+    const res = await state.client.request<any>("models.auth.reauth", { authId });
+    return res;
+  } catch (err) {
+    console.error("Failed to start OAuth reauth:", err);
+    state.modelsError = String(err);
+    return null;
+  }
+}
