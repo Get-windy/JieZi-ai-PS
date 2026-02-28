@@ -22,7 +22,12 @@ export function renderAuthManagerModal(props: ModelsProps) {
   const auths = props.snapshot?.auths?.[providerId] ?? [];
 
   return html`
-    <div class="modal-overlay" @click=${() => props.onManageAuths("")}>
+    <div class="modal-overlay" @click=${(e: Event) => {
+      // 只在直接点击 overlay 自身时关闭，防止意外关闭
+      if (e.target === e.currentTarget) {
+        props.onManageAuths("");
+      }
+    }}>
       <div class="modal-content modal-content--large" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>${providerLabel} - ${t("models.auth_management")}</h2>
@@ -121,7 +126,12 @@ export function renderAuthEditModal(props: ModelsProps) {
   };
 
   return html`
-    <div class="modal-overlay" @click=${handleCancelAuth}>
+    <div class="modal-overlay" @click=${(e: Event) => {
+      // 只在直接点击 overlay 自身时关闭，防止输入框失焦触发关闭
+      if (e.target === e.currentTarget) {
+        handleCancelAuth();
+      }
+    }}>
       <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>${providerLabel} - ${isNew ? t("models.add_auth_title") : t("models.edit_auth")}</h2>
@@ -357,7 +367,12 @@ export function renderModelsListModal(props: ModelsProps) {
   const modelConfigs = props.snapshot?.modelConfigs?.[providerId] ?? [];
 
   return html`
-    <div class="modal-overlay" @click=${() => props.onCloseModelsList()}>
+    <div class="modal-overlay" @click=${(e: Event) => {
+      // 只在直接点击 overlay 自身时关闭，防止意外关闭
+      if (e.target === e.currentTarget) {
+        props.onCloseModelsList();
+      }
+    }}>
       <div class="modal-content modal-content--large" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>${providerLabel} - ${t("models.model_list")}</h2>
@@ -579,7 +594,12 @@ export function renderModelConfigModal(props: ModelsProps) {
   };
 
   return html`
-    <div class="modal-overlay" @click=${handleCancelModelConfig}>
+    <div class="modal-overlay" @click=${(e: Event) => {
+      // 只在直接点击 overlay 自身时关闭，防止输入框失焦触发关闭
+      if (e.target === e.currentTarget) {
+        handleCancelModelConfig();
+      }
+    }}>
       <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>${isNewModel ? t("models.add_model") : `${t("models.model_config")} - ${config.modelName}`}</h2>
