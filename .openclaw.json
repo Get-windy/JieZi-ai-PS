@@ -1,14 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft-07/schema#",
   "title": "JieZI OpenClaw Configuration",
-  "description": "JieZI-ai-PS 默认配置 - 优先使用 JieZI ClawHub 技能仓库",
+  "description": "JieZI-ai-PS 默认配置 - 从 Gitee 仓库拉取技能",
 
   "skills": {
-    "load": {
-      "extraDirs": ["I:\\JieZI\\JieZI-clawhub\\skills"],
-      "watch": true,
-      "watchDebounceMs": 1000
-    },
     "clawhub": {
       "site": "https://gitee.com/CozyNook/JieZI-clawhub",
       "registry": "https://gitee.com/CozyNook/JieZI-clawhub",
