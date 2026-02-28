@@ -22,7 +22,12 @@ export function renderAuthManagerModal(props: ModelsProps) {
   const auths = props.snapshot?.auths?.[providerId] ?? [];
 
   return html`
-    <div class="modal-overlay" @click=${() => props.onManageAuths("")}>
+    <div class="modal-overlay" @click=${(e: Event) => {
+      // 只在直接点击 overlay 自身时关闭，防止意外关闭
+      if (e.target === e.currentTarget) {
+        props.onManageAuths("");
+      }
+    }}>
       <div class="modal-content modal-content--large" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>${providerLabel} - ${t("models.auth_management")}</h2>
@@ -121,7 +126,12 @@ export function renderAuthEditModal(props: ModelsProps) {
   };
 
   return html`
-    <div class="modal-overlay" @click=${handleCancelAuth}>
+    <div class="modal-overlay" @click=${(e: Event) => {
+      // 只在直接点击 overlay 自身时关闭，防止输入框失焦触发关闭
+      if (e.target === e.currentTarget) {
+        handleCancelAuth();
+      }
+    }}>
       <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>${providerLabel} - ${isNew ? t("models.add_auth_title") : t("models.edit_auth")}</h2>
@@ -208,7 +218,7 @@ export function renderAuthEditModal(props: ModelsProps) {
 function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
   const statusColor = auth.status?.valid ? "green" : "gray";
   // 检查是否正在测试
-  const isTesting = (props as any).testingAuthId === auth.authId;
+  const isTesting = (props as unknown as { testingAuthId?: string }).testingAuthId === auth.authId;
   const lastTest = auth.status?.lastChecked
     ? formatAgo(Date.now() - auth.status.lastChecked)
     : null;
@@ -219,7 +229,7 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
                          error.toLowerCase().includes("refresh") || 
                          error.toLowerCase().includes("invalid access token");
   const isQwenOAuth = auth.apiKey.startsWith("qwen-oauth") || 
-                      (auth as any).provider === "qwen-portal";
+                      (auth as unknown as { provider?: string }).provider === "qwen-portal";
   
   // 判断认证类型
   const authType = isQwenOAuth ? "oauth" : "api_key";
@@ -331,7 +341,7 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
             class="btn btn--sm btn--danger" 
             style="padding: 8px 14px; font-size: 13px;"
             @click=${() => {
-              if (confirm(`${t("models.delete_auth_confirm").replace("{name}", auth.name)}`)) {
+              if (confirm(t("models.delete_auth_confirm").replace("{name}", auth.name))) {
                 props.onDeleteAuth(auth.authId);
               }
             }}
@@ -357,7 +367,12 @@ export function renderModelsListModal(props: ModelsProps) {
   const modelConfigs = props.snapshot?.modelConfigs?.[providerId] ?? [];
 
   return html`
-    <div class="modal-overlay" @click=${() => props.onCloseModelsList()}>
+    <div class="modal-overlay" @click=${(e: Event) => {
+      // 只在直接点击 overlay 自身时关闭，防止意外关闭
+      if (e.target === e.currentTarget) {
+        props.onCloseModelsList();
+      }
+    }}>
       <div class="modal-content modal-content--large" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>${providerLabel} - ${t("models.model_list")}</h2>
@@ -378,8 +393,8 @@ export function renderModelsListModal(props: ModelsProps) {
                       class="btn btn--sm" 
                       style="font-size: 13px; padding: 8px 14px;"
                       @click=${() => {
-                        // 无认证时，使用供应商默认配置刷新
-                        props.onRefreshAuthModels(null);
+                        // 无认证时，使用空字符串作为默认authId
+                        props.onRefreshAuthModels("");
                       }}
                     >
                       🔄 ${t("models.view_available_models")}
@@ -456,7 +471,7 @@ export function renderModelsListModal(props: ModelsProps) {
 }
 
 function renderModelCard(model: ModelConfigSnapshot, props: ModelsProps) {
-  const isDeprecated = (model as any).deprecated === true;
+  const isDeprecated = (model as unknown as { deprecated?: boolean }).deprecated === true;
   const statusColor = isDeprecated ? "red" : model.enabled ? "green" : "gray";
   const displayName = model.nickname || model.modelName;
 
@@ -579,7 +594,12 @@ export function renderModelConfigModal(props: ModelsProps) {
   };
 
   return html`
-    <div class="modal-overlay" @click=${handleCancelModelConfig}>
+    <div class="modal-overlay" @click=${(e: Event) => {
+      // 只在直接点击 overlay 自身时关闭，防止输入框失焦触发关闭
+      if (e.target === e.currentTarget) {
+        handleCancelModelConfig();
+      }
+    }}>
       <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>${isNewModel ? t("models.add_model") : `${t("models.model_config")} - ${config.modelName}`}</h2>
@@ -936,26 +956,21 @@ export function renderAddProviderModal(
 
   const form = props.providerForm;
   const isEditing = form.isEditing || false;
-  const apiTemplates = (props.snapshot as any)?.apiTemplates || [];
-  const selectedTemplate = apiTemplates.find((t: any) => t.id === form.selectedTemplateId);
+  const apiTemplates = (props.snapshot as unknown as { apiTemplates?: unknown[] })?.apiTemplates || [];
+  const _selectedTemplate = apiTemplates.find((t: unknown) => (t as { id?: string }).id === form.selectedTemplateId);
 
   // API 示例导入状态（从 form 中读取）
   const showApiImport = form.showApiImport || false;
 
   // 添加模式：'code-import' | 'manual'
-  const addMode = (form as any).addMode || "code-import";
+  const addMode = (form as unknown as { addMode?: string }).addMode || "code-import";
 
   // 代码导入步骤：'input' | 'confirm'
-  const importStep = (form as any).importStep || "input";
+  const importStep = (form as unknown as { importStep?: string }).importStep || "input";
 
   // 切换添加模式
   const switchAddMode = (mode: "code-import" | "manual") => {
     props.onProviderFormChange({ addMode: mode, importStep: "input" });
-  };
-
-  // 切换导入状态
-  const toggleApiImport = () => {
-    props.onProviderFormChange({ showApiImport: !showApiImport });
   };
 
   // 解析 API 调用示例（支持 curl 命令）
@@ -1080,7 +1095,7 @@ export function renderAddProviderModal(
 
       // 提取 JSON Body 中的模型名称和默认参数
       let extractedModel: string | undefined;
-      let defaultParams: Record<string, any> = {};
+      let defaultParams: Record<string, unknown> = {};
 
       // 尝试解析 JSON 数据
       const jsonMatch = sample.match(/-d\s+['"]({[\s\S]*?})['"]/);
@@ -1454,28 +1469,31 @@ export function renderAddProviderModal(
             <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">${t("models.select_template")}</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;">
               ${apiTemplates.map(
-                (template: any) => html`
+                (template: unknown) => {
+                  const t = template as { id?: string; name?: string; description?: string };
+                  return html`
                 <div 
-                  class="card" 
+ class="card" 
                   style="
                     padding: 16px; 
                     cursor: pointer; 
-                    border: 2px solid ${form.selectedTemplateId === template.id ? "var(--accent)" : "transparent"};
-                    background: ${form.selectedTemplateId === template.id ? "var(--bg-elevated)" : "var(--bg-secondary)"};
+                    border: 2px solid ${form.selectedTemplateId === t.id ? "var(--accent)" : "transparent"};
+                    background: ${form.selectedTemplateId === t.id ? "var(--bg-elevated)" : "var(--bg-secondary)"};
                     transition: all 0.15s ease;
                   "
-                  @click=${() => props.onTemplateSelect(template.id)}
+                  @click=${() => props.onTemplateSelect(t.id!)}
                 >
-                  <div style="font-weight: 600; margin-bottom: 4px;">${template.name}</div>
+                  <div style="font-weight: 600; margin-bottom: 4px;">${t.name}</div>
                   ${
-                    template.description
+                    t.description
                       ? html`
-                    <div style="font-size: 12px; color: var(--text-secondary);">${template.description}</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">${t.description}</div>
                   `
                       : nothing
                   }
                 </div>
-              `,
+              `;
+                },
               )}
             </div>
           </div>
@@ -1643,14 +1661,14 @@ export function renderViewProviderModal(
 
   const providerId = props.viewingProviderId;
   // 从 providerInstances 读取完整的供应商信息
-  const providerInstance = (props.snapshot?.providerInstances as any[])?.find(
-    (p: any) => p.id === providerId,
-  );
+  const providerInstance = (props.snapshot?.providerInstances as unknown as Array<{ id?: string }>)?.find(
+    (p) => p.id === providerId,
+  ) as { id?: string; name?: string; icon?: string; website?: string; templateId?: string; defaultBaseUrl?: string; apiKeyPlaceholder?: string } | undefined;
   const providerLabel = props.snapshot?.providerLabels?.[providerId] || providerId;
   const auths = props.snapshot?.auths?.[providerId] ?? [];
   const modelConfigs = props.snapshot?.modelConfigs?.[providerId] ?? [];
-  const apiTemplates = (props.snapshot as any)?.apiTemplates || [];
-  const selectedTemplate = apiTemplates.find((t: any) => t.id === providerInstance?.templateId);
+  const apiTemplates = (props.snapshot as unknown as { apiTemplates?: unknown[] })?.apiTemplates || [];
+  const selectedTemplate = apiTemplates.find((t: unknown) => (t as { id?: string }).id === providerInstance?.templateId) as { id?: string; name?: string; description?: string } | undefined;
 
   return html`
     <div class="modal-overlay" @click=${() => props.onCancelProviderView()}>
@@ -1788,22 +1806,30 @@ export function renderViewProviderModal(
 // ============ OAuth重认证流程弹窗 ============
 
 export function renderOAuthReauthModal(props: ModelsProps) {
-  const reauth = (props as any).oauthReauth;
+  const reauth = (props as unknown as { oauthReauth?: unknown }).oauthReauth;
   console.log('[renderOAuthReauthModal] Called with oauthReauth:', reauth);
   if (!reauth) {
     console.log('[renderOAuthReauthModal] No reauth data, returning nothing');
     return nothing;
   }
 
-  const { authId, provider, deviceCode, userCode, verificationUrl, isPolling, error } = reauth;
+  const { authId, provider, userCode, verificationUrl, isPolling, error } = reauth as {
+    authId: string;
+    provider: string;
+    deviceCode?: string;
+    userCode: string;
+    verificationUrl: string;
+    isPolling: boolean;
+    error?: string;
+  };
   console.log('[renderOAuthReauthModal] Rendering modal with:', { authId, provider, userCode, verificationUrl });
 
   return html`
-    <div class="modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 9999;" @click=${() => (props as any).onCancelOAuthReauth?.()}>
+    <div class="modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 9999;" @click=${() => (props as unknown as { onCancelOAuthReauth?: () => void }).onCancelOAuthReauth?.()}>
       <div class="modal-content" style="position: relative; background: var(--bg-primary); border-radius: 12px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);" @click=${(e: Event) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>🔐 OAuth 重新认证 - ${provider}</h2>
-          <button class="btn-icon" @click=${() => (props as any).onCancelOAuthReauth?.()}>&times;</button>
+          <button class="btn-icon" @click=${() => (props as unknown as { onCancelOAuthReauth?: () => void }).onCancelOAuthReauth?.()}>&times;</button>
         </div>
         
         <div class="modal-body" style="padding: 32px; text-align: center;">
@@ -1844,7 +1870,7 @@ export function renderOAuthReauthModal(props: ModelsProps) {
                 <button 
                   class="btn btn--primary" 
                   style="margin-top: 24px; background: var(--accent); border-color: var(--accent);"
-                  @click=${() => (props as any).onStartOAuthPolling?.(authId)}
+                  @click=${() => (props as unknown as { onStartOAuthPolling?: (authId: string) => void }).onStartOAuthPolling?.(authId)}
                 >
                   ✅ 我已授权，开始检查
                 </button>
@@ -1854,7 +1880,7 @@ export function renderOAuthReauthModal(props: ModelsProps) {
         </div>
         
         <div class="modal-footer">
-          <button class="btn" @click=${() => (props as any).onCancelOAuthReauth?.()}>
+          <button class="btn" @click=${() => (props as unknown as { onCancelOAuthReauth?: () => void }).onCancelOAuthReauth?.()}>
             ${error ? "关闭" : "取消"}
           </button>
         </div>

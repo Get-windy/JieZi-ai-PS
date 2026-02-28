@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "JieZI OpenClaw Configuration",
+  "description": "JieZI-ai-PS 默认配置 - 从 Gitee 仓库拉取技能",
+
+  "skills": {
+    "clawhub": {
+      "site": "https://gitee.com/CozyNook/JieZI-clawhub",
+      "registry": "https://gitee.com/CozyNook/JieZI-clawhub",
+      "upstreamRegistry": "https://clawhub.ai",
+      "fallbackToUpstream": true
+    }
+  },
+
+  "agents": {
+    "defaults": {
+      "cliBackends": {
+        "qoder-cli": {
+          "command": "qodercli",
+          "args": ["-p", "-f", "json", "-q"],
+          "output": "json",
+          "input": "arg",
+          "modelArg": "--model",
+          "modelAliases": {
+            "efficient": "efficient",
+            "lite": "lite",
+            "performance": "performance",
+            "ultimate": "ultimate",
+            "qmodel": "qmodel",
+            "auto": "auto",
+            "default": "auto"
+          },
+          "sessionArg": "-r",
+          "sessionMode": "existing",
+          "sessionIdFields": ["session_id", "sessionId"],
+          "imageArg": "--attachment",
+          "imageMode": "repeat",
+          "serialize": true,
+          "reliability": {
+            "watchdog": {
+              "fresh": {
+                "noOutputTimeoutMs": 120000,
+                "enabled": true
+              },
+              "resume": {
+                "noOutputTimeoutMs": 180000,
+                "enabled": true
+              }
+            }
+          },
+          "env": {},
+          "clearEnv": []
+        }
+      }
+    }
+  }
+}
