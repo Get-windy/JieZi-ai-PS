@@ -841,7 +841,7 @@ async function updateAuth(params: {
       if (params.name !== undefined) {
         auth.name = params.name;
       }
-      if (params.apiKey !== undefined) {
+      if (params.apiKey !== undefined && params.apiKey !== "") {
         auth.apiKey = params.apiKey;
       }
       if (params.baseUrl !== undefined) {
