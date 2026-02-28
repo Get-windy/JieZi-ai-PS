@@ -992,9 +992,32 @@ export function renderAddProviderModal(
       // 如果有路径，保留到倒数第二个斜杠
       if (url.pathname && url.pathname !== "/") {
         const pathParts = url.pathname.split("/").filter((p) => p);
-        // 移除最后一个路径段（通常是端点名，如 chat/completions、completions 等）
+        
+        // 识别常见的 API 端点模式并移除
+        // 例如：chat/completions, completions, messages, embeddings 等
+        const commonEndpoints = [
+          "completions",
+          "messages",
+          "embeddings",
+          "chat",
+          "v1",
+        ];
+        
+        // 移除最后一个路径段（端点名）
         if (pathParts.length > 0) {
-          pathParts.pop(); // 移除最后一段
+          const lastPart = pathParts[pathParts.length - 1];
+          pathParts.pop();
+          
+          // 如果倒数第二个路径段也是常见端点（如 chat/completions），继续移除
+          if (pathParts.length > 0) {
+            const secondLastPart = pathParts[pathParts.length - 1];
+            // 特殊处理：如果是 chat/completions 或 v1/chat 这种组合，移除 chat
+            if (lastPart === "completions" && secondLastPart === "chat") {
+              pathParts.pop(); // 移除 chat
+            }
+          }
+          
+          // 构建最终的 baseUrl
           if (pathParts.length > 0) {
             baseUrl += "/" + pathParts.join("/");
           }
@@ -1011,6 +1034,36 @@ export function renderAddProviderModal(
         "api.openai.com": { id: "openai", name: "OpenAI" },
         "anthropic.com": { id: "anthropic", name: "Anthropic" },
         "api.anthropic.com": { id: "anthropic", name: "Anthropic" },
+        "siliconflow.cn": {
+          id: "siliconflow",
+          name: "硅基流动",
+          knownModels: [
+            "Pro/Qwen/Qwen2.5-72B-Instruct",
+            "Pro/Qwen/Qwen2.5-32B-Instruct",
+            "Pro/Qwen/Qwen2.5-14B-Instruct",
+            "Pro/Qwen/Qwen2.5-7B-Instruct",
+            "Pro/deepseek-ai/DeepSeek-V2.5",
+            "Pro/internlm/internlm2_5-20b-chat",
+            "Qwen/Qwen2.5-72B-Instruct",
+            "deepseek-ai/DeepSeek-V2.5",
+            "THUDM/glm-4-9b-chat",
+          ],
+        },
+        "api.siliconflow.cn": {
+          id: "siliconflow",
+          name: "硅基流动",
+          knownModels: [
+            "Pro/Qwen/Qwen2.5-72B-Instruct",
+            "Pro/Qwen/Qwen2.5-32B-Instruct",
+            "Pro/Qwen/Qwen2.5-14B-Instruct",
+            "Pro/Qwen/Qwen2.5-7B-Instruct",
+            "Pro/deepseek-ai/DeepSeek-V2.5",
+            "Pro/internlm/internlm2_5-20b-chat",
+            "Qwen/Qwen2.5-72B-Instruct",
+            "deepseek-ai/DeepSeek-V2.5",
+            "THUDM/glm-4-9b-chat",
+          ],
+        },
         "bigmodel.cn": {
           id: "zhipu",
           name: "智谱 AI",
