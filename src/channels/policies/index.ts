@@ -30,4 +30,5 @@ export { SmartRoutePolicyHandler } from "./smart-route.js";
 export * from "./types.js";
 export { PolicyRegistry } from "./registry.js";
 export * from "./executor.js";
+export * from "./scheduler.js";
 export * from "./dispatcher.js";

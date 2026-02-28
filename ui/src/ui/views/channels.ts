@@ -16,6 +16,16 @@ import {
 } from "./channels.account-manager.ts";
 import { renderChannelConfigSection } from "./channels.config.ts";
 import { channelEnabled, renderChannelAccountCount } from "./channels.shared.ts";
+import {
+  renderPairingNotificationBar,
+  renderChannelPairingSection,
+  renderPairingRequestsModal,
+} from "./channel-pairing.js";
+import {
+  getTotalPendingPairingCount,
+  getChannelPairingRequests,
+} from "../controllers/channel-pairing.js";
+import { renderNostrProfileForm } from "./channels.nostr-profile-form.ts";
 
 export function renderChannels(props: ChannelsProps) {
   const channels = props.snapshot?.channels as Record<string, unknown> | null;
@@ -40,7 +50,18 @@ export function renderChannels(props: ChannelsProps) {
       return a.order - b.order;
     });
 
+  // 获取配对请求总数
+  const pairingRequests = props.snapshot?.channelPairingRequests ?? {};
+  const totalPairingCount = getTotalPendingPairingCount(pairingRequests);
+
   return html`
+    <!-- 配对通知栏 -->
+    ${renderPairingNotificationBar({
+      totalCount: totalPairingCount,
+      onShowPairingRequests: props.onShowPairingModal,
+      onApproveAll: props.onApproveAllPairing,
+    })}
+
     ${
       hiddenChannels.length > 0
         ? html`
@@ -73,6 +94,24 @@ export function renderChannels(props: ChannelsProps) {
     ${renderAllChannelsModal(props, channelOrder, hiddenChannels)}
     ${renderDebugModal(props)}
     ${renderChannelGlobalConfigModal(props)}
+    
+    <!-- 配对请求模态框 -->
+    ${renderPairingRequestsModal({
+      open: props.showPairingModal,
+      allRequests: pairingRequests,
+      channelLabels: props.snapshot?.channelLabels ?? {},
+      onClose: props.onClosePairingModal,
+      onApprovePairing: async (channelId: string, code: string) => {
+        if (props.onApprovePairing) {
+          await props.onApprovePairing(channelId, code);
+        }
+      },
+      onRejectPairing: async (channelId: string, code: string) => {
+        if (props.onRejectPairing) {
+          await props.onRejectPairing(channelId, code);
+        }
+      },
+    })}
   `;
 }
 
@@ -339,7 +378,6 @@ function renderNostrProfileSection(
 
   // 如果显示表单，使用表单组件
   if (showForm) {
-    const { renderNostrProfileForm } = require("./channels.nostr-profile-form.ts");
     const profileFormCallbacks = {
       onFieldChange: props.onNostrProfileFieldChange,
       onSave: props.onNostrProfileSave,
@@ -440,6 +478,10 @@ function renderGenericChannelCard(
   const isConfigured = channelConfigured || hasConfiguredAccounts;
   const hasAnyAccounts = accounts.length > 0;
 
+  // 获取当前通道的配对请求
+  const pairingRequests = props.snapshot?.channelPairingRequests ?? {};
+  const channelPairingRequests = getChannelPairingRequests(pairingRequests, key);
+
   return html`
     <div class="card" style="position: relative;">
       <!-- 隐藏按钮（仅未配置通道显示） -->
@@ -461,6 +503,23 @@ function renderGenericChannelCard(
       <div class="card-title">${label}</div>
       <div class="card-sub">${t("channels.card.subtitle")}</div>
       ${accountCountLabel}
+
+      <!-- 配对请求区域 -->
+      ${renderChannelPairingSection({
+        channelId: key,
+        channelLabel: label,
+        requests: channelPairingRequests,
+        onApprovePairing: async (channelId: string, code: string) => {
+          if (props.onApprovePairing) {
+            await props.onApprovePairing(channelId, code);
+          }
+        },
+        onRejectPairing: async (channelId: string, code: string) => {
+          if (props.onRejectPairing) {
+            await props.onRejectPairing(channelId, code);
+          }
+        },
+      })}
 
       <!-- 账号操作按钮和状态指示器 -->
       <div class="row" style="margin-top: 16px; align-items: center; gap: 12px;">

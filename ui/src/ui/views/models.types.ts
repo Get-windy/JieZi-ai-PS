@@ -12,6 +12,19 @@ export type ModelsProps = {
   error: string | null;
   testingAuthId: string | null; // 正在测试的认证ID
 
+  // ============ OAuth重认证状态 ============
+  oauthReauth: {
+    authId: string;
+    provider: string;
+    deviceCode: string;
+    userCode: string;
+    verificationUrl: string;
+    expiresIn: number;
+    interval: number;
+    isPolling: boolean;
+    error?: string;
+  } | null; // OAuth重认证流程状态
+
   // ============ 认证管理状态 ============
   managingAuthProvider: string | null; // 当前管理认证的供应商ID
   editingAuth: {
@@ -78,6 +91,9 @@ export type ModelsProps = {
   onCancelAuthEdit: () => void; // 取消编辑认证
   onTestAuth: (authId: string) => void; // 测试认证连接
   onRefreshAuthBalance: (authId: string) => void; // 刷新认证余额
+  onReauth: (authId: string, provider: string) => void; // OAuth重新认证
+  onStartOAuthPolling: (authId: string) => void; // 开始OAuth授权轮询
+  onCancelOAuthReauth: () => void; // 取消OAuth重认证
 
   // ============ 模型列表操作回调 ============
   onManageModels: (provider: string) => void; // 打开模型列表弹窗

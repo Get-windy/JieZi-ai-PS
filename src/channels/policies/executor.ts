@@ -1,203 +1,252 @@
 /**
  * 策略执行器
- *
- * 功能：协调策略处理的完整流程
+ * 
+ * 功能：
+ * - 执行策略处理逻辑
+ * - 处理策略链（多个策略顺序执行）
+ * - 支持策略执行的日志记录和监控
  */
 
-import type { AgentChannelBindings } from "../../config/types.channel-bindings.js";
-import type { PolicyProcessContext, PolicyResult } from "./types.js";
+import type {
+  InboundMessageContext,
+  OutboundMessageContext,
+  PolicyResult,
+  PolicyProcessContext,
+} from "./types.js";
 import { channelBindingResolver } from "../bindings/resolver.js";
-import { messageDispatcher, type DispatchResult } from "./dispatcher.js";
+import { loadConfig } from "../../config/config.js";
+import type { AgentChannelBindings } from "../../config/types.channel-bindings.js";
 
 /**
- * 策略执行上下文
- */
-export type PolicyExecutionContext = {
-  /** 智能助手ID */
-  agentId: string;
-
-  /** 智能助手通道绑定配置 */
-  channelBindings?: AgentChannelBindings;
-
-  /** 消息信息 */
-  message: any;
-
-  /** 通道ID */
-  channelId: string;
-
-  /** 账号ID */
-  accountId: string;
-
-  /** 消息方向 */
-  direction: "inbound" | "outbound";
-
-  /** 额外上下文 */
-  metadata?: Record<string, unknown>;
-};
-
-/**
- * 策略执行结果
- */
-export type PolicyExecutionResult = {
-  /** 是否允许消息继续处理 */
-  allow: boolean;
-
-  /** 拒绝原因 */
-  reason?: string;
-
-  /** 策略结果 */
-  policyResult?: PolicyResult;
-
-  /** 派发结果 */
-  dispatchResult?: DispatchResult;
-
-  /** 使用的绑定配置 */
-  binding?: {
-    id: string;
-    policyType: string;
-  };
-};
-
-/**
- * 策略执行器类
+ * 策略执行器
  */
 export class PolicyExecutor {
+  private static instance: PolicyExecutor;
+
+  private constructor() {}
+
   /**
-   * 执行策略处理
-   *
-   * @param context - 执行上下文
-   * @param sendMessage - 发送消息的函数（用于自动回复和路由）
-   * @returns 执行结果
+   * 获取单例实例
    */
-  async execute(
-    context: PolicyExecutionContext,
-    sendMessage?: (target: any, content: any) => Promise<void>,
-  ): Promise<PolicyExecutionResult> {
-    // 1. 查找匹配的绑定
-    const binding = channelBindingResolver.resolveBinding(
-      context.channelBindings,
-      context.channelId,
-      context.accountId,
-    );
-
-    // 如果没有找到绑定，允许正常处理
-    if (!binding) {
-      return {
-        allow: true,
-        reason: "No matching channel binding found",
-      };
+  static getInstance(): PolicyExecutor {
+    if (!PolicyExecutor.instance) {
+      PolicyExecutor.instance = new PolicyExecutor();
     }
+    return PolicyExecutor.instance;
+  }
 
-    // 2. 构建策略处理上下文
-    const policyContext: PolicyProcessContext = {
-      agentId: context.agentId,
-      agentConfig: {}, // TODO: 从配置中获取完整的 agent config
-      message: context.message,
-      channelId: context.channelId,
-      accountId: context.accountId,
-      binding: {
-        id: binding.id,
-        policy: binding.policy,
-        enabled: binding.enabled,
-        priority: binding.priority,
-      },
-      gatewayContext: context.metadata || {},
-    };
-
-    // 3. 应用策略
-    let policyResult: PolicyResult;
+  /**
+   * 执行入站消息策略
+   * 
+   * @param message - 入站消息上下文
+   * @param agentId - 智能助手ID
+   * @returns 策略处理结果
+   */
+  async executeInboundPolicy(
+    message: InboundMessageContext,
+    agentId: string,
+  ): Promise<PolicyResult> {
     try {
-      policyResult = await channelBindingResolver.applyPolicy(policyContext);
+      // 加载配置
+      const config = await loadConfig();
+      const agent = config?.agents?.list?.find((a: any) => a.id === agentId);
+
+      if (!agent) {
+        console.warn(`[PolicyExecutor] Agent not found: ${agentId}`);
+        return {
+          allow: true, // 默认允许通过
+          reason: "Agent not found, allowing by default",
+        };
+      }
+
+      // 获取通道绑定配置
+      const channelBindings = (agent as any).channelBindings as AgentChannelBindings | undefined;
+
+      // 查找匹配的绑定
+      const binding = channelBindingResolver.resolveBinding(
+        channelBindings,
+        message.channelId,
+        message.accountId,
+      );
+
+      // 如果没有绑定，使用默认策略或允许通过
+      if (!binding) {
+        if (channelBindings?.defaultPolicy) {
+          return this.executeDefaultPolicy(message, agentId, channelBindings.defaultPolicy);
+        }
+
+        console.log(
+          `[PolicyExecutor] No binding found for channel ${message.channelId} and account ${message.accountId}, allowing by default`,
+        );
+        return {
+          allow: true,
+          reason: "No binding found, allowing by default",
+        };
+      }
+
+      // 构建策略处理上下文
+      const context: PolicyProcessContext = {
+        message,
+        agentId,
+        agentConfig: agent,
+        channelId: message.channelId,
+        accountId: message.accountId,
+        binding,
+        gatewayContext: {},
+      };
+
+      // 应用策略
+      const result = await channelBindingResolver.applyPolicy(context);
+
+      // 记录日志
+      this.logPolicyExecution("inbound", agentId, message.channelId, binding.policy.type, result);
+
+      return result;
     } catch (error) {
+      console.error("[PolicyExecutor] Error executing inbound policy:", error);
       return {
         allow: false,
-        reason: `Policy execution failed: ${error instanceof Error ? error.message : String(error)}`,
-        binding: {
-          id: binding.id,
-          policyType: binding.policy.type,
-        },
+        reason: `Policy execution error: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
+  }
 
-    // 4. 处理策略结果
-    const executionResult: PolicyExecutionResult = {
-      allow: policyResult.allow,
-      reason: policyResult.reason,
-      policyResult,
-      binding: {
-        id: binding.id,
-        policyType: binding.policy.type,
-      },
-    };
+  /**
+   * 执行出站消息策略
+   * 
+   * @param message - 出站消息上下文
+   * @param agentId - 智能助手ID
+   * @returns 策略处理结果
+   */
+  async executeOutboundPolicy(
+    message: OutboundMessageContext,
+    agentId: string,
+  ): Promise<PolicyResult> {
+    try {
+      // 加载配置
+      const config = await loadConfig();
+      const agent = config?.agents?.list?.find((a: any) => a.id === agentId);
 
-    // 5. 如果策略不允许，但需要派发消息（自动回复或路由）
-    if (!policyResult.allow && sendMessage) {
-      if (policyResult.autoReply || (policyResult.routeTo && policyResult.routeTo.length > 0)) {
-        const dispatchResult = await messageDispatcher.dispatch(
-          policyResult,
-          context.message,
-          sendMessage,
+      if (!agent) {
+        console.warn(`[PolicyExecutor] Agent not found: ${agentId}`);
+        return {
+          allow: true,
+          reason: "Agent not found, allowing by default",
+        };
+      }
+
+      // 获取通道绑定配置
+      const channelBindings = (agent as any).channelBindings as AgentChannelBindings | undefined;
+
+      // 查找匹配的绑定
+      const binding = channelBindingResolver.resolveBinding(
+        channelBindings,
+        message.channelId,
+        message.accountId,
+      );
+
+      // 如果没有绑定，使用默认策略或允许通过
+      if (!binding) {
+        if (channelBindings?.defaultPolicy) {
+          return this.executeDefaultPolicy(message, agentId, channelBindings.defaultPolicy);
+        }
+
+        console.log(
+          `[PolicyExecutor] No binding found for channel ${message.channelId} and account ${message.accountId}, allowing by default`,
         );
-
-        executionResult.dispatchResult = dispatchResult;
+        return {
+          allow: true,
+          reason: "No binding found, allowing by default",
+        };
       }
-    }
 
-    return executionResult;
+      // 构建策略处理上下文
+      const context: PolicyProcessContext = {
+        message,
+        agentId,
+        agentConfig: agent,
+        channelId: message.channelId,
+        accountId: message.accountId,
+        binding,
+        gatewayContext: {},
+      };
+
+      // 应用策略
+      const result = await channelBindingResolver.applyPolicy(context);
+
+      // 记录日志
+      this.logPolicyExecution("outbound", agentId, message.channelId, binding.policy.type, result);
+
+      return result;
+    } catch (error) {
+      console.error("[PolicyExecutor] Error executing outbound policy:", error);
+      return {
+        allow: false,
+        reason: `Policy execution error: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
   }
 
   /**
-   * 验证智能助手的所有通道绑定配置
-   *
-   * @param channelBindings - 通道绑定配置
-   * @returns 验证结果
+   * 执行默认策略
    */
-  async validateChannelBindings(channelBindings: AgentChannelBindings): Promise<{
-    valid: boolean;
-    errors?: Array<{
-      bindingId: string;
-      errors: string[];
-    }>;
-  }> {
-    if (!channelBindings.bindings || channelBindings.bindings.length === 0) {
-      return { valid: true };
+  private async executeDefaultPolicy(
+    message: InboundMessageContext | OutboundMessageContext,
+    agentId: string,
+    defaultPolicy: any,
+  ): Promise<PolicyResult> {
+    try {
+      // 构建临时绑定
+      const tempBinding = {
+        id: "default",
+        channelId: message.channelId,
+        accountId: message.accountId,
+        policy: defaultPolicy,
+        enabled: true,
+      };
+
+      const context: PolicyProcessContext = {
+        message,
+        agentId,
+        agentConfig: {},
+        channelId: message.channelId,
+        accountId: message.accountId,
+        binding: tempBinding,
+        gatewayContext: {},
+      };
+
+      return await channelBindingResolver.applyPolicy(context);
+    } catch (error) {
+      console.error("[PolicyExecutor] Error executing default policy:", error);
+      return {
+        allow: false,
+        reason: `Default policy execution error: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
-
-    const validationErrors: Array<{ bindingId: string; errors: string[] }> = [];
-
-    for (const binding of channelBindings.bindings) {
-      const result = await channelBindingResolver.validateBinding(binding);
-
-      if (!result.valid && result.errors) {
-        validationErrors.push({
-          bindingId: binding.id,
-          errors: result.errors,
-        });
-      }
-    }
-
-    return {
-      valid: validationErrors.length === 0,
-      errors: validationErrors.length > 0 ? validationErrors : undefined,
-    };
   }
 
   /**
-   * 列出所有可用的策略类型
+   * 记录策略执行日志
    */
-  listAvailablePolicies(): string[] {
-    return channelBindingResolver.listPolicyTypes();
-  }
-
-  /**
-   * 检查策略类型是否可用
-   */
-  isPolicyAvailable(type: string): boolean {
-    return channelBindingResolver.hasPolicyType(type);
+  private logPolicyExecution(
+    direction: "inbound" | "outbound",
+    agentId: string,
+    channelId: string,
+    policyType: string,
+    result: PolicyResult,
+  ): void {
+    console.log(
+      `[PolicyExecutor] ${direction} policy executed - ` +
+        `agent: ${agentId}, ` +
+        `channel: ${channelId}, ` +
+        `policy: ${policyType}, ` +
+        `result: ${result.allow ? "ALLOW" : "DENY"}` +
+        (result.reason ? `, reason: ${result.reason}` : ""),
+    );
   }
 }
 
 /**
  * 导出单例实例
  */
-export const policyExecutor = new PolicyExecutor();
+export const policyExecutor = PolicyExecutor.getInstance();

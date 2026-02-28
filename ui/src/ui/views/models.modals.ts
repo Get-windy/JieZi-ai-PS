@@ -212,6 +212,17 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
   const lastTest = auth.status?.lastChecked
     ? formatAgo(Date.now() - auth.status.lastChecked)
     : null;
+  
+  // 检测OAuth过期（通过error信息判断）
+  const error = auth.status?.error || "";
+  const isOAuthExpired = error.toLowerCase().includes("expired") || 
+                         error.toLowerCase().includes("refresh") || 
+                         error.toLowerCase().includes("invalid access token");
+  const isQwenOAuth = auth.apiKey.startsWith("qwen-oauth") || 
+                      (auth as any).provider === "qwen-portal";
+  
+  // 判断认证类型
+  const authType = isQwenOAuth ? "oauth" : "api_key";
 
   return html`
     <div class="card" style="padding: 20px;">
@@ -254,9 +265,40 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
             `
                 : nothing
             }
+            ${
+              isOAuthExpired && isQwenOAuth
+                ? html`
+              <div class="card-sub" style="margin-top: 6px; padding: 8px; background: rgba(255, 92, 92, 0.1); border-left: 3px solid #ff5c5c; font-size: 12px; border-radius: 4px;">
+                <div style="font-weight: 600; color: #ff5c5c; margin-bottom: 4px;">⚠️ OAuth 认证已过期</div>
+                <div style="color: var(--text-secondary); margin-bottom: 8px;">点击下方"重新认证"按钮刷新授权</div>
+              </div>
+            `
+                : nothing
+            }
           </div>
         </div>
         <div class="row" style="gap: 10px; flex-shrink: 0;">
+          ${isOAuthExpired && authType === "oauth" ? html`
+            <button 
+              class="btn btn--sm btn--warning" 
+              style="padding: 8px 14px; font-size: 13px; background: #ff9800; color: white;"
+              @click=${() => (props as any).onReauth?.(auth.authId, auth.provider)}
+            >
+              🔄 重新认证
+            </button>
+          ` : authType === "oauth" ? html`
+            <button 
+              class="btn btn--sm" 
+              style="padding: 8px 14px; font-size: 13px; background: #4CAF50; color: white;"
+              @click=${() => {
+                console.log('[DEBUG] OAuth Debug Button Clicked', { authId: auth.authId, provider: auth.provider });
+                (props as any).onReauth?.(auth.authId, auth.provider);
+              }}
+              title="调试OAuth重认证功能"
+            >
+              🐛 OAuth调试
+            </button>
+          ` : nothing}
            <button 
             class="btn btn--sm" 
             style="padding: 8px 14px; font-size: 13px; ${isTesting ? "opacity: 0.6;" : ""}"
@@ -1736,6 +1778,84 @@ export function renderViewProviderModal(
             }}
           >
             ✏️ ${t("models.edit_provider")}
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ============ OAuth重认证流程弹窗 ============
+
+export function renderOAuthReauthModal(props: ModelsProps) {
+  const reauth = (props as any).oauthReauth;
+  console.log('[renderOAuthReauthModal] Called with oauthReauth:', reauth);
+  if (!reauth) {
+    console.log('[renderOAuthReauthModal] No reauth data, returning nothing');
+    return nothing;
+  }
+
+  const { authId, provider, deviceCode, userCode, verificationUrl, isPolling, error } = reauth;
+  console.log('[renderOAuthReauthModal] Rendering modal with:', { authId, provider, userCode, verificationUrl });
+
+  return html`
+    <div class="modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 9999;" @click=${() => (props as any).onCancelOAuthReauth?.()}>
+      <div class="modal-content" style="position: relative; background: var(--bg-primary); border-radius: 12px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="modal-header">
+          <h2>🔐 OAuth 重新认证 - ${provider}</h2>
+          <button class="btn-icon" @click=${() => (props as any).onCancelOAuthReauth?.()}>&times;</button>
+        </div>
+        
+        <div class="modal-body" style="padding: 32px; text-align: center;">
+          ${error ? html`
+            <div style="padding: 16px; background: rgba(255, 92, 92, 0.1); border-left: 3px solid #ff5c5c; border-radius: 4px; margin-bottom: 24px; text-align: left;">
+              <div style="font-weight: 600; color: #ff5c5c; margin-bottom: 4px;">⚠️ 认证失败</div>
+              <div style="font-size: 13px; color: var(--text-secondary);">${error}</div>
+            </div>
+          ` : html`
+            <div style="margin-bottom: 24px;">
+              <div style="font-size: 18px; font-weight: 600; margin-bottom: 12px;">请打开以下链接授权</div>
+              <a 
+                href="${verificationUrl}" 
+                target="_blank" 
+                style="display: inline-block; padding: 12px 24px; background: var(--accent); color: white; border-radius: 6px; text-decoration: none; font-weight: 600; margin-bottom: 16px;"
+              >
+                🔗 打开授权页面
+              </a>
+              
+              <div style="margin: 24px 0;">
+                <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 8px;">或者手动输入以下验证码：</div>
+                <div style="display: inline-block; padding: 16px 32px; background: var(--bg-elevated); border: 2px solid var(--accent); border-radius: 8px; font-size: 32px; font-weight: 700; letter-spacing: 4px; font-family: monospace; color: var(--accent);">
+                  ${userCode}
+                </div>
+              </div>
+              
+              ${isPolling ? html`
+                <div style="margin-top: 24px; padding: 12px; background: var(--bg-secondary); border-radius: 6px;">
+                  <div style="display: inline-block; width: 16px; height: 16px; border: 2px solid var(--accent); border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px;"></div>
+                  <span style="color: var(--text-secondary);">等待授权完成...</span>
+                </div>
+                <style>
+                  @keyframes spin {
+                    to { transform: rotate(360deg); }
+                  }
+                </style>
+              ` : html`
+                <button 
+                  class="btn btn--primary" 
+                  style="margin-top: 24px; background: var(--accent); border-color: var(--accent);"
+                  @click=${() => (props as any).onStartOAuthPolling?.(authId)}
+                >
+                  ✅ 我已授权，开始检查
+                </button>
+              `}
+            </div>
+          `}
+        </div>
+        
+        <div class="modal-footer">
+          <button class="btn" @click=${() => (props as any).onCancelOAuthReauth?.()}>
+            ${error ? "关闭" : "取消"}
           </button>
         </div>
       </div>

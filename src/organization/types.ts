@@ -7,23 +7,61 @@
 /**
  * 组织层级类型
  */
-export type OrganizationLevel = "company" | "department" | "team" | "individual";
+export type OrganizationLevel = "company" | "department" | "team" | "project" | "individual";
 
 /**
- * 组织结构
+ * 成员类型（人类或智能助手）
+ */
+export type MemberType = "human" | "agent";
+
+/**
+ * 成员角色
+ */
+export type MemberRole = "owner" | "admin" | "manager" | "lead" | "member" | "observer";
+
+/**
+ * 组织成员
+ */
+export interface OrganizationMember {
+  id: string; // 成员ID（人类或助手ID）
+  type: MemberType; // 成员类型
+  role: MemberRole; // 角色
+  title?: string; // 职位名称
+  reportTo?: string; // 汇报对象ID
+  manages?: string[]; // 管理的成员ID列表
+  permissions?: string[]; // 特定权限列表
+  responsibilities?: string[]; // 职责列表
+  joinedAt: number; // 加入时间
+}
+
+/**
+ * 组织结构（扩展版本 - P0.1）
  */
 export interface Organization {
   id: string;
   name: string;
   level: OrganizationLevel;
   parentId?: string; // 上级组织
+  childOrgs?: string[]; // 子组织ID列表
   managerId?: string; // 负责人助手ID
-  memberIds: string[]; // 成员助手ID列表
+  memberIds: string[]; // 成员助手ID列表（兼容旧版）
+  
+  // P0.1 新增：详细成员列表
+  members?: OrganizationMember[]; // 详细成员信息（人类+智能助手）
 
   // 组织属性
   description?: string;
   industry?: string; // 行业/业务领域
   location?: string; // 地域
+  type?: "company" | "department" | "team" | "project"; // 组织类型
+
+  // P0.1 新增：共享资源
+  sharedResources?: {
+    knowledgeBases?: string[]; // 共享知识库
+    documents?: string[]; // 共享文档
+    tools?: string[]; // 共享工具
+    workspaces?: string[]; // 共享工作空间
+  };
 
   // 资源配额（组织级）
   quota?: {
@@ -227,4 +265,56 @@ export interface CollaborationConfig {
 
   // 业务协作伙伴
   partners?: string[]; // 常协作的助手ID
+  
+  // P1.1 新增：好友关系
+  colleagues?: string[]; // 同事ID列表
+  projectPartners?: string[]; // 项目协作伙伴
+}
+
+/**
+ * 智能助手招聘请求（P0.3）
+ */
+export interface AgentRecruitRequest {
+  id: string;
+  organizationId: string; // 目标组织ID
+  requesterId: string; // 发起人ID
+  requesterType: MemberType; // 发起人类型
+  
+  // 招聘信息
+  agentTemplate?: string; // 使用的助手模板
+  agentConfig?: any; // 自定义助手配置
+  position: string; // 职位名称
+  role: MemberRole; // 角色
+  title?: string; // 职位描述
+  
+  // 审批状态
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  approvedBy?: string; // 审批人ID
+  approvedAt?: number; // 审批时间
+  rejectionReason?: string; // 拒绝原因
+  
+  // 招聘结果
+  agentId?: string; // 创建的助手ID（审批通过后）
+  
+  // 元数据
+  createdAt: number;
+  updatedAt?: number;
+}
+
+/**
+ * 智能助手入职信息（P0.3）
+ */
+export interface AgentOnboardingInfo {
+  agentId: string;
+  organizationId: string;
+  onboardingTasks: Array<{
+    taskId: string;
+    description: string;
+    status: "pending" | "in-progress" | "completed";
+    completedAt?: number;
+  }>;
+  knowledgeBasesAccessed: string[]; // 已访问的知识库
+  connectionsMade: string[]; // 已建立联系的成员
+  startedAt: number;
+  completedAt?: number;
 }

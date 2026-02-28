@@ -2,7 +2,7 @@ import { html, nothing } from "lit";
 import type { AppViewState } from "./app-view-state.ts";
 import type { OpenClawApp } from "./app.ts";
 import type { UsageState } from "./controllers/usage.ts";
-import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
+import { parseAgentSessionKey } from "../../../upstream/src/routing/session-key.js";
 import { refreshChatAvatar } from "./app-chat.ts";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
 import {
@@ -85,9 +85,6 @@ import {
   updateExecApprovalsFormValue,
 } from "./controllers/exec-approvals.ts";
 import {
-  confirmFriend,
-  removeFriend,
-  loadMessages,
   sendMessage,
 } from "./controllers/friends.ts";
 import {
@@ -407,6 +404,7 @@ export function renderApp(state: AppViewState) {
                 showAllChannelsModal: state.showAllChannelsModal,
                 debuggingChannel: state.debuggingChannel,
                 editingChannelGlobalConfig: state.editingChannelGlobalConfig,
+                showPairingModal: state.showPairingModal,
                 onRefresh: (probe) => loadChannels(state, probe),
                 onWhatsAppStart: (force) => state.handleWhatsAppStart(force),
                 onWhatsAppWait: () => state.handleWhatsAppWait(),
@@ -493,6 +491,104 @@ export function renderApp(state: AppViewState) {
                   // TODO: 保存全局配置
                   state.editingChannelGlobalConfig = null;
                 },
+                // 配对管理回调
+                onShowPairingModal: () => {
+                  state.showPairingModal = true;
+                },
+                onClosePairingModal: () => {
+                  state.showPairingModal = false;
+                },
+                onApproveAllPairing: async () => {
+                  const pairingRequests = state.channelsSnapshot?.channelPairingRequests ?? {};
+                  const allRequests: Array<{ channelId: string; code: string }> = [];
+                  
+                  // 收集所有配对请求
+                  for (const [channelId, requests] of Object.entries(pairingRequests)) {
+                    for (const req of requests) {
+                      allRequests.push({ channelId, code: req.code });
+                    }
+                  }
+                  
+                  if (allRequests.length === 0) {
+                    alert("ℹ️ 没有待处理的配对请求");
+                    return;
+                  }
+                  
+                  if (!confirm(`确定要批准所有 ${allRequests.length} 个配对请求吗？`)) {
+                    return;
+                  }
+                  
+                  let successCount = 0;
+                  let failCount = 0;
+                  
+                  // 逐个批准
+                  for (const { channelId, code } of allRequests) {
+                    try {
+                      const result = await state.client?.request("pairing.approve", {
+                        channel: channelId,
+                        code: code,
+                        notify: true,
+                      });
+                      if (result && result.success) {
+                        successCount++;
+                      } else {
+                        failCount++;
+                      }
+                    } catch (err) {
+                      console.error(`Failed to approve ${channelId}/${code}:`, err);
+                      failCount++;
+                    }
+                  }
+                  
+                  // 刷新数据
+                  await loadChannels(state, true);
+                  
+                  // 显示结果
+                  if (failCount === 0) {
+                    alert(`✅ 成功批准所有 ${successCount} 个配对请求！`);
+                  } else {
+                    alert(`✅ 成功 ${successCount} 个\n❌ 失败 ${failCount} 个`);
+                  }
+                },
+                onApprovePairing: async (channelId, code) => {
+                  console.log("Approve pairing:", channelId, code);
+                  if (confirm(`确定要批准通道 ${channelId} 的配对请求（配对码：${code}）吗？`)) {
+                    try {
+                      const result = await state.client?.request("pairing.approve", {
+                        channel: channelId,
+                        code: code,
+                        notify: true,
+                      });
+                      if (result && result.success) {
+                        await loadChannels(state, true);
+                        alert("✅ 配对请求已批准！");
+                      } else {
+                        alert(`❌ 批准失败：${result?.error || "未知错误"}`);
+                      }
+                    } catch (err) {
+                      alert(`❌ 批准失败：${String(err)}`);
+                    }
+                  }
+                },
+                onRejectPairing: async (channelId, code) => {
+                  console.log("Reject pairing:", channelId, code);
+                  if (confirm(`确定要拒绝通道 ${channelId} 的配对请求（配对码：${code}）吗？`)) {
+                    try {
+                      const result = await state.client?.request("pairing.reject", {
+                        channel: channelId,
+                        code: code,
+                      });
+                      if (result && result.success) {
+                        await loadChannels(state, true);
+                        alert("✅ 配对请求已拒绝！");
+                      } else {
+                        alert(`❌ 拒绝失败：${result?.error || "未知错误"}`);
+                      }
+                    } catch (err) {
+                      alert(`❌ 拒绝失败：${String(err)}`);
+                    }
+                  }
+                },
               })
             : nothing
         }
@@ -504,6 +600,7 @@ export function renderApp(state: AppViewState) {
                 loading: state.modelsLoading,
                 error: state.modelsError,
                 testingAuthId: state.testingAuthId,
+                oauthReauth: state.oauthReauth, // OAuth重认证状态
                 managingAuthProvider: state.managingAuthProvider,
                 editingAuth: state.editingAuth,
                 viewingAuth: state.viewingAuth,
@@ -581,6 +678,70 @@ export function renderApp(state: AppViewState) {
                 },
                 onRefreshAuthBalance: async (authId) => {
                   await refreshAuthBalance(state, authId);
+                },
+                onReauth: async (authId, provider) => {
+                  console.log('[OAuth Reauth] Button clicked', { authId, provider });
+                  try {
+                    const { startOAuthReauth } = await import("./controllers/models.js");
+                    const { startDeviceCodeAuth } = await import("./utils/oauth-manager.js");
+                    
+                    console.log('[OAuth Reauth] Starting reauth...');
+                    const result = await startOAuthReauth(state, authId);
+                    console.log('[OAuth Reauth] Result:', result);
+                    
+                    if (result) {
+                      // 使用通用OAuth管理器
+                      await startDeviceCodeAuth(
+                        {
+                          deviceCode: result.deviceCode,
+                          verificationUrl: result.verificationUrl,
+                          userCode: result.userCode,
+                          expiresIn: result.expiresIn,
+                          interval: result.interval,
+                          authId: result.authId,
+                          provider: result.provider,
+                          verifier: result.verifier,
+                        },
+                        {
+                          onPollRequest: async (params) => {
+                            const pollResult = await state.client?.request('models.auth.poll', params);
+                            return pollResult || { status: 'pending' };
+                          },
+                          onSuccess: async () => {
+                            alert('✅ OAuth授权成功！');
+                            await loadModels(state, false);
+                          },
+                          onError: (error) => {
+                            alert(`❌ 授权失败：${error}`);
+                          },
+                          onCancel: () => {
+                            console.log('[OAuth Reauth] User cancelled');
+                          },
+                        },
+                        {
+                          windowWidth: 600,
+                          windowHeight: 700,
+                          pollInterval: result.interval * 1000,
+                          maxAttempts: Math.floor(result.expiresIn / result.interval),
+                        }
+                      );
+                    } else {
+                      console.error('[OAuth Reauth] No result returned');
+                      alert("⚠️ 启动重认证失败，请稍后重试");
+                    }
+                  } catch (err) {
+                    console.error('[OAuth Reauth] Error:', err);
+                    alert(`❌ 启动重认证失败：${String(err)}`);
+                  }
+                },
+                onStartOAuthPolling: async (authId) => {
+                  if (!state.oauthReauth) {return;}
+                  state.oauthReauth = { ...state.oauthReauth, isPolling: true };
+                  // TODO: 实现轮询逻辑
+                  alert("🕑 轮询功能待实现，请手动刷新页面查看状态");
+                },
+                onCancelOAuthReauth: () => {
+                  state.oauthReauth = null;
                 },
                 onManageModels: (provider) => {
                   state.managingModelsProvider = provider;
@@ -1254,9 +1415,11 @@ export function renderApp(state: AppViewState) {
                 modelAccountsSaveSuccess: (state as any).modelAccountsSaveSuccess || false,
                 // 模型账号绑定管理
                 boundModelAccounts: state.boundModelAccounts,
+                boundModelDetails: state.boundModelDetails,
                 boundModelAccountsLoading: state.boundModelAccountsLoading,
                 boundModelAccountsError: state.boundModelAccountsError,
                 availableModelAccounts: state.availableModelAccounts,
+                availableModelDetails: state.availableModelDetails,
                 availableModelAccountsLoading: state.availableModelAccountsLoading,
                 availableModelAccountsError: state.availableModelAccountsError,
                 availableModelAccountsExpanded: state.availableModelAccountsExpanded,

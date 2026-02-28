@@ -2,6 +2,15 @@
  * Monitor RPC 处理器
  *
  * 协作监控 - 实时监控智能助手之间的协作活动
+ * 
+ * 功能特性：
+ * - 活动会话监控：追踪智能助手的实时连接状态
+ * - 消息流统计：分析消息交互模式和响应时间
+ * - 通道转发规则：管理消息路由和转发机制
+ * - 性能指标监控：统计系统整体运行状况
+ * - 异常告警管理：自动检测并记录异常情况
+ * - 健康状态检查：评估系统健康度并提供建议
+ * - 自定义指标记录：支持灵活的指标上报
  */
 
 import type { GatewayRequestHandlers } from "./types.js";
@@ -66,11 +75,15 @@ interface PerformanceMetrics {
 interface Alert {
   id: string;
   type: "error" | "warning" | "info";
+  severity: "critical" | "high" | "medium" | "low"; // 新增严重程度
   message: string;
   agentId?: string;
   channelId?: string;
   timestamp: number;
   acknowledged: boolean;
+  acknowledgedBy?: string; // 新增确认人
+  acknowledgedAt?: number; // 新增确认时间
+  resolvedAt?: number; // 新增解决时间
 }
 
 // 内存存储（生产环境应使用数据库）
@@ -78,6 +91,17 @@ const activeSessions = new Map<string, ActiveSession>();
 const messageFlows = new Map<string, MessageFlow>();
 const forwardingRules = new Map<string, ForwardingRule>();
 const alerts = new Map<string, Alert>();
+
+// 新增：指标历史记录（简化版，实际应使用时序数据库）
+interface MetricRecord {
+  name: string;
+  value: number;
+  timestamp: number;
+  tags: Record<string, string>;
+}
+const metricsHistory: MetricRecord[] = [];
+const MAX_METRICS_HISTORY = 1000; // 最多保留指标条数
+
 let performanceMetrics: PerformanceMetrics = {
   totalMessages: 0,
   totalSessions: 0,
@@ -235,13 +259,32 @@ export const monitorHandlers: GatewayRequestHandlers = {
    * 获取告警列表
    */
   "monitor.alerts": async ({ params, respond }) => {
-    const { unacknowledgedOnly } = params || {};
+    const { unacknowledgedOnly, severity, type, limit } = params || {};
 
     try {
       let alertsList = Array.from(alerts.values());
 
+      // 筛选未确认的告警
       if (unacknowledgedOnly) {
         alertsList = alertsList.filter((a) => !a.acknowledged);
+      }
+      
+      // 按严重程度筛选
+      if (severity) {
+        alertsList = alertsList.filter((a) => a.severity === severity);
+      }
+      
+      // 按类型筛选
+      if (type) {
+        alertsList = alertsList.filter((a) => a.type === type);
+      }
+      
+      // 按时间排序（最新的在前）
+      alertsList.sort((a, b) => b.timestamp - a.timestamp);
+      
+      // 限制数量
+      if (limit && typeof limit === "number") {
+        alertsList = alertsList.slice(0, limit);
       }
 
       respond(true, { alerts: alertsList, total: alertsList.length }, undefined);
@@ -254,7 +297,7 @@ export const monitorHandlers: GatewayRequestHandlers = {
    * 确认告警
    */
   "monitor.acknowledgeAlert": async ({ params, respond }) => {
-    const { alertId } = params || {};
+    const { alertId, acknowledgedBy } = params || {};
 
     if (!alertId || typeof alertId !== "string") {
       respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Missing alertId"));
@@ -269,6 +312,9 @@ export const monitorHandlers: GatewayRequestHandlers = {
       }
 
       alert.acknowledged = true;
+      alert.acknowledgedBy = typeof acknowledgedBy === "string" ? acknowledgedBy : "system";
+      alert.acknowledgedAt = Date.now();
+      
       respond(true, { alert }, undefined);
     } catch (err) {
       respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
@@ -516,15 +562,191 @@ export const monitorHandlers: GatewayRequestHandlers = {
     }
 
     try {
-      // 这里简化处理，实际应该存储到时序数据库
-      const metric = {
+      const metric: MetricRecord = {
         name: metricName,
         value,
-        tags: tags || {},
+        tags: (tags || {}) as Record<string, string>,
         timestamp: Date.now(),
       };
+      
+      // 添加到历史记录
+      metricsHistory.push(metric);
+      
+      // 保持历史记录数量在限制内
+      if (metricsHistory.length > MAX_METRICS_HISTORY) {
+        metricsHistory.splice(0, metricsHistory.length - MAX_METRICS_HISTORY);
+      }
 
       respond(true, { metric, recorded: true }, undefined);
+    } catch (err) {
+      respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+  
+  /**
+   * 获取指标历史记录
+   */
+  "monitor.metricsHistory": async ({ params, respond }) => {
+    const { metricName, startTime, endTime, limit } = params || {};
+    
+    try {
+      let records = [...metricsHistory];
+      
+      // 按指标名筛选
+      if (metricName && typeof metricName === "string") {
+        records = records.filter(r => r.name === metricName);
+      }
+      
+      // 按时间范围筛选
+      if (startTime && typeof startTime === "number") {
+        records = records.filter(r => r.timestamp >= startTime);
+      }
+      if (endTime && typeof endTime === "number") {
+        records = records.filter(r => r.timestamp <= endTime);
+      }
+      
+      // 按时间排序（最新的在前）
+      records.sort((a, b) => b.timestamp - a.timestamp);
+      
+      // 限制数量
+      if (limit && typeof limit === "number") {
+        records = records.slice(0, limit);
+      }
+      
+      respond(true, { records, total: records.length }, undefined);
+    } catch (err) {
+      respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+  
+  /**
+   * 获取指标聚合统计
+   */
+  "monitor.metricsAggregation": async ({ params, respond }) => {
+    const { metricName, aggregationType, startTime, endTime } = params || {};
+    
+    if (!metricName || typeof metricName !== "string") {
+      respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Missing metricName"));
+      return;
+    }
+    
+    const aggType = (aggregationType as string) || "avg";
+    if (!["avg", "sum", "min", "max", "count"].includes(aggType)) {
+      respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Invalid aggregationType"));
+      return;
+    }
+    
+    try {
+      let records = metricsHistory.filter(r => r.name === metricName);
+      
+      // 按时间范围筛选
+      if (startTime && typeof startTime === "number") {
+        records = records.filter(r => r.timestamp >= startTime);
+      }
+      if (endTime && typeof endTime === "number") {
+        records = records.filter(r => r.timestamp <= endTime);
+      }
+      
+      let result: number;
+      const values = records.map(r => r.value);
+      
+      switch (aggType) {
+        case "sum":
+          result = values.reduce((sum, v) => sum + v, 0);
+          break;
+        case "avg":
+          result = values.length > 0 ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
+          break;
+        case "min":
+          result = values.length > 0 ? Math.min(...values) : 0;
+          break;
+        case "max":
+          result = values.length > 0 ? Math.max(...values) : 0;
+          break;
+        case "count":
+          result = values.length;
+          break;
+        default:
+          result = 0;
+      }
+      
+      respond(true, {
+        metricName,
+        aggregationType: aggType,
+        value: result,
+        recordCount: records.length,
+        timeRange: { startTime, endTime },
+      }, undefined);
+    } catch (err) {
+      respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+  
+  /**
+   * 获取系统概览仪表板
+   */
+  "monitor.dashboard": async ({ respond }) => {
+    try {
+      const now = Date.now();
+      const uptime = now - performanceMetrics.uptime;
+      
+      // 计算健康分数
+      const idleSessions = Array.from(activeSessions.values()).filter(
+        (s) => s.status === "idle",
+      ).length;
+      const errorSessions = Array.from(activeSessions.values()).filter(
+        (s) => s.status === "error",
+      ).length;
+      const unacknowledgedAlerts = Array.from(alerts.values()).filter(
+        (a) => !a.acknowledged,
+      ).length;
+      const criticalAlerts = Array.from(alerts.values()).filter(
+        (a) => a.severity === "critical" && !a.acknowledged,
+      ).length;
+      
+      let healthScore = 100;
+      if (activeSessions.size > 0) {
+        healthScore -= (errorSessions / activeSessions.size) * 30;
+        healthScore -= (idleSessions / activeSessions.size) * 10;
+      }
+      healthScore -= criticalAlerts * 10;
+      healthScore -= unacknowledgedAlerts * 2;
+      healthScore = Math.max(0, Math.min(100, healthScore));
+      
+      // 构建仪表板数据
+      const dashboard = {
+        timestamp: now,
+        uptime,
+        health: {
+          score: Math.round(healthScore),
+          status: healthScore >= 80 ? "healthy" : healthScore >= 60 ? "warning" : "critical",
+        },
+        sessions: {
+          total: activeSessions.size,
+          active: activeSessions.size - idleSessions - errorSessions,
+          idle: idleSessions,
+          error: errorSessions,
+        },
+        messages: {
+          totalFlows: messageFlows.size,
+          totalMessages: performanceMetrics.totalMessages,
+        },
+        alerts: {
+          total: alerts.size,
+          unacknowledged: unacknowledgedAlerts,
+          critical: criticalAlerts,
+        },
+        performance: {
+          avgResponseTime: performanceMetrics.avgResponseTime,
+          errorRate: performanceMetrics.errorRate,
+        },
+        forwardingRules: {
+          total: forwardingRules.size,
+          enabled: Array.from(forwardingRules.values()).filter(r => r.enabled).length,
+        },
+      };
+      
+      respond(true, { dashboard }, undefined);
     } catch (err) {
       respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }
@@ -578,7 +800,12 @@ export function recordMessageFlow(flow: MessageFlow): void {
 /**
  * 辅助函数：添加告警
  */
-export function addAlert(alert: Omit<Alert, "id">): void {
+export function addAlert(alert: Omit<Alert, "id" | "acknowledged">): void {
   const alertId = `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  alerts.set(alertId, { ...alert, id: alertId });
+  alerts.set(alertId, { 
+    ...alert, 
+    id: alertId,
+    acknowledged: false,
+    severity: alert.severity || "medium", // 默认中等严重程度
+  });
 }

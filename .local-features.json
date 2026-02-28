@@ -1,0 +1,55 @@
+{
+  "version": "1.0.0",
+  "lastCheck": null,
+  "features": {
+    "i18n": {
+      "name": "国际化扩展层",
+      "files": [
+        "i18n/index.ts",
+        "i18n/frontend/views/overview.ts",
+        "i18n/frontend/views/usage.ts",
+        "i18n/frontend/views/usage-render-overview.ts",
+        "i18n/locales/zh-CN-extra.ts",
+        "i18n/locales/zh-TW-extra.ts",
+        "i18n/locales/pt-BR-extra.ts"
+      ]
+    },
+    "translations": {
+      "name": "本地翻译增强",
+      "files": [
+        "ui/src/i18n/locales/zh-CN.ts",
+        "ui/src/i18n/locales/zh-TW.ts",
+        "ui/src/i18n/locales/pt-BR.ts"
+      ]
+    },
+    "backend": {
+      "name": "本地后端功能",
+      "files": [
+        "src-local/health-check.ts"
+      ]
+    },
+    "frontend": {
+      "name": "本地前端功能",
+      "files": []
+    }
+  },
+  "protection": {
+    "gitattributes": {
+      "required": true,
+      "rules": [
+        "/src-local/** merge=ours",
+        "/ui-local/** merge=ours",
+        "/i18n/** merge=ours",
+        "/ui/src/i18n/locales/zh-CN.ts merge=ours",
+        "/ui/src/i18n/locales/zh-TW.ts merge=ours",
+        "/ui/src/i18n/locales/pt-BR.ts merge=ours"
+      ]
+    }
+  },
+  "imports": {
+    "app": {
+      "file": "ui/src/ui/app-render.ts",
+      "shouldContain": "views/overview"
+    }
+  }
+}

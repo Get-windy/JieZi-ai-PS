@@ -406,4 +406,220 @@ export const groupsHandlers: GatewayRequestHandlers = {
       );
     }
   },
+
+  /**
+   * 邀请成员加入群组
+   */
+  "group.member.invite": async ({ params, respond }) => {
+    try {
+      const groupId = params?.groupId ? String(params.groupId) : "";
+      const agentId = params?.agentId ? String(params.agentId) : "";
+      const inviterId = params?.inviterId ? String(params.inviterId) : "";
+
+      if (!groupId || !agentId || !inviterId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "groupId, agentId, and inviterId are required"),
+        );
+        return;
+      }
+
+      const message = params?.message ? String(params.message) : undefined;
+      const result = await groupManager.inviteMember(groupId, agentId, inviterId, message);
+      respond(true, result, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to invite member: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 申请加入群组
+   */
+  "group.member.join": async ({ params, respond }) => {
+    try {
+      const groupId = params?.groupId ? String(params.groupId) : "";
+      const agentId = params?.agentId ? String(params.agentId) : "";
+
+      if (!groupId || !agentId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "groupId and agentId are required"),
+        );
+        return;
+      }
+
+      const reason = params?.reason ? String(params.reason) : undefined;
+      const result = await groupManager.joinRequest(groupId, agentId, reason);
+      respond(true, result, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to join group: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 审批加入申请
+   */
+  "group.member.approve": async ({ params, respond }) => {
+    try {
+      const requestId = params?.requestId ? String(params.requestId) : "";
+      const decision = params?.decision ? String(params.decision) : "";
+      const approverId = params?.approverId ? String(params.approverId) : "";
+
+      if (!requestId || !decision || !approverId) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            "requestId, decision, and approverId are required",
+          ),
+        );
+        return;
+      }
+
+      if (decision !== "approve" && decision !== "reject") {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, 'decision must be "approve" or "reject"'),
+        );
+        return;
+      }
+
+      const result = await groupManager.approveRequest(
+        requestId,
+        decision as "approve" | "reject",
+        approverId,
+      );
+      respond(true, result, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to approve request: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 更新成员角色（新方法名）
+   */
+  "group.member.role.update": async ({ params, respond }) => {
+    try {
+      const groupId = params?.groupId ? String(params.groupId) : "";
+      const agentId = params?.agentId ? String(params.agentId) : "";
+      const role = params?.role as GroupMemberRole;
+
+      if (!groupId || !agentId || !role) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "groupId, agentId, and role are required"),
+        );
+        return;
+      }
+
+      await groupManager.updateMemberRole(groupId, agentId, role);
+      respond(true, { success: true }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to update member role: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 共享资源到群组
+   */
+  "group.resources.share": async ({ params, respond }) => {
+    try {
+      const groupId = params?.groupId ? String(params.groupId) : "";
+      const resourceType = params?.resourceType ? String(params.resourceType) : "";
+      const resourceId = params?.resourceId ? String(params.resourceId) : "";
+
+      if (!groupId || !resourceType || !resourceId) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            "groupId, resourceType, and resourceId are required",
+          ),
+        );
+        return;
+      }
+
+      if (
+        resourceType !== "document" &&
+        resourceType !== "knowledge" &&
+        resourceType !== "workspace"
+      ) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            'resourceType must be "document", "knowledge", or "workspace"',
+          ),
+        );
+        return;
+      }
+
+      await groupManager.shareResource(
+        groupId,
+        resourceType as "document" | "knowledge" | "workspace",
+        resourceId,
+      );
+      respond(true, { success: true }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to share resource: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 更新群组设置
+   */
+  "group.settings.update": async ({ params, respond }) => {
+    try {
+      const groupId = params?.groupId ? String(params.groupId) : "";
+      if (!groupId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "groupId is required"));
+        return;
+      }
+
+      const settings: any = {};
+      if (params?.type) settings.type = String(params.type);
+      if (typeof params?.requireApproval === "boolean")
+        settings.requireApproval = params.requireApproval;
+      if (typeof params?.allowInvite === "boolean") settings.allowInvite = params.allowInvite;
+      if (typeof params?.allowSpeak === "boolean") settings.allowSpeak = params.allowSpeak;
+      if (Array.isArray(params?.pinMessages))
+        settings.pinMessages = params.pinMessages.map(String);
+
+      const group = await groupManager.updateGroupSettings(groupId, settings);
+      respond(true, group, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to update group settings: ${String(error)}`),
+      );
+    }
+  },
 };

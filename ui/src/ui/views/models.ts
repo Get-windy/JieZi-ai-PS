@@ -11,6 +11,7 @@ import {
   renderImportModelsModal,
   renderAddProviderModal,
   renderViewProviderModal,
+  renderOAuthReauthModal,
 } from "./models.modals.js";
 
 /**

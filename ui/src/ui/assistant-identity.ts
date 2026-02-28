@@ -33,3 +33,19 @@ export function normalizeAssistantIdentity(
     typeof input?.agentId === "string" && input.agentId.trim() ? input.agentId.trim() : null;
   return { agentId, name, avatar };
 }
+
+/**
+ * Resolve assistant identity from injected environment variables or defaults
+ */
+export function resolveInjectedAssistantIdentity(): AssistantIdentity {
+  // Try to read from environment variables or window object
+  const envName = (window as any).__OPENCLAW_ASSISTANT_NAME__;
+  const envAvatar = (window as any).__OPENCLAW_ASSISTANT_AVATAR__;
+  const envAgentId = (window as any).__OPENCLAW_ASSISTANT_AGENT_ID__;
+
+  return normalizeAssistantIdentity({
+    name: envName,
+    avatar: envAvatar,
+    agentId: envAgentId,
+  });
+}

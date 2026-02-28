@@ -137,6 +137,7 @@ export type AppViewState = {
   showAllChannelsModal: boolean;
   debuggingChannel: { channelId: string; accountId?: string } | null;
   editingChannelGlobalConfig: string | null;
+  showPairingModal: boolean; // 配对请求模态框
   // 模型管理状态
   modelsLoading: boolean;
   modelsSnapshot: import("./types.ts").ModelsStatusSnapshot | null;
@@ -289,9 +290,24 @@ export type AppViewState = {
   modelAccountsSaveSuccess: boolean;
   // 模型账号绑定管理
   boundModelAccounts: string[];
+  boundModelDetails: Array<{
+    modelId: string;
+    providerId: string;
+    modelName: string;
+    displayName: string;
+    providerName: string;
+    enabled?: boolean;
+  }>;
   boundModelAccountsLoading: boolean;
   boundModelAccountsError: string | null;
   availableModelAccounts: string[];
+  availableModelDetails: Array<{
+    modelId: string;
+    providerId: string;
+    modelName: string;
+    displayName: string;
+    providerName: string;
+  }>;
   availableModelAccountsLoading: boolean;
   availableModelAccountsError: string | null;
   availableModelAccountsExpanded: boolean;

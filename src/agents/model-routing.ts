@@ -618,7 +618,7 @@ export async function scoreAllAccounts(
 
   // 4. 为每个账号打分
   const scores: AccountScore[] = await Promise.all(
-    config.accounts.map(async (accountId) => {
+    config.accounts.map(async (accountId: string) => {
       // 获取模型信息
       const modelInfo = await modelInfoGetter(accountId);
 
@@ -752,7 +752,7 @@ export async function routeToOptimalModelAccount(
   modelInfoGetter: (accountId: string) => Promise<ModelInfo | undefined>,
 ): Promise<RoutingResult> {
   // 0. 先过滤仅保留已绑定且已启用的模型账号（核心检查）
-  const boundAndEnabledAccounts = config.accounts.filter((accountId) => {
+  const boundAndEnabledAccounts = config.accounts.filter((accountId: string) => {
     // 查找账号配置
     const accountConfig = config.accountConfigs?.find((cfg: any) => cfg.accountId === accountId);
 

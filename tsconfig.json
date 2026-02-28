@@ -13,17 +13,20 @@
     "noEmitOnError": true,
     "outDir": "dist",
     "resolveJsonModule": true,
+    "rootDirs": ["./src", "./upstream/src"],
     "skipLibCheck": true,
     "strict": true,
     "target": "es2023",
     "useDefineForClassFields": false,
     "paths": {
-      "*": ["./*"],
+      "@upstream/*": ["./upstream/src/*"],
+      "@local/*": ["./src/*"],
+      "@i18n/*": ["./i18n/*"],
       "openclaw/plugin-sdk": ["./src/plugin-sdk/index.ts"],
       "openclaw/plugin-sdk/*": ["./src/plugin-sdk/*.ts"],
       "openclaw/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"]
     }
   },
-  "include": ["src/**/*", "ui/**/*", "extensions/**/*"],
-  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "extensions/**/*.test.ts"]
+  "include": ["src/**/*", "upstream/src/**/*", "src-local/**/*", "ui/**/*", "ui-local/**/*", "i18n/**/*", "extensions/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

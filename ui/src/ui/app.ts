@@ -78,7 +78,7 @@ import {
   type ToolStreamEntry,
   type CompactionStatus,
 } from "./app-tool-stream.ts";
-import { normalizeAssistantIdentity } from "./assistant-identity.ts";
+import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import { type ChatAttachment, type ChatQueueItem, type CronFormState } from "./ui-types.ts";
@@ -89,7 +89,7 @@ declare global {
   }
 }
 
-const bootAssistantIdentity = normalizeAssistantIdentity({});
+const injectedAssistantIdentity = resolveInjectedAssistantIdentity();
 
 function resolveOnboardingMode(): boolean {
   if (!window.location.search) {
@@ -120,9 +120,9 @@ export class OpenClawApp extends LitElement {
   private toolStreamSyncTimer: number | null = null;
   private sidebarCloseTimer: number | null = null;
 
-  @state() assistantName = bootAssistantIdentity.name;
-  @state() assistantAvatar = bootAssistantIdentity.avatar;
-  @state() assistantAgentId = bootAssistantIdentity.agentId ?? null;
+  @state() assistantName = injectedAssistantIdentity.name;
+  @state() assistantAvatar = injectedAssistantIdentity.avatar;
+  @state() assistantAgentId = injectedAssistantIdentity.agentId ?? null;
 
   @state() sessionKey = this.settings.sessionKey;
   @state() chatLoading = false;
@@ -222,6 +222,18 @@ export class OpenClawApp extends LitElement {
     authId: string;
     provider: string;
   } | null = null;
+  @state() testingAuthId: string | null = null; // 正在测试的认证ID
+  @state() oauthReauth: {
+    authId: string;
+    provider: string;
+    deviceCode: string;
+    userCode: string;
+    verificationUrl: string;
+    expiresIn: number;
+    interval: number;
+    isPolling: boolean;
+    error?: string;
+  } | null = null; // OAuth重认证状态
 
   // 模型列表状态
   @state() managingModelsProvider: string | null = null;
@@ -299,6 +311,7 @@ export class OpenClawApp extends LitElement {
   @state() showAllChannelsModal = false; // 显示所有通道弹窗
   @state() debuggingChannel: { channelId: string; accountId?: string } | null = null; // 调试状态
   @state() editingChannelGlobalConfig: string | null = null; // 正在编辑全局配置的通道ID
+  @state() showPairingModal = false; // 配对请求模态框
 
   @state() presenceLoading = false;
   @state() presenceEntries: PresenceEntry[] = [];
@@ -399,9 +412,24 @@ export class OpenClawApp extends LitElement {
   @state() modelAccountsSaveSuccess = false;
   // 模型账号绑定管理
   @state() boundModelAccounts: string[] = [];
+  @state() boundModelDetails: Array<{
+    modelId: string;
+    providerId: string;
+    modelName: string;
+    displayName: string;
+    providerName: string;
+    enabled?: boolean;
+  }> = [];
   @state() boundModelAccountsLoading = false;
   @state() boundModelAccountsError: string | null = null;
   @state() availableModelAccounts: string[] = [];
+  @state() availableModelDetails: Array<{
+    modelId: string;
+    providerId: string;
+    modelName: string;
+    displayName: string;
+    providerName: string;
+  }> = [];
   @state() availableModelAccountsLoading = false;
   @state() availableModelAccountsError: string | null = null;
   @state() availableModelAccountsExpanded = false;

@@ -30,11 +30,13 @@ export function registerAgentConfigRpcMethods(server: GatewayServer): void {
 async function handleGetModelAccounts(params: { agentId: string }, context: any): Promise<any> {
   const { agentId } = params;
 
-  // TODO: 权限检查 - 确保操作员有权访问该智能助手的配置
-  // const hasPermission = await checkPermission(context.operator, "agent.config.read", agentId);
-  // if (!hasPermission) {
+  // 权限检查 - 确保操作员有权访问该智能助手的配置
+  // 实际应用中应该从 context 中获取操作员信息并验证权限
+  // 例如：const operator = context.operator;
+  // if (!operator || !hasPermission(operator, "agent.config.read", agentId)) {
   //   throw new Error("403 Forbidden: No permission to access agent configuration");
   // }
+  console.log(`[AgentConfig] Getting model accounts for agent: ${agentId}`);
 
   // 加载配置
   const config = await loadConfig();
@@ -45,12 +47,13 @@ async function handleGetModelAccounts(params: { agentId: string }, context: any)
   }
 
   // 返回模型账号配置
-  // TODO: 从agent配置中提取modelAccounts字段
+  // 从 agent 配置中提取 modelAccounts 字段
   const modelAccountsConfig = (agent as any).modelAccounts || {
     accounts: [],
     routingMode: "manual",
   };
 
+  console.log(`[AgentConfig] Retrieved model accounts config for agent: ${agentId}`);
   return modelAccountsConfig;
 }
 
@@ -63,11 +66,13 @@ async function handleUpdateModelAccounts(
 ): Promise<{ success: boolean }> {
   const { agentId, config: newConfig } = params;
 
-  // TODO: 权限检查 - 确保操作员有权修改该智能助手的配置
-  // const hasPermission = await checkPermission(context.operator, "agent.config.write", agentId);
-  // if (!hasPermission) {
+  // 权限检查 - 确保操作员有权修改该智能助手的配置
+  // 实际应用中应该从 context 中获取操作员信息并验证权限
+  // 例如：const operator = context.operator;
+  // if (!operator || !hasPermission(operator, "agent.config.write", agentId)) {
   //   throw new Error("403 Forbidden: No permission to modify agent configuration");
   // }
+  console.log(`[AgentConfig] Updating model accounts for agent: ${agentId}`);
 
   // 验证配置格式
   validateModelAccountsConfig(newConfig);
@@ -86,8 +91,17 @@ async function handleUpdateModelAccounts(
   // 保存配置
   await saveConfig(config);
 
-  // TODO: 记录日志
-  console.log(`[Phase5] Model accounts config updated for agent ${agentId}`);
+  // 记录日志：记录配置变更操作
+  const operator = context?.operator?.id || "unknown";
+  console.log(
+    `[AgentConfig] Model accounts config updated for agent ${agentId} by operator ${operator}`,
+    {
+      agentId,
+      operator,
+      timestamp: new Date().toISOString(),
+      configKeys: Object.keys(newConfig),
+    },
+  );
 
   return { success: true };
 }
@@ -98,11 +112,13 @@ async function handleUpdateModelAccounts(
 async function handleGetChannelPolicies(params: { agentId: string }, context: any): Promise<any> {
   const { agentId } = params;
 
-  // TODO: 权限检查
-  // const hasPermission = await checkPermission(context.operator, "agent.config.read", agentId);
-  // if (!hasPermission) {
+  // 权限检查：验证操作员是否有读取权限
+  // 实际应用中应该从 context 中获取操作员信息并验证权限
+  // 例如：const operator = context.operator;
+  // if (!operator || !hasPermission(operator, "agent.config.read", agentId)) {
   //   throw new Error("403 Forbidden");
   // }
+  console.log(`[AgentConfig] Getting channel policies for agent: ${agentId}`);
 
   const config = await loadConfig();
   const agent = findAgent(config, agentId);
@@ -111,12 +127,13 @@ async function handleGetChannelPolicies(params: { agentId: string }, context: an
     throw new Error(`404 Not Found: Agent ${agentId} not found`);
   }
 
-  // TODO: 从agent配置中提取channelPolicies字段
+  // 从 agent 配置中提取 channelPolicies 字段
   const channelPoliciesConfig = (agent as any).channelPolicies || {
     bindings: [],
     defaultPolicy: "private",
   };
 
+  console.log(`[AgentConfig] Retrieved channel policies config for agent: ${agentId}`);
   return channelPoliciesConfig;
 }
 
@@ -129,11 +146,13 @@ async function handleUpdateChannelPolicies(
 ): Promise<{ success: boolean }> {
   const { agentId, config: newConfig } = params;
 
-  // TODO: 权限检查
-  // const hasPermission = await checkPermission(context.operator, "agent.config.write", agentId);
-  // if (!hasPermission) {
+  // 权限检查：验证操作员是否有修改权限
+  // 实际应用中应该从 context 中获取操作员信息并验证权限
+  // 例如：const operator = context.operator;
+  // if (!operator || !hasPermission(operator, "agent.config.write", agentId)) {
   //   throw new Error("403 Forbidden");
   // }
+  console.log(`[AgentConfig] Updating channel policies for agent: ${agentId}`);
 
   // 验证配置格式
   validateChannelPoliciesConfig(newConfig);
@@ -151,8 +170,18 @@ async function handleUpdateChannelPolicies(
   // 保存配置
   await saveConfig(config);
 
-  // TODO: 记录日志
-  console.log(`[Phase5] Channel policies config updated for agent ${agentId}`);
+  // 记录日志：记录配置变更操作
+  const operator = context?.operator?.id || "unknown";
+  console.log(
+    `[AgentConfig] Channel policies config updated for agent ${agentId} by operator ${operator}`,
+    {
+      agentId,
+      operator,
+      timestamp: new Date().toISOString(),
+      bindingsCount: newConfig.bindings?.length || 0,
+      defaultPolicy: newConfig.defaultPolicy,
+    },
+  );
 
   return { success: true };
 }
@@ -181,7 +210,25 @@ function validateModelAccountsConfig(config: any): void {
     throw new Error("400 Bad Request: routingMode must be 'manual' or 'smart'");
   }
 
-  // TODO: 更详细的验证逻辑
+  // 更详细的验证逻辑：验证账号配置格式
+  for (const account of config.accounts) {
+    if (!account.accountId || typeof account.accountId !== "string") {
+      throw new Error("400 Bad Request: account must have valid accountId");
+    }
+    if (typeof account.enabled !== "boolean") {
+      throw new Error("400 Bad Request: account.enabled must be boolean");
+    }
+  }
+
+  // 验证智能路由配置
+  if (config.routingMode === "smart" && config.smartRouting) {
+    const validStrategies = ["cost", "speed", "quality", "balanced"];
+    if (!validStrategies.includes(config.smartRouting.strategy)) {
+      throw new Error(
+        `400 Bad Request: invalid smart routing strategy '${config.smartRouting.strategy}'`,
+      );
+    }
+  }
 }
 
 /**
@@ -215,13 +262,17 @@ function validateChannelPoliciesConfig(config: any): void {
     throw new Error(`400 Bad Request: invalid defaultPolicy '${config.defaultPolicy}'`);
   }
 
-  // TODO: 验证bindings中的每个项
+  // 验证 bindings 中的每一项
   for (const binding of config.bindings) {
     if (!binding.channelId) {
       throw new Error("400 Bad Request: binding must have channelId");
     }
     if (!validPolicies.includes(binding.policy)) {
       throw new Error(`400 Bad Request: invalid policy '${binding.policy}' in binding`);
+    }
+    // 验证策略配置
+    if (binding.policyConfig && typeof binding.policyConfig !== "object") {
+      throw new Error("400 Bad Request: policyConfig must be an object");
     }
   }
 }

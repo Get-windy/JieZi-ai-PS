@@ -218,8 +218,18 @@ export class NotificationManager {
         } as any);
       }
 
-      // TODO: 实际发送到 Slack
-      console.log("[Slack] Sending notification:", payload);
+      // 实际发送到 Slack Webhook
+      const response = await fetch(this.channelConfig.slack.webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Slack webhook returned ${response.status}: ${response.statusText}`);
+      }
+
+      console.log("[Slack] Notification sent successfully");
     } catch (error) {
       console.error("[Slack] Failed to send notification:", error);
     }
@@ -239,8 +249,21 @@ export class NotificationManager {
         timestamp: Date.now(),
       };
 
-      // TODO: 实际发送到 Webhook
-      console.log("[Webhook] Sending notification:", payload);
+      // 实际发送到自定义 Webhook
+      const response = await fetch(this.channelConfig.webhook.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...this.channelConfig.webhook.headers,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Webhook returned ${response.status}: ${response.statusText}`);
+      }
+
+      console.log("[Webhook] Notification sent successfully");
     } catch (error) {
       console.error("[Webhook] Failed to send notification:", error);
     }
@@ -261,8 +284,25 @@ ${notification.message}
 
 Priority: ${notification.priority}`;
 
-      // TODO: 实际发送到 Telegram
-      console.log("[Telegram] Sending notification:", text);
+      // 实际发送到 Telegram Bot API
+      const telegramApiUrl = `https://api.telegram.org/bot${this.channelConfig.telegram.botToken}/sendMessage`;
+      
+      const response = await fetch(telegramApiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: this.channelConfig.telegram.chatId,
+          text,
+          parse_mode: "Markdown",
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Telegram API returned ${response.status}: ${error}`);
+      }
+
+      console.log("[Telegram] Notification sent successfully");
     } catch (error) {
       console.error("[Telegram] Failed to send notification:", error);
     }
@@ -523,11 +563,16 @@ Priority: ${notification.priority}`;
     const now = Date.now();
     let count = 0;
 
-    for (const [id, notification] of this.notifications.entries()) {
+    const entriesToDelete: string[] = [];
+    for (const [id, notification] of Array.from(this.notifications.entries())) {
       if (notification.expiresAt && notification.expiresAt < now) {
-        this.notifications.delete(id);
-        count++;
+        entriesToDelete.push(id);
       }
+    }
+
+    for (const id of entriesToDelete) {
+      this.notifications.delete(id);
+      count++;
     }
 
     return count;

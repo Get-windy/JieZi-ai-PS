@@ -235,6 +235,16 @@ export class Phase7Integration {
     return advancedApprovalSystem.revokeEmergencyAccess(requestId, revokedBy, reason);
   }
 
+  /**
+   * 获取紧急访问请求列表
+   */
+  public getEmergencyAccessRequests(params?: {
+    status?: EmergencyAccessRequest["status"];
+    severity?: EmergencyAccessRequest["severity"];
+  }): EmergencyAccessRequest[] {
+    return advancedApprovalSystem.getEmergencyAccessRequests(params);
+  }
+
   // ========== 便捷接口 - 通知管理 ==========
 
   /**
@@ -525,7 +535,7 @@ export class Phase7Integration {
         activeAdmins: admins.filter((a) => a.isActive).length,
         onlineAdmins: admins.filter((a) => a.isOnline).length,
         pendingApprovals: pendingApprovals.length,
-        emergencyAccessRequests: 0, // TODO: 实现统计
+        emergencyAccessRequests: advancedApprovalSystem.getEmergencyAccessRequests({ status: "pending" }).length,
       },
     };
   }

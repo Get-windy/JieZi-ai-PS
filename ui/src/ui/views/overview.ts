@@ -1,9 +1,11 @@
-import { html, nothing } from "lit";
-import type { GatewayHelloOk } from "../gateway.ts";
-import type { UiSettings } from "../storage.ts";
+import { html } from "lit";
+import { ConnectErrorDetailCodes } from "../../../../upstream/src/gateway/protocol/connect-error-details.js";
+import { t, i18n, type Locale } from "../../i18n/index.ts";
 import { formatRelativeTimestamp, formatDurationHuman } from "../format.ts";
+import type { GatewayHelloOk } from "../gateway.ts";
 import { formatNextRun } from "../presenter.ts";
-import { renderSessionStorage, type SessionStorageProps } from "./session-storage.js";
+import type { UiSettings } from "../storage.ts";
+import { shouldShowPairingHint } from "./overview-hints.ts";
 
 export type OverviewProps = {
   connected: boolean;
@@ -11,6 +13,7 @@ export type OverviewProps = {
   settings: UiSettings;
   password: string;
   lastError: string | null;
+  lastErrorCode: string | null;
   presenceCount: number;
   sessionsCount: number | null;
   cronEnabled: boolean | null;
@@ -21,44 +24,90 @@ export type OverviewProps = {
   onSessionKeyChange: (next: string) => void;
   onConnect: () => void;
   onRefresh: () => void;
-  // 会话存储管理
-  sessionStorage?: SessionStorageProps;
 };
 
 export function renderOverview(props: OverviewProps) {
   const snapshot = props.hello?.snapshot as
-    | { uptimeMs?: number; policy?: { tickIntervalMs?: number } }
-    | undefined;
-  const uptime = snapshot?.uptimeMs ? formatDurationHuman(snapshot.uptimeMs) : "n/a";
-  const tick = snapshot?.policy?.tickIntervalMs ? `${snapshot.policy.tickIntervalMs}ms` : "n/a";
-
-  // 获取当前使用的时区
-  const currentTimezone = (() => {
-    if (props.settings.timezone === "auto") {
-      try {
-        return Intl.DateTimeFormat().resolvedOptions().timeZone;
-      } catch {
-        return "浏览器默认";
+    | {
+        uptimeMs?: number;
+        policy?: { tickIntervalMs?: number };
+        authMode?: "none" | "token" | "password" | "trusted-proxy";
       }
+    | undefined;
+  const uptime = snapshot?.uptimeMs ? formatDurationHuman(snapshot.uptimeMs) : t("common.na");
+  const tick = snapshot?.policy?.tickIntervalMs
+    ? `${snapshot.policy.tickIntervalMs}ms`
+    : t("common.na");
+  const authMode = snapshot?.authMode;
+  const isTrustedProxy = authMode === "trusted-proxy";
+
+  const pairingHint = (() => {
+    if (!shouldShowPairingHint(props.connected, props.lastError, props.lastErrorCode)) {
+      return null;
     }
-    return props.settings.timezone;
+    return html`
+      <div class="muted" style="margin-top: 8px">
+        ${t("overview.pairing.hint")}
+        <div style="margin-top: 6px">
+          <span class="mono">openclaw devices list</span><br />
+          <span class="mono">openclaw devices approve &lt;requestId&gt;</span>
+        </div>
+        <div style="margin-top: 6px; font-size: 12px;">
+          ${t("overview.pairing.mobileHint")}
+        </div>
+        <div style="margin-top: 6px">
+          <a
+            class="session-link"
+            href="https://docs.openclaw.ai/web/control-ui#device-pairing-first-connection"
+            target="_blank"
+            rel="noreferrer"
+            title="Device pairing docs (opens in new tab)"
+            >Docs: Device pairing</a
+          >
+        </div>
+      </div>
+    `;
   })();
+
   const authHint = (() => {
     if (props.connected || !props.lastError) {
       return null;
     }
     const lower = props.lastError.toLowerCase();
-    const authFailed = lower.includes("unauthorized") || lower.includes("connect failed");
+    const authRequiredCodes = new Set<string>([
+      ConnectErrorDetailCodes.AUTH_REQUIRED,
+      ConnectErrorDetailCodes.AUTH_TOKEN_MISSING,
+      ConnectErrorDetailCodes.AUTH_PASSWORD_MISSING,
+      ConnectErrorDetailCodes.AUTH_TOKEN_NOT_CONFIGURED,
+      ConnectErrorDetailCodes.AUTH_PASSWORD_NOT_CONFIGURED,
+    ]);
+    const authFailureCodes = new Set<string>([
+      ...authRequiredCodes,
+      ConnectErrorDetailCodes.AUTH_UNAUTHORIZED,
+      ConnectErrorDetailCodes.AUTH_TOKEN_MISMATCH,
+      ConnectErrorDetailCodes.AUTH_PASSWORD_MISMATCH,
+      ConnectErrorDetailCodes.AUTH_DEVICE_TOKEN_MISMATCH,
+      ConnectErrorDetailCodes.AUTH_RATE_LIMITED,
+      ConnectErrorDetailCodes.AUTH_TAILSCALE_IDENTITY_MISSING,
+      ConnectErrorDetailCodes.AUTH_TAILSCALE_PROXY_MISSING,
+      ConnectErrorDetailCodes.AUTH_TAILSCALE_WHOIS_FAILED,
+      ConnectErrorDetailCodes.AUTH_TAILSCALE_IDENTITY_MISMATCH,
+    ]);
+    const authFailed = props.lastErrorCode
+      ? authFailureCodes.has(props.lastErrorCode)
+      : lower.includes("unauthorized") || lower.includes("connect failed");
     if (!authFailed) {
       return null;
     }
     const hasToken = Boolean(props.settings.token.trim());
     const hasPassword = Boolean(props.password.trim());
-    if (!hasToken && !hasPassword) {
+    const isAuthRequired = props.lastErrorCode
+      ? authRequiredCodes.has(props.lastErrorCode)
+      : !hasToken && !hasPassword;
+    if (isAuthRequired) {
       return html`
         <div class="muted" style="margin-top: 8px">
-          This gateway requires auth. Add a token or password, then click Connect. 此 Gateway
-          需要认证。添加令牌或密码，然后点击连接。
+          ${t("overview.auth.required")}
           <div style="margin-top: 6px">
             <span class="mono">openclaw dashboard --no-open</span> → tokenized URL<br />
             <span class="mono">openclaw doctor --generate-gateway-token</span> → set token
@@ -70,7 +119,7 @@ export function renderOverview(props: OverviewProps) {
               target="_blank"
               rel="noreferrer"
               title="Control UI auth docs (opens in new tab)"
-              >文档：控制面板认证</a
+              >Docs: Control UI auth</a
             >
           </div>
         </div>
@@ -78,9 +127,7 @@ export function renderOverview(props: OverviewProps) {
     }
     return html`
       <div class="muted" style="margin-top: 8px">
-        Auth failed. Re-copy a tokenized URL with 认证失败。使用以下命令重新复制带令牌的 URL
-        <span class="mono">openclaw dashboard --no-open</span>, or update the token, then click Connect.
-        <span class="mono">openclaw dashboard --no-open</span>，或更新令牌，然后点击连接。
+        ${t("overview.auth.failed", { command: "openclaw dashboard --no-open" })}
         <div style="margin-top: 6px">
           <a
             class="session-link"
@@ -94,6 +141,7 @@ export function renderOverview(props: OverviewProps) {
       </div>
     `;
   })();
+
   const insecureContextHint = (() => {
     if (props.connected || !props.lastError) {
       return null;
@@ -103,17 +151,21 @@ export function renderOverview(props: OverviewProps) {
       return null;
     }
     const lower = props.lastError.toLowerCase();
-    if (!lower.includes("secure context") && !lower.includes("device identity required")) {
+    const insecureContextCode =
+      props.lastErrorCode === ConnectErrorDetailCodes.CONTROL_UI_DEVICE_IDENTITY_REQUIRED ||
+      props.lastErrorCode === ConnectErrorDetailCodes.DEVICE_IDENTITY_REQUIRED;
+    if (
+      !insecureContextCode &&
+      !lower.includes("secure context") &&
+      !lower.includes("device identity required")
+    ) {
       return null;
     }
     return html`
       <div class="muted" style="margin-top: 8px">
-        This page is HTTP, so the browser blocks device identity. Use HTTPS (Tailscale Serve) or open
-        此页面是 HTTP，浏览器阻止设备身份验证。请使用 HTTPS (Tailscale Serve) 或在 Gateway 主机上打开
-        <span class="mono">http://127.0.0.1:18789</span> on the gateway host.
+        ${t("overview.insecure.hint", { url: "http://127.0.0.1:18789" })}
         <div style="margin-top: 6px">
-          If you must stay on HTTP, set 如果必须使用 HTTP，请设置
-          <span class="mono">gateway.controlUi.allowInsecureAuth: true</span> (token-only).
+          ${t("overview.insecure.stayHttp", { config: "gateway.controlUi.allowInsecureAuth: true" })}
         </div>
         <div style="margin-top: 6px">
           <a
@@ -122,7 +174,7 @@ export function renderOverview(props: OverviewProps) {
             target="_blank"
             rel="noreferrer"
             title="Tailscale Serve docs (opens in new tab)"
-            >文档：Tailscale Serve</a
+            >Docs: Tailscale Serve</a
           >
           <span class="muted"> · </span>
           <a
@@ -131,21 +183,23 @@ export function renderOverview(props: OverviewProps) {
             target="_blank"
             rel="noreferrer"
             title="Insecure HTTP docs (opens in new tab)"
-            >文档：不安全的 HTTP</a
+            >Docs: Insecure HTTP</a
           >
         </div>
       </div>
     `;
   })();
 
+  const currentLocale = i18n.getLocale();
+
   return html`
     <section class="grid grid-cols-2">
       <div class="card">
-        <div class="card-title">Gateway 访问</div>
-        <div class="card-sub">控制面板连接的位置以及如何进行认证。</div>
+        <div class="card-title">${t("overview.access.title")}</div>
+        <div class="card-sub">${t("overview.access.subtitle")}</div>
         <div class="form-grid" style="margin-top: 16px;">
           <label class="field">
-            <span>WebSocket URL</span>
+            <span>${t("overview.access.wsUrl")}</span>
             <input
               .value=${props.settings.gatewayUrl}
               @input=${(e: Event) => {
@@ -155,31 +209,37 @@ export function renderOverview(props: OverviewProps) {
               placeholder="ws://100.x.y.z:18789"
             />
           </label>
+          ${
+            isTrustedProxy
+              ? ""
+              : html`
+                <label class="field">
+                  <span>${t("overview.access.token")}</span>
+                  <input
+                    .value=${props.settings.token}
+                    @input=${(e: Event) => {
+                      const v = (e.target as HTMLInputElement).value;
+                      props.onSettingsChange({ ...props.settings, token: v });
+                    }}
+                    placeholder="OPENCLAW_GATEWAY_TOKEN"
+                  />
+                </label>
+                <label class="field">
+                  <span>${t("overview.access.password")}</span>
+                  <input
+                    type="password"
+                    .value=${props.password}
+                    @input=${(e: Event) => {
+                      const v = (e.target as HTMLInputElement).value;
+                      props.onPasswordChange(v);
+                    }}
+                    placeholder=${t("overview.access.passwordPlaceholder")}
+                  />
+                </label>
+              `
+          }
           <label class="field">
-            <span>Gateway 令牌</span>
-            <input
-              .value=${props.settings.token}
-              @input=${(e: Event) => {
-                const v = (e.target as HTMLInputElement).value;
-                props.onSettingsChange({ ...props.settings, token: v });
-              }}
-              placeholder="OPENCLAW_GATEWAY_TOKEN"
-            />
-          </label>
-          <label class="field">
-            <span>密码（不存储）</span>
-            <input
-              type="password"
-              .value=${props.password}
-              @input=${(e: Event) => {
-                const v = (e.target as HTMLInputElement).value;
-                props.onPasswordChange(v);
-              }}
-              placeholder="系统或共享密码"
-            />
-          </label>
-          <label class="field">
-            <span>默认会话密钥</span>
+            <span>${t("overview.access.sessionKey")}</span>
             <input
               .value=${props.settings.sessionKey}
               @input=${(e: Event) => {
@@ -189,62 +249,53 @@ export function renderOverview(props: OverviewProps) {
             />
           </label>
           <label class="field">
-            <span>显示时区</span>
+            <span>${t("overview.access.language")}</span>
             <select
-              .value=${props.settings.timezone}
+              .value=${currentLocale}
               @change=${(e: Event) => {
-                const v = (e.target as HTMLSelectElement).value;
-                props.onSettingsChange({ ...props.settings, timezone: v });
+                const v = (e.target as HTMLSelectElement).value as Locale;
+                void i18n.setLocale(v);
+                props.onSettingsChange({ ...props.settings, locale: v });
               }}
             >
-              <option value="auto">自动检测</option>
-              <option value="Asia/Shanghai">中国时间 (Asia/Shanghai)</option>
-              <option value="Asia/Hong_Kong">香港时间 (Asia/Hong_Kong)</option>
-              <option value="Asia/Taipei">台北时间 (Asia/Taipei)</option>
-              <option value="Asia/Tokyo">东京时间 (Asia/Tokyo)</option>
-              <option value="Asia/Seoul">首尔时间 (Asia/Seoul)</option>
-              <option value="Asia/Singapore">新加坡时间 (Asia/Singapore)</option>
-              <option value="America/New_York">纽约时间 (America/New_York)</option>
-              <option value="America/Los_Angeles">洛杉矶时间 (America/Los_Angeles)</option>
-              <option value="America/Chicago">芝加哥时间 (America/Chicago)</option>
-              <option value="Europe/London">伦敦时间 (Europe/London)</option>
-              <option value="Europe/Paris">巴黎时间 (Europe/Paris)</option>
-              <option value="UTC">UTC 时间</option>
+              <option value="en">${t("languages.en")}</option>
+              <option value="zh-CN">${t("languages.zhCN")}</option>
+              <option value="zh-TW">${t("languages.zhTW")}</option>
+              <option value="pt-BR">${t("languages.ptBR")}</option>
             </select>
           </label>
         </div>
-        <div class="muted" style="margin-top: 8px; font-size: 12px;">
-          当前时区：<span class="mono" style="color: var(--accent);">${currentTimezone}</span>
-        </div>
         <div class="row" style="margin-top: 14px;">
-          <button class="btn" @click=${() => props.onConnect()}>连接</button>
-          <button class="btn" @click=${() => props.onRefresh()}>刷新</button>
-          <span class="muted">点击连接以应用连接更改。</span>
+          <button class="btn" @click=${() => props.onConnect()}>${t("common.connect")}</button>
+          <button class="btn" @click=${() => props.onRefresh()}>${t("common.refresh")}</button>
+          <span class="muted">${
+            isTrustedProxy ? t("overview.access.trustedProxy") : t("overview.access.connectHint")
+          }</span>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-title">快照</div>
-        <div class="card-sub">最新的 Gateway 握手信息。</div>
+        <div class="card-title">${t("overview.snapshot.title")}</div>
+        <div class="card-sub">${t("overview.snapshot.subtitle")}</div>
         <div class="stat-grid" style="margin-top: 16px;">
           <div class="stat">
-            <div class="stat-label">状态</div>
+            <div class="stat-label">${t("overview.snapshot.status")}</div>
             <div class="stat-value ${props.connected ? "ok" : "warn"}">
-              ${props.connected ? "已连接" : "未连接"}
+              ${props.connected ? t("common.ok") : t("common.offline")}
             </div>
           </div>
           <div class="stat">
-            <div class="stat-label">运行时间</div>
+            <div class="stat-label">${t("overview.snapshot.uptime")}</div>
             <div class="stat-value">${uptime}</div>
           </div>
           <div class="stat">
-            <div class="stat-label">轮询间隔</div>
+            <div class="stat-label">${t("overview.snapshot.tickInterval")}</div>
             <div class="stat-value">${tick}</div>
           </div>
           <div class="stat">
-            <div class="stat-label">上次通道刷新</div>
+            <div class="stat-label">${t("overview.snapshot.lastChannelsRefresh")}</div>
             <div class="stat-value">
-              ${props.lastChannelsRefresh ? formatRelativeTimestamp(props.lastChannelsRefresh) : "n/a"}
+              ${props.lastChannelsRefresh ? formatRelativeTimestamp(props.lastChannelsRefresh) : t("common.na")}
             </div>
           </div>
         </div>
@@ -252,12 +303,13 @@ export function renderOverview(props: OverviewProps) {
           props.lastError
             ? html`<div class="callout danger" style="margin-top: 14px;">
               <div>${props.lastError}</div>
+              ${pairingHint ?? ""}
               ${authHint ?? ""}
               ${insecureContextHint ?? ""}
             </div>`
             : html`
                 <div class="callout" style="margin-top: 14px">
-                  使用通道功能链接 WhatsApp、Telegram、Discord、Signal 或 iMessage。
+                  ${t("overview.snapshot.channelsHint")}
                 </div>
               `
         }
@@ -266,43 +318,41 @@ export function renderOverview(props: OverviewProps) {
 
     <section class="grid grid-cols-3" style="margin-top: 18px;">
       <div class="card stat-card">
-        <div class="stat-label">实例</div>
+        <div class="stat-label">${t("overview.stats.instances")}</div>
         <div class="stat-value">${props.presenceCount}</div>
-        <div class="muted">过去 5 分钟内的在线信号。</div>
+        <div class="muted">${t("overview.stats.instancesHint")}</div>
       </div>
       <div class="card stat-card">
-        <div class="stat-label">会话</div>
-        <div class="stat-value">${props.sessionsCount ?? "n/a"}</div>
-        <div class="muted">Gateway 跟踪的最近会话密钥。</div>
+        <div class="stat-label">${t("overview.stats.sessions")}</div>
+        <div class="stat-value">${props.sessionsCount ?? t("common.na")}</div>
+        <div class="muted">${t("overview.stats.sessionsHint")}</div>
       </div>
       <div class="card stat-card">
-        <div class="stat-label">定时任务</div>
+        <div class="stat-label">${t("overview.stats.cron")}</div>
         <div class="stat-value">
-          ${props.cronEnabled == null ? "n/a" : props.cronEnabled ? "已启用" : "已禁用"}
+          ${props.cronEnabled == null ? t("common.na") : props.cronEnabled ? t("common.enabled") : t("common.disabled")}
         </div>
-        <div class="muted">下次唤醒 ${formatNextRun(props.cronNext)}</div>
+        <div class="muted">${t("overview.stats.cronNext", { time: formatNextRun(props.cronNext) })}</div>
       </div>
     </section>
 
-    ${props.sessionStorage ? renderSessionStorage(props.sessionStorage) : nothing}
-
     <section class="card" style="margin-top: 18px;">
-      <div class="card-title">注意事项</div>
-      <div class="card-sub">远程控制设置的快速提示。</div>
+      <div class="card-title">${t("overview.notes.title")}</div>
+      <div class="card-sub">${t("overview.notes.subtitle")}</div>
       <div class="note-grid" style="margin-top: 14px;">
         <div>
-          <div class="note-title">Tailscale 服务</div>
+          <div class="note-title">${t("overview.notes.tailscaleTitle")}</div>
           <div class="muted">
-            建议使用 serve 模式，将 Gateway 保持在本地回环并使用 Tailnet 认证。
+            ${t("overview.notes.tailscaleText")}
           </div>
         </div>
         <div>
-          <div class="note-title">会话卫生</div>
-          <div class="muted">使用 /new 或 sessions.patch 重置上下文。</div>
+          <div class="note-title">${t("overview.notes.sessionTitle")}</div>
+          <div class="muted">${t("overview.notes.sessionText")}</div>
         </div>
         <div>
-          <div class="note-title">定时任务提醒</div>
-          <div class="muted">使用独立会话进行定期运行。</div>
+          <div class="note-title">${t("overview.notes.cronTitle")}</div>
+          <div class="muted">${t("overview.notes.cronText")}</div>
         </div>
       </div>
     </section>

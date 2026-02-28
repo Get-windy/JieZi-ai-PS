@@ -4,6 +4,8 @@ import type { GatewayRequestHandlers } from "./types.js";
 import { resetModelCatalogCacheForTest } from "../../agents/model-catalog.js";
 import { loadConfig } from "../../config/config.js";
 import { STATE_DIR } from "../../config/paths.js";
+import { DEFAULT_PROVIDER } from "../../agents/defaults.js";
+import { buildAllowedModelSet } from "../../agents/model-selection.js";
 import {
   ErrorCodes,
   errorShape,
@@ -634,6 +636,7 @@ async function testOpenAIConnection(params: {
       }
 
       const errorText = await response.text();
+
       let errorMessage = `HTTP ${response.status}`;
 
       try {
@@ -2187,6 +2190,30 @@ export const modelsHandlers: GatewayRequestHandlers = {
         return;
       }
 
+      // 对于OAuth认证，从AuthProfileStore获取token
+      let actualApiKey = auth.apiKey;
+      console.log('[models.auth.test] Auth info:', {
+        authId,
+        provider: auth.provider,
+        apiKeyPrefix: auth.apiKey?.slice(0, 30),
+        baseUrl: auth.baseUrl,
+      });
+
+      if (auth.provider === 'qwen-portal' && auth.apiKey.startsWith('qwen-oauth:')) {
+        try {
+          const { ensureAuthProfileStore } = await import("../../agents/auth-profiles.js");
+          const store = ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
+          const profileId = `${auth.provider}:default`;
+          const profile = store.profiles[profileId];
+          
+          if (profile && profile.type === 'oauth' && profile.access) {
+            actualApiKey = profile.access;
+          }
+        } catch (err) {
+          console.error('[models.auth.test] Failed to load OAuth token:', err);
+        }
+      }
+
       // 获取供应商配置
       const providerInstance = storage.providers.find((p) => p.id === auth.provider);
       const baseUrl = auth.baseUrl || providerInstance?.defaultBaseUrl || "";
@@ -2216,21 +2243,21 @@ export const modelsHandlers: GatewayRequestHandlers = {
         // Anthropic 测试
         result = await testAnthropicConnection({
           baseUrl,
-          apiKey: auth.apiKey,
+          apiKey: actualApiKey,  // ✅ 使用实际的OAuth token
           modelName: modelName || "claude-3-5-sonnet-20241022",
         });
       } else if (templateId === "google-gemini") {
         // Google Gemini 测试（使用API Key作为query参数）
         result = await testGoogleGeminiConnection({
           baseUrl,
-          apiKey: auth.apiKey,
+          apiKey: actualApiKey,  // ✅ 使用实际的OAuth token
           modelName: modelName || "gemini-1.5-flash",
         });
       } else {
         // OpenAI 兼容测试（默认）
         result = await testOpenAIConnection({
           baseUrl,
-          apiKey: auth.apiKey,
+          apiKey: actualApiKey,  // ✅ 使用实际的OAuth token
           modelName: modelName || defaultTestModel,
         });
       }
@@ -2340,6 +2367,554 @@ export const modelsHandlers: GatewayRequestHandlers = {
         undefined,
       );
     } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+
+  /**
+   * 获取认证健康状态
+   * 支持OAuth/API Key/Token类型的认证状态检测
+   */
+  "models.auth.status": async ({ params, respond }) => {
+    try {
+      const authIdParam = params?.authId;
+      const authId = typeof authIdParam === 'string' ? authIdParam.trim() : '';
+      if (!authId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "authId is required"));
+        return;
+      }
+
+      const storage = await loadModelManagement();
+      
+      // 查找认证
+      let auth: ProviderAuth | undefined;
+      for (const auths of Object.values(storage.auths)) {
+        auth = auths.find((a) => a.authId === authId);
+        if (auth) {break;}
+      }
+
+      if (!auth) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Auth not found"));
+        return;
+      }
+
+      // 检查OAuth认证状态
+      const { ensureAuthProfileStore } = await import("../../agents/auth-profiles.js");
+      const { buildAuthHealthSummary, DEFAULT_OAUTH_WARN_MS } = await import(
+        "../../agents/auth-health.js"
+      );
+      
+      const store = ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
+      const health = buildAuthHealthSummary({
+        store,
+        warnAfterMs: DEFAULT_OAUTH_WARN_MS,
+        providers: [auth.provider],
+      });
+
+      // 查找profile健康状态
+      const profileHealth = health.profiles.find(
+        (p) => p.provider === auth.provider && p.type === "oauth",
+      );
+
+      let authType: "oauth" | "api_key" | "token" = "api_key";
+      let status: "ok" | "expiring" | "expired" | "unknown" = "unknown";
+      let expiresAt: number | undefined;
+      let canRefresh = false;
+
+      if (profileHealth) {
+        authType = profileHealth.type;
+        status = profileHealth.status === "ok" || profileHealth.status === "static" 
+          ? "ok" 
+          : profileHealth.status === "expiring" 
+          ? "expiring" 
+          : profileHealth.status === "expired" 
+          ? "expired" 
+          : "unknown";
+        expiresAt = profileHealth.expiresAt;
+        
+        // OAuth类型且有refresh token可以刷新
+        const profile = store.profiles[profileHealth.profileId];
+        if (profile?.type === "oauth" && profile.refresh) {
+          canRefresh = true;
+        }
+      }
+
+      respond(
+        true,
+        {
+          authId,
+          provider: auth.provider,
+          type: authType,
+          status,
+          expiresAt,
+          canRefresh,
+          remainingMs: expiresAt ? expiresAt - Date.now() : undefined,
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+
+  /**
+   * 手动刷新OAuth Token
+   * 立即尝试刷新指定认证的Token，不等待守护进程
+   */
+  "models.auth.refresh": async ({ params, respond }) => {
+    try {
+      const authIdParam = params?.authId;
+      const authId = typeof authIdParam === 'string' ? authIdParam.trim() : '';
+      const force = Boolean(params?.force);
+
+      if (!authId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "authId is required"));
+        return;
+      }
+
+      const storage = await loadModelManagement();
+      
+      // 查找认证
+      let auth: ProviderAuth | undefined;
+      for (const auths of Object.values(storage.auths)) {
+        auth = auths.find((a) => a.authId === authId);
+        if (auth) {break;}
+      }
+
+      if (!auth) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Auth not found"));
+        return;
+      }
+
+      // 检查是否为OAuth认证
+      const { ensureAuthProfileStore, saveAuthProfileStore } = await import(
+        "../../agents/auth-profiles.js"
+      );
+      const store = ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
+      
+      // 查找OAuth profile
+      const profileId = `${auth.provider}:default`; // 假设使用默认profile
+      const profile = store.profiles[profileId];
+
+      if (!profile || profile.type !== "oauth") {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "Not an OAuth authentication"),
+        );
+        return;
+      }
+
+      if (!profile.refresh) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "No refresh token available"),
+        );
+        return;
+      }
+
+      // 检查是否需要刷新
+      const now = Date.now();
+      if (!force && profile.expires > now) {
+        const remainingMs = profile.expires - now;
+        respond(
+          true,
+          {
+            refreshed: false,
+            message: "Token still valid, use force=true to refresh anyway",
+            expiresAt: profile.expires,
+            remainingMs,
+          },
+          undefined,
+        );
+        return;
+      }
+
+      // 执行刷新
+      let newCredentials;
+      
+      try {
+        switch (auth.provider) {
+          case "qwen-portal": {
+            const { refreshQwenPortalCredentials } = await import(
+              "../../providers/qwen-portal-oauth.js"
+            );
+            newCredentials = await refreshQwenPortalCredentials(profile);
+            break;
+          }
+          // TODO: 添加其他provider的刷新逻辑
+          default:
+            respond(
+              false,
+              undefined,
+              errorShape(ErrorCodes.INVALID_REQUEST, `Unsupported provider: ${auth.provider}`),
+            );
+            return;
+        }
+      } catch (refreshErr) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.UNAVAILABLE,
+            `Refresh failed: ${refreshErr instanceof Error ? refreshErr.message : String(refreshErr)}`,
+          ),
+        );
+        return;
+      }
+
+      // 更新store
+      store.profiles[profileId] = {
+        ...profile,
+        ...newCredentials,
+        type: "oauth",
+      };
+      saveAuthProfileStore(store, undefined);
+
+      respond(
+        true,
+        {
+          refreshed: true,
+          expiresAt: newCredentials.expires,
+          remainingMs: newCredentials.expires - Date.now(),
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+
+  /**
+   * 启动OAuth重认证流程
+   * 返回Device Code授权信息，前端轮询检测授权完成
+   */
+  "models.auth.reauth": async ({ params, respond }) => {
+    try {
+      const authIdParam = params?.authId;
+      const authId = typeof authIdParam === 'string' ? authIdParam.trim() : '';
+
+      if (!authId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "authId is required"));
+        return;
+      }
+
+      const storage = await loadModelManagement();
+      
+      // 查找认证
+      let auth: ProviderAuth | undefined;
+      for (const auths of Object.values(storage.auths)) {
+        auth = auths.find((a) => a.authId === authId);
+        if (auth) {break;}
+      }
+
+      if (!auth) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Auth not found"));
+        return;
+      }
+
+      // 检查是否支持OAuth重认证
+      if (auth.provider !== "qwen-portal") {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `OAuth reauth not supported for provider: ${auth.provider}`,
+          ),
+        );
+        return;
+      }
+
+      // 启动Device Code流程
+      try {
+        // 导入qwen OAuth模块
+        const oauthModule = await import("../../../extensions/qwen-portal-auth/oauth.js");
+        
+        // 生成PKCE
+        const { randomBytes, createHash } = await import("node:crypto");
+        const verifier = randomBytes(32).toString("base64url");
+        const challenge = createHash("sha256").update(verifier).digest("base64url");
+
+        // 请求Device Code
+        const QWEN_OAUTH_BASE_URL = "https://chat.qwen.ai";
+        const QWEN_OAUTH_DEVICE_CODE_ENDPOINT = `${QWEN_OAUTH_BASE_URL}/api/v1/oauth2/device/code`;
+        const QWEN_OAUTH_CLIENT_ID = "f0304373b74a44d2b584a3fb70ca9e56";
+        const QWEN_OAUTH_SCOPE = "openid profile email model.completion";
+        const { randomUUID } = await import("node:crypto");
+
+        const toFormUrlEncoded = (data: Record<string, string>) => {
+          return Object.entries(data)
+            .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+            .join("&");
+        };
+
+        const deviceResponse = await fetch(QWEN_OAUTH_DEVICE_CODE_ENDPOINT, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Accept: "application/json",
+            "x-request-id": randomUUID(),
+          },
+          body: toFormUrlEncoded({
+            client_id: QWEN_OAUTH_CLIENT_ID,
+            scope: QWEN_OAUTH_SCOPE,
+            code_challenge: challenge,
+            code_challenge_method: "S256",
+          }),
+        });
+
+        if (!deviceResponse.ok) {
+          const text = await deviceResponse.text();
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.UNAVAILABLE, `Device code request failed: ${text}`),
+          );
+          return;
+        }
+
+        const deviceData = (await deviceResponse.json()) as {
+          device_code: string;
+          user_code: string;
+          verification_uri: string;
+          verification_uri_complete?: string;
+          expires_in: number;
+          interval?: number;
+        };
+
+        // 存储verifier以供后续轮询使用
+        // TODO: 将verifier存储到临时存储，供前端轮询时使用
+        
+        respond(
+          true,
+          {
+            deviceCode: deviceData.device_code,
+            userCode: deviceData.user_code,
+            verificationUrl: deviceData.verification_uri_complete || deviceData.verification_uri,
+            expiresIn: deviceData.expires_in,
+            interval: deviceData.interval || 2,
+            provider: auth.provider,
+            authId,
+            verifier, // 返回verifier用于前端轮询
+          },
+          undefined,
+        );
+      } catch (oauthErr) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.UNAVAILABLE,
+            `OAuth flow init failed: ${oauthErr instanceof Error ? oauthErr.message : String(oauthErr)}`,
+          ),
+        );
+      }
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+
+  /**
+   * 轮询检测OAuth授权状态
+   */
+  "models.auth.poll": async ({ params, respond }) => {
+    try {
+      const deviceCodeParam = params?.deviceCode;
+      const verifierParam = params?.verifier;
+      const deviceCode = typeof deviceCodeParam === 'string' ? deviceCodeParam.trim() : '';
+      const verifier = typeof verifierParam === 'string' ? verifierParam.trim() : '';
+
+      if (!deviceCode || !verifier) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "deviceCode and verifier are required"),
+        );
+        return;
+      }
+
+      // 轮询Token
+      const QWEN_OAUTH_BASE_URL = "https://chat.qwen.ai";
+      const QWEN_OAUTH_TOKEN_ENDPOINT = `${QWEN_OAUTH_BASE_URL}/api/v1/oauth2/token`;
+      const QWEN_OAUTH_CLIENT_ID = "f0304373b74a44d2b584a3fb70ca9e56";
+      const QWEN_OAUTH_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
+      const { randomUUID } = await import("node:crypto");
+
+      const toFormUrlEncoded = (data: Record<string, string>) => {
+        return Object.entries(data)
+          .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+          .join("&");
+      };
+
+      const tokenResponse = await fetch(QWEN_OAUTH_TOKEN_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+          "x-request-id": randomUUID(),
+        },
+        body: toFormUrlEncoded({
+          grant_type: QWEN_OAUTH_GRANT_TYPE,
+          device_code: deviceCode,
+          client_id: QWEN_OAUTH_CLIENT_ID,
+          code_verifier: verifier,
+        }),
+      });
+
+      // 尝试解析JSON响应
+      let tokenData: unknown;
+      try {
+        tokenData = await tokenResponse.json();
+      } catch {
+        const text = await tokenResponse.text();
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Token response parse failed: ${text}`),
+        );
+        return;
+      }
+
+      // 类型守卫:检查tokenData结构
+      if (typeof tokenData !== 'object' || tokenData === null) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, 'Invalid token response format'),
+        );
+        return;
+      }
+
+      const tokenObj = tokenData as Record<string, unknown>;
+
+      // 检查响应状态
+      if (tokenObj.error) {
+        if (tokenObj.error === "authorization_pending") {
+          // 用户尚未完成授权
+          respond(true, { status: "pending" }, undefined);
+          return;
+        } else if (tokenObj.error === "slow_down") {
+          // 轮询太快，减慢速度
+          respond(true, { status: "slow_down" }, undefined);
+          return;
+        } else {
+          // 其他错误（如expired_token、access_denied）
+          respond(
+            false,
+            undefined,
+            errorShape(
+              ErrorCodes.UNAVAILABLE,
+              `Authorization failed: ${tokenObj.error_description || tokenObj.error}`,
+            ),
+          );
+          return;
+        }
+      }
+
+      // 授权成功！更新认证信息
+      const accessToken = typeof tokenObj.access_token === 'string' ? tokenObj.access_token : undefined;
+      const refreshToken = typeof tokenObj.refresh_token === 'string' ? tokenObj.refresh_token : undefined;
+      const expiresIn = typeof tokenObj.expires_in === 'number' ? tokenObj.expires_in : undefined;
+      const resourceUrl = typeof tokenObj.resource_url === 'string' ? tokenObj.resource_url : undefined;
+
+      console.log('[models.auth.poll] ========== QWEN TOKEN RESPONSE ==========');
+      console.log('[models.auth.poll] Raw tokenData keys:', Object.keys(tokenObj));
+      console.log('[models.auth.poll] access_token length:', accessToken?.length);
+      console.log('[models.auth.poll] refresh_token length:', refreshToken?.length);
+      console.log('[models.auth.poll] expires_in:', expiresIn);
+      console.log('[models.auth.poll] resource_url:', resourceUrl);
+      console.log('[models.auth.poll] Full tokenData:', JSON.stringify(tokenObj).slice(0, 500));
+      console.log('[models.auth.poll] ===============================================');
+
+      if (!accessToken || !refreshToken || !expiresIn) {
+        console.error('[models.auth.poll] ❌ Missing required token fields!');
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, "Token response missing required fields"),
+        );
+        return;
+      }
+
+      // 从 params 中获取 authId
+      const authIdFromParams = params?.authId;
+      const authId = typeof authIdFromParams === 'string' ? authIdFromParams.trim() : '';
+      if (!authId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "authId is required"));
+        return;
+      }
+
+      // 更新认证存储
+      const storage = await loadModelManagement();
+      let auth: ProviderAuth | undefined;
+      let providerKey: string | undefined;
+
+      for (const [key, auths] of Object.entries(storage.auths)) {
+        auth = auths.find((a) => a.authId === authId);
+        if (auth) {
+          providerKey = key;
+          break;
+        }
+      }
+
+      if (!auth || !providerKey) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Auth not found"));
+        return;
+      }
+
+      // 更新OAuth凭据
+      // 保存到 AuthProfileStore
+      try {
+        const { ensureAuthProfileStore, saveAuthProfileStore } = await import(
+          "../../agents/auth-profiles.js"
+        );
+        const store = ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
+
+        const profileId = `${auth.provider}:default`;
+        const expiresAt = Date.now() + expiresIn * 1000;
+
+        store.profiles[profileId] = {
+          type: "oauth",
+          provider: auth.provider,
+          access: accessToken,
+          refresh: refreshToken,
+          expires: expiresAt,
+        };
+
+        saveAuthProfileStore(store, undefined);
+      } catch (err) {
+        console.error('[models.auth.poll] Failed to save to AuthProfileStore:', err);
+      }
+
+      // 同时更新 models.json 中的 apiKey（用于UI显示）
+      auth.apiKey = `qwen-oauth:${accessToken.slice(0, 20)}...`;
+      
+      // 更新 baseUrl 为 Qwen 返回的 resource_url
+      if (resourceUrl) {
+        const normalizedBaseUrl = resourceUrl.startsWith('http') 
+          ? resourceUrl 
+          : `https://${resourceUrl}`;
+        const finalBaseUrl = normalizedBaseUrl.endsWith('/v1') 
+          ? normalizedBaseUrl 
+          : `${normalizedBaseUrl}/v1`;
+        
+        auth.baseUrl = finalBaseUrl;
+      }
+      
+      await saveModelManagement(storage);
+
+      respond(
+        true,
+        {
+          status: "success",
+          message: "OAuth authorization completed successfully",
+        },
+        undefined,
+      );
+    } catch (err) {
+      console.error('[models.auth.poll] Error:', err);
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }
   },

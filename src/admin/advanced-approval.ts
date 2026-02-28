@@ -701,6 +701,37 @@ export class AdvancedApprovalSystem {
   }
 
   /**
+   * 获取紧急访问请求列表
+   */
+  public getEmergencyAccessRequests(params?: {
+    status?: EmergencyAccessRequest["status"];
+    severity?: EmergencyAccessRequest["severity"];
+    requesterId?: string;
+  }): EmergencyAccessRequest[] {
+    let requests = Array.from(this.emergencyAccess.values());
+
+    // 过滤状态
+    if (params?.status) {
+      requests = requests.filter((r) => r.status === params.status);
+    }
+
+    // 过滤严重程度
+    if (params?.severity) {
+      requests = requests.filter((r) => r.severity === params.severity);
+    }
+
+    // 过滤请求者
+    if (params?.requesterId) {
+      requests = requests.filter((r) => r.requester.id === params.requesterId);
+    }
+
+    // 按创建时间排序（最新的在前）
+    requests.sort((a, b) => b.createdAt - a.createdAt);
+
+    return requests;
+  }
+
+  /**
    * 清空所有数据（仅用于测试）
    */
   public clearAll(): void {
