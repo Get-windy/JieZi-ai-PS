@@ -895,7 +895,21 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       const storage = await loadModelManagement();
 
       // 解析 modelId 格式：providerId/modelName
-      const [providerId, modelName] = modelId.split("/");
+      // 注意：modelName 可能包含斜杠（如 Pro/deepseek-ai/DeepSeek-V3.2）
+      const slashIndex = modelId.indexOf("/");
+      if (slashIndex === -1) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Invalid model ID format: ${modelId}, expected: providerId/modelName`,
+          ),
+        );
+        return;
+      }
+      const providerId = modelId.substring(0, slashIndex);
+      const modelName = modelId.substring(slashIndex + 1);
       if (!providerId || !modelName) {
         respond(
           false,
