@@ -78,6 +78,72 @@ If you're merging code from upstream or updating `package.json`, please be aware
 
 ### 📌 项目更新记录 | Project Update Log
 
+#### 2026年2月28日 - 同步上游到 v2026.2.28 (0a23739c3) | 2026-02-28: Sync Upstream to v2026.2.28 (0a23739c3)
+
+**🎯 主要更新 | Main Updates:**
+
+**1. Android 节点功能增强 | Android Node Feature Enhancement**
+
+- ✅ **新增原生功能支持 | Added Native Feature Support**
+  - **相机处理 | Camera Processing**: 添加 `CameraHandler` 和 `CameraCaptureManager` 用于相机操作和图像捕获 | Added `CameraHandler` and `CameraCaptureManager` for camera operations and image capture
+  - **联系人管理 | Contact Management**: 新增 `ContactsHandler` 用于访问设备联系人 | Added `ContactsHandler` for accessing device contacts
+  - **运动传感器 | Motion Sensor**: 实现 `MotionHandler` 用于获取设备运动数据 | Implemented `MotionHandler` for getting device motion data
+  - **相册管理 | Photo Gallery**: 添加 `PhotosHandler` 用于访问和管理设备照片 | Added `PhotosHandler` for accessing and managing device photos
+  - **系统服务 | System Services**: 新增 `SystemHandler` 用于系统级别操作 | Added `SystemHandler` for system-level operations
+  - **日历访问 | Calendar Access**: 实现 `CalendarHandler` 用于日程管理 | Implemented `CalendarHandler` for calendar management
+  - **通知管理 | Notification Management**: 添加 `NotificationsHandler` 和 `DeviceNotificationListenerService` | Added `NotificationsHandler` and `DeviceNotificationListenerService`
+
+- ✅ **测试覆盖 | Test Coverage**
+  - 为所有新功能添加全面的单元测试 | Added comprehensive unit tests for all new features
+  - 包括 `CalendarHandlerTest`、`CameraHandlerTest`、`ContactsHandlerTest` 等 | Including `CalendarHandlerTest`, `CameraHandlerTest`, `ContactsHandlerTest`, etc.
+
+**2. 飞书集成改进 | Feishu Integration Improvements**
+
+- ✅ **发送者身份回退 | Sender Identity Fallback**
+  - 修复 `feishu: fall back to user_id for inbound sender identity` 问题 | Fixed `feishu: fall back to user_id for inbound sender identity` issue
+  - 解决入站消息发送者身份识别问题 | Resolved inbound message sender identity recognition issue
+  - 改进 `extensions/feishu/src/monitor.ts` 中的身份处理逻辑 | Improved identity handling logic in `extensions/feishu/src/monitor.ts`
+
+- ✅ **音频下载资源类型 | Audio Download Resource Type**
+  - 添加对 `resource type=file` 的回归测试 | Added regression test for `resource type=file`
+  - 修复飞书音频下载相关问题 | Fixed Feishu audio download related issues
+
+**3. 构建和发布优化 | Build and Release Optimization**
+
+- ✅ **macOS 构建策略 | macOS Build Policy**
+  - 优化 Sparkle 构建版本策略和默认设置 | Optimized Sparkle build version policy and defaults
+  - 统一构建策略和默认配置 | Unified build policy and default configurations
+  - 改进版本号解析和构建编号生成 | Improved version number parsing and build number generation
+
+- ✅ **发布检查 | Release Check**
+  - 添加新的发布检查测试 | Added new release check tests
+  - 验证应用广播 Sparkle 版本下限 | Validated appcast Sparkle version floor
+
+**4. 自动回复系统重构 | Auto-reply System Refactoring**
+
+- ✅ **会话生命周期管理 | Session Lifecycle Management**
+  - 删除过时的 TTL 测试文件 | Removed outdated TTL test files
+  - 移除 `post-compaction-audit.ts` 文件及相关引用 | Removed `post-compaction-audit.ts` file and related references
+  - 重构会话压缩后的读取审计逻辑 | Refactored post-compaction read audit logic
+
+**5. 国际化支持扩展 | Internationalization Support Expansion**
+
+- ✅ **新增德语支持 | Added German Support**
+  - 在 `ui/src/i18n/locales/de.ts` 中添加德语翻译 | Added German translations in `ui/src/i18n/locales/de.ts`
+  - 扩展多语言支持范围 | Extended multilingual support range
+
+**📝 修复的问题 | Fixed Issues:**
+
+1. ❌ 飞书入站消息发送者身份识别错误 | Feishu inbound message sender identity recognition error → ✅ 已修复 | Fixed (fallback to user_id)
+2. ❌ macOS 构建版本策略不一致 | Inconsistent macOS build version policy → ✅ 已优化 | Optimized (unified policy)
+3. ❌ 自动回复系统存在冗余文件 | Auto-reply system has redundant files → ✅ 已清理 | Cleaned (refactored)
+4. ❌ 缺少德语国际化支持 | Missing German internationalization support → ✅ 已添加 | Added (de.ts locale)
+
+**🔧 代码贡献 | Code Contributions:**
+
+- 感谢社区贡献者 @NewdlDewdl, @Clawborn, @Yaxuan42 的贡献 | Thanks to community contributors @NewdlDewdl, @Clawborn, @Yaxuan42
+- 改进了多个通道的稳定性和功能 | Improved stability and functionality of multiple channels
+
 #### 2026年2月12日 - 智能助手管理页面功能完善与体验优化 | 2026-02-12 - Agent Management Page Feature Enhancements & UX Optimization
 
 **🎯 核心功能改进 | Core Feature Improvements:**

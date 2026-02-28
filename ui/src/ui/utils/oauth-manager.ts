@@ -3,7 +3,7 @@
  * 支持多种OAuth流程：Device Code Flow, Authorization Code Flow等
  */
 
-export type OAuthProvider = 'qwen-portal' | 'github' | 'google' | 'azure' | string;
+export type OAuthProvider = 'qwen-portal' | 'github' | 'google' | 'azure';
 
 export type OAuthFlowType = 'device_code' | 'authorization_code';
 
@@ -110,7 +110,7 @@ export class OAuthManager {
 
     // 延迟后开始轮询
     setTimeout(() => {
-      this.startPolling(params);
+      void this.startPolling(params);
     }, 1000);
 
     // 监听窗口关闭
@@ -200,7 +200,7 @@ export class OAuthManager {
     };
 
     // 开始第一次轮询
-    poll();
+    void poll();
   }
 
   /**
@@ -220,7 +220,7 @@ export class OAuthManager {
         if (event.data.success) {
           this.stop();
           this.closeWindow();
-          this.callbacks.onSuccess();
+          void this.callbacks.onSuccess();
         } else {
           this.callbacks.onError?.(event.data.error || 'Authorization failed');
         }

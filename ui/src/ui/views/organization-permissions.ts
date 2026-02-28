@@ -222,8 +222,8 @@ export type ApprovalStats = {
 export type ApprovalFilter = {
   status: "all" | "pending" | "approved" | "denied" | "expired" | "cancelled";
   priority: "all" | "low" | "normal" | "high" | "urgent";
-  type: "all" | string;
-  requester: "all" | string;
+  type: string;
+  requester: string;
   search: string;
 };
 

@@ -52,6 +52,72 @@
 
 ### 📌 项目更新记录
 
+#### 2026年2月28日 - 同步上游到 v2026.2.28 (0a23739c3)
+
+**🎯 主要更新：**
+
+**1. Android 节点功能增强**
+
+- ✅ **新增原生功能支持**
+  - **相机处理**：添加 `CameraHandler` 和 `CameraCaptureManager` 用于相机操作和图像捕获
+  - **联系人管理**：新增 `ContactsHandler` 用于访问设备联系人
+  - **运动传感器**：实现 `MotionHandler` 用于获取设备运动数据
+  - **相册管理**：添加 `PhotosHandler` 用于访问和管理设备照片
+  - **系统服务**：新增 `SystemHandler` 用于系统级别操作
+  - **日历访问**：实现 `CalendarHandler` 用于日程管理
+  - **通知管理**：添加 `NotificationsHandler` 和 `DeviceNotificationListenerService`
+
+- ✅ **测试覆盖**
+  - 为所有新功能添加全面的单元测试
+  - 包括 `CalendarHandlerTest`、`CameraHandlerTest`、`ContactsHandlerTest` 等
+
+**2. 飞书集成改进**
+
+- ✅ **发送者身份回退**
+  - 修复 `feishu: fall back to user_id for inbound sender identity` 问题
+  - 解决入站消息发送者身份识别问题
+  - 改进 `extensions/feishu/src/monitor.ts` 中的身份处理逻辑
+
+- ✅ **音频下载资源类型**
+  - 添加对 `resource type=file` 的回归测试
+  - 修复飞书音频下载相关问题
+
+**3. 构建和发布优化**
+
+- ✅ **macOS 构建策略**
+  - 优化 Sparkle 构建版本策略和默认设置
+  - 统一构建策略和默认配置
+  - 改进版本号解析和构建编号生成
+
+- ✅ **发布检查**
+  - 添加新的发布检查测试
+  - 验证应用广播 Sparkle 版本下限
+
+**4. 自动回复系统重构**
+
+- ✅ **会话生命周期管理**
+  - 删除过时的 TTL 测试文件
+  - 移除 `post-compaction-audit.ts` 文件及相关引用
+  - 重构会话压缩后的读取审计逻辑
+
+**5. 国际化支持扩展**
+
+- ✅ **新增德语支持**
+  - 在 `ui/src/i18n/locales/de.ts` 中添加德语翻译
+  - 扩展多语言支持范围
+
+**📝 修复的问题：**
+
+1. ❌ 飞书入站消息发送者身份识别错误 → ✅ 已修复 (fallback to user_id)
+2. ❌ macOS 构建版本策略不一致 → ✅ 已优化 (unified policy)
+3. ❌ 自动回复系统存在冗余文件 → ✅ 已清理 (refactored)
+4. ❌ 缺少德语国际化支持 → ✅ 已添加 (de.ts locale)
+
+**🔧 代码贡献：**
+
+- 感谢社区贡献者 @NewdlDewdl, @Clawborn, @Yaxuan42 的贡献
+- 改进了多个通道的稳定性和功能
+
 #### 2026年2月14日 - 配对功能UI美化与批量操作实现
 
 **🎨 UI美化升级：**

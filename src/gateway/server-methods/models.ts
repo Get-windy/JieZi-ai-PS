@@ -2377,7 +2377,8 @@ export const modelsHandlers: GatewayRequestHandlers = {
    */
   "models.auth.status": async ({ params, respond }) => {
     try {
-      const authId = String(params?.authId ?? "").trim();
+      const authIdParam = params?.authId;
+      const authId = typeof authIdParam === 'string' ? authIdParam.trim() : '';
       if (!authId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "authId is required"));
         return;
@@ -2462,7 +2463,8 @@ export const modelsHandlers: GatewayRequestHandlers = {
    */
   "models.auth.refresh": async ({ params, respond }) => {
     try {
-      const authId = String(params?.authId ?? "").trim();
+      const authIdParam = params?.authId;
+      const authId = typeof authIdParam === 'string' ? authIdParam.trim() : '';
       const force = Boolean(params?.force);
 
       if (!authId) {
@@ -2590,7 +2592,8 @@ export const modelsHandlers: GatewayRequestHandlers = {
    */
   "models.auth.reauth": async ({ params, respond }) => {
     try {
-      const authId = String(params?.authId ?? "").trim();
+      const authIdParam = params?.authId;
+      const authId = typeof authIdParam === 'string' ? authIdParam.trim() : '';
 
       if (!authId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "authId is required"));
@@ -2718,8 +2721,10 @@ export const modelsHandlers: GatewayRequestHandlers = {
    */
   "models.auth.poll": async ({ params, respond }) => {
     try {
-      const deviceCode = String(params?.deviceCode ?? "").trim();
-      const verifier = String(params?.verifier ?? "").trim();
+      const deviceCodeParam = params?.deviceCode;
+      const verifierParam = params?.verifier;
+      const deviceCode = typeof deviceCodeParam === 'string' ? deviceCodeParam.trim() : '';
+      const verifier = typeof verifierParam === 'string' ? verifierParam.trim() : '';
 
       if (!deviceCode || !verifier) {
         respond(
@@ -2759,7 +2764,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
       });
 
       // 尝试解析JSON响应
-      let tokenData: any;
+      let tokenData: unknown;
       try {
         tokenData = await tokenResponse.json();
       } catch {
@@ -2772,13 +2777,25 @@ export const modelsHandlers: GatewayRequestHandlers = {
         return;
       }
 
+      // 类型守卫:检查tokenData结构
+      if (typeof tokenData !== 'object' || tokenData === null) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, 'Invalid token response format'),
+        );
+        return;
+      }
+
+      const tokenObj = tokenData as Record<string, unknown>;
+
       // 检查响应状态
-      if (tokenData.error) {
-        if (tokenData.error === "authorization_pending") {
+      if (tokenObj.error) {
+        if (tokenObj.error === "authorization_pending") {
           // 用户尚未完成授权
           respond(true, { status: "pending" }, undefined);
           return;
-        } else if (tokenData.error === "slow_down") {
+        } else if (tokenObj.error === "slow_down") {
           // 轮询太快，减慢速度
           respond(true, { status: "slow_down" }, undefined);
           return;
@@ -2789,7 +2806,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
             undefined,
             errorShape(
               ErrorCodes.UNAVAILABLE,
-              `Authorization failed: ${tokenData.error_description || tokenData.error}`,
+              `Authorization failed: ${tokenObj.error_description || tokenObj.error}`,
             ),
           );
           return;
@@ -2797,18 +2814,18 @@ export const modelsHandlers: GatewayRequestHandlers = {
       }
 
       // 授权成功！更新认证信息
-      const accessToken = tokenData.access_token;
-      const refreshToken = tokenData.refresh_token;
-      const expiresIn = tokenData.expires_in;
-      const resourceUrl = tokenData.resource_url;
+      const accessToken = typeof tokenObj.access_token === 'string' ? tokenObj.access_token : undefined;
+      const refreshToken = typeof tokenObj.refresh_token === 'string' ? tokenObj.refresh_token : undefined;
+      const expiresIn = typeof tokenObj.expires_in === 'number' ? tokenObj.expires_in : undefined;
+      const resourceUrl = typeof tokenObj.resource_url === 'string' ? tokenObj.resource_url : undefined;
 
       console.log('[models.auth.poll] ========== QWEN TOKEN RESPONSE ==========');
-      console.log('[models.auth.poll] Raw tokenData keys:', Object.keys(tokenData));
+      console.log('[models.auth.poll] Raw tokenData keys:', Object.keys(tokenObj));
       console.log('[models.auth.poll] access_token length:', accessToken?.length);
       console.log('[models.auth.poll] refresh_token length:', refreshToken?.length);
       console.log('[models.auth.poll] expires_in:', expiresIn);
       console.log('[models.auth.poll] resource_url:', resourceUrl);
-      console.log('[models.auth.poll] Full tokenData:', JSON.stringify(tokenData).slice(0, 500));
+      console.log('[models.auth.poll] Full tokenData:', JSON.stringify(tokenObj).slice(0, 500));
       console.log('[models.auth.poll] ===============================================');
 
       if (!accessToken || !refreshToken || !expiresIn) {
@@ -2822,7 +2839,8 @@ export const modelsHandlers: GatewayRequestHandlers = {
       }
 
       // 从 params 中获取 authId
-      const authId = String(params?.authId ?? "").trim();
+      const authIdFromParams = params?.authId;
+      const authId = typeof authIdFromParams === 'string' ? authIdFromParams.trim() : '';
       if (!authId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "authId is required"));
         return;

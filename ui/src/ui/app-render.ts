@@ -85,9 +85,6 @@ import {
   updateExecApprovalsFormValue,
 } from "./controllers/exec-approvals.ts";
 import {
-  confirmFriend,
-  removeFriend,
-  loadMessages,
   sendMessage,
 } from "./controllers/friends.ts";
 import {
