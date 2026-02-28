@@ -2389,7 +2389,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
       let auth: ProviderAuth | undefined;
       for (const auths of Object.values(storage.auths)) {
         auth = auths.find((a) => a.authId === authId);
-        if (auth) break;
+        if (auth) {break;}
       }
 
       if (!auth) {
@@ -2476,7 +2476,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
       let auth: ProviderAuth | undefined;
       for (const auths of Object.values(storage.auths)) {
         auth = auths.find((a) => a.authId === authId);
-        if (auth) break;
+        if (auth) {break;}
       }
 
       if (!auth) {
@@ -2603,7 +2603,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
       let auth: ProviderAuth | undefined;
       for (const auths of Object.values(storage.auths)) {
         auth = auths.find((a) => a.authId === authId);
-        if (auth) break;
+        if (auth) {break;}
       }
 
       if (!auth) {

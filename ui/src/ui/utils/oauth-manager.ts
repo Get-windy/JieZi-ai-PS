@@ -188,13 +188,13 @@ export class OAuthManager {
         } else {
           // 继续轮询
           if (!this.stopped) {
-            this.pollTimer = window.setTimeout(poll, this.options.pollInterval!);
+            this.pollTimer = window.setTimeout(poll, this.options.pollInterval);
           }
         }
       } catch (err) {
         console.error('[OAuthManager] Poll error:', err);
         if (!this.stopped) {
-          this.pollTimer = window.setTimeout(poll, this.options.pollInterval!);
+          this.pollTimer = window.setTimeout(poll, this.options.pollInterval);
         }
       }
     };

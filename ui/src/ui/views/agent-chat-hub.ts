@@ -104,6 +104,9 @@ export interface ChatHubState {
   
   /** 搜索关键词 */
   searchQuery: string;
+  
+  /** 视图模式：'detailed' 显示工具调用和美化UI，'compact' 显示原始envelope格式 */
+  viewMode: 'detailed' | 'compact';
 }
 
 /**
@@ -117,6 +120,7 @@ export interface ChatHubProps {
   onToggleLeftSidebar: () => void;
   onToggleRightSidebar: () => void;
   onSearch: (query: string) => void;
+  onViewModeChange: (mode: 'detailed' | 'compact') => void;
 }
 
 /**
@@ -336,6 +340,13 @@ function renderChatArea(props: ChatHubProps): TemplateResult {
         
         <!-- 操作按钮 -->
         <div style="display: flex; gap: 8px;">
+          <!-- 视图模式切换 -->
+          <button
+            @click=${() => props.onViewModeChange(state.viewMode === 'detailed' ? 'compact' : 'detailed')}
+            style="padding: 6px 12px; border: 1px solid ${state.viewMode === 'detailed' ? '#2196f3' : '#d0d0d0'}; border-radius: 6px; background: ${state.viewMode === 'detailed' ? '#e3f2fd' : 'white'}; cursor: pointer; font-size: 13px;"
+            title="${state.viewMode === 'detailed' ? '切换到简洁视图（显示原始格式）' : '切换到详细视图（显示工具调用）'}">
+            ${state.viewMode === 'detailed' ? '📝 详细' : '📋 简洁'}
+          </button>
           <button style="padding: 6px 12px; border: 1px solid #d0d0d0; border-radius: 6px; background: white; cursor: pointer; font-size: 13px;">
             📞 通话
           </button>
@@ -357,7 +368,7 @@ function renderChatArea(props: ChatHubProps): TemplateResult {
             <div style="font-size: 32px; margin-bottom: 8px;">👋</div>
             <div>开始你们的对话吧！</div>
           </div>
-        ` : state.messages.map(msg => renderMessage(msg, state.currentAgent!))}
+        ` : state.messages.map(msg => renderMessage(msg, state.currentAgent!, state.viewMode))}
       </div>
       
       <!-- 消息输入区 -->
@@ -369,9 +380,24 @@ function renderChatArea(props: ChatHubProps): TemplateResult {
 /**
  * 渲染单条消息
  */
-function renderMessage(message: Message, currentAgent: AgentInfo): TemplateResult {
+function renderMessage(message: Message, currentAgent: AgentInfo, viewMode: 'detailed' | 'compact'): TemplateResult {
   const isMyMessage = message.senderId === currentAgent.id;
   
+  // 简洁视图：显示原始 envelope 格式（类似 Main 助手）
+  if (viewMode === 'compact') {
+    return html`
+      <div style="padding: 8px 12px; background: #f5f5f5; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 12px; color: #333; line-height: 1.6;">
+        <span style="color: #666;">[${new Date(message.timestamp).toLocaleString('zh-CN', { 
+          year: 'numeric', month: '2-digit', day: '2-digit', 
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false 
+        })} GMT+8]</span>
+        <span style="color: #2196f3; font-weight: 600;"> ${message.senderName}</span>: 
+        <span style="color: #000;">${message.content}</span>
+      </div>
+    `;
+  }
+  
+  // 详细视图：美化 UI（类似皇朝效率助手）
   return html`
     <div style="display: flex; gap: 10px; flex-direction: ${isMyMessage ? 'row-reverse' : 'row'}; align-items: flex-start;">
       <!-- 发送者头像 -->

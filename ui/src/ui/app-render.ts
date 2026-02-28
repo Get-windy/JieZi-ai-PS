@@ -738,7 +738,7 @@ export function renderApp(state: AppViewState) {
                   }
                 },
                 onStartOAuthPolling: async (authId) => {
-                  if (!state.oauthReauth) return;
+                  if (!state.oauthReauth) {return;}
                   state.oauthReauth = { ...state.oauthReauth, isPolling: true };
                   // TODO: 实现轮询逻辑
                   alert("🕑 轮询功能待实现，请手动刷新页面查看状态");
