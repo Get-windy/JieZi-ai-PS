@@ -63,7 +63,7 @@ export type FollowupRun = {
     provider: string;
     model: string;
     authProfileId?: string;
-    authProfileIdSource?: "auto" | "user" | "smart-routing";
+    authProfileIdSource?: "auto" | "user" | "smart-routing" | "default-account";
     thinkLevel?: ThinkLevel;
     verboseLevel?: VerboseLevel;
     reasoningLevel?: ReasoningLevel;

@@ -435,6 +435,7 @@ export async function runPreparedReply(
     resolvedQueue.mode === "steer-backlog";
   const authProfileId = await resolveSessionAuthProfileOverride({
     cfg,
+    agentId, // 传递助手ID，用于读取 modelAccounts.defaultAccountId
     provider,
     agentDir,
     sessionEntry,
