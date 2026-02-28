@@ -1,6 +1,11 @@
 // Lit 模块类型声明
 // 这个文件用于解决 TypeScript 找不到 lit 模块类型的问题
 declare module "lit" {
+  import type { TemplateResult } from "lit/index.js";
+  
+  export function html(strings: TemplateStringsArray, ...values: unknown[]): TemplateResult;
+  export const nothing: symbol;
+  export type { TemplateResult };
   export * from "lit/index.js";
 }
 
