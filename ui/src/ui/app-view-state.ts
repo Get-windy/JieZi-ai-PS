@@ -15,6 +15,7 @@ import type {
   AgentsFilesListResult,
   AgentIdentityResult,
   ChannelsStatusSnapshot,
+  ChatConversationContext,
   ConfigSnapshot,
   ConfigUiHints,
   CronJob,
@@ -597,6 +598,13 @@ export type AppViewState = {
   notificationStatsLoading?: boolean;
   notificationStatsError?: string | null;
   notificationStats?: any | null;
+  // ============ 聊天导航树状态 ============
+  chatNavExpandedNodes: Set<string>;
+  chatNavCurrentContext: ChatConversationContext | null;
+  chatNavSearchQuery: string;
+  chatNavChannelForceJoined: boolean;
+  // 注意：channelBindings 现在由后端 agent.list 直接返回，不再需要单独加载
+
   client: GatewayBrowserClient | null;
   refreshSessionsAfterChat: Set<string>;
   connect: () => void;

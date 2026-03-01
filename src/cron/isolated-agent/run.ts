@@ -375,6 +375,7 @@ export async function runCronIsolatedAgentTurn(params: {
   // auth which may not match the configured auth-profiles, causing 401 errors.
   const authProfileId = await resolveSessionAuthProfileOverride({
     cfg: cfgWithAgentDefaults,
+    agentId, // 传递助手ID，用于读取 modelAccounts.defaultAccountId
     provider,
     agentDir,
     sessionEntry: cronSession.sessionEntry,

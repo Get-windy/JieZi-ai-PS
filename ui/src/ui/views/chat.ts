@@ -10,10 +10,11 @@ import { normalizeMessage, normalizeRoleForGrouping } from "../chat/message-norm
 import { icons } from "../icons.ts";
 import { t } from "../i18n.ts";
 import { detectTextDirection } from "../text-direction.ts";
-import type { SessionsListResult } from "../types.ts";
+import type { SessionsListResult, ChatNavigationNode, ChatConversationContext } from "../types.ts";
 import type { ChatItem, MessageGroup } from "../types/chat-types.ts";
 import type { ChatAttachment, ChatQueueItem } from "../ui-types.ts";
 import { renderMarkdownSidebar } from "./markdown-sidebar.ts";
+import { renderChatNavigationTree } from "./chat-navigation-tree.ts";
 import "../components/resizable-divider.ts";
 
 export type CompactionIndicatorStatus = {
@@ -81,6 +82,19 @@ export type ChatProps = {
   onCloseSidebar?: () => void;
   onSplitRatioChange?: (ratio: number) => void;
   onChatScroll?: (event: Event) => void;
+  // ============ 导航树相关 ============
+  navNodes: ChatNavigationNode[];
+  navCurrentContext: ChatConversationContext | null;
+  navExpandedNodeIds: Set<string>;
+  navSearchQuery: string;
+  navChannelForceJoined: boolean;
+  navLoading?: boolean;
+  navError?: string | null;
+  onNavRetry?: () => void;
+  onNavSelectContext: (context: ChatConversationContext) => void;
+  onNavToggleNode: (nodeId: string) => void;
+  onNavSearchChange: (query: string) => void;
+  onNavChannelForceJoinToggle: () => void;
 };
 
 const COMPACTION_TOAST_DURATION_MS = 5000;
@@ -239,7 +253,10 @@ function renderAttachmentPreview(props: ChatProps) {
 }
 
 export function renderChat(props: ChatProps) {
-  const canCompose = props.connected;
+  const isChannelObserve = props.navCurrentContext?.type === "channel-observe";
+  const isReadOnly = isChannelObserve && !props.navChannelForceJoined;
+
+  const canCompose = props.connected && !isReadOnly;
   const isBusy = props.sending || props.stream !== null;
   const canAbort = Boolean(props.canAbort && props.onAbort);
   const activeSession = props.sessions?.sessions?.find((row) => row.key === props.sessionKey);
@@ -317,6 +334,27 @@ export function renderChat(props: ChatProps) {
 
   return html`
     <section class="card chat">
+      <div class="chat-with-nav">
+        <!-- 左侧导航树 -->
+        <div class="chat-nav-sidebar">
+          ${renderChatNavigationTree({
+            nodes: props.navNodes,
+            currentContext: props.navCurrentContext,
+            expandedNodeIds: props.navExpandedNodeIds,
+            searchQuery: props.navSearchQuery,
+            channelForceJoined: props.navChannelForceJoined,
+            loading: props.navLoading,
+            error: props.navError,
+            onRetry: props.onNavRetry,
+            onSelectContext: props.onNavSelectContext,
+            onToggleNode: props.onNavToggleNode,
+            onSearchChange: props.onNavSearchChange,
+            onChannelForceJoinToggle: props.onNavChannelForceJoinToggle,
+          })}
+        </div>
+
+        <!-- 右侧聊天主区域 -->
+        <div class="chat-main-area">
       ${props.disabledReason ? html`<div class="callout">${props.disabledReason}</div>` : nothing}
 
       ${props.error ? html`<div class="callout danger">${props.error}</div>` : nothing}
@@ -333,6 +371,38 @@ export function renderChat(props: ChatProps) {
             >
               ${icons.x}
             </button>
+          `
+          : nothing
+      }
+
+      ${isReadOnly
+          ? html`
+            <div class="chat-readonly-bar">
+              <span>👁️ 通道观察模式（只读）：正在观察 ${(props.navCurrentContext as any)?.channelName ?? "通道"} 的消息</span>
+              <button
+                class="btn btn--sm"
+                type="button"
+                @click=${props.onNavChannelForceJoinToggle}
+              >
+                🔧 强行接入
+              </button>
+            </div>
+          `
+          : nothing
+      }
+
+      ${isChannelObserve && props.navChannelForceJoined
+          ? html`
+            <div class="chat-force-joined-bar">
+              <span>⚠️ 您正在以管理员身份直接回复通道消息，请谨慎操作</span>
+              <button
+                class="btn btn--sm"
+                type="button"
+                @click=${props.onNavChannelForceJoinToggle}
+              >
+                退出接入
+              </button>
+            </div>
           `
           : nothing
       }
@@ -430,7 +500,7 @@ export function renderChat(props: ChatProps) {
               ${ref((el) => el && adjustTextareaHeight(el as HTMLTextAreaElement))}
               .value=${props.draft}
               dir=${detectTextDirection(props.draft)}
-              ?disabled=${!props.connected}
+              ?disabled=${!canCompose}
               @keydown=${(e: KeyboardEvent) => {
                 if (e.key !== "Enter") {
                   return;
@@ -441,7 +511,7 @@ export function renderChat(props: ChatProps) {
                 if (e.shiftKey) {
                   return;
                 } // Allow Shift+Enter for line breaks
-                if (!props.connected) {
+                if (!canCompose) {
                   return;
                 }
                 e.preventDefault();
@@ -461,14 +531,14 @@ export function renderChat(props: ChatProps) {
           <div class="chat-compose__actions">
             <button
               class="btn"
-              ?disabled=${!props.connected || (!canAbort && props.sending)}
+              ?disabled=${!canCompose || (!canAbort && props.sending)}
               @click=${canAbort ? props.onAbort : props.onNewSession}
             >
               ${canAbort ? "Stop" : "New session"}
             </button>
             <button
               class="btn primary"
-              ?disabled=${!props.connected}
+              ?disabled=${!canCompose}
               @click=${props.onSend}
             >
               ${isBusy ? "Queue" : "Send"}<kbd class="btn-kbd">↵</kbd>
@@ -476,6 +546,8 @@ export function renderChat(props: ChatProps) {
           </div>
         </div>
       </div>
+        </div><!-- .chat-main-area -->
+      </div><!-- .chat-with-nav -->
     </section>
   `;
 }

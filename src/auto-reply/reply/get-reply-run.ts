@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { resolveSessionAuthProfileOverride } from "../../agents/auth-profiles/session-override.js";
+import { resolveSessionAuthProfileWithSmartRouting } from "../../agents/auth-profiles/session-smart-routing.js";
 import type { ExecToolDefaults } from "../../agents/bash-tools.js";
 import {
   abortEmbeddedPiRun,
@@ -12,9 +13,10 @@ import {
   resolveGroupSessionKey,
   resolveSessionFilePath,
   resolveSessionFilePathOptions,
-  type SessionEntry,
   updateSessionStore,
 } from "../../config/sessions.js";
+// 使用本地扩展的 SessionEntry 类型
+import type { SessionEntry } from "../../config/sessions/types.js";
 import { logVerbose } from "../../globals.js";
 import { clearCommandLane, getQueueSize } from "../../process/command-queue.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
@@ -199,8 +201,6 @@ export async function runPreparedReply(
     blockReplyChunking,
     resolvedBlockStreamingBreak,
     modelState,
-    provider,
-    model,
     perMessageQueueMode,
     perMessageQueueOptions,
     typing,
@@ -219,6 +219,8 @@ export async function runPreparedReply(
   } = params;
   let {
     sessionEntry,
+    provider, // 需要可变，因为智能路由可能会覆盖
+    model,    // 需要可变，因为智能路由可能会覆盖
     resolvedThinkLevel,
     resolvedVerboseLevel,
     resolvedReasoningLevel,
@@ -248,7 +250,7 @@ export async function runPreparedReply(
     ? buildGroupIntro({
         cfg,
         sessionCtx,
-        sessionEntry,
+        sessionEntry: sessionEntry as any, // 类型断言：本地扩展类型兼容上游类型
         defaultActivation,
         silentToken: SILENT_REPLY_TOKEN,
       })
@@ -308,11 +310,12 @@ export async function runPreparedReply(
   const effectiveBaseBody = baseBodyTrimmed
     ? baseBodyForPrompt
     : "[User sent media without caption]";
-  let prefixedBodyBase = await applySessionHints({
+  let prefixedBodyBase: string;
+  prefixedBodyBase = await applySessionHints({
     baseBody: effectiveBaseBody,
     abortedLastRun,
-    sessionEntry,
-    sessionStore,
+    sessionEntry: sessionEntry as any, // 类型断言：本地扩展类型兼容上游类型
+    sessionStore: sessionStore as any,
     sessionKey,
     storePath,
     abortKey: command.abortKey,
@@ -335,8 +338,8 @@ export async function runPreparedReply(
       ? `[Thread starter - for context]\n${threadStarterBody}`
       : undefined;
   const skillResult = await ensureSkillSnapshot({
-    sessionEntry,
-    sessionStore,
+    sessionEntry: sessionEntry as any,
+    sessionStore: sessionStore as any,
     sessionKey,
     storePath,
     sessionId,
@@ -414,7 +417,7 @@ export async function runPreparedReply(
   const resolvedQueue = resolveQueueSettings({
     cfg,
     channel: sessionCtx.Provider,
-    sessionEntry,
+    sessionEntry: sessionEntry as any,
     inlineMode: perMessageQueueMode,
     inlineOptions: perMessageQueueOptions,
   });
@@ -433,16 +436,47 @@ export async function runPreparedReply(
     resolvedQueue.mode === "followup" ||
     resolvedQueue.mode === "collect" ||
     resolvedQueue.mode === "steer-backlog";
-  const authProfileId = await resolveSessionAuthProfileOverride({
+  // ============ 智能路由集成 ============
+  // 先尝试智能路由，如果配置了智能路由则使用路由引擎
+  const smartRoutingResult = await resolveSessionAuthProfileWithSmartRouting({
     cfg,
-    provider,
+    agentId,
     agentDir,
-    sessionEntry,
-    sessionStore,
+    provider,
+    message: baseBodyTrimmedRaw, // 使用原始消息内容进行路由决策
+    sessionEntry: sessionEntry as any,
+    sessionStore: sessionStore as any,
     sessionKey,
     storePath,
     isNewSession,
   });
+  
+  let authProfileId: string | undefined;
+  
+  if (smartRoutingResult) {
+    // 智能路由成功，使用路由结果中的 provider/model
+    authProfileId = smartRoutingResult.authProfileId;
+    if (smartRoutingResult.provider && smartRoutingResult.model) {
+      provider = smartRoutingResult.provider;
+      model = smartRoutingResult.model;
+      console.log(
+        `[SmartRouting] Using routed model: ${provider}/${model} (${smartRoutingResult.reason})`,
+      );
+    }
+  } else {
+    // 如果智能路由未配置或失败，回退到默认逻辑
+    authProfileId = await resolveSessionAuthProfileOverride({
+      cfg,
+      provider,
+      agentDir,
+      sessionEntry: sessionEntry as any,
+      sessionStore: sessionStore as any,
+      sessionKey,
+      storePath,
+      isNewSession,
+    });
+  }
+  // ============ 智能路由集成结束 ============
   const authProfileIdSource = sessionEntry?.authProfileOverrideSource;
   const followupRun = {
     prompt: queuedBody,
@@ -498,7 +532,7 @@ export async function runPreparedReply(
 
   return runReplyAgent({
     commandBody: prefixedCommandBody,
-    followupRun,
+    followupRun: followupRun as any, // 类型断言：本地扩展类型兼容上游类型
     queueKey,
     resolvedQueue,
     shouldSteer,

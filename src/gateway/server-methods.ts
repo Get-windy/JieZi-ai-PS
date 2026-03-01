@@ -17,6 +17,7 @@ import { cronHandlers } from "./server-methods/cron.js";
 import { deviceHandlers } from "./server-methods/devices.js";
 import { doctorHandlers } from "./server-methods/doctor.js";
 import { execApprovalsHandlers } from "./server-methods/exec-approvals.js";
+import { friendsHandlers } from "./server-methods/friends-rpc.js";
 import { groupsHandlers } from "./server-methods/groups-rpc.js";
 import { healthHandlers } from "./server-methods/health.js";
 import { logsHandlers } from "./server-methods/logs.js";
@@ -87,6 +88,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...deviceHandlers,
   ...doctorHandlers,
   ...execApprovalsHandlers,
+  ...friendsHandlers,
   ...webHandlers,
   ...modelsHandlers,
   ...configHandlers,

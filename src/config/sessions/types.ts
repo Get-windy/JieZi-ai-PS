@@ -55,7 +55,7 @@ export type SessionEntry = {
   providerOverride?: string;
   modelOverride?: string;
   authProfileOverride?: string;
-  authProfileOverrideSource?: "auto" | "user" | "smart-routing";
+  authProfileOverrideSource?: "auto" | "user" | "smart-routing" | "default-account";
   authProfileOverrideCompactionCount?: number;
   /** 智能路由选中的模型账号ID（用于会话固定） */
   modelAccountId?: string;

@@ -345,6 +345,16 @@ export type GatewayAgentRow = {
     avatar?: string;
     avatarUrl?: string;
   };
+  /** 智能体绑定的通道账号信息（用于导航树过滤） */
+  channelBindings?: {
+    bindings: Array<{
+      id: string;
+      channelId: string;
+      accountId: string;
+      policy?: unknown;
+    }>;
+    defaultPolicy?: unknown;
+  } | null;
 };
 
 export type AgentsListResult = {
@@ -691,6 +701,110 @@ export type ModelConfigSnapshot = {
     outputPer1k: number; // 输出token单价（每1K tokens，美元）
     currency: string; // 货币单位
   } | null;
+};
+
+// ============ 聊天导航树类型定义 ============
+
+/**
+ * 聊天会话上下文（扩展 sessionKey 的语义，支持多种会话模式）
+ *
+ * 三种角色模式：
+ * - 管理员模式（agent-direct）：直接和智能体对话
+ * - 通道观察模式（channel-observe）：观察/强行接入通道消息
+ * - 协调者模式（group / contact）：群聊或好友对话
+ */
+export type ChatConversationContext =
+  // 全局聚合视图：所有智能体所有消息
+  | {
+      type: "all";
+      sessionKey: string; // 默认指向 default agent 的 main
+    }
+  // 单个智能体的所有消息聚合
+  | {
+      type: "agent-all";
+      agentId: string;
+      agentName?: string;
+      agentEmoji?: string;
+      sessionKey: string; // 如 "main:main"
+    }
+  // 管理员模式：直接对话智能体
+  | {
+      type: "agent-direct";
+      agentId: string;
+      agentName?: string;
+      agentEmoji?: string;
+      sessionKey: string; // 如 "main:main"
+    }
+  // 该智能体所有通道聚合
+  | {
+      type: "channels-all";
+      agentId: string;
+      agentName?: string;
+      sessionKey: string; // 如 "main:main"
+    }
+  // 通道观察：观察智能体在某个通道的对话
+  | {
+      type: "channel-observe";
+      agentId: string;
+      agentName?: string;
+      channelId: string;
+      channelName?: string;
+      accountId: string;
+      accountName?: string;
+      sessionKey: string; // 如 "main:channel:discord:account123"
+    }
+  // 群聊协作：参与群聊（引用 collaboration.groups）
+  | {
+      type: "group";
+      agentId?: string;
+      groupId: string;
+      groupName?: string;
+      memberAgentIds?: string[];
+      sessionKey: string; // 如 "main:group:{groupId}"
+    }
+  // 好友对话：智能体间一对一（引用 collaboration.friends）
+  | {
+      type: "contact";
+      agentId: string;
+      contactAgentId: string;
+      contactAgentName?: string;
+      sessionKey: string; // 如 "main:contact:{contactAgentId}"
+    };
+
+/**
+ * 导航树节点
+ */
+export type ChatNavigationNode = {
+  id: string;
+  label: string;
+  icon: string;
+  context: ChatConversationContext;
+  unreadCount?: number;
+  children?: ChatNavigationNode[];
+  /** 节点层级类型，用于样式区分 */
+  nodeType?: "root" | "agent" | "category" | "item";
+};
+
+/**
+ * 聊天导航树的 Props
+ */
+export type ChatNavigationTreeProps = {
+  nodes: ChatNavigationNode[];
+  currentContext: ChatConversationContext | null;
+  expandedNodeIds: Set<string>;
+  searchQuery: string;
+  /** 通道观察模式是否已强行接入 */
+  channelForceJoined: boolean;
+  /** 数据加载中 */
+  loading?: boolean;
+  /** 数据加载错误 */
+  error?: string | null;
+  /** 重试加载回调 */
+  onRetry?: () => void;
+  onSelectContext: (context: ChatConversationContext) => void;
+  onToggleNode: (nodeId: string) => void;
+  onSearchChange: (query: string) => void;
+  onChannelForceJoinToggle: () => void;
 };
 
 // ============ 旧的类型定义（向后兼容，标记为废弃）============

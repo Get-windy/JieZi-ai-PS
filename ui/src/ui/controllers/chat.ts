@@ -45,6 +45,7 @@ export async function loadChatHistory(state: ChatState) {
     state.chatThinkingLevel = res.thinkingLevel ?? null;
   } catch (err) {
     state.lastError = String(err);
+    console.error("[Chat] loadChatHistory error:", err);
   } finally {
     state.chatLoading = false;
   }
@@ -182,6 +183,7 @@ export async function sendChatMessage(
     return runId;
   } catch (err) {
     const error = String(err);
+    console.error("[Chat] sendChatMessage error:", err);
     state.chatRunId = null;
     state.chatStream = null;
     state.chatStreamStartedAt = null;

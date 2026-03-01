@@ -17,6 +17,31 @@ import {
 import { clearSessionAuthProfileOverride } from "./session-override.js";
 
 /**
+ * 从 accountId 解析出 provider 和 model
+ * accountId 格式示例：siliconflow/Pro/deepseek-ai/DeepSeek-V3.2
+ */
+function parseProviderModelFromAccountId(accountId: string): {
+  provider: string;
+  model: string;
+} | undefined {
+  // accountId 格式：providerId/tier/namespace/modelName
+  // 或 providerId/modelName
+  const parts = accountId.split("/");
+  if (parts.length < 2) {
+    return undefined;
+  }
+  
+  const provider = parts[0];
+  // 如果有多个部分，取最后一个作为 model，其余作为 provider 的一部分
+  // 例如：siliconflow/Pro/deepseek-ai/DeepSeek-V3.2
+  // provider = siliconflow
+  // model = Pro/deepseek-ai/DeepSeek-V3.2
+  const model = parts.slice(1).join("/");
+  
+  return { provider, model };
+}
+
+/**
  * 检测消息中是否包含图片
  * 支持多种格式：
  * - Markdown 图片：![alt](url)
@@ -96,13 +121,27 @@ function detectToolsNeeded(message: string): boolean {
 }
 
 /**
+ * 智能路由结果
+ */
+export type SmartRoutingResult = {
+  /** 选中的认证账号ID */
+  authProfileId: string;
+  /** 解析出的 provider */
+  provider?: string;
+  /** 解析出的 model */
+  model?: string;
+  /** 选择原因 */
+  reason: string;
+};
+
+/**
  * 使用智能路由引擎解析会话的模型账号
  *
  * 此函数检查智能助手是否配置了智能路由，如果配置了则调用路由引擎选择最优账号。
  * 如果未配置或路由失败，则回退到原有的 resolveSessionAuthProfileOverride 逻辑。
  *
  * @param params - 路由参数
- * @returns 选中的 authProfileId（accountId），如果路由失败则返回 undefined
+ * @returns 智能路由结果（包含 authProfileId、provider、model），如果路由失败则返回 undefined
  */
 export async function resolveSessionAuthProfileWithSmartRouting(params: {
   cfg: OpenClawConfig;
@@ -115,7 +154,7 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
   sessionKey?: string;
   storePath?: string;
   isNewSession: boolean;
-}): Promise<string | undefined> {
+}): Promise<SmartRoutingResult | undefined> {
   const {
     cfg,
     agentId,
@@ -142,7 +181,13 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
     sessionEntry?.authProfileOverride &&
     sessionEntry?.authProfileOverrideSource === "user"
   ) {
-    return sessionEntry.authProfileOverride;
+    const parsed = parseProviderModelFromAccountId(sessionEntry.authProfileOverride);
+    return {
+      authProfileId: sessionEntry.authProfileOverride,
+      provider: parsed?.provider,
+      model: parsed?.model,
+      reason: "User manually selected",
+    };
   }
 
   // 3. 如果启用了会话固定且已有智能路由选择的账号，则检查是否需要重新路由
@@ -156,10 +201,16 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
     const store = ensureAuthProfileStore(agentDir, { allowKeychainPrompt: false });
     const pinnedProfile = store.profiles[sessionEntry.authProfileOverride];
     if (pinnedProfile && modelAccountsConfig.accounts.includes(sessionEntry.authProfileOverride)) {
-      // 账号仍然有效，继续使用
-      return sessionEntry.authProfileOverride;
-    }
+    // 账号仍然有效，继续使用
+    const parsed = parseProviderModelFromAccountId(sessionEntry.authProfileOverride);
+    return {
+      authProfileId: sessionEntry.authProfileOverride,
+      provider: parsed?.provider,
+      model: parsed?.model,
+      reason: "Session pinned (still valid)",
+    };
   }
+}
 
   // 4. 构建 SessionContext
   const sessionContext: SessionContext = {
@@ -233,11 +284,18 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
         });
       }
 
-      console.log(`[SmartRouting] Selected account ${selectedAccountId} for session ${sessionKey}`);
-      console.log(`[SmartRouting] Reason: ${routingResult.reason}`);
-    }
+    console.log(`[SmartRouting] Selected account ${selectedAccountId} for session ${sessionKey}`);
+    console.log(`[SmartRouting] Reason: ${routingResult.reason}`);
+  }
 
-    return selectedAccountId;
+  // 9. 从 accountId 解析 provider 和 model
+  const parsed = parseProviderModelFromAccountId(selectedAccountId);
+  return {
+    authProfileId: selectedAccountId,
+    provider: parsed?.provider,
+    model: parsed?.model,
+    reason: routingResult.reason,
+  };
   } catch (err) {
     console.error("[SmartRouting] Failed to route:", err);
     // 路由失败，返回 undefined 让调用方回退到默认逻辑

@@ -158,6 +158,9 @@ function validateChannelPoliciesConfig(config: unknown): void {
 
 /**
  * 获取智能助手的通道绑定配置
+ * 
+ * 优先从 agent.channelBindings 读取，如果没有则从全局 config.bindings[] 读取并转换格式
+ * 这样可以兼容旧的通道绑定机制（通过助手管理页面的通道标签页绑定的数据）
  */
 function getAgentChannelBindings(
   cfg: OpenClawConfig,
@@ -171,8 +174,56 @@ function getAgentChannelBindings(
     return null;
   }
 
-  // 从agent配置中提取channelBindings
-  return (agent as { channelBindings?: AgentChannelBindings }).channelBindings || null;
+  // 优先从agent配置中提取channelBindings（新机制）
+  const channelBindings = (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
+  
+  if (channelBindings && channelBindings.bindings && channelBindings.bindings.length > 0) {
+    return channelBindings;
+  }
+  
+  // 如果没有，从config.bindings[]读取并转换（旧机制兼容）
+  const globalBindings = listBindings(cfg);
+  const agentGlobalBindings = globalBindings.filter(
+    (b) => normalizeAgentId(b.agentId) === normalized && b.match?.channel
+  );
+  
+  if (agentGlobalBindings.length > 0) {
+    // 转换为新格式
+    const convertedBindings = agentGlobalBindings.map((b, index) => ({
+      id: `${b.match.channel}-${b.match.accountId || 'default'}-${index}`,
+      channelId: b.match.channel,
+      accountId: b.match.accountId || 'default',
+      policy: {
+        type: 'private' as const,
+        config: {
+          allowedUsers: [],
+        },
+      },
+      enabled: true,
+      priority: 50,
+    }));
+    
+    return {
+      bindings: convertedBindings,
+      defaultPolicy: {
+        type: "private",
+        config: {
+          allowedUsers: [],
+        },
+      },
+    };
+  }
+  
+  // 如果都没有，返回默认空配置
+  return {
+    defaultPolicy: {
+      type: "private",
+      config: {
+        allowedUsers: [],
+      },
+    },
+    bindings: [],
+  };
 }
 
 /**
@@ -259,6 +310,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       // 注意：modelAccountId 和 channelAccountIds 是旧字段，已废弃
       modelAccountId: (agent as unknown as { modelAccountId?: string }).modelAccountId,
       channelAccountIds: (agent as unknown as { channelAccountIds?: string[] }).channelAccountIds,
+      // 新增：返回通道绑定信息（用于前端导航树过滤）
+      channelBindings: getAgentChannelBindings(cfg, agent.id),
     }));
 
     respond(true, { agents: result }, undefined);
@@ -895,7 +948,21 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       const storage = await loadModelManagement();
 
       // 解析 modelId 格式：providerId/modelName
-      const [providerId, modelName] = modelId.split("/");
+      // 注意：modelName 可能包含斜杠（如 Pro/deepseek-ai/DeepSeek-V3.2）
+      const slashIndex = modelId.indexOf("/");
+      if (slashIndex === -1) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Invalid model ID format: ${modelId}, expected: providerId/modelName`,
+          ),
+        );
+        return;
+      }
+      const providerId = modelId.substring(0, slashIndex);
+      const modelName = modelId.substring(slashIndex + 1);
       if (!providerId || !modelName) {
         respond(
           false,
