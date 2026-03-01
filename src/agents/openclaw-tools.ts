@@ -21,6 +21,42 @@ import { createSubagentsTool } from "./tools/subagents-tool.js";
 import { createTtsTool } from "./tools/tts-tool.js";
 import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
 import { resolveWorkspaceRoot } from "./workspace-dir.js";
+// Phase 6: 智能体管理工具
+import { 
+  createAgentCreateTool, 
+  createAgentUpdateTool, 
+  createAgentDeleteTool 
+} from "./tools/agent-management-tools.js";
+import { 
+  createFriendAddTool, 
+  createFriendRemoveTool, 
+  createFriendListTool 
+} from "./tools/friend-management-tools.js";
+import { 
+  createGroupCreateTool, 
+  createGroupAddMemberTool, 
+  createGroupRemoveMemberTool, 
+  createGroupDeleteTool 
+} from "./tools/group-management-tools.js";
+// Phase 6 P1: 组织和权限管理工具
+import {
+  createOrganizationCreateTool,
+  createOrganizationUpdateTool,
+  createOrganizationMemberAddTool,
+  createOrganizationMemberUpdateTool,
+  createOrganizationMemberRemoveTool,
+  createOrganizationListTool,
+} from "./tools/organization-management-tools.js";
+import {
+  createRecruitAgentTool,
+  createApproveRecruitTool,
+  createRecruitListTool,
+} from "./tools/recruit-management-tools.js";
+import {
+  createPermissionGrantTool,
+  createPermissionRevokeTool,
+  createPermissionListTool,
+} from "./tools/permission-management-tools.js";
 
 export function createOpenClawTools(options?: {
   sandboxBrowserBridgeUrl?: string;
@@ -166,6 +202,144 @@ export function createOpenClawTools(options?: {
     ...(webSearchTool ? [webSearchTool] : []),
     ...(webFetchTool ? [webFetchTool] : []),
     ...(imageTool ? [imageTool] : []),
+    // Phase 6: 智能体管理工具
+    createAgentCreateTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentUpdateTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentDeleteTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    // Phase 6: 好友关系工具
+    createFriendAddTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createFriendRemoveTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createFriendListTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    // Phase 6: 群组管理工具
+    createGroupCreateTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createGroupAddMemberTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createGroupRemoveMemberTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createGroupDeleteTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    // Phase 6 P1: 组织管理工具
+    createOrganizationCreateTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createOrganizationUpdateTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createOrganizationMemberAddTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createOrganizationMemberUpdateTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createOrganizationMemberRemoveTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createOrganizationListTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    // Phase 6 P1: 招聘管理工具
+    createRecruitAgentTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createApproveRecruitTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createRecruitListTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    // Phase 6 P1: 权限管理工具
+    createPermissionGrantTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createPermissionRevokeTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createPermissionListTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
   ];
 
   const pluginTools = resolvePluginTools({

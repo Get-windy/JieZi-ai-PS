@@ -58,62 +58,62 @@ export function renderPolicyBindingDialog(params: {
     {
       value: "private",
       label: t("agents.channel_policies.policy.private"),
-      description: "智能助手专属通道，不对外暴露",
+      description: "私密通道：只有智能助手和指定用户可以访问",
     },
     {
       value: "monitor",
       label: t("agents.channel_policies.policy.monitor"),
-      description: "长通模式，接收所有消息并带来源标记",
+      description: "监控通道：只读监控，不回复",
     },
     {
-      value: "listen_only",
-      label: t("agents.channel_policies.policy.listen_only"),
-      description: "仅监听，不回复",
+      value: "listen-only",
+      label: t("agents.channel_policies.policy.listen-only"),
+      description: "只监听：记录消息，不响应，用于数据收集",
     },
     {
-      value: "filter",
-      label: t("agents.channel_policies.policy.filter"),
-      description: "基于规则过滤消息",
-    },
-    {
-      value: "scheduled",
-      label: t("agents.channel_policies.policy.scheduled"),
-      description: "根据时间表响应消息",
-    },
-    {
-      value: "forward",
-      label: t("agents.channel_policies.policy.forward"),
-      description: "自动转发消息到其他通道",
-    },
-    {
-      value: "smart_route",
-      label: t("agents.channel_policies.policy.smart_route"),
-      description: "根据内容智能选择通道",
-    },
-    {
-      value: "broadcast",
-      label: t("agents.channel_policies.policy.broadcast"),
-      description: "一条消息发送到多个通道",
-    },
-    {
-      value: "round_robin",
-      label: t("agents.channel_policies.policy.round_robin"),
-      description: "多通道负载均衡",
+      value: "load-balance",
+      label: t("agents.channel_policies.policy.load-balance"),
+      description: "负载均衡：多个账号轮流处理消息",
     },
     {
       value: "queue",
       label: t("agents.channel_policies.policy.queue"),
-      description: "消息排队，批量处理",
+      description: "队列模式：消息排队，批量处理",
     },
     {
       value: "moderate",
       label: t("agents.channel_policies.policy.moderate"),
-      description: "需要审核后才发送",
+      description: "审核模式：消息需要审核后才发送",
     },
     {
       value: "echo",
       label: t("agents.channel_policies.policy.echo"),
-      description: "记录日志，不处理",
+      description: "回声模式：仅记录日志，不处理",
+    },
+    {
+      value: "filter",
+      label: t("agents.channel_policies.policy.filter"),
+      description: "过滤模式：基于规则过滤消息",
+    },
+    {
+      value: "scheduled",
+      label: t("agents.channel_policies.policy.scheduled"),
+      description: "定时模式：根据时间表响应消息",
+    },
+    {
+      value: "forward",
+      label: t("agents.channel_policies.policy.forward"),
+      description: "转发模式：自动转发消息到其他通道",
+    },
+    {
+      value: "broadcast",
+      label: t("agents.channel_policies.policy.broadcast"),
+      description: "广播模式：一条消息发送到多个通道",
+    },
+    {
+      value: "smart-route",
+      label: t("agents.channel_policies.policy.smart-route"),
+      description: "智能路由：根据内容智能选择通道",
     },
   ];
 

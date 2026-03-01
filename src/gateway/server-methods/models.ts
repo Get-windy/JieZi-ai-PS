@@ -13,8 +13,15 @@ import {
   validateModelsListParams,
 } from "../protocol/index.js";
 
-// 模型管理配置文件路径
+// 模型管理配置文件路径 - UI 管理系统的主存储
 const MODEL_MANAGEMENT_FILE = path.join(STATE_DIR, "model-management.json");
+
+// 官方运行时配置路径（用于同步）
+const getAgentModelsPath = () => {
+  const { resolveOpenClawAgentDir } = require("../../agents/agent-paths.js");
+  const agentDir = resolveOpenClawAgentDir();
+  return path.join(agentDir, "models.json");
+};
 
 // ============ 供应商默认模型列表 ============
 
@@ -114,6 +121,21 @@ const PROVIDER_KNOWN_MODELS: Record<string, string[]> = {
 
   // xAI
   xai: ["grok-beta", "grok-vision-beta"],
+
+  // SiliconFlow (硅基流动)
+  siliconflow: [
+    "Pro/Qwen/Qwen2.5-72B-Instruct",
+    "Pro/Qwen/Qwen2.5-32B-Instruct",
+    "Pro/Qwen/Qwen2.5-14B-Instruct",
+    "Pro/Qwen/Qwen2.5-7B-Instruct",
+    "Pro/deepseek-ai/DeepSeek-V3.2",
+    "Pro/deepseek-ai/DeepSeek-V2.5",
+    "Pro/internlm/internlm2_5-20b-chat",
+    "Pro/MiniMaxAI/MiniMax-M2.1",
+    "Qwen/Qwen2.5-72B-Instruct",
+    "deepseek-ai/DeepSeek-V2.5",
+    "THUDM/glm-4-9b-chat",
+  ],
 };
 
 // ============ 新的数据结构 ============
@@ -235,6 +257,9 @@ export type ModelManagementStorage = {
 
   // 每个供应商的默认认证ID
   defaultAuthId: Record<string, string>;
+
+  // 已删除供应商黑名单（防止自动添加回来）
+  deletedProviders?: string[];
 };
 
 // API模板库（预置，不需要存储到文件）
@@ -398,13 +423,105 @@ const DEFAULT_PROVIDERS: ProviderInstance[] = [
       "glm-3-turbo",
     ],
   },
+  {
+    id: "siliconflow",
+    name: "硅基流动 (SiliconFlow)",
+    icon: "🔹",
+    website: "https://siliconflow.cn",
+    templateId: "openai-compatible",
+    defaultBaseUrl: "https://api.siliconflow.cn/v1",
+    apiKeyPlaceholder: "sk-...",
+    custom: false,
+    createdAt: 0,
+    // SiliconFlow 的已知模型列表
+    knownModels: [
+      "Pro/Qwen/Qwen2.5-72B-Instruct",
+      "Pro/Qwen/Qwen2.5-32B-Instruct",
+      "Pro/Qwen/Qwen2.5-14B-Instruct",
+      "Pro/Qwen/Qwen2.5-7B-Instruct",
+      "Pro/deepseek-ai/DeepSeek-V3.2",
+      "Pro/deepseek-ai/DeepSeek-V2.5",
+      "Pro/internlm/internlm2_5-20b-chat",
+      "Pro/MiniMaxAI/MiniMax-M2.1",
+      "Qwen/Qwen2.5-72B-Instruct",
+      "deepseek-ai/DeepSeek-V2.5",
+      "THUDM/glm-4-9b-chat",
+    ],
+  },
 ];
 
 // ============ 存储管理函数 ============
 
+/**
+ * 从 UI 管理结构同步到官方 models.json 格式
+ */
+function syncToAgentModelsJson(storage: ModelManagementStorage): any {
+  const result: any = {
+    providers: {},
+  };
+
+  // 遍历所有认证配置
+  for (const [providerId, auths] of Object.entries(storage.auths)) {
+    if (!auths || auths.length === 0) {
+      continue;
+    }
+
+    // 使用默认认证或第一个启用的认证
+    const defaultAuth = auths.find(a => a.isDefault && a.enabled) || auths.find(a => a.enabled) || auths[0];
+    if (!defaultAuth) {
+      continue;
+    }
+
+    const providerConfig: any = {
+      baseUrl: defaultAuth.baseUrl,
+      apiKey: defaultAuth.apiKey,
+      api: "openai-completions", // 默认 API 类型
+      models: [],
+    };
+
+    // 添加模型配置
+    const providerModels = storage.models[providerId] || [];
+    
+    providerConfig.models = providerModels
+      .filter(m => m.enabled)
+      .map(m => ({
+        id: m.modelName,
+        name: m.nickname || m.modelName,
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: m.maxTokens || 128000,
+        maxTokens: m.maxTokens || 8192,
+        api: "openai-completions",
+      }));
+
+    result.providers[providerId] = providerConfig;
+  }
+
+  return result;
+}
+
+// ============ 缓存机制 ============
+let cachedStorage: ModelManagementStorage | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL_MS = 60 * 60 * 1000; // 缓存有效期 1 小时
+
+// 清除缓存（供其他函数在保存后调用）
+export function invalidateModelManagementCache(): void {
+  cachedStorage = null;
+  cacheTimestamp = 0;
+}
+
 // 加载模型管理配置（导出供其他模块使用）
 export async function loadModelManagement(): Promise<ModelManagementStorage> {
+  // 检查缓存是否有效
+  const now = Date.now();
+  if (cachedStorage && (now - cacheTimestamp) < CACHE_TTL_MS) {
+    return cachedStorage;
+  }
+
   try {
+    // 从 UI 管理系统的主存储加载
     const content = await fs.readFile(MODEL_MANAGEMENT_FILE, "utf-8");
     const storage = JSON.parse(content) as ModelManagementStorage;
 
@@ -416,9 +533,6 @@ export async function loadModelManagement(): Promise<ModelManagementStorage> {
     // 如果是空的，添加预置的常用供应商
     if (storage.providers.length === 0) {
       storage.providers = [...DEFAULT_PROVIDERS];
-      await saveModelManagement(storage);
-      console.log("[Models] Initialized with default providers");
-      return storage;
     }
 
     // ✅ 修复老数据：为现有供应商补充缺失的字段
@@ -472,19 +586,86 @@ export async function loadModelManagement(): Promise<ModelManagementStorage> {
     if (needsSave) {
       await saveModelManagement(storage);
       console.log("[Models] Fixed legacy provider data with missing fields");
+    } else {
+      // 即使没有修复数据，也只在首次加载时同步
+      if (!cachedStorage) {
+        await syncRuntimeFiles(storage);
+      }
     }
+
+    // 更新缓存
+    cachedStorage = storage;
+    cacheTimestamp = Date.now();
 
     return storage;
   } catch (err) {
     // 文件不存在时，尝试从旧配置迁移
-    return await migrateFromLegacyConfig();
+    const storage = await migrateFromLegacyConfig();
+    // 更新缓存
+    cachedStorage = storage;
+    cacheTimestamp = Date.now();
+    return storage;
   }
 }
 
-// 保存模型管理配置
+// 同步运行时文件（models.json 和 auth-profiles.json）但不保存主存储
+async function syncRuntimeFiles(storage: ModelManagementStorage): Promise<void> {
+  // 1. 同步到官方 models.json
+  const agentModelsPath = getAgentModelsPath();
+  const agentModelsData = syncToAgentModelsJson(storage);
+  await fs.mkdir(path.dirname(agentModelsPath), { recursive: true });
+  await fs.writeFile(agentModelsPath, JSON.stringify(agentModelsData, null, 2), "utf-8");
+  console.log("[Models] Synced to agent models.json:", agentModelsPath);
+
+  // 2. 同步到 auth-profiles.json
+  await syncAuthProfiles(storage);
+}
+
+// 同步认证信息到 auth-profiles.json
+async function syncAuthProfiles(storage: ModelManagementStorage): Promise<void> {
+  const { resolveOpenClawAgentDir } = require("../../agents/agent-paths.js");
+  const agentDir = resolveOpenClawAgentDir();
+  const authProfilesPath = path.join(agentDir, "auth-profiles.json");
+  
+  // 构建 auth-profiles.json 格式
+  const authProfiles: any = {
+    version: 1,
+    profiles: {},
+  };
+  
+  // 遍历所有认证，转换为 auth-profiles 格式
+  for (const [providerId, auths] of Object.entries(storage.auths)) {
+    if (!auths || auths.length === 0) {continue;}
+    
+    for (const auth of auths) {
+      if (!auth.enabled) {continue;} // 只同步启用的认证
+      
+      const profileId = `${providerId}:${auth.name.replace(/[^a-zA-Z0-9-_]/g, '-')}`;
+      authProfiles.profiles[profileId] = {
+        type: "api_key",
+        provider: providerId,
+        key: auth.apiKey,
+        ...(auth.baseUrl && { baseUrl: auth.baseUrl }),
+      };
+    }
+  }
+  
+  await fs.writeFile(authProfilesPath, JSON.stringify(authProfiles, null, 2), "utf-8");
+  console.log("[Models] Synced to auth-profiles.json:", authProfilesPath);
+  console.log(`[Models] Auth profiles count: ${Object.keys(authProfiles.profiles).length}`);
+}
+
+// 保存模型管理配置（同时同步到官方 models.json 和 auth-profiles.json）
 async function saveModelManagement(storage: ModelManagementStorage): Promise<void> {
+  // 1. 保存到 UI 管理系统的主存储
   await fs.mkdir(path.dirname(MODEL_MANAGEMENT_FILE), { recursive: true });
   await fs.writeFile(MODEL_MANAGEMENT_FILE, JSON.stringify(storage, null, 2), "utf-8");
+
+  // 2. 同步运行时文件
+  await syncRuntimeFiles(storage);
+
+  // 3. 清除缓存，确保下次读取最新数据
+  invalidateModelManagementCache();
 }
 
 // 生成唯一ID（使用时间戳 + 随机数）
@@ -1487,11 +1668,18 @@ export const modelsHandlers: GatewayRequestHandlers = {
         }),
       );
 
-      // ✅ 确保模型目录中的所有供应商都在 providerInstances 中
+      // ✅ 确保模型目录中的所有供应商都在 providerInstances 中（除非已被用户删除）
       const originalProviderCount = storage.providers.length;
       const providerInstancesMap = new Map(storage.providers.map((p) => [p.id, p]));
+      const deletedProviders = storage.deletedProviders || [];
 
       for (const providerId of providerSet) {
+        // 跳过已被用户主动删除的供应商
+        if (deletedProviders.includes(providerId)) {
+          console.log(`[Models] Skipping auto-add for deleted provider: ${providerId}`);
+          continue;
+        }
+
         if (!providerInstancesMap.has(providerId)) {
           // 查找默认配置
           const defaultProvider = DEFAULT_PROVIDERS.find((p) => p.id === providerId);
@@ -1660,6 +1848,13 @@ export const modelsHandlers: GatewayRequestHandlers = {
       };
 
       storage.providers.push(provider);
+      
+      // 从删除黑名单中移除（如果存在）
+      if (storage.deletedProviders?.includes(id)) {
+        storage.deletedProviders = storage.deletedProviders.filter(pid => pid !== id);
+        console.log(`[Models] Removed provider from deleted blacklist: ${id}`);
+      }
+      
       await saveModelManagement(storage);
 
       console.log(`[Models] Added custom provider: ${id} (${name})`);
@@ -1810,6 +2005,15 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       // 删除供应商
       storage.providers = storage.providers.filter((p) => p.id !== id);
+      
+      // 添加到已删除黑名单，防止自动添加回来
+      if (!storage.deletedProviders) {
+        storage.deletedProviders = [];
+      }
+      if (!storage.deletedProviders.includes(id)) {
+        storage.deletedProviders.push(id);
+      }
+      
       await saveModelManagement(storage);
 
       console.log(`[Models] Deleted provider: ${id}`);

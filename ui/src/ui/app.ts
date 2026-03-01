@@ -23,6 +23,7 @@ import type {
   LogLevel,
   PresenceEntry,
   ChannelsStatusSnapshot,
+  ChatConversationContext,
   ModelsStatusSnapshot,
   SessionsListResult,
   SkillStatusReport,
@@ -516,6 +517,14 @@ export class OpenClawApp extends LitElement {
 
   // Message Queue 状态
   @state() messageQueueActivePanel: "monitor" | "statistics" | "configuration" = "monitor";
+
+  // ============ 聊天导航树状态 ============
+  @state() chatNavExpandedNodes = new Set<string>(["__all__"]);
+  @state() chatNavCurrentContext: ChatConversationContext | null = null;
+  @state() chatNavSearchQuery = "";
+  @state() chatNavChannelForceJoined = false;
+  // 注意：channelBindings 现在由后端 agent.list 直接返回，不再需要单独加载
+
   @state() queueLoading = false;
   @state() queueError: string | null = null;
   @state() queueMessages: import("./controllers/message-queue.ts").QueuedMessage[] = [];

@@ -331,6 +331,29 @@ export function listAgentsForGateway(cfg: OpenClawConfig): {
   if (mainKey && !agentIds.includes(mainKey)) {
     agentIds = [...agentIds, mainKey];
   }
+  
+  // 🔍 构建智能体的通道绑定数据
+  // 从配置的 bindings 数组中提取每个智能体的绑定信息
+  const bindingsByAgent = new Map<string, Array<{ channelId: string; accountId: string }>>();
+  const allBindings = Array.isArray(cfg.bindings) ? cfg.bindings : [];
+  for (const binding of allBindings) {
+    if (!binding || !binding.agentId || !binding.match) {
+      continue;
+    }
+    const agentId = normalizeAgentId(binding.agentId);
+    const channelId = binding.match.channel?.trim();
+    const accountId = binding.match.accountId?.trim();
+    
+    if (!channelId || !accountId) {
+      continue;
+    }
+    
+    if (!bindingsByAgent.has(agentId)) {
+      bindingsByAgent.set(agentId, []);
+    }
+    bindingsByAgent.get(agentId)!.push({ channelId, accountId });
+  }
+  
   const agents = agentIds.map((id) => {
     const meta = configuredById.get(id);
     // 如果助手不在 agents.list 中（如系统默认助手 main），从全局配置解析工作区路径
@@ -343,11 +366,19 @@ export function listAgentsForGateway(cfg: OpenClawConfig): {
         // 解析失败，保持为 undefined
       }
     }
+    
+    // 获取该智能体的通道绑定
+    const channelBindings = bindingsByAgent.get(id) || [];
+    
     return {
       id,
       name: meta?.name,
       workspace,
       identity: meta?.identity,
+      // 添加通道绑定信息
+      channelBindings: {
+        bindings: channelBindings,
+      },
     };
   });
   return { defaultId, mainKey, scope, agents };

@@ -319,9 +319,6 @@ export function resolveDefaultModelForAgent(params: {
       if (slashIndex !== -1) {
         const provider = defaultModelId.substring(0, slashIndex);
         const model = defaultModelId.substring(slashIndex + 1);
-        console.log(
-          `[DefaultModel] Using defaultAccountId for agent ${params.agentId}: ${provider}/${model}`,
-        );
         return { provider, model };
       }
     }

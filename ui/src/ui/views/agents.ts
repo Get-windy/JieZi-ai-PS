@@ -121,16 +121,16 @@ export type ChannelBinding = {
 export type ChannelPolicy =
   | "private"
   | "monitor"
-  | "listen_only"
+  | "listen-only"
+  | "load-balance"
+  | "queue"
+  | "moderate"
+  | "echo"
   | "filter"
   | "scheduled"
   | "forward"
-  | "smart_route"
   | "broadcast"
-  | "round_robin"
-  | "queue"
-  | "moderate"
-  | "echo";
+  | "smart-route";
 
 export type AgentsProps = {
   loading: boolean;
@@ -1129,6 +1129,7 @@ function renderAgentChannelPolicies(params: {
   error: string | null;
   saving: boolean;
   saveSuccess: boolean;
+  boundChannelAccounts?: any[];
   onChange?: (agentId: string, config: ChannelPoliciesConfig) => void;
   onEditPolicyBinding?: (agentId: string, index: number, binding: ChannelBinding) => void;
   onAddPolicyBinding?: (agentId: string) => void;
@@ -1173,9 +1174,29 @@ function renderAgentChannelPolicies(params: {
       description: "长通模式，接收所有消息并带来源标记",
     },
     {
-      value: "listen_only",
-      label: t("agents.channel_policies.policy.listen_only"),
-      description: "仅监听，不回复",
+      value: "listen-only",
+      label: t("agents.channel_policies.policy.listen-only"),
+      description: "只监听：记录消息，不响应，用于数据收集",
+    },
+    {
+      value: "load-balance",
+      label: t("agents.channel_policies.policy.load-balance"),
+      description: "负载均衡：多个账号轮流处理消息",
+    },
+    {
+      value: "queue",
+      label: t("agents.channel_policies.policy.queue"),
+      description: "队列模式：消息排队，批量处理",
+    },
+    {
+      value: "moderate",
+      label: t("agents.channel_policies.policy.moderate"),
+      description: "审核模式：消息需要审核后才发送",
+    },
+    {
+      value: "echo",
+      label: t("agents.channel_policies.policy.echo"),
+      description: "回声模式：仅记录日志，不处理",
     },
     {
       value: "filter",
@@ -1190,37 +1211,17 @@ function renderAgentChannelPolicies(params: {
     {
       value: "forward",
       label: t("agents.channel_policies.policy.forward"),
-      description: "自动转发消息到其他通道",
-    },
-    {
-      value: "smart_route",
-      label: t("agents.channel_policies.policy.smart_route"),
-      description: "根据内容智能选择通道",
+      description: "转发模式：自动转发消息到其他通道",
     },
     {
       value: "broadcast",
       label: t("agents.channel_policies.policy.broadcast"),
-      description: "一条消息发送到多个通道",
+      description: "广播模式：一条消息发送到多个通道",
     },
     {
-      value: "round_robin",
-      label: t("agents.channel_policies.policy.round_robin"),
-      description: "多通道负载均衡",
-    },
-    {
-      value: "queue",
-      label: t("agents.channel_policies.policy.queue"),
-      description: "消息排队，批量处理",
-    },
-    {
-      value: "moderate",
-      label: t("agents.channel_policies.policy.moderate"),
-      description: "需要审核后才发送",
-    },
-    {
-      value: "echo",
-      label: t("agents.channel_policies.policy.echo"),
-      description: "记录日志，不处理",
+      value: "smart-route",
+      label: t("agents.channel_policies.policy.smart-route"),
+      description: "智能路由：根据内容智能选择通道",
     },
   ];
 
@@ -1249,86 +1250,243 @@ function renderAgentChannelPolicies(params: {
             @change=${(e: Event) => {
               if (params.onChange) {
                 const target = e.target as HTMLSelectElement;
+                const policyType = target.value;
+                // 根据策略类型创建对应的配置对象
+                let policyConfig: any;
+                switch (policyType) {
+                  case "private":
+                    policyConfig = { type: "private", config: { allowedUsers: [] } };
+                    break;
+                  case "monitor":
+                    policyConfig = { type: "monitor", config: { monitorChannels: [], enableLogging: true } };
+                    break;
+                  case "listen-only":
+                    policyConfig = { type: "listen-only", config: { enableLogging: true, logPath: "./logs" } };
+                    break;
+                  case "load-balance":
+                    policyConfig = { type: "load-balance", config: { accountIds: [], algorithm: "round-robin" } };
+                    break;
+                  case "queue":
+                    policyConfig = { type: "queue", config: { maxQueueSize: 100, batchInterval: 60, batchSize: 10, overflowAction: "reject" } };
+                    break;
+                  case "moderate":
+                    policyConfig = { type: "moderate", config: { moderators: [] } };
+                    break;
+                  case "echo":
+                    policyConfig = { type: "echo", config: { logLevel: "info", logPath: "./logs" } };
+                    break;
+                  case "filter":
+                    policyConfig = { type: "filter", config: {} };
+                    break;
+                  case "scheduled":
+                    policyConfig = { type: "scheduled", config: {} };
+                    break;
+                  case "forward":
+                    policyConfig = { type: "forward", config: { targetChannels: [] } };
+                    break;
+                  case "broadcast":
+                    policyConfig = { type: "broadcast", config: { targetChannels: [] } };
+                    break;
+                  case "smart-route":
+                    policyConfig = { type: "smart-route", config: { routingRules: [] } };
+                    break;
+                  default:
+                    policyConfig = { type: policyType, config: {} };
+                }
                 params.onChange(params.agentId, {
                   ...config,
-                  defaultPolicy: target.value as any,
+                  defaultPolicy: policyConfig,
                 });
               }
             }}
           >
             ${policyOptions.map(
-              (opt) => html`
-              <option value=${opt.value} ?selected=${config.defaultPolicy === opt.value}>
-                ${opt.label}
-              </option>
-            `,
+              (opt) => {
+                // 获取当前选中的策略类型
+                const currentPolicyType = typeof config.defaultPolicy === 'object' && config.defaultPolicy !== null
+                  ? (config.defaultPolicy as any).type
+                  : config.defaultPolicy;
+                return html`
+                  <option value=${opt.value} ?selected=${currentPolicyType === opt.value}>
+                    ${opt.label}
+                  </option>
+                `;
+              }
             )}
           </select>
           <div class="muted" style="flex: 1; font-size: 0.875rem; padding-top: 8px;">
-            ${policyOptions.find((p) => p.value === config.defaultPolicy)?.description || ""}
+            ${(() => {
+              const currentPolicyType = typeof config.defaultPolicy === 'object' && config.defaultPolicy !== null
+                ? (config.defaultPolicy as any).type
+                : config.defaultPolicy;
+              return policyOptions.find((p) => p.value === currentPolicyType)?.description || "";
+            })()}
           </div>
         </div>
       </div>
 
-      <!-- 通道绑定列表 -->
+      <!-- 已绑定通道的策略配置 -->
       <div style="margin-top: 24px;">
-        <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <div class="label">${t("agents.channel_policies.bindings")} (${config.bindings?.length || 0})</div>
-          <button class="btn btn--sm" ?disabled=${!params.onChange} @click=${() => {
-            if (params.onAddPolicyBinding) {
-              params.onAddPolicyBinding(params.agentId);
-            }
-          }}>
-            + 添加绑定
-          </button>
+        <div class="label" style="margin-bottom: 12px;">已绑定通道的策略配置</div>
+        <div style="color: var(--fg-muted); font-size: 0.875rem; margin-bottom: 12px;">
+          为每个已绑定的通道账号配置独立的策略。如果未配置，将使用上面的默认策略。
         </div>
-        <div class="list" style="margin-top: 8px;">
-          ${
-            Array.isArray(config.bindings) && config.bindings.length > 0
-              ? config.bindings.map(
-                  (binding: any, index: number) => html`
-                <div class="list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 4px; background: var(--bg-1); margin-bottom: 8px;">
-                  <div style="flex: 1;">
-                    <div class="mono" style="font-weight: 500;">${binding.channelId}</div>
-                    ${binding.accountId ? html`<div class="muted" style="font-size: 0.875rem; margin-top: 2px;">${binding.accountId}</div>` : nothing}
-                  </div>
-                  <div style="display: flex; gap: 8px; align-items: center;">
-                    <span class="agent-pill">${t(`agents.channel_policies.policy.${binding.policy}`)}</span>
-                    <button 
-                      class="btn btn--sm"
-                      @click=${() => {
-                        if (params.onEditPolicyBinding) {
-                          params.onEditPolicyBinding(params.agentId, index, binding);
-                        }
-                      }}
-                    >
-                      配置
-                    </button>
-                    <button 
-                      class="btn btn--sm"
-                      style="color: var(--color-danger);"
-                      ?disabled=${!params.onChange}
-                      @click=${() => {
-                        if (params.onChange && confirm("确定要删除该绑定吗？")) {
-                          const newBindings = [...config.bindings];
-                          newBindings.splice(index, 1);
-                          params.onChange(params.agentId, {
-                            ...config,
-                            bindings: newBindings,
-                          });
-                        }
-                      }}
-                    >
-                      删除
-                    </button>
-                  </div>
-                </div>
-              `,
-                )
-              : html`<div class="muted">${t("agents.channel_policies.no_bindings")}</div>`
-          }
-        </div>
-      </div>
+        ${params.boundChannelAccounts && params.boundChannelAccounts.length > 0
+          ? html`
+            <div class="list" style="margin-top: 8px;">
+              ${params.boundChannelAccounts.map((binding: any) =>
+                binding.accountIds.map((accountId: string) => {
+                  // 查找该通道账号的策略配置
+                  const existingBinding = Array.isArray(config.bindings)
+                    ? config.bindings.find(
+                        (b: any) => b.channelId === binding.channelId && b.accountId === accountId
+                      )
+                    : null;
+                  const currentPolicy = existingBinding?.policy || null;
+
+                  return html`
+                    <div class="list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 4px; background: var(--bg-1); margin-bottom: 8px;">
+                      <div style="flex: 1;">
+                        <div class="mono" style="font-weight: 500;">${binding.channelId}:${accountId}</div>
+                        <div class="muted" style="font-size: 0.875rem; margin-top: 2px;">
+                          ${currentPolicy
+                            ? `当前策略: ${t(`agents.channel_policies.policy.${typeof currentPolicy === 'object' ? (currentPolicy as any).type : currentPolicy}`)}`
+                            : '使用默认策略'}
+                        </div>
+                      </div>
+                      <div style="display: flex; gap: 8px; align-items: center;">
+                        <select
+                          style="width: 200px;"
+                          ?disabled=${!params.onChange}
+                          @change=${(e: Event) => {
+                            if (params.onChange) {
+                              const target = e.target as HTMLSelectElement;
+                              const policyType = target.value;
+                              
+                              // 创建新的绑定配置
+                              let policyConfig: any = null;
+                              if (policyType) {
+                                switch (policyType) {
+                                  case "private":
+                                    policyConfig = { type: "private", config: { allowedUsers: [] } };
+                                    break;
+                                  case "monitor":
+                                    policyConfig = { type: "monitor", config: { monitorChannels: [], enableLogging: true } };
+                                    break;
+                                  case "listen-only":
+                                    policyConfig = { type: "listen-only", config: { enableLogging: true, logPath: "./logs" } };
+                                    break;
+                                  case "load-balance":
+                                    policyConfig = { type: "load-balance", config: { accountIds: [], algorithm: "round-robin" } };
+                                    break;
+                                  case "queue":
+                                    policyConfig = { type: "queue", config: { maxQueueSize: 100, batchInterval: 60, batchSize: 10, overflowAction: "reject" } };
+                                    break;
+                                  case "moderate":
+                                    policyConfig = { type: "moderate", config: { moderators: [] } };
+                                    break;
+                                  case "echo":
+                                    policyConfig = { type: "echo", config: { logLevel: "info", logPath: "./logs" } };
+                                    break;
+                                  case "filter":
+                                    policyConfig = { type: "filter", config: {} };
+                                    break;
+                                  case "scheduled":
+                                    policyConfig = { type: "scheduled", config: {} };
+                                    break;
+                                  case "forward":
+                                    policyConfig = { type: "forward", config: { targetChannels: [] } };
+                                    break;
+                                  case "broadcast":
+                                    policyConfig = { type: "broadcast", config: { targetChannels: [] } };
+                                    break;
+                                  case "smart-route":
+                                    policyConfig = { type: "smart-route", config: { routingRules: [] } };
+                                    break;
+                                }
+                              }
+
+                              // 更新绑定列表
+                              const newBindings = Array.isArray(config.bindings) ? [...config.bindings] : [];
+                              const existingIndex = newBindings.findIndex(
+                                (b: any) => b.channelId === binding.channelId && b.accountId === accountId
+                              );
+
+                              if (policyConfig) {
+                                // 添加或更新绑定
+                                const newBinding = {
+                                  channelId: binding.channelId,
+                                  accountId,
+                                  policy: policyConfig,
+                                };
+                                if (existingIndex >= 0) {
+                                  newBindings[existingIndex] = newBinding;
+                                } else {
+                                  newBindings.push(newBinding);
+                                }
+                              } else {
+                                // 移除绑定（使用默认策略）
+                                if (existingIndex >= 0) {
+                                  newBindings.splice(existingIndex, 1);
+                                }
+                              }
+
+                              params.onChange(params.agentId, {
+                                ...config,
+                                bindings: newBindings,
+                              });
+                            }
+                          }}
+                        >
+                          <option value="" ?selected=${!currentPolicy}>使用默认策略</option>
+                          ${policyOptions.map(
+                            (opt) => {
+                              const currentPolicyType = typeof currentPolicy === 'object' && currentPolicy !== null
+                                ? (currentPolicy as any).type
+                                : currentPolicy;
+                              return html`
+                                <option value=${opt.value} ?selected=${currentPolicyType === opt.value}>
+                                  ${opt.label}
+                                </option>
+                              `;
+                            }
+                          )}
+                        </select>
+                        ${currentPolicy
+                          ? html`
+                            <button 
+                              class="btn btn--sm"
+                              @click=${() => {
+                                if (params.onEditPolicyBinding) {
+                                  const existingIndex = Array.isArray(config.bindings)
+                                    ? config.bindings.findIndex(
+                                        (b: any) => b.channelId === binding.channelId && b.accountId === accountId
+                                      )
+                                    : -1;
+                                  if (existingIndex >= 0) {
+                                    params.onEditPolicyBinding(params.agentId, existingIndex, config.bindings[existingIndex]);
+                                  }
+                                }
+                              }}
+                            >
+                              配置
+                            </button>
+                          `
+                          : nothing}
+                      </div>
+                    </div>
+                  `;
+                })
+              )}
+            </div>
+          `
+          : html`
+            <div class="callout" style="margin-top: 8px;">
+              <div style="font-weight: 500; margin-bottom: 4px;">⚠️ 尚未绑定任何通道账号</div>
+              <div style="font-size: 0.875rem;">请先在「通道」标签页绑定通道账号，然后再配置策略。</div>
+            </div>
+          `
+        }
 
       <!-- 策略说明 -->
       <details style="margin-top: 24px; padding: 16px; border: 1px solid var(--border); border-radius: 6px;">
@@ -1608,6 +1766,7 @@ export function renderAgents(props: AgentsProps) {
                       error: props.channelPoliciesError,
                       saving: props.channelPoliciesSaving,
                       saveSuccess: props.channelPoliciesSaveSuccess,
+                      boundChannelAccounts: props.boundChannelAccounts || [],
                       onChange: props.onChannelPoliciesChange,
                       onEditPolicyBinding: props.onEditPolicyBinding,
                       onAddPolicyBinding: props.onAddPolicyBinding,

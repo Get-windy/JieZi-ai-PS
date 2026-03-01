@@ -18,6 +18,7 @@ import { loadCronJobs, loadCronStatus } from "./controllers/cron.ts";
 import { loadDebug } from "./controllers/debug.ts";
 import { loadDevices } from "./controllers/devices.ts";
 import { loadExecApprovals } from "./controllers/exec-approvals.ts";
+import { loadFriends } from "./controllers/friends.ts";
 import { loadGroups } from "./controllers/groups.ts";
 import { loadLogs } from "./controllers/logs.ts";
 import { loadQueueStatus, loadQueueStats, loadQueueConfig } from "./controllers/message-queue.ts";
@@ -251,6 +252,19 @@ export async function refreshActiveTab(host: SettingsHost) {
     await loadExecApprovals(host as unknown as OpenClawApp);
   }
   if (host.tab === "chat") {
+    // 第一步：并发加载所有辅助数据（通道、群组、好友）
+    // 必须先加载完成，确保导航树有完整数据
+    // 注意：channelBindings 现在由后端 agent.list 直接返回，不需要单独加载
+    const app = host as unknown as OpenClawApp;
+    const agentId = app.agentsList?.defaultId ?? "main";
+    await Promise.all([
+      !app.channelsSnapshot ? loadChannels(app, false) : Promise.resolve(),
+      !app.groupsList ? loadGroups(app) : Promise.resolve(),
+      app.friendsList?.length === 0 ? loadFriends(app, agentId) : Promise.resolve(),
+    ]);
+
+    // 第二步：辅助数据加载完成后再刷新聊天
+    // 这样可以确保导航树首次渲染时有完整的群组/好友数据
     await refreshChat(host as unknown as Parameters<typeof refreshChat>[0]);
     scheduleChatScroll(
       host as unknown as Parameters<typeof scheduleChatScroll>[0],

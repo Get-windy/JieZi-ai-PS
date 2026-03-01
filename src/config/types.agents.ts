@@ -146,5 +146,7 @@ export type AgentBinding = {
     teamId?: string;
     /** Discord role IDs used for role-based routing. */
     roles?: string[];
+    /** Keywords for message-based routing to specific agents. */
+    keyword?: string[];
   };
 };

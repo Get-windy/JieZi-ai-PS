@@ -87,6 +87,7 @@ import {
 import {
   sendMessage,
 } from "./controllers/friends.ts";
+import { buildNavigationTree } from "./controllers/chat-navigation.ts";
 import {
   loadGroups,
   createGroup,
@@ -2579,19 +2580,19 @@ export function renderApp(state: AppViewState) {
                     // TODO: 需要当前智能助手 ID
                     // void loadMessages(state, "current-agent-id", friendId);
                   },
-                  onAddFriend: async (toAgentId, message) => {
+                  onAddFriend: async (_toAgentId, _message) => {
                     // TODO: 需要当前智能助手 ID
                     // await addFriend(state, "current-agent-id", toAgentId, message);
                   },
-                  onRemoveFriend: async (friendId) => {
+                  onRemoveFriend: async (_friendId) => {
                     // TODO: 需要当前智能助手 ID
                     // await removeFriend(state, "current-agent-id", friendId);
                   },
-                  onConfirmFriend: async (friendId, accept) => {
+                  onConfirmFriend: async (_friendId, _accept) => {
                     // TODO: 需要当前智能助手 ID
                     // await confirmFriend(state, "current-agent-id", friendId, accept);
                   },
-                  onSendMessage: async (content) => {
+                  onSendMessage: async (_content) => {
                     if (state.selectedFriendId) {
                       // TODO: 需要当前智能助手 ID
                       // await sendMessage(state, "current-agent-id", state.selectedFriendId, content);
@@ -2985,6 +2986,67 @@ export function renderApp(state: AppViewState) {
                 onSplitRatioChange: (ratio: number) => state.handleSplitRatioChange(ratio),
                 assistantName: state.assistantName,
                 assistantAvatar: state.assistantAvatar,
+                // ============ 导航树 props ============
+                navNodes: buildNavigationTree({
+                  agents: state.agentsList,
+                  channelsSnapshot: state.channelsSnapshot,
+                  groups: state.groupsList,
+                  friends: state.friendsList,
+                  // channelBindings 现在直接从 agents.agents[…].channelBindings 获取
+                }),
+                navCurrentContext: state.chatNavCurrentContext,
+                navExpandedNodeIds: state.chatNavExpandedNodes,
+                navSearchQuery: state.chatNavSearchQuery,
+                navChannelForceJoined: state.chatNavChannelForceJoined,
+                navLoading: state.chatLoading,
+                navError: state.agentsError ?? state.channelsError ?? state.groupsError ?? null,
+                onNavRetry: () => {
+                  // 重新加载导航树所需的数据
+                  void Promise.all([
+                    loadAgents(state),
+                    loadChannels(state, false),
+                    loadGroups(state),
+                  ]).then(() => loadChatHistory(state));
+                },
+                onNavSelectContext: (context) => {
+                  state.chatNavCurrentContext = context;
+                  // 同步 sessionKey 并加载对应历史
+                  const nextKey = context.sessionKey;
+                  if (nextKey !== state.sessionKey) {
+                    state.sessionKey = nextKey;
+                    state.chatMessage = "";
+                    state.chatAttachments = [];
+                    state.chatStream = null;
+                    state.chatStreamStartedAt = null;
+                    state.chatRunId = null;
+                    state.chatQueue = [];
+                    state.resetToolStream();
+                    state.resetChatScroll();
+                    state.applySettings({
+                      ...state.settings,
+                      sessionKey: nextKey,
+                      lastActiveSessionKey: nextKey,
+                    });
+                    void state.loadAssistantIdentity();
+                    void loadChatHistory(state);
+                    void refreshChatAvatar(state);
+                  }
+                },
+                onNavToggleNode: (nodeId) => {
+                  const next = new Set(state.chatNavExpandedNodes);
+                  if (next.has(nodeId)) {
+                    next.delete(nodeId);
+                  } else {
+                    next.add(nodeId);
+                  }
+                  state.chatNavExpandedNodes = next;
+                },
+                onNavSearchChange: (query) => {
+                  state.chatNavSearchQuery = query;
+                },
+                onNavChannelForceJoinToggle: () => {
+                  state.chatNavChannelForceJoined = !state.chatNavChannelForceJoined;
+                },
               })
             : nothing
         }
