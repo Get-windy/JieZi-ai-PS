@@ -1,394 +1,405 @@
 /**
- * Phase 6: Training System RPC Methods
- * 培训系统 RPC 方法
+ * 培训系统 Gateway RPC Handlers
+ * 
+ * 提供智能体培训、技能转移、评估功能
  */
 
 import type { GatewayRequestHandlers } from "./types.js";
-import { lifecycleManager } from "../../lifecycle/lifecycle-manager.js";
-import { skillManagement } from "../../lifecycle/skill-management.js";
-import { trainingSystem } from "../../lifecycle/training-system.js";
+import { loadConfig } from "../../config/config.js";
+import { listAgentEntries } from "../../commands/agents.config.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
+import { ErrorCodes, errorShape } from "../protocol/index.js";
 
 /**
- * 培训系统 RPC 方法处理器
+ * 培训记录
  */
-export const trainingMethods: GatewayRequestHandlers = {
+interface TrainingRecord {
+  id: string;
+  trainerId: string;
+  traineeId: string;
+  topic: string;
+  status: "scheduled" | "in_progress" | "completed" | "cancelled";
+  startedAt?: number;
+  completedAt?: number;
+  progress?: number;
+  feedback?: string;
+}
+
+/**
+ * 培训课程
+ */
+interface TrainingCourse {
+  id: string;
+  name: string;
+  description: string;
+  creatorId: string;
+  duration: number;
+  prerequisites?: string[];
+  topics: string[];
+  createdAt: number;
+}
+
+/**
+ * 评估结果
+ */
+interface AssessmentResult {
+  id: string;
+  assessorId: string;
+  targetId: string;
+  skills: Record<string, number>; // skill name -> score (0-100)
+  overallScore: number;
+  feedback: string;
+  assessedAt: number;
+}
+
+// 内存存储（生产环境应持久化）
+const trainingRecords = new Map<string, TrainingRecord>();
+const trainingCourses = new Map<string, TrainingCourse>();
+const assessmentResults = new Map<string, AssessmentResult>();
+
+function generateId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+export const trainingHandlers: GatewayRequestHandlers = {
   /**
-   * 获取课程列表
+   * training.train - 开始培训智能体
    */
-  "training.courses.list": ({ params, respond }) => {
+  "training.train": async ({ params, respond }) => {
     try {
-      const type = params?.type as string | undefined;
-
-      let courses = trainingSystem.getAllCourses();
-
-      // 按类型筛选
-      if (type && type !== "all") {
-        courses = trainingSystem.getCoursesByType(type as any);
-      }
-
-      // 转换为前端格式
-      const formattedCourses = courses.map((course) => ({
-        id: course.id,
-        title: course.name, // 后端使用 name
-        description: course.description,
-        type: course.type,
-        level: course.difficulty, // 后端使用 difficulty
-        duration: course.estimatedDuration, // 后端使用 estimatedDuration
-        modules: course.modules,
-        hasAssessment: course.hasAssessment,
-        passingScore: course.passingScore,
-        prerequisites: course.prerequisites,
-        tags: course.tags,
-        createdAt: course.createdAt,
-        createdBy: course.createdBy,
-        updatedAt: course.updatedAt,
-      }));
-
-      respond(true, { courses: formattedCourses }, undefined);
-    } catch (err) {
-      respond(false, undefined, {
-        code: "TRAINING_COURSES_LIST_ERROR",
-        message: String(err instanceof Error ? err.message : err),
-      });
-    }
-  },
-
-  /**
-   * 获取培训进度列表
-   */
-  "training.progresses.list": ({ params, respond }) => {
-    try {
-      const agentId = params?.agentId as string | undefined;
-
-      let progresses = agentId
-        ? trainingSystem.getAgentProgresses(agentId)
-        : trainingSystem.getAllProgresses();
-
-      // 转换为前端格式
-      const formattedProgresses = progresses.map((progress: any) => ({
-        id: progress.id,
-        agentId: progress.agentId,
-        courseId: progress.courseId,
-        status: progress.status,
-        overallProgress: progress.overallProgress,
-        moduleProgress: (Array.from(progress.moduleProgress.entries()) as Array<[string, any]>).map(
-          ([moduleId, mp]) => ({
-            moduleId,
-            started: mp.started,
-            completed: mp.completed,
-            startedAt: mp.startedAt,
-            completedAt: mp.completedAt,
-            timeSpent: mp.timeSpent,
-          }),
-        ),
-        exerciseResults: (
-          Array.from(progress.exerciseResults.entries()) as Array<[string, any]>
-        ).map(([exerciseId, result]) => ({
-          exerciseId,
-          score: result.score,
-          totalPoints: result.totalPoints,
-          passed: result.passed,
-          attemptCount: result.attemptCount,
-          lastAttemptAt: result.lastAttemptAt,
-        })),
-        startedAt: progress.startedAt,
-        completedAt: progress.completedAt,
-        totalTimeSpent: progress.totalTimeSpent,
-        passed: progress.passed,
-        assessmentScore: progress.assessmentScore,
-      }));
-
-      respond(true, { progresses: formattedProgresses }, undefined);
-    } catch (err) {
-      respond(false, undefined, {
-        code: "TRAINING_PROGRESSES_LIST_ERROR",
-        message: String(err instanceof Error ? err.message : err),
-      });
-    }
-  },
-
-  /**
-   * 获取证书列表
-   */
-  "training.certificates.list": ({ params, respond }) => {
-    try {
-      const agentId = params?.agentId as string | undefined;
-
-      let certificates = agentId
-        ? trainingSystem.getAgentCertificates(agentId)
-        : trainingSystem.getAllCertificates();
-
-      // 转换为前端格式
-      const formattedCertificates = certificates.map((cert: any) => ({
-        id: cert.id,
-        agentId: cert.agentId,
-        courseId: cert.courseId,
-        type: cert.type,
-        title: cert.title,
-        description: cert.description,
-        level: cert.level,
-        issuedAt: cert.issuedAt,
-        expiresAt: cert.expiresAt,
-        verificationCode: cert.verificationCode,
-      }));
-
-      respond(true, { certificates: formattedCertificates }, undefined);
-    } catch (err) {
-      respond(false, undefined, {
-        code: "TRAINING_CERTIFICATES_LIST_ERROR",
-        message: String(err instanceof Error ? err.message : err),
-      });
-    }
-  },
-
-  /**
-   * 开始课程学习
-   */
-  "training.course.start": ({ params, respond }) => {
-    try {
-      const courseId = params?.courseId as string;
-      const agentId = params?.agentId as string;
-
-      if (!courseId || !agentId) {
-        respond(false, undefined, {
-          code: "INVALID_PARAMS",
-          message: "缺少必需参数：courseId 和 agentId",
-        });
+      const trainerId = normalizeAgentId(String(params.trainerId || ""));
+      const traineeId = normalizeAgentId(String(params.traineeId || ""));
+      const topic = String(params.topic || "");
+      
+      if (!trainerId || !traineeId || !topic) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "trainerId, traineeId, and topic are required"));
         return;
       }
-
-      const progress = trainingSystem.startCourse({ agentId, courseId });
-
-      respond(
-        true,
-        {
-          progress: {
-            id: progress.id,
-            agentId: progress.agentId,
-            courseId: progress.courseId,
-            status: progress.status,
-            overallProgress: progress.overallProgress,
-            startedAt: progress.startedAt,
-          },
-        },
-        undefined,
-      );
-    } catch (err) {
-      respond(false, undefined, {
-        code: "TRAINING_COURSE_START_ERROR",
-        message: String(err instanceof Error ? err.message : err),
-      });
-    }
-  },
-
-  /**
-   * 完成模块
-   */
-  "training.module.complete": ({ params, respond }) => {
-    try {
-      const agentId = params?.agentId as string;
-      const courseId = params?.courseId as string;
-      const moduleId = params?.moduleId as string;
-      const timeSpent = (params?.timeSpent as number) || 0;
-
-      if (!agentId || !courseId || !moduleId) {
-        respond(false, undefined, {
-          code: "INVALID_PARAMS",
-          message: "缺少必需参数：agentId, courseId 和 moduleId",
-        });
+      
+      const config = loadConfig();
+      const agents = listAgentEntries(config);
+      
+      const trainer = agents.find((a) => normalizeAgentId(a.id) === trainerId);
+      const trainee = agents.find((a) => normalizeAgentId(a.id) === traineeId);
+      
+      if (!trainer || !trainee) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Trainer or trainee not found"));
         return;
       }
-
-      const progress = trainingSystem.completeModule({
-        agentId,
+      
+      const trainingId = generateId("training");
+      const record: TrainingRecord = {
+        id: trainingId,
+        trainerId,
+        traineeId,
+        topic,
+        status: "scheduled",
+      };
+      
+      trainingRecords.set(trainingId, record);
+      
+      respond(true, {
+        success: true,
+        trainingId,
+        message: `Training "${topic}" scheduled for ${traineeId} by ${trainerId}`,
+        record,
+      });
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
+    }
+  },
+  
+  /**
+   * training.start - 开始培训
+   */
+  "training.start": async ({ params, respond }) => {
+    try {
+      const trainingId = String(params.trainingId || "");
+      
+      if (!trainingId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "trainingId is required"));
+        return;
+      }
+      
+      const record = trainingRecords.get(trainingId);
+      if (!record) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Training ${trainingId} not found`));
+        return;
+      }
+      
+      if (record.status !== "scheduled") {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Training ${trainingId} is already ${record.status}`));
+        return;
+      }
+      
+      record.status = "in_progress";
+      record.startedAt = Date.now();
+      record.progress = 0;
+      
+      trainingRecords.set(trainingId, record);
+      
+      respond(true, {
+        success: true,
+        message: `Training ${trainingId} started`,
+        record,
+      });
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
+    }
+  },
+  
+  /**
+   * training.complete - 完成培训
+   */
+  "training.complete": async ({ params, respond }) => {
+    try {
+      const trainingId = String(params.trainingId || "");
+      const feedback = String(params.feedback || "");
+      
+      if (!trainingId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "trainingId is required"));
+        return;
+      }
+      
+      const record = trainingRecords.get(trainingId);
+      if (!record) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Training ${trainingId} not found`));
+        return;
+      }
+      
+      if (record.status !== "in_progress") {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Training ${trainingId} is not in progress`));
+        return;
+      }
+      
+      record.status = "completed";
+      record.completedAt = Date.now();
+      record.progress = 100;
+      record.feedback = feedback;
+      
+      trainingRecords.set(trainingId, record);
+      
+      respond(true, {
+        success: true,
+        message: `Training ${trainingId} completed`,
+        record,
+      });
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
+    }
+  },
+  
+  /**
+   * training.assess - 评估智能体
+   */
+  "training.assess": async ({ params, respond }) => {
+    try {
+      const assessorId = normalizeAgentId(String(params.assessorId || ""));
+      const targetId = normalizeAgentId(String(params.targetId || ""));
+      const skills = (params.skills as Record<string, number>) || {};
+      const feedback = String(params.feedback || "");
+      
+      if (!assessorId || !targetId || Object.keys(skills).length === 0) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "assessorId, targetId, and skills are required"));
+        return;
+      }
+      
+      const scores = Object.values(skills);
+      const overallScore = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+      
+      const assessmentId = generateId("assessment");
+      const result: AssessmentResult = {
+        id: assessmentId,
+        assessorId,
+        targetId,
+        skills,
+        overallScore,
+        feedback,
+        assessedAt: Date.now(),
+      };
+      
+      assessmentResults.set(assessmentId, result);
+      
+      respond(true, {
+        success: true,
+        assessmentId,
+        message: `Assessment completed for ${targetId}`,
+        result,
+      });
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
+    }
+  },
+  
+  /**
+   * training.course.create - 创建培训课程
+   */
+  "training.course.create": async ({ params, respond }) => {
+    try {
+      const creatorId = normalizeAgentId(String(params.creatorId || ""));
+      const name = String(params.name || "");
+      const description = String(params.description || "");
+      const duration = typeof params.duration === "number" ? params.duration : 0;
+      const topics = (params.topics as string[]) || [];
+      const prerequisites = (params.prerequisites as string[]) || [];
+      
+      if (!creatorId || !name || topics.length === 0) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "creatorId, name, and topics are required"));
+        return;
+      }
+      
+      const courseId = generateId("course");
+      const course: TrainingCourse = {
+        id: courseId,
+        name,
+        description,
+        creatorId,
+        duration,
+        prerequisites,
+        topics,
+        createdAt: Date.now(),
+      };
+      
+      trainingCourses.set(courseId, course);
+      
+      respond(true, {
+        success: true,
         courseId,
-        moduleId,
-        timeSpent,
+        message: `Training course "${name}" created`,
+        course,
       });
-
-      respond(
-        true,
-        {
-          progress: {
-            id: progress.id,
-            overallProgress: progress.overallProgress,
-            totalTimeSpent: progress.totalTimeSpent,
-          },
-        },
-        undefined,
-      );
-    } catch (err) {
-      respond(false, undefined, {
-        code: "TRAINING_MODULE_COMPLETE_ERROR",
-        message: String(err instanceof Error ? err.message : err),
-      });
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
     }
   },
-
+  
   /**
-   * 完成课程
+   * training.course.assign - 分配培训课程
    */
-  "training.course.complete": ({ params, respond }) => {
+  "training.course.assign": async ({ params, respond }) => {
     try {
-      const agentId = params?.agentId as string;
-      const courseId = params?.courseId as string;
-      const assessmentScore = params?.assessmentScore as number | undefined;
-
-      if (!agentId || !courseId) {
-        respond(false, undefined, {
-          code: "INVALID_PARAMS",
-          message: "缺少必需参数：agentId 和 courseId",
-        });
+      const courseId = String(params.courseId || "");
+      const traineeId = normalizeAgentId(String(params.traineeId || ""));
+      const trainerId = normalizeAgentId(String(params.trainerId || ""));
+      
+      if (!courseId || !traineeId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "courseId and traineeId are required"));
         return;
       }
-
-      const progress = trainingSystem.completeCourse({
-        agentId,
-        courseId,
-        assessmentScore,
-      });
-
-      respond(
-        true,
-        {
-          progress: {
-            id: progress.id,
-            status: progress.status,
-            passed: progress.passed,
-            assessmentScore: progress.assessmentScore,
-            completedAt: progress.completedAt,
-          },
-        },
-        undefined,
-      );
-    } catch (err) {
-      respond(false, undefined, {
-        code: "TRAINING_COURSE_COMPLETE_ERROR",
-        message: String(err instanceof Error ? err.message : err),
-      });
-    }
-  },
-
-  /**
-   * 创建课程
-   */
-  "training.course.create": ({ params, respond }) => {
-    try {
-      const courseData = params as any;
-
-      if (!courseData.id || !courseData.title || !courseData.type) {
-        respond(false, undefined, {
-          code: "INVALID_PARAMS",
-          message: "缺少必需参数：id, title 和 type",
-        });
-        return;
-      }
-
-      const course = trainingSystem.createCourse({
-        id: courseData.id,
-        name: courseData.title, // 前端传 title，后端用 name
-        description: courseData.description || "",
-        type: courseData.type,
-        difficulty: courseData.level || "beginner", // 前端传 level，后端用 difficulty
-        estimatedDuration: courseData.duration || 60, // 前端传 duration
-        modules: courseData.modules || [],
-        hasAssessment: courseData.hasAssessment || false,
-        passingScore: courseData.passingScore,
-        prerequisites: courseData.prerequisites,
-        tags: courseData.tags,
-        createdBy: courseData.createdBy || "system",
-      });
-
-      respond(true, { course }, undefined);
-    } catch (err) {
-      respond(false, undefined, {
-        code: "TRAINING_COURSE_CREATE_ERROR",
-        message: String(err instanceof Error ? err.message : err),
-      });
-    }
-  },
-
-  /**
-   * 获取课程详情
-   */
-  "training.course.get": ({ params, respond }) => {
-    try {
-      const courseId = params?.courseId as string;
-
-      if (!courseId) {
-        respond(false, undefined, {
-          code: "INVALID_PARAMS",
-          message: "缺少必需参数：courseId",
-        });
-        return;
-      }
-
-      const course = trainingSystem.getCourse(courseId);
-
+      
+      const course = trainingCourses.get(courseId);
       if (!course) {
-        respond(false, undefined, {
-          code: "COURSE_NOT_FOUND",
-          message: `课程不存在：${courseId}`,
-        });
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Course ${courseId} not found`));
         return;
       }
-
-      respond(true, { course }, undefined);
-    } catch (err) {
-      respond(false, undefined, {
-        code: "TRAINING_COURSE_GET_ERROR",
-        message: String(err instanceof Error ? err.message : err),
-      });
-    }
-  },
-
-  /**
-   * 获取培训统计
-   */
-  "training.stats": ({ params, respond }) => {
-    try {
-      const stats = trainingSystem.getStatistics();
-
-      respond(true, { stats }, undefined);
-    } catch (err) {
-      respond(false, undefined, {
-        code: "TRAINING_STATS_ERROR",
-        message: String(err instanceof Error ? err.message : err),
-      });
-    }
-  },
-
-  /**
-   * 提交练习答案
-   */
-  "training.exercise.submit": ({ params, respond }) => {
-    try {
-      const agentId = params?.agentId as string;
-      const courseId = params?.courseId as string;
-      const exerciseId = params?.exerciseId as string;
-      const answers = params?.answers;
-
-      if (!agentId || !courseId || !exerciseId || !answers) {
-        respond(false, undefined, {
-          code: "INVALID_PARAMS",
-          message: "缺少必需参数：agentId, courseId, exerciseId 和 answers",
-        });
-        return;
+      
+      // 为课程中的每个主题创建培训记录
+      const trainingIds: string[] = [];
+      for (const topic of course.topics) {
+        const trainingId = generateId("training");
+        const record: TrainingRecord = {
+          id: trainingId,
+          trainerId: trainerId || course.creatorId,
+          traineeId,
+          topic,
+          status: "scheduled",
+        };
+        trainingRecords.set(trainingId, record);
+        trainingIds.push(trainingId);
       }
-
-      const result = trainingSystem.submitExercise({
-        agentId,
+      
+      respond(true, {
+        success: true,
+        message: `Course "${course.name}" assigned to ${traineeId}`,
         courseId,
-        exerciseId,
-        answers,
+        traineeId,
+        trainingIds,
       });
-
-      respond(true, { result }, undefined);
-    } catch (err) {
-      respond(false, undefined, {
-        code: "TRAINING_EXERCISE_SUBMIT_ERROR",
-        message: String(err instanceof Error ? err.message : err),
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
+    }
+  },
+  
+  /**
+   * training.transfer_skill - 技能转移
+   */
+  "training.transfer_skill": async ({ params, respond }) => {
+    try {
+      const sourceId = normalizeAgentId(String(params.sourceId || ""));
+      const targetId = normalizeAgentId(String(params.targetId || ""));
+      const skillName = String(params.skillName || "");
+      
+      if (!sourceId || !targetId || !skillName) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "sourceId, targetId, and skillName are required"));
+        return;
+      }
+      
+      const config = loadConfig();
+      const agents = listAgentEntries(config);
+      
+      const source = agents.find((a) => normalizeAgentId(a.id) === sourceId);
+      const target = agents.find((a) => normalizeAgentId(a.id) === targetId);
+      
+      if (!source || !target) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Source or target agent not found"));
+        return;
+      }
+      
+      const trainingId = generateId("training");
+      const record: TrainingRecord = {
+        id: trainingId,
+        trainerId: sourceId,
+        traineeId: targetId,
+        topic: `Skill Transfer: ${skillName}`,
+        status: "scheduled",
+      };
+      
+      trainingRecords.set(trainingId, record);
+      
+      respond(true, {
+        success: true,
+        trainingId,
+        message: `Skill "${skillName}" transfer scheduled from ${sourceId} to ${targetId}`,
+        record,
       });
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
+    }
+  },
+  
+  /**
+   * training.certify_trainer - 认证培训师
+   */
+  "training.certify_trainer": async ({ params, respond }) => {
+    try {
+      const trainerId = normalizeAgentId(String(params.trainerId || ""));
+      const certifierId = normalizeAgentId(String(params.certifierId || ""));
+      const specialties = (params.specialties as string[]) || [];
+      
+      if (!trainerId || !certifierId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "trainerId and certifierId are required"));
+        return;
+      }
+      
+      const config = loadConfig();
+      const agents = listAgentEntries(config);
+      
+      const trainer = agents.find((a) => normalizeAgentId(a.id) === trainerId);
+      if (!trainer) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Trainer ${trainerId} not found`));
+        return;
+      }
+      
+      respond(true, {
+        success: true,
+        message: `Trainer ${trainerId} certified by ${certifierId}`,
+        trainerId,
+        certifierId,
+        specialties,
+        certifiedAt: Date.now(),
+      });
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
     }
   },
 };

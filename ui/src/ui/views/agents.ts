@@ -25,20 +25,7 @@ import {
   formatNextRun,
 } from "../presenter.ts";
 import { renderPolicyBindingDialog } from "./agents.channel-policy-dialog.ts";
-
-// 临时占位：权限管理面板（待实现）
-function renderPermissionsManagement(props: any) {
-  return html`
-    <div class="card" style="padding: 32px; text-align: center;">
-      <div style="font-size: 48px; margin-bottom: 16px;">🔒</div>
-      <h3 style="margin-bottom: 8px;">权限管理</h3>
-      <p style="color: var(--text-secondary); margin-bottom: 24px;">
-        此功能正在开发中，敬请期待。
-      </p>
-      ${props.error ? html`<div class="error">${props.error}</div>` : nothing}
-    </div>
-  `;
-}
+import { renderPermissionsManagement } from "./permissions-management.ts";
 
 export type AgentsPanel =
   | "overview"
