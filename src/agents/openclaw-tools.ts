@@ -21,7 +21,6 @@ import { createSubagentsTool } from "./tools/subagents-tool.js";
 import { createTtsTool } from "./tools/tts-tool.js";
 import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
 import { resolveWorkspaceRoot } from "./workspace-dir.js";
-// Phase 6: 智能体管理工具
 import { 
   createAgentCreateTool, 
   createAgentUpdateTool, 
@@ -38,7 +37,6 @@ import {
   createGroupRemoveMemberTool, 
   createGroupDeleteTool 
 } from "./tools/group-management-tools.js";
-// Phase 6 P1: 组织和权限管理工具
 import {
   createOrganizationCreateTool,
   createOrganizationUpdateTool,
@@ -53,10 +51,72 @@ import {
   createRecruitListTool,
 } from "./tools/recruit-management-tools.js";
 import {
-  createPermissionGrantTool,
-  createPermissionRevokeTool,
-  createPermissionListTool,
-} from "./tools/permission-management-tools.js";
+  createTaskCreateTool,
+  createTaskListTool,
+  createTaskUpdateTool,
+  createTaskCompleteTool,
+  createTaskDeleteTool,
+} from "./tools/task-management-tools.js";
+import {
+  createAgentDiscoverTool,
+  createAgentInspectTool,
+  createAgentStatusTool,
+  createAgentCapabilitiesTool,
+  createAgentAssignTaskTool,
+  createAgentCommunicateTool,
+} from "./tools/agent-discovery-tools.js";
+import {
+  createAgentSpawnTool,
+  createAgentStartTool,
+  createAgentStopTool,
+  createAgentRestartTool,
+  createAgentConfigureTool,
+  createAgentDestroyTool,
+  createAgentCloneTool,
+} from "./tools/agent-lifecycle-tools.js";
+import {
+  createDeactivateAgentTool,
+  createActivateAgentTool,
+  createConfigureAgentRoleTool,
+  createAssignSupervisorTool,
+  createAssignMentorTool,
+  createPromoteAgentTool,
+  createTransferAgentTool,
+} from "./tools/hr-management-tools.js";
+import {
+  createApprovalRequestTool,
+  createApproveRequestTool,
+  createRejectRequestTool,
+  createListPendingApprovalsTool,
+  createGetApprovalStatusTool,
+  createCancelApprovalRequestTool,
+} from "./tools/approval-tools.js";
+import {
+  createTrainAgentTool,
+  createTrainingStartTool,
+  createTrainingCompleteTool,
+  createAssessAgentTool,
+  createCreateTrainingCourseTool,
+  createAssignTrainingTool,
+  createTransferSkillTool,
+  createCertifyTrainerTool,
+} from "./tools/training-tools.js";
+import {
+  createPerm_GrantTool,
+  createPerm_RevokeTool,
+  createPerm_DelegateTool,
+  createPerm_CheckTool,
+  createPerm_ListTool,
+  createPerm_AuditTool,
+} from "./tools/permission-management-tools-impl.js";
+import {
+  createOrgDepartmentTool,
+  createOrgTeamTool,
+  createOrgAssignToDepartmentTool,
+  createOrgAssignToTeamTool,
+  createOrgSetReportingLineTool,
+  createOrgStructureListTool,
+} from "./tools/organization-structure-tools.js";
 
 export function createOpenClawTools(options?: {
   sandboxBrowserBridgeUrl?: string;
@@ -202,7 +262,6 @@ export function createOpenClawTools(options?: {
     ...(webSearchTool ? [webSearchTool] : []),
     ...(webFetchTool ? [webFetchTool] : []),
     ...(imageTool ? [imageTool] : []),
-    // Phase 6: 智能体管理工具
     createAgentCreateTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
@@ -221,7 +280,6 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
     }),
-    // Phase 6: 好友关系工具
     createFriendAddTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
@@ -240,7 +298,6 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
     }),
-    // Phase 6: 群组管理工具
     createGroupCreateTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
@@ -265,7 +322,6 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
     }),
-    // Phase 6 P1: 组织管理工具
     createOrganizationCreateTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
@@ -302,7 +358,6 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
     }),
-    // Phase 6 P1: 招聘管理工具
     createRecruitAgentTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
@@ -321,20 +376,312 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
     }),
-    // Phase 6 P1: 权限管理工具
-    createPermissionGrantTool({
+    createTaskCreateTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
         config: options?.config,
       }),
     }),
-    createPermissionRevokeTool({
+    createTaskListTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
         config: options?.config,
       }),
     }),
-    createPermissionListTool({
+    createTaskUpdateTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTaskCompleteTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTaskDeleteTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentDiscoverTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentInspectTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentStatusTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentCapabilitiesTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentAssignTaskTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentCommunicateTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentSpawnTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentStartTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentStopTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentRestartTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentConfigureTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentDestroyTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentCloneTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    // HR管理工具
+    createDeactivateAgentTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createActivateAgentTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createConfigureAgentRoleTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAssignSupervisorTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAssignMentorTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createPromoteAgentTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTransferAgentTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    // 审批流程工具
+    createApprovalRequestTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createApproveRequestTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createRejectRequestTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createListPendingApprovalsTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createGetApprovalStatusTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createCancelApprovalRequestTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    // 培训系统工具
+    createTrainAgentTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTrainingStartTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTrainingCompleteTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAssessAgentTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createCreateTrainingCourseTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAssignTrainingTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTransferSkillTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createCertifyTrainerTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    // 权限管理工具
+    createPerm_GrantTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createPerm_RevokeTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createPerm_DelegateTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createPerm_CheckTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createPerm_ListTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createPerm_AuditTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    // 组织架构工具
+    createOrgDepartmentTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createOrgTeamTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createOrgAssignToDepartmentTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createOrgAssignToTeamTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createOrgSetReportingLineTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createOrgStructureListTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
         config: options?.config,

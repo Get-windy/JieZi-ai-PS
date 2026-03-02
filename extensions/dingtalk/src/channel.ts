@@ -153,6 +153,8 @@ export const dingtalkPlugin: ChannelPlugin<ResolvedDingtalkAccount> = {
     startAccount: async (ctx) => {
       const account = ctx.account;
       ctx.log?.info(`[${account.accountId}] starting DingTalk provider`);
+      // 上报状态，防止 health-monitor 误判为 stopped
+      ctx.setStatus({ accountId: account.accountId });
       return monitorDingtalkProvider({
         accountId: account.accountId,
         config: ctx.cfg,

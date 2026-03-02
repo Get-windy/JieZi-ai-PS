@@ -6,6 +6,11 @@ import { isRoleAuthorizedForMethod, parseGatewayRole } from "./role-policy.js";
 import { agentHandlers } from "./server-methods/agent.js";
 import { agentsHandlers } from "./server-methods/agents.js";
 import { agentsManagementHandlers } from "./server-methods/agents-management.js";
+import { approvalHandlers } from "./server-methods/approval.js";
+import { hrManagementHandlers } from "./server-methods/hr-management.js";
+import { trainingHandlers } from "./server-methods/training.js";
+import { permissionManagementHandlers } from "./server-methods/permission-management.js";
+import { organizationStructureHandlers } from "./server-methods/organization-structure.js";
 import { browserHandlers } from "./server-methods/browser.js";
 import { channelManagerHandlers } from "./server-methods/channel-manager.js";
 import { channelPoliciesHandlers } from "./server-methods/channel-policies.js";
@@ -27,6 +32,7 @@ import { nodeHandlers } from "./server-methods/nodes.js";
 import { organizationChartHandlers } from "./server-methods/organization-chart.js";
 import { pairingHandlers } from "./server-methods/pairing.js";
 import { permissionsManagementHandlers } from "./server-methods/permissions-management.js";
+import { permissionHandlers } from "./server-methods/permission.js";
 import { phase5RpcHandlers } from "./server-methods/phase5-rpc.js";
 import { pushHandlers } from "./server-methods/push.js";
 import { sendHandlers } from "./server-methods/send.js";
@@ -109,9 +115,15 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...agentHandlers,
   ...agentsHandlers,
   ...agentsManagementHandlers,
+  ...approvalHandlers,
+  ...hrManagementHandlers,
+  ...trainingHandlers,
+  ...permissionManagementHandlers,
+  ...organizationStructureHandlers,
   ...groupsHandlers,
   ...organizationChartHandlers,
   ...permissionsManagementHandlers,
+  ...permissionHandlers,
   ...phase5RpcHandlers,
   ...browserHandlers,
 };
