@@ -167,7 +167,8 @@ export function applyTalkApiKey(config: OpenClawConfig): OpenClawConfig {
   if (!resolved) {
     return config;
   }
-  const existing = config.talk?.apiKey?.trim();
+  const existing =
+    typeof config.talk?.apiKey === "string" ? config.talk.apiKey.trim() : config.talk?.apiKey;
   if (existing) {
     return config;
   }

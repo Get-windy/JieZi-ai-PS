@@ -40,6 +40,8 @@ export function registerPluginHttpRoute(params: {
     handler: params.handler,
     pluginId: params.pluginId,
     source: params.source,
+    auth: "gateway",
+    match: "exact",
   };
   routes.push(entry);
 
