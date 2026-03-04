@@ -1919,6 +1919,246 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
   },
 
   /**
+   * agent.discover - 发现/搜索系统中所有智能助手
+   * 支持按名称/ID/角色/标签过滤，返回助手基本信息和状态
+   */
+  "agent.discover": ({ params, respond }) => {
+    const cfg = loadConfig();
+    const agents = listAgentEntries(cfg);
+    const p = params as {
+      query?: string;
+      status?: string;
+      role?: string;
+      tags?: string[];
+      includePrivate?: boolean;
+      limit?: number;
+    };
+    const query = (p.query || "").toLowerCase().trim();
+    const statusFilter = p.status || "all";
+    const roleFilter = (p.role || "").toLowerCase().trim();
+    const tagsFilter = Array.isArray(p.tags) ? p.tags.map((t) => t.toLowerCase()) : [];
+    const limit = typeof p.limit === "number" && p.limit > 0 ? Math.min(p.limit, 200) : 50;
+
+    const result = agents
+      .filter((agent) => {
+        // 按查询词过滤（匹配 id 或 name）
+        if (query) {
+          const id = agent.id.toLowerCase();
+          const name = (agent.name || "").toLowerCase();
+          if (!id.includes(query) && !name.includes(query)) {
+            return false;
+          }
+        }
+        // 按角色过滤
+        if (roleFilter) {
+          const agentRole = (
+            ((agent as Record<string, unknown>).role as string) || ""
+          ).toLowerCase();
+          if (!agentRole.includes(roleFilter)) {
+            return false;
+          }
+        }
+        // 按标签过滤
+        if (tagsFilter.length > 0) {
+          const agentTags = new Set(
+            (((agent as Record<string, unknown>).tags as string[]) || []).map((t) =>
+              t.toLowerCase(),
+            ),
+          );
+          if (!tagsFilter.every((tag) => agentTags.has(tag))) {
+            return false;
+          }
+        }
+        // status 过滤（当前只有配置状态，不是运行时状态）
+        // 保留 all 或任意值（运行时状态需要进一步扩展）
+        return statusFilter === "all" || true;
+      })
+      .slice(0, limit)
+      .map((agent) => ({
+        id: agent.id,
+        name: agent.name || agent.id,
+        status: "online",
+        role: (agent as Record<string, unknown>).role || null,
+        description: (agent as Record<string, unknown>).description || null,
+        capabilities: (agent as Record<string, unknown>).capabilities || [],
+        tags: (agent as Record<string, unknown>).tags || [],
+        online: true,
+        lastSeen: null,
+        availability: "available",
+        default: agent.default || false,
+        workspace: resolveAgentWorkspaceDir(cfg, agent.id),
+      }));
+
+    respond(true, result, undefined);
+  },
+
+  /**
+   * agent.inspect - 获取指定智能助手的详细信息
+   */
+  "agent.inspect": ({ params, respond }) => {
+    const targetAgentId = String(
+      (params as { targetAgentId?: string | number })?.targetAgentId ?? "",
+    ).trim();
+    if (!targetAgentId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "targetAgentId is required"),
+      );
+      return;
+    }
+
+    const cfg = loadConfig();
+    if (!validateAgentId(targetAgentId, cfg, respond)) {
+      return;
+    }
+
+    const includeConfig =
+      typeof (params as { includeConfig?: boolean }).includeConfig === "boolean"
+        ? (params as { includeConfig?: boolean }).includeConfig
+        : false;
+    const includeStats =
+      typeof (params as { includeStats?: boolean }).includeStats === "boolean"
+        ? (params as { includeStats?: boolean }).includeStats
+        : true;
+    const includeSessions =
+      typeof (params as { includeSessions?: boolean }).includeSessions === "boolean"
+        ? (params as { includeSessions?: boolean }).includeSessions
+        : false;
+
+    const agents = listAgentEntries(cfg);
+    const normalized = normalizeAgentId(targetAgentId);
+    const agent = agents.find((a) => normalizeAgentId(a.id) === normalized);
+
+    if (!agent) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `Agent not found: ${targetAgentId}`),
+      );
+      return;
+    }
+
+    const agentExtra = agent as Record<string, unknown>;
+    const response: Record<string, unknown> = {
+      id: agent.id,
+      name: agent.name || agent.id,
+      status: "online",
+      role: agentExtra.role || null,
+      description: agentExtra.description || null,
+      capabilities: agentExtra.capabilities || [],
+      skills: agentExtra.skills || [],
+      tags: agentExtra.tags || [],
+      createdAt: agentExtra.createdAt || null,
+      lastActiveAt: agentExtra.lastActiveAt || null,
+      default: agent.default || false,
+      workspace: resolveAgentWorkspaceDir(cfg, agent.id),
+      model: agent.model || null,
+    };
+
+    if (includeStats) {
+      response.stats = {
+        totalSessions: 0,
+        activeSessions: 0,
+        totalMessages: 0,
+      };
+    }
+
+    if (includeConfig) {
+      response.config = {
+        id: agent.id,
+        name: agent.name,
+        model: agent.model,
+        workspace: agent.workspace,
+        default: agent.default,
+      };
+    }
+
+    if (includeSessions) {
+      response.sessions = [];
+    }
+
+    respond(true, response, undefined);
+  },
+
+  /**
+   * agent.status - 获取或设置智能助手状态
+   */
+  "agent.status": ({ params, respond }) => {
+    const targetAgentId = String(
+      (params as { targetAgentId?: string | number })?.targetAgentId ?? "",
+    ).trim();
+    if (!targetAgentId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "targetAgentId is required"),
+      );
+      return;
+    }
+
+    const cfg = loadConfig();
+    if (!validateAgentId(targetAgentId, cfg, respond)) {
+      return;
+    }
+
+    // 目前状态为只读（运行时状态需要进一步扩展，此处返回基础在线状态）
+    respond(
+      true,
+      {
+        status: "online",
+        statusMessage: null,
+        online: true,
+        lastStatusChange: null,
+        uptime: null,
+      },
+      undefined,
+    );
+  },
+
+  /**
+   * agent.capabilities - 查询智能助手的能力列表
+   */
+  "agent.capabilities": ({ params, respond }) => {
+    const targetAgentId = String(
+      (params as { targetAgentId?: string | number })?.targetAgentId ?? "",
+    ).trim();
+    if (!targetAgentId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "targetAgentId is required"),
+      );
+      return;
+    }
+
+    const cfg = loadConfig();
+    if (!validateAgentId(targetAgentId, cfg, respond)) {
+      return;
+    }
+
+    const agents = listAgentEntries(cfg);
+    const normalized = normalizeAgentId(targetAgentId);
+    const agent = agents.find((a) => normalizeAgentId(a.id) === normalized);
+    const agentExtra = (agent || {}) as Record<string, unknown>;
+
+    respond(
+      true,
+      {
+        name: agent?.name || targetAgentId,
+        skills: agentExtra.skills || [],
+        tools: agentExtra.tools || [],
+        languages: agentExtra.languages || ["zh", "en"],
+        specialAbilities: agentExtra.specialAbilities || [],
+        limitations: agentExtra.limitations || [],
+        maxConcurrentTasks: agentExtra.maxConcurrentTasks || 1,
+        supportedChannels: agentExtra.supportedChannels || [],
+      },
+      undefined,
+    );
+  },
+
+  /**
    * agent.workspace.delete - 删除工作区目录
    */
   "agent.workspace.delete": async ({ params, respond }) => {
