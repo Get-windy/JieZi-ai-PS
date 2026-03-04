@@ -1,13 +1,13 @@
 /**
  * 任务系统存储层
- * 
+ *
  * 提供任务、会议数据的持久化存储功能
  * 使用JSON文件存储（未来可扩展到数据库）
  */
 
 import { join } from "node:path";
-import { readJsonFile, writeJsonAtomic, createAsyncLock } from "../infra/json-files.js";
 import { STATE_DIR } from "../config/paths.js";
+import { readJsonFile, writeJsonAtomic, createAsyncLock } from "../infra/json-files.js";
 import type {
   Task,
   TaskFilter,
@@ -39,7 +39,8 @@ const DEPENDENCIES_FILE = join(TASKS_DIR, "dependencies.json");
 const MEETING_MESSAGES_FILE = join(TASKS_DIR, "meeting-messages.json");
 
 // 异步锁
-const lock = createAsyncLock();
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _lock = createAsyncLock();
 
 // 内存缓存
 let tasksCache: Map<string, Task> | null = null;
@@ -183,21 +184,24 @@ export async function getTask(taskId: string): Promise<Task | undefined> {
 /**
  * 更新任务
  */
-export async function updateTask(taskId: string, updates: Partial<Task>): Promise<Task | undefined> {
+export async function updateTask(
+  taskId: string,
+  updates: Partial<Task>,
+): Promise<Task | undefined> {
   const tasks = await loadTasks();
   const task = tasks.get(taskId);
-  
+
   if (!task) {
     return undefined;
   }
-  
+
   const updatedTask = {
     ...task,
     ...updates,
     id: taskId, // 确保ID不被修改
     updatedAt: Date.now(),
   };
-  
+
   tasks.set(taskId, updatedTask);
   await saveToFile(TASKS_FILE, tasks);
   return updatedTask;
@@ -209,28 +213,28 @@ export async function updateTask(taskId: string, updates: Partial<Task>): Promis
 export async function deleteTask(taskId: string): Promise<boolean> {
   const tasks = await loadTasks();
   const deleted = tasks.delete(taskId);
-  
+
   if (deleted) {
     await saveToFile(TASKS_FILE, tasks);
-    
+
     // 清理关联数据
     const comments = await loadComments();
     comments.delete(taskId);
     await saveArrayToFile(COMMENTS_FILE, comments);
-    
+
     const attachments = await loadAttachments();
     attachments.delete(taskId);
     await saveArrayToFile(ATTACHMENTS_FILE, attachments);
-    
+
     const worklogs = await loadWorklogs();
     worklogs.delete(taskId);
     await saveArrayToFile(WORKLOGS_FILE, worklogs);
-    
+
     const dependencies = await loadDependencies();
     dependencies.delete(taskId);
     await saveArrayToFile(DEPENDENCIES_FILE, dependencies);
   }
-  
+
   return deleted;
 }
 
@@ -240,81 +244,78 @@ export async function deleteTask(taskId: string): Promise<boolean> {
 export async function listTasks(filter?: TaskFilter): Promise<Task[]> {
   const tasks = await loadTasks();
   let results = Array.from(tasks.values());
-  
+
   if (!filter) {
     return results;
   }
-  
+
   // 应用筛选条件
   if (filter.assigneeId) {
-    results = results.filter(task =>
-      task.assignees.some(assignee => assignee.id === filter.assigneeId)
+    results = results.filter((task) =>
+      task.assignees.some((assignee) => assignee.id === filter.assigneeId),
     );
   }
-  
+
   if (filter.assigneeType) {
-    results = results.filter(task =>
-      task.assignees.some(assignee => assignee.type === filter.assigneeType)
+    results = results.filter((task) =>
+      task.assignees.some((assignee) => assignee.type === filter.assigneeType),
     );
   }
-  
+
   if (filter.creatorId) {
-    results = results.filter(task => task.creatorId === filter.creatorId);
+    results = results.filter((task) => task.creatorId === filter.creatorId);
   }
-  
+
   if (filter.status) {
     const statuses = Array.isArray(filter.status) ? filter.status : [filter.status];
-    results = results.filter(task => statuses.includes(task.status));
+    results = results.filter((task) => statuses.includes(task.status));
   }
-  
+
   if (filter.priority) {
     const priorities = Array.isArray(filter.priority) ? filter.priority : [filter.priority];
-    results = results.filter(task => priorities.includes(task.priority));
+    results = results.filter((task) => priorities.includes(task.priority));
   }
-  
+
   if (filter.type) {
     const types = Array.isArray(filter.type) ? filter.type : [filter.type];
-    results = results.filter(task => task.type && types.includes(task.type));
+    results = results.filter((task) => task.type && types.includes(task.type));
   }
-  
+
   if (filter.organizationId) {
-    results = results.filter(task => task.organizationId === filter.organizationId);
+    results = results.filter((task) => task.organizationId === filter.organizationId);
   }
-  
+
   if (filter.teamId) {
-    results = results.filter(task => task.teamId === filter.teamId);
+    results = results.filter((task) => task.teamId === filter.teamId);
   }
-  
+
   if (filter.projectId) {
-    results = results.filter(task => task.projectId === filter.projectId);
+    results = results.filter((task) => task.projectId === filter.projectId);
   }
-  
+
   if (filter.tags && filter.tags.length > 0) {
-    results = results.filter(task =>
-      task.tags && filter.tags!.some(tag => task.tags!.includes(tag))
+    results = results.filter(
+      (task) => task.tags && filter.tags!.some((tag) => task.tags!.includes(tag)),
     );
   }
-  
+
   if (filter.dueDateBefore) {
-    results = results.filter(task =>
-      task.dueDate && task.dueDate < filter.dueDateBefore!
-    );
+    results = results.filter((task) => task.dueDate && task.dueDate < filter.dueDateBefore!);
   }
-  
+
   if (filter.dueDateAfter) {
-    results = results.filter(task =>
-      task.dueDate && task.dueDate > filter.dueDateAfter!
-    );
+    results = results.filter((task) => task.dueDate && task.dueDate > filter.dueDateAfter!);
   }
-  
+
   if (filter.keyword) {
     const keyword = filter.keyword.toLowerCase();
-    results = results.filter(task =>
-      task.title.toLowerCase().includes(keyword) ||
-      task.description.toLowerCase().includes(keyword)
+    results = results.filter(
+      (task) =>
+        task.title.toLowerCase().includes(keyword) ||
+        (task.description ?? "").toLowerCase().includes(keyword),
     );
   }
-  
+
   return results;
 }
 
@@ -323,40 +324,45 @@ export async function listTasks(filter?: TaskFilter): Promise<Task[]> {
  */
 export async function getTaskStats(filter?: TaskFilter): Promise<TaskStats> {
   const tasks = await listTasks(filter);
-  
+
   const byStatus: Record<TaskStatus, number> = {
-    "todo": 0,
+    todo: 0,
     "in-progress": 0,
-    "review": 0,
-    "blocked": 0,
-    "done": 0,
-    "cancelled": 0,
+    review: 0,
+    blocked: 0,
+    done: 0,
+    cancelled: 0,
   };
-  
+
   const byPriority: Record<TaskPriority, number> = {
-    "low": 0,
-    "medium": 0,
-    "high": 0,
-    "urgent": 0,
+    low: 0,
+    medium: 0,
+    high: 0,
+    urgent: 0,
   };
-  
+
   let overdue = 0;
   let completedThisWeek = 0;
   let completedThisMonth = 0;
   const completionTimes: number[] = [];
-  
+
   const now = Date.now();
   const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
   const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
-  
+
   for (const task of tasks) {
     byStatus[task.status]++;
     byPriority[task.priority]++;
-    
-    if (task.dueDate && task.dueDate < now && task.status !== "done" && task.status !== "cancelled") {
+
+    if (
+      task.dueDate &&
+      task.dueDate < now &&
+      task.status !== "done" &&
+      task.status !== "cancelled"
+    ) {
       overdue++;
     }
-    
+
     if (task.completedAt) {
       if (task.completedAt > weekAgo) {
         completedThisWeek++;
@@ -364,18 +370,19 @@ export async function getTaskStats(filter?: TaskFilter): Promise<TaskStats> {
       if (task.completedAt > monthAgo) {
         completedThisMonth++;
       }
-      
+
       if (task.timeTracking.startedAt) {
         const completionTime = (task.completedAt - task.timeTracking.startedAt) / (1000 * 60 * 60); // 小时
         completionTimes.push(completionTime);
       }
     }
   }
-  
-  const averageCompletionTime = completionTimes.length > 0
-    ? completionTimes.reduce((sum, time) => sum + time, 0) / completionTimes.length
-    : undefined;
-  
+
+  const averageCompletionTime =
+    completionTimes.length > 0
+      ? completionTimes.reduce((sum, time) => sum + time, 0) / completionTimes.length
+      : undefined;
+
   return {
     total: tasks.length,
     byStatus,
@@ -400,7 +407,7 @@ export async function addTaskComment(comment: TaskComment): Promise<TaskComment>
   taskComments.push(comment);
   comments.set(comment.taskId, taskComments);
   await saveArrayToFile(COMMENTS_FILE, comments);
-  
+
   // 更新任务的最后活动时间
   await updateTask(comment.taskId, {
     timeTracking: {
@@ -408,7 +415,7 @@ export async function addTaskComment(comment: TaskComment): Promise<TaskComment>
       lastActivityAt: Date.now(),
     },
   });
-  
+
   return comment;
 }
 
@@ -449,7 +456,7 @@ export async function addWorklog(worklog: AgentWorkLog): Promise<AgentWorkLog> {
   taskWorklogs.push(worklog);
   worklogs.set(worklog.taskId, taskWorklogs);
   await saveArrayToFile(WORKLOGS_FILE, worklogs);
-  
+
   // 更新任务的时间追踪
   const task = await getTask(worklog.taskId);
   if (task && worklog.duration) {
@@ -461,7 +468,7 @@ export async function addWorklog(worklog: AgentWorkLog): Promise<AgentWorkLog> {
       },
     });
   }
-  
+
   return worklog;
 }
 
@@ -496,23 +503,26 @@ export async function getTaskDependencies(taskId: string): Promise<TaskDependenc
 /**
  * 检查循环依赖
  */
-export async function checkCircularDependency(taskId: string, dependsOnTaskId: string): Promise<boolean> {
+export async function checkCircularDependency(
+  taskId: string,
+  dependsOnTaskId: string,
+): Promise<boolean> {
   const visited = new Set<string>();
   const queue = [dependsOnTaskId];
-  
+
   while (queue.length > 0) {
     const currentTaskId = queue.shift()!;
-    
+
     if (currentTaskId === taskId) {
       return true; // 发现循环依赖
     }
-    
+
     if (visited.has(currentTaskId)) {
       continue;
     }
-    
+
     visited.add(currentTaskId);
-    
+
     const dependencies = await getTaskDependencies(currentTaskId);
     for (const dep of dependencies) {
       if (dep.dependencyType === "blocks" || dep.dependencyType === "is-blocked-by") {
@@ -520,7 +530,7 @@ export async function checkCircularDependency(taskId: string, dependsOnTaskId: s
       }
     }
   }
-  
+
   return false; // 没有循环依赖
 }
 
@@ -549,21 +559,24 @@ export async function getMeeting(meetingId: string): Promise<Meeting | undefined
 /**
  * 更新会议
  */
-export async function updateMeeting(meetingId: string, updates: Partial<Meeting>): Promise<Meeting | undefined> {
+export async function updateMeeting(
+  meetingId: string,
+  updates: Partial<Meeting>,
+): Promise<Meeting | undefined> {
   const meetings = await loadMeetings();
   const meeting = meetings.get(meetingId);
-  
+
   if (!meeting) {
     return undefined;
   }
-  
+
   const updatedMeeting = {
     ...meeting,
     ...updates,
     id: meetingId,
     updatedAt: Date.now(),
   };
-  
+
   meetings.set(meetingId, updatedMeeting);
   await saveToFile(MEETINGS_FILE, meetings);
   return updatedMeeting;
@@ -575,16 +588,16 @@ export async function updateMeeting(meetingId: string, updates: Partial<Meeting>
 export async function deleteMeeting(meetingId: string): Promise<boolean> {
   const meetings = await loadMeetings();
   const deleted = meetings.delete(meetingId);
-  
+
   if (deleted) {
     await saveToFile(MEETINGS_FILE, meetings);
-    
+
     // 清理会议消息
     const messages = await loadMeetingMessages();
     messages.delete(meetingId);
     await saveArrayToFile(MEETING_MESSAGES_FILE, messages);
   }
-  
+
   return deleted;
 }
 
@@ -594,60 +607,61 @@ export async function deleteMeeting(meetingId: string): Promise<boolean> {
 export async function listMeetings(filter?: MeetingFilter): Promise<Meeting[]> {
   const meetings = await loadMeetings();
   let results = Array.from(meetings.values());
-  
+
   if (!filter) {
     return results;
   }
-  
+
   // 应用筛选条件
   if (filter.organizerId) {
-    results = results.filter(meeting => meeting.organizerId === filter.organizerId);
+    results = results.filter((meeting) => meeting.organizerId === filter.organizerId);
   }
-  
+
   if (filter.participantId) {
-    results = results.filter(meeting =>
-      meeting.participants.some(p => p.id === filter.participantId)
+    results = results.filter((meeting) =>
+      meeting.participants.some((p) => p.id === filter.participantId),
     );
   }
-  
+
   if (filter.status) {
     const statuses = Array.isArray(filter.status) ? filter.status : [filter.status];
-    results = results.filter(meeting => statuses.includes(meeting.status));
+    results = results.filter((meeting) => statuses.includes(meeting.status));
   }
-  
+
   if (filter.type) {
     const types = Array.isArray(filter.type) ? filter.type : [filter.type];
-    results = results.filter(meeting => types.includes(meeting.type));
+    results = results.filter((meeting) => types.includes(meeting.type));
   }
-  
+
   if (filter.organizationId) {
-    results = results.filter(meeting => meeting.organizationId === filter.organizationId);
+    results = results.filter((meeting) => meeting.organizationId === filter.organizationId);
   }
-  
+
   if (filter.teamId) {
-    results = results.filter(meeting => meeting.teamId === filter.teamId);
+    results = results.filter((meeting) => meeting.teamId === filter.teamId);
   }
-  
+
   if (filter.projectId) {
-    results = results.filter(meeting => meeting.projectId === filter.projectId);
+    results = results.filter((meeting) => meeting.projectId === filter.projectId);
   }
-  
+
   if (filter.scheduledAfter) {
-    results = results.filter(meeting => meeting.scheduledAt > filter.scheduledAfter!);
+    results = results.filter((meeting) => meeting.scheduledAt > filter.scheduledAfter!);
   }
-  
+
   if (filter.scheduledBefore) {
-    results = results.filter(meeting => meeting.scheduledAt < filter.scheduledBefore!);
+    results = results.filter((meeting) => meeting.scheduledAt < filter.scheduledBefore!);
   }
-  
+
   if (filter.keyword) {
     const keyword = filter.keyword.toLowerCase();
-    results = results.filter(meeting =>
-      meeting.title.toLowerCase().includes(keyword) ||
-      (meeting.description && meeting.description.toLowerCase().includes(keyword))
+    results = results.filter(
+      (meeting) =>
+        meeting.title.toLowerCase().includes(keyword) ||
+        (meeting.description && meeting.description.toLowerCase().includes(keyword)),
     );
   }
-  
+
   return results;
 }
 
@@ -656,64 +670,64 @@ export async function listMeetings(filter?: MeetingFilter): Promise<Meeting[]> {
  */
 export async function getMeetingStats(filter?: MeetingFilter): Promise<MeetingStats> {
   const meetings = await listMeetings(filter);
-  
+
   const byStatus: Record<MeetingStatus, number> = {
-    "scheduled": 0,
+    scheduled: 0,
     "in-progress": 0,
-    "completed": 0,
-    "cancelled": 0,
+    completed: 0,
+    cancelled: 0,
   };
-  
+
   const byType: Record<MeetingType, number> = {
-    "standup": 0,
-    "review": 0,
-    "planning": 0,
-    "brainstorm": 0,
-    "decision": 0,
-    "other": 0,
+    standup: 0,
+    review: 0,
+    planning: 0,
+    brainstorm: 0,
+    decision: 0,
+    other: 0,
   };
-  
+
   let upcomingThisWeek = 0;
   let completedThisWeek = 0;
   const durations: number[] = [];
   const participantCounts: number[] = [];
   let totalDecisions = 0;
   let totalActionItems = 0;
-  
+
   const now = Date.now();
   const weekFromNow = now + 7 * 24 * 60 * 60 * 1000;
   const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
-  
+
   for (const meeting of meetings) {
     byStatus[meeting.status]++;
     byType[meeting.type]++;
-    
+
     if (meeting.status === "scheduled" && meeting.scheduledAt < weekFromNow) {
       upcomingThisWeek++;
     }
-    
+
     if (meeting.status === "completed" && meeting.endedAt && meeting.endedAt > weekAgo) {
       completedThisWeek++;
     }
-    
+
     if (meeting.endedAt && meeting.startedAt) {
       const actualDuration = (meeting.endedAt - meeting.startedAt) / (1000 * 60); // 分钟
       durations.push(actualDuration);
     }
-    
+
     participantCounts.push(meeting.participants.length);
     totalDecisions += meeting.decisions.length;
     totalActionItems += meeting.actionItems.length;
   }
-  
-  const averageDuration = durations.length > 0
-    ? durations.reduce((sum, d) => sum + d, 0) / durations.length
-    : undefined;
-  
-  const averageParticipants = participantCounts.length > 0
-    ? participantCounts.reduce((sum, c) => sum + c, 0) / participantCounts.length
-    : undefined;
-  
+
+  const averageDuration =
+    durations.length > 0 ? durations.reduce((sum, d) => sum + d, 0) / durations.length : undefined;
+
+  const averageParticipants =
+    participantCounts.length > 0
+      ? participantCounts.reduce((sum, c) => sum + c, 0) / participantCounts.length
+      : undefined;
+
   return {
     total: meetings.length,
     byStatus,
@@ -759,7 +773,7 @@ export async function addMeetingDecision(decision: MeetingDecision): Promise<Mee
   if (!meeting) {
     throw new Error(`Meeting not found: ${decision.meetingId}`);
   }
-  
+
   meeting.decisions.push(decision);
   await updateMeeting(decision.meetingId, { decisions: meeting.decisions });
   return decision;
@@ -768,12 +782,14 @@ export async function addMeetingDecision(decision: MeetingDecision): Promise<Mee
 /**
  * 添加会议行动项
  */
-export async function addMeetingActionItem(actionItem: MeetingActionItem): Promise<MeetingActionItem> {
+export async function addMeetingActionItem(
+  actionItem: MeetingActionItem,
+): Promise<MeetingActionItem> {
   const meeting = await getMeeting(actionItem.meetingId);
   if (!meeting) {
     throw new Error(`Meeting not found: ${actionItem.meetingId}`);
   }
-  
+
   meeting.actionItems.push(actionItem);
   await updateMeeting(actionItem.meetingId, { actionItems: meeting.actionItems });
   return actionItem;
@@ -785,27 +801,27 @@ export async function addMeetingActionItem(actionItem: MeetingActionItem): Promi
 export async function updateAgendaItemStatus(
   meetingId: string,
   agendaItemId: string,
-  status: "pending" | "in-progress" | "completed" | "skipped"
+  status: "pending" | "in-progress" | "completed" | "skipped",
 ): Promise<Meeting | undefined> {
   const meeting = await getMeeting(meetingId);
   if (!meeting) {
     return undefined;
   }
-  
-  const agendaIndex = meeting.agenda.findIndex(item => item.id === agendaItemId);
+
+  const agendaIndex = meeting.agenda.findIndex((item) => item.id === agendaItemId);
   if (agendaIndex === -1) {
     return undefined;
   }
-  
+
   meeting.agenda[agendaIndex].status = status;
-  
+
   if (status === "in-progress") {
     meeting.agenda[agendaIndex].startedAt = Date.now();
     meeting.currentAgendaIndex = agendaIndex;
   } else if (status === "completed" || status === "skipped") {
     meeting.agenda[agendaIndex].completedAt = Date.now();
   }
-  
+
   return await updateMeeting(meetingId, {
     agenda: meeting.agenda,
     currentAgendaIndex: meeting.currentAgendaIndex,

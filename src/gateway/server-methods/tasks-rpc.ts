@@ -177,10 +177,30 @@ export const tasksRpc: GatewayRequestHandlers = {
         return;
       }
 
-      // 验证状态
+      // 验证状态（兼容常见别名）
+      const STATUS_ALIASES: Record<string, TaskStatus> = {
+        in_progress: "in-progress",
+        inprogress: "in-progress",
+        "in progress": "in-progress",
+        completed: "done",
+        complete: "done",
+        finish: "done",
+        finished: "done",
+        closed: "done",
+        open: "todo",
+        new: "todo",
+        pending: "todo",
+        cancel: "cancelled",
+        wip: "in-progress",
+      };
+      const normalizedStatus = status
+        ? (STATUS_ALIASES[status.toLowerCase()] ?? status)
+        : undefined;
       if (
-        status &&
-        !["todo", "in-progress", "review", "blocked", "done", "cancelled"].includes(status)
+        normalizedStatus &&
+        !["todo", "in-progress", "review", "blocked", "done", "cancelled"].includes(
+          normalizedStatus,
+        )
       ) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "无效的任务状态"));
         return;
@@ -256,7 +276,7 @@ export const tasksRpc: GatewayRequestHandlers = {
       const updatedTask = await storage.updateTask(taskId, {
         title,
         description,
-        status,
+        status: normalizedStatus,
         priority,
         dueDate,
         tags: updatedTags,
