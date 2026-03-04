@@ -169,7 +169,8 @@ export {
   TtsModeSchema,
   TtsProviderSchema,
 } from "../config/zod-schema.core.js";
-export { ToolPolicySchema } from "../config/zod-schema.agent-runtime.js";
+// ToolPolicySchema 从上游导出（避免循环依赖）
+export { ToolPolicySchema } from "../../upstream/src/config/zod-schema.agent-runtime.js";
 export type { RuntimeEnv } from "../runtime.js";
 export type { WizardPrompter } from "../wizard/prompts.js";
 export { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";

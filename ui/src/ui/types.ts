@@ -608,6 +608,8 @@ export type ModelsStatusSnapshot = {
     id: string;
     name: string;
     description?: string;
+    icon?: string;
+    website?: string;
     defaultBaseUrl: string;
     apiKeyPlaceholder?: string;
     authType?: "bearer" | "api-key" | "custom";
@@ -845,4 +847,33 @@ export type ModelAccountSnapshot = {
   temperature?: number | null;
   maxTokens?: number | null;
   topP?: number | null;
+};
+
+export type ToolCatalogProfile = {
+  id: "minimal" | "coding" | "messaging" | "full";
+  label: string;
+};
+
+export type ToolCatalogEntry = {
+  id: string;
+  label: string;
+  description: string;
+  source: "core" | "plugin";
+  pluginId?: string;
+  optional?: boolean;
+  defaultProfiles: Array<"minimal" | "coding" | "messaging" | "full">;
+};
+
+export type ToolCatalogGroup = {
+  id: string;
+  label: string;
+  source: "core" | "plugin";
+  pluginId?: string;
+  tools: ToolCatalogEntry[];
+};
+
+export type ToolsCatalogResult = {
+  agentId: string;
+  profiles: ToolCatalogProfile[];
+  groups: ToolCatalogGroup[];
 };

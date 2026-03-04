@@ -1,4 +1,6 @@
 import { z } from "zod";
+// ToolPolicySchema 从上游导入（避免循环依赖）
+import { ToolPolicySchema } from "../../upstream/src/config/zod-schema.agent-runtime.js";
 import { isSafeScpRemoteHost } from "../infra/scp-host.js";
 import { isValidInboundPathRootPattern } from "../media/inbound-path-policy.js";
 import {
@@ -12,7 +14,6 @@ import {
   normalizeTelegramCommandName,
   resolveTelegramCustomCommands,
 } from "./telegram-custom-commands.js";
-import { ToolPolicySchema } from "./zod-schema.agent-runtime.js";
 import { ChannelHeartbeatVisibilitySchema } from "./zod-schema.channels.js";
 import {
   BlockStreamingChunkSchema,

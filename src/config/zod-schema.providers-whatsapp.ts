@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { ToolPolicySchema } from "./zod-schema.agent-runtime.js";
+// ToolPolicySchema 从上游导入（避免循环依赖）
+import { ToolPolicySchema } from "../../upstream/src/config/zod-schema.agent-runtime.js";
 import { ChannelHeartbeatVisibilitySchema } from "./zod-schema.channels.js";
 import {
   BlockStreamingCoalesceSchema,

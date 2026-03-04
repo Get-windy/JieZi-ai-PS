@@ -48,6 +48,7 @@ export type AppViewState = {
   themeResolved: "light" | "dark";
   hello: GatewayHelloOk | null;
   lastError: string | null;
+  lastErrorCode: string | null;
   eventLog: EventLogEntry[];
   assistantName: string;
   assistantAvatar: string | null;
@@ -145,6 +146,17 @@ export type AppViewState = {
   modelsError: string | null;
   modelsLastSuccess: number | null;
   testingAuthId: string | null;
+  oauthReauth: {
+    authId: string;
+    provider: string;
+    deviceCode: string;
+    userCode: string;
+    verificationUrl: string;
+    expiresIn: number;
+    interval: number;
+    isPolling: boolean;
+    error?: string;
+  } | null;
   managingAuthProvider: string | null;
   editingAuth: {
     authId?: string;
@@ -208,6 +220,11 @@ export type AppViewState = {
   agentsList: AgentsListResult | null;
   agentsError: string | null;
   agentsSelectedId: string | null;
+  editingAgent: { id: string; name?: string; workspace?: string } | null;
+  creatingAgent: boolean;
+  deletingAgent: boolean;
+  isNewAgent: boolean;
+  defaultWorkspaceRoot: string | null;
   agentsPanel:
     | "overview"
     | "files"
@@ -216,7 +233,8 @@ export type AppViewState = {
     | "channels"
     | "cron"
     | "modelAccounts"
-    | "channelPolicies";
+    | "channelPolicies"
+    | "permissionsConfig";
   // Collaboration 协作管理状态
   collaborationActivePanel: "groups" | "friends" | "monitor" | "scenarios";
   agentFilesLoading: boolean;
@@ -315,6 +333,7 @@ export type AppViewState = {
   defaultModelAccountId: string;
   modelAccountOperationError: string | null;
   // 模型账号配置管理
+  // oxlint-disable-next-line typescript/no-explicit-any
   accountConfigs: Record<string, any>; // accountId -> ModelAccountConfig
   accountConfigsLoading: boolean;
   accountConfigsError: string | null;
@@ -322,6 +341,7 @@ export type AppViewState = {
   configuringModelAccount: {
     agentId: string;
     accountId: string;
+    // oxlint-disable-next-line typescript/no-explicit-any
     currentConfig: any;
   } | null;
   channelPoliciesConfig: Record<string, unknown> | null;
@@ -329,6 +349,7 @@ export type AppViewState = {
   channelPoliciesError: string | null;
   channelPoliciesSaving: boolean;
   channelPoliciesSaveSuccess: boolean;
+  // oxlint-disable-next-line typescript/no-explicit-any
   editingPolicyBinding: { agentId: string; index: number; binding: any } | null;
   addingPolicyBinding: string | null;
   // 策略配置对话框状态
@@ -339,18 +360,22 @@ export type AppViewState = {
     currentPolicy: string;
   } | null;
   // 通道账号绑定管理
+  // oxlint-disable-next-line typescript/no-explicit-any
   boundChannelAccounts: any[];
   boundChannelAccountsLoading: boolean;
   boundChannelAccountsError: string | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
   availableChannelAccounts: any[];
   availableChannelAccountsLoading: boolean;
   availableChannelAccountsError: string | null;
   availableChannelAccountsExpanded: boolean;
   channelAccountOperationError: string | null;
   // 控制器期望的字段名（与 AgentChannelAccountsState 匹配）
+  // oxlint-disable-next-line typescript/no-explicit-any
   boundAccounts: any[];
   boundAccountsLoading: boolean;
   boundAccountsError: string | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
   availableAccounts: any[];
   availableAccountsLoading: boolean;
   availableAccountsError: string | null;
@@ -378,6 +403,8 @@ export type AppViewState = {
   usageDailyChartMode: "total" | "by-type";
   usageTimeSeriesMode: "cumulative" | "per-turn";
   usageTimeSeriesBreakdownMode: "total" | "by-type";
+  usageTimeSeriesCursorStart: number | null;
+  usageTimeSeriesCursorEnd: number | null;
   usageTimeSeries: SessionUsageTimeSeries | null;
   usageTimeSeriesLoading: boolean;
   usageSessionLogs: SessionLogEntry[] | null;
@@ -394,6 +421,8 @@ export type AppViewState = {
   usageHeaderPinned: boolean;
   usageSessionsTab: "all" | "recent";
   usageVisibleColumns: string[];
+  usageFilterProvider: string | null;
+  usageShowProviderOverview: boolean;
   usageLogFilterRoles: import("./views/usage.js").SessionLogRole[];
   usageLogFilterTools: string[];
   usageLogFilterHasTools: boolean;
@@ -406,6 +435,9 @@ export type AppViewState = {
   cronRunsJobId: string | null;
   cronRuns: CronRunLogEntry[];
   cronBusy: boolean;
+  toolsCatalogLoading: boolean;
+  toolsCatalogError: string | null;
+  toolsCatalogResult: import("./types.ts").ToolsCatalogResult | null;
   skillsLoading: boolean;
   skillsReport: SkillStatusReport | null;
   skillsError: string | null;
@@ -451,7 +483,8 @@ export type AppViewState = {
   queueConfigLoading: boolean;
   queueConfigSaving: boolean;
   // Permissions Management 状态
-  permissionsManagementActiveTab: "config" | "approvals" | "history";
+  permissionsManagementActiveTab: "overview" | "rules" | "audit";
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents, typescript/no-explicit-any
   permissionsConfig: any | null;
   permissionsConfigLoading: boolean;
   permissionsConfigSaving: boolean;
@@ -461,9 +494,12 @@ export type AppViewState = {
   permissionsError: string | null; // 权限错误信息
   permissionsSaving: boolean; // 权限保存中
   permissionsSaveSuccess: boolean; // 权限保存成功标志
+  // oxlint-disable-next-line typescript/no-explicit-any
   approvalRequests: any[];
   approvalRequestsLoading: boolean;
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents, typescript/no-explicit-any
   approvalStats: any | null; // 审批统计信息
+  // oxlint-disable-next-line typescript/no-explicit-any
   permissionChangeHistory: any[];
   permissionsHistoryLoading: boolean;
   permissionHistoryLoading: boolean; // 对应 agent-permissions 中的 permissionHistoryLoading
@@ -477,7 +513,8 @@ export type AppViewState = {
   // Organization Chart 状态
   organizationChartViewMode: "tree" | "list";
   organizationChartSelectedNode: string | null;
-  organizationData: any | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
+  organizationData: any;
   organizationDataLoading: boolean;
   organizationDataError: string | null;
   // 组织与权限管理统一状态
@@ -551,18 +588,23 @@ export type AppViewState = {
   approvalsFilterRequester: string;
   approvalsFilterSearch: string;
   selectedApprovals: Set<string>;
-  selectedApprovalDetail: any | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
+  selectedApprovalDetail: any;
   // 系统管理状态（增强）
   systemRolesLoading: boolean;
   systemRolesSaving: boolean;
   systemRolesError: string | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
   systemRoles: any[];
-  editingSystemRole: any | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
+  editingSystemRole: any;
   securityPoliciesLoading: boolean;
   securityPoliciesSaving: boolean;
-  securityPolicies: any | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
+  securityPolicies: any;
   auditLogsLoading: boolean;
   auditLogsError: string | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
   auditLogs: any[];
   auditLogsFilter: {
     startDate: string;
@@ -572,32 +614,41 @@ export type AppViewState = {
   };
   // Phase 7: 超级管理员与审批系统状态
   superAdminActiveTab: "management" | "approvals" | "notifications";
+  // oxlint-disable-next-line typescript/no-explicit-any
   superAdminsList: any[];
   superAdminsLoading?: boolean;
   superAdminsError?: string | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
   superAdmins?: any[];
-  adminSession?: any | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
+  adminSession?: any;
   adminOperationsLoading?: boolean;
   adminOperationsError?: string | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
   adminOperations?: any[];
   // approvalRequests 和 approvalRequestsLoading 已在上面定义（第334-335行）
   approvalRequestsError?: string | null;
   pendingApprovalsLoading?: boolean;
   pendingApprovalsError?: string | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
   pendingApprovals?: any[];
   approvalStatsLoading?: boolean;
   approvalStatsError?: string | null;
   // approvalStats 已在上面定义（第341行）
   approvalPoliciesLoading?: boolean;
   approvalPoliciesError?: string | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
   approvalPolicies?: any[];
+  // oxlint-disable-next-line typescript/no-explicit-any
   superAdminNotifications: any[];
   notificationsLoading?: boolean;
   notificationsError?: string | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
   notifications?: any[];
   notificationStatsLoading?: boolean;
   notificationStatsError?: string | null;
-  notificationStats?: any | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
+  notificationStats?: any;
   // ============ 聊天导航树状态 ============
   chatNavExpandedNodes: Set<string>;
   chatNavCurrentContext: ChatConversationContext | null;

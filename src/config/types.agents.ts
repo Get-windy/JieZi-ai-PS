@@ -85,9 +85,9 @@ export type AgentConfig = {
   modelAccountId?: string;
   /** 绑定的通道账号ID列表（格式：channel/accountId） */
   channelAccountIds?: string[];
-  /** 【Phase 1】智能助手模型账号智能路由配置 */
+  /** 智能助手模型账号智能路由配置 */
   modelAccounts?: AgentModelAccountsConfig;
-  /** 【Phase 2】通道账号策略配置 */
+  /** 通道账号策略配置 */
   channelPolicies?: AgentChannelPolicies;
   /** Optional allowlist of skills for this agent (omit = all skills; empty = none). */
   skills?: string[];

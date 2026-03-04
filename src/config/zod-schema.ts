@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { ToolsSchema } from "./zod-schema.agent-runtime.js";
+// ToolsSchema 从上游导入（避免循环依赖）
+import { ToolsSchema } from "../../upstream/src/config/zod-schema.agent-runtime.js";
+// AgentsSchema 使用我们的扩展版本（包含企业级权限系统）
 import { AgentsSchema, AudioSchema, BindingsSchema, BroadcastSchema } from "./zod-schema.agents.js";
 import { ApprovalsSchema } from "./zod-schema.approvals.js";
 import { HexColorSchema, ModelsConfigSchema } from "./zod-schema.core.js";

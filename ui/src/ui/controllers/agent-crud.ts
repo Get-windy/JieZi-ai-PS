@@ -27,7 +27,7 @@ export async function createAgent(
       workspace: agent.workspace || "",
     });
 
-    if (!result || !(result as any).success) {
+    if (!result || !(result as { success?: boolean }).success) {
       throw new Error("Failed to create agent");
     }
 
@@ -53,22 +53,18 @@ export async function updateAgent(
     throw new Error("Not connected to gateway");
   }
 
-  try {
-    const result = await state.client.request("agent.update", {
-      id: agent.id,
-      name: agent.name,
-      workspace: agent.workspace,
-    });
+  const result = await state.client.request("agent.update", {
+    id: agent.id,
+    name: agent.name,
+    workspace: agent.workspace,
+  });
 
-    if (!result || !(result as any).success) {
-      throw new Error("Failed to update agent");
-    }
-
-    // 刷新列表
-    await loadAgents(state);
-  } catch (err) {
-    throw err;
+  if (!result || !(result as { success?: boolean }).success) {
+    throw new Error("Failed to update agent");
   }
+
+  // 刷新列表
+  await loadAgents(state);
 }
 
 /**
@@ -78,7 +74,7 @@ export async function deleteAgent(
   state: AppViewState,
   agentId: string,
   deleteWorkspace?: boolean,
-): Promise<void> {
+): Promise<boolean | undefined> {
   if (!state.client || !state.connected) {
     throw new Error("Not connected to gateway");
   }
@@ -91,7 +87,7 @@ export async function deleteAgent(
       deleteWorkspace: deleteWorkspace || false,
     });
 
-    if (!result || !(result as any).success) {
+    if (!result || !(result as { success?: boolean }).success) {
       throw new Error("Failed to delete agent");
     }
 
@@ -103,7 +99,7 @@ export async function deleteAgent(
     // 刷新列表
     await loadAgents(state);
 
-    return (result as any).workspaceDeleted;
+    return (result as { workspaceDeleted?: boolean }).workspaceDeleted;
   } finally {
     state.deletingAgent = false;
   }
@@ -126,17 +122,22 @@ export async function migrateAgentWorkspace(
     newWorkspace,
   });
 
-  if (!result || !(result as any).success) {
+  if (!result || !(result as { success?: boolean }).success) {
     throw new Error("Failed to migrate workspace");
   }
 
   // 刷新列表
   await loadAgents(state);
 
+  const migrateResult = result as {
+    migrated?: boolean;
+    oldWorkspace?: string;
+    newWorkspace?: string;
+  };
   return {
-    migrated: (result as any).migrated,
-    oldWorkspace: (result as any).oldWorkspace,
-    newWorkspace: (result as any).newWorkspace,
+    migrated: migrateResult.migrated ?? false,
+    oldWorkspace: migrateResult.oldWorkspace ?? "",
+    newWorkspace: migrateResult.newWorkspace ?? "",
   };
 }
 
@@ -154,7 +155,7 @@ export async function getDefaultWorkspace(state: AppViewState): Promise<string> 
     throw new Error("Failed to get default workspace");
   }
 
-  return (result as any).defaultWorkspace;
+  return (result as { defaultWorkspace?: string }).defaultWorkspace ?? "";
 }
 
 /**
@@ -169,7 +170,7 @@ export async function setDefaultWorkspace(state: AppViewState, workspace: string
     workspace,
   });
 
-  if (!result || !(result as any).success) {
+  if (!result || !(result as { success?: boolean }).success) {
     throw new Error("Failed to set default workspace");
   }
 }
@@ -182,18 +183,14 @@ export async function setDefaultAgent(state: AppViewState, agentId: string): Pro
     throw new Error("Not connected to gateway");
   }
 
-  try {
-    const result = await state.client.request("agent.setDefault", {
-      id: agentId,
-    });
+  const result2 = await state.client.request("agent.setDefault", {
+    id: agentId,
+  });
 
-    if (!result || !(result as any).success) {
-      throw new Error("Failed to set default agent");
-    }
-
-    // 刷新列表
-    await loadAgents(state);
-  } catch (err) {
-    throw err;
+  if (!result2 || !(result2 as { success?: boolean }).success) {
+    throw new Error("Failed to set default agent");
   }
+
+  // 刷新列表
+  await loadAgents(state);
 }

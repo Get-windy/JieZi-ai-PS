@@ -1,37 +1,5 @@
 import { LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import type { EventLogEntry } from "./app-events.ts";
-import type { AppViewState } from "./app-view-state.ts";
-import type { DevicePairingList } from "./controllers/devices.ts";
-import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
-import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
-import type { SkillMessage } from "./controllers/skills.ts";
-import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
-import type { Tab } from "./navigation.ts";
-import type { ResolvedTheme, ThemeMode } from "./theme.ts";
-import type {
-  AgentsListResult,
-  AgentsFilesListResult,
-  AgentIdentityResult,
-  ConfigSnapshot,
-  ConfigUiHints,
-  CronJob,
-  CronRunLogEntry,
-  CronStatus,
-  HealthSnapshot,
-  LogEntry,
-  LogLevel,
-  PresenceEntry,
-  ChannelsStatusSnapshot,
-  ChatConversationContext,
-  ModelsStatusSnapshot,
-  SessionsListResult,
-  SkillStatusReport,
-  StatusSummary,
-  NostrProfile,
-} from "./types.ts";
-import type { ModelAccountsConfig, ChannelPoliciesConfig } from "./views/agents.ts";
-import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
 import {
   handleChannelConfigReload as handleChannelConfigReloadInternal,
   handleChannelConfigSave as handleChannelConfigSaveInternal,
@@ -51,6 +19,7 @@ import {
   removeQueuedMessage as removeQueuedMessageInternal,
 } from "./app-chat.ts";
 import { DEFAULT_CRON_FORM, DEFAULT_LOG_LEVEL_FILTERS } from "./app-defaults.ts";
+import type { EventLogEntry } from "./app-events.ts";
 import { connectGateway as connectGatewayInternal } from "./app-gateway.ts";
 import {
   handleConnected,
@@ -79,10 +48,41 @@ import {
   type ToolStreamEntry,
   type CompactionStatus,
 } from "./app-tool-stream.ts";
+import type { AppViewState } from "./app-view-state.ts";
 import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity.ts";
+import type { DevicePairingList } from "./controllers/devices.ts";
+import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
+import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
+import type { SkillMessage } from "./controllers/skills.ts";
+import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
+import type { Tab } from "./navigation.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
+import type { ResolvedTheme, ThemeMode } from "./theme.ts";
+import type {
+  AgentsListResult,
+  AgentsFilesListResult,
+  AgentIdentityResult,
+  ConfigSnapshot,
+  ConfigUiHints,
+  CronJob,
+  CronRunLogEntry,
+  CronStatus,
+  HealthSnapshot,
+  LogEntry,
+  LogLevel,
+  PresenceEntry,
+  ChannelsStatusSnapshot,
+  ChatConversationContext,
+  ModelsStatusSnapshot,
+  SessionsListResult,
+  SkillStatusReport,
+  StatusSummary,
+  NostrProfile,
+} from "./types.ts";
 import { type ChatAttachment, type ChatQueueItem, type CronFormState } from "./ui-types.ts";
+import type { ModelAccountsConfig, ChannelPoliciesConfig } from "./views/agents.ts";
+import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
 
 declare global {
   interface Window {
@@ -404,6 +404,8 @@ export class OpenClawApp extends LitElement {
   @state() editingAgent: { id: string; name?: string; workspace?: string } | null = null;
   @state() creatingAgent = false;
   @state() deletingAgent = false;
+  @state() isNewAgent = false;
+  @state() defaultWorkspaceRoot: string | null = null;
   // Phase 5: Agents Management 状态
   @state() agentsManagementActivePanel: "detail" | "modelAccounts" | "channelPolicies" = "detail";
   @state() modelAccountsConfig: ModelAccountsConfig | null = null;
@@ -437,6 +439,7 @@ export class OpenClawApp extends LitElement {
   @state() defaultModelAccountId = "";
   @state() modelAccountOperationError: string | null = null;
   // 模型账号配置管理
+  // oxlint-disable-next-line typescript/no-explicit-any
   @state() accountConfigs: Record<string, any> = {};
   @state() accountConfigsLoading = false;
   @state() accountConfigsError: string | null = null;
@@ -444,6 +447,7 @@ export class OpenClawApp extends LitElement {
   @state() configuringModelAccount: {
     agentId: string;
     accountId: string;
+    // oxlint-disable-next-line typescript/no-explicit-any
     currentConfig: any;
   } | null = null;
   @state() channelPoliciesConfig: ChannelPoliciesConfig | null = null;
@@ -451,6 +455,7 @@ export class OpenClawApp extends LitElement {
   @state() channelPoliciesError: string | null = null;
   @state() channelPoliciesSaving = false;
   @state() channelPoliciesSaveSuccess = false;
+  // oxlint-disable-next-line typescript/no-explicit-any
   @state() editingPolicyBinding: { agentId: string; index: number; binding: any } | null = null; // 正在配置的策略绑定
   @state() addingPolicyBinding: string | null = null; // 正在添加策略绑定的 agentId
   // 策略配置对话框状态
@@ -461,18 +466,22 @@ export class OpenClawApp extends LitElement {
     currentPolicy: string;
   } | null = null;
   // 通道账号绑定管理
+  // oxlint-disable-next-line typescript/no-explicit-any
   @state() boundChannelAccounts: any[] = [];
   @state() boundChannelAccountsLoading = false;
   @state() boundChannelAccountsError: string | null = null;
+  // oxlint-disable-next-line typescript/no-explicit-any
   @state() availableChannelAccounts: any[] = [];
   @state() availableChannelAccountsLoading = false;
   @state() availableChannelAccountsError: string | null = null;
   @state() availableChannelAccountsExpanded = false;
   @state() channelAccountOperationError: string | null = null;
   // 控制器期望的字段名（与 AgentChannelAccountsState 匹配）
+  // oxlint-disable-next-line typescript/no-explicit-any
   @state() boundAccounts: any[] = [];
   @state() boundAccountsLoading = false;
   @state() boundAccountsError: string | null = null;
+  // oxlint-disable-next-line typescript/no-explicit-any
   @state() availableAccounts: any[] = [];
   @state() availableAccountsLoading = false;
   @state() availableAccountsError: string | null = null;
@@ -483,12 +492,14 @@ export class OpenClawApp extends LitElement {
   // Phase 5: Organization Chart 状态
   @state() organizationChartViewMode: "tree" | "list" = "list";
   @state() organizationChartSelectedNode: string | null = null;
-  @state() organizationData: any | null = null;
+  // oxlint-disable-next-line typescript/no-explicit-any
+  @state() organizationData: any = null;
   @state() organizationDataLoading = false;
   @state() organizationDataError: string | null = null;
   // Phase 5: Permissions Management 状态
-  @state() permissionsManagementActiveTab: "config" | "approvals" | "history" = "config";
-  @state() permissionsConfig: any | null = null;
+  @state() permissionsManagementActiveTab: "overview" | "rules" | "audit" = "overview";
+  // oxlint-disable-next-line typescript/no-explicit-any
+  @state() permissionsConfig: any = null;
   @state() permissionsConfigLoading = false;
   @state() permissionsConfigSaving = false;
   @state() permissionsConfigError: string | null = null;
@@ -497,9 +508,12 @@ export class OpenClawApp extends LitElement {
   @state() permissionsError: string | null = null; // 权限错误信息
   @state() permissionsSaving = false; // 权限保存中
   @state() permissionsSaveSuccess = false; // 权限保存成功标志
+  // oxlint-disable-next-line typescript/no-explicit-any
   @state() approvalRequests: any[] = [];
   @state() approvalRequestsLoading = false;
-  @state() approvalStats: any | null = null; // 审批统计信息
+  // oxlint-disable-next-line typescript/no-explicit-any
+  @state() approvalStats: any = null; // 审批统计信息
+  // oxlint-disable-next-line typescript/no-explicit-any
   @state() permissionChangeHistory: any[] = [];
   @state() permissionsHistoryLoading = false;
   @state() permissionHistoryLoading = false; // 对应 agent-permissions 中的 permissionHistoryLoading
@@ -512,7 +526,9 @@ export class OpenClawApp extends LitElement {
   @state() approvalsStatsLoading = false;
   // Phase 7: Super Admin State
   @state() superAdminActiveTab: "management" | "approvals" | "notifications" = "management";
+  // oxlint-disable-next-line typescript/no-explicit-any
   @state() superAdminsList: any[] = [];
+  // oxlint-disable-next-line typescript/no-explicit-any
   @state() superAdminNotifications: any[] = [];
 
   // Message Queue 状态
@@ -893,7 +909,7 @@ export class OpenClawApp extends LitElement {
   }
 
   async handleStorageBrowse() {
-    const { openStorageBrowser, loadStorageDirectories } = await import("./controllers/storage.js");
+    const { openStorageBrowser } = await import("./controllers/storage.js");
     await openStorageBrowser(this, this.client);
   }
 

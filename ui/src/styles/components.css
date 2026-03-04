@@ -826,6 +826,11 @@
   z-index: 1;
 }
 
+.btn--sm:hover {
+  transform: none;
+  box-shadow: none;
+}
+
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -2245,7 +2250,14 @@
 .agent-tabs {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;      /* 禁止换行，避免内容高度变化时滚动条宽度导致的宽度波动触发换行 */
+  overflow-x: auto;       /* 超宽时横向滚动而非换行 */
+  scrollbar-width: none;  /* 隐藏横向滚动条（Firefox） */
+  min-height: 30px;       /* 固定最小高度，防止布局抖动 */
+}
+
+.agent-tabs::-webkit-scrollbar {
+  display: none; /* 隐藏横向滚动条（Chrome/Safari） */
 }
 
 .agent-tab {
@@ -2254,17 +2266,64 @@
   padding: 6px 14px;
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
   background: var(--secondary);
   cursor: pointer;
+  flex-shrink: 0;
   transition:
     border-color var(--duration-fast) ease,
-    background var(--duration-fast) ease;
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
 }
 
 .agent-tab.active {
   background: var(--accent);
   border-color: var(--accent);
   color: white;
+}
+
+/* 权限面板子标签 */
+.perm-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.perm-tab {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: var(--secondary);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+
+.perm-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* 权限动作强调徽章 */
+.permission-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid currentColor;
 }
 
 .agents-overview-grid {

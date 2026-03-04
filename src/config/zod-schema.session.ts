@@ -1,7 +1,8 @@
 import { z } from "zod";
+// ElevatedAllowFromSchema 从上游导入（避免循环依赖）
+import { ElevatedAllowFromSchema } from "../../upstream/src/config/zod-schema.agent-runtime.js";
 import { parseByteSize } from "../cli/parse-bytes.js";
 import { parseDurationMs } from "../cli/parse-duration.js";
-import { ElevatedAllowFromSchema } from "./zod-schema.agent-runtime.js";
 import { createAllowDenyChannelRulesSchema } from "./zod-schema.allowdeny.js";
 import {
   GroupChatSchema,

@@ -1,16 +1,16 @@
 import { html, nothing } from "lit";
-import type { AppViewState } from "./app-view-state.ts";
-import type { OpenClawApp } from "./app.ts";
-import type { UsageState } from "./controllers/usage.ts";
 import { parseAgentSessionKey } from "../../../upstream/src/routing/session-key.js";
 import { refreshChatAvatar } from "./app-chat.ts";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
+import type { AppViewState } from "./app-view-state.ts";
+import type { OpenClawApp } from "./app.ts";
 import {
   loadBoundChannelAccounts,
   loadAvailableChannelAccounts,
   addChannelAccountBinding,
   removeChannelAccountBinding,
   toggleAvailableAccountsExpanded,
+  type AgentChannelAccountsState,
 } from "./controllers/agent-channel-accounts.ts";
 import {
   createAgent,
@@ -30,6 +30,7 @@ import {
   unbindModelAccount,
   setDefaultModelAccount,
   toggleAvailableModelAccountsExpanded,
+  type AgentModelAccountsState,
 } from "./controllers/agent-model-accounts.ts";
 import {
   loadAgentPermissions,
@@ -39,21 +40,20 @@ import {
   respondToApproval as respondToPermissionApproval,
   batchApproveRequests,
   batchDenyRequests,
+  loadPermissionHistory,
 } from "./controllers/agent-permissions.ts";
 import {
   loadModelAccounts,
   loadChannelPolicies,
   saveModelAccounts,
   saveChannelPolicies,
+  type AgentPhase5State,
 } from "./controllers/agent-phase5.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
 import { loadAgents } from "./controllers/agents.ts";
-import {
-  loadApprovals,
-  loadApprovalStats,
-  respondToApproval,
-} from "./controllers/approvals.ts";
+import { loadApprovals, loadApprovalStats, respondToApproval } from "./controllers/approvals.ts";
 import { loadChannels } from "./controllers/channels.ts";
+import { buildNavigationTree } from "./controllers/chat-navigation.ts";
 import { loadChatHistory } from "./controllers/chat.ts";
 import {
   applyConfig,
@@ -69,6 +69,7 @@ import {
   runCronJob,
   removeCronJob,
   addCronJob,
+  type CronState,
 } from "./controllers/cron.ts";
 import { loadDebug, callDebugMethod } from "./controllers/debug.ts";
 import {
@@ -84,10 +85,6 @@ import {
   saveExecApprovals,
   updateExecApprovalsFormValue,
 } from "./controllers/exec-approvals.ts";
-import {
-  sendMessage,
-} from "./controllers/friends.ts";
-import { buildNavigationTree } from "./controllers/chat-navigation.ts";
 import {
   loadGroups,
   createGroup,
@@ -111,7 +108,6 @@ import {
   setDefaultAuth,
   testAuth,
   refreshAuthBalance,
-  fetchAvailableModels,
   refreshAuthModels,
   saveModelConfig,
   deleteModelConfig,
@@ -159,7 +155,8 @@ import {
   changeFilterStatus,
   changeFilterSource,
 } from "./controllers/skills.ts";
-import { loadSuperAdmins, loadNotifications } from "./controllers/super-admin.ts";
+import { loadSuperAdmins } from "./controllers/super-admin.ts";
+import type { UsageState } from "./controllers/usage.ts";
 import { loadUsage, loadSessionTimeSeries, loadSessionLogs } from "./controllers/usage.ts";
 import { t } from "./i18n.js";
 import { icons } from "./icons.ts";
@@ -173,7 +170,6 @@ const debouncedLoadUsage = (state: UsageState) => {
   }
   usageDateDebounceTimeout = window.setTimeout(() => void loadUsage(state), 400);
 };
-import { renderModelAccountConfigDialog } from "./views/agents.model-account-config-dialog.ts";
 import { renderAgents } from "./views/agents.ts";
 import { renderChannelPolicyDialog } from "./views/channel-policy-dialog.ts";
 import { renderChannels } from "./views/channels.ts";
@@ -184,7 +180,6 @@ import { renderCron } from "./views/cron.ts";
 import { renderDebug } from "./views/debug.ts";
 import { renderExecApprovalPrompt } from "./views/exec-approval.ts";
 import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.ts";
-import { renderGroups } from "./views/groups.ts";
 import { renderInstances } from "./views/instances.ts";
 import { renderLogs } from "./views/logs.ts";
 import { renderMessageQueue } from "./views/message-queue.ts";
@@ -352,6 +347,7 @@ export function renderApp(state: AppViewState) {
                 settings: state.settings,
                 password: state.password,
                 lastError: state.lastError,
+                lastErrorCode: state.lastErrorCode,
                 presenceCount,
                 sessionsCount,
                 cronEnabled: state.cronStatus?.enabled ?? null,
@@ -502,26 +498,26 @@ export function renderApp(state: AppViewState) {
                 onApproveAllPairing: async () => {
                   const pairingRequests = state.channelsSnapshot?.channelPairingRequests ?? {};
                   const allRequests: Array<{ channelId: string; code: string }> = [];
-                  
+
                   // 收集所有配对请求
                   for (const [channelId, requests] of Object.entries(pairingRequests)) {
                     for (const req of requests) {
                       allRequests.push({ channelId, code: req.code });
                     }
                   }
-                  
+
                   if (allRequests.length === 0) {
                     alert("ℹ️ 没有待处理的配对请求");
                     return;
                   }
-                  
+
                   if (!confirm(`确定要批准所有 ${allRequests.length} 个配对请求吗？`)) {
                     return;
                   }
-                  
+
                   let successCount = 0;
                   let failCount = 0;
-                  
+
                   // 逐个批准
                   for (const { channelId, code } of allRequests) {
                     try {
@@ -530,7 +526,7 @@ export function renderApp(state: AppViewState) {
                         code: code,
                         notify: true,
                       });
-                      if (result && result.success) {
+                      if (result && (result as { success?: boolean }).success) {
                         successCount++;
                       } else {
                         failCount++;
@@ -540,10 +536,10 @@ export function renderApp(state: AppViewState) {
                       failCount++;
                     }
                   }
-                  
+
                   // 刷新数据
                   await loadChannels(state, true);
-                  
+
                   // 显示结果
                   if (failCount === 0) {
                     alert(`✅ 成功批准所有 ${successCount} 个配对请求！`);
@@ -560,11 +556,13 @@ export function renderApp(state: AppViewState) {
                         code: code,
                         notify: true,
                       });
-                      if (result && result.success) {
+                      if (result && (result as { success?: boolean }).success) {
                         await loadChannels(state, true);
                         alert("✅ 配对请求已批准！");
                       } else {
-                        alert(`❌ 批准失败：${result?.error || "未知错误"}`);
+                        alert(
+                          `❌ 批准失败：${(result as { error?: string })?.error || "未知错误"}`,
+                        );
                       }
                     } catch (err) {
                       alert(`❌ 批准失败：${String(err)}`);
@@ -579,11 +577,13 @@ export function renderApp(state: AppViewState) {
                         channel: channelId,
                         code: code,
                       });
-                      if (result && result.success) {
+                      if (result && (result as { success?: boolean }).success) {
                         await loadChannels(state, true);
                         alert("✅ 配对请求已拒绝！");
                       } else {
-                        alert(`❌ 拒绝失败：${result?.error || "未知错误"}`);
+                        alert(
+                          `❌ 拒绝失败：${(result as { error?: string })?.error || "未知错误"}`,
+                        );
                       }
                     } catch (err) {
                       alert(`❌ 拒绝失败：${String(err)}`);
@@ -621,9 +621,9 @@ export function renderApp(state: AppViewState) {
                 onAddAuth: (provider) => {
                   // 从 providerInstances 获取供应商的默认 Base URL
                   const providerInstance = state.modelsSnapshot?.providerInstances?.find(
-                    (p: any) => p.id === provider,
+                    (p) => p.id === provider,
                   );
-                  const defaultBaseUrl = (providerInstance as any)?.defaultBaseUrl || "";
+                  const defaultBaseUrl = providerInstance?.defaultBaseUrl || "";
 
                   state.editingAuth = {
                     provider,
@@ -642,7 +642,7 @@ export function renderApp(state: AppViewState) {
                       provider: auth.provider,
                       name: auth.name,
                       apiKey: "",
-                      baseUrl: auth.baseUrl,
+                      baseUrl: auth.baseUrl ?? undefined,
                     };
                   }
                 },
@@ -681,15 +681,15 @@ export function renderApp(state: AppViewState) {
                   await refreshAuthBalance(state, authId);
                 },
                 onReauth: async (authId, provider) => {
-                  console.log('[OAuth Reauth] Button clicked', { authId, provider });
+                  console.log("[OAuth Reauth] Button clicked", { authId, provider });
                   try {
                     const { startOAuthReauth } = await import("./controllers/models.js");
                     const { startDeviceCodeAuth } = await import("./utils/oauth-manager.js");
-                    
-                    console.log('[OAuth Reauth] Starting reauth...');
+
+                    console.log("[OAuth Reauth] Starting reauth...");
                     const result = await startOAuthReauth(state, authId);
-                    console.log('[OAuth Reauth] Result:', result);
-                    
+                    console.log("[OAuth Reauth] Result:", result);
+
                     if (result) {
                       // 使用通用OAuth管理器
                       await startDeviceCodeAuth(
@@ -700,23 +700,30 @@ export function renderApp(state: AppViewState) {
                           expiresIn: result.expiresIn,
                           interval: result.interval,
                           authId: result.authId,
-                          provider: result.provider,
-                          verifier: result.verifier,
+                          provider:
+                            result.provider as import("./utils/oauth-manager.js").OAuthProvider,
+                          verifier: (result as { verifier?: string }).verifier,
                         },
                         {
                           onPollRequest: async (params) => {
-                            const pollResult = await state.client?.request('models.auth.poll', params);
-                            return pollResult || { status: 'pending' };
+                            const pollResult = await state.client?.request(
+                              "models.auth.poll",
+                              params,
+                            );
+                            return (pollResult || { status: "pending" }) as {
+                              status: "pending" | "success" | "slow_down";
+                              message?: string;
+                            };
                           },
                           onSuccess: async () => {
-                            alert('✅ OAuth授权成功！');
+                            alert("✅ OAuth授权成功！");
                             await loadModels(state, false);
                           },
                           onError: (error) => {
                             alert(`❌ 授权失败：${error}`);
                           },
                           onCancel: () => {
-                            console.log('[OAuth Reauth] User cancelled');
+                            console.log("[OAuth Reauth] User cancelled");
                           },
                         },
                         {
@@ -724,19 +731,21 @@ export function renderApp(state: AppViewState) {
                           windowHeight: 700,
                           pollInterval: result.interval * 1000,
                           maxAttempts: Math.floor(result.expiresIn / result.interval),
-                        }
+                        },
                       );
                     } else {
-                      console.error('[OAuth Reauth] No result returned');
+                      console.error("[OAuth Reauth] No result returned");
                       alert("⚠️ 启动重认证失败，请稍后重试");
                     }
                   } catch (err) {
-                    console.error('[OAuth Reauth] Error:', err);
+                    console.error("[OAuth Reauth] Error:", err);
                     alert(`❌ 启动重认证失败：${String(err)}`);
                   }
                 },
-                onStartOAuthPolling: async (authId) => {
-                  if (!state.oauthReauth) {return;}
+                onStartOAuthPolling: async (_authId) => {
+                  if (!state.oauthReauth) {
+                    return;
+                  }
                   state.oauthReauth = { ...state.oauthReauth, isPolling: true };
                   // TODO: 实现轮询逻辑
                   alert("🕑 轮询功能待实现，请手动刷新页面查看状态");
@@ -773,16 +782,22 @@ export function renderApp(state: AppViewState) {
                       authId: config.authId,
                       provider: config.provider,
                       modelName: config.modelName,
-                      nickname: config.nickname,
+                      nickname: config.nickname ?? undefined,
                       enabled: config.enabled,
-                      temperature: config.temperature,
-                      topP: config.topP,
-                      maxTokens: config.maxTokens,
-                      frequencyPenalty: config.frequencyPenalty,
-                      systemPrompt: config.systemPrompt,
-                      conversationRounds: config.conversationRounds,
-                      maxIterations: config.maxIterations,
-                      usageLimits: config.usageLimits,
+                      temperature: config.temperature ?? undefined,
+                      topP: config.topP ?? undefined,
+                      maxTokens: config.maxTokens ?? undefined,
+                      frequencyPenalty: config.frequencyPenalty ?? undefined,
+                      systemPrompt: config.systemPrompt ?? undefined,
+                      conversationRounds: config.conversationRounds ?? undefined,
+                      maxIterations: config.maxIterations ?? undefined,
+                      usageLimits: config.usageLimits
+                        ? {
+                            maxRequestsPerDay: config.usageLimits.maxRequestsPerDay ?? undefined,
+                            maxTokensPerRequest:
+                              config.usageLimits.maxTokensPerRequest ?? undefined,
+                          }
+                        : undefined,
                     };
                   }
                 },
@@ -925,27 +940,27 @@ export function renderApp(state: AppViewState) {
                 onEditProvider: (id) => {
                   // 从 providerInstances 中查找供应商
                   const provider = state.modelsSnapshot?.providerInstances?.find(
-                    (p: any) => p.id === id,
+                    (p) => p.id === id,
                   );
                   if (provider) {
                     state.addingProvider = true; // 显示模态框
                     state.providerForm = {
-                      selectedTemplateId: (provider as any).templateId || null,
-                      id: (provider as any).id,
-                      name: (provider as any).name,
-                      icon: (provider as any).icon || "🤖",
-                      website: (provider as any).website || "",
-                      defaultBaseUrl: (provider as any).defaultBaseUrl || "",
-                      apiKeyPlaceholder: (provider as any).apiKeyPlaceholder || "请输入API密钥",
+                      selectedTemplateId: provider.templateId || null,
+                      id: provider.id,
+                      name: provider.name,
+                      icon: provider.icon || "🤖",
+                      website: provider.website || "",
+                      defaultBaseUrl: provider.defaultBaseUrl || "",
+                      apiKeyPlaceholder: provider.apiKeyPlaceholder || "请输入API密钥",
                       isEditing: true,
-                      originalId: (provider as any).id,
+                      originalId: provider.id,
                     };
                   }
                 },
                 onTemplateSelect: (templateId) => {
                   if (state.providerForm) {
-                    const template = (state.modelsSnapshot as any)?.apiTemplates?.find(
-                      (t: any) => t.id === templateId,
+                    const template = state.modelsSnapshot?.apiTemplates?.find(
+                      (t) => t.id === templateId,
                     );
                     if (template) {
                       state.providerForm = {
@@ -980,8 +995,8 @@ export function renderApp(state: AppViewState) {
                 },
                 onDeleteProvider: async (id) => {
                   // 获取供应商信息
-                  const providerInstance = (state.modelsSnapshot?.providerInstances as any[])?.find(
-                    (p: any) => p.id === id,
+                  const providerInstance = state.modelsSnapshot?.providerInstances?.find(
+                    (p) => p.id === id,
                   );
                   const providerName = providerInstance?.name || id;
 
@@ -1108,9 +1123,8 @@ export function renderApp(state: AppViewState) {
                 timeZone: state.usageTimeZone,
                 contextExpanded: state.usageContextExpanded,
                 headerPinned: state.usageHeaderPinned,
-                // 供应商筛选和概览视图
-                filterProvider: state.usageFilterProvider,
-                showProviderOverview: state.usageShowProviderOverview,
+                timeSeriesCursorStart: state.usageTimeSeriesCursorStart,
+                timeSeriesCursorEnd: state.usageTimeSeriesCursorEnd,
                 onStartDateChange: (date) => {
                   state.usageStartDate = date;
                   state.usageSelectedDays = [];
@@ -1331,16 +1345,9 @@ export function renderApp(state: AppViewState) {
                   state.usageTimeSeries = null;
                   state.usageSessionLogs = null;
                 },
-                // 供应商选择回调
-                onSelectProvider: (providerId) => {
-                  // 跳转到该供应商的详细视图
-                  const baseP = window.location.pathname.split("/usage")[0] || "";
-                  window.location.href = `${baseP}/usage?provider=${providerId}`;
-                },
-                onClearProviderFilter: () => {
-                  // 清除供应商筛选，返回概览视图
-                  const baseP = window.location.pathname.split("/usage")[0] || "";
-                  window.location.href = `${baseP}/usage`;
+                onTimeSeriesCursorRangeChange: (start, end) => {
+                  state.usageTimeSeriesCursorStart = start;
+                  state.usageTimeSeriesCursorEnd = end;
                 },
               })
             : nothing
@@ -1364,11 +1371,12 @@ export function renderApp(state: AppViewState) {
                 runs: state.cronRuns,
                 onFormChange: (patch) => (state.cronForm = { ...state.cronForm, ...patch }),
                 onRefresh: () => state.loadCron(),
-                onAdd: () => addCronJob(state),
-                onToggle: (job, enabled) => toggleCronJob(state, job, enabled),
-                onRun: (job) => runCronJob(state, job),
-                onRemove: (job) => removeCronJob(state, job),
-                onLoadRuns: (jobId) => loadCronRuns(state, jobId),
+                onAdd: () => addCronJob(state as unknown as CronState),
+                onToggle: (job, enabled) =>
+                  toggleCronJob(state as unknown as CronState, job, enabled),
+                onRun: (job) => runCronJob(state as unknown as CronState, job),
+                onRemove: (job) => removeCronJob(state as unknown as CronState, job),
+                onLoadRuns: (jobId) => loadCronRuns(state as unknown as CronState, jobId),
               })
             : nothing
         }
@@ -1408,12 +1416,12 @@ export function renderApp(state: AppViewState) {
                 agentSkillsError: state.agentSkillsError,
                 agentSkillsAgentId: state.agentSkillsAgentId,
                 skillsFilter: state.skillsFilter,
-                // Phase 5: 模型账号和通道策略
+                // oxlint-disable-next-line typescript/no-explicit-any
                 modelAccountsConfig: state.modelAccountsConfig as any,
                 modelAccountsLoading: state.modelAccountsLoading,
                 modelAccountsError: state.modelAccountsError,
-                modelAccountsSaving: (state as any).modelAccountsSaving || false,
-                modelAccountsSaveSuccess: (state as any).modelAccountsSaveSuccess || false,
+                modelAccountsSaving: state.modelAccountsSaving || false,
+                modelAccountsSaveSuccess: state.modelAccountsSaveSuccess || false,
                 // 模型账号绑定管理
                 boundModelAccounts: state.boundModelAccounts,
                 boundModelDetails: state.boundModelDetails,
@@ -1426,12 +1434,12 @@ export function renderApp(state: AppViewState) {
                 availableModelAccountsExpanded: state.availableModelAccountsExpanded,
                 defaultModelAccountId: state.defaultModelAccountId,
                 modelAccountOperationError: state.modelAccountOperationError,
-                // 通道策略配置
+                // oxlint-disable-next-line typescript/no-explicit-any
                 channelPoliciesConfig: state.channelPoliciesConfig as any,
                 channelPoliciesLoading: state.channelPoliciesLoading,
                 channelPoliciesError: state.channelPoliciesError,
-                channelPoliciesSaving: (state as any).channelPoliciesSaving || false,
-                channelPoliciesSaveSuccess: (state as any).channelPoliciesSaveSuccess || false,
+                channelPoliciesSaving: state.channelPoliciesSaving || false,
+                channelPoliciesSaveSuccess: state.channelPoliciesSaveSuccess || false,
                 // 通道账号绑定管理
                 boundChannelAccounts: state.boundChannelAccounts,
                 boundChannelAccountsLoading: state.boundChannelAccountsLoading,
@@ -1441,11 +1449,20 @@ export function renderApp(state: AppViewState) {
                 availableChannelAccountsError: state.availableChannelAccountsError,
                 availableChannelAccountsExpanded: state.availableChannelAccountsExpanded,
                 channelAccountOperationError: state.channelAccountOperationError,
-                editingAgent: (state as any).editingAgent || null,
-                creatingAgent: (state as any).creatingAgent || false,
-                deletingAgent: (state as any).deletingAgent || false,
-                defaultWorkspaceRoot: (state as any).defaultWorkspaceRoot,
-                isNewAgent: (state as any).isNewAgent || false,
+                editingAgent: state.editingAgent || null,
+                creatingAgent: state.creatingAgent || false,
+                deletingAgent: state.deletingAgent || false,
+                // Phase 3: 权限管理数据
+                permissionsConfig: state.permissionsConfig,
+                permissionsLoading: state.permissionsLoading,
+                permissionsError: state.permissionsError,
+                permissionsActiveTab: state.permissionsManagementActiveTab,
+                permissionsConfigSaving: state.permissionsSaving,
+                approvalRequests: state.approvalRequests,
+                approvalsLoading: state.approvalsLoading,
+                approvalStats: state.approvalStats,
+                permissionChangeHistory: state.permissionChangeHistory,
+                permissionHistoryLoading: state.permissionHistoryLoading,
                 onRefresh: async () => {
                   await loadAgents(state);
                   const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
@@ -1476,15 +1493,27 @@ export function renderApp(state: AppViewState) {
                   }
                   // 如果当前在通道策略面板，重新加载通道配置数据
                   if (state.agentsPanel === "channelPolicies") {
-                    void loadChannelPolicies(state, agentId);
-                    void loadBoundChannelAccounts(state, agentId);
-                    void loadAvailableChannelAccounts(state, agentId);
+                    void loadChannelPolicies(state as unknown as AgentPhase5State, agentId);
+                    void loadBoundChannelAccounts(
+                      state as unknown as AgentChannelAccountsState,
+                      agentId,
+                    );
+                    void loadAvailableChannelAccounts(
+                      state as unknown as AgentChannelAccountsState,
+                      agentId,
+                    );
                   }
                   // 如果当前在模型账号面板，重新加载模型账号数据
                   if (state.agentsPanel === "modelAccounts") {
-                    void loadModelAccounts(state, agentId);
-                    void loadBoundModelAccounts(state, agentId);
-                    void loadAvailableModelAccounts(state, agentId);
+                    void loadModelAccounts(state as unknown as AgentPhase5State, agentId);
+                    void loadBoundModelAccounts(
+                      state as unknown as AgentModelAccountsState,
+                      agentId,
+                    );
+                    void loadAvailableModelAccounts(
+                      state as unknown as AgentModelAccountsState,
+                      agentId,
+                    );
                   }
                   // 如果当前在权限配置面板，重新加载权限数据
                   if (state.agentsPanel === "permissionsConfig") {
@@ -1516,8 +1545,14 @@ export function renderApp(state: AppViewState) {
                     void loadChannels(state, false);
                     // 加载通道账号绑定管理数据
                     if (resolvedAgentId) {
-                      void loadBoundChannelAccounts(state, resolvedAgentId);
-                      void loadAvailableChannelAccounts(state, resolvedAgentId);
+                      void loadBoundChannelAccounts(
+                        state as unknown as AgentChannelAccountsState,
+                        resolvedAgentId,
+                      );
+                      void loadAvailableChannelAccounts(
+                        state as unknown as AgentChannelAccountsState,
+                        resolvedAgentId,
+                      );
                     }
                   }
                   if (panel === "cron") {
@@ -1525,15 +1560,27 @@ export function renderApp(state: AppViewState) {
                   }
                   // Phase 5: 加载模型账号和通道策略
                   if (panel === "modelAccounts" && resolvedAgentId) {
-                    void loadModelAccounts(state, resolvedAgentId);
-                    void loadBoundModelAccounts(state, resolvedAgentId);
-                    void loadAvailableModelAccounts(state, resolvedAgentId);
+                    void loadModelAccounts(state as unknown as AgentPhase5State, resolvedAgentId);
+                    void loadBoundModelAccounts(
+                      state as unknown as AgentModelAccountsState,
+                      resolvedAgentId,
+                    );
+                    void loadAvailableModelAccounts(
+                      state as unknown as AgentModelAccountsState,
+                      resolvedAgentId,
+                    );
                   }
                   if (panel === "channelPolicies" && resolvedAgentId) {
-                    void loadChannelPolicies(state, resolvedAgentId);
+                    void loadChannelPolicies(state as unknown as AgentPhase5State, resolvedAgentId);
                     // 加载通道账号绑定管理数据
-                    void loadBoundChannelAccounts(state, resolvedAgentId);
-                    void loadAvailableChannelAccounts(state, resolvedAgentId);
+                    void loadBoundChannelAccounts(
+                      state as unknown as AgentChannelAccountsState,
+                      resolvedAgentId,
+                    );
+                    void loadAvailableChannelAccounts(
+                      state as unknown as AgentChannelAccountsState,
+                      resolvedAgentId,
+                    );
                   }
                   // Phase 3: 加载权限配置（针对具体助手）
                   if (panel === "permissionsConfig" && resolvedAgentId) {
@@ -1800,9 +1847,14 @@ export function renderApp(state: AppViewState) {
                 onModelAccountsChange: resolvedAgentId
                   ? async (agentId, config) => {
                       try {
-                        await saveModelAccounts(state, agentId, config as any);
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        await saveModelAccounts(
+                          state as unknown as AgentPhase5State,
+                          agentId,
+                          config as any,
+                        );
                         // 保存成功后重新加载
-                        await loadModelAccounts(state, agentId);
+                        await loadModelAccounts(state as unknown as AgentPhase5State, agentId);
                       } catch (err) {
                         console.error("Failed to save model accounts:", err);
                       }
@@ -1811,9 +1863,14 @@ export function renderApp(state: AppViewState) {
                 onChannelPoliciesChange: resolvedAgentId
                   ? async (agentId, config) => {
                       try {
-                        await saveChannelPolicies(state, agentId, config as any);
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        await saveChannelPolicies(
+                          state as unknown as AgentPhase5State,
+                          agentId,
+                          config as any,
+                        );
                         // 保存成功后重新加载
-                        await loadChannelPolicies(state, agentId);
+                        await loadChannelPolicies(state as unknown as AgentPhase5State, agentId);
                       } catch (err) {
                         console.error("Failed to save channel policies:", err);
                       }
@@ -1840,7 +1897,7 @@ export function renderApp(state: AppViewState) {
                 },
                 onSavePolicyBinding: async (agentId, binding, index) => {
                   try {
-                    const config = state.channelPoliciesConfig as any;
+                    const config = state.channelPoliciesConfig;
                     if (!config) {
                       return;
                     }
@@ -1854,7 +1911,7 @@ export function renderApp(state: AppViewState) {
                       bindings.push(binding);
                     }
 
-                    await saveChannelPolicies(state, agentId, {
+                    await saveChannelPolicies(state as unknown as AgentPhase5State, agentId, {
                       ...config,
                       bindings,
                     });
@@ -1864,7 +1921,7 @@ export function renderApp(state: AppViewState) {
                     state.addingPolicyBinding = null;
 
                     // 重新加载配置
-                    await loadChannelPolicies(state, agentId);
+                    await loadChannelPolicies(state as unknown as AgentPhase5State, agentId);
                   } catch (err) {
                     console.error("Failed to save policy binding:", err);
                   }
@@ -1879,15 +1936,60 @@ export function renderApp(state: AppViewState) {
                   : undefined,
                 onPermissionsTabChange: (tab) => {
                   state.permissionsManagementActiveTab = tab;
+                  // 切到审计标签时自动加载权限变更历史
+                  if (tab === "audit" && resolvedAgentId) {
+                    void loadPermissionHistory(state, resolvedAgentId);
+                  }
                 },
+                onPermissionsConfigChange: resolvedAgentId
+                  ? async (agentId, config) => {
+                      state.permissionsConfig = config;
+                      try {
+                        await saveAgentPermissions(state, agentId, config);
+                        void loadAgentPermissions(state, agentId);
+                      } catch (err) {
+                        console.error("Failed to save permissions config:", err);
+                        throw err;
+                      }
+                    }
+                  : undefined,
+                onInitPermissions: resolvedAgentId
+                  ? async (agentId) => {
+                      try {
+                        const defaultConfig = {
+                          defaultAction: "deny" as const,
+                          rules: [],
+                          approvalConfig: {
+                            enabled: false,
+                            approvers: [],
+                            requiredApprovals: 1,
+                            timeout: 3600,
+                            timeoutAction: "reject" as const,
+                            requireReason: true,
+                          },
+                          enableAuditLog: true,
+                          auditLogPath: "logs/permissions-audit.jsonl",
+                        };
+                        state.permissionsConfig = defaultConfig;
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        await saveAgentPermissions(state, agentId, defaultConfig as any);
+                        await loadAgentPermissions(state, agentId);
+                        alert("工具权限配置初始化成功！");
+                      } catch (err) {
+                        console.error("Failed to initialize permissions:", err);
+                        alert(
+                          `初始化权限失败: ${err instanceof Error ? err.message : String(err)}`,
+                        );
+                      }
+                    }
+                  : undefined,
                 onPermissionChange: resolvedAgentId
-                  ? (agentId, permission, granted) => {
+                  ? (agentId, _permission, _granted) => {
                       // 更新权限配置
                       if (state.permissionsConfig) {
-                        const config = state.permissionsConfig;
                         // 更新权限状态
                         // TODO: 实现权限更新逻辑
-                        console.log("Permission change:", agentId, permission, granted);
+                        console.log("Permission change:", agentId, _permission, _granted);
                       }
                     }
                   : undefined,
@@ -1949,35 +2051,57 @@ export function renderApp(state: AppViewState) {
                 // 模型账号绑定管理回调
                 onBindModelAccount: async (accountId) => {
                   if (resolvedAgentId) {
-                    await bindModelAccount(state, resolvedAgentId, accountId);
+                    await bindModelAccount(
+                      state as unknown as AgentModelAccountsState,
+                      resolvedAgentId,
+                      accountId,
+                    );
                   }
                 },
                 onUnbindModelAccount: async (accountId) => {
                   if (resolvedAgentId) {
-                    await unbindModelAccount(state, resolvedAgentId, accountId);
+                    await unbindModelAccount(
+                      state as unknown as AgentModelAccountsState,
+                      resolvedAgentId,
+                      accountId,
+                    );
                   }
                 },
                 onToggleAvailableModelAccounts: () => {
-                  toggleAvailableModelAccountsExpanded(state);
+                  toggleAvailableModelAccountsExpanded(state as unknown as AgentModelAccountsState);
                 },
                 onSetDefaultModelAccount: async (accountId) => {
                   if (resolvedAgentId) {
-                    await setDefaultModelAccount(state, resolvedAgentId, accountId);
+                    await setDefaultModelAccount(
+                      state as unknown as AgentModelAccountsState,
+                      resolvedAgentId,
+                      accountId,
+                    );
                   }
                 },
                 // 通道账号绑定管理回调
                 onAddChannelAccount: async (channelId, accountId) => {
                   if (resolvedAgentId) {
-                    await addChannelAccountBinding(state, resolvedAgentId, channelId, accountId);
+                    await addChannelAccountBinding(
+                      state as unknown as AgentChannelAccountsState,
+                      resolvedAgentId,
+                      channelId,
+                      accountId,
+                    );
                   }
                 },
                 onRemoveChannelAccount: async (channelId, accountId) => {
                   if (resolvedAgentId) {
-                    await removeChannelAccountBinding(state, resolvedAgentId, channelId, accountId);
+                    await removeChannelAccountBinding(
+                      state as unknown as AgentChannelAccountsState,
+                      resolvedAgentId,
+                      channelId,
+                      accountId,
+                    );
                   }
                 },
                 onToggleAvailableChannelAccounts: () => {
-                  toggleAvailableAccountsExpanded(state);
+                  toggleAvailableAccountsExpanded(state as unknown as AgentChannelAccountsState);
                 },
                 onConfigurePolicy: async (channelId, accountId, currentPolicy) => {
                   // 打开策略配置对话框
@@ -1996,13 +2120,13 @@ export function renderApp(state: AppViewState) {
                     const defaultWorkspaceRoot = await getDefaultWorkspace(state);
                     // 打开新增智能助手对话框
                     state.editingAgent = { id: "", name: "", workspace: "" };
-                    (state as any).isNewAgent = true; // 标记为新增模式
-                    (state as any).defaultWorkspaceRoot = defaultWorkspaceRoot;
+                    state.isNewAgent = true; // 标记为新增模式
+                    state.defaultWorkspaceRoot = defaultWorkspaceRoot;
                   } catch (err) {
                     console.error("Failed to load default workspace:", err);
                     // 即使失败也允许创建助手
                     state.editingAgent = { id: "", name: "", workspace: "" };
-                    (state as any).isNewAgent = true; // 标记为新增模式
+                    state.isNewAgent = true; // 标记为新增模式
                   }
                 },
                 onEditAgent: (agentId) => {
@@ -2015,12 +2139,13 @@ export function renderApp(state: AppViewState) {
                       // 使用后端返回的 workspace 字段
                       workspace: agent.workspace || "",
                     };
-                    (state as any).isNewAgent = false; // 编辑模式
+                    state.isNewAgent = false; // 编辑模式
                   }
                 },
                 onDeleteAgent: async (agentId) => {
                   const agent = state.agentsList?.agents.find((a) => a.id === agentId);
-                  const workspace = (agent as any)?.workspaceResolved || (agent as any)?.workspace;
+                  const workspace =
+                    (agent as { workspaceResolved?: string }).workspaceResolved || agent?.workspace;
 
                   // 自定义对话框：二次确认并选择工作区操作
                   const dialogHtml = `
@@ -2068,13 +2193,13 @@ export function renderApp(state: AppViewState) {
 
                   dialog.querySelector("#cancel-btn")!.addEventListener("click", closeDialog);
                   dialog.querySelector("#confirm-btn")!.addEventListener("click", async () => {
-                    const deleteWorkspace =
-                      workspace &&
-                      (
-                        dialog.querySelector(
-                          'input[name="workspace-action"]:checked',
-                        ) as HTMLInputElement
-                      )?.value === "delete";
+                    const deleteWorkspace = workspace
+                      ? (
+                          dialog.querySelector(
+                            'input[name="workspace-action"]:checked',
+                          ) as HTMLInputElement
+                        )?.value === "delete"
+                      : undefined;
                     closeDialog();
 
                     try {
@@ -2106,7 +2231,7 @@ export function renderApp(state: AppViewState) {
                   }
 
                   try {
-                    if ((state as any).isNewAgent) {
+                    if (state.isNewAgent) {
                       // 创建新助手
                       await createAgent(state, {
                         id: state.editingAgent.id,
@@ -2125,7 +2250,7 @@ export function renderApp(state: AppViewState) {
                     }
                     // 关闭对话框
                     state.editingAgent = null;
-                    (state as any).isNewAgent = false;
+                    state.isNewAgent = false;
                   } catch (err) {
                     console.error("Failed to save agent:", err);
                     alert("保存失败: " + (err instanceof Error ? err.message : String(err)));
@@ -2134,7 +2259,7 @@ export function renderApp(state: AppViewState) {
                 onCancelEdit: () => {
                   // 关闭编辑对话框
                   state.editingAgent = null;
-                  (state as any).isNewAgent = false;
+                  state.isNewAgent = false;
                 },
                 onAgentFormChange: (field, value) => {
                   // 更新表单字段
@@ -2148,7 +2273,7 @@ export function renderApp(state: AppViewState) {
                 onMigrateWorkspace: async (agentId) => {
                   const agent = state.agentsList?.agents.find((a) => a.id === agentId);
                   const currentWorkspace =
-                    (agent as any)?.workspaceResolved || (agent as any)?.workspace;
+                    (agent as { workspaceResolved?: string }).workspaceResolved || agent?.workspace;
 
                   // 创建迁移对话框
                   const dialog = document.createElement("div");
@@ -2194,12 +2319,12 @@ export function renderApp(state: AppViewState) {
                     fileInput.type = "file";
                     fileInput.setAttribute("webkitdirectory", "");
                     fileInput.setAttribute("directory", "");
-                    fileInput.onchange = (e: Event) => {
+                    fileInput.addEventListener("change", (e: Event) => {
                       const files = (e.target as HTMLInputElement).files;
                       if (files && files.length > 0) {
                         inputEl.value = files[0].webkitRelativePath.split("/")[0];
                       }
-                    };
+                    });
                     fileInput.click();
                   });
 
@@ -2308,7 +2433,10 @@ export function renderApp(state: AppViewState) {
 
                                 document.body.removeChild(deleteProgressDialog);
 
-                                if (deleteResult && (deleteResult as any).success) {
+                                if (
+                                  deleteResult &&
+                                  (deleteResult as { success?: boolean }).success
+                                ) {
                                   alert("✅ 原工作区已成功删除");
                                 } else {
                                   alert(
@@ -2391,12 +2519,12 @@ export function renderApp(state: AppViewState) {
                       fileInput.type = "file";
                       fileInput.setAttribute("webkitdirectory", "");
                       fileInput.setAttribute("directory", "");
-                      fileInput.onchange = (e: Event) => {
+                      fileInput.addEventListener("change", (e: Event) => {
                         const files = (e.target as HTMLInputElement).files;
                         if (files && files.length > 0) {
                           inputEl.value = files[0].webkitRelativePath.split("/")[0];
                         }
-                      };
+                      });
                       fileInput.click();
                     });
 
@@ -2506,6 +2634,7 @@ export function renderApp(state: AppViewState) {
                         description: "",
                         isPublic: false,
                       };
+                      // oxlint-disable-next-line typescript/no-explicit-any
                       await createGroup(state, group as any);
                       state.creatingGroup = false;
                       state.editingGroup = null;
@@ -2529,6 +2658,7 @@ export function renderApp(state: AppViewState) {
                         members: [],
                         isPublic: false,
                         [field]: value,
+                        // oxlint-disable-next-line typescript/no-explicit-any
                       } as any;
                     }
                   },
@@ -2649,6 +2779,7 @@ export function renderApp(state: AppViewState) {
                         rule,
                       );
                     } else {
+                      // oxlint-disable-next-line typescript/no-explicit-any
                       await addForwardingRule(state as unknown as OpenClawApp, rule as any);
                     }
                     state.monitorCreatingRule = false;
@@ -2670,6 +2801,7 @@ export function renderApp(state: AppViewState) {
                         enabled: true,
                         createdAt: Date.now(),
                         [field]: value,
+                        // oxlint-disable-next-line typescript/no-explicit-any
                       } as any;
                     }
                   },
@@ -2745,6 +2877,7 @@ export function renderApp(state: AppViewState) {
                       } else {
                         await createScenario(
                           state as unknown as OpenClawApp,
+                          // oxlint-disable-next-line typescript/no-explicit-any
                           state.editingScenario as any,
                         );
                       }
@@ -2772,6 +2905,7 @@ export function renderApp(state: AppViewState) {
                         createdAt: Date.now(),
                         updatedAt: Date.now(),
                         [field]: value,
+                        // oxlint-disable-next-line typescript/no-explicit-any
                       } as any;
                     }
                   },
@@ -3202,8 +3336,8 @@ export function renderApp(state: AppViewState) {
                 selectedApprovalDetail: null,
                 // 系统管理数据
                 superAdmins: state.superAdminsList || [],
-                superAdminsLoading: state.superAdminsLoading,
-                superAdminsError: state.superAdminsError,
+                superAdminsLoading: state.superAdminsLoading ?? false,
+                superAdminsError: state.superAdminsError ?? null,
                 systemRoles: [],
                 auditLogs: [],
                 // 回调函数

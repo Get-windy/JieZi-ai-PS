@@ -1,16 +1,5 @@
 import { html, nothing } from "lit";
-import type {
-  AgentFileEntry,
-  AgentsFilesListResult,
-  AgentsListResult,
-  AgentIdentityResult,
-  ChannelAccountSnapshot,
-  ChannelsStatusSnapshot,
-  CronJob,
-  CronStatus,
-  SkillStatusEntry,
-  SkillStatusReport,
-} from "../types.ts";
+import { listCoreToolSections } from "../../../../src/agents/tool-catalog.js";
 import {
   expandToolGroups,
   normalizeToolName,
@@ -24,6 +13,17 @@ import {
   formatCronState,
   formatNextRun,
 } from "../presenter.ts";
+import type {
+  AgentFileEntry,
+  AgentsFilesListResult,
+  AgentsListResult,
+  AgentIdentityResult,
+  ChannelsStatusSnapshot,
+  CronJob,
+  CronStatus,
+  SkillStatusEntry,
+  SkillStatusReport,
+} from "../types.ts";
 import { renderPolicyBindingDialog } from "./agents.channel-policy-dialog.ts";
 import { renderPermissionsManagement } from "./permissions-management.ts";
 
@@ -141,9 +141,24 @@ export type AgentsProps = {
   modelAccountsSaveSuccess: boolean;
   // 模型账号绑定管理
   boundModelAccounts?: string[];
+  boundModelDetails?: Array<{
+    modelId: string;
+    providerId: string;
+    modelName: string;
+    displayName: string;
+    providerName: string;
+    enabled?: boolean;
+  }>;
   boundModelAccountsLoading?: boolean;
   boundModelAccountsError?: string | null;
   availableModelAccounts?: string[];
+  availableModelDetails?: Array<{
+    modelId: string;
+    providerId: string;
+    modelName: string;
+    displayName: string;
+    providerName: string;
+  }>;
   availableModelAccountsLoading?: boolean;
   availableModelAccountsError?: string | null;
   availableModelAccountsExpanded?: boolean;
@@ -180,16 +195,22 @@ export type AgentsProps = {
   // Phase 3: 权限管理
   permissionsLoading?: boolean;
   permissionsError?: string | null;
-  permissionsActiveTab?: "config" | "approvals" | "history";
+  permissionsActiveTab?: "overview" | "rules" | "audit";
+  // oxlint-disable-next-line typescript/no-explicit-any
   permissionsConfig?: any;
   permissionsConfigLoading?: boolean;
   permissionsConfigSaving?: boolean;
+  // oxlint-disable-next-line typescript/no-explicit-any
   approvalRequests?: any[];
   approvalsLoading?: boolean;
+  // oxlint-disable-next-line typescript/no-explicit-any
   approvalStats?: any;
+  // oxlint-disable-next-line typescript/no-explicit-any
   approvalsFilter?: any;
   selectedApprovals?: Set<string>;
+  // oxlint-disable-next-line typescript/no-explicit-any
   selectedApprovalDetail?: any;
+  // oxlint-disable-next-line typescript/no-explicit-any
   permissionChangeHistory?: any[];
   permissionHistoryLoading?: boolean;
   // 增删改查相关状态
@@ -228,9 +249,11 @@ export type AgentsProps = {
   onAgentSkillsClear: (agentId: string) => void;
   onAgentSkillsDisableAll: (agentId: string) => void;
   // 通道账号绑定管理
+  // oxlint-disable-next-line typescript/no-explicit-any
   boundChannelAccounts?: any[];
   boundChannelAccountsLoading?: boolean;
   boundChannelAccountsError?: string | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
   availableChannelAccounts?: any[];
   availableChannelAccountsLoading?: boolean;
   availableChannelAccountsError?: string | null;
@@ -239,18 +262,29 @@ export type AgentsProps = {
   onAddChannelAccount?: (channelId: string, accountId: string) => void;
   onRemoveChannelAccount?: (channelId: string, accountId: string) => void;
   onToggleAvailableChannelAccounts?: () => void;
+  onConfigurePolicy?: (
+    channelId: string,
+    accountId: string,
+    currentPolicy: string,
+  ) => void | Promise<void>;
   // Phase 3: 权限管理回调
   onPermissionsRefresh?: (agentId: string) => void;
-  onPermissionsTabChange?: (tab: "config" | "approvals" | "history") => void;
+  onPermissionsTabChange?: (tab: "overview" | "rules" | "audit") => void;
   onPermissionChange?: (agentId: string, permission: string, granted: boolean) => void;
+  onInitPermissions?: (agentId: string) => Promise<void>;
   onPermissionsSaveConfig?: (agentId: string) => void;
+  /** 权限规则增删改后保存整个新配置 */
+  // oxlint-disable-next-line typescript/no-explicit-any
+  onPermissionsConfigChange?: (agentId: string, config: any) => Promise<void>;
   onApprovalAction?: (requestId: string, action: "approve" | "deny", comment?: string) => void;
   onBatchApprove?: (requestIds: string[], comment?: string) => void;
   onBatchDeny?: (requestIds: string[], reason: string) => void;
+  // oxlint-disable-next-line typescript/no-explicit-any
   onApprovalsFilterChange?: (filter: any) => void;
   onSelectApproval?: (requestId: string, selected: boolean) => void;
   onSelectAllApprovals?: () => void;
   onDeselectAllApprovals?: () => void;
+  // oxlint-disable-next-line typescript/no-explicit-any
   onShowApprovalDetail?: (request: any) => void;
   // 增删改查回调
   onAddAgent: () => void;
@@ -259,133 +293,21 @@ export type AgentsProps = {
   onSaveAgent: () => void;
   onCancelEdit: () => void;
   onAgentFormChange: (field: string, value: string) => void;
+  onMigrateWorkspace?: (agentId: string) => void | Promise<void>;
+  onConfigureDefaultWorkspace?: () => void | Promise<void>;
+  onSetDefaultAgent?: (agentId: string) => void | Promise<void>;
 };
 
-const TOOL_SECTIONS = [
-  {
-    id: "fs",
-    label: () => t("agents.tools.section.fs"),
-    tools: [
-      { id: "read", label: "read", description: () => t("agents.tools.tool.read") },
-      { id: "write", label: "write", description: () => t("agents.tools.tool.write") },
-      { id: "edit", label: "edit", description: () => t("agents.tools.tool.edit") },
-      {
-        id: "apply_patch",
-        label: "apply_patch",
-        description: () => t("agents.tools.tool.apply_patch"),
-      },
-    ],
-  },
-  {
-    id: "runtime",
-    label: () => t("agents.tools.section.runtime"),
-    tools: [
-      { id: "exec", label: "exec", description: () => t("agents.tools.tool.exec") },
-      { id: "process", label: "process", description: () => t("agents.tools.tool.process") },
-    ],
-  },
-  {
-    id: "web",
-    label: () => t("agents.tools.section.web"),
-    tools: [
-      {
-        id: "web_search",
-        label: "web_search",
-        description: () => t("agents.tools.tool.web_search"),
-      },
-      { id: "web_fetch", label: "web_fetch", description: () => t("agents.tools.tool.web_fetch") },
-    ],
-  },
-  {
-    id: "memory",
-    label: () => t("agents.tools.section.memory"),
-    tools: [
-      {
-        id: "memory_search",
-        label: "memory_search",
-        description: () => t("agents.tools.tool.memory_search"),
-      },
-      {
-        id: "memory_get",
-        label: "memory_get",
-        description: () => t("agents.tools.tool.memory_get"),
-      },
-    ],
-  },
-  {
-    id: "sessions",
-    label: () => t("agents.tools.section.sessions"),
-    tools: [
-      {
-        id: "sessions_list",
-        label: "sessions_list",
-        description: () => t("agents.tools.tool.sessions_list"),
-      },
-      {
-        id: "sessions_history",
-        label: "sessions_history",
-        description: () => t("agents.tools.tool.sessions_history"),
-      },
-      {
-        id: "sessions_send",
-        label: "sessions_send",
-        description: () => t("agents.tools.tool.sessions_send"),
-      },
-      {
-        id: "sessions_spawn",
-        label: "sessions_spawn",
-        description: () => t("agents.tools.tool.sessions_spawn"),
-      },
-      {
-        id: "session_status",
-        label: "session_status",
-        description: () => t("agents.tools.tool.session_status"),
-      },
-    ],
-  },
-  {
-    id: "ui",
-    label: () => t("agents.tools.section.ui"),
-    tools: [
-      { id: "browser", label: "browser", description: () => t("agents.tools.tool.browser") },
-      { id: "canvas", label: "canvas", description: () => t("agents.tools.tool.canvas") },
-    ],
-  },
-  {
-    id: "messaging",
-    label: () => t("agents.tools.section.messaging"),
-    tools: [{ id: "message", label: "message", description: () => t("agents.tools.tool.message") }],
-  },
-  {
-    id: "automation",
-    label: () => t("agents.tools.section.automation"),
-    tools: [
-      { id: "cron", label: "cron", description: () => t("agents.tools.tool.cron") },
-      { id: "gateway", label: "gateway", description: () => t("agents.tools.tool.gateway") },
-    ],
-  },
-  {
-    id: "nodes",
-    label: () => t("agents.tools.section.nodes"),
-    tools: [{ id: "nodes", label: "nodes", description: () => t("agents.tools.tool.nodes") }],
-  },
-  {
-    id: "agents",
-    label: () => t("agents.tools.section.agents"),
-    tools: [
-      {
-        id: "agents_list",
-        label: "agents_list",
-        description: () => t("agents.tools.tool.agents_list"),
-      },
-    ],
-  },
-  {
-    id: "media",
-    label: () => t("agents.tools.section.media"),
-    tools: [{ id: "image", label: "image", description: () => t("agents.tools.tool.image") }],
-  },
-];
+// 从 tool-catalog.ts 动态派生 —— 以后只需在 tool-catalog.ts + i18n.ts 添加工具，此处自动同步
+const TOOL_SECTIONS = listCoreToolSections().map((section) => ({
+  id: section.id,
+  label: () => t(`agents.tools.section.${section.id}`, section.label),
+  tools: section.tools.map((tool) => ({
+    id: tool.id,
+    label: tool.id,
+    description: () => t(`agents.tools.tool.${tool.id}`, tool.description),
+  })),
+}));
 
 const PROFILE_OPTIONS = [
   { id: "minimal", label: () => t("agents.tools.preset_minimal") },
@@ -761,6 +683,46 @@ function matchesList(name: string, list?: string[]) {
 }
 
 /**
+ * 计算当前 agent 已启用的工具集合（用于权限规则页过滤）
+ */
+function computeEnabledToolIds(
+  configForm: Record<string, unknown> | null,
+  agentId: string,
+): Set<string> {
+  const config = resolveAgentConfig(configForm, agentId);
+  const agentTools = (config.entry?.tools ?? {}) as {
+    profile?: string;
+    allow?: string[];
+    alsoAllow?: string[];
+    deny?: string[];
+  };
+  const globalTools = (config.globalTools ?? {}) as { profile?: string };
+  const profile = agentTools.profile ?? globalTools.profile ?? "full";
+  const hasAgentAllow = Array.isArray(agentTools.allow) && agentTools.allow.length > 0;
+  const alsoAllow: string[] = hasAgentAllow
+    ? []
+    : Array.isArray(agentTools.alsoAllow)
+      ? agentTools.alsoAllow
+      : [];
+  const deny: string[] = hasAgentAllow ? [] : Array.isArray(agentTools.deny) ? agentTools.deny : [];
+  const basePolicy = hasAgentAllow
+    ? { allow: agentTools.allow ?? [], deny: agentTools.deny ?? [] }
+    : (resolveToolProfilePolicy(profile) ?? undefined);
+  const enabled = new Set<string>();
+  for (const section of TOOL_SECTIONS) {
+    for (const tool of section.tools) {
+      const baseAllowed = isAllowedByPolicy(tool.id, basePolicy);
+      const extraAllowed = matchesList(tool.id, alsoAllow);
+      const denied = matchesList(tool.id, deny);
+      if ((baseAllowed || extraAllowed) && !denied) {
+        enabled.add(tool.id);
+      }
+    }
+  }
+  return enabled;
+}
+
+/**
  * Phase 5: 渲染模型配置面板（模型账号绑定 + 智能路由）
  */
 function renderAgentModelAccounts(params: {
@@ -780,12 +742,15 @@ function renderAgentModelAccounts(params: {
   availableModelAccountsExpanded: boolean;
   defaultModelAccountId: string;
   modelAccountOperationError: string | null;
+  // oxlint-disable-next-line typescript/no-explicit-any
+  accountConfigs?: Record<string, any>;
   // 回调
   onChange?: (agentId: string, config: ModelAccountsConfig) => void;
   onBindModelAccount?: (accountId: string) => void;
   onUnbindModelAccount?: (accountId: string) => void;
   onToggleAvailableModelAccounts?: () => void;
   onSetDefaultModelAccount?: (accountId: string) => void;
+  onToggleAccountEnabled?: (accountId: string, enabled: boolean) => void;
 }) {
   if (params.loading || params.boundModelAccountsLoading) {
     return html`
@@ -1116,6 +1081,7 @@ function renderAgentChannelPolicies(params: {
   error: string | null;
   saving: boolean;
   saveSuccess: boolean;
+  // oxlint-disable-next-line typescript/no-explicit-any
   boundChannelAccounts?: any[];
   onChange?: (agentId: string, config: ChannelPoliciesConfig) => void;
   onEditPolicyBinding?: (agentId: string, index: number, binding: ChannelBinding) => void;
@@ -1239,28 +1205,49 @@ function renderAgentChannelPolicies(params: {
                 const target = e.target as HTMLSelectElement;
                 const policyType = target.value;
                 // 根据策略类型创建对应的配置对象
+                // oxlint-disable-next-line typescript/no-explicit-any
                 let policyConfig: any;
                 switch (policyType) {
                   case "private":
                     policyConfig = { type: "private", config: { allowedUsers: [] } };
                     break;
                   case "monitor":
-                    policyConfig = { type: "monitor", config: { monitorChannels: [], enableLogging: true } };
+                    policyConfig = {
+                      type: "monitor",
+                      config: { monitorChannels: [], enableLogging: true },
+                    };
                     break;
                   case "listen-only":
-                    policyConfig = { type: "listen-only", config: { enableLogging: true, logPath: "./logs" } };
+                    policyConfig = {
+                      type: "listen-only",
+                      config: { enableLogging: true, logPath: "./logs" },
+                    };
                     break;
                   case "load-balance":
-                    policyConfig = { type: "load-balance", config: { accountIds: [], algorithm: "round-robin" } };
+                    policyConfig = {
+                      type: "load-balance",
+                      config: { accountIds: [], algorithm: "round-robin" },
+                    };
                     break;
                   case "queue":
-                    policyConfig = { type: "queue", config: { maxQueueSize: 100, batchInterval: 60, batchSize: 10, overflowAction: "reject" } };
+                    policyConfig = {
+                      type: "queue",
+                      config: {
+                        maxQueueSize: 100,
+                        batchInterval: 60,
+                        batchSize: 10,
+                        overflowAction: "reject",
+                      },
+                    };
                     break;
                   case "moderate":
                     policyConfig = { type: "moderate", config: { moderators: [] } };
                     break;
                   case "echo":
-                    policyConfig = { type: "echo", config: { logLevel: "info", logPath: "./logs" } };
+                    policyConfig = {
+                      type: "echo",
+                      config: { logLevel: "info", logPath: "./logs" },
+                    };
                     break;
                   case "filter":
                     policyConfig = { type: "filter", config: {} };
@@ -1287,25 +1274,25 @@ function renderAgentChannelPolicies(params: {
               }
             }}
           >
-            ${policyOptions.map(
-              (opt) => {
-                // 获取当前选中的策略类型
-                const currentPolicyType = typeof config.defaultPolicy === 'object' && config.defaultPolicy !== null
-                  ? (config.defaultPolicy as any).type
+            ${policyOptions.map((opt) => {
+              // 获取当前选中的策略类型
+              const currentPolicyType =
+                typeof config.defaultPolicy === "object" && config.defaultPolicy !== null
+                  ? (config.defaultPolicy as { type?: string }).type
                   : config.defaultPolicy;
-                return html`
+              return html`
                   <option value=${opt.value} ?selected=${currentPolicyType === opt.value}>
                     ${opt.label}
                   </option>
                 `;
-              }
-            )}
+            })}
           </select>
           <div class="muted" style="flex: 1; font-size: 0.875rem; padding-top: 8px;">
             ${(() => {
-              const currentPolicyType = typeof config.defaultPolicy === 'object' && config.defaultPolicy !== null
-                ? (config.defaultPolicy as any).type
-                : config.defaultPolicy;
+              const currentPolicyType =
+                typeof config.defaultPolicy === "object" && config.defaultPolicy !== null
+                  ? (config.defaultPolicy as { type?: string }).type
+                  : config.defaultPolicy;
               return policyOptions.find((p) => p.value === currentPolicyType)?.description || "";
             })()}
           </div>
@@ -1318,15 +1305,16 @@ function renderAgentChannelPolicies(params: {
         <div style="color: var(--fg-muted); font-size: 0.875rem; margin-bottom: 12px;">
           为每个已绑定的通道账号配置独立的策略。如果未配置，将使用上面的默认策略。
         </div>
-        ${params.boundChannelAccounts && params.boundChannelAccounts.length > 0
-          ? html`
+        ${
+          params.boundChannelAccounts && params.boundChannelAccounts.length > 0
+            ? html`
             <div class="list" style="margin-top: 8px;">
-              ${params.boundChannelAccounts.map((binding: any) =>
+              ${params.boundChannelAccounts.map((binding) =>
                 binding.accountIds.map((accountId: string) => {
                   // 查找该通道账号的策略配置
                   const existingBinding = Array.isArray(config.bindings)
                     ? config.bindings.find(
-                        (b: any) => b.channelId === binding.channelId && b.accountId === accountId
+                        (b) => b.channelId === binding.channelId && b.accountId === accountId,
                       )
                     : null;
                   const currentPolicy = existingBinding?.policy || null;
@@ -1336,9 +1324,11 @@ function renderAgentChannelPolicies(params: {
                       <div style="flex: 1;">
                         <div class="mono" style="font-weight: 500;">${binding.channelId}:${accountId}</div>
                         <div class="muted" style="font-size: 0.875rem; margin-top: 2px;">
-                          ${currentPolicy
-                            ? `当前策略: ${t(`agents.channel_policies.policy.${typeof currentPolicy === 'object' ? (currentPolicy as any).type : currentPolicy}`)}`
-                            : '使用默认策略'}
+                          ${
+                            currentPolicy
+                              ? `当前策略: ${t(`agents.channel_policies.policy.${typeof currentPolicy === "object" ? (currentPolicy as { type?: string }).type : currentPolicy}`)}`
+                              : "使用默认策略"
+                          }
                         </div>
                       </div>
                       <div style="display: flex; gap: 8px; align-items: center;">
@@ -1349,31 +1339,55 @@ function renderAgentChannelPolicies(params: {
                             if (params.onChange) {
                               const target = e.target as HTMLSelectElement;
                               const policyType = target.value;
-                              
+
                               // 创建新的绑定配置
+                              // oxlint-disable-next-line typescript/no-explicit-any
                               let policyConfig: any = null;
                               if (policyType) {
                                 switch (policyType) {
                                   case "private":
-                                    policyConfig = { type: "private", config: { allowedUsers: [] } };
+                                    policyConfig = {
+                                      type: "private",
+                                      config: { allowedUsers: [] },
+                                    };
                                     break;
                                   case "monitor":
-                                    policyConfig = { type: "monitor", config: { monitorChannels: [], enableLogging: true } };
+                                    policyConfig = {
+                                      type: "monitor",
+                                      config: { monitorChannels: [], enableLogging: true },
+                                    };
                                     break;
                                   case "listen-only":
-                                    policyConfig = { type: "listen-only", config: { enableLogging: true, logPath: "./logs" } };
+                                    policyConfig = {
+                                      type: "listen-only",
+                                      config: { enableLogging: true, logPath: "./logs" },
+                                    };
                                     break;
                                   case "load-balance":
-                                    policyConfig = { type: "load-balance", config: { accountIds: [], algorithm: "round-robin" } };
+                                    policyConfig = {
+                                      type: "load-balance",
+                                      config: { accountIds: [], algorithm: "round-robin" },
+                                    };
                                     break;
                                   case "queue":
-                                    policyConfig = { type: "queue", config: { maxQueueSize: 100, batchInterval: 60, batchSize: 10, overflowAction: "reject" } };
+                                    policyConfig = {
+                                      type: "queue",
+                                      config: {
+                                        maxQueueSize: 100,
+                                        batchInterval: 60,
+                                        batchSize: 10,
+                                        overflowAction: "reject",
+                                      },
+                                    };
                                     break;
                                   case "moderate":
                                     policyConfig = { type: "moderate", config: { moderators: [] } };
                                     break;
                                   case "echo":
-                                    policyConfig = { type: "echo", config: { logLevel: "info", logPath: "./logs" } };
+                                    policyConfig = {
+                                      type: "echo",
+                                      config: { logLevel: "info", logPath: "./logs" },
+                                    };
                                     break;
                                   case "filter":
                                     policyConfig = { type: "filter", config: {} };
@@ -1382,21 +1396,33 @@ function renderAgentChannelPolicies(params: {
                                     policyConfig = { type: "scheduled", config: {} };
                                     break;
                                   case "forward":
-                                    policyConfig = { type: "forward", config: { targetChannels: [] } };
+                                    policyConfig = {
+                                      type: "forward",
+                                      config: { targetChannels: [] },
+                                    };
                                     break;
                                   case "broadcast":
-                                    policyConfig = { type: "broadcast", config: { targetChannels: [] } };
+                                    policyConfig = {
+                                      type: "broadcast",
+                                      config: { targetChannels: [] },
+                                    };
                                     break;
                                   case "smart-route":
-                                    policyConfig = { type: "smart-route", config: { routingRules: [] } };
+                                    policyConfig = {
+                                      type: "smart-route",
+                                      config: { routingRules: [] },
+                                    };
                                     break;
                                 }
                               }
 
                               // 更新绑定列表
-                              const newBindings = Array.isArray(config.bindings) ? [...config.bindings] : [];
+                              const newBindings = Array.isArray(config.bindings)
+                                ? [...config.bindings]
+                                : [];
                               const existingIndex = newBindings.findIndex(
-                                (b: any) => b.channelId === binding.channelId && b.accountId === accountId
+                                (b) =>
+                                  b.channelId === binding.channelId && b.accountId === accountId,
                               );
 
                               if (policyConfig) {
@@ -1426,32 +1452,38 @@ function renderAgentChannelPolicies(params: {
                           }}
                         >
                           <option value="" ?selected=${!currentPolicy}>使用默认策略</option>
-                          ${policyOptions.map(
-                            (opt) => {
-                              const currentPolicyType = typeof currentPolicy === 'object' && currentPolicy !== null
-                                ? (currentPolicy as any).type
+                          ${policyOptions.map((opt) => {
+                            const currentPolicyType =
+                              typeof currentPolicy === "object" && currentPolicy !== null
+                                ? (currentPolicy as { type?: string }).type
                                 : currentPolicy;
-                              return html`
+                            return html`
                                 <option value=${opt.value} ?selected=${currentPolicyType === opt.value}>
                                   ${opt.label}
                                 </option>
                               `;
-                            }
-                          )}
+                          })}
                         </select>
-                        ${currentPolicy
-                          ? html`
+                        ${
+                          currentPolicy
+                            ? html`
                             <button 
                               class="btn btn--sm"
                               @click=${() => {
                                 if (params.onEditPolicyBinding) {
                                   const existingIndex = Array.isArray(config.bindings)
                                     ? config.bindings.findIndex(
-                                        (b: any) => b.channelId === binding.channelId && b.accountId === accountId
+                                        (b) =>
+                                          b.channelId === binding.channelId &&
+                                          b.accountId === accountId,
                                       )
                                     : -1;
                                   if (existingIndex >= 0) {
-                                    params.onEditPolicyBinding(params.agentId, existingIndex, config.bindings[existingIndex]);
+                                    params.onEditPolicyBinding(
+                                      params.agentId,
+                                      existingIndex,
+                                      config.bindings[existingIndex],
+                                    );
                                   }
                                 }
                               }}
@@ -1459,20 +1491,21 @@ function renderAgentChannelPolicies(params: {
                               配置
                             </button>
                           `
-                          : nothing}
+                            : nothing
+                        }
                       </div>
                     </div>
                   `;
-                })
+                }),
               )}
             </div>
           `
-          : html`
-            <div class="callout" style="margin-top: 8px;">
-              <div style="font-weight: 500; margin-bottom: 4px;">⚠️ 尚未绑定任何通道账号</div>
-              <div style="font-size: 0.875rem;">请先在「通道」标签页绑定通道账号，然后再配置策略。</div>
-            </div>
-          `
+            : html`
+                <div class="callout" style="margin-top: 8px">
+                  <div style="font-weight: 500; margin-bottom: 4px">⚠️ 尚未绑定任何通道账号</div>
+                  <div style="font-size: 0.875rem">请先在「通道」标签页绑定通道账号，然后再配置策略。</div>
+                </div>
+              `
         }
 
       <!-- 策略说明 -->
@@ -1763,42 +1796,100 @@ export function renderAgents(props: AgentsProps) {
               ${
                 props.activePanel === "permissionsConfig"
                   ? renderPermissionsManagement({
+                      agentId: selectedAgent.id,
+                      agents: props.agentsList?.agents || [],
+                      permissionsConfig: props.permissionsConfig || null,
                       loading: props.permissionsLoading || false,
                       error: props.permissionsError || null,
-                      activeTab: props.permissionsActiveTab || "config",
-                      permissionsConfig: props.permissionsConfig || null,
-                      configLoading: props.permissionsConfigLoading || false,
-                      configSaving: props.permissionsConfigSaving || false,
-                      approvalRequests: props.approvalRequests || [],
-                      approvalsLoading: props.approvalsLoading || false,
-                      approvalStats: props.approvalStats || null,
-                      approvalsFilter: props.approvalsFilter || {
-                        status: "all",
-                        priority: "all",
-                        type: "all",
-                        requester: "all",
-                        search: "",
+                      saving: props.permissionsConfigSaving || false,
+                      saveSuccess: false,
+                      availableRoles: [],
+                      toolCategories: {},
+                      predefinedRoles: {},
+                      activeTab: props.permissionsActiveTab || "overview",
+                      selectedTargetAgent: null,
+                      targetAgentRoles: [],
+                      targetAgentRolesLoading: false,
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      gateway: null as any,
+                      enabledToolIds: Array.from(
+                        computeEnabledToolIds(props.configForm, selectedAgent.id),
+                      ),
+                      onInitPermissions: async (agentId: string) => {
+                        if (props.onInitPermissions) {
+                          await props.onInitPermissions(agentId);
+                          props.onPermissionsRefresh?.(agentId);
+                        }
                       },
-                      selectedApprovals: props.selectedApprovals || new Set(),
-                      selectedApprovalDetail: props.selectedApprovalDetail || null,
-                      changeHistory: props.permissionChangeHistory || [],
-                      historyLoading: props.permissionHistoryLoading || false,
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      onAddRule: async (agentId: string, rule: any) => {
+                        const current = props.permissionsConfig;
+                        if (!current) {
+                          return;
+                        }
+                        const updated = { ...current, rules: [...current.rules, rule] };
+                        await props.onPermissionsConfigChange?.(agentId, updated);
+                      },
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      onUpdateRule: async (agentId: string, ruleId: string, updates: any) => {
+                        const current = props.permissionsConfig;
+                        if (!current) {
+                          return;
+                        }
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const updated = {
+                          ...current,
+                          rules: current.rules.map((r: any) =>
+                            r.id === ruleId ? { ...r, ...updates } : r,
+                          ),
+                        };
+                        await props.onPermissionsConfigChange?.(agentId, updated);
+                      },
+                      onDeleteRule: async (agentId: string, ruleId: string) => {
+                        const current = props.permissionsConfig;
+                        if (!current) {
+                          return;
+                        }
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const updated = {
+                          ...current,
+                          rules: current.rules.filter((r: any) => r.id !== ruleId),
+                        };
+                        await props.onPermissionsConfigChange?.(agentId, updated);
+                      },
+                      onToggleRule: async (agentId: string, ruleId: string, enabled: boolean) => {
+                        const current = props.permissionsConfig;
+                        if (!current) {
+                          return;
+                        }
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const updated = {
+                          ...current,
+                          rules: current.rules.map((r: any) =>
+                            r.id === ruleId ? { ...r, enabled: !enabled } : r,
+                          ),
+                        };
+                        await props.onPermissionsConfigChange?.(agentId, updated);
+                      },
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      onBatchSetRules: async (agentId: string, newRules: any[]) => {
+                        const current = props.permissionsConfig;
+                        if (!current) {
+                          return;
+                        }
+                        // 单次写入，避免逐条调用产生竞争条件
+                        await props.onPermissionsConfigChange?.(agentId, {
+                          ...current,
+                          rules: newRules,
+                        });
+                      },
+                      onSwitchTab: (tab: "overview" | "rules" | "audit") => {
+                        props.onPermissionsTabChange?.(tab);
+                      },
                       onRefresh: () => props.onPermissionsRefresh?.(selectedAgent.id),
-                      onTabChange: (tab) => props.onPermissionsTabChange?.(tab),
-                      onPermissionChange: (agentId, permission, granted) =>
-                        props.onPermissionChange?.(agentId, permission, granted),
-                      onSaveConfig: () => props.onPermissionsSaveConfig?.(selectedAgent.id),
-                      onApprovalAction: (requestId, action, comment) =>
-                        props.onApprovalAction?.(requestId, action, comment),
-                      onBatchApprove: (requestIds, comment) =>
-                        props.onBatchApprove?.(requestIds, comment),
-                      onBatchDeny: (requestIds, reason) => props.onBatchDeny?.(requestIds, reason),
-                      onFilterChange: (filter) => props.onApprovalsFilterChange?.(filter),
-                      onSelectApproval: (requestId, selected) =>
-                        props.onSelectApproval?.(requestId, selected),
-                      onSelectAll: () => props.onSelectAllApprovals?.(),
-                      onDeselectAll: () => props.onDeselectAllApprovals?.(),
-                      onShowApprovalDetail: (request) => props.onShowApprovalDetail?.(request),
+                      auditLogs: props.permissionChangeHistory || [],
+                      auditLoading: props.permissionHistoryLoading || false,
+                      onLoadAuditLogs: () => props.onPermissionsRefresh?.(selectedAgent.id),
                     })
                   : nothing
               }
@@ -1815,6 +1906,7 @@ export function renderAgents(props: AgentsProps) {
             binding: props.editingPolicyBinding?.binding || null,
             index: props.editingPolicyBinding?.index,
             channelsSnapshot: props.channelsSnapshot, // 传递通道快照
+            // oxlint-disable-next-line typescript/no-explicit-any
             onChange: (field: string, value: any) => {
               // 修改编辑中的绑定对象
               if (props.editingPolicyBinding) {
@@ -1830,6 +1922,7 @@ export function renderAgents(props: AgentsProps) {
                 // 添加模式，创建一个临时的编辑状态
                 const tempBinding = {
                   channelId: "",
+                  // oxlint-disable-next-line typescript/no-explicit-any
                   policy: "private" as any,
                   [field]: value,
                 };
@@ -2148,137 +2241,6 @@ function renderAgentContextCard(context: AgentContext, subtitle: string) {
   `;
 }
 
-type ChannelSummaryEntry = {
-  id: string;
-  label: string;
-  accounts: ChannelAccountSnapshot[];
-};
-
-function resolveChannelLabel(snapshot: ChannelsStatusSnapshot, id: string) {
-  const meta = snapshot.channelMeta?.find((entry) => entry.id === id);
-  if (meta?.label) {
-    return meta.label;
-  }
-  return snapshot.channelLabels?.[id] ?? id;
-}
-
-function resolveChannelEntries(snapshot: ChannelsStatusSnapshot | null): ChannelSummaryEntry[] {
-  if (!snapshot) {
-    return [];
-  }
-  const ids = new Set<string>();
-  for (const id of snapshot.channelOrder ?? []) {
-    ids.add(id);
-  }
-  for (const entry of snapshot.channelMeta ?? []) {
-    ids.add(entry.id);
-  }
-  for (const id of Object.keys(snapshot.channelAccounts ?? {})) {
-    ids.add(id);
-  }
-  const ordered: string[] = [];
-  const seed = snapshot.channelOrder?.length ? snapshot.channelOrder : Array.from(ids);
-  for (const id of seed) {
-    if (!ids.has(id)) {
-      continue;
-    }
-    ordered.push(id);
-    ids.delete(id);
-  }
-  for (const id of ids) {
-    ordered.push(id);
-  }
-  return ordered.map((id) => ({
-    id,
-    label: resolveChannelLabel(snapshot, id),
-    accounts: snapshot.channelAccounts?.[id] ?? [],
-  }));
-}
-
-const CHANNEL_EXTRA_FIELDS = ["groupPolicy", "streamMode", "dmPolicy"] as const;
-
-function translateChannelField(field: string): string {
-  const key = `agents.channels.field.${field}`;
-  return t(key);
-}
-
-function resolveChannelConfigValue(
-  configForm: Record<string, unknown> | null,
-  channelId: string,
-): Record<string, unknown> | null {
-  if (!configForm) {
-    return null;
-  }
-  const channels = (configForm.channels ?? {}) as Record<string, unknown>;
-  const fromChannels = channels[channelId];
-  if (fromChannels && typeof fromChannels === "object") {
-    return fromChannels as Record<string, unknown>;
-  }
-  const fallback = configForm[channelId];
-  if (fallback && typeof fallback === "object") {
-    return fallback as Record<string, unknown>;
-  }
-  return null;
-}
-
-function formatChannelExtraValue(raw: unknown): string {
-  if (raw == null) {
-    return "n/a";
-  }
-  if (typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean") {
-    return String(raw);
-  }
-  try {
-    return JSON.stringify(raw);
-  } catch {
-    return "n/a";
-  }
-}
-
-function resolveChannelExtras(
-  configForm: Record<string, unknown> | null,
-  channelId: string,
-): Array<{ label: string; value: string }> {
-  const value = resolveChannelConfigValue(configForm, channelId);
-  if (!value) {
-    return [];
-  }
-  return CHANNEL_EXTRA_FIELDS.flatMap((field) => {
-    if (!(field in value)) {
-      return [];
-    }
-    return [{ label: translateChannelField(field), value: formatChannelExtraValue(value[field]) }];
-  });
-}
-
-function summarizeChannelAccounts(accounts: ChannelAccountSnapshot[]) {
-  let connected = 0;
-  let configured = 0;
-  let enabled = 0;
-  for (const account of accounts) {
-    const probeOk =
-      account.probe && typeof account.probe === "object" && "ok" in account.probe
-        ? Boolean((account.probe as { ok?: unknown }).ok)
-        : false;
-    const isConnected = account.connected === true || account.running === true || probeOk;
-    if (isConnected) {
-      connected += 1;
-    }
-    if (account.configured) {
-      configured += 1;
-    }
-    if (account.enabled) {
-      enabled += 1;
-    }
-  }
-  return {
-    total: accounts.length,
-    connected,
-    configured,
-    enabled,
-  };
-}
-
 function renderAgentChannels(params: {
   agent: AgentsListResult["agents"][number];
   defaultId: string | null;
@@ -2286,10 +2248,12 @@ function renderAgentChannels(params: {
   agentFilesList: AgentsFilesListResult | null;
   agentIdentity: AgentIdentityResult | null;
   // 已绑定的通道账号
+  // oxlint-disable-next-line typescript/no-explicit-any
   boundAccounts: any[];
   boundAccountsLoading: boolean;
   boundAccountsError: string | null;
   // 可用但未绑定的通道账号
+  // oxlint-disable-next-line typescript/no-explicit-any
   availableAccounts: any[];
   availableAccountsLoading: boolean;
   availableAccountsError: string | null;
@@ -2349,7 +2313,7 @@ function renderAgentChannels(params: {
                 : html`
                   <div class="list" style="margin-top: 8px;">
                     ${params.boundAccounts.map(
-                      (binding: any) => html`
+                      (binding) => html`
                         <div class="card" style="margin-bottom: 8px; padding: 12px;">
                           <div class="row" style="justify-content: space-between; align-items: center;">
                             <div>
@@ -2422,7 +2386,7 @@ function renderAgentChannels(params: {
                         : html`
                           <div class="list">
                             ${params.availableAccounts.map(
-                              (account: any) => html`
+                              (account) => html`
                                 <div class="list-item" style="display: flex; justify-content: space-between; align-items: center;">
                                   <div>
                                     <div class="list-title">${account.label}</div>
@@ -2917,8 +2881,8 @@ function renderAgentTools(params: {
                   return html`
                     <div class="agent-tool-row">
                       <div>
-                        <div class="agent-tool-title mono">${tool.label}</div>
-                        <div class="agent-tool-sub">${tool.description()}</div>
+                        <div class="agent-tool-title">${tool.description()}</div>
+                        <div class="agent-tool-sub mono">${tool.id}</div>
                       </div>
                       <label class="cfg-toggle">
                         <input

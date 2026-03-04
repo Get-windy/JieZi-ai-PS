@@ -158,7 +158,7 @@ function validateChannelPoliciesConfig(config: unknown): void {
 
 /**
  * 获取智能助手的通道绑定配置
- * 
+ *
  * 优先从 agent.channelBindings 读取，如果没有则从全局 config.bindings[] 读取并转换格式
  * 这样可以兼容旧的通道绑定机制（通过助手管理页面的通道标签页绑定的数据）
  */
@@ -176,25 +176,25 @@ function getAgentChannelBindings(
 
   // 优先从agent配置中提取channelBindings（新机制）
   const channelBindings = (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
-  
+
   if (channelBindings && channelBindings.bindings && channelBindings.bindings.length > 0) {
     return channelBindings;
   }
-  
+
   // 如果没有，从config.bindings[]读取并转换（旧机制兼容）
   const globalBindings = listBindings(cfg);
   const agentGlobalBindings = globalBindings.filter(
-    (b) => normalizeAgentId(b.agentId) === normalized && b.match?.channel
+    (b) => normalizeAgentId(b.agentId) === normalized && b.match?.channel,
   );
-  
+
   if (agentGlobalBindings.length > 0) {
     // 转换为新格式
     const convertedBindings = agentGlobalBindings.map((b, index) => ({
-      id: `${b.match.channel}-${b.match.accountId || 'default'}-${index}`,
+      id: `${b.match.channel}-${b.match.accountId || "default"}-${index}`,
       channelId: b.match.channel,
-      accountId: b.match.accountId || 'default',
+      accountId: b.match.accountId || "default",
       policy: {
-        type: 'private' as const,
+        type: "private" as const,
         config: {
           allowedUsers: [],
         },
@@ -202,7 +202,7 @@ function getAgentChannelBindings(
       enabled: true,
       priority: 50,
     }));
-    
+
     return {
       bindings: convertedBindings,
       defaultPolicy: {
@@ -213,7 +213,7 @@ function getAgentChannelBindings(
       },
     };
   }
-  
+
   // 如果都没有，返回默认空配置
   return {
     defaultPolicy: {
@@ -1039,6 +1039,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       // 添加到accounts列表
       const updatedAccounts = [...currentAccounts, modelId];
       const updatedConfig = {
+        routingMode: "manual" as const, // 首次绑定默认手动模式；已有配置则被 spread 覆盖
         ...modelAccounts,
         accounts: updatedAccounts,
         // 如果是第一个模型，设为默认
