@@ -4,6 +4,7 @@ import { ADMIN_SCOPE, authorizeOperatorScopesForMethod } from "./method-scopes.j
 import { ErrorCodes, errorShape } from "./protocol/index.js";
 import { isRoleAuthorizedForMethod, parseGatewayRole } from "./role-policy.js";
 import { coreGatewayHandlers } from "./server-methods/index.js";
+export { coreGatewayHandlers } from "./server-methods/index.js";
 import type { GatewayRequestHandlers, GatewayRequestOptions } from "./server-methods/types.js";
 
 const CONTROL_PLANE_WRITE_METHODS = new Set(["config.apply", "config.patch", "update.run"]);
