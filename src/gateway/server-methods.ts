@@ -3,52 +3,8 @@ import { consumeControlPlaneWriteBudget } from "./control-plane-rate-limit.js";
 import { ADMIN_SCOPE, authorizeOperatorScopesForMethod } from "./method-scopes.js";
 import { ErrorCodes, errorShape } from "./protocol/index.js";
 import { isRoleAuthorizedForMethod, parseGatewayRole } from "./role-policy.js";
-import { agentHandlers } from "./server-methods/agent.js";
-import { agentsHandlers } from "./server-methods/agents.js";
-import { agentsManagementHandlers } from "./server-methods/agents-management.js";
-import { approvalHandlers } from "./server-methods/approval.js";
-import { hrManagementHandlers } from "./server-methods/hr-management.js";
-import { trainingHandlers } from "./server-methods/training.js";
-import { permissionManagementHandlers } from "./server-methods/permission-management.js";
-import { organizationStructureHandlers } from "./server-methods/organization-structure.js";
-import { browserHandlers } from "./server-methods/browser.js";
-import { channelManagerHandlers } from "./server-methods/channel-manager.js";
-import { channelPoliciesHandlers } from "./server-methods/channel-policies.js";
-import { channelsHandlers } from "./server-methods/channels.js";
-import { chatHandlers } from "./server-methods/chat.js";
-import { configHandlers } from "./server-methods/config.js";
-import { connectHandlers } from "./server-methods/connect.js";
-import { cronHandlers } from "./server-methods/cron.js";
-import { deviceHandlers } from "./server-methods/devices.js";
-import { doctorHandlers } from "./server-methods/doctor.js";
-import { execApprovalsHandlers } from "./server-methods/exec-approvals.js";
-import { friendsHandlers } from "./server-methods/friends-rpc.js";
-import { groupsHandlers } from "./server-methods/groups-rpc.js";
-import { healthHandlers } from "./server-methods/health.js";
-import { logsHandlers } from "./server-methods/logs.js";
-import { messageQueueHandlers } from "./server-methods/message-queue-rpc.js";
-import { modelsHandlers } from "./server-methods/models.js";
-import { nodeHandlers } from "./server-methods/nodes.js";
-import { organizationChartHandlers } from "./server-methods/organization-chart.js";
-import { pairingHandlers } from "./server-methods/pairing.js";
-import { permissionsManagementHandlers } from "./server-methods/permissions-management.js";
-import { permissionHandlers } from "./server-methods/permission.js";
-import { phase5RpcHandlers } from "./server-methods/phase5-rpc.js";
-import { pushHandlers } from "./server-methods/push.js";
-import { sendHandlers } from "./server-methods/send.js";
-import { sessionsHandlers } from "./server-methods/sessions.js";
-import { skillsHandlers } from "./server-methods/skills.js";
-import { storageHandlers } from "./server-methods/storage.js";
-import { systemHandlers } from "./server-methods/system.js";
-import { talkHandlers } from "./server-methods/talk.js";
-import { toolsCatalogHandlers } from "./server-methods/tools-catalog.js";
-import { ttsHandlers } from "./server-methods/tts.js";
+import { coreGatewayHandlers } from "./server-methods/index.js";
 import type { GatewayRequestHandlers, GatewayRequestOptions } from "./server-methods/types.js";
-import { updateHandlers } from "./server-methods/update.js";
-import { usageHandlers } from "./server-methods/usage.js";
-import { voicewakeHandlers } from "./server-methods/voicewake.js";
-import { webHandlers } from "./server-methods/web.js";
-import { wizardHandlers } from "./server-methods/wizard.js";
 
 const CONTROL_PLANE_WRITE_METHODS = new Set(["config.apply", "config.patch", "update.run"]);
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {
@@ -79,54 +35,6 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
   }
   return null;
 }
-
-export const coreGatewayHandlers: GatewayRequestHandlers = {
-  ...connectHandlers,
-  ...logsHandlers,
-  ...messageQueueHandlers,
-  ...voicewakeHandlers,
-  ...healthHandlers,
-  ...channelsHandlers,
-  ...channelManagerHandlers,
-  ...channelPoliciesHandlers,
-  ...chatHandlers,
-  ...cronHandlers,
-  ...deviceHandlers,
-  ...doctorHandlers,
-  ...execApprovalsHandlers,
-  ...friendsHandlers,
-  ...webHandlers,
-  ...modelsHandlers,
-  ...configHandlers,
-  ...wizardHandlers,
-  ...talkHandlers,
-  ...toolsCatalogHandlers,
-  ...ttsHandlers,
-  ...skillsHandlers,
-  ...sessionsHandlers,
-  ...systemHandlers,
-  ...updateHandlers,
-  ...nodeHandlers,
-  ...pairingHandlers,
-  ...pushHandlers,
-  ...sendHandlers,
-  ...usageHandlers,
-  ...storageHandlers,
-  ...agentHandlers,
-  ...agentsHandlers,
-  ...agentsManagementHandlers,
-  ...approvalHandlers,
-  ...hrManagementHandlers,
-  ...trainingHandlers,
-  ...permissionManagementHandlers,
-  ...organizationStructureHandlers,
-  ...groupsHandlers,
-  ...organizationChartHandlers,
-  ...permissionsManagementHandlers,
-  ...permissionHandlers,
-  ...phase5RpcHandlers,
-  ...browserHandlers,
-};
 
 export async function handleGatewayRequest(
   opts: GatewayRequestOptions & { extraHandlers?: GatewayRequestHandlers },
