@@ -1,12 +1,13 @@
+// oxlint-disable typescript/no-base-to-string -- params values are unknown but safe to stringify
 /**
  * Groups Management RPC Methods
  * 群组管理的 RPC 方法处理器
  */
 
 import type { GroupMemberRole } from "../../sessions/group-manager.js";
-import type { GatewayRequestHandlers } from "./types.js";
 import { groupManager } from "../../sessions/group-manager.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
+import type { GatewayRequestHandlers } from "./types.js";
 
 /**
  * 群组管理 RPC 方法处理器
@@ -18,7 +19,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
   "groups.list": async ({ params, respond }) => {
     try {
       // 获取所有群组
-      const allGroups = Array.from((groupManager as any).groups.values());
+      const allGroups = groupManager.getAllGroups();
 
       // 如果指定了 agentId，只返回该智能助手所在的群组
       const agentId = params?.agentId ? String(params.agentId) : undefined;
@@ -77,15 +78,18 @@ export const groupsHandlers: GatewayRequestHandlers = {
    */
   "groups.create": async ({ params, respond }) => {
     try {
-      const id = params?.id ? String(params.id) : "";
+      // id 可选，不传则自动生成
+      const id = params?.id
+        ? String(params.id)
+        : `group_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const name = params?.name ? String(params.name) : "";
       const ownerId = params?.ownerId ? String(params.ownerId) : "";
 
-      if (!id || !name || !ownerId) {
+      if (!name || !ownerId) {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "id, name, and ownerId are required"),
+          errorShape(ErrorCodes.INVALID_REQUEST, "name and ownerId are required"),
         );
         return;
       }
@@ -123,12 +127,27 @@ export const groupsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const updates: any = {};
-      if (params?.name) updates.name = String(params.name);
-      if (params?.description !== undefined) updates.description = String(params.description);
-      if (typeof params?.isPublic === "boolean") updates.isPublic = params.isPublic;
-      if (typeof params?.maxMembers === "number") updates.maxMembers = params.maxMembers;
-      if (Array.isArray(params?.tags)) updates.tags = params.tags.map(String);
+      const updates: Partial<
+        Pick<
+          import("../../sessions/group-manager.js").GroupInfo,
+          "name" | "description" | "isPublic" | "maxMembers" | "tags"
+        >
+      > = {};
+      if (params?.name) {
+        updates.name = String(params.name);
+      }
+      if (params?.description !== undefined) {
+        updates.description = String(params.description);
+      }
+      if (typeof params?.isPublic === "boolean") {
+        updates.isPublic = params.isPublic;
+      }
+      if (typeof params?.maxMembers === "number") {
+        updates.maxMembers = params.maxMembers;
+      }
+      if (Array.isArray(params?.tags)) {
+        updates.tags = params.tags.map(String);
+      }
 
       const group = await groupManager.updateGroup(groupId, updates);
       respond(true, group, undefined);
@@ -496,11 +515,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const result = await groupManager.approveRequest(
-        requestId,
-        decision as "approve" | "reject",
-        approverId,
-      );
+      const result = await groupManager.approveRequest(requestId, decision, approverId);
       respond(true, result, undefined);
     } catch (error) {
       respond(
@@ -577,11 +592,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      await groupManager.shareResource(
-        groupId,
-        resourceType as "document" | "knowledge" | "workspace",
-        resourceId,
-      );
+      await groupManager.shareResource(groupId, resourceType, resourceId);
       respond(true, { success: true }, undefined);
     } catch (error) {
       respond(
@@ -603,14 +614,22 @@ export const groupsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const settings: any = {};
-      if (params?.type) settings.type = String(params.type);
-      if (typeof params?.requireApproval === "boolean")
+      const settings: Parameters<typeof groupManager.updateGroupSettings>[1] = {};
+      if (params?.type) {
+        settings.type = String(params.type);
+      }
+      if (typeof params?.requireApproval === "boolean") {
         settings.requireApproval = params.requireApproval;
-      if (typeof params?.allowInvite === "boolean") settings.allowInvite = params.allowInvite;
-      if (typeof params?.allowSpeak === "boolean") settings.allowSpeak = params.allowSpeak;
-      if (Array.isArray(params?.pinMessages))
+      }
+      if (typeof params?.allowInvite === "boolean") {
+        settings.allowInvite = params.allowInvite;
+      }
+      if (typeof params?.allowSpeak === "boolean") {
+        settings.allowSpeak = params.allowSpeak;
+      }
+      if (Array.isArray(params?.pinMessages)) {
         settings.pinMessages = params.pinMessages.map(String);
+      }
 
       const group = await groupManager.updateGroupSettings(groupId, settings);
       respond(true, group, undefined);

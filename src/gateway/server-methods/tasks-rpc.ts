@@ -1,32 +1,36 @@
+// oxlint-disable typescript/no-base-to-string -- params values are unknown but safe to stringify
 /**
  * Tasks RPC Handlers
  *
  * 提供任务协作系统相关的RPC方法（P2.2）：
- * 
+ *
  * 任务基础操作：
  * - task.create - 创建任务
  * - task.update - 更新任务
  * - task.delete - 删除任务
  * - task.get - 获取任务详情
  * - task.list - 列出任务
- * 
+ *
  * 任务协作操作：
  * - task.assign - 分配任务
  * - task.status.update - 更新任务状态
  * - task.comment.add - 添加评论
  * - task.attachment.add - 添加附件
  * - task.worklog.add - 添加工作记录（智能助手专用）
- * 
+ *
  * 任务关系操作：
  * - task.subtask.create - 创建子任务
  * - task.dependency.add - 添加依赖关系
  * - task.block - 标记任务被阻塞
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import type { MemberType } from "../../organization/types.js";
+import {
+  checkTaskAccess,
+  checkTaskModifyAccess,
+  checkTaskDeleteAccess,
+} from "../../tasks/permissions.js";
 import * as storage from "../../tasks/storage.js";
-import { checkTaskAccess, checkTaskModifyAccess, checkTaskDeleteAccess } from "../../tasks/permissions.js";
 import type {
   Task,
   TaskStatus,
@@ -37,11 +41,9 @@ import type {
   TaskAttachment,
   AgentWorkLog,
   TaskDependency,
-  CreateTaskRequest,
-  UpdateTaskRequest,
-  TaskFilter,
 } from "../../tasks/types.js";
-import type { MemberType } from "../../organization/types.js";
+import { ErrorCodes, errorShape } from "../protocol/index.js";
+import type { GatewayRequestHandlers } from "./types.js";
 
 /**
  * 任务 RPC 方法注册
@@ -58,22 +60,14 @@ export const tasksRpc: GatewayRequestHandlers = {
       const creatorType = params?.creatorType
         ? (String(params.creatorType) as MemberType)
         : "human";
-      const assigneeIds = params?.assigneeIds
-        ? (params.assigneeIds as string[])
-        : [];
-      const priority = params?.priority
-        ? (String(params.priority) as TaskPriority)
-        : "medium";
+      const assigneeIds = params?.assigneeIds ? (params.assigneeIds as string[]) : [];
+      const priority = params?.priority ? (String(params.priority) as TaskPriority) : "medium";
       const type = params?.type ? (String(params.type) as TaskType) : undefined;
       const dueDate = params?.dueDate ? Number(params.dueDate) : undefined;
-      const organizationId = params?.organizationId
-        ? String(params.organizationId)
-        : undefined;
+      const organizationId = params?.organizationId ? String(params.organizationId) : undefined;
       const teamId = params?.teamId ? String(params.teamId) : undefined;
       const projectId = params?.projectId ? String(params.projectId) : undefined;
-      const parentTaskId = params?.parentTaskId
-        ? String(params.parentTaskId)
-        : undefined;
+      const parentTaskId = params?.parentTaskId ? String(params.parentTaskId) : undefined;
       const tags = params?.tags ? (params.tags as string[]) : [];
 
       // 验证参数
@@ -87,27 +81,19 @@ export const tasksRpc: GatewayRequestHandlers = {
       }
 
       if (!description || description.length < 1) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "任务描述不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务描述不能为空"));
         return;
       }
 
       // 验证优先级
       if (!["low", "medium", "high", "urgent"].includes(priority)) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "无效的任务优先级"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "无效的任务优先级"));
         return;
       }
 
       // 验证组织/团队/项目（简化版，实际应该调用组织管理模块）
       // 在实际环境中，这里应该查询组织管理系统确认创建者的权限
-      
+
       // 生成任务ID
       const taskId = `task-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
 
@@ -147,7 +133,7 @@ export const tasksRpc: GatewayRequestHandlers = {
 
       // 存储到数据库
       await storage.createTask(newTask);
-      
+
       // 通知所有被分配者
       for (const assignee of assignees) {
         // 这里应该调用通知系统发送任务分配通知
@@ -173,69 +159,47 @@ export const tasksRpc: GatewayRequestHandlers = {
    */
   "task.update": async ({ params, respond }) => {
     try {
-      const taskId = params?.taskId ? String(params.taskId) : "";
+      // 兼容工具端传 id 或 taskId
+      const taskId =
+        (params?.taskId ? String(params.taskId) : "") || (params?.id ? String(params.id) : "");
       const title = params?.title ? String(params.title) : undefined;
-      const description = params?.description
-        ? String(params.description)
-        : undefined;
-      const status = params?.status
-        ? (String(params.status) as TaskStatus)
-        : undefined;
-      const priority = params?.priority
-        ? (String(params.priority) as TaskPriority)
-        : undefined;
+      const description = params?.description ? String(params.description) : undefined;
+      const status = params?.status ? (String(params.status) as TaskStatus) : undefined;
+      const priority = params?.priority ? (String(params.priority) as TaskPriority) : undefined;
       const dueDate = params?.dueDate ? Number(params.dueDate) : undefined;
       const tags = params?.tags ? (params.tags as string[]) : undefined;
 
       if (!taskId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "任务ID不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务ID不能为空"));
         return;
       }
 
       // 验证状态
       if (
         status &&
-        !["todo", "in-progress", "review", "blocked", "done", "cancelled"].includes(
-          status,
-        )
+        !["todo", "in-progress", "review", "blocked", "done", "cancelled"].includes(status)
       ) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "无效的任务状态"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "无效的任务状态"));
         return;
       }
 
       // 验证优先级
       if (priority && !["low", "medium", "high", "urgent"].includes(priority)) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "无效的任务优先级"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "无效的任务优先级"));
         return;
       }
 
       // 从数据库获取任务
       const task = await storage.getTask(taskId);
       if (!task) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.NOT_FOUND, "任务不存在"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
         return;
       }
-      
+
       // 权限检查 - 需要创建者、执行者或管理员权限
       const requesterId = params?.requesterId ? String(params.requesterId) : undefined;
       if (requesterId) {
-        const ownerIds = task.assignees.filter(a => a.role === "owner").map(a => a.id);
+        const ownerIds = task.assignees.filter((a) => a.role === "owner").map((a) => a.id);
         const permCheck = checkTaskModifyAccess(
           task.creatorId,
           ownerIds,
@@ -243,18 +207,18 @@ export const tasksRpc: GatewayRequestHandlers = {
           task.teamId,
           requesterId,
           undefined,
-          undefined
+          undefined,
         );
         if (!permCheck.allowed) {
           respond(
             false,
             undefined,
-            errorShape(ErrorCodes.PERMISSION_DENIED, permCheck.reason || "无权限修改此任务")
+            errorShape(ErrorCodes.INVALID_REQUEST, permCheck.reason || "无权限修改此任务"),
           );
           return;
         }
       }
-      
+
       // 更新任务信息
       const updatedTask = await storage.updateTask(taskId, {
         title,
@@ -283,28 +247,22 @@ export const tasksRpc: GatewayRequestHandlers = {
    */
   "task.delete": async ({ params, respond }) => {
     try {
-      const taskId = params?.taskId ? String(params.taskId) : "";
+      // 兼容工具端传 id 或 taskId
+      const taskId =
+        (params?.taskId ? String(params.taskId) : "") || (params?.id ? String(params.id) : "");
 
       if (!taskId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "任务ID不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务ID不能为空"));
         return;
       }
 
       // 从数据库获取任务
       const task = await storage.getTask(taskId);
       if (!task) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.NOT_FOUND, "任务不存在"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
         return;
       }
-      
+
       // 权限检查 - 需要创建者或管理员权限
       const requesterId = params?.requesterId ? String(params.requesterId) : undefined;
       if (requesterId) {
@@ -314,38 +272,44 @@ export const tasksRpc: GatewayRequestHandlers = {
           task.teamId,
           requesterId,
           undefined,
-          undefined
+          undefined,
         );
         if (!permCheck.allowed) {
           respond(
             false,
             undefined,
-            errorShape(ErrorCodes.PERMISSION_DENIED, permCheck.reason || "无权限删除此任务")
+            errorShape(ErrorCodes.INVALID_REQUEST, permCheck.reason || "无权限删除此任务"),
           );
           return;
         }
       }
-      
+
       // 检查是否有子任务或依赖关系
       if (task.subtasks && task.subtasks.length > 0) {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `任务存在${task.subtasks.length}个子任务，请先删除子任务`)
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `任务存在${task.subtasks.length}个子任务，请先删除子任务`,
+          ),
         );
         return;
       }
-      
+
       const dependencies = await storage.getTaskDependencies(taskId);
       if (dependencies.length > 0) {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `任务存在${dependencies.length}个依赖关系，请先解除依赖`)
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `任务存在${dependencies.length}个依赖关系，请先解除依赖`,
+          ),
         );
         return;
       }
-      
+
       // 从数据库删除
       const deleted = await storage.deleteTask(taskId);
 
@@ -370,30 +334,22 @@ export const tasksRpc: GatewayRequestHandlers = {
       const taskId = params?.taskId ? String(params.taskId) : "";
 
       if (!taskId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "任务ID不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务ID不能为空"));
         return;
       }
 
       // 从数据库获取任务
       const task = await storage.getTask(taskId);
-      
+
       if (!task) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.NOT_FOUND, "任务不存在"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
         return;
       }
-      
+
       // 权限检查 - 验证请求者有权限查看此任务
       const requesterId = params?.requesterId ? String(params.requesterId) : undefined;
       if (requesterId) {
-        const assigneeIds = task.assignees.map(a => a.id);
+        const assigneeIds = task.assignees.map((a) => a.id);
         const permCheck = checkTaskAccess(
           task.creatorId,
           assigneeIds,
@@ -401,30 +357,30 @@ export const tasksRpc: GatewayRequestHandlers = {
           task.teamId,
           requesterId,
           undefined,
-          undefined
+          undefined,
         );
         if (!permCheck.allowed) {
           respond(
             false,
             undefined,
-            errorShape(ErrorCodes.PERMISSION_DENIED, permCheck.reason || "无权限查看此任务")
+            errorShape(ErrorCodes.INVALID_REQUEST, permCheck.reason || "无权限查看此任务"),
           );
           return;
         }
       }
-      
+
       // 加载关联数据
       const comments = await storage.getTaskComments(taskId);
       const attachments = await storage.getTaskAttachments(taskId);
       const worklogs = await storage.getTaskWorklogs(taskId);
       const dependencies = await storage.getTaskDependencies(taskId);
-      
+
       const fullTask = {
         ...task,
         comments,
         attachments,
         workLogs: worklogs,
-        dependencies: dependencies.map(d => d.dependsOnTaskId),
+        dependencies: dependencies.map((d) => d.dependsOnTaskId),
       };
 
       respond(true, fullTask, undefined);
@@ -445,23 +401,19 @@ export const tasksRpc: GatewayRequestHandlers = {
    */
   "task.list": async ({ params, respond }) => {
     try {
-      const assigneeId = params?.assigneeId
-        ? String(params.assigneeId)
-        : undefined;
+      const assigneeId = params?.assigneeId ? String(params.assigneeId) : undefined;
       const creatorId = params?.creatorId ? String(params.creatorId) : undefined;
       const status = params?.status ? (params.status as TaskStatus | TaskStatus[]) : undefined;
       const priority = params?.priority
         ? (params.priority as TaskPriority | TaskPriority[])
         : undefined;
-      const organizationId = params?.organizationId
-        ? String(params.organizationId)
-        : undefined;
+      const organizationId = params?.organizationId ? String(params.organizationId) : undefined;
       const teamId = params?.teamId ? String(params.teamId) : undefined;
       const projectId = params?.projectId ? String(params.projectId) : undefined;
       const keyword = params?.keyword ? String(params.keyword) : undefined;
 
       // 构建筛选条件
-      const filter: any = {
+      const filter: Record<string, unknown> = {
         assigneeId,
         creatorId,
         status,
@@ -471,17 +423,17 @@ export const tasksRpc: GatewayRequestHandlers = {
         projectId,
         keyword,
       };
-      
+
       // 从数据库查询任务列表
       const tasks = await storage.listTasks(filter);
-      
+
       // 权限检查 - 只返回用户有权限查看的任务
       const requesterId = params?.requesterId ? String(params.requesterId) : undefined;
       let filteredTasks = tasks;
-      
+
       if (requesterId) {
-        filteredTasks = tasks.filter(task => {
-          const assigneeIds = task.assignees.map(a => a.id);
+        filteredTasks = tasks.filter((task) => {
+          const assigneeIds = task.assignees.map((a) => a.id);
           const permCheck = checkTaskAccess(
             task.creatorId,
             assigneeIds,
@@ -489,7 +441,7 @@ export const tasksRpc: GatewayRequestHandlers = {
             task.teamId,
             requesterId,
             undefined,
-            undefined
+            undefined,
           );
           return permCheck.allowed;
         });
@@ -518,35 +470,25 @@ export const tasksRpc: GatewayRequestHandlers = {
       const assigneeType = params?.assigneeType
         ? (String(params.assigneeType) as MemberType)
         : "agent";
-      const role = params?.role
-        ? String(params.role)
-        : "assignee";
+      const role = params?.role ? String(params.role) : "assignee";
       const assignedBy = params?.assignedBy ? String(params.assignedBy) : "system";
 
       if (!taskId || !assigneeId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"));
         return;
       }
 
       // 获取任务
       const task = await storage.getTask(taskId);
       if (!task) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.NOT_FOUND, "任务不存在"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
         return;
       }
-      
+
       // 权限检查 - 需要任务owner或管理员权限
       const requesterId = params?.requesterId ? String(params.requesterId) : undefined;
       if (requesterId) {
-        const ownerIds = task.assignees.filter(a => a.role === "owner").map(a => a.id);
+        const ownerIds = task.assignees.filter((a) => a.role === "owner").map((a) => a.id);
         const permCheck = checkTaskModifyAccess(
           task.creatorId,
           ownerIds,
@@ -554,29 +496,25 @@ export const tasksRpc: GatewayRequestHandlers = {
           task.teamId,
           requesterId,
           undefined,
-          undefined
+          undefined,
         );
         if (!permCheck.allowed) {
           respond(
             false,
             undefined,
-            errorShape(ErrorCodes.PERMISSION_DENIED, permCheck.reason || "无权限分配此任务")
+            errorShape(ErrorCodes.INVALID_REQUEST, permCheck.reason || "无权限分配此任务"),
           );
           return;
         }
       }
-      
+
       // 验证被分配者不重复
-      const existingAssignee = task.assignees.find(a => a.id === assigneeId);
+      const existingAssignee = task.assignees.find((a) => a.id === assigneeId);
       if (existingAssignee) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "该用户已经是任务执行者")
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "该用户已经是任务执行者"));
         return;
       }
-      
+
       // 添加执行者到任务
       const newAssignee: TaskAssignee = {
         id: assigneeId,
@@ -585,10 +523,10 @@ export const tasksRpc: GatewayRequestHandlers = {
         assignedAt: Date.now(),
         assignedBy,
       };
-      
+
       task.assignees.push(newAssignee);
       await storage.updateTask(taskId, { assignees: task.assignees });
-      
+
       // 通知被分配者
       console.log(`[Task Notification] New assignee ${assigneeId} added to task ${taskId}`);
       // 实际环境中应该调用通知系统发送任务分配通知
@@ -619,39 +557,27 @@ export const tasksRpc: GatewayRequestHandlers = {
       const updatedBy = params?.updatedBy ? String(params.updatedBy) : "system";
 
       if (!taskId || !newStatus) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"));
         return;
       }
 
       // 验证状态
       if (!["todo", "in-progress", "review", "blocked", "done", "cancelled"].includes(newStatus)) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "无效的任务状态"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "无效的任务状态"));
         return;
       }
 
       // 获取任务
       const task = await storage.getTask(taskId);
       if (!task) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.NOT_FOUND, "任务不存在"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
         return;
       }
-      
+
       // 权限检查 - 需要执行者或管理员权限
       const requesterId = params?.requesterId ? String(params.requesterId) : updatedBy;
       if (requesterId) {
-        const ownerIds = task.assignees.filter(a => a.role === "owner").map(a => a.id);
+        const ownerIds = task.assignees.filter((a) => a.role === "owner").map((a) => a.id);
         const permCheck = checkTaskModifyAccess(
           task.creatorId,
           ownerIds,
@@ -659,48 +585,45 @@ export const tasksRpc: GatewayRequestHandlers = {
           task.teamId,
           requesterId,
           undefined,
-          undefined
+          undefined,
         );
         if (!permCheck.allowed) {
           respond(
             false,
             undefined,
-            errorShape(ErrorCodes.PERMISSION_DENIED, permCheck.reason || "无权限更新任务状态")
+            errorShape(ErrorCodes.INVALID_REQUEST, permCheck.reason || "无权限更新任务状态"),
           );
           return;
         }
       }
-      
+
       // 验证状态流转合法性
       const validTransitions: Record<TaskStatus, TaskStatus[]> = {
-        "todo": ["in-progress", "cancelled"],
+        todo: ["in-progress", "cancelled"],
         "in-progress": ["review", "blocked", "done", "cancelled"],
-        "review": ["in-progress", "done", "cancelled"],
-        "blocked": ["in-progress", "cancelled"],
-        "done": ["in-progress"], // 允许重新打开
-        "cancelled": ["todo"], // 允许恢复
+        review: ["in-progress", "done", "cancelled"],
+        blocked: ["in-progress", "cancelled"],
+        done: ["in-progress"], // 允许重新打开
+        cancelled: ["todo"], // 允许恢复
       };
-      
+
       if (!validTransitions[task.status].includes(newStatus)) {
         respond(
           false,
           undefined,
-          errorShape(
-            ErrorCodes.INVALID_REQUEST,
-            `无效的状态流转: ${task.status} -> ${newStatus}`
-          )
+          errorShape(ErrorCodes.INVALID_REQUEST, `无效的状态流转: ${task.status} -> ${newStatus}`),
         );
         return;
       }
-      
+
       // 更新状态并记录变更历史
       const updates: Partial<Task> = { status: newStatus };
-      
+
       // 如果状态变为done，记录完成时间
       if (newStatus === "done") {
         updates.completedAt = Date.now();
       }
-      
+
       // 如果状态变为in-progress，记录开始时间
       if (newStatus === "in-progress" && !task.timeTracking.startedAt) {
         updates.timeTracking = {
@@ -708,11 +631,13 @@ export const tasksRpc: GatewayRequestHandlers = {
           startedAt: Date.now(),
         };
       }
-      
+
       await storage.updateTask(taskId, updates);
-      
+
       // 发送状态变更通知
-      console.log(`[Task Notification] Task ${taskId} status changed: ${task.status} -> ${newStatus}`);
+      console.log(
+        `[Task Notification] Task ${taskId} status changed: ${task.status} -> ${newStatus}`,
+      );
       // 实际环境中应该通知所有相关人员
 
       const result = {
@@ -744,12 +669,8 @@ export const tasksRpc: GatewayRequestHandlers = {
       const taskId = params?.taskId ? String(params.taskId) : "";
       const content = params?.content ? String(params.content) : "";
       const authorId = params?.authorId ? String(params.authorId) : "system";
-      const authorType = params?.authorType
-        ? (String(params.authorType) as MemberType)
-        : "human";
-      const attachments = params?.attachments
-        ? (params.attachments as string[])
-        : undefined;
+      const authorType = params?.authorType ? (String(params.authorType) as MemberType) : "human";
+      const attachments = params?.attachments ? (params.attachments as string[]) : undefined;
       const replyToCommentId = params?.replyToCommentId
         ? String(params.replyToCommentId)
         : undefined;
@@ -766,15 +687,11 @@ export const tasksRpc: GatewayRequestHandlers = {
       // 权限检查 - 验证用户有权限访问此任务
       const task = await storage.getTask(taskId);
       if (!task) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.NOT_FOUND, "任务不存在")
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
         return;
       }
-      
-      const assigneeIds = task.assignees.map(a => a.id);
+
+      const assigneeIds = task.assignees.map((a) => a.id);
       const permCheck = checkTaskAccess(
         task.creatorId,
         assigneeIds,
@@ -782,17 +699,17 @@ export const tasksRpc: GatewayRequestHandlers = {
         task.teamId,
         authorId,
         undefined,
-        undefined
+        undefined,
       );
       if (!permCheck.allowed) {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.PERMISSION_DENIED, permCheck.reason || "无权限评论此任务")
+          errorShape(ErrorCodes.INVALID_REQUEST, permCheck.reason || "无权限评论此任务"),
         );
         return;
       }
-      
+
       // 添加评论
       const commentId = `comment-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
 
@@ -806,9 +723,9 @@ export const tasksRpc: GatewayRequestHandlers = {
         replyToCommentId,
         createdAt: Date.now(),
       };
-      
+
       await storage.addTaskComment(newComment);
-      
+
       // 通知相关人员
       console.log(`[Task Notification] New comment on task ${taskId} by ${authorId}`);
       // 实际环境中应该通知任务创建者和所有执行者
@@ -839,26 +756,18 @@ export const tasksRpc: GatewayRequestHandlers = {
       const uploadedBy = params?.uploadedBy ? String(params.uploadedBy) : "system";
 
       if (!taskId || !fileName || !fileUrl) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"));
         return;
       }
 
       // 权限检查 - 验证用户有权限访问此任务
       const task = await storage.getTask(taskId);
       if (!task) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.NOT_FOUND, "任务不存在")
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
         return;
       }
-      
-      const assigneeIds = task.assignees.map(a => a.id);
+
+      const assigneeIds = task.assignees.map((a) => a.id);
       const permCheck = checkTaskAccess(
         task.creatorId,
         assigneeIds,
@@ -866,28 +775,31 @@ export const tasksRpc: GatewayRequestHandlers = {
         task.teamId,
         uploadedBy,
         undefined,
-        undefined
+        undefined,
       );
       if (!permCheck.allowed) {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.PERMISSION_DENIED, permCheck.reason || "无权限添加附件")
+          errorShape(ErrorCodes.INVALID_REQUEST, permCheck.reason || "无权限添加附件"),
         );
         return;
       }
-      
+
       // 验证文件大小限制（默认50MB）
       const maxFileSize = 50 * 1024 * 1024;
       if (fileSize > maxFileSize) {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `文件大小超过限制（最大${maxFileSize / 1024 / 1024}MB）`)
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `文件大小超过限制（最大${maxFileSize / 1024 / 1024}MB）`,
+          ),
         );
         return;
       }
-      
+
       const attachmentId = `attach-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
 
       const newAttachment: TaskAttachment = {
@@ -900,7 +812,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         uploadedBy,
         uploadedAt: Date.now(),
       };
-      
+
       await storage.addTaskAttachment(newAttachment);
 
       respond(true, newAttachment, undefined);
@@ -929,40 +841,30 @@ export const tasksRpc: GatewayRequestHandlers = {
       const result = params?.result
         ? (String(params.result) as "success" | "failure" | "partial")
         : undefined;
-      const errorMessage = params?.errorMessage
-        ? String(params.errorMessage)
-        : undefined;
+      const errorMessage = params?.errorMessage ? String(params.errorMessage) : undefined;
 
       if (!taskId || !agentId || !action) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"));
         return;
       }
 
       // 权限检查 - 验证智能助手是此任务的执行者
       const task = await storage.getTask(taskId);
       if (!task) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.NOT_FOUND, "任务不存在")
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
         return;
       }
-      
-      const isAssignee = task.assignees.some(a => a.id === agentId && a.type === "agent");
+
+      const isAssignee = task.assignees.some((a) => a.id === agentId && a.type === "agent");
       if (!isAssignee) {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.PERMISSION_DENIED, "智能助手不是此任务的执行者")
+          errorShape(ErrorCodes.INVALID_REQUEST, "智能助手不是此任务的执行者"),
         );
         return;
       }
-      
+
       const worklogId = `worklog-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
 
       const newWorklog: AgentWorkLog = {
@@ -976,7 +878,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         errorMessage,
         createdAt: Date.now(),
       };
-      
+
       await storage.addWorklog(newWorklog);
 
       respond(true, newWorklog, undefined);
@@ -1001,34 +903,25 @@ export const tasksRpc: GatewayRequestHandlers = {
       const title = params?.title ? String(params.title) : "";
       const description = params?.description ? String(params.description) : "";
       const creatorId = params?.creatorId ? String(params.creatorId) : "system";
-      const assigneeIds = params?.assigneeIds
-        ? (params.assigneeIds as string[])
-        : [];
-      const priority = params?.priority
-        ? (String(params.priority) as TaskPriority)
-        : "medium";
+      const assigneeIds = params?.assigneeIds ? (params.assigneeIds as string[]) : [];
+      const priority = params?.priority ? (String(params.priority) as TaskPriority) : "medium";
 
       if (!parentTaskId || !title) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"));
         return;
       }
-      
+
+      // 获取父任务
+      const parentTask = await storage.getTask(parentTaskId);
+
       if (!parentTask) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.NOT_FOUND, "父任务不存在"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "父任务不存在"));
         return;
       }
 
       // 权限检查 - 验证用户有权限访问父任务
       const requesterId = params?.requesterId ? String(params.requesterId) : creatorId;
-      const parentTaskAssigneeIds = parentTask.assignees.map(a => a.id);
+      const parentTaskAssigneeIds = parentTask.assignees.map((a) => a.id);
       const permCheck = checkTaskAccess(
         parentTask.creatorId,
         parentTaskAssigneeIds,
@@ -1036,20 +929,20 @@ export const tasksRpc: GatewayRequestHandlers = {
         parentTask.teamId,
         requesterId,
         undefined,
-        undefined
+        undefined,
       );
       if (!permCheck.allowed) {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.PERMISSION_DENIED, permCheck.reason || "无权限创建子任务")
+          errorShape(ErrorCodes.INVALID_REQUEST, permCheck.reason || "无权限创建子任务"),
         );
         return;
       }
-      
+
       // 创建子任务（继承父任务的组织/团队/项目）
       const subtaskId = `task-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
-      
+
       const assignees: TaskAssignee[] = assigneeIds.map((assigneeId, index) => ({
         id: assigneeId,
         type: "agent" as MemberType,
@@ -1077,10 +970,10 @@ export const tasksRpc: GatewayRequestHandlers = {
         },
         createdAt: Date.now(),
       };
-      
+
       // 存储子任务
       await storage.createTask(subtask);
-      
+
       // 更新父任务的子任务列表
       const parentSubtasks = parentTask.subtasks || [];
       parentSubtasks.push(subtaskId);
@@ -1105,45 +998,36 @@ export const tasksRpc: GatewayRequestHandlers = {
   "task.dependency.add": async ({ params, respond }) => {
     try {
       const taskId = params?.taskId ? String(params.taskId) : "";
-      const dependsOnTaskId = params?.dependsOnTaskId
-        ? String(params.dependsOnTaskId)
-        : "";
-      const dependencyType = params?.dependencyType
-        ? String(params.dependencyType)
-        : "blocks";
-      const description = params?.description
-        ? String(params.description)
-        : undefined;
+      const dependsOnTaskId = params?.dependsOnTaskId ? String(params.dependsOnTaskId) : "";
+      const dependencyType = params?.dependencyType ? String(params.dependencyType) : "blocks";
+      const description = params?.description ? String(params.description) : undefined;
       const createdBy = params?.createdBy ? String(params.createdBy) : "system";
 
       if (!taskId || !dependsOnTaskId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"));
         return;
       }
 
       // 验证依赖类型
-      if (
-        !["blocks", "is-blocked-by", "relates-to", "duplicates"].includes(
-          dependencyType,
-        )
-      ) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "无效的依赖类型"),
-        );
+      if (!["blocks", "is-blocked-by", "relates-to", "duplicates"].includes(dependencyType)) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "无效的依赖类型"));
+        return;
+      }
+
+      // 验证两个任务都存在
+      const task = await storage.getTask(taskId);
+      const dependsOnTask = await storage.getTask(dependsOnTaskId);
+
+      if (!task || !dependsOnTask) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
         return;
       }
 
       // 权限检查 - 验证用户有权限访问两个任务
       const requesterId = params?.requesterId ? String(params.requesterId) : createdBy;
-      
+
       // 检查主任务访问权限
-      const taskAssigneeIds = task.assignees.map(a => a.id);
+      const taskAssigneeIds = task.assignees.map((a) => a.id);
       const taskPermCheck = checkTaskAccess(
         task.creatorId,
         taskAssigneeIds,
@@ -1151,19 +1035,15 @@ export const tasksRpc: GatewayRequestHandlers = {
         task.teamId,
         requesterId,
         undefined,
-        undefined
+        undefined,
       );
       if (!taskPermCheck.allowed) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.PERMISSION_DENIED, "无权限访问主任务")
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "无权限访问主任务"));
         return;
       }
-      
+
       // 检查依赖任务访问权限
-      const depTaskAssigneeIds = dependsOnTask.assignees.map(a => a.id);
+      const depTaskAssigneeIds = dependsOnTask.assignees.map((a) => a.id);
       const depTaskPermCheck = checkTaskAccess(
         dependsOnTask.creatorId,
         depTaskAssigneeIds,
@@ -1171,30 +1051,13 @@ export const tasksRpc: GatewayRequestHandlers = {
         dependsOnTask.teamId,
         requesterId,
         undefined,
-        undefined
+        undefined,
       );
       if (!depTaskPermCheck.allowed) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.PERMISSION_DENIED, "无权限访问依赖任务")
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "无权限访问依赖任务"));
         return;
       }
-      
-      // 验证两个任务都存在
-      const task = await storage.getTask(taskId);
-      const dependsOnTask = await storage.getTask(dependsOnTaskId);
-      
-      if (!task || !dependsOnTask) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.NOT_FOUND, "任务不存在"),
-        );
-        return;
-      }
-      
+
       // 检查是否会造成循环依赖
       const hasCircular = await storage.checkCircularDependency(taskId, dependsOnTaskId);
       if (hasCircular) {
@@ -1205,7 +1068,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         );
         return;
       }
-      
+
       // 创建依赖关系
       const dependencyId = `dep-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
 
@@ -1213,16 +1076,12 @@ export const tasksRpc: GatewayRequestHandlers = {
         id: dependencyId,
         taskId,
         dependsOnTaskId,
-        dependencyType: dependencyType as
-          | "blocks"
-          | "is-blocked-by"
-          | "relates-to"
-          | "duplicates",
+        dependencyType: dependencyType as "blocks" | "is-blocked-by" | "relates-to" | "duplicates",
         description,
         createdAt: Date.now(),
         createdBy,
       };
-      
+
       await storage.addTaskDependency(dependency);
 
       respond(true, dependency, undefined);
@@ -1241,59 +1100,101 @@ export const tasksRpc: GatewayRequestHandlers = {
   /**
    * task.block - 标记任务被阻塞
    */
+  /**
+   * task.complete - 标记任务为已完成（快捷方式）
+   */
+  "task.complete": async ({ params, respond }) => {
+    try {
+      // 兼容工具端传 id 或 taskId
+      const taskId =
+        (params?.taskId ? String(params.taskId) : "") || (params?.id ? String(params.id) : "");
+
+      if (!taskId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务ID不能为空"));
+        return;
+      }
+
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
+        return;
+      }
+
+      const completedAt = typeof params?.completedAt === "number" ? params.completedAt : Date.now();
+      const completedBy = params?.completedBy ? String(params.completedBy) : undefined;
+      const note = params?.note ? String(params.note) : undefined;
+
+      const updatedTask = await storage.updateTask(taskId, {
+        status: "done" as TaskStatus,
+        completedAt,
+        ...(note ? { completionNote: note } : {}),
+      });
+
+      respond(
+        true,
+        {
+          ...updatedTask,
+          completedBy,
+          completedAt,
+          note,
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to complete task: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
   "task.block": async ({ params, respond }) => {
     try {
       const taskId = params?.taskId ? String(params.taskId) : "";
-      const blockedByTaskId = params?.blockedByTaskId
-        ? String(params.blockedByTaskId)
-        : undefined;
+      const blockedByTaskId = params?.blockedByTaskId ? String(params.blockedByTaskId) : undefined;
       const reason = params?.reason ? String(params.reason) : "";
       const blockedBy = params?.blockedBy ? String(params.blockedBy) : "system";
 
       if (!taskId || !reason) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"));
         return;
       }
 
       // 权限检查 - 验证用户有权限访问任务
       const requesterId = params?.requesterId ? String(params.requesterId) : blockedBy;
-      const assigneeIds = task.assignees.map(a => a.id);
+      const _ownerIds = task.assignees.filter((a) => a.role === "owner").map((a) => a.id);
       const permCheck = checkTaskModifyAccess(
         task.creatorId,
-        task.assignees.filter(a => a.role === "owner").map(a => a.id),
+        task.assignees.filter((a) => a.role === "owner").map((a) => a.id),
         task.organizationId,
         task.teamId,
         requesterId,
         undefined,
-        undefined
+        undefined,
       );
       if (!permCheck.allowed) {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.PERMISSION_DENIED, permCheck.reason || "无权限阻塞此任务")
+          errorShape(ErrorCodes.INVALID_REQUEST, permCheck.reason || "无权限阻塞此任务"),
         );
         return;
       }
-      
+
       // 获取任务
       const task = await storage.getTask(taskId);
       if (!task) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.NOT_FOUND, "任务不存在"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
         return;
       }
-      
+
       // 更新任务状态为 blocked
       await storage.updateTask(taskId, { status: "blocked" });
-      
+
       // 如果指定了 blockedByTaskId，创建依赖关系
       if (blockedByTaskId) {
         const dependencyId = `dep-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
@@ -1307,7 +1208,7 @@ export const tasksRpc: GatewayRequestHandlers = {
           createdBy: blockedBy,
         });
       }
-      
+
       // 记录阻塞原因（通过添加系统评论）
       const blockComment: TaskComment = {
         id: `comment-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
@@ -1318,7 +1219,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         createdAt: Date.now(),
       };
       await storage.addTaskComment(blockComment);
-      
+
       // 通知相关人员
       console.log(`[Task Notification] Task ${taskId} is blocked: ${reason}`);
       // 实际环境中应该通知所有相关人员
