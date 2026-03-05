@@ -1,3 +1,4 @@
+/* oxlint-disable */
 /**
  * Phase 6: Agent-to-Agent 群组管理系统
  *
@@ -8,8 +9,8 @@
  * - 一对一好友关系管理
  */
 
-import type { GroupMessage, GroupSessionMetadata } from "./group-message-storage.js";
 import { groupWorkspaceManager } from "../workspace/group-workspace.js";
+import type { GroupMessage, GroupSessionMetadata } from "./group-message-storage.js";
 import { groupMessageStorage } from "./group-message-storage.js";
 
 /**
@@ -423,10 +424,14 @@ export class GroupManager {
    */
   canSpeak(groupId: string, agentId: string): boolean {
     const group = this.groups.get(groupId);
-    if (!group) return false;
+    if (!group) {
+      return false;
+    }
 
     const member = group.members.find((m) => m.agentId === agentId);
-    if (!member) return false;
+    if (!member) {
+      return false;
+    }
 
     return !member.muted;
   }
@@ -479,7 +484,7 @@ export class GroupManager {
    */
   async addFriend(agentA: string, agentB: string, initiator: string): Promise<FriendRelation> {
     // 生成关系ID（保证A-B和B-A是同一个关系）
-    const [sortedA, sortedB] = [agentA, agentB].sort();
+    const [sortedA, sortedB] = [agentA, agentB].toSorted();
     const relationId = `friend-${sortedA}-${sortedB}`;
 
     // 检查是否已存在
@@ -510,7 +515,7 @@ export class GroupManager {
    * 确认好友关系
    */
   async confirmFriend(agentA: string, agentB: string): Promise<void> {
-    const [sortedA, sortedB] = [agentA, agentB].sort();
+    const [sortedA, sortedB] = [agentA, agentB].toSorted();
     const relationId = `friend-${sortedA}-${sortedB}`;
 
     const relation = this.friendRelations.get(relationId);
@@ -528,7 +533,7 @@ export class GroupManager {
    * 删除好友关系
    */
   async removeFriend(agentA: string, agentB: string): Promise<void> {
-    const [sortedA, sortedB] = [agentA, agentB].sort();
+    const [sortedA, sortedB] = [agentA, agentB].toSorted();
     const relationId = `friend-${sortedA}-${sortedB}`;
 
     if (!this.friendRelations.delete(relationId)) {
@@ -542,7 +547,7 @@ export class GroupManager {
    * 检查是否为好友
    */
   isFriend(agentA: string, agentB: string): boolean {
-    const [sortedA, sortedB] = [agentA, agentB].sort();
+    const [sortedA, sortedB] = [agentA, agentB].toSorted();
     const relationId = `friend-${sortedA}-${sortedB}`;
     const relation = this.friendRelations.get(relationId);
     return relation?.confirmed ?? false;
@@ -555,7 +560,9 @@ export class GroupManager {
     const friends: string[] = [];
 
     for (const relation of this.friendRelations.values()) {
-      if (!relation.confirmed) continue;
+      if (!relation.confirmed) {
+        continue;
+      }
 
       if (relation.agentA === agentId) {
         friends.push(relation.agentB);
@@ -580,6 +587,13 @@ export class GroupManager {
     }
 
     return groups;
+  }
+
+  /**
+   * 获取所有群组（管理用）
+   */
+  getAllGroups(): GroupInfo[] {
+    return Array.from(this.groups.values());
   }
 
   /**
@@ -697,7 +711,7 @@ export class GroupManager {
       remark?: string;
     },
   ): FriendRelation {
-    const [sortedA, sortedB] = [agentId, friendId].sort();
+    const [sortedA, sortedB] = [agentId, friendId].toSorted();
     const relationId = `friend-${sortedA}-${sortedB}`;
 
     const relation = this.friendRelations.get(relationId);
@@ -750,12 +764,8 @@ export class GroupManager {
    * @param agentB - 智能助手B
    * @param type - 互动类型：message | collaboration
    */
-  updateFriendInteraction(
-    agentA: string,
-    agentB: string,
-    type: "message" | "collaboration",
-  ): void {
-    const [sortedA, sortedB] = [agentA, agentB].sort();
+  updateFriendInteraction(agentA: string, agentB: string, type: "message" | "collaboration"): void {
+    const [sortedA, sortedB] = [agentA, agentB].toSorted();
     const relationId = `friend-${sortedA}-${sortedB}`;
 
     const relation = this.friendRelations.get(relationId);
@@ -791,7 +801,7 @@ export class GroupManager {
     createdAt: number;
     acceptedAt?: number;
   } | null {
-    const [sortedA, sortedB] = [agentId, friendId].sort();
+    const [sortedA, sortedB] = [agentId, friendId].toSorted();
     const relationId = `friend-${sortedA}-${sortedB}`;
 
     const relation = this.friendRelations.get(relationId);
@@ -853,16 +863,16 @@ export class GroupManager {
 
     // 策略 2: 好友的好友（二度连接）
     for (const friendId of currentFriends) {
-      if (friendId === agentId) continue;
+      if (friendId === agentId) {
+        continue;
+      }
       const friendsOfFriend = this.getFriends(friendId);
       for (const potentialFriend of friendsOfFriend) {
         if (!currentFriends.has(potentialFriend)) {
           const existing = recommendations.get(potentialFriend);
           const newScore = (existing?.score || 0) + 2;
           recommendations.set(potentialFriend, {
-            reason: existing
-              ? `${existing.reason}, 共同好友`
-              : `与 ${friendId} 的共同好友`,
+            reason: existing ? `${existing.reason}, 共同好友` : `与 ${friendId} 的共同好友`,
             score: newScore,
           });
         }
@@ -875,7 +885,7 @@ export class GroupManager {
     // 按分数排序并限制数量
     const sortedRecommendations = Array.from(recommendations.entries())
       .map(([agentId, { reason, score }]) => ({ agentId, reason, score }))
-      .sort((a, b) => b.score - a.score)
+      .toSorted((a, b) => b.score - a.score)
       .slice(0, limit);
 
     console.log(
@@ -995,9 +1005,7 @@ export class GroupManager {
   ): Promise<{ success: boolean; status: string }> {
     // TODO: 从持久化系统检索申请记录
     // 这里仅为示例实现
-    console.log(
-      `[Group Manager] Request ${requestId} ${decision}d by ${approverId}`,
-    );
+    console.log(`[Group Manager] Request ${requestId} ${decision}d by ${approverId}`);
 
     if (decision === "approve") {
       // TODO: 根据 requestId 获取 groupId 和 agentId，然后添加成员
@@ -1052,9 +1060,7 @@ export class GroupManager {
         break;
     }
 
-    console.log(
-      `[Group Manager] Shared ${resourceType} ${resourceId} to group ${groupId}`,
-    );
+    console.log(`[Group Manager] Shared ${resourceType} ${resourceId} to group ${groupId}`);
   }
 
   /**

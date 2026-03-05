@@ -1,6 +1,6 @@
 /**
  * 任务管理工具
- * 
+ *
  * 提供创建、查询、更新、完成任务的工具
  * 让智能体能够管理待办事项和任务列表
  */
@@ -135,8 +135,8 @@ export function createTaskCreateTool(opts?: {
         // 生成唯一任务ID
         const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-        // 调用 task.create RPC（这个RPC需要在Gateway实现）
-        const response = await callGatewayTool("task.create", gatewayOpts, {
+        // 调用 task.create RPC
+        await callGatewayTool("task.create", gatewayOpts, {
           id: taskId,
           title,
           description,
@@ -207,7 +207,13 @@ export function createTaskListTool(opts?: {
           limit,
         });
 
-        const tasks = Array.isArray(response) ? response : [];
+        // 服务端返回 { tasks, total } 对象
+        const resp = response as { tasks?: unknown[]; total?: number } | unknown[] | null;
+        const tasks = Array.isArray(resp)
+          ? resp
+          : resp && typeof resp === "object" && "tasks" in resp && Array.isArray(resp.tasks)
+            ? resp.tasks
+            : [];
 
         return jsonResult({
           success: true,
@@ -234,7 +240,7 @@ export function createTaskListTool(opts?: {
 /**
  * 创建任务更新工具
  */
-export function createTaskUpdateTool(opts?: {
+export function createTaskUpdateTool(_opts?: {
   /** 当前操作者的智能助手ID */
   currentAgentId?: string;
 }): AnyAgentTool {
@@ -254,11 +260,22 @@ export function createTaskUpdateTool(opts?: {
       const dueDate = readStringParam(params, "dueDate");
       const assignee = readStringParam(params, "assignee");
       const addTags = Array.isArray(params.addTags) ? params.addTags.map(String) : undefined;
-      const removeTags = Array.isArray(params.removeTags) ? params.removeTags.map(String) : undefined;
+      const removeTags = Array.isArray(params.removeTags)
+        ? params.removeTags.map(String)
+        : undefined;
       const gatewayOpts = readGatewayCallOptions(params);
 
       // 检查是否至少提供了一个更新字段
-      if (!title && !description && !status && !priority && !dueDate && !assignee && !addTags && !removeTags) {
+      if (
+        !title &&
+        !description &&
+        !status &&
+        !priority &&
+        !dueDate &&
+        !assignee &&
+        !addTags &&
+        !removeTags
+      ) {
         return jsonResult({
           success: false,
           error: "At least one field must be provided for update",
@@ -361,7 +378,7 @@ export function createTaskDeleteTool(opts?: {
 
       try {
         // 调用 task.delete RPC
-        const response = await callGatewayTool("task.delete", gatewayOpts, {
+        await callGatewayTool("task.delete", gatewayOpts, {
           id: taskId,
           deletedBy: opts?.currentAgentId,
           deletedAt: Date.now(),

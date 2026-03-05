@@ -67,6 +67,8 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "agent.identity.get",
     "agent.status",
     "agent.capabilities",
+    "agent.discover",
+    "agent.inspect",
     "skills.status",
     "voicewake.get",
     "sessions.list",
@@ -87,21 +89,34 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "talk.config",
     "agents.files.list",
     "agents.files.get",
-    // 第2阶段：查询类权限
+    // 权限管理：查询类
     "permission_mgmt.check",
     "permission_mgmt.list",
+    // 组织架构：查询类
     "org_structure.get_department",
     "org_structure.get_team",
     "org_structure.list_departments",
     "org_structure.list_teams",
     "org_structure.get_relationship",
+    // 培训：查询类
     "training.get_record",
     "training.list_records",
     "training.get_course",
     "training.list_courses",
+    // HR：查询类
     "hr_mgmt.get_status",
+    // 群组：查询类
     "groups.list",
     "groups.get",
+    // 任务：查询类
+    "task.list",
+    // 审批：查询类
+    "approval.get_status",
+    "approval.list_pending",
+    // 好友：查询类
+    "friends.list",
+    // 组织：查询类
+    "org.list",
   ],
   [WRITE_SCOPE]: [
     "send",
@@ -121,33 +136,71 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "chat.abort",
     "browser.request",
     "push.test",
-    // 第2阶段：一般写操作
+    // 群组：写操作
     "groups.create",
     "groups.update",
     "groups.delete",
     "groups.add_member",
+    "groups.addMember",
     "groups.remove_member",
+    "groups.removeMember",
+    // 任务：写操作
     "task.create",
     "task.update",
     "task.delete",
     "task.assign",
+    "task.complete",
+    // 审批：写操作
+    "approval.create",
+    "approval.approve",
+    "approval.reject",
+    "approval.cancel",
+    // 权限管理：写操作
     "permission_mgmt.grant",
     "permission_mgmt.revoke",
     "permission_mgmt.delegate",
+    "permission.grant",
+    "permission.revoke",
+    "permission.list",
+    // 组织架构：写操作
     "org_structure.create_department",
     "org_structure.update_department",
     "org_structure.create_team",
     "org_structure.update_team",
     "org_structure.set_relationship",
+    "org.department.create",
+    "org.team.create",
+    "org.assign_to_department",
+    "org.assign_to_team",
+    "org.set_reporting_line",
+    // 培训：写操作
     "training.create_course",
     "training.update_course",
     "training.enroll",
     "training.complete",
     "training.certify_trainer",
+    // HR：写操作
     "hr_mgmt.deactivate",
     "hr_mgmt.activate",
     "hr_mgmt.offboard",
     "hr_mgmt.create_requisition",
+    "hr.deactivate_agent",
+    "hr.activate_agent",
+    "hr.configure_agent_role",
+    "hr.assign_supervisor",
+    "hr.assign_mentor",
+    "hr.promote_agent",
+    "hr.transfer_agent",
+    // 好友：写操作
+    "friends.add",
+    "friends.remove",
+    // 招募：写操作
+    "organization.agent.recruit",
+    "organization.agent.recruit.approve",
+    "organization.agent.recruit.list",
+    // Agent 发现与通信
+    "agent.assign_task",
+    "agent.communicate",
   ],
   [ADMIN_SCOPE]: [
     "channels.logout",
@@ -172,11 +225,23 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "set-heartbeats",
     "system-event",
     "agents.files.set",
-    // 第2阶段：仅管理员操作
+    // 权限管理：仅管理员
     "permission_mgmt.audit",
+    // 组织架构：仅管理员
     "org_structure.delete_department",
     "org_structure.delete_team",
+    // 培训：仅管理员
     "training.delete_course",
+    // Agent 生命周期：仅管理员
+    "agent.spawn",
+    "agent.start",
+    "agent.stop",
+    "agent.restart",
+    "agent.configure",
+    "agent.destroy",
+    "agent.clone",
+    "agent.update",
+    "agent.delete",
   ],
 };
 

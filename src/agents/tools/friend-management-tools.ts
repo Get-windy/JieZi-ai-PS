@@ -1,6 +1,6 @@
 /**
  * 好友关系管理工具
- * 
+ *
  * 提供添加、删除、列出好友的工具
  */
 
@@ -44,7 +44,7 @@ const FriendListToolSchema = Type.Object({
 /**
  * 创建添加好友工具
  */
-export function createFriendAddTool(opts?: {
+export function createFriendAddTool(_opts?: {
   /** 当前操作者的智能助手ID */
   currentAgentId?: string;
 }): AnyAgentTool {
@@ -72,10 +72,9 @@ export function createFriendAddTool(opts?: {
 
       try {
         // 调用 friends.add RPC
-        const response = await callGatewayTool("friends.add", gatewayOpts, {
-          agentId,
-          friendAgentId,
-          nickname,
+        await callGatewayTool("friends.add", gatewayOpts, {
+          fromAgentId: agentId,
+          toAgentId: friendAgentId,
           message,
         });
 
@@ -102,7 +101,7 @@ export function createFriendAddTool(opts?: {
 /**
  * 创建删除好友工具
  */
-export function createFriendRemoveTool(opts?: {
+export function createFriendRemoveTool(_opts?: {
   /** 当前操作者的智能助手ID */
   currentAgentId?: string;
 }): AnyAgentTool {
@@ -120,9 +119,9 @@ export function createFriendRemoveTool(opts?: {
 
       try {
         // 调用 friends.remove RPC
-        const response = await callGatewayTool("friends.remove", gatewayOpts, {
+        await callGatewayTool("friends.remove", gatewayOpts, {
           agentId,
-          friendAgentId,
+          friendId: friendAgentId,
         });
 
         return jsonResult({
@@ -147,7 +146,7 @@ export function createFriendRemoveTool(opts?: {
 /**
  * 创建列出好友工具
  */
-export function createFriendListTool(opts?: {
+export function createFriendListTool(_opts?: {
   /** 当前操作者的智能助手ID */
   currentAgentId?: string;
 }): AnyAgentTool {
@@ -168,18 +167,25 @@ export function createFriendListTool(opts?: {
           agentId,
         });
 
-        const friends = (response as any)?.friends || [];
+        const resp = response as { friends?: unknown[] } | null;
+        const friends =
+          resp && typeof resp === "object" && "friends" in resp && Array.isArray(resp.friends)
+            ? resp.friends
+            : [];
 
         return jsonResult({
           success: true,
           message: `Found ${friends.length} friend(s)`,
-          friends: friends.map((friend: any) => ({
-            agentId: friend.agentId,
-            agentName: friend.agentName,
-            nickname: friend.nickname,
-            addedAt: friend.addedAt,
-            lastMessageAt: friend.lastMessageAt,
-          })),
+          friends: friends.map((friend) => {
+            const f = friend as Record<string, unknown>;
+            return {
+              agentId: f.agentId,
+              agentName: f.agentName,
+              nickname: f.nickname,
+              addedAt: f.addedAt,
+              lastMessageAt: f.lastMessageAt,
+            };
+          }),
         });
       } catch (error) {
         return jsonResult({
