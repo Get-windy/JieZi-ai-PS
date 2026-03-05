@@ -18,8 +18,9 @@ import type {
   ChannelsStatusSnapshot,
   ChatConversationContext,
   ChatNavigationNode,
+  SessionsListResult,
 } from "../types.ts";
-import type { GroupInfo, GroupsListResult } from "../views/groups.ts";
+import type { GroupsListResult } from "../views/groups.ts";
 import type { Friend } from "./friends.ts";
 
 // ============ 通道工具函数 ============
@@ -75,6 +76,12 @@ export interface BuildNavigationTreeOptions {
   channelsSnapshot: ChannelsStatusSnapshot | null;
   groups: GroupsListResult | null;
   friends: Friend[];
+  /**
+   * 来自 sessions.list 的历史会话列表，用于构建“全部会话”节点的子树
+   */
+  sessions?: SessionsListResult | null;
+  // Z4: 未读消息计数映射（sessionKey → 未读数）
+  unreadSessionMessages?: Record<string, number>;
   // 注意：channelBindings 现在直接从 agent 对象中获取，不再需要单独传递
 }
 
@@ -104,7 +111,7 @@ export interface BuildNavigationTreeOptions {
  * - 单个数据源加载失败不影响其他节点渲染
  */
 export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNavigationNode[] {
-  const { agents, channelsSnapshot, groups, friends } = options;
+  const { agents, channelsSnapshot, groups, friends, sessions, unreadSessionMessages } = options;
 
   // === 防御性默认值处理 ===
   const agentList = agents?.agents ?? [];
@@ -121,19 +128,121 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
   const groupList = groups?.groups ?? [];
   const friendList = Array.isArray(friends) ? friends : [];
 
+  // Z4: 未读数查询辅助函数
+  const unread = unreadSessionMessages ?? {};
+  const getUnread = (sessionKey: string): number | undefined => {
+    const count = unread[sessionKey];
+    return count && count > 0 ? count : undefined;
+  };
+  // 计算某个前缀下所有 sessionKey 的未读数之和
+  const sumUnreadByPrefix = (prefix: string): number | undefined => {
+    let total = 0;
+    for (const [key, count] of Object.entries(unread)) {
+      if (key.startsWith(prefix) && count > 0) {
+        total += count;
+      }
+    }
+    return total > 0 ? total : undefined;
+  };
+  // 计算全部未读数之和
+  const sumAllUnread = (): number | undefined => {
+    let total = 0;
+    for (const count of Object.values(unread)) {
+      if (count > 0) {
+        total += count;
+      }
+    }
+    return total > 0 ? total : undefined;
+  };
+
   // 顶层节点数组
   const rootNodes: ChatNavigationNode[] = [];
 
-  // ---- 顶级: 📊 全部 ----
-  rootNodes.push({
-    id: "__all__",
-    label: "全部",
-    icon: "📊",
-    nodeType: "root",
+  // ---- 顶级: 📊 全部会话（展开后显示历史会话子树）----
+  const sessionList = sessions?.sessions ?? [];
+  // 按 updatedAt 降序排列
+  const sortedSessions = [...sessionList].toSorted(
+    (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0),
+  );
+
+  // 三档展开逻辑（全由 nodeId 控制，展开状态由外部 expandedNodeIds 管理）：
+  //   1）默认：展开有未读的历史会话，最多 5 条 → id=__all_unread__
+  //   2）点击展开全部未读 → id=__all_unread_full__
+  //   3）点击展开全部会话 → id=__all_sessions__
+  const UNREAD_PREVIEW = 5;
+
+  const unreadSessions = sortedSessions.filter((s) => {
+    const count = unread[s.key];
+    return count !== undefined && count > 0;
+  });
+
+  const makeSessionHistoryNode = (
+    s: SessionsListResult["sessions"][number],
+  ): ChatNavigationNode => {
+    const displayName = s.displayName?.trim() || s.label?.trim() || s.key;
+    return {
+      id: `session-hist-${s.key}`,
+      label: displayName,
+      icon: "💬",
+      nodeType: "item",
+      unreadCount: getUnread(s.key),
+      context: {
+        type: "session-history",
+        sessionKey: s.key,
+        displayName,
+      },
+    };
+  };
+
+  // 默认展开项：最多 UNREAD_PREVIEW 条未读会话
+  const previewUnreadNodes = unreadSessions.slice(0, UNREAD_PREVIEW).map(makeSessionHistoryNode);
+
+  // "展开全部未读" 节点（未读超过 UNREAD_PREVIEW 条时显示）
+  const moreUnreadNode: ChatNavigationNode | null =
+    unreadSessions.length > UNREAD_PREVIEW
+      ? {
+          id: "__all_unread_full__",
+          label: `展开全部未读（共 ${unreadSessions.length} 条）`,
+          icon: "🔔",
+          nodeType: "item",
+          unreadCount: undefined,
+          context: {
+            type: "all",
+            sessionKey: defaultSessionKey,
+          },
+        }
+      : null;
+
+  // "展开全部会话" 节点（始终显示）
+  const allSessionsNode: ChatNavigationNode = {
+    id: "__all_sessions__",
+    label: `展开全部会话（${sortedSessions.length} 条）`,
+    icon: "📂",
+    nodeType: "item",
+    unreadCount: undefined,
     context: {
       type: "all",
       sessionKey: defaultSessionKey,
     },
+  };
+
+  const allChildren: ChatNavigationNode[] = [
+    ...previewUnreadNodes,
+    ...(moreUnreadNode ? [moreUnreadNode] : []),
+    allSessionsNode,
+  ];
+
+  rootNodes.push({
+    id: "__all__",
+    label: "全部会话",
+    icon: "📊",
+    nodeType: "root",
+    unreadCount: sumAllUnread(),
+    context: {
+      type: "all",
+      sessionKey: defaultSessionKey,
+    },
+    children: allChildren.length > 0 ? allChildren : undefined,
   });
 
   // ---- 每个智能体生成一棵子树 ----
@@ -149,6 +258,7 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       label: "全部",
       icon: "📋",
       nodeType: "item",
+      unreadCount: sumUnreadByPrefix(`${agent.id}:`),
       context: {
         type: "agent-all",
         agentId: agent.id,
@@ -164,7 +274,7 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
         channelId: b.channelId,
         accountId: b.accountId,
       })) ?? [];
-    
+
     const channelItems = buildAgentChannelItems(
       agent,
       channelOrder,
@@ -172,13 +282,18 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       channelLabels,
       agentBindings,
     );
+    // Z4: 为通道节点添加未读计数
+    for (const ci of channelItems) {
+      ci.unreadCount = getUnread(ci.context.sessionKey);
+    }
     if (channelItems.length > 0) {
-      // “全部通道” 聚合节点
+      // "全部通道" 聚合节点
       const allChannelsNode: ChatNavigationNode = {
         id: `channels-all-${agent.id}`,
         label: "全部通道",
         icon: "📦",
         nodeType: "item",
+        unreadCount: sumUnreadByPrefix(`${agent.id}:channel:`),
         context: {
           type: "channels-all",
           agentId: agent.id,
@@ -197,40 +312,14 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       });
     }
 
-    // 3) 👥 群聊（将所有群组关联到每个 agent，因为 group 是协作性资源）
-    if (groupList.length > 0) {
-      const groupItems: ChatNavigationNode[] = groupList.map((group) => ({
-        id: `group-${agent.id}-${group.id}`,
-        label: group.name,
-        icon: "💬",
-        nodeType: "item" as const,
-        context: {
-          type: "group" as const,
-          agentId: agent.id,
-          groupId: group.id,
-          groupName: group.name,
-          memberAgentIds: group.members.map((m) => m.agentId),
-          sessionKey: `${agent.id}:group:${group.id}`,
-        },
-      }));
-
-      agentChildren.push({
-        id: `groups-${agent.id}`,
-        label: "群聊",
-        icon: "👥",
-        nodeType: "category",
-        context: groupItems[0].context,
-        children: groupItems,
-      });
-    }
-
-    // 4) 🤝 好友
+    // 3) 🤝 好友（群聊已移至顶级独立栏目，不再挂在 agent 子树下）
     if (friendList.length > 0) {
       const friendItems: ChatNavigationNode[] = friendList.map((friend) => ({
         id: `friend-${agent.id}-${friend.id}`,
         label: friend.agentName || friend.agentId,
         icon: "🤖",
         nodeType: "item" as const,
+        unreadCount: getUnread(`${agent.id}:contact:${friend.agentId}`),
         context: {
           type: "contact" as const,
           agentId: agent.id,
@@ -250,12 +339,14 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       });
     }
 
+    // 4) 🤝 好友
     // 智能体根节点
     rootNodes.push({
       id: `agent-${agent.id}`,
       label: agentName,
       icon: agentEmoji,
       nodeType: "agent",
+      unreadCount: sumUnreadByPrefix(`${agent.id}:`),
       context: {
         type: "agent-direct",
         agentId: agent.id,
@@ -264,6 +355,40 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
         sessionKey: agentSessionKey,
       },
       children: agentChildren,
+    });
+  }
+
+  // ---- 顶级：👥 群聊（独立栏目，不重复挂在每个 agent 下）----
+  if (groupList.length > 0) {
+    // 用默认 agent 作为群聊消息的归属 agent（发消息时的上下文 agent）
+    const groupAgentId = defaultAgent?.id ?? agentList[0]?.id ?? "main";
+    const groupItems: ChatNavigationNode[] = groupList.map((group) => {
+      const sessionKey = `agent:${groupAgentId}:group:${group.id}`;
+      return {
+        id: `group-${group.id}`,
+        label: group.name,
+        icon: "💬",
+        nodeType: "item" as const,
+        unreadCount: sumUnreadByPrefix(`:group:${group.id}`),
+        context: {
+          type: "group" as const,
+          agentId: groupAgentId,
+          groupId: group.id,
+          groupName: group.name,
+          memberAgentIds: group.members.map((m) => m.agentId),
+          sessionKey,
+        },
+      };
+    });
+
+    rootNodes.push({
+      id: "groups-root",
+      label: "群聊",
+      icon: "👥",
+      nodeType: "category",
+      unreadCount: sumUnreadByPrefix(`:group:`),
+      context: groupItems[0].context,
+      children: groupItems,
     });
   }
 
@@ -300,14 +425,14 @@ function buildAgentChannelItems(
 
   for (const channelId of channelOrder) {
     const accounts = channelAccounts[channelId] ?? [];
-    
+
     for (const account of accounts) {
       const accountId = account.accountId;
       const bindingKey = `${channelId}:${accountId}`;
 
       // 只显示该智能体绑定的通道账号
       const isMatched = bindingSet.has(bindingKey);
-      
+
       if (!isMatched) {
         continue;
       }
@@ -331,7 +456,7 @@ function buildAgentChannelItems(
           sessionKey: `${agent.id}:channel:${channelId}:${accountId}`,
         },
       };
-      
+
       items.push(item);
     }
   }
@@ -348,8 +473,12 @@ export function isSameContext(
   a: ChatConversationContext | null,
   b: ChatConversationContext | null,
 ): boolean {
-  if (!a || !b) {return false;}
-  if (a.type !== b.type) {return false;}
+  if (!a || !b) {
+    return false;
+  }
+  if (a.type !== b.type) {
+    return false;
+  }
   return a.sessionKey === b.sessionKey;
 }
 
@@ -359,9 +488,15 @@ export function isSameContext(
 export function resolveContextType(
   sessionKey: string,
 ): "agent-direct" | "channel-observe" | "group" | "contact" {
-  if (sessionKey.includes(":channel:")) {return "channel-observe";}
-  if (sessionKey.includes(":group:")) {return "group";}
-  if (sessionKey.includes(":contact:")) {return "contact";}
+  if (sessionKey.includes(":channel:")) {
+    return "channel-observe";
+  }
+  if (sessionKey.includes(":group:")) {
+    return "group";
+  }
+  if (sessionKey.includes(":contact:")) {
+    return "contact";
+  }
   return "agent-direct";
 }
 
@@ -384,7 +519,10 @@ export function createDefaultContext(sessionKey: string): ChatConversationContex
     case "group":
       return {
         type: "group",
-        groupId: parts[2] ?? "",
+        // 格式: agent:{agentId}:group:{groupId}
+        // parts = ["agent", agentId, "group", groupId]
+        agentId: parts[1] ?? "main",
+        groupId: parts[3] ?? "",
         sessionKey,
       };
     case "contact":
@@ -411,10 +549,14 @@ export function findNodeBySessionKey(
   sessionKey: string,
 ): ChatNavigationNode | null {
   for (const node of nodes) {
-    if (node.context.sessionKey === sessionKey) {return node;}
+    if (node.context.sessionKey === sessionKey) {
+      return node;
+    }
     if (node.children) {
       const found = findNodeBySessionKey(node.children, sessionKey);
-      if (found) {return found;}
+      if (found) {
+        return found;
+      }
     }
   }
   return null;
@@ -427,7 +569,9 @@ export function filterNavigationNodes(
   nodes: ChatNavigationNode[],
   query: string,
 ): ChatNavigationNode[] {
-  if (!query.trim()) {return nodes;}
+  if (!query.trim()) {
+    return nodes;
+  }
 
   const lowerQuery = query.toLowerCase();
 

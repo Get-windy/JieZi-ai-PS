@@ -7,6 +7,7 @@ import { abortChatRun, loadChatHistory, sendChatMessage } from "./controllers/ch
 import { loadSessions } from "./controllers/sessions.ts";
 import type { GatewayHelloOk } from "./gateway.ts";
 import { normalizeBasePath } from "./navigation.ts";
+import type { ChatConversationContext } from "./types.ts";
 import type { ChatAttachment, ChatQueueItem } from "./ui-types.ts";
 import { generateUUID } from "./uuid.ts";
 
@@ -22,6 +23,10 @@ export type ChatHost = {
   hello: GatewayHelloOk | null;
   chatAvatarUrl: string | null;
   refreshSessionsAfterChat: Set<string>;
+  // Z3: 通道观察模式行为控制所需字段
+  chatNavCurrentContext?: ChatConversationContext | null;
+  chatNavChannelForceJoined?: boolean;
+  lastError?: string | null;
 };
 
 export const CHAT_SESSIONS_ACTIVE_MINUTES = 120;
@@ -164,6 +169,14 @@ export async function handleSendChat(
   if (!host.connected) {
     return;
   }
+
+  // Z3: 通道观察模式行为控制 — 未强行接入时拦截发送
+  const ctx = host.chatNavCurrentContext;
+  if (ctx?.type === "channel-observe" && !host.chatNavChannelForceJoined) {
+    host.lastError = "通道观察模式：需要先“强行接入”才能发送消息";
+    return;
+  }
+
   const previousDraft = host.chatMessage;
   const message = (messageOverride ?? host.chatMessage).trim();
   const attachments = host.chatAttachments ?? [];

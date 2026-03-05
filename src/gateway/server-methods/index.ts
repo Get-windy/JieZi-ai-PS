@@ -28,6 +28,7 @@ import { browserHandlers } from "./browser.js";
 import { channelManagerHandlers } from "./channel-manager.js";
 import { channelPoliciesHandlers } from "./channel-policies.js";
 import { channelsHandlers } from "./channels.js";
+import { chatAggregateHandlers } from "./chat-aggregate.js";
 import { chatHandlers } from "./chat.js";
 import { configHandlers } from "./config.js";
 import { connectHandlers } from "./connect.js";
@@ -128,6 +129,7 @@ const hardcodedHandlers: GatewayRequestHandlers = {
 
   // 聊天与会话
   ...chatHandlers,
+  ...chatAggregateHandlers,
   ...sessionsHandlers,
 
   // 配置与向导

@@ -54,7 +54,11 @@ import { loadAgents } from "./controllers/agents.ts";
 import { loadApprovals, loadApprovalStats, respondToApproval } from "./controllers/approvals.ts";
 import { loadChannels } from "./controllers/channels.ts";
 import { buildNavigationTree } from "./controllers/chat-navigation.ts";
-import { loadChatHistory } from "./controllers/chat.ts";
+import {
+  loadAggregatedHistory,
+  loadChatHistory,
+  resolveBackendSessionKey,
+} from "./controllers/chat.ts";
 import {
   applyConfig,
   loadConfig,
@@ -1847,11 +1851,10 @@ export function renderApp(state: AppViewState) {
                 onModelAccountsChange: resolvedAgentId
                   ? async (agentId, config) => {
                       try {
-                        // oxlint-disable-next-line typescript/no-explicit-any
                         await saveModelAccounts(
                           state as unknown as AgentPhase5State,
                           agentId,
-                          config as any,
+                          config as Record<string, unknown>,
                         );
                         // 保存成功后重新加载
                         await loadModelAccounts(state as unknown as AgentPhase5State, agentId);
@@ -1863,11 +1866,10 @@ export function renderApp(state: AppViewState) {
                 onChannelPoliciesChange: resolvedAgentId
                   ? async (agentId, config) => {
                       try {
-                        // oxlint-disable-next-line typescript/no-explicit-any
                         await saveChannelPolicies(
                           state as unknown as AgentPhase5State,
                           agentId,
-                          config as any,
+                          config as Record<string, unknown>,
                         );
                         // 保存成功后重新加载
                         await loadChannelPolicies(state as unknown as AgentPhase5State, agentId);
@@ -3126,6 +3128,10 @@ export function renderApp(state: AppViewState) {
                   channelsSnapshot: state.channelsSnapshot,
                   groups: state.groupsList,
                   friends: state.friendsList,
+                  // 历史会话列表，用于构建“全部会话”子树
+                  sessions: state.sessionsResult,
+                  // Z4: 传递未读消息计数以映射到导航树节点
+                  unreadSessionMessages: state.unreadSessionMessages,
                   // channelBindings 现在直接从 agents.agents[…].channelBindings 获取
                 }),
                 navCurrentContext: state.chatNavCurrentContext,
@@ -3144,8 +3150,36 @@ export function renderApp(state: AppViewState) {
                 },
                 onNavSelectContext: (context) => {
                   state.chatNavCurrentContext = context;
-                  // 同步 sessionKey 并加载对应历史
-                  const nextKey = context.sessionKey;
+                  // Z1: 上下文感知的 sessionKey 解析，将 group/contact 解析为后端可识别的 sessionKey
+                  const nextKey = resolveBackendSessionKey(context);
+                  // Z4: 切换到该节点时清除对应的未读计数
+                  if (state.unreadSessionMessages) {
+                    const unread = { ...state.unreadSessionMessages };
+                    // 清除当前上下文涉及的 sessionKey 的未读数
+                    delete unread[nextKey];
+                    // 对于聚合视图，清除所有匹配的未读数
+                    if (context.type === "all") {
+                      state.unreadSessionMessages = {};
+                    } else if (context.type === "agent-all" && context.agentId) {
+                      const prefix = context.agentId + ":";
+                      for (const key of Object.keys(unread)) {
+                        if (key.startsWith(prefix)) {
+                          delete unread[key];
+                        }
+                      }
+                      state.unreadSessionMessages = unread;
+                    } else if (context.type === "channels-all" && context.agentId) {
+                      const prefix = context.agentId + ":channel:";
+                      for (const key of Object.keys(unread)) {
+                        if (key.startsWith(prefix)) {
+                          delete unread[key];
+                        }
+                      }
+                      state.unreadSessionMessages = unread;
+                    } else {
+                      state.unreadSessionMessages = unread;
+                    }
+                  }
                   if (nextKey !== state.sessionKey) {
                     state.sessionKey = nextKey;
                     state.chatMessage = "";
@@ -3162,8 +3196,21 @@ export function renderApp(state: AppViewState) {
                       lastActiveSessionKey: nextKey,
                     });
                     void state.loadAssistantIdentity();
-                    void loadChatHistory(state);
+                    if (context.type === "all") {
+                      // 全部会话聚合视图
+                      void loadAggregatedHistory(state);
+                    } else {
+                      void loadChatHistory(state);
+                    }
                     void refreshChatAvatar(state);
+                  } else {
+                    // Z1: 即使后端 sessionKey 相同，如果上下文类型变了也重新加载
+                    // （例如从 agent-direct 切换到 agent-all，虽然 sessionKey 都是 main:main）
+                    if (context.type === "all") {
+                      void loadAggregatedHistory(state);
+                    } else {
+                      void loadChatHistory(state);
+                    }
                   }
                 },
                 onNavToggleNode: (nodeId) => {

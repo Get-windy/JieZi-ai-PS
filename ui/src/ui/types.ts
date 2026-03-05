@@ -762,7 +762,7 @@ export type ChatConversationContext =
       groupId: string;
       groupName?: string;
       memberAgentIds?: string[];
-      sessionKey: string; // 如 "main:group:{groupId}"
+      sessionKey: string; // 如 "agent:main:group:{groupId}"
     }
   // 好友对话：智能体间一对一（引用 collaboration.friends）
   | {
@@ -771,6 +771,12 @@ export type ChatConversationContext =
       contactAgentId: string;
       contactAgentName?: string;
       sessionKey: string; // 如 "main:contact:{contactAgentId}"
+    }
+  // 历史会话节点：来自 sessions.list，代表一条具体的历史对话记录
+  | {
+      type: "session-history";
+      sessionKey: string;
+      displayName?: string;
     };
 
 /**
@@ -876,4 +882,25 @@ export type ToolsCatalogResult = {
   agentId: string;
   profiles: ToolCatalogProfile[];
   groups: ToolCatalogGroup[];
+};
+
+// ============ 聊天聚合接口类型 ============
+
+/** 聊天聚合接口返回的单条消息（带来源元数据） */
+export type AggregatedMessage = {
+  /** 来源 sessionKey */
+  sessionKey: string;
+  /** 来源会话的人类可读名称（如 "飞书 · 张三"） */
+  displayName: string;
+  /** 消息内容（同 chat.history 的 messages 格式） */
+  message: unknown;
+  /** 消息时间戳（ms） */
+  ts: number | null;
+};
+
+/** chat.history.aggregate 接口响应类型 */
+export type ChatHistoryAggregateResult = {
+  messages: AggregatedMessage[];
+  sessionCount: number;
+  truncated: boolean;
 };
