@@ -189,13 +189,16 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
   };
 
   // 子树：未读会话优先显示，其余按时间排序
+  // 过滤掉从未有过活动的空会话（updatedAt 为 null/undefined 表示从未收发过消息）
   // 默认只展示前 20 条，避免树过长
   const MAX_SESSION_PREVIEW = 20;
+  const activeSessions = sortedSessions.filter((s) => s.updatedAt != null);
+  const activeUnreadSessions = unreadSessions.filter((s) => s.updatedAt != null);
   const sessionChildNodes: ChatNavigationNode[] = [
-    ...unreadSessions.map(makeSessionHistoryNode),
-    ...sortedSessions
+    ...activeUnreadSessions.map(makeSessionHistoryNode),
+    ...activeSessions
       .filter((s) => !(unread[s.key] > 0))
-      .slice(0, Math.max(0, MAX_SESSION_PREVIEW - unreadSessions.length))
+      .slice(0, Math.max(0, MAX_SESSION_PREVIEW - activeUnreadSessions.length))
       .map(makeSessionHistoryNode),
   ];
 

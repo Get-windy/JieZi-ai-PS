@@ -8,9 +8,7 @@ export interface DingtalkMonitorOptions {
   abortSignal: AbortSignal;
 }
 
-export async function monitorDingtalkProvider(
-  options: DingtalkMonitorOptions,
-): Promise<() => void> {
+export async function monitorDingtalkProvider(options: DingtalkMonitorOptions): Promise<void> {
   const { accountId, config, runtime, abortSignal } = options;
 
   // 使用与 channel.ts 相同的配置解析逻辑
@@ -29,13 +27,21 @@ export async function monitorDingtalkProvider(
     throw new Error(`DingTalk account '${accountId}': appKey and appSecret are required`);
   }
 
-  // 导入钉钉 Stream SDK（使用命名导出）
-  const { DWClient, EventAck } = await import("dingtalk-stream-sdk-nodejs");
+  // 提前检查 abort
+  if (abortSignal.aborted) {
+    return;
+  }
 
-  const client = new DWClient({
+  // 导入钉钉 Stream SDK（使用命名导出）
+  const { DWClient } = await import("dingtalk-stream-sdk-nodejs");
+
+  const clientConfig = {
     clientId: appKey,
     clientSecret: appSecret,
-  });
+    // 禁用 SDK 自动重连，由框架负责生命周期管理，避免重连风暴
+    autoReconnect: false,
+  };
+  const client = new DWClient(clientConfig as { clientId: string; clientSecret: string });
 
   runtime.log?.(
     `[dingtalk] [${accountId}] Client config:`,
@@ -68,6 +74,7 @@ export async function monitorDingtalkProvider(
       const senderNick = messageData?.senderNick;
       const text = messageData?.text?.content || messageData?.content || "";
       const msgtype = messageData?.msgtype;
+      void msgtype; // 内入消息匹配类型，回复时固定使用 text 类型
       const conversationType = messageData?.conversationType; // 1=单聊, 2=群聊
       const sessionWebhook = messageData?.sessionWebhook; // 用于回复消息
 
@@ -209,57 +216,39 @@ export async function monitorDingtalkProvider(
     }
   });
 
-  // 同时保留全局事件监听器用于调试
-  client.registerAllEventListener((event: any) => {
-    try {
-      const { headers, data, type } = event;
-      const topic = headers?.topic;
-      const eventType = headers?.eventType;
-      const eventId = headers?.eventId;
+  // 启动客户端并保持连接（返回一个长期挂起的 Promise，与飞书插件保持一致）
+  // 只有当 abortSignal 触发时才 resolve，框架以此判断账户是否仍在运行
+  return new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      client.disconnect();
+      runtime.log?.(`[dingtalk] [${accountId}] DingTalk Stream client disconnected`);
+    };
 
-      // 只记录非 SYSTEM 类型的事件
-      if (type !== "SYSTEM") {
-        runtime.log?.(`[dingtalk] [${accountId}] ========== 收到事件 ==========`);
-        runtime.log?.(`[dingtalk] [${accountId}] type: ${type}`);
-        runtime.log?.(`[dingtalk] [${accountId}] topic: ${topic}`);
-        runtime.log?.(`[dingtalk] [${accountId}] eventType: ${eventType}`);
-        runtime.log?.(`[dingtalk] [${accountId}] eventId: ${eventId}`);
-        runtime.log?.(`[dingtalk] [${accountId}] headers:`, JSON.stringify(headers, null, 2));
+    const handleAbort = () => {
+      runtime.log?.(`[dingtalk] [${accountId}] abort signal received, stopping`);
+      cleanup();
+      resolve();
+    };
 
-        // 解析消息数据
-        const messageData = typeof data === "string" ? JSON.parse(data) : data;
-
-        runtime.log?.(
-          `[dingtalk] [${accountId}] message data:`,
-          JSON.stringify(messageData, null, 2),
-        );
-        runtime.log?.(`[dingtalk] [${accountId}] ========== 事件结束 ==========`);
-      }
-
-      // 返回成功确认
-      return { status: EventAck.SUCCESS };
-    } catch (error) {
-      runtime.error?.(`[dingtalk] [${accountId}] error processing event:`, error);
-      return { status: EventAck.LATER, message: String(error) };
+    if (abortSignal.aborted) {
+      cleanup();
+      resolve();
+      return;
     }
+
+    abortSignal.addEventListener("abort", handleAbort, { once: true });
+
+    client
+      .connect()
+      .then(() => {
+        runtime.log?.(`[dingtalk] [${accountId}] DingTalk Stream client connected`);
+      })
+      .catch((err: unknown) => {
+        abortSignal.removeEventListener("abort", handleAbort);
+        cleanup();
+        reject(err);
+      });
   });
-
-  // 启动客户端
-  await client.connect();
-  runtime.log?.(`[dingtalk] [${accountId}] DingTalk Stream client connected`);
-
-  // 监听 abort 信号
-  const cleanup = () => {
-    client.disconnect();
-    runtime.log?.(`[dingtalk] [${accountId}] DingTalk Stream client disconnected`);
-  };
-
-  abortSignal.addEventListener("abort", cleanup);
-
-  return () => {
-    abortSignal.removeEventListener("abort", cleanup);
-    cleanup();
-  };
 }
 
 // 通过 sessionWebhook 发送回复消息
@@ -303,23 +292,6 @@ async function sendDingtalkReply(params: {
     runtime.error?.(`[dingtalk] [${accountId}] 发送回复时出错:`, error);
     throw error;
   }
-}
-
-async function sendDingtalkMessage(params: {
-  client: any;
-  conversationId: string;
-  message: string;
-}) {
-  const { client, conversationId, message } = params;
-
-  // 使用钉钉 API 发送消息
-  await client.socketCallBack({
-    conversationId,
-    msgtype: "text",
-    text: {
-      content: message,
-    },
-  });
 }
 
 export async function sendMessageDingtalk(
