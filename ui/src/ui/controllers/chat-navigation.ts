@@ -118,7 +118,7 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
   const agentList = agents?.agents ?? [];
   const defaultId = agents?.defaultId ?? "main";
   const defaultAgent = agentList.find((a) => a.id === defaultId) ?? agentList[0];
-  const defaultSessionKey = defaultAgent ? `${defaultAgent.id}:main` : "main:main";
+  const defaultSessionKey = defaultAgent ? `agent:${defaultAgent.id}:main` : "agent:main:main";
 
   // 通道数据默认值
   const channelOrder = channelsSnapshot?.channelOrder ?? [];
@@ -216,7 +216,7 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
   for (const agent of agentList) {
     const agentName = agent.identity?.name || agent.name || agent.id;
     const agentEmoji = agent.identity?.emoji || "🤖";
-    const agentSessionKey = `${agent.id}:main`;
+    const agentSessionKey = `agent:${agent.id}:main`;
     const agentChildren: ChatNavigationNode[] = [];
 
     // 1) 📋 全部（该智能体所有消息）
@@ -409,12 +409,13 @@ function buildAgentChannelItems(
   // 将绑定列表转换为 Set 以便快速查找
   const bindingSet = new Set(agentBindings.map((b) => `${b.channelId}:${b.accountId}`));
 
-  // 从 sessions.list 构建 (channelId -> accountId -> realSessionKey[]) 的映射
-  // 后端 key 格式：agent:{agentId}:{channelId}:{peerKind}:{peerId}
-  // 字段：lastChannel=channelId, lastAccountId=accountId
+  // 从 sessions.list 构建通道会话映射，支持两种匹配方式：
+  // 1. lastChannel + lastAccountId 精确匹配
+  // 2. 按 sessionKey 前缀匹配（agent:{agentId}:{channelId}:）
   const channelSessionMap = new Map<string, SessionsListResult["sessions"][number][]>();
   if (sessionsResult?.sessions) {
     for (const s of sessionsResult.sessions) {
+      // 方式1：lastChannel 字段存在时构建精确映射
       const ch = s.lastChannel;
       const acc = s.lastAccountId;
       if (ch && acc) {
@@ -422,6 +423,24 @@ function buildAgentChannelItems(
         const existing = channelSessionMap.get(mapKey) ?? [];
         existing.push(s);
         channelSessionMap.set(mapKey, existing);
+      }
+      // 方式2：从 sessionKey 解析 channelId（格式 agent:{agentId}:{channelId}:{peerKind}:{peerId}）
+      if (s.key.startsWith("agent:")) {
+        const parts = s.key.split(":");
+        // parts[2] 是 channelId（跳过 main 和 group）
+        if (
+          parts.length >= 5 &&
+          parts[2] !== "main" &&
+          parts[2] !== "group" &&
+          parts[2] !== "cron"
+        ) {
+          const keyChannelId = parts[2];
+          // 用 channelId:* 作为通配 key，供后续按 channelId 匹配
+          const wildcardKey = `${keyChannelId}:*`;
+          const existing2 = channelSessionMap.get(wildcardKey) ?? [];
+          existing2.push(s);
+          channelSessionMap.set(wildcardKey, existing2);
+        }
       }
     }
   }
@@ -457,8 +476,18 @@ function buildAgentChannelItems(
       const channelLabel = channelLabels[channelId] ?? getChannelDisplayName(channelId);
 
       // 优先从 sessions.list 匹配真实的后端 sessionKey
-      // 尝试按 lastChannel=channelId + lastAccountId=accountId 匹配
-      const matchedSessions = channelSessionMap.get(`${channelId}:${accountId}`) ?? [];
+      // 方式1：精确匹配 lastChannel:lastAccountId
+      const exactMatched = channelSessionMap.get(`${channelId}:${accountId}`) ?? [];
+      // 方式2：通过 sessionKey 前缀匹配（agent:{agentId}:{channelId}:）
+      const wildcardMatched = (channelSessionMap.get(`${channelId}:*`) ?? []).filter((s) =>
+        s.key.startsWith(`agent:${agent.id}:${channelId}:`),
+      );
+      // 合并去重（优先精确匹配，再补充通配匹配）
+      const mergedKeys = new Set(exactMatched.map((s) => s.key));
+      const matchedSessions = [
+        ...exactMatched,
+        ...wildcardMatched.filter((s) => !mergedKeys.has(s.key)),
+      ];
       // 过滤属于该 agent 的 session
       const agentSessions = matchedSessions.filter((s) => s.key.startsWith(`agent:${agent.id}:`));
 
