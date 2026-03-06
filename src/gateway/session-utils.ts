@@ -46,6 +46,7 @@ import type {
 
 export {
   archiveFileOnDisk,
+  archiveSessionTranscripts,
   capArrayByJsonBytes,
   readFirstUserMessageFromTranscript,
   readLastMessagePreviewFromTranscript,
@@ -202,6 +203,51 @@ export function loadSessionEntry(sessionKey: string) {
   }
   // === 调试日志结束 ===
   return { cfg, storePath, store, entry, canonicalKey };
+}
+
+/**
+ * Find all on-disk store keys that match the given key case-insensitively.
+ */
+export function findStoreKeysIgnoreCase(
+  store: Record<string, unknown>,
+  targetKey: string,
+): string[] {
+  const lowered = targetKey.toLowerCase();
+  const matches: string[] = [];
+  for (const key of Object.keys(store)) {
+    if (key.toLowerCase() === lowered) {
+      matches.push(key);
+    }
+  }
+  return matches;
+}
+
+/**
+ * Remove legacy key variants for one canonical session key.
+ */
+export function pruneLegacyStoreKeys(params: {
+  store: Record<string, unknown>;
+  canonicalKey: string;
+  candidates: Iterable<string>;
+}) {
+  const keysToDelete = new Set<string>();
+  for (const candidate of params.candidates) {
+    const trimmed = String(candidate ?? "").trim();
+    if (!trimmed) {
+      continue;
+    }
+    if (trimmed !== params.canonicalKey) {
+      keysToDelete.add(trimmed);
+    }
+    for (const match of findStoreKeysIgnoreCase(params.store, trimmed)) {
+      if (match !== params.canonicalKey) {
+        keysToDelete.add(match);
+      }
+    }
+  }
+  for (const key of keysToDelete) {
+    delete params.store[key];
+  }
 }
 
 export function classifySessionKey(key: string, entry?: SessionEntry): GatewaySessionRow["kind"] {
@@ -459,7 +505,11 @@ function resolveSessionStoreAgentId(cfg: OpenClawConfig, canonicalKey: string): 
   return resolveDefaultStoreAgentId(cfg);
 }
 
-function canonicalizeSpawnedByForAgent(agentId: string, spawnedBy?: string): string | undefined {
+export function canonicalizeSpawnedByForAgent(
+  _cfg: OpenClawConfig,
+  agentId: string,
+  spawnedBy?: string,
+): string | undefined {
   const raw = spawnedBy?.trim();
   if (!raw) {
     return undefined;
@@ -520,13 +570,21 @@ function mergeSessionEntryIntoCombined(params: {
     combined[canonicalKey] = {
       ...entry,
       ...existing,
-      spawnedBy: canonicalizeSpawnedByForAgent(agentId, existing.spawnedBy ?? entry.spawnedBy),
+      spawnedBy: canonicalizeSpawnedByForAgent(
+        null as unknown as OpenClawConfig,
+        agentId,
+        existing.spawnedBy ?? entry.spawnedBy,
+      ),
     };
   } else {
     combined[canonicalKey] = {
       ...existing,
       ...entry,
-      spawnedBy: canonicalizeSpawnedByForAgent(agentId, entry.spawnedBy ?? existing?.spawnedBy),
+      spawnedBy: canonicalizeSpawnedByForAgent(
+        null as unknown as OpenClawConfig,
+        agentId,
+        entry.spawnedBy ?? existing?.spawnedBy,
+      ),
     };
   }
 }
