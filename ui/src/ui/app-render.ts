@@ -3138,7 +3138,7 @@ export function renderApp(state: AppViewState) {
                 navExpandedNodeIds: state.chatNavExpandedNodes,
                 navSearchQuery: state.chatNavSearchQuery,
                 navChannelForceJoined: state.chatNavChannelForceJoined,
-                navLoading: state.chatLoading,
+                navLoading: !state.agentsList && state.chatLoading,
                 navError: state.agentsError ?? state.channelsError ?? state.groupsError ?? null,
                 onNavRetry: () => {
                   // 重新加载导航树所需的数据

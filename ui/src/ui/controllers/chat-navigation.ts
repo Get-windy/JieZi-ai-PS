@@ -401,6 +401,9 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       context: groupsRootContext,
       children: groupItems.length > 0 ? groupItems : undefined,
     });
+    console.log(
+      `[NavTree:调试] 群聊节点已加入rootNodes，groups数量=${groupItems.length}，总节点数=${rootNodes.length}`,
+    );
   }
 
   return rootNodes;
