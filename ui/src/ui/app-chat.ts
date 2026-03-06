@@ -218,9 +218,8 @@ export async function handleSendChat(
 export async function refreshChat(host: ChatHost, opts?: { scheduleScroll?: boolean }) {
   await Promise.all([
     loadChatHistory(host as unknown as OpenClawApp),
-    loadSessions(host as unknown as OpenClawApp, {
-      activeMinutes: CHAT_SESSIONS_ACTIVE_MINUTES,
-    }),
+    // 导航树需要所有通道 session，不限制时间（通道 session 可能长期不活跃但仍需要显示）
+    loadSessions(host as unknown as OpenClawApp),
     refreshChatAvatar(host),
   ]);
   if (opts?.scheduleScroll !== false) {
