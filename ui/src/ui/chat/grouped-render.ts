@@ -70,16 +70,30 @@ export function renderReadingIndicatorGroup(assistant?: AssistantIdentity) {
   `;
 }
 
+function formatMessageTimestamp(ts: number): string {
+  const date = new Date(ts);
+  const now = new Date();
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  if (isToday) {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  // 非今天：显示月日 + 时分，例如 "3月5日 14:30"
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return `${month}月${day}日 ${time}`;
+}
+
 export function renderStreamingGroup(
   text: string,
   startedAt: number,
   onOpenSidebar?: (content: string) => void,
   assistant?: AssistantIdentity,
 ) {
-  const timestamp = new Date(startedAt).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const timestamp = formatMessageTimestamp(startedAt);
   const name = assistant?.name ?? "Assistant";
 
   return html`
@@ -123,10 +137,7 @@ export function renderMessageGroup(
         : normalizedRole;
   const roleClass =
     normalizedRole === "user" ? "user" : normalizedRole === "assistant" ? "assistant" : "other";
-  const timestamp = new Date(group.timestamp).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const timestamp = formatMessageTimestamp(group.timestamp);
 
   return html`
     <div class="chat-group ${roleClass}">

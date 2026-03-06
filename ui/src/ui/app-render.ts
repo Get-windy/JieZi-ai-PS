@@ -3110,6 +3110,35 @@ export function renderApp(state: AppViewState) {
                 onAbort: () => void state.handleAbortChat(),
                 onQueueRemove: (id) => state.removeQueuedMessage(id),
                 onNewSession: () => state.handleSendChat("/new", { restoreDraft: true }),
+                onDeleteSession: () => {
+                  const key = state.sessionKey;
+                  // 主会话不允许删除
+                  if (key === "main" || key.endsWith(":main")) {
+                    window.alert("主对话不支持删除，可以通过发送 /new 来创建新对话。");
+                    return;
+                  }
+                  void deleteSession(state, key).then((deleted) => {
+                    if (deleted) {
+                      // 删除成功：切换到默认主会话
+                      state.sessionKey = "agent:main:main";
+                      state.chatMessage = "";
+                      state.chatAttachments = [];
+                      state.chatStream = null;
+                      state.chatStreamStartedAt = null;
+                      state.chatRunId = null;
+                      state.chatQueue = [];
+                      state.resetToolStream();
+                      state.resetChatScroll();
+                      state.applySettings({
+                        ...state.settings,
+                        sessionKey: "agent:main:main",
+                        lastActiveSessionKey: "agent:main:main",
+                      });
+                      void loadChatHistory(state);
+                      void loadSessions(state);
+                    }
+                  });
+                },
                 showNewMessages: state.chatNewMessagesBelow && !state.chatManualRefreshInFlight,
                 onScrollToBottom: () => state.scrollToBottom(),
                 // Sidebar props for tool output viewing
