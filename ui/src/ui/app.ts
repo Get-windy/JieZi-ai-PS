@@ -539,6 +539,8 @@ export class OpenClawApp extends LitElement {
   @state() chatNavCurrentContext: ChatConversationContext | null = null;
   @state() chatNavSearchQuery = "";
   @state() chatNavChannelForceJoined = false;
+  // Z2 + Z4: 未读消息计数映射（sessionKey → 未读消息数）
+  @state() unreadSessionMessages: Record<string, number> = {};
   // 注意：channelBindings 现在由后端 agent.list 直接返回，不再需要单独加载
 
   @state() queueLoading = false;

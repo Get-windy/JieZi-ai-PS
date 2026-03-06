@@ -8,13 +8,12 @@ import {
 } from "../chat/grouped-render.ts";
 import { normalizeMessage, normalizeRoleForGrouping } from "../chat/message-normalizer.ts";
 import { icons } from "../icons.ts";
-import { t } from "../i18n.ts";
 import { detectTextDirection } from "../text-direction.ts";
 import type { SessionsListResult, ChatNavigationNode, ChatConversationContext } from "../types.ts";
 import type { ChatItem, MessageGroup } from "../types/chat-types.ts";
 import type { ChatAttachment, ChatQueueItem } from "../ui-types.ts";
-import { renderMarkdownSidebar } from "./markdown-sidebar.ts";
 import { renderChatNavigationTree } from "./chat-navigation-tree.ts";
+import { renderMarkdownSidebar } from "./markdown-sidebar.ts";
 import "../components/resizable-divider.ts";
 
 export type CompactionIndicatorStatus = {
@@ -78,6 +77,7 @@ export type ChatProps = {
   onAbort?: () => void;
   onQueueRemove: (id: string) => void;
   onNewSession: () => void;
+  onDeleteSession?: () => void;
   onOpenSidebar?: (content: string) => void;
   onCloseSidebar?: () => void;
   onSplitRatioChange?: (ratio: number) => void;
@@ -355,6 +355,28 @@ export function renderChat(props: ChatProps) {
 
         <!-- 右侧聊天主区域 -->
         <div class="chat-main-area">
+          <!-- 聊天工具栏 -->
+          <div class="chat-toolbar">
+            <div class="chat-toolbar__left">
+              <!-- 预留扩展位置 -->
+            </div>
+            <div class="chat-toolbar__right">
+              ${
+                props.onDeleteSession
+                  ? html`
+                  <button
+                    class="btn btn--sm btn--danger-ghost"
+                    type="button"
+                    title="删除当前对话"
+                    @click=${props.onDeleteSession}
+                  >
+                    🗑️ 删除对话
+                  </button>
+                `
+                  : nothing
+              }
+            </div>
+          </div>
       ${props.disabledReason ? html`<div class="callout">${props.disabledReason}</div>` : nothing}
 
       ${props.error ? html`<div class="callout danger">${props.error}</div>` : nothing}
@@ -375,10 +397,11 @@ export function renderChat(props: ChatProps) {
           : nothing
       }
 
-      ${isReadOnly
+      ${
+        isReadOnly
           ? html`
             <div class="chat-readonly-bar">
-              <span>👁️ 通道观察模式（只读）：正在观察 ${(props.navCurrentContext as any)?.channelName ?? "通道"} 的消息</span>
+              <span>👁️ 通道观察模式（只读）：正在观察 ${(props.navCurrentContext as { channelName?: string } | null)?.channelName ?? "通道"} 的消息</span>
               <button
                 class="btn btn--sm"
                 type="button"
@@ -391,7 +414,8 @@ export function renderChat(props: ChatProps) {
           : nothing
       }
 
-      ${isChannelObserve && props.navChannelForceJoined
+      ${
+        isChannelObserve && props.navChannelForceJoined
           ? html`
             <div class="chat-force-joined-bar">
               <span>⚠️ 您正在以管理员身份直接回复通道消息，请谨慎操作</span>

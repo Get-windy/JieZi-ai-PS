@@ -1,10 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-  resolveAgentWorkspaceDir,
-  resolveDefaultAgentId,
-  resolveAgentModelAccounts,
-} from "../agents/agent-scope.js";
+import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { lookupContextTokens } from "../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import {
@@ -185,6 +181,26 @@ export function loadSessionEntry(sessionKey: string) {
   const storePath = resolveStorePath(sessionCfg?.store, { agentId });
   const store = loadSessionStore(storePath);
   const entry = store[canonicalKey];
+  // === 调试日志：帮助排查通道 sessionKey 不匹配问题 ===
+  const storeKeys = Object.keys(store);
+  const channelKeys = storeKeys.filter((k) => k.includes(":channel:") || k.includes(":group:"));
+  console.log(
+    `[SessionDebug] loadSessionEntry 输入="${sessionKey}" → canonicalKey="${canonicalKey}" 命中=${!!entry}`,
+  );
+  if (!entry) {
+    console.log(
+      `[SessionDebug] store 中的通道/群聊 key（共 ${channelKeys.length} 条）:`,
+      channelKeys.slice(0, 20),
+    );
+    if (channelKeys.length === 0) {
+      // 打印全部 key（最多20条）用于诊断
+      console.log(
+        `[SessionDebug] store 全部 key（共 ${storeKeys.length} 条，最多显示20条）:`,
+        storeKeys.slice(0, 20),
+      );
+    }
+  }
+  // === 调试日志结束 ===
   return { cfg, storePath, store, entry, canonicalKey };
 }
 
@@ -331,7 +347,7 @@ export function listAgentsForGateway(cfg: OpenClawConfig): {
   if (mainKey && !agentIds.includes(mainKey)) {
     agentIds = [...agentIds, mainKey];
   }
-  
+
   // 🔍 构建智能体的通道绑定数据
   // 从配置的 bindings 数组中提取每个智能体的绑定信息
   const bindingsByAgent = new Map<string, Array<{ channelId: string; accountId: string }>>();
@@ -343,17 +359,17 @@ export function listAgentsForGateway(cfg: OpenClawConfig): {
     const agentId = normalizeAgentId(binding.agentId);
     const channelId = binding.match.channel?.trim();
     const accountId = binding.match.accountId?.trim();
-    
+
     if (!channelId || !accountId) {
       continue;
     }
-    
+
     if (!bindingsByAgent.has(agentId)) {
       bindingsByAgent.set(agentId, []);
     }
     bindingsByAgent.get(agentId)!.push({ channelId, accountId });
   }
-  
+
   const agents = agentIds.map((id) => {
     const meta = configuredById.get(id);
     // 如果助手不在 agents.list 中（如系统默认助手 main），从全局配置解析工作区路径
@@ -366,10 +382,10 @@ export function listAgentsForGateway(cfg: OpenClawConfig): {
         // 解析失败，保持为 undefined
       }
     }
-    
+
     // 获取该智能体的通道绑定
     const channelBindings = bindingsByAgent.get(id) || [];
-    
+
     return {
       id,
       name: meta?.name,

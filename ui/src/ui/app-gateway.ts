@@ -1,11 +1,5 @@
-import type { EventLogEntry } from "./app-events.ts";
-import type { OpenClawApp } from "./app.ts";
-import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
-import type { GatewayEventFrame, GatewayHelloOk } from "./gateway.ts";
-import type { Tab } from "./navigation.ts";
-import type { UiSettings } from "./storage.ts";
-import type { AgentsListResult, PresenceEntry, HealthSnapshot, StatusSummary } from "./types.ts";
 import { CHAT_SESSIONS_ACTIVE_MINUTES, flushChatQueueForEvent } from "./app-chat.ts";
+import type { EventLogEntry } from "./app-events.ts";
 import {
   applySettings,
   loadCron,
@@ -13,11 +7,17 @@ import {
   setLastActiveSessionKey,
 } from "./app-settings.ts";
 import { handleAgentEvent, resetToolStream, type AgentEventPayload } from "./app-tool-stream.ts";
+import type { OpenClawApp } from "./app.ts";
 import { loadAgents } from "./controllers/agents.ts";
 import { loadAssistantIdentity } from "./controllers/assistant-identity.ts";
 import { loadChatHistory } from "./controllers/chat.ts";
-import { handleChatEvent, type ChatEventPayload } from "./controllers/chat.ts";
+import {
+  handleChatEvent,
+  shouldAcceptEventForContext,
+  type ChatEventPayload,
+} from "./controllers/chat.ts";
 import { loadDevices } from "./controllers/devices.ts";
+import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import {
   addExecApproval,
   parseExecApprovalRequested,
@@ -27,6 +27,10 @@ import {
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadSessions } from "./controllers/sessions.ts";
 import { GatewayBrowserClient } from "./gateway-client.js";
+import type { GatewayEventFrame, GatewayHelloOk } from "./gateway.ts";
+import type { Tab } from "./navigation.ts";
+import type { UiSettings } from "./storage.ts";
+import type { AgentsListResult, PresenceEntry, HealthSnapshot, StatusSummary } from "./types.ts";
 
 type GatewayHost = {
   settings: UiSettings;
@@ -215,7 +219,28 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
         payload.sessionKey,
       );
     }
-    const state = handleChatEvent(host as unknown as OpenClawApp, payload);
+
+    // Z2: 上下文感知的事件路由，传递当前导航上下文
+    const appHost = host as unknown as OpenClawApp;
+    const currentContext = appHost.chatNavCurrentContext ?? null;
+
+    // Z2 + Z4: 无论是否匹配当前上下文，都更新未读计数（final 事件表示有新消息到达）
+    if (
+      payload?.sessionKey &&
+      payload.state === "final" &&
+      !shouldAcceptEventForContext(payload.sessionKey, host.sessionKey, currentContext)
+    ) {
+      const prev =
+        (appHost as unknown as { unreadSessionMessages: Record<string, number> })
+          .unreadSessionMessages ?? {};
+      const next = { ...prev };
+      next[payload.sessionKey] = (next[payload.sessionKey] ?? 0) + 1;
+      (
+        appHost as unknown as { unreadSessionMessages: Record<string, number> }
+      ).unreadSessionMessages = next;
+    }
+
+    const state = handleChatEvent(host as unknown as OpenClawApp, payload, currentContext);
     if (state === "final" || state === "error" || state === "aborted") {
       resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
       void flushChatQueueForEvent(host as unknown as Parameters<typeof flushChatQueueForEvent>[0]);

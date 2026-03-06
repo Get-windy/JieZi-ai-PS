@@ -1,5 +1,10 @@
 import { extractText } from "../chat/message-extract.ts";
 import type { GatewayBrowserClient } from "../gateway.ts";
+import type {
+  AggregatedMessage,
+  ChatConversationContext,
+  ChatHistoryAggregateResult,
+} from "../types.ts";
 import type { ChatAttachment } from "../ui-types.ts";
 import { generateUUID } from "../uuid.ts";
 
@@ -17,6 +22,8 @@ export type ChatState = {
   chatStream: string | null;
   chatStreamStartedAt: number | null;
   lastError: string | null;
+  /** 聚合视图的消息列表（只在 type=all 时使用） */
+  chatAggregatedMessages?: AggregatedMessage[] | null;
 };
 
 export type ChatEventPayload = {
@@ -27,10 +34,24 @@ export type ChatEventPayload = {
   errorMessage?: string;
 };
 
+// ============ Z5: 竞态保护 ============
+// Module-level counter to guard against stale loadChatHistory responses
+let _chatLoadRequestId = 0;
+
 export async function loadChatHistory(state: ChatState) {
   if (!state.client || !state.connected) {
+    console.warn(
+      "[Chat:调试] loadChatHistory 跳过：client=",
+      !!state.client,
+      "connected=",
+      state.connected,
+    );
     return;
   }
+  const requestId = ++_chatLoadRequestId;
+  console.log(
+    `[Chat:调试] loadChatHistory 开始请求 sessionKey="${state.sessionKey}" requestId=${requestId}`,
+  );
   state.chatLoading = true;
   state.lastError = null;
   try {
@@ -41,13 +62,137 @@ export async function loadChatHistory(state: ChatState) {
         limit: 200,
       },
     );
+    // Z5: 竞态保护 — 如果在请求期间 sessionKey 已切换（新请求已发出），丢弃本次过期响应
+    if (requestId !== _chatLoadRequestId) {
+      console.warn(
+        `[Chat:调试] loadChatHistory 竞态丢弃 requestId=${requestId}，当前=${_chatLoadRequestId}`,
+      );
+      return;
+    }
+    const msgCount = Array.isArray(res.messages) ? res.messages.length : 0;
+    console.log(
+      `[Chat:调试] loadChatHistory 响应 sessionKey="${state.sessionKey}" 消息数=${msgCount}`,
+      res,
+    );
     state.chatMessages = Array.isArray(res.messages) ? res.messages : [];
     state.chatThinkingLevel = res.thinkingLevel ?? null;
   } catch (err) {
+    if (requestId !== _chatLoadRequestId) {
+      return;
+    }
+    console.error("[Chat:调试] loadChatHistory 错误:", err);
     state.lastError = String(err);
-    console.error("[Chat] loadChatHistory error:", err);
+  } finally {
+    // Only clear loading if this is still the latest request
+    if (requestId === _chatLoadRequestId) {
+      state.chatLoading = false;
+    }
+  }
+}
+
+// ============ Z1: 上下文感知的数据加载 ============
+
+/**
+ * 加载聚合历史（全部会话节点使用）。
+ * 调用 chat.history.aggregate 接口，自动发现所有活跃会话并合并消息按时间排序。
+ */
+export async function loadAggregatedHistory(state: ChatState): Promise<void> {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  state.chatLoading = true;
+  state.lastError = null;
+  state.chatAggregatedMessages = null;
+  try {
+    const res = await state.client.request<ChatHistoryAggregateResult>("chat.history.aggregate", {
+      autoDiscover: true,
+      limit: 200,
+      activeMinutes: 60 * 24 * 30, // 最近 30 天活跃
+    });
+    state.chatAggregatedMessages = Array.isArray(res.messages) ? res.messages : [];
+    // 聚合视图：chatMessages 也填充（展示层按 chatAggregatedMessages 优先）
+    state.chatMessages = state.chatAggregatedMessages.map((m) => m.message);
+  } catch (err) {
+    state.lastError = String(err);
+    console.error("[Chat] loadAggregatedHistory error:", err);
   } finally {
     state.chatLoading = false;
+  }
+}
+
+// ============ Z1: 上下文感知的数据加载 ============
+
+/**
+ * 将 ConversationContext 解析为后端实际可识别的 sessionKey。
+ *
+ * 群组 sessionKey 格式：agent:{agentId}:group:{groupId}
+ * 后端 loadSessionEntry 能通过 parseAgentSessionKey 正确解析此格式。
+ *
+ * 通道 sessionKey 后端已支持（如 "main:channel:discord:account123"），直接使用。
+ */
+export function resolveBackendSessionKey(context: ChatConversationContext): string {
+  const key = (() => {
+    switch (context.type) {
+      case "agent-direct":
+      case "channel-observe":
+        return context.sessionKey;
+      case "all":
+      case "agent-all":
+      case "channels-all":
+        return context.sessionKey;
+      case "group":
+        return context.sessionKey;
+      case "contact":
+        return `${context.agentId}:main`;
+      case "session-history":
+        return context.sessionKey;
+    }
+  })();
+  console.log(
+    `[Chat:调试] resolveBackendSessionKey type="${context.type}" context.sessionKey="${context.sessionKey}" → 解析后="${key}"`,
+  );
+  return key;
+}
+
+/**
+ * 判断一个 chat 事件是否应该被当前上下文接受并处理。
+ *
+ * 用于 Z2 上下文感知的实时事件路由：
+ * - all 视图接受所有事件
+ * - agent-all 视图接受该 agent 的所有事件
+ * - channels-all 视图接受该 agent 的所有通道事件
+ * - 其他视图精确匹配 state.sessionKey
+ */
+export function shouldAcceptEventForContext(
+  eventSessionKey: string,
+  stateSessionKey: string,
+  context?: ChatConversationContext | null,
+): boolean {
+  if (!context) {
+    // 无上下文时回退到精确匹配（向后兼容）
+    return eventSessionKey === stateSessionKey;
+  }
+  switch (context.type) {
+    case "all":
+      // 全局聚合视图：接受所有 sessionKey 的事件
+      return true;
+    case "agent-all": {
+      // 单个智能体聚合：接受以 agentId: 开头的事件
+      const prefix = context.agentId + ":";
+      return eventSessionKey.startsWith(prefix);
+    }
+    case "channels-all": {
+      // 全部通道聚合：接受以 agentId:channel: 开头的事件
+      const prefix = context.agentId + ":channel:";
+      return eventSessionKey.startsWith(prefix);
+    }
+    case "agent-direct":
+    case "channel-observe":
+    case "group":
+    case "contact":
+    default:
+      // 精确匹配已解析的后端 sessionKey
+      return eventSessionKey === stateSessionKey;
   }
 }
 
@@ -219,11 +364,22 @@ export async function abortChatRun(state: ChatState): Promise<boolean> {
   }
 }
 
-export function handleChatEvent(state: ChatState, payload?: ChatEventPayload) {
+export function handleChatEvent(
+  state: ChatState,
+  payload?: ChatEventPayload,
+  currentContext?: ChatConversationContext | null,
+) {
   if (!payload) {
     return null;
   }
-  if (payload.sessionKey !== state.sessionKey) {
+
+  // Z2: 上下文感知的事件路由，替代原来的简单 sessionKey 字符串比对
+  const accepted = shouldAcceptEventForContext(
+    payload.sessionKey,
+    state.sessionKey,
+    currentContext,
+  );
+  if (!accepted) {
     return null;
   }
 

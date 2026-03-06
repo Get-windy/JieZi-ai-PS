@@ -654,6 +654,8 @@ export type AppViewState = {
   chatNavCurrentContext: ChatConversationContext | null;
   chatNavSearchQuery: string;
   chatNavChannelForceJoined: boolean;
+  // Z2 + Z4: 未读消息计数映射（sessionKey → 未读消息数）
+  unreadSessionMessages: Record<string, number>;
   // 注意：channelBindings 现在由后端 agent.list 直接返回，不再需要单独加载
 
   client: GatewayBrowserClient | null;
