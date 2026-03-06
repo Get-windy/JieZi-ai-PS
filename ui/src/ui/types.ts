@@ -408,6 +408,12 @@ export type GatewaySessionRow = {
   subject?: string;
   room?: string;
   space?: string;
+  channel?: string;
+  groupChannel?: string;
+  chatType?: string;
+  lastChannel?: string;
+  lastTo?: string;
+  lastAccountId?: string;
   updatedAt: number | null;
   sessionId?: string;
   systemSent?: boolean;
@@ -422,6 +428,8 @@ export type GatewaySessionRow = {
   model?: string;
   modelProvider?: string;
   contextTokens?: number;
+  derivedTitle?: string;
+  lastMessagePreview?: string;
 };
 
 export type SessionsListResult = {

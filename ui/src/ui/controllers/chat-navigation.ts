@@ -77,7 +77,8 @@ export interface BuildNavigationTreeOptions {
   groups: GroupsListResult | null;
   friends: Friend[];
   /**
-   * 来自 sessions.list 的历史会话列表，用于构建“全部会话”节点的子树
+   * 来自 sessions.list 的历史会话列表，用于构建"全部会话"节点的子树
+   * 同时用于通道节点匹配真实的后端 sessionKey
    */
   sessions?: SessionsListResult | null;
   // Z4: 未读消息计数映射（sessionKey → 未读数）
@@ -281,19 +282,26 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       channelAccounts,
       channelLabels,
       agentBindings,
+      sessions,
     );
-    // Z4: 为通道节点添加未读计数
+    // Z4: 为通道节点添加未读计数（用 sessionKey 匹配，也兼容旧格式）
     for (const ci of channelItems) {
-      ci.unreadCount = getUnread(ci.context.sessionKey);
+      ci.unreadCount =
+        getUnread(ci.context.sessionKey) ??
+        getUnread((ci.context as { sessionKey: string }).sessionKey);
     }
     if (channelItems.length > 0) {
-      // "全部通道" 聚合节点
+      // "全部通道" 聚合节点（未读数：兼容新旧两种前缀格式）
       const allChannelsNode: ChatNavigationNode = {
         id: `channels-all-${agent.id}`,
         label: "全部通道",
         icon: "📦",
         nodeType: "item",
-        unreadCount: sumUnreadByPrefix(`agent:${agent.id}:channel:`),
+        unreadCount:
+          sumUnreadByPrefix(`agent:${agent.id}:`) &&
+          (sumUnreadByPrefix(`agent:${agent.id}:`) ?? 0) > 0
+            ? sumUnreadByPrefix(`agent:${agent.id}:`)
+            : undefined,
         context: {
           type: "channels-all",
           agentId: agent.id,
@@ -414,11 +422,16 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
 /**
  * 构建某个智能体绑定的通道节点列表
  *
+ * 关键：sessionKey 优先从 sessions.list 真实数据中匹配（lastChannel + lastAccountId），
+ * 后端真实格式是 agent:{agentId}:{channelId}:{peerKind}:{peerId}，
+ * 不能手动拼接，否则 peerKind/peerId 无法正确推断。
+ *
  * @param agent - 智能体信息
  * @param channelOrder - 所有通道ID列表（排序）
  * @param channelAccounts - 所有通道的账号信息
  * @param channelLabels - 通道显示名称映射
  * @param agentBindings - 该智能体绑定的通道账号列表（用于过滤）
+ * @param sessionsResult - sessions.list 结果，用于匹配真实 sessionKey
  */
 function buildAgentChannelItems(
   agent: { id: string; name?: string; identity?: { name?: string; emoji?: string } },
@@ -426,6 +439,7 @@ function buildAgentChannelItems(
   channelAccounts: Record<string, Array<{ accountId: string; name?: string | null }>>,
   channelLabels: Record<string, string>,
   agentBindings: AgentChannelBinding[],
+  sessionsResult?: SessionsListResult | null,
 ): ChatNavigationNode[] {
   const items: ChatNavigationNode[] = [];
 
@@ -437,6 +451,23 @@ function buildAgentChannelItems(
   // 将绑定列表转换为 Set 以便快速查找
   const bindingSet = new Set(agentBindings.map((b) => `${b.channelId}:${b.accountId}`));
 
+  // 从 sessions.list 构建 (channelId -> accountId -> realSessionKey[]) 的映射
+  // 后端 key 格式：agent:{agentId}:{channelId}:{peerKind}:{peerId}
+  // 字段：lastChannel=channelId, lastAccountId=accountId
+  const channelSessionMap = new Map<string, SessionsListResult["sessions"][number][]>();
+  if (sessionsResult?.sessions) {
+    for (const s of sessionsResult.sessions) {
+      const ch = s.lastChannel;
+      const acc = s.lastAccountId;
+      if (ch && acc) {
+        const mapKey = `${ch}:${acc}`;
+        const existing = channelSessionMap.get(mapKey) ?? [];
+        existing.push(s);
+        channelSessionMap.set(mapKey, existing);
+      }
+    }
+  }
+
   for (const channelId of channelOrder) {
     const accounts = channelAccounts[channelId] ?? [];
 
@@ -445,34 +476,89 @@ function buildAgentChannelItems(
       const bindingKey = `${channelId}:${accountId}`;
 
       // 只显示该智能体绑定的通道账号
-      const isMatched = bindingSet.has(bindingKey);
-
-      if (!isMatched) {
+      if (!bindingSet.has(bindingKey)) {
         continue;
       }
 
       const accountName = account.name ?? accountId;
       const channelLabel = channelLabels[channelId] ?? getChannelDisplayName(channelId);
 
-      const item: ChatNavigationNode = {
-        id: `channel-${agent.id}-${channelId}-${accountId}`,
-        label: `${channelLabel} - ${accountName}`,
-        icon: getChannelIcon(channelId),
-        nodeType: "item",
-        context: {
-          type: "channel-observe",
-          agentId: agent.id,
-          agentName: agent.identity?.name || agent.name,
-          channelId,
-          channelName: channelLabel,
-          accountId,
-          accountName: accountName ?? undefined,
-          // 必须加 agent: 前缀，否则后端 parseAgentSessionKey 返回 null，会错误 fallback 到 agent 主会话
-          sessionKey: `agent:${agent.id}:channel:${channelId}:${accountId}`,
-        },
-      };
+      // 优先从 sessions.list 匹配真实的后端 sessionKey
+      // 尝试按 lastChannel=channelId + lastAccountId=accountId 匹配
+      const matchedSessions = channelSessionMap.get(`${channelId}:${accountId}`) ?? [];
+      // 过滤属于该 agent 的 session
+      const agentSessions = matchedSessions.filter((s) => s.key.startsWith(`agent:${agent.id}:`));
 
-      items.push(item);
+      if (agentSessions.length > 0) {
+        // 有真实 session：每个 session 生成一个子节点，或合并为一个节点（取最近更新的）
+        const latestSession = agentSessions.toSorted(
+          (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0),
+        )[0];
+        const realSessionKey = latestSession.key;
+        const displayLabel =
+          latestSession.displayName?.trim() || `${channelLabel} - ${accountName}`;
+
+        items.push({
+          id: `channel-${agent.id}-${channelId}-${accountId}`,
+          label: displayLabel,
+          icon: getChannelIcon(channelId),
+          nodeType: "item",
+          context: {
+            type: "channel-observe",
+            agentId: agent.id,
+            agentName: agent.identity?.name || agent.name,
+            channelId,
+            channelName: channelLabel,
+            accountId,
+            accountName: accountName ?? undefined,
+            // 使用后端 sessions.list 里的真实 key，格式：agent:{agentId}:{channelId}:{peerKind}:{peerId}
+            sessionKey: realSessionKey,
+          },
+        });
+
+        // 如果该通道账号有多个活跃 session（多用户），额外展示子节点
+        if (agentSessions.length > 1) {
+          const parentNode = items[items.length - 1];
+          parentNode.label = `${channelLabel} - ${accountName}（${agentSessions.length} 个会话）`;
+          parentNode.nodeType = "category";
+          parentNode.children = agentSessions
+            .toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+            .map((s) => ({
+              id: `channel-sess-${s.key}`,
+              label: s.displayName?.trim() || s.key,
+              icon: getChannelIcon(channelId),
+              nodeType: "item" as const,
+              context: {
+                type: "channel-observe" as const,
+                agentId: agent.id,
+                channelId,
+                channelName: channelLabel,
+                accountId,
+                sessionKey: s.key,
+              },
+            }));
+        }
+      } else {
+        // 没有匹配到真实 session：仍然显示通道配置项，但标注"暂无会话"
+        // sessionKey 用 agent:{agentId}:{channelId}:main（告知后端从该通道主会话查找）
+        const fallbackKey = `agent:${agent.id}:${channelId}:main`;
+        items.push({
+          id: `channel-${agent.id}-${channelId}-${accountId}`,
+          label: `${channelLabel} - ${accountName}`,
+          icon: getChannelIcon(channelId),
+          nodeType: "item",
+          context: {
+            type: "channel-observe",
+            agentId: agent.id,
+            agentName: agent.identity?.name || agent.name,
+            channelId,
+            channelName: channelLabel,
+            accountId,
+            accountName: accountName ?? undefined,
+            sessionKey: fallbackKey,
+          },
+        });
+      }
     }
   }
 
@@ -499,24 +585,46 @@ export function isSameContext(
 
 /**
  * 根据 sessionKey 解析出 ConversationContext 的类型
+ *
+ * 后端真实 key 格式：
+ *   主会话：  agent:{agentId}:main
+ *   通道：    agent:{agentId}:{channelId}:{peerKind}:{peerId}
+ *              其中 peerKind = direct | channel | group | account | ...
+ *   精山会话：agent:{agentId}:{channelId}:account:{accountId}:direct:{peerId}
+ *   群组：    agent:{agentId}:group:{groupId}  或  agent:{agentId}:{channelId}:group:{groupId}
+ *   好友：    {agentId}:contact:{contactId}
  */
 export function resolveContextType(
   sessionKey: string,
 ): "agent-direct" | "channel-observe" | "group" | "contact" {
-  if (sessionKey.includes(":channel:")) {
-    return "channel-observe";
+  // 第一段必须是 agent 才处理通道
+  if (!sessionKey.startsWith("agent:")) {
+    if (sessionKey.includes(":contact:")) {
+      return "contact";
+    }
+    return "agent-direct";
   }
-  if (sessionKey.includes(":group:")) {
+  const parts = sessionKey.split(":");
+  // agent:{agentId}:group:{groupId} → parts[2] === "group"
+  if (parts[2] === "group" || parts[3] === "group") {
     return "group";
   }
-  if (sessionKey.includes(":contact:")) {
-    return "contact";
+  // agent:{agentId}:main → parts[2] === "main" 且只有 3 段
+  if (parts[2] === "main" && parts.length <= 3) {
+    return "agent-direct";
+  }
+  // 其他带外部通道的 key：agent:{agentId}:{channelId}:{peerKind}:{peerId}
+  // parts.length >= 5 且 parts[2] 不是 main 时，认为是通道
+  if (parts.length >= 5 && parts[2] !== "main") {
+    return "channel-observe";
   }
   return "agent-direct";
 }
 
 /**
  * 从 sessionKey 创建默认的 ConversationContext
+ *
+ * 处理真实后端 key 格式：agent:{agentId}:{channelId}:{peerKind}:{peerId}
  */
 export function createDefaultContext(sessionKey: string): ChatConversationContext {
   const contextType = resolveContextType(sessionKey);
@@ -526,20 +634,19 @@ export function createDefaultContext(sessionKey: string): ChatConversationContex
     case "channel-observe":
       return {
         type: "channel-observe",
-        // 格式: agent:{agentId}:channel:{channelId}:{accountId}
-        // parts = ["agent", agentId, "channel", channelId, accountId]
-        agentId: parts[1] ?? parts[0],
-        channelId: parts[3] ?? "",
-        accountId: parts[4] ?? "",
+        // 真实格式：agent:{agentId}:{channelId}:{peerKind}:{peerId}
+        // parts = ["agent", agentId, channelId, peerKind, peerId, ...]
+        agentId: parts[1] ?? "main",
+        channelId: parts[2] ?? "",
+        accountId: parts[4] ?? parts[3] ?? "",
         sessionKey,
       };
     case "group":
       return {
         type: "group",
-        // 格式: agent:{agentId}:group:{groupId}
-        // parts = ["agent", agentId, "group", groupId]
+        // 格式: agent:{agentId}:group:{groupId} 或 agent:{agentId}:{channelId}:group:{groupId}
         agentId: parts[1] ?? "main",
-        groupId: parts[3] ?? "",
+        groupId: (parts[2] === "group" ? parts[3] : parts[4]) ?? "",
         sessionKey,
       };
     case "contact":
@@ -552,7 +659,7 @@ export function createDefaultContext(sessionKey: string): ChatConversationContex
     default:
       return {
         type: "agent-direct",
-        agentId: parts[0] ?? "main",
+        agentId: (parts[0] === "agent" ? parts[1] : parts[0]) ?? "main",
         sessionKey,
       };
   }

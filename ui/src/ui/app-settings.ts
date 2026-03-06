@@ -1,5 +1,3 @@
-import type { OpenClawApp } from "./app.ts";
-import type { AgentsListResult } from "./types.ts";
 import { refreshChat } from "./app-chat.ts";
 import {
   startLogsPolling,
@@ -8,6 +6,7 @@ import {
   stopDebugPolling,
 } from "./app-polling.ts";
 import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll.ts";
+import type { OpenClawApp } from "./app.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
 import { loadAgents } from "./controllers/agents.ts";
@@ -21,7 +20,7 @@ import { loadExecApprovals } from "./controllers/exec-approvals.ts";
 import { loadFriends } from "./controllers/friends.ts";
 import { loadGroups } from "./controllers/groups.ts";
 import { loadLogs } from "./controllers/logs.ts";
-import { loadQueueStatus, loadQueueStats, loadQueueConfig } from "./controllers/message-queue.ts";
+import { loadQueueStatus, loadQueueStats } from "./controllers/message-queue.ts";
 import { loadModels } from "./controllers/models.js";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
@@ -38,6 +37,7 @@ import {
 import { saveSettings, type UiSettings } from "./storage.ts";
 import { startThemeTransition, type ThemeTransitionContext } from "./theme-transition.ts";
 import { resolveTheme, type ResolvedTheme, type ThemeMode } from "./theme.ts";
+import type { AgentsListResult } from "./types.ts";
 
 type SettingsHost = {
   settings: UiSettings;
@@ -168,7 +168,7 @@ export function setTab(host: SettingsHost, next: Tab) {
   if (next === "models") {
     // 切换到模型管理页面时，启动自动刷新
     void import("./controllers/models.js").then(({ startModelsAutoRefresh }) => {
-      startModelsAutoRefresh(host as any);
+      startModelsAutoRefresh(host as unknown as Parameters<typeof startModelsAutoRefresh>[0]);
     });
   } else {
     // 离开模型管理页面时，停止自动刷新
@@ -180,8 +180,9 @@ export function setTab(host: SettingsHost, next: Tab) {
   if (next === "usage" && typeof window !== "undefined") {
     const url = new URL(window.location.href);
     const provider = url.searchParams.get("provider")?.trim() || null;
-    (host as any).usageFilterProvider = provider;
-    (host as any).usageShowProviderOverview = !provider; // 没有provider时显示概览
+    (host as unknown as { usageFilterProvider: string | null }).usageFilterProvider = provider;
+    (host as unknown as { usageShowProviderOverview: boolean }).usageShowProviderOverview =
+      !provider; // 没有provider时显示概览
   }
   void refreshActiveTab(host);
   syncUrlWithTab(host, next, false);
@@ -252,7 +253,7 @@ export async function refreshActiveTab(host: SettingsHost) {
     await loadExecApprovals(host as unknown as OpenClawApp);
   }
   if (host.tab === "chat") {
-    // 第一步：并发加载所有辅助数据（通道、群组、好友）
+    // 第一步：并发加载所有辅助数据（通道、群组、好友、会话列表）
     // 必须先加载完成，确保导航树有完整数据
     // 注意：channelBindings 现在由后端 agent.list 直接返回，不需要单独加载
     const app = host as unknown as OpenClawApp;
@@ -261,6 +262,8 @@ export async function refreshActiveTab(host: SettingsHost) {
       !app.channelsSnapshot ? loadChannels(app, false) : Promise.resolve(),
       !app.groupsList ? loadGroups(app) : Promise.resolve(),
       app.friendsList?.length === 0 ? loadFriends(app, agentId) : Promise.resolve(),
+      // 加载会话列表，用于通道节点匹配真实 sessionKey（lastChannel+lastAccountId）
+      loadSessions(app as unknown as import("./controllers/sessions.ts").SessionsState),
     ]);
 
     // 第二步：辅助数据加载完成后再刷新聊天
@@ -397,8 +400,9 @@ export function onPopState(host: SettingsHost) {
   // 解析 usage 页面的 provider 参数
   if (resolved === "usage") {
     const provider = url.searchParams.get("provider")?.trim() || null;
-    (host as any).usageFilterProvider = provider;
-    (host as any).usageShowProviderOverview = !provider; // 没有provider时显示概览
+    (host as unknown as { usageFilterProvider: string | null }).usageFilterProvider = provider;
+    (host as unknown as { usageShowProviderOverview: boolean }).usageShowProviderOverview =
+      !provider; // 没有provider时显示概览
   }
 
   setTabFromRoute(host, resolved);
@@ -483,7 +487,7 @@ export async function loadChannelsTab(host: SettingsHost) {
 }
 
 export async function loadModelsTab(host: SettingsHost) {
-  [await loadModels(host as unknown as OpenClawApp, true)];
+  await loadModels(host as unknown as OpenClawApp, true);
   setTimeout(() => {
     void loadModels(host as unknown as OpenClawApp, false);
   }, 200);
