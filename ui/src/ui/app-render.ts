@@ -3149,9 +3149,13 @@ export function renderApp(state: AppViewState) {
                   ]).then(() => loadChatHistory(state));
                 },
                 onNavSelectContext: (context) => {
+                  console.log("[Nav:调试] 点击导航节点", JSON.stringify(context));
                   state.chatNavCurrentContext = context;
                   // Z1: 上下文感知的 sessionKey 解析，将 group/contact 解析为后端可识别的 sessionKey
                   const nextKey = resolveBackendSessionKey(context);
+                  console.log(
+                    `[Nav:调试] 当前 state.sessionKey="${state.sessionKey}" → nextKey="${nextKey}" 是否相同=${nextKey === state.sessionKey}`,
+                  );
                   // Z4: 切换到该节点时清除对应的未读计数
                   if (state.unreadSessionMessages) {
                     const unread = { ...state.unreadSessionMessages };

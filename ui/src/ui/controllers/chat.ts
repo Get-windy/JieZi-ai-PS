@@ -40,9 +40,18 @@ let _chatLoadRequestId = 0;
 
 export async function loadChatHistory(state: ChatState) {
   if (!state.client || !state.connected) {
+    console.warn(
+      "[Chat:调试] loadChatHistory 跳过：client=",
+      !!state.client,
+      "connected=",
+      state.connected,
+    );
     return;
   }
   const requestId = ++_chatLoadRequestId;
+  console.log(
+    `[Chat:调试] loadChatHistory 开始请求 sessionKey="${state.sessionKey}" requestId=${requestId}`,
+  );
   state.chatLoading = true;
   state.lastError = null;
   try {
@@ -55,16 +64,24 @@ export async function loadChatHistory(state: ChatState) {
     );
     // Z5: 竞态保护 — 如果在请求期间 sessionKey 已切换（新请求已发出），丢弃本次过期响应
     if (requestId !== _chatLoadRequestId) {
+      console.warn(
+        `[Chat:调试] loadChatHistory 竞态丢弃 requestId=${requestId}，当前=${_chatLoadRequestId}`,
+      );
       return;
     }
+    const msgCount = Array.isArray(res.messages) ? res.messages.length : 0;
+    console.log(
+      `[Chat:调试] loadChatHistory 响应 sessionKey="${state.sessionKey}" 消息数=${msgCount}`,
+      res,
+    );
     state.chatMessages = Array.isArray(res.messages) ? res.messages : [];
     state.chatThinkingLevel = res.thinkingLevel ?? null;
   } catch (err) {
     if (requestId !== _chatLoadRequestId) {
       return;
     }
+    console.error("[Chat:调试] loadChatHistory 错误:", err);
     state.lastError = String(err);
-    console.error("[Chat] loadChatHistory error:", err);
   } finally {
     // Only clear loading if this is still the latest request
     if (requestId === _chatLoadRequestId) {
@@ -114,26 +131,27 @@ export async function loadAggregatedHistory(state: ChatState): Promise<void> {
  * 通道 sessionKey 后端已支持（如 "main:channel:discord:account123"），直接使用。
  */
 export function resolveBackendSessionKey(context: ChatConversationContext): string {
-  switch (context.type) {
-    case "agent-direct":
-    case "channel-observe":
-      // 这两种类型的 sessionKey 后端能直接识别
-      return context.sessionKey;
-    case "all":
-    case "agent-all":
-    case "channels-all":
-      // 聚合视图：sessionKey 已指向 default agent 的 main（由 buildNavigationTree 生成）
-      return context.sessionKey;
-    case "group":
-      // sessionKey 格式为 agent:{agentId}:group:{groupId}，后端可直接识别
-      return context.sessionKey;
-    case "contact":
-      // 好友对话：后端暂不识别 contact sessionKey，回退到 agent 主会话
-      return `${context.agentId}:main`;
-    case "session-history":
-      // 历史会话节点：直接使用该 sessionKey
-      return context.sessionKey;
-  }
+  const key = (() => {
+    switch (context.type) {
+      case "agent-direct":
+      case "channel-observe":
+        return context.sessionKey;
+      case "all":
+      case "agent-all":
+      case "channels-all":
+        return context.sessionKey;
+      case "group":
+        return context.sessionKey;
+      case "contact":
+        return `${context.agentId}:main`;
+      case "session-history":
+        return context.sessionKey;
+    }
+  })();
+  console.log(
+    `[Chat:调试] resolveBackendSessionKey type="${context.type}" context.sessionKey="${context.sessionKey}" → 解析后="${key}"`,
+  );
+  return key;
 }
 
 /**
