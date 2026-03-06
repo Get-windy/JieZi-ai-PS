@@ -80,11 +80,12 @@ function formatMessageTimestamp(ts: number): string {
   if (isToday) {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
-  // 非今天：显示月日 + 时分，例如 "3月5日 14:30"
+  // 非今天：显示年月日 + 时分，例如 "2026年3月5日 14:30"
+  const year = date.getFullYear();
   const month = date.getMonth() + 1;
   const day = date.getDate();
   const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return `${month}月${day}日 ${time}`;
+  return `${year}年${month}月${day}日 ${time}`;
 }
 
 export function renderStreamingGroup(
