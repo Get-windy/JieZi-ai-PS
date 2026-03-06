@@ -259,7 +259,7 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       label: "全部",
       icon: "📋",
       nodeType: "item",
-      unreadCount: sumUnreadByPrefix(`${agent.id}:`),
+      unreadCount: sumUnreadByPrefix(`agent:${agent.id}:`),
       context: {
         type: "agent-all",
         agentId: agent.id,
@@ -467,6 +467,21 @@ function buildAgentChannelItems(
       }
     }
   }
+  // 调试：打印 sessions.list 里所有通道会话的 lastChannel/lastAccountId
+  if (sessionsResult?.sessions) {
+    const channelSessions = sessionsResult.sessions.filter((s) => s.lastChannel || s.channel);
+    console.log(
+      `[NavTree:调试] sessions.list 通道相关会话数=${channelSessions.length}，channelSessionMap keys=`,
+      [...channelSessionMap.keys()],
+      "\n前5条:",
+      channelSessions.slice(0, 5).map((s) => ({
+        key: s.key,
+        lastChannel: s.lastChannel,
+        lastAccountId: s.lastAccountId,
+        channel: s.channel,
+      })),
+    );
+  }
 
   for (const channelId of channelOrder) {
     const accounts = channelAccounts[channelId] ?? [];
@@ -488,6 +503,16 @@ function buildAgentChannelItems(
       const matchedSessions = channelSessionMap.get(`${channelId}:${accountId}`) ?? [];
       // 过滤属于该 agent 的 session
       const agentSessions = matchedSessions.filter((s) => s.key.startsWith(`agent:${agent.id}:`));
+
+      // 调试：打印匹配情况
+      console.log(
+        `[NavTree:调试] 通道匹配 channelId=${channelId} accountId=${accountId} bindingKey=${bindingKey}`,
+        `\n  matchedSessions数=${matchedSessions.length} agentSessions数=${agentSessions.length}`,
+        `\n  channelSessionMap中的key: feishu:xxx =`,
+        [...channelSessionMap.entries()]
+          .filter(([k]) => k.startsWith(channelId))
+          .map(([k, v]) => ({ key: k, sessions: v.map((s) => s.key) })),
+      );
 
       if (agentSessions.length > 0) {
         // 有真实 session：每个 session 生成一个子节点，或合并为一个节点（取最近更新的）
