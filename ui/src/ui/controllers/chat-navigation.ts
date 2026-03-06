@@ -159,18 +159,11 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
   // 顶层节点数组
   const rootNodes: ChatNavigationNode[] = [];
 
-  // ---- 顶级: 📊 全部会话（展开后显示历史会话子树）----
+  // ---- 顶级: 📊 全部会话（子树直接是会话列表，无冗余按钮节点）----
   const sessionList = sessions?.sessions ?? [];
-  // 按 updatedAt 降序排列
   const sortedSessions = [...sessionList].toSorted(
     (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0),
   );
-
-  // 三档展开逻辑（全由 nodeId 控制，展开状态由外部 expandedNodeIds 管理）：
-  //   1）默认：展开有未读的历史会话，最多 5 条 → id=__all_unread__
-  //   2）点击展开全部未读 → id=__all_unread_full__
-  //   3）点击展开全部会话 → id=__all_sessions__
-  const UNREAD_PREVIEW = 5;
 
   const unreadSessions = sortedSessions.filter((s) => {
     const count = unread[s.key];
@@ -195,42 +188,15 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
     };
   };
 
-  // 默认展开项：最多 UNREAD_PREVIEW 条未读会话
-  const previewUnreadNodes = unreadSessions.slice(0, UNREAD_PREVIEW).map(makeSessionHistoryNode);
-
-  // "展开全部未读" 节点（未读超过 UNREAD_PREVIEW 条时显示）
-  const moreUnreadNode: ChatNavigationNode | null =
-    unreadSessions.length > UNREAD_PREVIEW
-      ? {
-          id: "__all_unread_full__",
-          label: `展开全部未读（共 ${unreadSessions.length} 条）`,
-          icon: "🔔",
-          nodeType: "item",
-          unreadCount: undefined,
-          context: {
-            type: "all",
-            sessionKey: defaultSessionKey,
-          },
-        }
-      : null;
-
-  // "展开全部会话" 节点（始终显示）
-  const allSessionsNode: ChatNavigationNode = {
-    id: "__all_sessions__",
-    label: `展开全部会话（${sortedSessions.length} 条）`,
-    icon: "📂",
-    nodeType: "item",
-    unreadCount: undefined,
-    context: {
-      type: "all",
-      sessionKey: defaultSessionKey,
-    },
-  };
-
-  const allChildren: ChatNavigationNode[] = [
-    ...previewUnreadNodes,
-    ...(moreUnreadNode ? [moreUnreadNode] : []),
-    allSessionsNode,
+  // 子树：未读会话优先显示，其余按时间排序
+  // 默认只展示前 20 条，避免树过长
+  const MAX_SESSION_PREVIEW = 20;
+  const sessionChildNodes: ChatNavigationNode[] = [
+    ...unreadSessions.map(makeSessionHistoryNode),
+    ...sortedSessions
+      .filter((s) => !(unread[s.key] > 0))
+      .slice(0, Math.max(0, MAX_SESSION_PREVIEW - unreadSessions.length))
+      .map(makeSessionHistoryNode),
   ];
 
   rootNodes.push({
@@ -243,7 +209,7 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       type: "all",
       sessionKey: defaultSessionKey,
     },
-    children: allChildren.length > 0 ? allChildren : undefined,
+    children: sessionChildNodes.length > 0 ? sessionChildNodes : undefined,
   });
 
   // ---- 每个智能体生成一棵子树 ----
@@ -291,32 +257,24 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
         getUnread((ci.context as { sessionKey: string }).sessionKey);
     }
     if (channelItems.length > 0) {
-      // "全部通道" 聚合节点（未读数：兼容新旧两种前缀格式）
-      const allChannelsNode: ChatNavigationNode = {
-        id: `channels-all-${agent.id}`,
-        label: "全部通道",
-        icon: "📦",
-        nodeType: "item",
-        unreadCount:
-          sumUnreadByPrefix(`agent:${agent.id}:`) &&
-          (sumUnreadByPrefix(`agent:${agent.id}:`) ?? 0) > 0
-            ? sumUnreadByPrefix(`agent:${agent.id}:`)
-            : undefined,
+      // 通道分类节点：点击即聚合显示该 agent 所有通道消息，子节点直接是各通道账号（去掉冗余的"全部通道"）
+      const channelsUnread =
+        (sumUnreadByPrefix(`agent:${agent.id}:`) ?? 0) > 0
+          ? sumUnreadByPrefix(`agent:${agent.id}:`)
+          : undefined;
+      agentChildren.push({
+        id: `channels-${agent.id}`,
+        label: "通道",
+        icon: "📱",
+        nodeType: "category",
+        unreadCount: channelsUnread,
         context: {
           type: "channels-all",
           agentId: agent.id,
           agentName,
           sessionKey: agentSessionKey,
         },
-      };
-
-      agentChildren.push({
-        id: `channels-${agent.id}`,
-        label: "通道",
-        icon: "📱",
-        nodeType: "category",
-        context: allChannelsNode.context,
-        children: [allChannelsNode, ...channelItems],
+        children: channelItems,
       });
     }
 
