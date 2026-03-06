@@ -9,6 +9,9 @@
  * - 一对一好友关系管理
  */
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { groupWorkspaceManager } from "../workspace/group-workspace.js";
 import type { GroupMessage, GroupSessionMetadata } from "./group-message-storage.js";
 import { groupMessageStorage } from "./group-message-storage.js";
@@ -180,6 +183,50 @@ export interface FriendRelation {
 export class GroupManager {
   private groups: Map<string, GroupInfo> = new Map();
   private friendRelations: Map<string, FriendRelation> = new Map();
+  private readonly persistPath: string;
+
+  constructor() {
+    this.persistPath = join(homedir(), ".openclaw", "groups");
+    this._loadFromDisk();
+  }
+
+  /** 从磁盘加载群组数据（启动时调用） */
+  private _loadFromDisk(): void {
+    try {
+      const file = join(this.persistPath, "groups.json");
+      if (!existsSync(file)) {
+        return;
+      }
+      const raw = readFileSync(file, "utf-8");
+      const data = JSON.parse(raw) as { groups?: GroupInfo[] };
+      if (Array.isArray(data.groups)) {
+        for (const g of data.groups) {
+          this.groups.set(g.id, g);
+        }
+        console.log(`[Group Manager] Loaded ${data.groups.length} groups from disk`);
+      }
+    } catch (err) {
+      console.error("[Group Manager] Failed to load groups from disk:", err);
+    }
+  }
+
+  /** 将群组数据保存到磁盘 */
+  private _saveToDisk(): void {
+    try {
+      if (!existsSync(this.persistPath)) {
+        mkdirSync(this.persistPath, { recursive: true });
+      }
+      const file = join(this.persistPath, "groups.json");
+      const data = {
+        version: "1.0",
+        timestamp: Date.now(),
+        groups: Array.from(this.groups.values()),
+      };
+      writeFileSync(file, JSON.stringify(data, null, 2), "utf-8");
+    } catch (err) {
+      console.error("[Group Manager] Failed to save groups to disk:", err);
+    }
+  }
 
   /**
    * 创建群组
@@ -257,6 +304,7 @@ export class GroupManager {
     await this.sendSystemMessage(id, `群组 "${name}" 已创建`);
 
     console.log(`[Group Manager] Created group ${id} with ${group.members.length} members`);
+    this._saveToDisk();
     return group;
   }
 
@@ -281,6 +329,7 @@ export class GroupManager {
 
     Object.assign(group, updates);
     this.groups.set(groupId, group);
+    this._saveToDisk();
 
     // 更新元数据
     if (updates.name) {
@@ -334,6 +383,7 @@ export class GroupManager {
     await this.sendSystemMessage(groupId, `${agentId} 加入了群组`);
 
     console.log(`[Group Manager] Added member ${agentId} to group ${groupId}`);
+    this._saveToDisk();
   }
 
   /**
@@ -367,6 +417,7 @@ export class GroupManager {
     await this.sendSystemMessage(groupId, `${agentId} 离开了群组`);
 
     console.log(`[Group Manager] Removed member ${agentId} from group ${groupId}`);
+    this._saveToDisk();
   }
 
   /**
@@ -397,6 +448,7 @@ export class GroupManager {
 
     // 发送系统消息
     await this.sendSystemMessage(groupId, `${agentId} 的角色从 ${oldRole} 变更为 ${newRole}`);
+    this._saveToDisk();
   }
 
   /**
@@ -458,6 +510,7 @@ export class GroupManager {
 
     // 删除群组
     this.groups.delete(groupId);
+    this._saveToDisk();
 
     console.log(`[Group Manager] Deleted group ${groupId}`);
   }
