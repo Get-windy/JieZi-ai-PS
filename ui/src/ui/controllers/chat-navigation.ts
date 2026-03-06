@@ -293,7 +293,7 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
         label: "全部通道",
         icon: "📦",
         nodeType: "item",
-        unreadCount: sumUnreadByPrefix(`${agent.id}:channel:`),
+        unreadCount: sumUnreadByPrefix(`agent:${agent.id}:channel:`),
         context: {
           type: "channels-all",
           agentId: agent.id,
@@ -339,14 +339,19 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       });
     }
 
-    // 4) 🤝 好友
-    // 智能体根节点
+    // 智能体根节点（未读数覆盖通道 + 直接对话两种前缀）
+    const agentUnread = (() => {
+      const direct = sumUnreadByPrefix(`agent:${agent.id}:`) ?? 0;
+      const legacy = sumUnreadByPrefix(`${agent.id}:`) ?? 0;
+      const total = direct + legacy;
+      return total > 0 ? total : undefined;
+    })();
     rootNodes.push({
       id: `agent-${agent.id}`,
       label: agentName,
       icon: agentEmoji,
       nodeType: "agent",
-      unreadCount: sumUnreadByPrefix(`${agent.id}:`),
+      unreadCount: agentUnread,
       context: {
         type: "agent-direct",
         agentId: agent.id,
@@ -359,8 +364,8 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
   }
 
   // ---- 顶级：👥 群聊（独立栏目，不重复挂在每个 agent 下）----
-  if (groupList.length > 0) {
-    // 用默认 agent 作为群聊消息的归属 agent（发消息时的上下文 agent）
+  // 始终显示群聊根节点（即使暂无群组），方便用户通过 collaboration 面板创建群组
+  {
     const groupAgentId = defaultAgent?.id ?? agentList[0]?.id ?? "main";
     const groupItems: ChatNavigationNode[] = groupList.map((group) => {
       const sessionKey = `agent:${groupAgentId}:group:${group.id}`;
@@ -369,7 +374,7 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
         label: group.name,
         icon: "💬",
         nodeType: "item" as const,
-        unreadCount: sumUnreadByPrefix(`:group:${group.id}`),
+        unreadCount: getUnread(`agent:${groupAgentId}:group:${group.id}`),
         context: {
           type: "group" as const,
           agentId: groupAgentId,
@@ -381,14 +386,20 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       };
     });
 
+    const groupsRootContext = groupItems[0]?.context ?? {
+      type: "agent-direct" as const,
+      agentId: groupAgentId,
+      sessionKey: `agent:${groupAgentId}:main:main`,
+    };
+
     rootNodes.push({
       id: "groups-root",
       label: "群聊",
       icon: "👥",
       nodeType: "category",
-      unreadCount: sumUnreadByPrefix(`:group:`),
-      context: groupItems[0].context,
-      children: groupItems,
+      unreadCount: sumUnreadByPrefix(`agent:${groupAgentId}:group:`),
+      context: groupsRootContext,
+      children: groupItems.length > 0 ? groupItems : undefined,
     });
   }
 
@@ -453,7 +464,8 @@ function buildAgentChannelItems(
           channelName: channelLabel,
           accountId,
           accountName: accountName ?? undefined,
-          sessionKey: `${agent.id}:channel:${channelId}:${accountId}`,
+          // 必须加 agent: 前缀，否则后端 parseAgentSessionKey 返回 null，会错误 fallback 到 agent 主会话
+          sessionKey: `agent:${agent.id}:channel:${channelId}:${accountId}`,
         },
       };
 
@@ -511,9 +523,11 @@ export function createDefaultContext(sessionKey: string): ChatConversationContex
     case "channel-observe":
       return {
         type: "channel-observe",
-        agentId: parts[0],
-        channelId: parts[2] ?? "",
-        accountId: parts[3] ?? "",
+        // 格式: agent:{agentId}:channel:{channelId}:{accountId}
+        // parts = ["agent", agentId, "channel", channelId, accountId]
+        agentId: parts[1] ?? parts[0],
+        channelId: parts[3] ?? "",
+        accountId: parts[4] ?? "",
         sessionKey,
       };
     case "group":

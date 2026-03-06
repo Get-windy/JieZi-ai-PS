@@ -3169,7 +3169,7 @@ export function renderApp(state: AppViewState) {
                       }
                       state.unreadSessionMessages = unread;
                     } else if (context.type === "channels-all" && context.agentId) {
-                      const prefix = context.agentId + ":channel:";
+                      const prefix = `agent:${context.agentId}:channel:`;
                       for (const key of Object.keys(unread)) {
                         if (key.startsWith(prefix)) {
                           delete unread[key];
