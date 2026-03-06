@@ -355,28 +355,6 @@ export function renderChat(props: ChatProps) {
 
         <!-- 右侧聊天主区域 -->
         <div class="chat-main-area">
-          <!-- 聊天工具栏 -->
-          <div class="chat-toolbar">
-            <div class="chat-toolbar__left">
-              <!-- 预留扩展位置 -->
-            </div>
-            <div class="chat-toolbar__right">
-              ${
-                props.onDeleteSession
-                  ? html`
-                  <button
-                    class="btn btn--sm btn--danger-ghost"
-                    type="button"
-                    title="删除当前对话"
-                    @click=${props.onDeleteSession}
-                  >
-                    🗑️ 删除对话
-                  </button>
-                `
-                  : nothing
-              }
-            </div>
-          </div>
       ${props.disabledReason ? html`<div class="callout">${props.disabledReason}</div>` : nothing}
 
       ${props.error ? html`<div class="callout danger">${props.error}</div>` : nothing}

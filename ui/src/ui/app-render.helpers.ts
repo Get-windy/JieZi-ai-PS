@@ -1,7 +1,9 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import { refreshChat } from "./app-chat.ts";
 import type { AppViewState } from "./app-view-state.ts";
 import { OpenClawApp } from "./app.ts";
+import { loadChatHistory } from "./controllers/chat.ts";
+import { deleteSession, loadSessions } from "./controllers/sessions.ts";
 import { t } from "./i18n.ts";
 import { icons } from "./icons.ts";
 import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
@@ -118,8 +120,52 @@ export function renderChatControls(state: AppViewState) {
       <circle cx="12" cy="12" r="3"></circle>
     </svg>
   `;
+  // 主会话（agent:xxx:main 或 main）不允许删除
+  const currentKey = state.sessionKey;
+  const isMainSession = currentKey === "main" || currentKey.endsWith(":main");
+
   return html`
     <div class="chat-controls">
+      ${
+        !isMainSession
+          ? html`
+        <button
+          class="btn btn--sm btn--icon"
+          title="删除当前对话"
+          ?disabled=${!state.connected}
+          @click=${() => {
+            void deleteSession(
+              state as unknown as Parameters<typeof deleteSession>[0],
+              currentKey,
+            ).then((deleted) => {
+              if (deleted) {
+                const nextKey = "agent:main:main";
+                state.sessionKey = nextKey;
+                state.chatMessage = "";
+                state.chatAttachments = [];
+                state.chatStream = null;
+                (state as unknown as OpenClawApp).chatStreamStartedAt = null;
+                state.chatRunId = null;
+                state.chatQueue = [];
+                (state as unknown as OpenClawApp).resetToolStream();
+                (state as unknown as OpenClawApp).resetChatScroll();
+                state.applySettings({
+                  ...state.settings,
+                  sessionKey: nextKey,
+                  lastActiveSessionKey: nextKey,
+                });
+                void loadChatHistory(state as unknown as Parameters<typeof loadChatHistory>[0]);
+                void loadSessions(state as unknown as Parameters<typeof loadSessions>[0]);
+              }
+            });
+          }}
+        >
+          🗑️
+        </button>
+        <span class="chat-controls__separator">|</span>
+      `
+          : nothing
+      }
       <button
         class="btn btn--sm btn--icon"
         ?disabled=${state.chatLoading || !state.connected}
