@@ -2214,7 +2214,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             ? `[QUERY from ${senderId}] ${message}`
             : `[NOTIFICATION from ${senderId}] ${message}`;
 
-    // 内部调用 chat.send handler
+    // 内部调用 chat.send handler，同时附加 __interagent 元数据供 UI 精确识别
+    // __interagent 字段会随消息持久化，让 UI 无需解析文本即可识别 agent 间通信消息
     const chatSendHandler = chatHandlers["chat.send"];
     if (!chatSendHandler) {
       respond(

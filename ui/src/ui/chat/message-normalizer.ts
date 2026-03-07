@@ -3,7 +3,38 @@
  */
 
 import { stripInboundMetadata } from "../../../../upstream/src/auto-reply/reply/strip-inbound-meta.js";
-import type { NormalizedMessage, MessageContentItem } from "../types/chat-types.ts";
+import type { AgentCommMeta, NormalizedMessage, MessageContentItem } from "../types/chat-types.ts";
+
+/**
+ * Matches inter-agent communication prefix: [TYPE from senderId]
+ * Supports: COMMAND, REQUEST, QUERY, NOTIFICATION (case-insensitive)
+ */
+const AGENT_COMM_PREFIX_RE = /^\[(COMMAND|REQUEST|QUERY|NOTIFICATION)\s+from\s+([^\]]+)\]\s*/i;
+
+/**
+ * Parse inter-agent communication prefix from a user message text.
+ * Returns AgentCommMeta if matched, null otherwise.
+ */
+export function parseAgentCommPrefix(text: string): AgentCommMeta | null {
+  const match = AGENT_COMM_PREFIX_RE.exec(text);
+  if (!match) {
+    return null;
+  }
+  const rawType = match[1].toLowerCase();
+  const type =
+    rawType === "command"
+      ? "command"
+      : rawType === "request"
+        ? "request"
+        : rawType === "query"
+          ? "query"
+          : "notification";
+  return {
+    type,
+    senderId: match[2].trim(),
+    body: text.slice(match[0].length).trim(),
+  };
+}
 
 /**
  * Normalize a raw message object into a consistent structure.
@@ -52,16 +83,25 @@ export function normalizeMessage(message: unknown): NormalizedMessage {
   const id = typeof m.id === "string" ? m.id : undefined;
 
   // Strip AI-injected metadata prefix blocks from user messages before display.
+  // Also detect inter-agent communication prefix ([COMMAND/REQUEST/QUERY/NOTIFICATION from agentId]).
+  let agentComm: AgentCommMeta | undefined;
   if (role === "user" || role === "User") {
     content = content.map((item) => {
       if (item.type === "text" && typeof item.text === "string") {
-        return { ...item, text: stripInboundMetadata(item.text) };
+        const stripped = stripInboundMetadata(item.text);
+        // Check for inter-agent comm prefix after stripping inbound metadata
+        const commMeta = parseAgentCommPrefix(stripped);
+        if (commMeta) {
+          agentComm = commMeta;
+          return { ...item, text: stripped };
+        }
+        return { ...item, text: stripped };
       }
       return item;
     });
   }
 
-  return { role, content, timestamp, id };
+  return { role, content, timestamp, id, agentComm };
 }
 
 /**
