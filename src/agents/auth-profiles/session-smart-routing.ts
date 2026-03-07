@@ -14,30 +14,35 @@ import {
   type SessionContext,
   type ModelInfo,
 } from "../model-routing.js";
-import { clearSessionAuthProfileOverride } from "./session-override.js";
+import {
+  clearSessionAuthProfileOverride as _clearSessionAuthProfileOverride,
+  resolveModelAccountToAuthProfile,
+} from "./session-override.js";
 
 /**
  * 从 accountId 解析出 provider 和 model
  * accountId 格式示例：siliconflow/Pro/deepseek-ai/DeepSeek-V3.2
  */
-function parseProviderModelFromAccountId(accountId: string): {
-  provider: string;
-  model: string;
-} | undefined {
+function parseProviderModelFromAccountId(accountId: string):
+  | {
+      provider: string;
+      model: string;
+    }
+  | undefined {
   // accountId 格式：providerId/tier/namespace/modelName
   // 或 providerId/modelName
   const parts = accountId.split("/");
   if (parts.length < 2) {
     return undefined;
   }
-  
+
   const provider = parts[0];
   // 如果有多个部分，取最后一个作为 model，其余作为 provider 的一部分
   // 例如：siliconflow/Pro/deepseek-ai/DeepSeek-V3.2
   // provider = siliconflow
   // model = Pro/deepseek-ai/DeepSeek-V3.2
   const model = parts.slice(1).join("/");
-  
+
   return { provider, model };
 }
 
@@ -159,7 +164,7 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
     cfg,
     agentId,
     agentDir,
-    provider,
+    provider: _provider,
     message,
     sessionEntry,
     sessionStore,
@@ -201,16 +206,16 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
     const store = ensureAuthProfileStore(agentDir, { allowKeychainPrompt: false });
     const pinnedProfile = store.profiles[sessionEntry.authProfileOverride];
     if (pinnedProfile && modelAccountsConfig.accounts.includes(sessionEntry.authProfileOverride)) {
-    // 账号仍然有效，继续使用
-    const parsed = parseProviderModelFromAccountId(sessionEntry.authProfileOverride);
-    return {
-      authProfileId: sessionEntry.authProfileOverride,
-      provider: parsed?.provider,
-      model: parsed?.model,
-      reason: "Session pinned (still valid)",
-    };
+      // 账号仍然有效，继续使用
+      const parsed = parseProviderModelFromAccountId(sessionEntry.authProfileOverride);
+      return {
+        authProfileId: sessionEntry.authProfileOverride,
+        provider: parsed?.provider,
+        model: parsed?.model,
+        reason: "Session pinned (still valid)",
+      };
+    }
   }
-}
 
   // 4. 构建 SessionContext
   const sessionContext: SessionContext = {
@@ -259,8 +264,20 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
     const selectedAccountId = routingResult.accountId;
 
     // 7. 验证选中的账号是否存在
+    // accountId 可能是 "provider/model" 格式，需要先转换为 auth store 的 profileId 格式
     const store = ensureAuthProfileStore(agentDir, { allowKeychainPrompt: false });
-    if (!store.profiles[selectedAccountId]) {
+    let resolvedProfileId: string | undefined;
+    if (store.profiles[selectedAccountId]) {
+      // 已经是有效的 profileId（如 "ali-bailian:----pro--"）
+      resolvedProfileId = selectedAccountId;
+    } else {
+      // 尝试将 "provider/model" 格式转换为 profileId
+      resolvedProfileId = resolveModelAccountToAuthProfile({
+        modelId: selectedAccountId,
+        store,
+      });
+    }
+    if (!resolvedProfileId) {
       console.warn(`[SmartRouting] Selected account ${selectedAccountId} not found in auth store`);
       return undefined;
     }
@@ -270,10 +287,10 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
       sessionEntry &&
       sessionStore &&
       sessionKey &&
-      (sessionEntry.authProfileOverride !== selectedAccountId ||
+      (sessionEntry.authProfileOverride !== resolvedProfileId ||
         sessionEntry.authProfileOverrideSource !== "smart-routing")
     ) {
-      sessionEntry.authProfileOverride = selectedAccountId;
+      sessionEntry.authProfileOverride = resolvedProfileId;
       sessionEntry.authProfileOverrideSource = "smart-routing";
       sessionEntry.updatedAt = Date.now();
       sessionStore[sessionKey] = sessionEntry;
@@ -284,18 +301,20 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
         });
       }
 
-    console.log(`[SmartRouting] Selected account ${selectedAccountId} for session ${sessionKey}`);
-    console.log(`[SmartRouting] Reason: ${routingResult.reason}`);
-  }
+      console.log(
+        `[SmartRouting] Selected account ${resolvedProfileId} (from ${selectedAccountId}) for session ${sessionKey}`,
+      );
+      console.log(`[SmartRouting] Reason: ${routingResult.reason}`);
+    }
 
-  // 9. 从 accountId 解析 provider 和 model
-  const parsed = parseProviderModelFromAccountId(selectedAccountId);
-  return {
-    authProfileId: selectedAccountId,
-    provider: parsed?.provider,
-    model: parsed?.model,
-    reason: routingResult.reason,
-  };
+    // 9. 从 accountId（provider/model 格式）解析 provider 和 model
+    const parsed = parseProviderModelFromAccountId(selectedAccountId);
+    return {
+      authProfileId: resolvedProfileId,
+      provider: parsed?.provider,
+      model: parsed?.model,
+      reason: routingResult.reason,
+    };
   } catch (err) {
     console.error("[SmartRouting] Failed to route:", err);
     // 路由失败，返回 undefined 让调用方回退到默认逻辑

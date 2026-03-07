@@ -58,7 +58,7 @@ export async function clearSessionAuthProfileOverride(params: {
  *
  * 需要通过模型的providerId和认证信息来建立映射关系
  */
-function resolveModelAccountToAuthProfile(params: {
+export function resolveModelAccountToAuthProfile(params: {
   modelId: string;
   store: ReturnType<typeof ensureAuthProfileStore>;
 }): string | undefined {

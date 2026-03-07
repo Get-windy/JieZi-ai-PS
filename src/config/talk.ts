@@ -47,3 +47,10 @@ export function resolveTalkApiKey(
   }
   return readTalkApiKeyFromProfile(deps);
 }
+
+// Re-export upstream additions
+export {
+  DEFAULT_TALK_PROVIDER,
+  normalizeTalkConfig,
+  resolveActiveTalkProviderConfig,
+} from "@upstream/config/talk.js";

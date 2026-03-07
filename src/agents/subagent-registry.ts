@@ -28,6 +28,7 @@ import {
   listDescendantRunsForRequesterFromRuns,
   listRunsForRequesterFromRuns,
   resolveRequesterForChildSessionFromRuns,
+  shouldIgnorePostCompletionAnnounceForSessionFromRuns,
 } from "./subagent-registry-queries.js";
 import {
   getSubagentRunsSnapshotForRead,
@@ -946,5 +947,9 @@ export {
   countPendingDescendantRunsExcludingRun,
 } from "@upstream/agents/subagent-registry.js";
 
-// Re-export from subagent-registry-runtime (new upstream split)
-export { shouldIgnorePostCompletionAnnounceForSession } from "@upstream/agents/subagent-registry-runtime.js";
+export function shouldIgnorePostCompletionAnnounceForSession(childSessionKey: string): boolean {
+  return shouldIgnorePostCompletionAnnounceForSessionFromRuns(
+    getSubagentRunsSnapshotForRead(subagentRuns),
+    childSessionKey,
+  );
+}
