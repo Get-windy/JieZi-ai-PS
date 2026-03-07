@@ -35,6 +35,7 @@ import type { OpenClawConfig } from "../../config/types.js";
 import { listBindings } from "../../routing/bindings.js";
 import { normalizeAgentId, DEFAULT_AGENT_ID } from "../../routing/session-key.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { chatHandlers } from "./chat.js";
 import type { GatewayRequestHandlers, RespondFn } from "./types.js";
 
 /**
@@ -2156,6 +2157,237 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       },
       undefined,
     );
+  },
+
+  /**
+   * agent.communicate - 向目标智能助手发送消息
+   *
+   * 实现方式：将消息投递到目标 agent 的 main session（agent:{targetAgentId}:main）
+   * 根本上是内部调用 chat.send
+   */
+  "agent.communicate": async (callCtx) => {
+    const { params, respond } = callCtx;
+    const p = params as {
+      targetAgentId?: string;
+      message?: string;
+      messageType?: string;
+      waitForReply?: boolean;
+      senderId?: string;
+      messageId?: string;
+    };
+
+    const targetAgentId = String(p?.targetAgentId ?? "").trim();
+    const message = String(p?.message ?? "").trim();
+
+    if (!targetAgentId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "targetAgentId is required"),
+      );
+      return;
+    }
+    if (!message) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "message is required"));
+      return;
+    }
+
+    const cfg = loadConfig();
+    if (!validateAgentId(targetAgentId, cfg, respond)) {
+      return;
+    }
+
+    // 构造目标 agent 的 main sessionKey
+    const sessionKey = `agent:${normalizeAgentId(targetAgentId)}:main`;
+    const messageId =
+      p?.messageId ?? `msg_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+    const senderId = p?.senderId ?? "system";
+    const messageType = p?.messageType ?? "notification";
+
+    // 格式化消息，添加发送者和类型信息
+    const formattedMessage =
+      messageType === "command"
+        ? `[COMMAND from ${senderId}] ${message}`
+        : messageType === "request"
+          ? `[REQUEST from ${senderId}] ${message}`
+          : messageType === "query"
+            ? `[QUERY from ${senderId}] ${message}`
+            : `[NOTIFICATION from ${senderId}] ${message}`;
+
+    // 内部调用 chat.send handler
+    const chatSendHandler = chatHandlers["chat.send"];
+    if (!chatSendHandler) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "chat.send handler not available"),
+      );
+      return;
+    }
+
+    let responded = false;
+    const innerRespond = (ok: boolean, payload: unknown, error: unknown) => {
+      if (responded) {
+        return;
+      }
+      responded = true;
+      if (ok) {
+        respond(
+          true,
+          {
+            delivered: true,
+            messageId,
+            targetAgent: targetAgentId,
+            sessionKey,
+            type: messageType,
+            chatResponse: payload,
+          },
+          undefined,
+        );
+      } else {
+        respond(false, undefined, error as Parameters<RespondFn>[2]);
+      }
+    };
+
+    try {
+      await chatSendHandler({
+        ...callCtx,
+        params: {
+          sessionKey,
+          message: formattedMessage,
+          idempotencyKey: messageId,
+        },
+        respond: innerRespond as RespondFn,
+      });
+    } catch (err) {
+      if (!responded) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.UNAVAILABLE,
+            `Failed to deliver message to agent: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+      }
+    }
+  },
+
+  /**
+   * agent.assign_task - 向目标智能助手分配任务
+   *
+   * 实现方式：将任务格式化为结构化消息，内部调用 chat.send 投递到目标 agent 的 main session
+   */
+  "agent.assign_task": async (callCtx) => {
+    const { params, respond } = callCtx;
+    const p = params as {
+      targetAgentId?: string;
+      task?: string;
+      priority?: string;
+      deadline?: string;
+      context?: unknown;
+      taskId?: string;
+      requesterId?: string;
+    };
+
+    const targetAgentId = String(p?.targetAgentId ?? "").trim();
+    const task = String(p?.task ?? "").trim();
+
+    if (!targetAgentId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "targetAgentId is required"),
+      );
+      return;
+    }
+    if (!task) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "task is required"));
+      return;
+    }
+
+    const cfg = loadConfig();
+    if (!validateAgentId(targetAgentId, cfg, respond)) {
+      return;
+    }
+
+    const sessionKey = `agent:${normalizeAgentId(targetAgentId)}:main`;
+    const taskId = p?.taskId ?? `task_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+    const requesterId = p?.requesterId ?? "system";
+    const priority = p?.priority ?? "medium";
+
+    // 构建结构化任务消息
+    const taskLines = [
+      `[TASK ASSIGNMENT]`,
+      `Task ID: ${taskId}`,
+      `From: ${requesterId}`,
+      `Priority: ${priority}`,
+      p?.deadline ? `Deadline: ${p.deadline}` : null,
+      ``,
+      `Task:`,
+      task,
+      p?.context ? `\nContext: ${JSON.stringify(p.context, null, 2)}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const chatSendHandler = chatHandlers["chat.send"];
+    if (!chatSendHandler) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "chat.send handler not available"),
+      );
+      return;
+    }
+
+    let responded = false;
+    const innerRespond = (ok: boolean, payload: unknown, error: unknown) => {
+      if (responded) {
+        return;
+      }
+      responded = true;
+      if (ok) {
+        respond(
+          true,
+          {
+            queued: true,
+            taskId,
+            targetAgent: targetAgentId,
+            sessionKey,
+            priority,
+            assignedAt: Date.now(),
+            chatResponse: payload,
+          },
+          undefined,
+        );
+      } else {
+        respond(false, undefined, error as Parameters<RespondFn>[2]);
+      }
+    };
+
+    try {
+      await chatSendHandler({
+        ...callCtx,
+        params: {
+          sessionKey,
+          message: taskLines,
+          idempotencyKey: taskId,
+        },
+        respond: innerRespond as RespondFn,
+      });
+    } catch (err) {
+      if (!responded) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.UNAVAILABLE,
+            `Failed to assign task to agent: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+      }
+    }
   },
 
   /**
