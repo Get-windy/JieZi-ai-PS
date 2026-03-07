@@ -288,13 +288,16 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
         label: friend.agentName || friend.agentId,
         icon: "🤖",
         nodeType: "item" as const,
-        unreadCount: getUnread(`${agent.id}:contact:${friend.agentId}`),
+        // 未读数：好友消息存在目标 agent main session，按对应的 sessionKey 计数
+        unreadCount: getUnread(`agent:${friend.agentId}:main`),
         context: {
           type: "contact" as const,
           agentId: agent.id,
           contactAgentId: friend.agentId,
           contactAgentName: friend.agentName || friend.agentId,
-          sessionKey: `${agent.id}:contact:${friend.agentId}`,
+          // 关键修复：sessionKey 指向目标 agent 的 main session
+          // agent_communicate 产生的消息就存在这里
+          sessionKey: `agent:${friend.agentId}:main`,
         },
       }));
 
@@ -607,7 +610,7 @@ export function isSameContext(
  *              其中 peerKind = direct | channel | group | account | ...
  *   精山会话：agent:{agentId}:{channelId}:account:{accountId}:direct:{peerId}
  *   群组：    agent:{agentId}:group:{groupId}  或  agent:{agentId}:{channelId}:group:{groupId}
- *   好友：    {agentId}:contact:{contactId}
+ *   好友：    agent:{contactAgentId}:main（直接指向目标 agent main session）
  */
 export function resolveContextType(
   sessionKey: string,
@@ -615,6 +618,7 @@ export function resolveContextType(
   // 第一段必须是 agent 才处理通道
   if (!sessionKey.startsWith("agent:")) {
     if (sessionKey.includes(":contact:")) {
+      // 兼容旧格式（已废弃）
       return "contact";
     }
     return "agent-direct";

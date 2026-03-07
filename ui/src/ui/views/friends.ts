@@ -4,10 +4,10 @@
  */
 
 import { html, nothing } from "lit";
-import type { Friend, FriendRequest, DirectMessage } from "../controllers/friends.ts";
+import type { Friend, FriendRequest } from "../controllers/friends.ts";
 import { t } from "../i18n.ts";
 
-export type FriendsSubPanel = "list" | "requests" | "chat";
+export type FriendsSubPanel = "list" | "requests";
 
 export type FriendsProps = {
   loading: boolean;
@@ -17,11 +17,7 @@ export type FriendsProps = {
   friendRequestsLoading: boolean;
   friendRequestsList: FriendRequest[];
   selectedFriendId: string | null;
-  messagesLoading: boolean;
-  messagesList: DirectMessage[];
-  sendingMessage: boolean;
   activeSubPanel: FriendsSubPanel;
-  draftMessage: string;
 
   onRefresh: () => void;
   onSelectSubPanel: (panel: FriendsSubPanel) => void;
@@ -29,8 +25,8 @@ export type FriendsProps = {
   onAddFriend: (toAgentId: string, message?: string) => void;
   onRemoveFriend: (friendId: string) => void;
   onConfirmFriend: (friendId: string, accept: boolean) => void;
-  onSendMessage: (content: string) => void;
-  onDraftMessageChange: (content: string) => void;
+  /** 导航到聊天页面的好友节点，传入目标 agent ID，让用户在聊天页程查看通信记录 */
+  onNavigateToChatFriend?: (friendAgentId: string) => void;
 };
 
 export function renderFriendsView(props: FriendsProps) {
@@ -56,13 +52,7 @@ export function renderFriendsView(props: FriendsProps) {
       ${renderFriendsTabs(props)}
 
       <div style="margin-top: 16px;">
-        ${
-          props.activeSubPanel === "list"
-            ? renderFriendsList(props)
-            : props.activeSubPanel === "requests"
-              ? renderFriendRequests(props)
-              : renderChat(props)
-        }
+        ${props.activeSubPanel === "list" ? renderFriendsList(props) : renderFriendRequests(props)}
       </div>
     </section>
   `;
@@ -77,7 +67,6 @@ function renderFriendsTabs(props: FriendsProps) {
       icon: "📬",
       count: props.friendRequestsList.filter((r) => r.status === "pending").length,
     },
-    { id: "chat", label: "聊天", icon: "💬" },
   ];
 
   return html`
@@ -147,13 +136,7 @@ function renderFriendsList(props: FriendsProps) {
         (friend) => html`
           <div
             class="card"
-            style="padding: 12px; cursor: pointer; ${
-              props.selectedFriendId === friend.id ? "border: 2px solid var(--primary-color);" : ""
-            }"
-            @click=${() => {
-              props.onSelectFriend(friend.id);
-              props.onSelectSubPanel("chat");
-            }}
+            style="padding: 12px;"
           >
             <div class="row" style="justify-content: space-between; align-items: center;">
               <div>
@@ -178,10 +161,9 @@ function renderFriendsList(props: FriendsProps) {
                   class="btn-icon"
                   @click=${(e: Event) => {
                     e.stopPropagation();
-                    props.onSelectFriend(friend.id);
-                    props.onSelectSubPanel("chat");
+                    props.onNavigateToChatFriend?.(friend.agentId);
                   }}
-                  title="发送消息"
+                  title="在聊天页查看通信记录"
                 >
                   💬
                 </button>
@@ -262,112 +244,6 @@ function renderFriendRequests(props: FriendsProps) {
           </div>
         `,
       )}
-    </div>
-  `;
-}
-
-function renderChat(props: FriendsProps) {
-  if (!props.selectedFriendId) {
-    return html`
-      <div class="empty-state">
-        <div style="font-size: 48px">💬</div>
-        <div style="font-size: 18px; font-weight: 500; margin-top: 16px">选择一个好友开始聊天</div>
-        <div class="muted">从好友列表中选择要聊天的好友</div>
-      </div>
-    `;
-  }
-
-  const friend = props.friendsList.find((f) => f.id === props.selectedFriendId);
-
-  return html`
-    <div style="display: flex; flex-direction: column; height: 600px;">
-      <div style="padding: 12px; border-bottom: 1px solid var(--border-color);">
-        <div style="font-weight: 500;">${friend?.agentName || props.selectedFriendId}</div>
-        <div class="muted" style="font-size: 12px;">
-          ${
-            friend?.status === "online"
-              ? "🟢 在线"
-              : friend?.status === "busy"
-                ? "🟡 忙碌"
-                : "⚫ 离线"
-          }
-        </div>
-      </div>
-
-      <div style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px;">
-        ${
-          props.messagesLoading
-            ? html`
-                <div class="empty-state">加载消息中...</div>
-              `
-            : props.messagesList.length === 0
-              ? html`
-                  <div class="empty-state">暂无消息</div>
-                `
-              : props.messagesList.map(
-                  (msg) => html`
-                    <div
-                      style="
-                        max-width: 70%;
-                        ${
-                          msg.fromAgentId === props.selectedFriendId
-                            ? "align-self: flex-start;"
-                            : "align-self: flex-end;"
-                        }
-                      "
-                    >
-                      <div
-                        class="card"
-                        style="
-                          padding: 8px 12px;
-                          ${
-                            msg.fromAgentId === props.selectedFriendId
-                              ? "background: var(--background-secondary);"
-                              : "background: var(--primary-color); color: white;"
-                          }
-                        "
-                      >
-                        ${msg.content}
-                      </div>
-                      <div class="muted" style="font-size: 10px; margin-top: 2px;">
-                        ${new Date(msg.timestamp).toLocaleTimeString()}
-                      </div>
-                    </div>
-                  `,
-                )
-        }
-      </div>
-
-      <div style="padding: 12px; border-top: 1px solid var(--border-color);">
-        <div class="row" style="gap: 8px;">
-          <textarea
-            style="flex: 1; min-height: 60px; resize: vertical;"
-            placeholder="输入消息..."
-            .value=${props.draftMessage}
-            @input=${(e: Event) =>
-              props.onDraftMessageChange((e.target as HTMLTextAreaElement).value)}
-            @keydown=${(e: KeyboardEvent) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                if (props.draftMessage.trim()) {
-                  props.onSendMessage(props.draftMessage);
-                }
-              }
-            }}
-          ></textarea>
-          <button
-            class="btn-primary"
-            @click=${() => {
-              if (props.draftMessage.trim()) {
-                props.onSendMessage(props.draftMessage);
-              }
-            }}
-            ?disabled=${props.sendingMessage || !props.draftMessage.trim()}
-          >
-            ${props.sendingMessage ? "发送中..." : "发送"}
-          </button>
-        </div>
-      </div>
     </div>
   `;
 }

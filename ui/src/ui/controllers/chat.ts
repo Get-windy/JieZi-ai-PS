@@ -143,7 +143,9 @@ export function resolveBackendSessionKey(context: ChatConversationContext): stri
       case "group":
         return context.sessionKey;
       case "contact":
-        return `${context.agentId}:main`;
+        // 好友对话：直接读取目标 agent 的 main session
+        // agent_communicate 工具产生的消息存储在目标 agent 的 main session 里
+        return `agent:${context.contactAgentId}:main`;
       case "session-history":
         return context.sessionKey;
     }
@@ -190,8 +192,9 @@ export function shouldAcceptEventForContext(
     case "channel-observe":
     case "group":
     case "contact":
+      // contact 类型：直接匹配目标 agent main session（即 resolveBackendSessionKey 返回的 key）
+      return eventSessionKey === stateSessionKey;
     default:
-      // 精确匹配已解析的后端 sessionKey
       return eventSessionKey === stateSessionKey;
   }
 }

@@ -254,7 +254,8 @@ function renderAttachmentPreview(props: ChatProps) {
 
 export function renderChat(props: ChatProps) {
   const isChannelObserve = props.navCurrentContext?.type === "channel-observe";
-  const isReadOnly = isChannelObserve && !props.navChannelForceJoined;
+  const isContactView = props.navCurrentContext?.type === "contact";
+  const isReadOnly = (isChannelObserve && !props.navChannelForceJoined) || isContactView;
 
   const canCompose = props.connected && !isReadOnly;
   const isBusy = props.sending || props.stream !== null;
@@ -376,7 +377,20 @@ export function renderChat(props: ChatProps) {
       }
 
       ${
-        isReadOnly
+        isContactView
+          ? html`
+            <div class="chat-readonly-bar">
+              <span>🤝 好友通信记录（只读）：正在查看与 ${
+                (props.navCurrentContext as { contactAgentName?: string } | null)
+                  ?.contactAgentName ?? "好友"
+              } 的 Agent 间通信记录。如需发送消息，请由 Agent 调用 <code>agent_communicate</code> 工具。</span>
+            </div>
+          `
+          : nothing
+      }
+
+      ${
+        isReadOnly && isChannelObserve
           ? html`
             <div class="chat-readonly-bar">
               <span>👁️ 通道观察模式（只读）：正在观察 ${(props.navCurrentContext as { channelName?: string } | null)?.channelName ?? "通道"} 的消息</span>
