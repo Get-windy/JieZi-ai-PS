@@ -1299,6 +1299,11 @@ export async function checkModelAvailability(
     }
 
     if (!modelConfig.enabled) {
+      // 如果模型被标记为 deprecated，说明它是迁移备份数据，不应阻止运行
+      // （SmartRouting 等通过 auth profile 配置的模型不受此限制）
+      if (modelConfig.deprecated) {
+        return { available: true };
+      }
       return {
         available: false,
         reason: `模型 ${provider}/${modelName} 已被禁用，请在模型管理界面启用后使用`,

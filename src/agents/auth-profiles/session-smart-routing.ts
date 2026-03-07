@@ -229,17 +229,20 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
   };
 
   // 5. 构建 modelInfoGetter 函数
+  // accountId 可能是 "provider/model" 格式，需先转换为 profileId 再查 auth store
   const modelInfoGetter = async (accountId: string): Promise<ModelInfo | undefined> => {
     const store = ensureAuthProfileStore(agentDir, { allowKeychainPrompt: false });
-    const profile = store.profiles[accountId];
+    // 先直接查，再尝试按 provider 匹配转换
+    const profile =
+      store.profiles[accountId] ??
+      (() => {
+        const resolved = resolveModelAccountToAuthProfile({ modelId: accountId, store });
+        return resolved ? store.profiles[resolved] : undefined;
+      })();
     if (!profile) {
       return undefined;
     }
 
-    // 这里需要从 profile 中获取模型信息
-    // 由于 profile 只包含认证信息，不包含模型能力信息，
-    // 我们需要从配置或模型目录中获取
-    // 暂时返回默认值
     return {
       id: accountId,
       contextWindow: 100000, // 默认值
