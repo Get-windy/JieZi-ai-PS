@@ -204,3 +204,9 @@ export function buildXaiModelDefinition(): ModelDefinitionConfig {
     maxTokens: XAI_DEFAULT_MAX_TOKENS,
   };
 }
+
+// Re-export upstream additions (Kilocode model)
+export {
+  KILOCODE_DEFAULT_MODEL_ID,
+  buildKilocodeModelDefinition,
+} from "@upstream/commands/onboard-auth.models.js";

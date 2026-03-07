@@ -164,3 +164,6 @@ export function listEnabledTelegramAccounts(cfg: OpenClawConfig): ResolvedTelegr
     .map((accountId) => resolveTelegramAccount({ cfg, accountId }))
     .filter((account) => account.enabled);
 }
+
+// Re-export upstream additions
+export { resolveTelegramPollActionGateState } from "@upstream/telegram/accounts.js";

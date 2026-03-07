@@ -68,6 +68,9 @@ import { updateSessionStoreAfterAgentRun } from "./agent/session-store.js";
 import { resolveSession } from "./agent/session.js";
 import type { AgentCommandOpts } from "./agent/types.js";
 
+// Re-export agentCommandFromIngress from upstream (added in upstream refactor)
+export { agentCommandFromIngress } from "@upstream/commands/agent.js";
+
 type PersistSessionEntryParams = {
   sessionStore: Record<string, SessionEntry>;
   sessionKey: string;

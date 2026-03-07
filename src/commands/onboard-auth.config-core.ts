@@ -514,3 +514,10 @@ export function applyQianfanConfig(cfg: OpenClawConfig): OpenClawConfig {
   const next = applyQianfanProviderConfig(cfg);
   return applyAgentDefaultModelPrimary(next, QIANFAN_DEFAULT_MODEL_REF);
 }
+
+// Re-export upstream additions (Kilocode provider config)
+export {
+  KILOCODE_BASE_URL,
+  applyKilocodeProviderConfig,
+  applyKilocodeConfig,
+} from "@upstream/commands/onboard-auth.config-core.js";

@@ -580,3 +580,6 @@ export const ProviderCommandsSchema = z
   })
   .strict()
   .optional();
+
+// Re-export upstream additions
+export { SecretProviderSchema } from "@upstream/config/zod-schema.core.js";
