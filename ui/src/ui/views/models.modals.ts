@@ -4,10 +4,10 @@
  */
 
 import { html, nothing } from "lit";
-import type { ModelsStatusSnapshot, ProviderAuthSnapshot, ModelConfigSnapshot } from "../types.js";
-import type { ModelsProps } from "./models.types.js";
 import { formatAgo } from "../format.js";
 import { t } from "../i18n.js";
+import type { ModelsStatusSnapshot, ProviderAuthSnapshot, ModelConfigSnapshot } from "../types.js";
+import type { ModelsProps } from "./models.types.js";
 import "../components/icon-picker.js"; // 导入图标选择器
 
 // ============ 认证管理模态框 ============
@@ -222,15 +222,17 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
   const lastTest = auth.status?.lastChecked
     ? formatAgo(Date.now() - auth.status.lastChecked)
     : null;
-  
+
   // 检测OAuth过期（通过error信息判断）
   const error = auth.status?.error || "";
-  const isOAuthExpired = error.toLowerCase().includes("expired") || 
-                         error.toLowerCase().includes("refresh") || 
-                         error.toLowerCase().includes("invalid access token");
-  const isQwenOAuth = auth.apiKey.startsWith("qwen-oauth") || 
-                      (auth as unknown as { provider?: string }).provider === "qwen-portal";
-  
+  const isOAuthExpired =
+    error.toLowerCase().includes("expired") ||
+    error.toLowerCase().includes("refresh") ||
+    error.toLowerCase().includes("invalid access token");
+  const isQwenOAuth =
+    auth.apiKey.startsWith("qwen-oauth") ||
+    (auth as unknown as { provider?: string }).provider === "qwen-portal";
+
   // 判断认证类型
   const authType = isQwenOAuth ? "oauth" : "api_key";
 
@@ -278,42 +280,63 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
             ${
               isOAuthExpired && isQwenOAuth
                 ? html`
-              <div class="card-sub" style="margin-top: 6px; padding: 8px; background: rgba(255, 92, 92, 0.1); border-left: 3px solid #ff5c5c; font-size: 12px; border-radius: 4px;">
-                <div style="font-weight: 600; color: #ff5c5c; margin-bottom: 4px;">⚠️ OAuth 认证已过期</div>
-                <div style="color: var(--text-secondary); margin-bottom: 8px;">点击下方"重新认证"按钮刷新授权</div>
-              </div>
-            `
+                    <div
+                      class="card-sub"
+                      style="
+                        margin-top: 6px;
+                        padding: 8px;
+                        background: rgba(255, 92, 92, 0.1);
+                        border-left: 3px solid #ff5c5c;
+                        font-size: 12px;
+                        border-radius: 4px;
+                      "
+                    >
+                      <div style="font-weight: 600; color: #ff5c5c; margin-bottom: 4px">⚠️ OAuth 认证已过期</div>
+                      <div style="color: var(--text-secondary); margin-bottom: 8px">点击下方"重新认证"按钮刷新授权</div>
+                    </div>
+                  `
                 : nothing
             }
           </div>
         </div>
         <div class="row" style="gap: 10px; flex-shrink: 0;">
-          ${isOAuthExpired && authType === "oauth" ? html`
+          ${
+            isOAuthExpired && authType === "oauth"
+              ? html`
             <button 
               class="btn btn--sm btn--warning" 
               style="padding: 8px 14px; font-size: 13px; background: #ff9800; color: white;"
-              @click=${() => (props as any).onReauth?.(auth.authId, auth.provider)}
+              @click=${() => (props as unknown as { onReauth?: (authId: string, provider: string) => void }).onReauth?.(auth.authId, auth.provider)}
             >
               🔄 重新认证
             </button>
-          ` : authType === "oauth" ? html`
+          `
+              : authType === "oauth"
+                ? html`
             <button 
               class="btn btn--sm" 
               style="padding: 8px 14px; font-size: 13px; background: #4CAF50; color: white;"
               @click=${() => {
-                console.log('[DEBUG] OAuth Debug Button Clicked', { authId: auth.authId, provider: auth.provider });
-                (props as any).onReauth?.(auth.authId, auth.provider);
+                console.log("[DEBUG] OAuth Debug Button Clicked", {
+                  authId: auth.authId,
+                  provider: auth.provider,
+                });
+                (
+                  props as unknown as { onReauth?: (authId: string, provider: string) => void }
+                ).onReauth?.(auth.authId, auth.provider);
               }}
               title="调试OAuth重认证功能"
             >
               🐛 OAuth调试
             </button>
-          ` : nothing}
+          `
+                : nothing
+          }
            <button 
             class="btn btn--sm" 
             style="padding: 8px 14px; font-size: 13px; ${isTesting ? "opacity: 0.6;" : ""}"
             ?disabled=${isTesting}
-            @click=${() => (props as any).onTestAuth?.(auth.authId)}
+            @click=${() => (props as unknown as { onTestAuth?: (authId: string) => void }).onTestAuth?.(auth.authId)}
           >
             ${isTesting ? "🔄 " + t("models.testing") : "✅ " + t("models.test")}
           </button>
@@ -535,11 +558,11 @@ function renderModelCard(model: ModelConfigSnapshot, props: ModelsProps) {
               : html`
             <button 
               class="btn btn--sm" 
-              style="padding: 6px 12px; font-size: 12px; cursor: not-allowed; opacity: 0.5;"
-              disabled
-              title="${t("models.deprecated_cannot_enable")}"
+              style="padding: 6px 12px; font-size: 12px;"
+              @click=${() => props.onToggleModelConfig(model.configId, !model.enabled)}
+              title="${t("models.deprecated_can_still_enable")}"
             >
-              ⚠️ ${t("models.deprecated")}
+              ${model.enabled ? `🔴 ${t("models.disable")}` : `🟢 ${t("models.enable")}`}
             </button>
           `
           }
@@ -956,11 +979,14 @@ export function renderAddProviderModal(
 
   const form = props.providerForm;
   const isEditing = form.isEditing || false;
-  const apiTemplates = (props.snapshot as unknown as { apiTemplates?: unknown[] })?.apiTemplates || [];
-  const _selectedTemplate = apiTemplates.find((t: unknown) => (t as { id?: string }).id === form.selectedTemplateId);
+  const apiTemplates =
+    (props.snapshot as unknown as { apiTemplates?: unknown[] })?.apiTemplates || [];
+  const _selectedTemplate = apiTemplates.find(
+    (t: unknown) => (t as { id?: string }).id === form.selectedTemplateId,
+  );
 
   // API 示例导入状态（从 form 中读取）
-  const showApiImport = form.showApiImport || false;
+  const _showApiImport = form.showApiImport || false;
 
   // 添加模式：'code-import' | 'manual'
   const addMode = (form as unknown as { addMode?: string }).addMode || "code-import";
@@ -992,22 +1018,16 @@ export function renderAddProviderModal(
       // 如果有路径，保留到倒数第二个斜杠
       if (url.pathname && url.pathname !== "/") {
         const pathParts = url.pathname.split("/").filter((p) => p);
-        
+
         // 识别常见的 API 端点模式并移除
         // 例如：chat/completions, completions, messages, embeddings 等
-        const commonEndpoints = [
-          "completions",
-          "messages",
-          "embeddings",
-          "chat",
-          "v1",
-        ];
-        
+        const _commonEndpoints = ["completions", "messages", "embeddings", "chat", "v1"];
+
         // 移除最后一个路径段（端点名）
         if (pathParts.length > 0) {
           const lastPart = pathParts[pathParts.length - 1];
           pathParts.pop();
-          
+
           // 如果倒数第二个路径段也是常见端点（如 chat/completions），继续移除
           if (pathParts.length > 0) {
             const secondLastPart = pathParts[pathParts.length - 1];
@@ -1016,7 +1036,7 @@ export function renderAddProviderModal(
               pathParts.pop(); // 移除 chat
             }
           }
-          
+
           // 构建最终的 baseUrl
           if (pathParts.length > 0) {
             baseUrl += "/" + pathParts.join("/");
@@ -1521,10 +1541,9 @@ export function renderAddProviderModal(
           <div style="margin-bottom: 24px;">
             <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">${t("models.select_template")}</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;">
-              ${apiTemplates.map(
-                (template: unknown) => {
-                  const t = template as { id?: string; name?: string; description?: string };
-                  return html`
+              ${apiTemplates.map((template: unknown) => {
+                const t = template as { id?: string; name?: string; description?: string };
+                return html`
                 <div 
  class="card" 
                   style="
@@ -1546,8 +1565,7 @@ export function renderAddProviderModal(
                   }
                 </div>
               `;
-                },
-              )}
+              })}
             </div>
           </div>
 
@@ -1714,14 +1732,27 @@ export function renderViewProviderModal(
 
   const providerId = props.viewingProviderId;
   // 从 providerInstances 读取完整的供应商信息
-  const providerInstance = (props.snapshot?.providerInstances as unknown as Array<{ id?: string }>)?.find(
-    (p) => p.id === providerId,
-  ) as { id?: string; name?: string; icon?: string; website?: string; templateId?: string; defaultBaseUrl?: string; apiKeyPlaceholder?: string } | undefined;
+  const providerInstance = (
+    props.snapshot?.providerInstances as unknown as Array<{ id?: string }>
+  )?.find((p) => p.id === providerId) as
+    | {
+        id?: string;
+        name?: string;
+        icon?: string;
+        website?: string;
+        templateId?: string;
+        defaultBaseUrl?: string;
+        apiKeyPlaceholder?: string;
+      }
+    | undefined;
   const providerLabel = props.snapshot?.providerLabels?.[providerId] || providerId;
   const auths = props.snapshot?.auths?.[providerId] ?? [];
   const modelConfigs = props.snapshot?.modelConfigs?.[providerId] ?? [];
-  const apiTemplates = (props.snapshot as unknown as { apiTemplates?: unknown[] })?.apiTemplates || [];
-  const selectedTemplate = apiTemplates.find((t: unknown) => (t as { id?: string }).id === providerInstance?.templateId) as { id?: string; name?: string; description?: string } | undefined;
+  const apiTemplates =
+    (props.snapshot as unknown as { apiTemplates?: unknown[] })?.apiTemplates || [];
+  const selectedTemplate = apiTemplates.find(
+    (t: unknown) => (t as { id?: string }).id === providerInstance?.templateId,
+  ) as { id?: string; name?: string; description?: string } | undefined;
 
   return html`
     <div class="modal-overlay" @click=${() => props.onCancelProviderView()}>
@@ -1860,9 +1891,9 @@ export function renderViewProviderModal(
 
 export function renderOAuthReauthModal(props: ModelsProps) {
   const reauth = (props as unknown as { oauthReauth?: unknown }).oauthReauth;
-  console.log('[renderOAuthReauthModal] Called with oauthReauth:', reauth);
+  console.log("[renderOAuthReauthModal] Called with oauthReauth:", reauth);
   if (!reauth) {
-    console.log('[renderOAuthReauthModal] No reauth data, returning nothing');
+    console.log("[renderOAuthReauthModal] No reauth data, returning nothing");
     return nothing;
   }
 
@@ -1875,7 +1906,12 @@ export function renderOAuthReauthModal(props: ModelsProps) {
     isPolling: boolean;
     error?: string;
   };
-  console.log('[renderOAuthReauthModal] Rendering modal with:', { authId, provider, userCode, verificationUrl });
+  console.log("[renderOAuthReauthModal] Rendering modal with:", {
+    authId,
+    provider,
+    userCode,
+    verificationUrl,
+  });
 
   return html`
     <div class="modal-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 9999;" @click=${() => (props as unknown as { onCancelOAuthReauth?: () => void }).onCancelOAuthReauth?.()}>
@@ -1886,12 +1922,15 @@ export function renderOAuthReauthModal(props: ModelsProps) {
         </div>
         
         <div class="modal-body" style="padding: 32px; text-align: center;">
-          ${error ? html`
+          ${
+            error
+              ? html`
             <div style="padding: 16px; background: rgba(255, 92, 92, 0.1); border-left: 3px solid #ff5c5c; border-radius: 4px; margin-bottom: 24px; text-align: left;">
               <div style="font-weight: 600; color: #ff5c5c; margin-bottom: 4px;">⚠️ 认证失败</div>
               <div style="font-size: 13px; color: var(--text-secondary);">${error}</div>
             </div>
-          ` : html`
+          `
+              : html`
             <div style="margin-bottom: 24px;">
               <div style="font-size: 18px; font-weight: 600; margin-bottom: 12px;">请打开以下链接授权</div>
               <a 
@@ -1909,17 +1948,33 @@ export function renderOAuthReauthModal(props: ModelsProps) {
                 </div>
               </div>
               
-              ${isPolling ? html`
-                <div style="margin-top: 24px; padding: 12px; background: var(--bg-secondary); border-radius: 6px;">
-                  <div style="display: inline-block; width: 16px; height: 16px; border: 2px solid var(--accent); border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px;"></div>
-                  <span style="color: var(--text-secondary);">等待授权完成...</span>
-                </div>
-                <style>
-                  @keyframes spin {
-                    to { transform: rotate(360deg); }
-                  }
-                </style>
-              ` : html`
+              ${
+                isPolling
+                  ? html`
+                      <div style="margin-top: 24px; padding: 12px; background: var(--bg-secondary); border-radius: 6px">
+                        <div
+                          style="
+                            display: inline-block;
+                            width: 16px;
+                            height: 16px;
+                            border: 2px solid var(--accent);
+                            border-top-color: transparent;
+                            border-radius: 50%;
+                            animation: spin 1s linear infinite;
+                            margin-right: 8px;
+                          "
+                        ></div>
+                        <span style="color: var(--text-secondary)">等待授权完成...</span>
+                      </div>
+                      <style>
+                        @keyframes spin {
+                          to {
+                            transform: rotate(360deg);
+                          }
+                        }
+                      </style>
+                    `
+                  : html`
                 <button 
                   class="btn btn--primary" 
                   style="margin-top: 24px; background: var(--accent); border-color: var(--accent);"
@@ -1927,9 +1982,11 @@ export function renderOAuthReauthModal(props: ModelsProps) {
                 >
                   ✅ 我已授权，开始检查
                 </button>
-              `}
+              `
+              }
             </div>
-          `}
+          `
+          }
         </div>
         
         <div class="modal-footer">

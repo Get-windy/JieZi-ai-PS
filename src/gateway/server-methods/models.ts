@@ -2355,23 +2355,22 @@ export const modelsHandlers: GatewayRequestHandlers = {
       const availableModelNames = new Set(availableModels.map((m) => m.toLowerCase()));
 
       // 更新已配置模型的deprecated状态
+      // 行业通用标准：模型不在刷新列表中不代表已停用（可能是 API 不支持列表、列表不完整或手动添加的模型）
+      // 只有模型出现在刷新列表中时，才主动清除其 deprecated 标记（说明模型仍然存活）
+      // deprecated 标记只应由明确的 API 级别错误（如 404/410）触发，刷新操作不主动设置 deprecated
       let hasChanges = false;
       for (const model of configuredModels) {
         const isAvailable = availableModelNames.has(model.modelName.toLowerCase());
-        const shouldBeDeprecated = !isAvailable;
 
-        if (model.deprecated !== shouldBeDeprecated) {
-          model.deprecated = shouldBeDeprecated;
+        // 若模型出现在刷新列表中，清除其 deprecated 标记（模型已恢复可用）
+        if (isAvailable && model.deprecated) {
+          model.deprecated = false;
           hasChanges = true;
-
-          // 如果模型被停用，自动禁用它
-          if (shouldBeDeprecated && model.enabled) {
-            model.enabled = false;
-            console.log(
-              `[Models] Model ${model.provider}/${model.modelName} deprecated, auto-disabled`,
-            );
-          }
+          console.log(
+            `[Models] Model ${model.provider}/${model.modelName} is available again, cleared deprecated flag`,
+          );
         }
+        // 不在列表中：保持现状，不自动标记 deprecated，也不自动禁用
       }
 
       // 如果有变化，保存配置

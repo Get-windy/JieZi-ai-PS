@@ -546,9 +546,11 @@ const translations: Record<Locale, Record<string, string>> = {
     "models.no_new_models": "No new models available",
     "models.import_selected": "Import Selected",
     "models.new": "NEW",
-    "models.deprecated": "Deprecated",
+    "models.deprecated": "未确认可用",
     "models.deprecated_cannot_enable":
       "This model has been deprecated by the provider and cannot be enabled",
+    "models.deprecated_can_still_enable":
+      "This model was not found in the provider's model list during refresh. It may still work — you can enable and test it manually.",
     "models.providers_title": "Model Providers",
     "models.add_provider": "Add Provider",
     "models.edit_provider": "Edit Provider",
@@ -3440,8 +3442,10 @@ const translations: Record<Locale, Record<string, string>> = {
     "models.no_new_models": "没有可用的新模型",
     "models.import_selected": "导入选中",
     "models.new": "新",
-    "models.deprecated": "已停用",
+    "models.deprecated": "未在列表中",
     "models.deprecated_cannot_enable": "该模型已被供应商停用，无法启用",
+    "models.deprecated_can_still_enable":
+      "刷新时未在供应商模型列表中找到该模型，但该模型可能仍然可用，您可以手动启用并测试。",
     "models.providers_title": "模型供应商",
     "models.add_provider": "添加供应商",
     "models.edit_provider": "编辑供应商",
