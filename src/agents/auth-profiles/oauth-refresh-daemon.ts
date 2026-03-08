@@ -3,10 +3,14 @@
  * 定期检查OAuth认证状态，在Token即将过期时自动刷新
  */
 
-import { ensureAuthProfileStore, type AuthProfileStore } from "../auth-profiles.js";
-import type { OAuthCredentials } from "./oauth.js";
-import { refreshQwenPortalCredentials } from "../../providers/qwen-portal-oauth.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
+import { refreshQwenPortalCredentials } from "../../providers/qwen-portal-oauth.js";
+import {
+  ensureAuthProfileStore,
+  saveAuthProfileStore,
+  type AuthProfileStore,
+} from "../auth-profiles.js";
+import type { OAuthCredentials } from "./oauth.js";
 
 const log = createSubsystemLogger("oauth-refresh");
 
@@ -76,7 +80,6 @@ class OAuthRefreshDaemon {
     const profiles = Object.entries(store.profiles).filter(
       ([_, cred]) => cred.type === "oauth" && this.shouldRefresh(cred, now),
     );
-
     if (profiles.length === 0) {
       log.debug("No OAuth profiles need refresh");
       return;
@@ -85,7 +88,9 @@ class OAuthRefreshDaemon {
     log.info(`Found ${profiles.length} OAuth profiles to refresh`);
 
     for (const [profileId, credential] of profiles) {
-      if (credential.type !== "oauth") continue;
+      if (credential.type !== "oauth") {
+        continue;
+      }
 
       // 检查是否最近尝试过刷新
       const attempt = this.refreshAttempts.get(profileId);
@@ -98,7 +103,7 @@ class OAuthRefreshDaemon {
 
       try {
         await this.refreshProfile(profileId, credential, store);
-        
+
         // 刷新成功，清除失败记录
         this.refreshAttempts.delete(profileId);
       } catch (error) {
@@ -122,12 +127,17 @@ class OAuthRefreshDaemon {
     }
 
     const timeUntilExpiry = expiresAt - now;
-    const shouldRefresh = timeUntilExpiry > 0 && timeUntilExpiry <= REFRESH_BEFORE_EXPIRY_MS;
+    // 已过期 或 在提前刷新窗口内，均需刷新
+    const shouldRefresh = timeUntilExpiry <= REFRESH_BEFORE_EXPIRY_MS;
 
     if (shouldRefresh) {
+      const status =
+        timeUntilExpiry <= 0
+          ? `已过期 ${Math.abs(Math.floor(timeUntilExpiry / 1000 / 60))}分钟`
+          : `还有 ${Math.floor(timeUntilExpiry / 1000 / 60 / 60 / 24)} 天过期`;
       log.debug(`Profile needs refresh`, {
         provider: credential.provider,
-        expiresIn: `${Math.floor(timeUntilExpiry / 1000 / 60 / 60 / 24)}days`,
+        status,
       });
     }
 
@@ -154,34 +164,25 @@ class OAuthRefreshDaemon {
       failureCount: (this.refreshAttempts.get(profileId)?.failureCount || 0) + 1,
     });
 
-    let newCredentials: OAuthCredentials;
-
-    // 根据provider类型调用对应的刷新函数
-    switch (credential.provider) {
-      case "qwen-portal":
-        newCredentials = await refreshQwenPortalCredentials(credential);
-        break;
-      // TODO: 添加更多OAuth provider的刷新逻辑
-      // case "google":
-      //   newCredentials = await refreshGoogleCredentials(credential);
-      //   break;
-      // case "github":
-      //   newCredentials = await refreshGitHubCredentials(credential);
-      //   break;
-      default:
-        log.warn(`Unknown OAuth provider: ${credential.provider}`);
-        return;
+    // 守护进程只负责 qwen-portal 的提前预刷新。
+    // 其他 OAuth provider（minimax-portal、openai-codex、google-gemini-cli 等）
+    // 由调用时的 resolveApiKeyForProfile 通用机制（含文件锁）负责自动刷新，
+    // 守护进程无需重复处理，避免并发写入冲突。
+    if (credential.provider !== "qwen-portal") {
+      log.debug(
+        `Provider ${credential.provider}: call-time auto-refresh will handle expiry, skipping daemon pre-refresh`,
+      );
+      return;
     }
 
-    // 更新store
+    const newCredentials = await refreshQwenPortalCredentials(credential);
+
+    // 更新 store 并持久化
     store.profiles[profileId] = {
       ...credential,
       ...newCredentials,
       type: "oauth",
     };
-
-    // 保存到文件
-    const { saveAuthProfileStore } = await import("../auth-profiles.js");
     saveAuthProfileStore(store, undefined);
 
     log.info(`✅ Successfully refreshed OAuth token for ${profileId}`, {
@@ -192,20 +193,30 @@ class OAuthRefreshDaemon {
 
   /**
    * 处理刷新失败
+   * 记录失败次数，但不永久停止——下次检查周期仍会重试，
+   * 确保守护进程不会因为一段时间的网络故障而永久失效。
    */
   private handleRefreshFailure(profileId: string, error: unknown): void {
     const attempt = this.refreshAttempts.get(profileId);
-    const failureCount = attempt?.failureCount || 1;
+    const failureCount = (attempt?.failureCount ?? 0) + 1;
 
     log.error(`Failed to refresh OAuth token for ${profileId}`, {
       error: error instanceof Error ? error.message : String(error),
       failureCount,
     });
 
-    // 如果连续失败超过3次，停止尝试该profile
     if (failureCount >= 3) {
-      log.warn(`Stopping auto-refresh for ${profileId} after ${failureCount} failures`);
-      // 保留记录但不再尝试（直到下次服务器重启）
+      // 连续失败多次后清除记录，让下次检查周期重新计数并重试
+      log.warn(
+        `OAuth refresh for ${profileId} failed ${failureCount} times, resetting for next cycle retry`,
+      );
+      this.refreshAttempts.delete(profileId);
+    } else {
+      this.refreshAttempts.set(profileId, {
+        profileId,
+        lastAttemptTime: attempt?.lastAttemptTime ?? Date.now(),
+        failureCount,
+      });
     }
   }
 
