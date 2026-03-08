@@ -711,6 +711,12 @@ export type ModelConfigSnapshot = {
     outputPer1k: number; // 输出token单价（每1K tokens，美元）
     currency: string; // 货币单位
   } | null;
+  /**
+   * 模型未在供应商最近返回的目录中出现（运行时标注，不持久化）。
+   * 不影响模型可用性——很多供应商目录 API 不会列出全部模型，
+   * 手动添加的模型属于正常情况，仅作提示性展示。
+   */
+  unlisted?: boolean | null;
 };
 
 // ============ 聊天导航树类型定义 ============

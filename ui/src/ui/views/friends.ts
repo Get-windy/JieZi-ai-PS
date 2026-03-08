@@ -34,7 +34,7 @@ export function renderFriendsView(props: FriendsProps) {
     <section class="card">
       <div class="row" style="justify-content: space-between;">
         <div>
-          <div class="card-title">🤝 ${t("collaboration.friends.title")}</div>
+          <div class="card-title">💬 ${t("collaboration.friends.title")}</div>
           <div class="card-sub">${t("collaboration.friends.subtitle")}</div>
         </div>
         <div class="row" style="gap: 8px;">
@@ -60,10 +60,10 @@ export function renderFriendsView(props: FriendsProps) {
 
 function renderFriendsTabs(props: FriendsProps) {
   const tabs: Array<{ id: FriendsSubPanel; label: string; icon: string; count?: number }> = [
-    { id: "list", label: "好友列表", icon: "👥", count: props.friendsTotal },
+    { id: "list", label: "直接会话列表", icon: "💬", count: props.friendsTotal },
     {
       id: "requests",
-      label: "好友请求",
+      label: "连接请求",
       icon: "📬",
       count: props.friendRequestsList.filter((r) => r.status === "pending").length,
     },
@@ -113,11 +113,11 @@ function renderFriendsList(props: FriendsProps) {
   if (props.friendsList.length === 0) {
     return html`
       <div class="empty-state">
-        <div style="font-size: 48px;">👥</div>
-        <div style="font-size: 18px; font-weight: 500; margin-top: 16px;">暂无好友</div>
-        <div class="muted">添加好友开始协作</div>
+        <div style="font-size: 48px;">💬</div>
+        <div style="font-size: 18px; font-weight: 500; margin-top: 16px;">暂无直接会话</div>
+        <div class="muted">添加连接开始协作</div>
         <button class="btn-primary" @click=${() => showAddFriendDialog(props)} style="margin-top: 16px;">
-          ➕ 添加好友
+          ➕ 添加连接
         </button>
       </div>
     `;
@@ -126,9 +126,9 @@ function renderFriendsList(props: FriendsProps) {
   return html`
     <div style="display: flex; flex-direction: column; gap: 8px;">
       <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
-        <div class="muted">共 ${props.friendsTotal} 个好友</div>
+        <div class="muted">共 ${props.friendsTotal} 个直接连接</div>
         <button class="btn-secondary" @click=${() => showAddFriendDialog(props)}>
-          ➕ 添加好友
+          ➕ 添加连接
         </button>
       </div>
       
@@ -163,7 +163,7 @@ function renderFriendsList(props: FriendsProps) {
                     e.stopPropagation();
                     props.onNavigateToChatFriend?.(friend.agentId);
                   }}
-                  title="在聊天页查看通信记录"
+                  title="在聊天页查看会话记录"
                 >
                   💬
                 </button>
@@ -173,7 +173,7 @@ function renderFriendsList(props: FriendsProps) {
                     e.stopPropagation();
                     props.onRemoveFriend(friend.id);
                   }}
-                  title="删除好友"
+                  title="移除连接"
                 >
                   🗑️
                 </button>
@@ -199,8 +199,8 @@ function renderFriendRequests(props: FriendsProps) {
     return html`
       <div class="empty-state">
         <div style="font-size: 48px">📬</div>
-        <div style="font-size: 18px; font-weight: 500; margin-top: 16px">暂无好友请求</div>
-        <div class="muted">收到的好友请求会显示在这里</div>
+        <div style="font-size: 18px; font-weight: 500; margin-top: 16px">暂无连接请求</div>
+        <div class="muted">收到的连接请求会显示在这里</div>
       </div>
     `;
   }
@@ -249,9 +249,9 @@ function renderFriendRequests(props: FriendsProps) {
 }
 
 function showAddFriendDialog(props: FriendsProps) {
-  const toAgentId = prompt("请输入要添加的好友ID:");
+  const toAgentId = prompt("请输入要连接的 Agent ID:");
   if (toAgentId) {
-    const message = prompt("请输入好友请求消息（可选）:", "你好，我想添加你为好友");
+    const message = prompt("请输入连接请求的附言（可选）:", "你好，我想与你建立直接会话");
     props.onAddFriend(toAgentId, message || undefined);
   }
 }

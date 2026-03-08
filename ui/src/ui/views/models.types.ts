@@ -70,6 +70,8 @@ export type ModelsProps = {
     isConfigured: boolean;
     isEnabled: boolean;
     isDeprecated: boolean;
+    isUnlisted?: boolean; // 不在供应商目录中（仅提示，不影响可用性）
+    configId?: string;
   }> | null;
   importingAuthId: string | null; // 正在导入模型的认证ID
   importingProvider: string | null; // 正在导入模型的供应商ID
@@ -134,7 +136,7 @@ export type ModelsProps = {
   onViewProvider: (id: string) => void; // 查看供应商详情（只读）
   onEditProvider: (id: string) => void; // 编辑供应商
   onTemplateSelect: (templateId: string) => void; // 选择模板
-  onProviderFormChange: (patch: any) => void; // 更新供应商表单字段
+  onProviderFormChange: (patch: Record<string, unknown>) => void; // 更新供应商表单字段
   onSaveProvider: (params: {
     id: string;
     name: string;

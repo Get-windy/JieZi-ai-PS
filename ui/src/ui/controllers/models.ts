@@ -15,7 +15,7 @@ export function startModelsAutoRefresh(state: ModelsState) {
 
   autoRefreshTimer = setInterval(() => {
     if (state.connected && !state.modelsLoading) {
-      loadModels(state, false);
+      void loadModels(state, false);
     }
   }, AUTO_REFRESH_INTERVAL);
 }
@@ -294,7 +294,7 @@ export async function getModelPricing(
       pricing: { inputPer1k: number; outputPer1k: number; currency: string } | null;
     }>("models.config.getPricing", { modelName });
     return res?.pricing || null;
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -311,6 +311,7 @@ export async function refreshAuthModels(
     isConfigured: boolean;
     isEnabled: boolean;
     isDeprecated: boolean;
+    isUnlisted?: boolean; // 不在供应商目录中（仅提示）
     configId?: string;
   }>
 > {
@@ -324,6 +325,7 @@ export async function refreshAuthModels(
         isConfigured: boolean;
         isEnabled: boolean;
         isDeprecated: boolean;
+        isUnlisted?: boolean;
         configId?: string;
       }>;
       total: number;
@@ -445,11 +447,13 @@ export async function deleteProvider(state: ModelsState, id: string, cascade: bo
       authCount: res?.authCount,
       modelCount: res?.modelCount,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     // 当后端返回 error 时，尝试从错误中提取数据
-    // 错误格式：{ message: string, data?: any }
-    if (err?.data) {
-      const data = err.data;
+    // 错误格式：{ message: string, data?: unknown }
+    if (err && typeof err === "object" && "data" in err) {
+      const data = (
+        err as { data: { requiresCascade?: boolean; authCount?: number; modelCount?: number } }
+      ).data;
       if (data.requiresCascade) {
         return {
           success: false,
@@ -487,10 +491,17 @@ export async function getAuthStatus(
     return null;
   }
   try {
-    const res = await state.client.request<any>("models.auth.status", { authId });
+    const res = await state.client.request<{
+      authId: string;
+      provider: string;
+      type: "oauth" | "api_key" | "token";
+      status: "ok" | "expiring" | "expired" | "unknown";
+      expiresAt?: number;
+      canRefresh: boolean;
+      remainingMs?: number;
+    }>("models.auth.status", { authId });
     return res;
-  } catch (err) {
-    console.error("Failed to get auth status:", err);
+  } catch {
     return null;
   }
 }
@@ -512,13 +523,18 @@ export async function refreshAuthToken(
     return { refreshed: false, message: "Not connected" };
   }
   try {
-    const res = await state.client.request<any>("models.auth.refresh", { authId, force });
-    
+    const res = await state.client.request<{
+      refreshed: boolean;
+      expiresAt?: number;
+      remainingMs?: number;
+      message?: string;
+    }>("models.auth.refresh", { authId, force });
+
     // 刷新成功后重新加载数据
     if (res?.refreshed) {
       await loadModels(state, false);
     }
-    
+
     return res || { refreshed: false };
   } catch (err) {
     console.error("Failed to refresh auth token:", err);
@@ -545,7 +561,15 @@ export async function startOAuthReauth(
     return null;
   }
   try {
-    const res = await state.client.request<any>("models.auth.reauth", { authId });
+    const res = await state.client.request<{
+      deviceCode: string;
+      userCode: string;
+      verificationUrl: string;
+      expiresIn: number;
+      interval: number;
+      provider: string;
+      authId: string;
+    }>("models.auth.reauth", { authId });
     return res;
   } catch (err) {
     console.error("Failed to start OAuth reauth:", err);

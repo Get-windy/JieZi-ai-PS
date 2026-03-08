@@ -457,22 +457,9 @@ const DEFAULT_PROVIDERS: ProviderInstance[] = [
  * 从 UI 管理结构同步到官方 models.json 格式
  */
 /**
- * 修正已知错误的 provider baseUrl
- *
- * 部分用户配置了专用接口（如阿里云代码助手専用地址），需要自动修正为通用地址。
+ * 规范化 provider baseUrl（直接透传，不做自动修正）
  */
 function normalizeProviderBaseUrl(baseUrl: string | undefined): string | undefined {
-  if (!baseUrl) {
-    return baseUrl;
-  }
-  // coding.dashscope.aliyuncs.com 是阿里云代码助手专属接口，不支持通用大模型
-  // 应该使用 dashscope.aliyuncs.com/compatible-mode/v1
-  if (baseUrl.includes("coding.dashscope.aliyuncs.com")) {
-    console.warn(
-      `[Models] Auto-correcting baseUrl: ${baseUrl} → https://dashscope.aliyuncs.com/compatible-mode/v1`,
-    );
-    return "https://dashscope.aliyuncs.com/compatible-mode/v1";
-  }
   return baseUrl;
 }
 
@@ -789,13 +776,18 @@ async function migrateFromLegacyConfig(): Promise<ModelManagementStorage> {
 const TEST_TIMEOUT_MS = 10000;
 
 // OpenAI 兼容 API 测试
+// 最佳实践：
+//   1. 优先 GET /models —— 模型无关，只验证 baseUrl + apiKey 有效性
+//   2. /models 返回 401/403 时，直接报认证失败，不继续尝试 chat 探针
+//   3. /models 返回其他 4xx/5xx 时，若调用者传入了模型名，再做 chat 探针
+//   4. 始终不使用硬编码的 fallback 模型名（如 gpt-4o-mini），避免因供应商不支持该名称而误报失败
 async function testOpenAIConnection(params: {
   baseUrl: string;
   apiKey: string;
-  modelName?: string; // 可选：仅在需要测试具体模型时使用
-}): Promise<{ ok: boolean; status?: number; error?: string }> {
+  modelName?: string; // 可选：/models 失败时用此名称做 chat 探针
+}): Promise<{ ok: boolean; status?: number; error?: string; modelsListed?: string[] }> {
   try {
-    // 优先测试 /models 端点（不需要模型名称，更通用）
+    // ── Step 1: GET /models（不依赖任何模型名，最通用）──
     const modelsEndpoint = params.baseUrl.endsWith("/")
       ? `${params.baseUrl}models`
       : `${params.baseUrl}/models`;
@@ -803,78 +795,105 @@ async function testOpenAIConnection(params: {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
-    const modelsResponse = await fetch(modelsEndpoint, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${params.apiKey}`,
-      },
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (modelsResponse.ok) {
-      return { ok: true, status: modelsResponse.status };
+    let modelsResponse: Response;
+    try {
+      modelsResponse = await fetch(modelsEndpoint, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${params.apiKey}` },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
     }
 
-    // 如果 /models 不可用且提供了模型名称，尝试 chat 请求
+    if (modelsResponse.ok) {
+      // 尝试解析模型列表（仅用于返回信息，不影响成功判定）
+      let modelsListed: string[] | undefined;
+      try {
+        const body = await modelsResponse.json();
+        const data: unknown[] = body?.data ?? (Array.isArray(body) ? body : []);
+        modelsListed = data
+          .map((m: unknown) => (m as { id?: string })?.id)
+          .filter(Boolean) as string[];
+      } catch {
+        // 解析失败不影响成功
+      }
+      return { ok: true, status: modelsResponse.status, modelsListed };
+    }
+
+    // ── Step 2: /models 失败 ──
+    // 401/403 = apiKey 明确无效，不再尝试 chat 探针（避免误导用户）
+    if (modelsResponse.status === 401 || modelsResponse.status === 403) {
+      const errText = await modelsResponse.text().catch(() => "");
+      let errMsg = `HTTP ${modelsResponse.status}: 认证失败，请检查 API Key`;
+      try {
+        const d = JSON.parse(errText);
+        errMsg = d.error?.message || d.message || errMsg;
+      } catch {
+        if (errText.length < 300) {
+          errMsg = errText || errMsg;
+        }
+      }
+      return { ok: false, status: modelsResponse.status, error: errMsg };
+    }
+
+    // 只有调用者明确传入了模型名时，才做 chat 探针；否则直接报告连接失败原因
+    // 这样避免了用硬编码模型名导致的"模型不存在"误报
     if (params.modelName) {
-      const endpoint = params.baseUrl.endsWith("/")
+      const chatEndpoint = params.baseUrl.endsWith("/")
         ? `${params.baseUrl}chat/completions`
         : `${params.baseUrl}/chat/completions`;
 
       const controller2 = new AbortController();
       const timeoutId2 = setTimeout(() => controller2.abort(), TEST_TIMEOUT_MS);
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${params.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: params.modelName,
-          messages: [{ role: "user", content: "测试连接" }],
-          max_tokens: 5,
-        }),
-        signal: controller2.signal,
-      });
-
-      clearTimeout(timeoutId2);
-
-      if (response.ok) {
-        return { ok: true, status: response.status };
+      let chatResponse: Response;
+      try {
+        chatResponse = await fetch(chatEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${params.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: params.modelName,
+            messages: [{ role: "user", content: "hi" }],
+            max_tokens: 1,
+          }),
+          signal: controller2.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId2);
       }
 
-      const errorText = await response.text();
+      if (chatResponse.ok) {
+        return { ok: true, status: chatResponse.status };
+      }
 
-      let errorMessage = `HTTP ${response.status}`;
-
+      const chatErrorText = await chatResponse.text().catch(() => "");
+      let chatErrorMsg = `HTTP ${chatResponse.status}`;
       try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.error?.message || errorData.message || errorMessage;
+        const d = JSON.parse(chatErrorText);
+        chatErrorMsg = d.error?.message || d.message || chatErrorMsg;
       } catch {
-        if (errorText.length < 200) {
-          errorMessage = errorText;
+        if (chatErrorText.length < 300) {
+          chatErrorMsg = chatErrorText || chatErrorMsg;
         }
       }
-
-      return { ok: false, status: response.status, error: errorMessage };
+      return { ok: false, status: chatResponse.status, error: chatErrorMsg };
     }
 
-    // 没有模型名称且 /models 失败，返回错误
-    const errorText = await modelsResponse.text();
+    // 没有模型名，直接返回 /models 的错误
+    const errorText = await modelsResponse.text().catch(() => "");
     let errorMessage = `HTTP ${modelsResponse.status}`;
-
     try {
-      const errorData = JSON.parse(errorText);
-      errorMessage = errorData.error?.message || errorData.message || errorMessage;
+      const d = JSON.parse(errorText);
+      errorMessage = d.error?.message || d.message || errorMessage;
     } catch {
-      if (errorText.length < 200) {
-        errorMessage = errorText;
+      if (errorText.length < 300) {
+        errorMessage = errorText || errorMessage;
       }
     }
-
     return { ok: false, status: modelsResponse.status, error: errorMessage };
   } catch (err) {
     if ((err as Error).name === "AbortError") {
@@ -1140,7 +1159,7 @@ async function addModelConfig(params: {
     provider: params.provider,
     modelName: params.modelName,
     nickname: params.nickname,
-    enabled: false, // 默认禁用
+    enabled: true, // 默认启用（用户主动添加的模型视为可用）
     deprecated: false, // 默认不是停用状态
     ...restConfig,
   };
@@ -1149,6 +1168,10 @@ async function addModelConfig(params: {
     storage.models[params.provider] = [];
   }
   storage.models[params.provider].push(modelConfig);
+
+  console.log(
+    `[Models] addModelConfig: added ${params.provider}/${params.modelName} configId=${configId} enabled=true (default)`,
+  );
 
   await saveModelManagement(storage);
   return modelConfig;
@@ -1790,7 +1813,35 @@ export const modelsHandlers: GatewayRequestHandlers = {
               })),
             ]),
           ),
-          modelConfigs: storage.models,
+          modelConfigs: Object.fromEntries(
+            Object.entries(storage.models).map(([providerId, modelList]) => {
+              // 计算该供应商的已知模型集合（用于标注 unlisted）
+              const providerInstance = storage.providers.find((p) => p.id === providerId);
+              const knownModels = providerInstance?.knownModels;
+              // 若供应商没有 knownModels（未刷新过或不支持目录查询），不标注 unlisted
+              const knownSet =
+                knownModels && knownModels.length > 0
+                  ? new Set(knownModels.map((m: string) => m.toLowerCase()))
+                  : null;
+              return [
+                providerId,
+                modelList.map((model) => {
+                  const isUnlisted = knownSet
+                    ? !knownSet.has(model.modelName.toLowerCase())
+                    : false;
+                  if (isUnlisted) {
+                    console.log(
+                      `[Models] models.list: ${providerId}/${model.modelName} marked as unlisted (knownSet has ${knownSet?.size} entries)`,
+                    );
+                  }
+                  return {
+                    ...model,
+                    unlisted: isUnlisted,
+                  };
+                }),
+              ];
+            }),
+          ),
           defaultAuthId: storage.defaultAuthId,
           // API模板库（预置）
           apiTemplates: API_TEMPLATES,
@@ -2208,11 +2259,12 @@ export const modelsHandlers: GatewayRequestHandlers = {
   // 添加模型配置
   "models.config.add": async ({ params, respond }) => {
     try {
-      const { authId, provider, modelName, nickname, config } = params as {
+      const { authId, provider, modelName, nickname, enabled, config } = params as {
         authId: string;
         provider: string;
         modelName: string;
         nickname?: string;
+        enabled?: boolean; // 前端传来的启用状态（勾选框）
         config?: Partial<ModelConfig>;
       };
 
@@ -2225,7 +2277,19 @@ export const modelsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const modelConfig = await addModelConfig({ authId, provider, modelName, nickname, config });
+      // 将前端传来的 enabled 合并进 config，优先级：前端明确勾选 > 默认 true
+      const mergedConfig: Partial<ModelConfig> = {
+        ...config,
+        ...(enabled !== undefined ? { enabled } : {}),
+      };
+
+      const modelConfig = await addModelConfig({
+        authId,
+        provider,
+        modelName,
+        nickname,
+        config: mergedConfig,
+      });
       respond(true, { config: modelConfig }, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
@@ -2354,7 +2418,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
       // 创建供应商可用模型的Set
       const availableModelNames = new Set(availableModels.map((m) => m.toLowerCase()));
 
-      // 更新已配置模型的deprecated状态
+      // 更新已配置模型的 deprecated 状态
       // 行业通用标准：模型不在刷新列表中不代表已停用（可能是 API 不支持列表、列表不完整或手动添加的模型）
       // 只有模型出现在刷新列表中时，才主动清除其 deprecated 标记（说明模型仍然存活）
       // deprecated 标记只应由明确的 API 级别错误（如 404/410）触发，刷新操作不主动设置 deprecated
@@ -2378,7 +2442,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
         await saveModelManagement(storage);
       }
 
-      // 标记新模型和已配置的模型
+      // 标记供应商目录中的模型
       const models = availableModels.map((modelName) => {
         const isConfigured = configuredModelNames.has(modelName.toLowerCase());
         const config = configuredModels.find(
@@ -2389,9 +2453,33 @@ export const modelsHandlers: GatewayRequestHandlers = {
           isConfigured,
           isEnabled: config?.enabled || false,
           isDeprecated: config?.deprecated || false,
+          isUnlisted: false, // 在供应商目录里，不是 unlisted
           configId: config?.configId,
         };
       });
+
+      // 追加「已配置但不在供应商目录中」的模型（unlisted）
+      // 很多供应商的目录 API 不会列出全部模型（如手动添加的、目录不完整的）
+      for (const model of configuredModels) {
+        const alreadyIncluded = availableModelNames.has(model.modelName.toLowerCase());
+        if (!alreadyIncluded) {
+          models.push({
+            modelName: model.modelName,
+            isConfigured: true,
+            isEnabled: model.enabled,
+            isDeprecated: model.deprecated || false,
+            isUnlisted: true, // 不在供应商目录中，仅作提示
+            configId: model.configId,
+          });
+          console.log(
+            `[Models] refreshModels: model ${model.provider}/${model.modelName} is unlisted (not in provider directory), kept as-is`,
+          );
+        }
+      }
+
+      console.log(
+        `[Models] refreshModels: provider=${auth.provider} authId=${authId} total=${models.length} (inDirectory=${availableModels.length}, unlisted=${models.filter((m) => m.isUnlisted).length})`,
+      );
 
       respond(true, { models, total: models.length }, undefined);
     } catch (err) {
@@ -2471,32 +2559,41 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       const startTime = Date.now();
 
-      // 选择默认测试模型：优先使用供应商的 knownModels 的第一个
-      let defaultTestModel = "gpt-4o-mini";
-      if (providerInstance?.knownModels && providerInstance.knownModels.length > 0) {
-        defaultTestModel = providerInstance.knownModels[0];
+      // 选择 chat 探针模型：
+      // 优先用调用者传入的 modelName；否则用该认证下第一个启用的模型；
+      // 始终不使用硬编码的 fallback 名称（如 gpt-4o-mini），避免供应商不支持导致误报
+      let chatProbeModel: string | undefined = modelName;
+      if (!chatProbeModel) {
+        const configuredModels = storage.models[auth.provider] || [];
+        const firstEnabled = configuredModels.find(
+          (m) => m.authId === auth.authId && m.enabled && !m.deprecated,
+        );
+        chatProbeModel = firstEnabled?.modelName; // 可能仍为 undefined，此时 /models 失败才真报错
       }
 
       if (templateId === "anthropic-compatible") {
-        // Anthropic 测试
+        // Anthropic 测试：必须有模型名才能发请求
+        // 优先用已配置的模型名；没有时才用 Anthropic 官方最通用的免费模型名
         result = await testAnthropicConnection({
           baseUrl,
-          apiKey: actualApiKey, // ✅ 使用实际的OAuth token
-          modelName: modelName || "claude-3-5-sonnet-20241022",
+          apiKey: actualApiKey,
+          modelName: chatProbeModel || "claude-3-haiku-20240307", // 官方最小/最通用模型，作为最后兜底
         });
       } else if (templateId === "google-gemini") {
-        // Google Gemini 测试（使用API Key作为query参数）
+        // Google Gemini：先通过 GET /models 验证（最佳实践），该函数内部已处理
+        // 优先用已配置的模型名；没有时用免费额度最大的模型
         result = await testGoogleGeminiConnection({
           baseUrl,
-          apiKey: actualApiKey, // ✅ 使用实际的OAuth token
-          modelName: modelName || "gemini-1.5-flash",
+          apiKey: actualApiKey,
+          modelName: chatProbeModel || "gemini-2.0-flash", // 当前最通用的免费模型
         });
       } else {
-        // OpenAI 兼容测试（默认）
+        // OpenAI 兼容：先走 GET /models（无需模型名）；失败时才用已配置模型名做 chat 探针
+        // chatProbeModel 为 undefined 时，/models 失败会直接报错（不用 hardcoded fallback）
         result = await testOpenAIConnection({
           baseUrl,
-          apiKey: actualApiKey, // ✅ 使用实际的OAuth token
-          modelName: modelName || defaultTestModel,
+          apiKey: actualApiKey,
+          modelName: chatProbeModel, // undefined 时不做 chat fallback，/models 失败直接报错
         });
       }
 
@@ -2582,7 +2679,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
         authId,
         provider,
         modelName,
-        enabled: false, // 新导入的模型默认禁用
+        enabled: true, // 新导入的模型默认启用（与手动添加保持一致）
         deprecated: false, // 新导入的模型默认不是停用状态
       }));
 

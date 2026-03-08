@@ -1,4 +1,4 @@
-import { html, nothing } from "lit";
+import { html } from "lit";
 import { t } from "../i18n.ts";
 import { renderFriendsView, type FriendsProps } from "./friends.ts";
 import { renderGroups, type GroupsProps } from "./groups.ts";
@@ -67,7 +67,7 @@ function renderCollaborationTabs(
 ) {
   const tabs = [
     { id: "groups" as const, label: "群组管理", icon: "👥" },
-    { id: "friends" as const, label: "好友关系", icon: "🤝" },
+    { id: "friends" as const, label: "直接会话", icon: "💬" },
     { id: "monitor" as const, label: "协作监控", icon: "📊" },
     { id: "scenarios" as const, label: "协作场景", icon: "🎯" },
   ];

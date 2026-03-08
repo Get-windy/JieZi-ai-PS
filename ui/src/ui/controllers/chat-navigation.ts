@@ -303,8 +303,8 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
 
       agentChildren.push({
         id: `friends-${agent.id}`,
-        label: "好友",
-        icon: "🤝",
+        label: "直接会话",
+        icon: "💬",
         nodeType: "category",
         context: friendItems[0].context,
         children: friendItems,

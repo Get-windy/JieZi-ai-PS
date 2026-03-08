@@ -473,7 +473,18 @@ export function renderModelsListModal(props: ModelsProps) {
                     ? html`<div class="muted" style="padding: 20px; text-align: center; font-size: 13px;">${t("models.no_models")}</div>`
                     : html`
                     <div style="display: grid; gap: 12px;">
-                      ${authModels.map((model) => renderModelCard(model, props))}
+                      ${[...authModels]
+                        .toSorted((a, b) => {
+                          // 排序：启用的在前，deprecated 的在最后，禁用的在中间
+                          const aDeprecated =
+                            (a as unknown as { deprecated?: boolean }).deprecated === true;
+                          const bDeprecated =
+                            (b as unknown as { deprecated?: boolean }).deprecated === true;
+                          const aScore = aDeprecated ? 2 : a.enabled ? 0 : 1;
+                          const bScore = bDeprecated ? 2 : b.enabled ? 0 : 1;
+                          return aScore - bScore;
+                        })
+                        .map((model) => renderModelCard(model, props))}
                     </div>
                   `
                 }
@@ -495,6 +506,7 @@ export function renderModelsListModal(props: ModelsProps) {
 
 function renderModelCard(model: ModelConfigSnapshot, props: ModelsProps) {
   const isDeprecated = (model as unknown as { deprecated?: boolean }).deprecated === true;
+  const isUnlisted = (model as unknown as { unlisted?: boolean }).unlisted === true;
   const statusColor = isDeprecated ? "red" : model.enabled ? "green" : "gray";
   const displayName = model.nickname || model.modelName;
 
@@ -522,6 +534,25 @@ function renderModelCard(model: ModelConfigSnapshot, props: ModelsProps) {
                   ${model.enabled ? `✓ ${t("models.status_enabled")}` : `○ ${t("models.status_disabled")}`}
                 </span>
               `
+              }
+              ${
+                isUnlisted
+                  ? html`
+                      <span
+                        style="
+                          font-size: 11px;
+                          padding: 2px 6px;
+                          background: rgba(234, 179, 8, 0.12);
+                          color: #ca8a04;
+                          border-radius: 3px;
+                          border: 1px solid rgba(234, 179, 8, 0.3);
+                        "
+                        title="此模型未出现在供应商最近返回的目录中。这不代表模型不可用——很多供应商的目录 API 不会列出全部模型。"
+                      >
+                        📋 未在供应商目录
+                      </span>
+                    `
+                  : nothing
               }
             </div>
             <div class="card-sub" style="font-size: 11px; opacity: 0.7;">${model.modelName}</div>
@@ -820,12 +851,6 @@ function resolveProviderLabel(snapshot: ModelsStatusSnapshot | null, providerId:
 
 export function renderImportModelsModal(
   props: ModelsProps & {
-    importableModels: Array<{
-      modelName: string;
-      isConfigured: boolean;
-      isEnabled: boolean;
-      configId?: string;
-    }> | null;
     importingAuthId: string | null;
     importingProvider: string | null;
     selectedImportModels: Set<string>;
@@ -917,8 +942,27 @@ export function renderImportModelsModal(
               <div style="display: grid; gap: 8px; max-height: 200px; overflow-y: auto; padding: 4px;">
                 ${configuredModels.map(
                   (model) => html`
-                  <div class="card" style="padding: 12px 16px; display: flex; align-items: center; gap: 12px; opacity: 0.6;">
+                  <div class="card" style="padding: 12px 16px; display: flex; align-items: center; gap: 12px; opacity: 0.7;">
                     <span style="flex: 1; font-size: 14px;">${model.modelName}</span>
+                    ${
+                      model.isUnlisted
+                        ? html`
+                            <span
+                              style="
+                                font-size: 11px;
+                                padding: 2px 6px;
+                                background: rgba(234, 179, 8, 0.12);
+                                color: #ca8a04;
+                                border-radius: 3px;
+                                border: 1px solid rgba(234, 179, 8, 0.3);
+                              "
+                              title="此模型未出现在供应商最近返回的目录中，但已手动配置。不影响模型可用性。"
+                            >
+                              📋 未在供应商目录
+                            </span>
+                          `
+                        : nothing
+                    }
                     <span style="font-size: 11px; padding: 4px 8px; background: var(--text-secondary); color: #fff; border-radius: 4px;">
                       ${model.isEnabled ? t("models.enabled") : t("models.disabled")}
                     </span>

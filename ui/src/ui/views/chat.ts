@@ -380,10 +380,10 @@ export function renderChat(props: ChatProps) {
         isContactView
           ? html`
             <div class="chat-readonly-bar">
-              <span>🤝 好友通信记录（只读）：正在查看与 ${
+              <span>💬 直接会话（只读）：正在查看与 ${
                 (props.navCurrentContext as { contactAgentName?: string } | null)
-                  ?.contactAgentName ?? "好友"
-              } 的 Agent 间通信记录。如需发送消息，请由 Agent 调用 <code>agent_communicate</code> 工具。</span>
+                  ?.contactAgentName ?? "Agent"
+              } 的直接会话记录。如需发送消息，请由 Agent 调用 <code>agent_communicate</code> 工具。</span>
             </div>
           `
           : nothing
