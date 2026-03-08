@@ -18,7 +18,6 @@
  *   由调用方通过 handleGatewayRequest 的 extraHandlers 参数传入，不在此处注册。
  */
 
-import { agent2AgentHandlers } from "./agent-to-agent.js";
 import { agentHandlers } from "./agent.js";
 import { agentsManagementHandlers } from "./agents-management.js";
 import { agentsHandlers } from "./agents.js";
@@ -160,7 +159,6 @@ const hardcodedHandlers: GatewayRequestHandlers = {
   ...agentsHandlers,
   ...agentsManagementHandlers,
   ...lifecycleHandlers,
-  ...agent2AgentHandlers,
 
   // 审批流程
   ...approvalHandlers,

@@ -622,12 +622,34 @@ export async function loadModelManagement(): Promise<ModelManagementStorage> {
 
 // 同步运行时文件（models.json 和 auth-profiles.json）但不保存主存储
 async function syncRuntimeFiles(storage: ModelManagementStorage): Promise<void> {
-  // 1. 同步到官方 models.json
-  const agentModelsPath = getAgentModelsPath();
   const agentModelsData = syncToAgentModelsJson(storage);
-  await fs.mkdir(path.dirname(agentModelsPath), { recursive: true });
-  await fs.writeFile(agentModelsPath, JSON.stringify(agentModelsData, null, 2), "utf-8");
-  console.log("[Models] Synced to agent models.json:", agentModelsPath);
+  const agentModelsJson = JSON.stringify(agentModelsData, null, 2);
+
+  // 1. 同步 models.json 到所有 agents/*/agent/ 目录
+  const agentsBaseDir = path.join(STATE_DIR, "agents");
+  const modelsPaths: string[] = [];
+
+  try {
+    const agentDirs = await fs.readdir(agentsBaseDir);
+    for (const agentId of agentDirs) {
+      const agentModelsPath = path.join(agentsBaseDir, agentId, "agent", "models.json");
+      modelsPaths.push(agentModelsPath);
+    }
+  } catch {
+    // agents 目录不存在，退回到 main
+  }
+
+  // 确保 main agent 路径始终包含
+  const mainModelsPath = getAgentModelsPath();
+  if (!modelsPaths.includes(mainModelsPath)) {
+    modelsPaths.push(mainModelsPath);
+  }
+
+  for (const modelsPath of modelsPaths) {
+    await fs.mkdir(path.dirname(modelsPath), { recursive: true });
+    await fs.writeFile(modelsPath, agentModelsJson, "utf-8");
+    console.log("[Models] Synced models.json:", modelsPath);
+  }
 
   // 2. 同步到 auth-profiles.json
   await syncAuthProfiles(storage);
