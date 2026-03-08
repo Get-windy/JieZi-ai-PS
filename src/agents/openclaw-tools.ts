@@ -1,4 +1,5 @@
 import type { OpenClawConfig } from "../config/config.js";
+import { detectMessageToolExfil } from "../infra/exec-exfil-detect.js";
 import { resolvePluginTools } from "../plugins/tools.js";
 import type { GatewayMessageChannel } from "../utils/message-channel.js";
 import { resolveSessionAgentId } from "./agent-scope.js";
@@ -186,7 +187,7 @@ export function createOpenClawTools(options?: {
     config: options?.config,
     sandboxed: options?.sandboxed,
   });
-  const messageTool = options?.disableMessageTool
+  const rawMessageTool = options?.disableMessageTool
     ? null
     : createMessageTool({
         agentAccountId: options?.agentAccountId,
@@ -202,6 +203,22 @@ export function createOpenClawTools(options?: {
         requireExplicitTarget: options?.requireExplicitMessageTarget,
         requesterSenderId: options?.requesterSenderId ?? undefined,
       });
+  // Wrap message tool to block outbound exfiltration of sensitive content.
+  const messageTool = rawMessageTool
+    ? {
+        ...rawMessageTool,
+        execute: async (toolCallId: string, args: unknown, signal?: AbortSignal) => {
+          const argsObj = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+          const exfil = detectMessageToolExfil(argsObj);
+          if (exfil.detected) {
+            throw new Error(
+              `message tool denied: attempt to send sensitive data via external channel. ${exfil.reasons.join("; ")}`,
+            );
+          }
+          return rawMessageTool.execute(toolCallId, args, signal);
+        },
+      }
+    : null;
   const tools: AnyAgentTool[] = [
     createBrowserTool({
       sandboxBridgeUrl: options?.sandboxBrowserBridgeUrl,

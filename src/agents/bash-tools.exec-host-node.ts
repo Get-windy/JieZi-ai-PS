@@ -12,6 +12,7 @@ import {
   resolveExecApprovalsFromFile,
 } from "../infra/exec-approvals.js";
 import { detectCommandObfuscation } from "../infra/exec-obfuscation-detect.js";
+import { detectSelfProtectViolation } from "../infra/exec-self-protect-detect.js";
 import { buildNodeShellCommand } from "../infra/node-shell.js";
 import { logInfo } from "../logger.js";
 import { requestExecApprovalDecisionForHost } from "./bash-tools.exec-approval-request.js";
@@ -46,6 +47,12 @@ export type ExecuteNodeHostCommandParams = {
 export async function executeNodeHostCommand(
   params: ExecuteNodeHostCommandParams,
 ): Promise<AgentToolResult<ExecToolDetails>> {
+  const selfProtect = detectSelfProtectViolation(params.command);
+  if (selfProtect.detected) {
+    throw new Error(
+      `exec denied: command would terminate host processes (${selfProtect.reasons.join("; ")})`,
+    );
+  }
   const approvals = resolveExecApprovals(params.agentId, {
     security: params.security,
     ask: params.ask,
