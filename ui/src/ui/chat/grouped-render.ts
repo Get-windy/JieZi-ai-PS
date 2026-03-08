@@ -76,20 +76,12 @@ export function renderReadingIndicatorGroup(assistant?: AssistantIdentity) {
 
 function formatMessageTimestamp(ts: number): string {
   const date = new Date(ts);
-  const now = new Date();
-  const isToday =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-  if (isToday) {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }
-  // 非今天：显示年月日 + 时分，例如 "2026年3月5日 14:30"
   const year = date.getFullYear();
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-  const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return `${year}年${month}月${day}日 ${time}`;
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}年${month}月${day}日 ${hours}:${minutes}`;
 }
 
 export function renderStreamingGroup(
@@ -138,8 +130,25 @@ export function renderMessageGroup(
   // Detect agent-comm role: check if the first message has an agent-comm prefix
   const firstMsg = group.messages[0]?.message as Record<string, unknown> | undefined;
   const firstInteragent = firstMsg?.__interagent as Record<string, unknown> | undefined;
+
+  // Also check upstream provenance field: { kind: "inter_session", sourceSessionKey: "agent:doc-writer:main" }
+  const firstProvenance = firstMsg?.provenance as Record<string, unknown> | undefined;
+  const provenanceInterSession =
+    firstProvenance?.kind === "inter_session" &&
+    typeof firstProvenance.sourceSessionKey === "string"
+      ? firstProvenance.sourceSessionKey
+      : null;
+  // Extract agentId from sourceSessionKey like "agent:doc-writer:main" → "doc-writer"
+  const provenanceAgentId = provenanceInterSession
+    ? (() => {
+        const parts = provenanceInterSession.split(":");
+        // format: agent:<agentId>:<rest>
+        return parts.length >= 2 && parts[0] === "agent" ? parts[1] : provenanceInterSession;
+      })()
+    : null;
+
   const firstTextContent =
-    !firstInteragent && firstMsg
+    !firstInteragent && !provenanceAgentId && firstMsg
       ? (() => {
           const role = typeof firstMsg.role === "string" ? firstMsg.role : "";
           if (role === "user" || role === "User") {
@@ -161,12 +170,14 @@ export function renderMessageGroup(
   const firstCommMeta =
     firstInteragent && typeof firstInteragent.senderId === "string"
       ? { senderId: String(firstInteragent.senderId) }
-      : firstTextContent
-        ? (() => {
-            const m = parseAgentCommPrefix(firstTextContent);
-            return m ? { senderId: m.senderId } : null;
-          })()
-        : null;
+      : provenanceAgentId
+        ? { senderId: provenanceAgentId }
+        : firstTextContent
+          ? (() => {
+              const m = parseAgentCommPrefix(firstTextContent);
+              return m ? { senderId: m.senderId } : null;
+            })()
+          : null;
 
   const isAgentComm = Boolean(firstCommMeta);
   const who = isAgentComm
@@ -192,6 +203,7 @@ export function renderMessageGroup(
         avatar: opts.assistantAvatar ?? null,
       })}
       <div class="chat-group-messages">
+        ${isAgentComm ? html`<div class="chat-agent-name">${who}</div>` : nothing}
         ${group.messages.map((item, index) =>
           renderGroupedMessage(
             item.message,
@@ -203,7 +215,7 @@ export function renderMessageGroup(
           ),
         )}
         <div class="chat-group-footer">
-          <span class="chat-sender-name">${who}</span>
+          ${!isAgentComm ? html`<span class="chat-sender-name">${who}</span>` : nothing}
           <span class="chat-group-timestamp">${timestamp}</span>
         </div>
       </div>
@@ -275,7 +287,11 @@ function renderAgentCommMessage(
   isStreaming: boolean,
   _onOpenSidebar?: (content: string) => void,
 ) {
-  const { label, cls } = AGENT_COMM_TYPE_LABELS[meta.type];
+  const typeInfo = AGENT_COMM_TYPE_LABELS[meta.type] ?? {
+    label: meta.type,
+    cls: "agent-comm-badge--notification",
+  };
+  const { label, cls } = typeInfo;
   const bodyHtml = meta.body ? toSanitizedMarkdownHtml(meta.body) : "";
   const bubbleClasses = [
     "chat-bubble",
@@ -336,8 +352,8 @@ function renderGroupedMessage(
     typeof m.toolCallId === "string" ||
     typeof m.tool_call_id === "string";
 
-  // Detect inter-agent communication messages by their [TYPE from agentId] prefix
-  // Check __interagent metadata first (future-proof), then fall back to text parsing
+  // Detect inter-agent communication messages
+  // Priority 1: __interagent metadata (legacy/custom)
   const interagentMeta = m.__interagent as Record<string, unknown> | undefined;
   if (
     interagentMeta &&
@@ -364,6 +380,23 @@ function renderGroupedMessage(
     return renderAgentCommMessage(commMeta, opts.isStreaming, onOpenSidebar);
   }
 
+  // Priority 2: upstream provenance field { kind: "inter_session", sourceSessionKey: "agent:xxx:main" }
+  if ((role === "user" || role === "User") && !isToolResult) {
+    const provenance = m.provenance as Record<string, unknown> | undefined;
+    if (provenance?.kind === "inter_session" && typeof provenance.sourceSessionKey === "string") {
+      const parts = provenance.sourceSessionKey.split(":");
+      const agentId =
+        parts.length >= 2 && parts[0] === "agent" ? parts[1] : provenance.sourceSessionKey;
+      const commMeta: AgentCommMeta = {
+        type: "notification",
+        senderId: agentId,
+        body: extractTextCached(message) ?? "",
+      };
+      return renderAgentCommMessage(commMeta, opts.isStreaming, onOpenSidebar);
+    }
+  }
+
+  // Priority 3: [TYPE from agentId] text prefix
   if ((role === "user" || role === "User") && !isToolResult) {
     const textContent = extractTextCached(message);
     if (textContent) {
