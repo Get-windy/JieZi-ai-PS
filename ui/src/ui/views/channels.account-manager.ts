@@ -1,14 +1,15 @@
 import { html, nothing } from "lit";
-import type { ChannelAccountSnapshot } from "../types.js";
-import type { ChannelsProps } from "./channels.types.ts";
 import { formatAgo } from "../format.js";
 import { t } from "../i18n.js";
+import type { ChannelAccountSnapshot } from "../types.js";
 import { renderSchemaForm, type JsonSchema } from "./channels.schema-form.js";
+import type { ChannelsProps } from "./channels.types.ts";
 
 /**
  * 获取通道状态
  */
-function getChannelStatus(channelId: string, props: ChannelsProps): any {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function getChannelStatus(channelId: string, props: ChannelsProps): unknown {
   const channels = props.snapshot?.channels as Record<string, unknown> | null;
   return channels?.[channelId];
 }
@@ -16,7 +17,11 @@ function getChannelStatus(channelId: string, props: ChannelsProps): any {
 /**
  * 在弹窗中渲染通道状态信息
  */
-function renderChannelStatusInModal(channelStatus: any) {
+// eslint-disable-next-line no-unused-vars, @typescript-eslint/no-unused-vars
+function renderChannelStatusInModal(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  channelStatus: any,
+) {
   if (!channelStatus) {
     return nothing;
   }
@@ -90,9 +95,11 @@ function renderChannelStatusInModal(channelStatus: any) {
 /**
  * 在弹窗中渲染特殊内容（QR 码、Profile 表单等）
  */
+// eslint-disable-next-line no-unused-vars, @typescript-eslint/no-unused-vars
 function renderChannelExtraContentInModal(
   channelId: string,
   props: ChannelsProps,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   channelStatus: any,
   accounts: ChannelAccountSnapshot[],
 ) {
@@ -134,11 +141,12 @@ function renderChannelExtraContentInModal(
  */
 function renderNostrProfileInModal(
   props: ChannelsProps,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   channelStatus: any,
   accounts: ChannelAccountSnapshot[],
 ) {
   const primaryAccount = accounts[0];
-  const accountId = primaryAccount?.accountId ?? "default";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const profile = (primaryAccount as { profile?: any })?.profile ?? channelStatus?.profile;
 
   if (!profile) {
@@ -183,7 +191,13 @@ function renderNostrProfileInModal(
 /**
  * 在弹窗中渲染特殊操作按钮
  */
-function renderChannelActionsInModal(channelId: string, props: ChannelsProps, channelStatus: any) {
+// eslint-disable-next-line no-unused-vars, @typescript-eslint/no-unused-vars
+function renderChannelActionsInModal(
+  channelId: string,
+  props: ChannelsProps,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  channelStatus: any,
+) {
   switch (channelId) {
     case "whatsapp":
       // WhatsApp 特殊按钮
@@ -363,7 +377,7 @@ export function renderAccountManagerModal(props: ChannelsProps) {
                 ? html`<div class="muted" style="padding: 40px; text-align: center; font-size: 14px; color: var(--muted);">${t("channels.account.no_accounts")}</div>`
                 : html`
                 <div class="account-list" style="display: grid; gap: 16px;">
-                  ${accounts.map((account: any) => renderAccountCard({ account, channelId, props }))}
+                  ${accounts.map((account) => renderAccountCard({ account, channelId, props }))}
                 </div>
               `
             }
@@ -729,7 +743,9 @@ function extractAccountConfig(
   props: ChannelsProps,
 ): Record<string, unknown> {
   const cfg = props.configForm;
-  if (!cfg) return {};
+  if (!cfg) {
+    return {};
+  }
 
   const channelsConfig = cfg.channels as Record<string, unknown> | undefined;
   const channelConfig = channelsConfig?.[channelId] as Record<string, unknown> | undefined;
@@ -753,7 +769,8 @@ export function renderAccountEditModal(props: ChannelsProps) {
   const idPattern = /^[a-z0-9][a-z0-9-]*$/;
   const isValidId = accountId && idPattern.test(accountId);
   const hasName = Boolean(name && name.trim());
-  const canSave = isValidId && hasName;
+  // 编辑已有账号时只需 ID 合法；新建账号时还需要填写名称
+  const canSave = isNew ? isValidId && hasName : Boolean(isValidId);
 
   // 获取已存在的账号 ID 列表
   const accounts = props.snapshot?.channelAccounts?.[channelId] ?? [];

@@ -14,8 +14,10 @@ import {
   resolveAllowAlwaysPatterns,
   resolveExecApprovals,
 } from "../infra/exec-approvals.js";
+import { detectExfilAttempt } from "../infra/exec-exfil-detect.js";
 import { detectCommandObfuscation } from "../infra/exec-obfuscation-detect.js";
 import type { SafeBinProfile } from "../infra/exec-safe-bin-policy.js";
+import { detectSelfProtectViolation } from "../infra/exec-self-protect-detect.js";
 import { logInfo } from "../logger.js";
 import { markBackgrounded, tail } from "./bash-process-registry.js";
 import { requestExecApprovalDecisionForHost } from "./bash-tools.exec-approval-request.js";
@@ -59,6 +61,18 @@ export type ProcessGatewayAllowlistResult = {
 export async function processGatewayAllowlist(
   params: ProcessGatewayAllowlistParams,
 ): Promise<ProcessGatewayAllowlistResult> {
+  const selfProtect = detectSelfProtectViolation(params.command);
+  if (selfProtect.detected) {
+    throw new Error(
+      `exec denied: command would terminate host processes (${selfProtect.reasons.join("; ")})`,
+    );
+  }
+  const exfil = detectExfilAttempt(params.command);
+  if (exfil.detected) {
+    throw new Error(
+      `exec denied: command attempts to exfiltrate sensitive data outside openclaw (${exfil.reasons.join("; ")})`,
+    );
+  }
   const approvals = resolveExecApprovals(params.agentId, {
     security: params.security,
     ask: params.ask,

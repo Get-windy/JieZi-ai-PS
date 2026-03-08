@@ -9,7 +9,12 @@ import {
 import { normalizeMessage, normalizeRoleForGrouping } from "../chat/message-normalizer.ts";
 import { icons } from "../icons.ts";
 import { detectTextDirection } from "../text-direction.ts";
-import type { SessionsListResult, ChatNavigationNode, ChatConversationContext } from "../types.ts";
+import type {
+  AgentsListResult,
+  SessionsListResult,
+  ChatNavigationNode,
+  ChatConversationContext,
+} from "../types.ts";
 import type { ChatItem, MessageGroup } from "../types/chat-types.ts";
 import type { ChatAttachment, ChatQueueItem } from "../ui-types.ts";
 import { renderChatNavigationTree } from "./chat-navigation-tree.ts";
@@ -95,6 +100,9 @@ export type ChatProps = {
   onNavToggleNode: (nodeId: string) => void;
   onNavSearchChange: (query: string) => void;
   onNavChannelForceJoinToggle: () => void;
+  // ============ 参与者列表 ============
+  /** 所有 agents 列表，用于渲染参与者头部 */
+  agentsList?: AgentsListResult | null;
 };
 
 const COMPACTION_TOAST_DURATION_MS = 5000;
@@ -248,6 +256,164 @@ function renderAttachmentPreview(props: ChatProps) {
           </div>
         `,
       )}
+    </div>
+  `;
+}
+
+/**
+ * 解析当前对话的标题和参与者列表
+ */
+export function resolveConversationInfo(
+  context: ChatConversationContext | null,
+  agentsList: AgentsListResult | null | undefined,
+  assistantName: string,
+): {
+  title: string;
+  icon: string;
+  participants: Array<{ id: string; label: string; emoji: string; isUser?: boolean }>;
+} {
+  const allAgents = agentsList?.agents ?? [];
+
+  function getAgentLabel(agentId: string): string {
+    const found = allAgents.find((a) => a.id === agentId);
+    return found?.identity?.name ?? found?.name ?? agentId;
+  }
+
+  function getAgentEmoji(agentId: string): string {
+    const found = allAgents.find((a) => a.id === agentId);
+    return found?.identity?.emoji ?? "🤖";
+  }
+
+  const youParticipant = { id: "__you__", label: "You", emoji: "👤", isUser: true };
+
+  if (!context) {
+    return {
+      title: assistantName,
+      icon: "🤖",
+      participants: [{ id: "main", label: assistantName, emoji: "🤖" }, youParticipant],
+    };
+  }
+
+  switch (context.type) {
+    case "agent-direct":
+    case "agent-all": {
+      const name = context.agentName ?? getAgentLabel(context.agentId);
+      const emoji = context.agentEmoji ?? getAgentEmoji(context.agentId);
+      return {
+        title: name,
+        icon: emoji,
+        participants: [{ id: context.agentId, label: name, emoji }, youParticipant],
+      };
+    }
+    case "channel-observe": {
+      const agentName = context.agentName ?? getAgentLabel(context.agentId);
+      const emoji = getAgentEmoji(context.agentId);
+      const channelLabel = context.channelName ?? context.channelId;
+      return {
+        title: `${agentName} · ${channelLabel}`,
+        icon: "📡",
+        participants: [{ id: context.agentId, label: agentName, emoji }, youParticipant],
+      };
+    }
+    case "group": {
+      const memberIds = context.memberAgentIds ?? [];
+      const participants = memberIds.map((id) => ({
+        id,
+        label: getAgentLabel(id),
+        emoji: getAgentEmoji(id),
+      }));
+      // 如果没有成员列表，尝试从所有已知 agents 取
+      if (participants.length === 0 && allAgents.length > 0) {
+        allAgents.forEach((a) => {
+          participants.push({ id: a.id, label: getAgentLabel(a.id), emoji: getAgentEmoji(a.id) });
+        });
+      }
+      participants.push(youParticipant);
+      return {
+        title: context.groupName ?? `群组·${context.groupId}`,
+        icon: "👥",
+        participants,
+      };
+    }
+    case "contact": {
+      const contactName = context.contactAgentName ?? getAgentLabel(context.contactAgentId);
+      const contactEmoji = getAgentEmoji(context.contactAgentId);
+      const agentName = getAgentLabel(context.agentId);
+      const agentEmoji = getAgentEmoji(context.agentId);
+      return {
+        title: `${agentName} ↔️ ${contactName}`,
+        icon: "💬",
+        participants: [
+          { id: context.agentId, label: agentName, emoji: agentEmoji },
+          { id: context.contactAgentId, label: contactName, emoji: contactEmoji },
+          youParticipant,
+        ],
+      };
+    }
+    case "all": {
+      const participants = allAgents.map((a) => ({
+        id: a.id,
+        label: getAgentLabel(a.id),
+        emoji: getAgentEmoji(a.id),
+      }));
+      participants.push(youParticipant);
+      return { title: "所有对话", icon: "🌐", participants };
+    }
+    case "channels-all": {
+      const name = context.agentName ?? getAgentLabel(context.agentId);
+      const emoji = getAgentEmoji(context.agentId);
+      return {
+        title: `${name} · 所有通道`,
+        icon: "📡",
+        participants: [{ id: context.agentId, label: name, emoji }, youParticipant],
+      };
+    }
+    case "session-history": {
+      return {
+        title: context.displayName ?? context.sessionKey,
+        icon: "📜",
+        participants: [youParticipant],
+      };
+    }
+    default:
+      return { title: assistantName, icon: "🤖", participants: [youParticipant] };
+  }
+}
+
+/**
+ * 渲染参与者信息（内联紧凑版，用于顶部 header 控制栏）
+ */
+export function renderChatParticipantsInline(props: ChatProps) {
+  const { title, icon, participants } = resolveConversationInfo(
+    props.navCurrentContext,
+    props.agentsList,
+    props.assistantName,
+  );
+
+  const MAX_VISIBLE = 4;
+  const visible = participants.slice(0, MAX_VISIBLE);
+  const overflow = participants.length - MAX_VISIBLE;
+
+  return html`
+    <div class="chat-participants-inline">
+      <span class="chat-participants-inline__icon">${icon}</span>
+      <span class="chat-participants-inline__name">${title}</span>
+      <span class="chat-participants-inline__sep">·</span>
+      <div class="chat-participants-inline__avatars">
+        ${visible.map(
+          (p) => html`
+            <div
+              class="chat-participant-avatar-sm ${p.isUser ? "chat-participant-avatar-sm--you" : ""}"
+              title=${p.label}
+            >${p.emoji}</div>
+          `,
+        )}
+        ${
+          overflow > 0
+            ? html`<div class="chat-participant-avatar-sm chat-participant-avatar-sm--overflow" title="还有${overflow}位">+${overflow}</div>`
+            : nothing
+        }
+      </div>
     </div>
   `;
 }

@@ -427,3 +427,22 @@ img.chat-avatar {
   color: var(--text);
   margin: 0;
 }
+
+/* Agent name label above the bubble (WeChat-style) */
+.chat-agent-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #818cf8;
+  margin-bottom: 3px;
+  padding-left: 2px;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+
+:root[data-theme="light"] .chat-agent-name {
+  color: #4f46e5;
+}

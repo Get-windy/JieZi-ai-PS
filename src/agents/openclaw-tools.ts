@@ -1,62 +1,9 @@
 import type { OpenClawConfig } from "../config/config.js";
+import { detectMessageToolExfil } from "../infra/exec-exfil-detect.js";
 import { resolvePluginTools } from "../plugins/tools.js";
 import type { GatewayMessageChannel } from "../utils/message-channel.js";
 import { resolveSessionAgentId } from "./agent-scope.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
-import { createAgentsListTool } from "./tools/agents-list-tool.js";
-import { createBrowserTool } from "./tools/browser-tool.js";
-import { createCanvasTool } from "./tools/canvas-tool.js";
-import type { AnyAgentTool } from "./tools/common.js";
-import { createCronTool } from "./tools/cron-tool.js";
-import { createGatewayTool } from "./tools/gateway-tool.js";
-import { createImageTool } from "./tools/image-tool.js";
-import { createMessageTool } from "./tools/message-tool.js";
-import { createNodesTool } from "./tools/nodes-tool.js";
-import { createSessionStatusTool } from "./tools/session-status-tool.js";
-import { createSessionsHistoryTool } from "./tools/sessions-history-tool.js";
-import { createSessionsListTool } from "./tools/sessions-list-tool.js";
-import { createSessionsSendTool } from "./tools/sessions-send-tool.js";
-import { createSessionsSpawnTool } from "./tools/sessions-spawn-tool.js";
-import { createSubagentsTool } from "./tools/subagents-tool.js";
-import { createTtsTool } from "./tools/tts-tool.js";
-import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
-import { resolveWorkspaceRoot } from "./workspace-dir.js";
-import { 
-  createAgentCreateTool, 
-  createAgentUpdateTool, 
-  createAgentDeleteTool 
-} from "./tools/agent-management-tools.js";
-import { 
-  createFriendAddTool, 
-  createFriendRemoveTool, 
-  createFriendListTool 
-} from "./tools/friend-management-tools.js";
-import { 
-  createGroupCreateTool, 
-  createGroupAddMemberTool, 
-  createGroupRemoveMemberTool, 
-  createGroupDeleteTool 
-} from "./tools/group-management-tools.js";
-import {
-  createOrganizationCreateTool,
-  createOrganizationUpdateTool,
-  createOrganizationMemberAddTool,
-  createOrganizationMemberUpdateTool,
-  createOrganizationMemberRemoveTool,
-  createOrganizationListTool,
-} from "./tools/organization-management-tools.js";
-import {
-  createRecruitAgentTool,
-  createApproveRecruitTool,
-  createRecruitListTool,
-} from "./tools/recruit-management-tools.js";
-import {
-  createTaskCreateTool,
-  createTaskListTool,
-  createTaskUpdateTool,
-  createTaskCompleteTool,
-  createTaskDeleteTool,
-} from "./tools/task-management-tools.js";
 import {
   createAgentDiscoverTool,
   createAgentInspectTool,
@@ -75,14 +22,11 @@ import {
   createAgentCloneTool,
 } from "./tools/agent-lifecycle-tools.js";
 import {
-  createDeactivateAgentTool,
-  createActivateAgentTool,
-  createConfigureAgentRoleTool,
-  createAssignSupervisorTool,
-  createAssignMentorTool,
-  createPromoteAgentTool,
-  createTransferAgentTool,
-} from "./tools/hr-management-tools.js";
+  createAgentCreateTool,
+  createAgentUpdateTool,
+  createAgentDeleteTool,
+} from "./tools/agent-management-tools.js";
+import { createAgentsListTool } from "./tools/agents-list-tool.js";
 import {
   createApprovalRequestTool,
   createApproveRequestTool,
@@ -91,6 +35,77 @@ import {
   createGetApprovalStatusTool,
   createCancelApprovalRequestTool,
 } from "./tools/approval-tools.js";
+import { createBrowserTool } from "./tools/browser-tool.js";
+import { createCanvasTool } from "./tools/canvas-tool.js";
+import type { AnyAgentTool } from "./tools/common.js";
+import { createCronTool } from "./tools/cron-tool.js";
+import {
+  createFriendAddTool,
+  createFriendRemoveTool,
+  createFriendListTool,
+} from "./tools/friend-management-tools.js";
+import { createGatewayTool } from "./tools/gateway-tool.js";
+import {
+  createGroupCreateTool,
+  createGroupListTool,
+  createGroupAddMemberTool,
+  createGroupRemoveMemberTool,
+  createGroupDeleteTool,
+} from "./tools/group-management-tools.js";
+import {
+  createDeactivateAgentTool,
+  createActivateAgentTool,
+  createConfigureAgentRoleTool,
+  createAssignSupervisorTool,
+  createAssignMentorTool,
+  createPromoteAgentTool,
+  createTransferAgentTool,
+} from "./tools/hr-management-tools.js";
+import { createImageTool } from "./tools/image-tool.js";
+import { createMessageTool } from "./tools/message-tool.js";
+import { createNodesTool } from "./tools/nodes-tool.js";
+import {
+  createOrganizationCreateTool,
+  createOrganizationUpdateTool,
+  createOrganizationMemberAddTool,
+  createOrganizationMemberUpdateTool,
+  createOrganizationMemberRemoveTool,
+  createOrganizationListTool,
+} from "./tools/organization-management-tools.js";
+import {
+  createOrgDepartmentTool,
+  createOrgTeamTool,
+  createOrgAssignToDepartmentTool,
+  createOrgAssignToTeamTool,
+  createOrgSetReportingLineTool,
+  createOrgStructureListTool,
+} from "./tools/organization-structure-tools.js";
+import {
+  createPerm_GrantTool,
+  createPerm_RevokeTool,
+  createPerm_DelegateTool,
+  createPerm_CheckTool,
+  createPerm_ListTool,
+  createPerm_AuditTool,
+} from "./tools/permission-management-tools-impl.js";
+import {
+  createRecruitAgentTool,
+  createApproveRecruitTool,
+  createRecruitListTool,
+} from "./tools/recruit-management-tools.js";
+import { createSessionStatusTool } from "./tools/session-status-tool.js";
+import { createSessionsHistoryTool } from "./tools/sessions-history-tool.js";
+import { createSessionsListTool } from "./tools/sessions-list-tool.js";
+import { createSessionsSendTool } from "./tools/sessions-send-tool.js";
+import { createSessionsSpawnTool } from "./tools/sessions-spawn-tool.js";
+import { createSubagentsTool } from "./tools/subagents-tool.js";
+import {
+  createTaskCreateTool,
+  createTaskListTool,
+  createTaskUpdateTool,
+  createTaskCompleteTool,
+  createTaskDeleteTool,
+} from "./tools/task-management-tools.js";
 import {
   createTrainAgentTool,
   createTrainingStartTool,
@@ -101,22 +116,9 @@ import {
   createTransferSkillTool,
   createCertifyTrainerTool,
 } from "./tools/training-tools.js";
-import {
-  createPerm_GrantTool,
-  createPerm_RevokeTool,
-  createPerm_DelegateTool,
-  createPerm_CheckTool,
-  createPerm_ListTool,
-  createPerm_AuditTool,
-} from "./tools/permission-management-tools-impl.js";
-import {
-  createOrgDepartmentTool,
-  createOrgTeamTool,
-  createOrgAssignToDepartmentTool,
-  createOrgAssignToTeamTool,
-  createOrgSetReportingLineTool,
-  createOrgStructureListTool,
-} from "./tools/organization-structure-tools.js";
+import { createTtsTool } from "./tools/tts-tool.js";
+import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
+import { resolveWorkspaceRoot } from "./workspace-dir.js";
 
 export function createOpenClawTools(options?: {
   sandboxBrowserBridgeUrl?: string;
@@ -185,7 +187,7 @@ export function createOpenClawTools(options?: {
     config: options?.config,
     sandboxed: options?.sandboxed,
   });
-  const messageTool = options?.disableMessageTool
+  const rawMessageTool = options?.disableMessageTool
     ? null
     : createMessageTool({
         agentAccountId: options?.agentAccountId,
@@ -201,6 +203,22 @@ export function createOpenClawTools(options?: {
         requireExplicitTarget: options?.requireExplicitMessageTarget,
         requesterSenderId: options?.requesterSenderId ?? undefined,
       });
+  // Wrap message tool to block outbound exfiltration of sensitive content.
+  const messageTool = rawMessageTool
+    ? {
+        ...rawMessageTool,
+        execute: async (toolCallId: string, args: unknown, signal?: AbortSignal) => {
+          const argsObj = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+          const exfil = detectMessageToolExfil(argsObj);
+          if (exfil.detected) {
+            throw new Error(
+              `message tool denied: attempt to send sensitive data via external channel. ${exfil.reasons.join("; ")}`,
+            );
+          }
+          return rawMessageTool.execute(toolCallId, args, signal);
+        },
+      }
+    : null;
   const tools: AnyAgentTool[] = [
     createBrowserTool({
       sandboxBridgeUrl: options?.sandboxBrowserBridgeUrl,
@@ -293,6 +311,12 @@ export function createOpenClawTools(options?: {
       }),
     }),
     createFriendListTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createGroupListTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
         config: options?.config,

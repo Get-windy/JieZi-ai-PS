@@ -974,12 +974,17 @@ export class OpenClawApp extends LitElement {
   handleEditAccount(channelId: string, accountId: string) {
     const accounts = this.channelsSnapshot?.channelAccounts?.[channelId] ?? [];
     const account = accounts.find((a) => a.accountId === accountId);
+    const accountConfig = this.extractAccountConfig(channelId, accountId);
+
+    // name 优先取 snapshot，其次取 configForm 里的 name 字段内容
+    const resolvedName =
+      account?.name || (typeof accountConfig.name === "string" ? accountConfig.name : "") || "";
 
     this.editingChannelAccount = {
       channelId,
       accountId,
-      name: account?.name || "",
-      config: this.extractAccountConfig(channelId, accountId),
+      name: resolvedName,
+      config: accountConfig,
     };
     this.managingChannelId = null;
     this.viewingChannelAccount = null;

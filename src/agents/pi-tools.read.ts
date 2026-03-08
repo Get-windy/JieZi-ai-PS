@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { createEditTool, createReadTool, createWriteTool } from "@mariozechner/pi-coding-agent";
+import { redactSensitiveContent } from "../infra/sensitive-content-redact.js";
 import { detectMime } from "../media/mime.js";
 import { sniffMimeFromBase64 } from "../media/sniff-mime-from-base64.js";
 import type { ImageSanitizationLimits } from "./image-sanitization.js";
@@ -687,11 +688,26 @@ export function createOpenClawReadTool(
       const filePath = typeof record?.path === "string" ? String(record.path) : "<unknown>";
       const strippedDetailsResult = stripReadTruncationContentDetails(result);
       const normalizedResult = await normalizeReadImageResult(strippedDetailsResult, filePath);
-      return sanitizeToolResultImages(
+      const imageResult = await sanitizeToolResultImages(
         normalizedResult,
         `read:${filePath}`,
         options?.imageSanitization,
       );
+      // Redact sensitive values (tokens, keys, credentials, financial data)
+      // so the agent model cannot read the actual secret values.
+      const redactedContent = (imageResult.content as { type?: unknown; text?: string }[]).map(
+        (block) => {
+          if (block && block.type === "text" && typeof block.text === "string") {
+            const { text } = redactSensitiveContent(block.text);
+            return { ...block, text };
+          }
+          return block;
+        },
+      );
+      return {
+        ...imageResult,
+        content: redactedContent as typeof imageResult.content,
+      };
     },
   };
 }

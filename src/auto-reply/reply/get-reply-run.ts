@@ -220,7 +220,7 @@ export async function runPreparedReply(
   let {
     sessionEntry,
     provider, // 需要可变，因为智能路由可能会覆盖
-    model,    // 需要可变，因为智能路由可能会覆盖
+    model, // 需要可变，因为智能路由可能会覆盖
     resolvedThinkLevel,
     resolvedVerboseLevel,
     resolvedReasoningLevel,
@@ -250,6 +250,7 @@ export async function runPreparedReply(
     ? buildGroupIntro({
         cfg,
         sessionCtx,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         sessionEntry: sessionEntry as any, // 类型断言：本地扩展类型兼容上游类型
         defaultActivation,
         silentToken: SILENT_REPLY_TOKEN,
@@ -314,7 +315,9 @@ export async function runPreparedReply(
   prefixedBodyBase = await applySessionHints({
     baseBody: effectiveBaseBody,
     abortedLastRun,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     sessionEntry: sessionEntry as any, // 类型断言：本地扩展类型兼容上游类型
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     sessionStore: sessionStore as any,
     sessionKey,
     storePath,
@@ -338,7 +341,9 @@ export async function runPreparedReply(
       ? `[Thread starter - for context]\n${threadStarterBody}`
       : undefined;
   const skillResult = await ensureSkillSnapshot({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     sessionEntry: sessionEntry as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     sessionStore: sessionStore as any,
     sessionKey,
     storePath,
@@ -417,6 +422,7 @@ export async function runPreparedReply(
   const resolvedQueue = resolveQueueSettings({
     cfg,
     channel: sessionCtx.Provider,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     sessionEntry: sessionEntry as any,
     inlineMode: perMessageQueueMode,
     inlineOptions: perMessageQueueOptions,
@@ -444,24 +450,32 @@ export async function runPreparedReply(
     agentDir,
     provider,
     message: baseBodyTrimmedRaw, // 使用原始消息内容进行路由决策
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     sessionEntry: sessionEntry as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     sessionStore: sessionStore as any,
     sessionKey,
     storePath,
     isNewSession,
   });
-  
+
   let authProfileId: string | undefined;
-  
+
   if (smartRoutingResult) {
     // 智能路由成功，使用路由结果中的 provider/model
     authProfileId = smartRoutingResult.authProfileId;
     if (smartRoutingResult.provider && smartRoutingResult.model) {
       provider = smartRoutingResult.provider;
       model = smartRoutingResult.model;
-      console.log(
-        `[SmartRouting] Using routed model: ${provider}/${model} (${smartRoutingResult.reason})`,
-      );
+      // 只在账号实际发生变化时打印日志（避免会话粘性时每次都输出噪音日志）
+      if (
+        smartRoutingResult.reason !== "Session pinned (still valid)" &&
+        smartRoutingResult.reason !== "User manually selected"
+      ) {
+        console.log(
+          `[SmartRouting] Using routed model: ${provider}/${model} (${smartRoutingResult.reason})`,
+        );
+      }
     }
   } else {
     // 如果智能路由未配置或失败，回退到默认逻辑
@@ -469,7 +483,9 @@ export async function runPreparedReply(
       cfg,
       provider,
       agentDir,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       sessionEntry: sessionEntry as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       sessionStore: sessionStore as any,
       sessionKey,
       storePath,
@@ -532,6 +548,7 @@ export async function runPreparedReply(
 
   return runReplyAgent({
     commandBody: prefixedCommandBody,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     followupRun: followupRun as any, // 类型断言：本地扩展类型兼容上游类型
     queueKey,
     resolvedQueue,

@@ -1,6 +1,6 @@
 /**
  * 群组管理工具
- * 
+ *
  * 提供创建、管理群组的工具
  */
 
@@ -8,6 +8,77 @@ import { Type } from "@sinclair/typebox";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readStringParam, readStringArrayParam, readNumberParam } from "./common.js";
 import { callGatewayTool, readGatewayCallOptions } from "./gateway.js";
+
+/**
+ * group_list 工具参数 schema
+ */
+const GroupListToolSchema = Type.Object({
+  /** 可选：按 agentId 过滤，只返回指定 agent 所在群组 */
+  agentId: Type.Optional(Type.String()),
+});
+
+/**
+ * group_create 工具参数 schema
+ */
+
+/**
+ * 创建群组列表工具
+ */
+export function createGroupListTool(opts?: {
+  /** 当前操作者的智能助手 ID */
+  currentAgentId?: string;
+}): AnyAgentTool {
+  return {
+    label: "Group List",
+    name: "group_list",
+    description:
+      "List all groups or groups that a specific agent belongs to. Use this BEFORE creating a new group to check if it already exists. Returns group IDs, names, member counts, and owner IDs.",
+    parameters: GroupListToolSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      // 如果未传 agentId，默认用当前 agent 自己查询
+      const agentId = readStringParam(params, "agentId") || opts?.currentAgentId;
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        const response = await callGatewayTool(
+          "groups.list",
+          gatewayOpts,
+          agentId ? { agentId } : {},
+        );
+
+        const result = response as { groups?: unknown[]; total?: number };
+        const groups = Array.isArray(result?.groups) ? result.groups : [];
+
+        return jsonResult({
+          success: true,
+          total: groups.length,
+          groups: groups.map((g: unknown) => {
+            const grp = g as Record<string, unknown>;
+            return {
+              id: grp.id,
+              name: grp.name,
+              ownerId: grp.ownerId,
+              description: grp.description,
+              memberCount: Array.isArray(grp.members) ? grp.members.length : 0,
+              isPublic: grp.isPublic,
+              createdAt: grp.createdAt,
+            };
+          }),
+          tip:
+            groups.length === 0
+              ? "No groups found. You can create one with group_create."
+              : `Found ${groups.length} group(s). Check before creating a new one to avoid duplicates.`,
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to list groups: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    },
+  };
+}
 
 /**
  * group_create 工具参数 schema
@@ -60,7 +131,7 @@ const GroupDeleteToolSchema = Type.Object({
 /**
  * 创建群组创建工具
  */
-export function createGroupCreateTool(opts?: {
+export function createGroupCreateTool(_opts?: {
   /** 当前操作者的智能助手ID */
   currentAgentId?: string;
 }): AnyAgentTool {
@@ -82,12 +153,12 @@ export function createGroupCreateTool(opts?: {
 
       try {
         // 构建成员列表（群主自动成为owner角色）
-        const members = memberIds.map(id => ({
+        const members = memberIds.map((id) => ({
           agentId: id,
           role: id === ownerId ? "owner" : "member",
           joinedAt: Date.now(),
         }));
-        
+
         // 确保群主在成员列表中
         if (!memberIds.includes(ownerId)) {
           members.unshift({
@@ -98,16 +169,18 @@ export function createGroupCreateTool(opts?: {
         }
 
         // 调用 groups.create RPC
+        // 注意：服务端读取的是 initialMembers（字符串数组），而非 members对象数组
+        const initialMemberIds = memberIds.filter((id) => id !== ownerId);
         const response = await callGatewayTool("groups.create", gatewayOpts, {
           name,
           ownerId,
           description,
-          members,
+          initialMembers: initialMemberIds, // 使用服务端期望的字段名
           isPublic,
           maxMembers,
         });
 
-        const group = response as any;
+        const group = response;
 
         return jsonResult({
           success: true,
@@ -116,7 +189,7 @@ export function createGroupCreateTool(opts?: {
             id: group.id,
             name: group.name,
             ownerId: group.ownerId,
-            memberCount: group.members?.length || members.length,
+            memberCount: Array.isArray(group.members) ? group.members.length : members.length,
             isPublic: group.isPublic,
             createdAt: group.createdAt || Date.now(),
           },
@@ -134,7 +207,7 @@ export function createGroupCreateTool(opts?: {
 /**
  * 创建添加群成员工具
  */
-export function createGroupAddMemberTool(opts?: {
+export function createGroupAddMemberTool(_opts?: {
   /** 当前操作者的智能助手ID */
   currentAgentId?: string;
 }): AnyAgentTool {
@@ -162,7 +235,7 @@ export function createGroupAddMemberTool(opts?: {
               role: role || "member",
             });
             addedMembers.push(memberId);
-          } catch (error) {
+          } catch {
             // 忽略单个成员添加失败
           }
         }
@@ -197,7 +270,7 @@ export function createGroupAddMemberTool(opts?: {
 /**
  * 创建移除群成员工具
  */
-export function createGroupRemoveMemberTool(opts?: {
+export function createGroupRemoveMemberTool(_opts?: {
   /** 当前操作者的智能助手ID */
   currentAgentId?: string;
 }): AnyAgentTool {
@@ -217,7 +290,7 @@ export function createGroupRemoveMemberTool(opts?: {
         // 调用 groups.removeMember RPC（可能需要逐个移除）
         const removedMembers = [];
         const failedRemovals: Array<{ memberId: string; reason: string }> = [];
-        
+
         for (const memberId of memberIds) {
           try {
             await callGatewayTool("groups.removeMember", gatewayOpts, {
@@ -264,7 +337,7 @@ export function createGroupRemoveMemberTool(opts?: {
 /**
  * 创建删除群组工具
  */
-export function createGroupDeleteTool(opts?: {
+export function createGroupDeleteTool(_opts?: {
   /** 当前操作者的智能助手ID */
   currentAgentId?: string;
 }): AnyAgentTool {
@@ -281,7 +354,7 @@ export function createGroupDeleteTool(opts?: {
 
       try {
         // 调用 groups.delete RPC
-        const response = await callGatewayTool("groups.delete", gatewayOpts, {
+        await callGatewayTool("groups.delete", gatewayOpts, {
           groupId,
         });
 
