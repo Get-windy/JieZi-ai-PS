@@ -5,6 +5,7 @@ import {
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../../agents/agent-scope.js";
+import { resolveApiKeyForProfile, ensureAuthProfileStore } from "../../agents/auth-profiles.js";
 import { resolveSessionAuthProfileOverride } from "../../agents/auth-profiles/session-override.js";
 import { runCliAgent } from "../../agents/cli-runner.js";
 import { getCliSessionId, setCliSessionId } from "../../agents/cli-session.js";
@@ -385,6 +386,34 @@ export async function runCronIsolatedAgentTurn(params: {
     isNewSession: cronSession.isNewSession,
   });
   const authProfileIdSource = cronSession.sessionEntry.authProfileOverrideSource;
+
+  // Token 预检：在真正调用 LLM 前，主动验证并刷新 OAuth token。
+  // resolveApiKeyForProfile 内部会检查 token 是否过期，过期则自动刷新（含文件锁防并发）。
+  // 这样可以在 cron 触发时提前发现 token 失效，而不是等到 LLM 调用时才返回 401。
+  if (authProfileId) {
+    try {
+      const store = ensureAuthProfileStore(agentDir);
+      const preCheckResult = await resolveApiKeyForProfile({
+        cfg: cfgWithAgentDefaults,
+        store,
+        profileId: authProfileId,
+        agentDir,
+      });
+      if (!preCheckResult) {
+        logWarn(
+          `cron token pre-check: profile "${authProfileId}" returned no credentials, will fallback to env auth`,
+        );
+      }
+    } catch (preCheckErr) {
+      // token 已过期且刷新失败，提前终止并报告清晰错误，而不是等到 LLM 调用时返回晦涩的 401
+      return withRunSession({
+        status: "error",
+        error: `OAuth token refresh failed before cron run: ${
+          preCheckErr instanceof Error ? preCheckErr.message : String(preCheckErr)
+        }`,
+      });
+    }
+  }
 
   let runResult: Awaited<ReturnType<typeof runEmbeddedPiAgent>>;
   let fallbackProvider = provider;
