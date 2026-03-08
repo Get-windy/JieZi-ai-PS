@@ -433,41 +433,22 @@ export function renderApp(state: AppViewState) {
                   state.viewingChannelAccount = { channelId, accountId };
                 },
                 onEditAccount: (channelId, accountId) => {
-                  // TODO: 加载账号配置
-                  state.editingChannelAccount = {
-                    channelId,
-                    accountId,
-                    config: {},
-                  };
+                  (state as unknown as OpenClawApp).handleEditAccount(channelId, accountId);
                 },
                 onDeleteAccount: (channelId, accountId) => {
-                  if (confirm(`确定要删除此账号吗？`)) {
-                    // TODO: 实现删除逻辑
-                    console.log("Delete account:", channelId, accountId);
-                  }
+                  void (state as unknown as OpenClawApp).handleDeleteAccount(channelId, accountId);
                 },
                 onSaveAccount: () => {
-                  // TODO: 保存账号
-                  state.editingChannelAccount = null;
-                  state.creatingChannelAccount = false;
+                  void (state as unknown as OpenClawApp).handleSaveAccount();
                 },
                 onCancelAccountEdit: () => {
-                  state.editingChannelAccount = null;
-                  state.creatingChannelAccount = false;
+                  (state as unknown as OpenClawApp).handleCancelAccountEdit();
                 },
                 onCancelAccountView: () => {
-                  state.viewingChannelAccount = null;
+                  (state as unknown as OpenClawApp).handleCancelAccountView();
                 },
                 onAccountFormChange: (field, value) => {
-                  if (state.editingChannelAccount) {
-                    state.editingChannelAccount = {
-                      ...state.editingChannelAccount,
-                      config: {
-                        ...state.editingChannelAccount.config,
-                        [field]: value,
-                      },
-                    };
-                  }
+                  (state as unknown as OpenClawApp).handleAccountFormChange(field, value);
                 },
                 onToggleAllChannelsModal: () => {
                   state.showAllChannelsModal = !state.showAllChannelsModal;
