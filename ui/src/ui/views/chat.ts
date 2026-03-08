@@ -263,7 +263,7 @@ function renderAttachmentPreview(props: ChatProps) {
 /**
  * 解析当前对话的标题和参与者列表
  */
-function resolveConversationInfo(
+export function resolveConversationInfo(
   context: ChatConversationContext | null,
   agentsList: AgentsListResult | null | undefined,
   assistantName: string,
@@ -381,45 +381,38 @@ function resolveConversationInfo(
 }
 
 /**
- * 渲染考话顶部参与者栏（Discord/Slack 风格）
+ * 渲染参与者信息（内联紧凑版，用于顶部 header 控制栏）
  */
-function renderChatParticipantsBar(props: ChatProps) {
+export function renderChatParticipantsInline(props: ChatProps) {
   const { title, icon, participants } = resolveConversationInfo(
     props.navCurrentContext,
     props.agentsList,
     props.assistantName,
   );
 
-  const MAX_VISIBLE = 5;
+  const MAX_VISIBLE = 4;
   const visible = participants.slice(0, MAX_VISIBLE);
   const overflow = participants.length - MAX_VISIBLE;
 
   return html`
-    <div class="chat-participants-bar">
-      <div class="chat-participants-bar__title">
-        <span class="chat-participants-bar__icon">${icon}</span>
-        <span class="chat-participants-bar__name">${title}</span>
-      </div>
-      <div class="chat-participants-bar__members">
-        <span class="chat-participants-bar__label">成员</span>
-        <div class="chat-participants-bar__avatars">
-          ${visible.map(
-            (p) => html`
-              <div
-                class="chat-participant-avatar ${p.isUser ? "chat-participant-avatar--you" : ""}"
-                title=${p.label}
-              >
-                ${p.emoji}
-              </div>
-            `,
-          )}
-          ${
-            overflow > 0
-              ? html`<div class="chat-participant-avatar chat-participant-avatar--overflow" title="还有${overflow}位成员">+${overflow}</div>`
-              : nothing
-          }
-        </div>
-        <span class="chat-participants-bar__count">${participants.length}人</span>
+    <div class="chat-participants-inline">
+      <span class="chat-participants-inline__icon">${icon}</span>
+      <span class="chat-participants-inline__name">${title}</span>
+      <span class="chat-participants-inline__sep">·</span>
+      <div class="chat-participants-inline__avatars">
+        ${visible.map(
+          (p) => html`
+            <div
+              class="chat-participant-avatar-sm ${p.isUser ? "chat-participant-avatar-sm--you" : ""}"
+              title=${p.label}
+            >${p.emoji}</div>
+          `,
+        )}
+        ${
+          overflow > 0
+            ? html`<div class="chat-participant-avatar-sm chat-participant-avatar-sm--overflow" title="还有${overflow}位">+${overflow}</div>`
+            : nothing
+        }
       </div>
     </div>
   `;
@@ -529,7 +522,6 @@ export function renderChat(props: ChatProps) {
 
         <!-- 右侧聊天主区域 -->
         <div class="chat-main-area">
-          ${renderChatParticipantsBar(props)}
       ${props.disabledReason ? html`<div class="callout">${props.disabledReason}</div>` : nothing}
 
       ${props.error ? html`<div class="callout danger">${props.error}</div>` : nothing}

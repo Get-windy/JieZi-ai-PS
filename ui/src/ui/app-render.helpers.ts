@@ -1,4 +1,4 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import { refreshChat } from "./app-chat.ts";
 import type { AppViewState } from "./app-view-state.ts";
 import { OpenClawApp } from "./app.ts";
@@ -10,6 +10,7 @@ import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
 import type { ThemeMode } from "./theme.ts";
 import type { SessionsListResult } from "./types.ts";
+import { resolveConversationInfo } from "./views/chat.ts";
 
 type SessionDefaultsSnapshot = {
   mainSessionKey?: string;
@@ -123,8 +124,41 @@ export function renderChatControls(state: AppViewState) {
   // 任何会话都允许删除（删的是聊天记录和内容，不是账号本身）
   const currentKey = state.sessionKey;
 
+  const app = state as unknown as {
+    assistantName: string;
+    chatNavCurrentContext: unknown;
+    agentsList: unknown;
+  };
+  const { title, icon, participants } = resolveConversationInfo(
+    app.chatNavCurrentContext as never,
+    app.agentsList as never,
+    app.assistantName ?? "助手",
+  );
+  const MAX_VISIBLE = 4;
+  const visible = participants.slice(0, MAX_VISIBLE);
+  const overflow = participants.length - MAX_VISIBLE;
+
   return html`
     <div class="chat-controls">
+      <div class="chat-participants-inline">
+        <span class="chat-participants-inline__icon">${icon}</span>
+        <span class="chat-participants-inline__name">${title}</span>
+        <span class="chat-participants-inline__sep">·</span>
+        <div class="chat-participants-inline__avatars">
+          ${visible.map(
+            (p) => html`<div
+              class="chat-participant-avatar-sm ${p.isUser ? "chat-participant-avatar-sm--you" : ""}"
+              title=${p.label}
+            >${p.emoji}</div>`,
+          )}
+          ${
+            overflow > 0
+              ? html`<div class="chat-participant-avatar-sm chat-participant-avatar-sm--overflow" title="还有${overflow}位">+${overflow}</div>`
+              : nothing
+          }
+        </div>
+      </div>
+      <span class="chat-controls__separator">|</span>
       <button
         class="btn btn--sm btn--icon"
         title="删除当前对话"
