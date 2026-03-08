@@ -3127,6 +3127,7 @@ export function renderApp(state: AppViewState) {
                 onSplitRatioChange: (ratio: number) => state.handleSplitRatioChange(ratio),
                 assistantName: state.assistantName,
                 assistantAvatar: state.assistantAvatar,
+                agentsList: state.agentsList,
                 // ============ 导航树 props ============
                 navNodes: buildNavigationTree({
                   agents: state.agentsList,

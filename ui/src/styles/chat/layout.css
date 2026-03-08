@@ -461,3 +461,151 @@
     min-width: 120px;
   }
 }
+
+/* ==============================================
+   CHAT PARTICIPANTS BAR - top of chat-main-area
+   ============================================== */
+
+.chat-participants-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  margin-bottom: 4px;
+  background: var(--panel, rgba(255,255,255,0.04));
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 10px;
+  flex-shrink: 0;
+  min-height: 44px;
+  gap: 12px;
+}
+
+:root[data-theme="light"] .chat-participants-bar {
+  background: #f8fafc;
+  border-color: rgba(16,24,40,0.1);
+}
+
+/* 左侧对话标题 */
+.chat-participants-bar__title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1;
+}
+
+.chat-participants-bar__icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.chat-participants-bar__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong, var(--text));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 右侧成员区 */
+.chat-participants-bar__members {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.chat-participants-bar__label {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+
+.chat-participants-bar__count {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* 头像堆叠容器 */
+.chat-participants-bar__avatars {
+  display: flex;
+  align-items: center;
+  /* 头像先后重叠 */
+  flex-direction: row-reverse;
+}
+
+/* 单个参与者头像 */
+.chat-participant-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(99,102,241,0.15);
+  border: 2px solid var(--bg, #1a1a2e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  cursor: default;
+  transition: transform 150ms ease-out, z-index 0ms;
+  position: relative;
+  /* 头像圆圈间距 */
+  margin-left: -8px;
+  z-index: 1;
+}
+
+.chat-participant-avatar:first-child {
+  margin-left: 0;
+}
+
+.chat-participant-avatar:hover {
+  transform: translateY(-2px) scale(1.1);
+  z-index: 10;
+}
+
+/* 用户自己的头像 */
+.chat-participant-avatar--you {
+  background: rgba(34,197,94,0.15);
+  font-size: 13px;
+}
+
+/* overflow 数字头像 */
+.chat-participant-avatar--overflow {
+  background: var(--panel-strong, rgba(255,255,255,0.1));
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: -0.03em;
+}
+
+:root[data-theme="light"] .chat-participant-avatar {
+  border-color: #f8fafc;
+  background: rgba(99,102,241,0.1);
+}
+
+:root[data-theme="light"] .chat-participant-avatar--you {
+  background: rgba(34,197,94,0.1);
+}
+
+:root[data-theme="light"] .chat-participant-avatar--overflow {
+  background: #e5e7eb;
+  color: #6b7280;
+}
+
+@media (max-width: 640px) {
+  .chat-participants-bar {
+    padding: 6px 10px;
+    min-height: 38px;
+  }
+  .chat-participants-bar__name {
+    font-size: 13px;
+  }
+  .chat-participant-avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+  }
+}
