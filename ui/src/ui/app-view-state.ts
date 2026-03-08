@@ -270,7 +270,7 @@ export type AppViewState = {
   messagesLoading: boolean;
   messagesList: import("./controllers/friends.ts").DirectMessage[];
   sendingMessage: boolean;
-  friendsActiveSubPanel: "list" | "requests" | "chat";
+  friendsActiveSubPanel: "list" | "requests";
   draftMessage: string;
   // Monitor 协作监控状态
   monitorActiveSubPanel: "sessions" | "flows" | "forwarding" | "metrics" | "alerts";

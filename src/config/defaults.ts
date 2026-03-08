@@ -505,3 +505,6 @@ export function applyCompactionDefaults(cfg: OpenClawConfig): OpenClawConfig {
 export function resetSessionDefaultsWarningForTests() {
   defaultWarnState = { warned: false };
 }
+
+// Re-export upstream additions
+export { applyTalkConfigNormalization } from "@upstream/config/defaults.js";

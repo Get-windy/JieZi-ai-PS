@@ -27,12 +27,24 @@ export type MessageContentItem = {
   args?: unknown;
 };
 
+/** Agent-to-agent communication metadata, parsed from [TYPE from agentId] prefix */
+export type AgentCommMeta = {
+  /** Message type: command | request | query | notification */
+  type: "command" | "request" | "query" | "notification";
+  /** Sender agent ID */
+  senderId: string;
+  /** Actual message body (prefix stripped) */
+  body: string;
+};
+
 /** Normalized message structure for rendering */
 export type NormalizedMessage = {
   role: string;
   content: MessageContentItem[];
   timestamp: number;
   id?: string;
+  /** Present when this is an inter-agent communication message */
+  agentComm?: AgentCommMeta;
 };
 
 /** Tool card representation for tool calls and results */

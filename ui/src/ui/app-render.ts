@@ -2694,11 +2694,7 @@ export function renderApp(state: AppViewState) {
                   friendRequestsLoading: state.friendRequestsLoading,
                   friendRequestsList: state.friendRequestsList,
                   selectedFriendId: state.selectedFriendId,
-                  messagesLoading: state.messagesLoading,
-                  messagesList: state.messagesList,
-                  sendingMessage: state.sendingMessage,
                   activeSubPanel: state.friendsActiveSubPanel,
-                  draftMessage: state.draftMessage,
                   onRefresh: () => {
                     // TODO: 需要当前智能助手 ID
                     // void loadFriends(state, "current-agent-id");
@@ -2708,9 +2704,6 @@ export function renderApp(state: AppViewState) {
                   },
                   onSelectFriend: (friendId) => {
                     state.selectedFriendId = friendId;
-                    // 加载消息历史
-                    // TODO: 需要当前智能助手 ID
-                    // void loadMessages(state, "current-agent-id", friendId);
                   },
                   onAddFriend: async (_toAgentId, _message) => {
                     // TODO: 需要当前智能助手 ID
@@ -2724,15 +2717,27 @@ export function renderApp(state: AppViewState) {
                     // TODO: 需要当前智能助手 ID
                     // await confirmFriend(state, "current-agent-id", friendId, accept);
                   },
-                  onSendMessage: async (_content) => {
-                    if (state.selectedFriendId) {
-                      // TODO: 需要当前智能助手 ID
-                      // await sendMessage(state, "current-agent-id", state.selectedFriendId, content);
-                      state.draftMessage = "";
-                    }
-                  },
-                  onDraftMessageChange: (content) => {
-                    state.draftMessage = content;
+                  onNavigateToChatFriend: (friendAgentId) => {
+                    // 切换到聊天 tab，并选中对应的好友节点
+                    // 寻找导航树中匹配该好友的 contact 节点
+                    const targetSessionKey = `agent:${friendAgentId}:main`;
+                    const context = {
+                      type: "contact" as const,
+                      agentId: state.agentsList?.defaultId ?? "main",
+                      contactAgentId: friendAgentId,
+                      contactAgentName:
+                        state.friendsList.find((f) => f.agentId === friendAgentId)?.agentName ??
+                        friendAgentId,
+                      sessionKey: targetSessionKey,
+                    };
+                    // 切换到聊天 tab
+                    state.tab = "chat";
+                    // 设置导航到该好友节点
+                    state.chatNavCurrentContext = context;
+                    state.sessionKey = targetSessionKey;
+                    void loadChatHistory(
+                      state as unknown as import("./controllers/chat.ts").ChatState,
+                    );
                   },
                 },
                 monitorProps: {

@@ -3,7 +3,24 @@ import type { OpenClawConfig } from "../../config/config.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { formatSandboxToolPolicyBlockedMessage } from "../sandbox.js";
 import { stableStringify } from "../stable-stringify.js";
+import {
+  isAuthErrorMessage,
+  isAuthPermanentErrorMessage,
+  isBillingErrorMessage,
+  isOverloadedErrorMessage,
+  isRateLimitErrorMessage,
+  isTimeoutErrorMessage,
+} from "./failover-matches.js";
 import type { FailoverReason } from "./types.js";
+
+export {
+  isAuthErrorMessage,
+  isAuthPermanentErrorMessage,
+  isBillingErrorMessage,
+  isOverloadedErrorMessage,
+  isRateLimitErrorMessage,
+  isTimeoutErrorMessage,
+} from "./failover-matches.js";
 
 const log = createSubsystemLogger("errors");
 
@@ -159,8 +176,6 @@ const ERROR_PREFIX_RE =
   /^(?:error|api\s*error|openai\s*error|anthropic\s*error|gateway\s*error|request failed|failed|exception)[:\s-]+/i;
 const CONTEXT_OVERFLOW_ERROR_HEAD_RE =
   /^(?:context overflow:|request_too_large\b|request size exceeds\b|request exceeds the maximum size\b|context length exceeded\b|maximum context length\b|prompt is too long\b|exceeds model context window\b)/i;
-const BILLING_ERROR_HEAD_RE =
-  /^(?:error[:\s-]+)?billing(?:\s+error)?(?:[:\s-]+|$)|^(?:error[:\s-]+)?(?:credit balance|insufficient credits?|payment required|http\s*402\b)/i;
 const HTTP_STATUS_PREFIX_RE = /^(?:http\s*)?(\d{3})\s+(.+)$/i;
 const HTTP_STATUS_CODE_PREFIX_RE = /^(?:http\s*)?(\d{3})(?:\s+([\s\S]+))?$/i;
 const HTML_ERROR_PREFIX_RE = /^\s*(?:<!doctype\s+html\b|<html\b)/i;
@@ -226,6 +241,43 @@ export function isTransientHttpError(raw: string): boolean {
     return false;
   }
   return TRANSIENT_HTTP_ERROR_CODES.has(status.code);
+}
+
+export function classifyFailoverReasonFromHttpStatus(
+  status: number | undefined,
+  message?: string,
+): FailoverReason | null {
+  if (typeof status !== "number" || !Number.isFinite(status)) {
+    return null;
+  }
+  if (status === 402) {
+    return "billing";
+  }
+  if (status === 429) {
+    return "rate_limit";
+  }
+  if (status === 401 || status === 403) {
+    if (message && isAuthPermanentErrorMessage(message)) {
+      return "auth_permanent";
+    }
+    return "auth";
+  }
+  if (status === 408) {
+    return "timeout";
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return "timeout";
+  }
+  if (status === 529) {
+    return "rate_limit";
+  }
+  if (status === 400) {
+    if (message && isBillingErrorMessage(message)) {
+      return "billing";
+    }
+    return "format";
+  }
+  return null;
 }
 
 function stripFinalTagsFromText(text: string): string {
@@ -692,33 +744,6 @@ function matchesErrorPatterns(raw: string, patterns: readonly ErrorPattern[]): b
   );
 }
 
-export function isRateLimitErrorMessage(raw: string): boolean {
-  return matchesErrorPatterns(raw, ERROR_PATTERNS.rateLimit);
-}
-
-export function isTimeoutErrorMessage(raw: string): boolean {
-  return matchesErrorPatterns(raw, ERROR_PATTERNS.timeout);
-}
-
-export function isBillingErrorMessage(raw: string): boolean {
-  const value = raw.toLowerCase();
-  if (!value) {
-    return false;
-  }
-  if (matchesErrorPatterns(value, ERROR_PATTERNS.billing)) {
-    return true;
-  }
-  if (!BILLING_ERROR_HEAD_RE.test(raw)) {
-    return false;
-  }
-  return (
-    value.includes("upgrade") ||
-    value.includes("credits") ||
-    value.includes("payment") ||
-    value.includes("plan")
-  );
-}
-
 export function isMissingToolCallInputError(raw: string): boolean {
   if (!raw) {
     return false;
@@ -731,14 +756,6 @@ export function isBillingAssistantError(msg: AssistantMessage | undefined): bool
     return false;
   }
   return isBillingErrorMessage(msg.errorMessage ?? "");
-}
-
-export function isAuthErrorMessage(raw: string): boolean {
-  return matchesErrorPatterns(raw, ERROR_PATTERNS.auth);
-}
-
-export function isOverloadedErrorMessage(raw: string): boolean {
-  return matchesErrorPatterns(raw, ERROR_PATTERNS.overloaded);
 }
 
 function isJsonApiInternalServerError(raw: string): boolean {

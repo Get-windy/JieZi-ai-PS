@@ -468,3 +468,6 @@ export async function installPluginFromPath(params: {
     dryRun: params.dryRun,
   });
 }
+
+// Re-export upstream additions
+export { PLUGIN_INSTALL_ERROR_CODE } from "@upstream/plugins/install.js";

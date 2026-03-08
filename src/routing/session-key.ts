@@ -21,6 +21,17 @@ export const DEFAULT_MAIN_KEY = "main";
 export type SessionKeyShape = "missing" | "agent" | "legacy_or_alias" | "malformed_agent";
 
 /**
+ * Returns wakeOptions augmented with the sessionKey when it is an agent-scoped
+ * key, so the heartbeat poller can scope its wake to a specific session.
+ */
+export function scopedHeartbeatWakeOptions<T extends object>(
+  sessionKey: string,
+  wakeOptions: T,
+): T | (T & { sessionKey: string }) {
+  return parseAgentSessionKey(sessionKey) ? { ...wakeOptions, sessionKey } : wakeOptions;
+}
+
+/**
  * 生成通道账号ID
  * 格式：通道名-时间戳 (例如: feishu-1k2m3n4p)
  * @param channelId 通道ID
@@ -29,7 +40,7 @@ export type SessionKeyShape = "missing" | "agent" | "legacy_or_alias" | "malform
  */
 export function generateChannelAccountId(
   channelId: string | undefined | null,
-  name?: string | undefined | null,
+  name?: string | null,
   existingIds?: string[],
 ): string {
   // 生成基于时间戳的唯一后缀（8位36进制）

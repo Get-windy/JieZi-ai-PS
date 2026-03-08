@@ -25,3 +25,9 @@ export function isSlackSenderAllowListed(params: {
     })
   );
 }
+
+// Re-export upstream's new system event authorization (added in upstream refactor)
+export {
+  type SlackSystemEventAuthResult,
+  authorizeSlackSystemEventSender,
+} from "@upstream/slack/monitor/auth.js";

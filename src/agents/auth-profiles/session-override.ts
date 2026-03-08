@@ -58,7 +58,7 @@ export async function clearSessionAuthProfileOverride(params: {
  *
  * 需要通过模型的providerId和认证信息来建立映射关系
  */
-function resolveModelAccountToAuthProfile(params: {
+export function resolveModelAccountToAuthProfile(params: {
   modelId: string;
   store: ReturnType<typeof ensureAuthProfileStore>;
 }): string | undefined {
@@ -179,33 +179,44 @@ export async function resolveSessionAuthProfileOverride(params: {
         store,
       });
 
-      if (defaultProfileId && order.includes(defaultProfileId)) {
-        // 检查默认账号是否可用（不在冷却期）
-        if (!isProfileInCooldown(store, defaultProfileId)) {
-          // 使用默认账号
-          sessionEntry.authProfileOverride = defaultProfileId;
-          sessionEntry.authProfileOverrideSource = "default-account"; // 新来源标记
-          sessionEntry.authProfileOverrideCompactionCount = compactionCount;
-          sessionEntry.updatedAt = Date.now();
-          sessionStore[sessionKey] = sessionEntry;
-          if (storePath) {
-            await updateSessionStore(storePath, (store) => {
-              store[sessionKey] = sessionEntry;
-            });
+      if (defaultProfileId) {
+        // defaultAccount 可能属于不同的 provider（如 siliconflow），
+        // 需要用它自己的 provider 构建 order，而不是用当前请求的 provider
+        const defaultProfile = store.profiles[defaultProfileId];
+        const defaultProvider = defaultProfile?.provider ?? provider;
+        const defaultOrder =
+          normalizeProviderId(defaultProvider) === normalizeProviderId(provider)
+            ? order
+            : resolveAuthProfileOrder({ cfg, store, provider: defaultProvider });
+
+        if (defaultOrder.includes(defaultProfileId)) {
+          // 检查默认账号是否可用（不在冷却期）
+          if (!isProfileInCooldown(store, defaultProfileId)) {
+            // 使用默认账号
+            sessionEntry.authProfileOverride = defaultProfileId;
+            sessionEntry.authProfileOverrideSource = "default-account"; // 新来源标记
+            sessionEntry.authProfileOverrideCompactionCount = compactionCount;
+            sessionEntry.updatedAt = Date.now();
+            sessionStore[sessionKey] = sessionEntry;
+            if (storePath) {
+              await updateSessionStore(storePath, (store) => {
+                store[sessionKey] = sessionEntry;
+              });
+            }
+            console.log(
+              `[DefaultAccount] Using default account ${defaultProfileId} for model ${defaultModelId}`,
+            );
+            return defaultProfileId;
+          } else {
+            console.warn(
+              `[DefaultAccount] Default account ${defaultProfileId} is in cooldown, falling back to next available`,
+            );
           }
-          console.log(
-            `[DefaultAccount] Using default account ${defaultProfileId} for model ${defaultModelId}`,
-          );
-          return defaultProfileId;
         } else {
           console.warn(
-            `[DefaultAccount] Default account ${defaultProfileId} is in cooldown, falling back to next available`,
+            `[DefaultAccount] Default account ${defaultProfileId} not in order for provider ${defaultProvider}, falling back to rotation`,
           );
         }
-      } else if (defaultProfileId) {
-        console.warn(
-          `[DefaultAccount] Default account ${defaultProfileId} not in order, falling back to rotation`,
-        );
       }
     }
   }

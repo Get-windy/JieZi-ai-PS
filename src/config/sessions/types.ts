@@ -209,3 +209,28 @@ export type SessionSystemPromptReport = {
 export const DEFAULT_RESET_TRIGGER = "/new";
 export const DEFAULT_RESET_TRIGGERS = ["/new", "/reset"];
 export const DEFAULT_IDLE_MINUTES = 60;
+
+/**
+ * Update the runtime model fields on a session entry.
+ * Returns true if any field was changed.
+ */
+export function setSessionRuntimeModel(
+  entry: SessionEntry,
+  runtime: { provider: string; model: string },
+): boolean {
+  const provider = runtime.provider.trim();
+  const model = runtime.model.trim();
+  if (!provider || !model) {
+    return false;
+  }
+  let changed = false;
+  if (entry.modelProvider !== provider) {
+    entry.modelProvider = provider;
+    changed = true;
+  }
+  if (entry.model !== model) {
+    entry.model = model;
+    changed = true;
+  }
+  return changed;
+}

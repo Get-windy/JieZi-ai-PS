@@ -3,14 +3,18 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import type { AssistantIdentity } from "../assistant-identity.ts";
 import { toSanitizedMarkdownHtml } from "../markdown.ts";
 import { detectTextDirection } from "../text-direction.ts";
-import type { MessageGroup } from "../types/chat-types.ts";
+import type { AgentCommMeta, MessageGroup } from "../types/chat-types.ts";
 import { renderCopyAsMarkdownButton } from "./copy-as-markdown.ts";
 import {
   extractTextCached,
   extractThinkingCached,
   formatReasoningMarkdown,
 } from "./message-extract.ts";
-import { isToolResultMessage, normalizeRoleForGrouping } from "./message-normalizer.ts";
+import {
+  isToolResultMessage,
+  normalizeRoleForGrouping,
+  parseAgentCommPrefix,
+} from "./message-normalizer.ts";
 import { extractToolCards, renderToolCardSidebar } from "./tool-cards.ts";
 
 type ImageBlock = {
@@ -130,19 +134,60 @@ export function renderMessageGroup(
 ) {
   const normalizedRole = normalizeRoleForGrouping(group.role);
   const assistantName = opts.assistantName ?? "Assistant";
-  const who =
-    normalizedRole === "user"
+
+  // Detect agent-comm role: check if the first message has an agent-comm prefix
+  const firstMsg = group.messages[0]?.message as Record<string, unknown> | undefined;
+  const firstInteragent = firstMsg?.__interagent as Record<string, unknown> | undefined;
+  const firstTextContent =
+    !firstInteragent && firstMsg
+      ? (() => {
+          const role = typeof firstMsg.role === "string" ? firstMsg.role : "";
+          if (role === "user" || role === "User") {
+            const content = firstMsg.content;
+            if (Array.isArray(content)) {
+              const textItem = content.find(
+                (c: unknown) =>
+                  typeof (c as Record<string, unknown>).type === "string" &&
+                  (c as Record<string, unknown>).type === "text",
+              ) as Record<string, unknown> | undefined;
+              return typeof textItem?.text === "string" ? textItem.text : null;
+            } else if (typeof content === "string") {
+              return content;
+            }
+          }
+          return null;
+        })()
+      : null;
+  const firstCommMeta =
+    firstInteragent && typeof firstInteragent.senderId === "string"
+      ? { senderId: String(firstInteragent.senderId) }
+      : firstTextContent
+        ? (() => {
+            const m = parseAgentCommPrefix(firstTextContent);
+            return m ? { senderId: m.senderId } : null;
+          })()
+        : null;
+
+  const isAgentComm = Boolean(firstCommMeta);
+  const who = isAgentComm
+    ? firstCommMeta!.senderId
+    : normalizedRole === "user"
       ? "You"
       : normalizedRole === "assistant"
         ? assistantName
         : normalizedRole;
-  const roleClass =
-    normalizedRole === "user" ? "user" : normalizedRole === "assistant" ? "assistant" : "other";
+  const roleClass = isAgentComm
+    ? "agent-comm"
+    : normalizedRole === "user"
+      ? "user"
+      : normalizedRole === "assistant"
+        ? "assistant"
+        : "other";
   const timestamp = formatMessageTimestamp(group.timestamp);
 
   return html`
     <div class="chat-group ${roleClass}">
-      ${renderAvatar(group.role, {
+      ${renderAvatar(isAgentComm ? "agent-comm" : group.role, {
         name: assistantName,
         avatar: opts.assistantAvatar ?? null,
       })}
@@ -170,6 +215,12 @@ function renderAvatar(role: string, assistant?: Pick<AssistantIdentity, "name" |
   const normalized = normalizeRoleForGrouping(role);
   const assistantName = assistant?.name?.trim() || "Assistant";
   const assistantAvatar = assistant?.avatar?.trim() || "";
+  // agent-comm: robot emoji avatar
+  if (role === "agent-comm") {
+    return html`
+      <div class="chat-avatar agent-comm" title="Agent">🤖</div>
+    `;
+  }
   const initial =
     normalized === "user"
       ? "U"
@@ -207,6 +258,49 @@ function isAvatarUrl(value: string): boolean {
   );
 }
 
+/** Badge label & color for each agent communication type */
+const AGENT_COMM_TYPE_LABELS: Record<AgentCommMeta["type"], { label: string; cls: string }> = {
+  command: { label: "命令", cls: "agent-comm-badge--command" },
+  request: { label: "请求", cls: "agent-comm-badge--request" },
+  query: { label: "查询", cls: "agent-comm-badge--query" },
+  notification: { label: "通知", cls: "agent-comm-badge--notification" },
+};
+
+/**
+ * Render a special bubble for inter-agent communication messages.
+ * These are user-role messages whose text begins with [TYPE from agentId].
+ */
+function renderAgentCommMessage(
+  meta: AgentCommMeta,
+  isStreaming: boolean,
+  _onOpenSidebar?: (content: string) => void,
+) {
+  const { label, cls } = AGENT_COMM_TYPE_LABELS[meta.type];
+  const bodyHtml = meta.body ? toSanitizedMarkdownHtml(meta.body) : "";
+  const bubbleClasses = [
+    "chat-bubble",
+    "chat-bubble--agent-comm",
+    isStreaming ? "streaming" : "",
+    "fade-in",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return html`
+    <div class=${bubbleClasses}>
+      <div class="agent-comm-header">
+        <span class="agent-comm-icon" aria-hidden="true">🤖</span>
+        <span class="agent-comm-sender">${meta.senderId}</span>
+        <span class="agent-comm-badge ${cls}">${label}</span>
+      </div>
+      ${
+        meta.body
+          ? html`<div class="chat-text agent-comm-body" dir=${detectTextDirection(meta.body)}>${unsafeHTML(bodyHtml)}</div>`
+          : nothing
+      }
+    </div>
+  `;
+}
+
 function renderMessageImages(images: ImageBlock[]) {
   if (images.length === 0) {
     return nothing;
@@ -241,6 +335,44 @@ function renderGroupedMessage(
     role.toLowerCase() === "tool_result" ||
     typeof m.toolCallId === "string" ||
     typeof m.tool_call_id === "string";
+
+  // Detect inter-agent communication messages by their [TYPE from agentId] prefix
+  // Check __interagent metadata first (future-proof), then fall back to text parsing
+  const interagentMeta = m.__interagent as Record<string, unknown> | undefined;
+  if (
+    interagentMeta &&
+    typeof interagentMeta.type === "string" &&
+    typeof interagentMeta.senderId === "string"
+  ) {
+    const rawType = interagentMeta.type.toLowerCase();
+    const commType =
+      rawType === "command"
+        ? "command"
+        : rawType === "request"
+          ? "request"
+          : rawType === "query"
+            ? "query"
+            : "notification";
+    const commMeta: AgentCommMeta = {
+      type: commType,
+      senderId: String(interagentMeta.senderId),
+      body:
+        typeof interagentMeta.body === "string"
+          ? interagentMeta.body
+          : (extractTextCached(message) ?? ""),
+    };
+    return renderAgentCommMessage(commMeta, opts.isStreaming, onOpenSidebar);
+  }
+
+  if ((role === "user" || role === "User") && !isToolResult) {
+    const textContent = extractTextCached(message);
+    if (textContent) {
+      const commMeta = parseAgentCommPrefix(textContent);
+      if (commMeta) {
+        return renderAgentCommMessage(commMeta, opts.isStreaming, onOpenSidebar);
+      }
+    }
+  }
 
   const toolCards = extractToolCards(message);
   const hasToolCards = toolCards.length > 0;

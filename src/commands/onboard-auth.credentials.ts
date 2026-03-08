@@ -372,3 +372,12 @@ export async function setMistralApiKey(key: string, agentDir?: string) {
     agentDir: resolveAuthAgentDir(agentDir),
   });
 }
+
+// Re-export upstream additions (Kilocode + new auth key setters)
+export {
+  setOpenaiApiKey,
+  setByteplusApiKey,
+  setVolcengineApiKey,
+  setKilocodeApiKey,
+  KILOCODE_DEFAULT_MODEL_REF,
+} from "@upstream/commands/onboard-auth.credentials.js";

@@ -187,3 +187,10 @@ function orderProfilesByMode(order: string[], store: AuthProfileStore): string[]
 
   return [...sorted, ...cooldownSorted];
 }
+
+// Re-export upstream additions
+export {
+  type AuthProfileEligibility,
+  type AuthProfileEligibilityReasonCode,
+  resolveAuthProfileEligibility,
+} from "@upstream/agents/auth-profiles/order.js";

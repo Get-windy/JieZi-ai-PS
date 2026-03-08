@@ -49,3 +49,6 @@ export async function buildChannelAccountSnapshot<ResolvedAccount>(params: {
     configured,
   };
 }
+
+// Re-export upstream additions
+export { buildReadOnlySourceChannelAccountSnapshot } from "@upstream/channels/plugins/status.js";

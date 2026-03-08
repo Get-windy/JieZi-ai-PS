@@ -433,3 +433,6 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
 
   return choose(resolveDefaultAgentId(input.cfg), "default");
 }
+
+// Re-export upstream additions
+export { pickFirstExistingAgentId } from "@upstream/routing/resolve-route.js";

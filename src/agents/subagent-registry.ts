@@ -28,6 +28,7 @@ import {
   listDescendantRunsForRequesterFromRuns,
   listRunsForRequesterFromRuns,
   resolveRequesterForChildSessionFromRuns,
+  shouldIgnorePostCompletionAnnounceForSessionFromRuns,
 } from "./subagent-registry-queries.js";
 import {
   getSubagentRunsSnapshotForRead,
@@ -442,6 +443,7 @@ async function finalizeSubagentCleanup(
     now,
     activeDescendantRuns: Math.max(0, countActiveDescendantRuns(entry.childSessionKey)),
     announceExpiryMs: ANNOUNCE_EXPIRY_MS,
+    announceCompletionHardExpiryMs: 30 * 60_000,
     maxAnnounceRetryCount: MAX_ANNOUNCE_RETRY_COUNT,
     deferDescendantDelayMs: MIN_ANNOUNCE_RETRY_DELAY_MS,
     resolveAnnounceRetryDelayMs,
@@ -937,4 +939,17 @@ export function listDescendantRunsForRequester(rootSessionKey: string): Subagent
 
 export function initSubagentRegistry() {
   restoreSubagentRunsOnce();
+}
+
+// Re-export upstream additions
+export {
+  countPendingDescendantRuns,
+  countPendingDescendantRunsExcludingRun,
+} from "@upstream/agents/subagent-registry.js";
+
+export function shouldIgnorePostCompletionAnnounceForSession(childSessionKey: string): boolean {
+  return shouldIgnorePostCompletionAnnounceForSessionFromRuns(
+    getSubagentRunsSnapshotForRead(subagentRuns),
+    childSessionKey,
+  );
 }

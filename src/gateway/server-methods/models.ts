@@ -1,17 +1,18 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { GatewayRequestHandlers } from "./types.js";
 import { resetModelCatalogCacheForTest } from "../../agents/model-catalog.js";
 import { loadConfig } from "../../config/config.js";
 import { STATE_DIR } from "../../config/paths.js";
-import { DEFAULT_PROVIDER } from "../../agents/defaults.js";
-import { buildAllowedModelSet } from "../../agents/model-selection.js";
+// DEFAULT_PROVIDER and buildAllowedModelSet are reserved for future use
+// import { DEFAULT_PROVIDER } from "../../agents/defaults.js";
+// import { buildAllowedModelSet } from "../../agents/model-selection.js";
 import {
   ErrorCodes,
   errorShape,
   formatValidationErrors,
   validateModelsListParams,
 } from "../protocol/index.js";
+import type { GatewayRequestHandlers } from "./types.js";
 
 // 模型管理配置文件路径 - UI 管理系统的主存储
 const MODEL_MANAGEMENT_FILE = path.join(STATE_DIR, "model-management.json");
@@ -455,7 +456,16 @@ const DEFAULT_PROVIDERS: ProviderInstance[] = [
 /**
  * 从 UI 管理结构同步到官方 models.json 格式
  */
+/**
+ * 规范化 provider baseUrl（直接透传，不做自动修正）
+ */
+function normalizeProviderBaseUrl(baseUrl: string | undefined): string | undefined {
+  return baseUrl;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function syncToAgentModelsJson(storage: ModelManagementStorage): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result: any = {
     providers: {},
   };
@@ -467,13 +477,15 @@ function syncToAgentModelsJson(storage: ModelManagementStorage): any {
     }
 
     // 使用默认认证或第一个启用的认证
-    const defaultAuth = auths.find(a => a.isDefault && a.enabled) || auths.find(a => a.enabled) || auths[0];
+    const defaultAuth =
+      auths.find((a) => a.isDefault && a.enabled) || auths.find((a) => a.enabled) || auths[0];
     if (!defaultAuth) {
       continue;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const providerConfig: any = {
-      baseUrl: defaultAuth.baseUrl,
+      baseUrl: normalizeProviderBaseUrl(defaultAuth.baseUrl),
       apiKey: defaultAuth.apiKey,
       api: "openai-completions", // 默认 API 类型
       models: [],
@@ -481,10 +493,10 @@ function syncToAgentModelsJson(storage: ModelManagementStorage): any {
 
     // 添加模型配置
     const providerModels = storage.models[providerId] || [];
-    
+
     providerConfig.models = providerModels
-      .filter(m => m.enabled)
-      .map(m => ({
+      .filter((m) => m.enabled)
+      .map((m) => ({
         id: m.modelName,
         name: m.nickname || m.modelName,
         reasoning: false,
@@ -516,7 +528,7 @@ export function invalidateModelManagementCache(): void {
 export async function loadModelManagement(): Promise<ModelManagementStorage> {
   // 检查缓存是否有效
   const now = Date.now();
-  if (cachedStorage && (now - cacheTimestamp) < CACHE_TTL_MS) {
+  if (cachedStorage && now - cacheTimestamp < CACHE_TTL_MS) {
     return cachedStorage;
   }
 
@@ -598,7 +610,7 @@ export async function loadModelManagement(): Promise<ModelManagementStorage> {
     cacheTimestamp = Date.now();
 
     return storage;
-  } catch (err) {
+  } catch {
     // 文件不存在时，尝试从旧配置迁移
     const storage = await migrateFromLegacyConfig();
     // 更新缓存
@@ -626,30 +638,35 @@ async function syncAuthProfiles(storage: ModelManagementStorage): Promise<void> 
   const { resolveOpenClawAgentDir } = require("../../agents/agent-paths.js");
   const agentDir = resolveOpenClawAgentDir();
   const authProfilesPath = path.join(agentDir, "auth-profiles.json");
-  
+
   // 构建 auth-profiles.json 格式
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const authProfiles: any = {
     version: 1,
     profiles: {},
   };
-  
+
   // 遍历所有认证，转换为 auth-profiles 格式
   for (const [providerId, auths] of Object.entries(storage.auths)) {
-    if (!auths || auths.length === 0) {continue;}
-    
+    if (!auths || auths.length === 0) {
+      continue;
+    }
+
     for (const auth of auths) {
-      if (!auth.enabled) {continue;} // 只同步启用的认证
-      
-      const profileId = `${providerId}:${auth.name.replace(/[^a-zA-Z0-9-_]/g, '-')}`;
+      if (!auth.enabled) {
+        continue;
+      } // 只同步启用的认证
+
+      const profileId = `${providerId}:${auth.name.replace(/[^a-zA-Z0-9-_]/g, "-")}`;
       authProfiles.profiles[profileId] = {
         type: "api_key",
         provider: providerId,
         key: auth.apiKey,
-        ...(auth.baseUrl && { baseUrl: auth.baseUrl }),
+        ...(auth.baseUrl && { baseUrl: normalizeProviderBaseUrl(auth.baseUrl) }),
       };
     }
   }
-  
+
   await fs.writeFile(authProfilesPath, JSON.stringify(authProfiles, null, 2), "utf-8");
   console.log("[Models] Synced to auth-profiles.json:", authProfilesPath);
   console.log(`[Models] Auth profiles count: ${Object.keys(authProfiles.profiles).length}`);
@@ -759,13 +776,18 @@ async function migrateFromLegacyConfig(): Promise<ModelManagementStorage> {
 const TEST_TIMEOUT_MS = 10000;
 
 // OpenAI 兼容 API 测试
+// 最佳实践：
+//   1. 优先 GET /models —— 模型无关，只验证 baseUrl + apiKey 有效性
+//   2. /models 返回 401/403 时，直接报认证失败，不继续尝试 chat 探针
+//   3. /models 返回其他 4xx/5xx 时，若调用者传入了模型名，再做 chat 探针
+//   4. 始终不使用硬编码的 fallback 模型名（如 gpt-4o-mini），避免因供应商不支持该名称而误报失败
 async function testOpenAIConnection(params: {
   baseUrl: string;
   apiKey: string;
-  modelName?: string; // 可选：仅在需要测试具体模型时使用
-}): Promise<{ ok: boolean; status?: number; error?: string }> {
+  modelName?: string; // 可选：/models 失败时用此名称做 chat 探针
+}): Promise<{ ok: boolean; status?: number; error?: string; modelsListed?: string[] }> {
   try {
-    // 优先测试 /models 端点（不需要模型名称，更通用）
+    // ── Step 1: GET /models（不依赖任何模型名，最通用）──
     const modelsEndpoint = params.baseUrl.endsWith("/")
       ? `${params.baseUrl}models`
       : `${params.baseUrl}/models`;
@@ -773,78 +795,105 @@ async function testOpenAIConnection(params: {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
-    const modelsResponse = await fetch(modelsEndpoint, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${params.apiKey}`,
-      },
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (modelsResponse.ok) {
-      return { ok: true, status: modelsResponse.status };
+    let modelsResponse: Response;
+    try {
+      modelsResponse = await fetch(modelsEndpoint, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${params.apiKey}` },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
     }
 
-    // 如果 /models 不可用且提供了模型名称，尝试 chat 请求
+    if (modelsResponse.ok) {
+      // 尝试解析模型列表（仅用于返回信息，不影响成功判定）
+      let modelsListed: string[] | undefined;
+      try {
+        const body = await modelsResponse.json();
+        const data: unknown[] = body?.data ?? (Array.isArray(body) ? body : []);
+        modelsListed = data
+          .map((m: unknown) => (m as { id?: string })?.id)
+          .filter(Boolean) as string[];
+      } catch {
+        // 解析失败不影响成功
+      }
+      return { ok: true, status: modelsResponse.status, modelsListed };
+    }
+
+    // ── Step 2: /models 失败 ──
+    // 401/403 = apiKey 明确无效，不再尝试 chat 探针（避免误导用户）
+    if (modelsResponse.status === 401 || modelsResponse.status === 403) {
+      const errText = await modelsResponse.text().catch(() => "");
+      let errMsg = `HTTP ${modelsResponse.status}: 认证失败，请检查 API Key`;
+      try {
+        const d = JSON.parse(errText);
+        errMsg = d.error?.message || d.message || errMsg;
+      } catch {
+        if (errText.length < 300) {
+          errMsg = errText || errMsg;
+        }
+      }
+      return { ok: false, status: modelsResponse.status, error: errMsg };
+    }
+
+    // 只有调用者明确传入了模型名时，才做 chat 探针；否则直接报告连接失败原因
+    // 这样避免了用硬编码模型名导致的"模型不存在"误报
     if (params.modelName) {
-      const endpoint = params.baseUrl.endsWith("/")
+      const chatEndpoint = params.baseUrl.endsWith("/")
         ? `${params.baseUrl}chat/completions`
         : `${params.baseUrl}/chat/completions`;
 
       const controller2 = new AbortController();
       const timeoutId2 = setTimeout(() => controller2.abort(), TEST_TIMEOUT_MS);
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${params.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: params.modelName,
-          messages: [{ role: "user", content: "测试连接" }],
-          max_tokens: 5,
-        }),
-        signal: controller2.signal,
-      });
-
-      clearTimeout(timeoutId2);
-
-      if (response.ok) {
-        return { ok: true, status: response.status };
+      let chatResponse: Response;
+      try {
+        chatResponse = await fetch(chatEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${params.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: params.modelName,
+            messages: [{ role: "user", content: "hi" }],
+            max_tokens: 1,
+          }),
+          signal: controller2.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId2);
       }
 
-      const errorText = await response.text();
+      if (chatResponse.ok) {
+        return { ok: true, status: chatResponse.status };
+      }
 
-      let errorMessage = `HTTP ${response.status}`;
-
+      const chatErrorText = await chatResponse.text().catch(() => "");
+      let chatErrorMsg = `HTTP ${chatResponse.status}`;
       try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.error?.message || errorData.message || errorMessage;
+        const d = JSON.parse(chatErrorText);
+        chatErrorMsg = d.error?.message || d.message || chatErrorMsg;
       } catch {
-        if (errorText.length < 200) {
-          errorMessage = errorText;
+        if (chatErrorText.length < 300) {
+          chatErrorMsg = chatErrorText || chatErrorMsg;
         }
       }
-
-      return { ok: false, status: response.status, error: errorMessage };
+      return { ok: false, status: chatResponse.status, error: chatErrorMsg };
     }
 
-    // 没有模型名称且 /models 失败，返回错误
-    const errorText = await modelsResponse.text();
+    // 没有模型名，直接返回 /models 的错误
+    const errorText = await modelsResponse.text().catch(() => "");
     let errorMessage = `HTTP ${modelsResponse.status}`;
-
     try {
-      const errorData = JSON.parse(errorText);
-      errorMessage = errorData.error?.message || errorData.message || errorMessage;
+      const d = JSON.parse(errorText);
+      errorMessage = d.error?.message || d.message || errorMessage;
     } catch {
-      if (errorText.length < 200) {
-        errorMessage = errorText;
+      if (errorText.length < 300) {
+        errorMessage = errorText || errorMessage;
       }
     }
-
     return { ok: false, status: modelsResponse.status, error: errorMessage };
   } catch (err) {
     if ((err as Error).name === "AbortError") {
@@ -1110,7 +1159,7 @@ async function addModelConfig(params: {
     provider: params.provider,
     modelName: params.modelName,
     nickname: params.nickname,
-    enabled: false, // 默认禁用
+    enabled: true, // 默认启用（用户主动添加的模型视为可用）
     deprecated: false, // 默认不是停用状态
     ...restConfig,
   };
@@ -1119,6 +1168,10 @@ async function addModelConfig(params: {
     storage.models[params.provider] = [];
   }
   storage.models[params.provider].push(modelConfig);
+
+  console.log(
+    `[Models] addModelConfig: added ${params.provider}/${params.modelName} configId=${configId} enabled=true (default)`,
+  );
 
   await saveModelManagement(storage);
   return modelConfig;
@@ -1269,6 +1322,11 @@ export async function checkModelAvailability(
     }
 
     if (!modelConfig.enabled) {
+      // 如果模型被标记为 deprecated，说明它是迁移备份数据，不应阻止运行
+      // （SmartRouting 等通过 auth profile 配置的模型不受此限制）
+      if (modelConfig.deprecated) {
+        return { available: true };
+      }
       return {
         available: false,
         reason: `模型 ${provider}/${modelName} 已被禁用，请在模型管理界面启用后使用`,
@@ -1551,7 +1609,7 @@ async function fetchOpenAIBalance(
         currency: "USD",
       };
     }
-  } catch (err) {
+  } catch {
     // 静默失败
   }
   return null;
@@ -1755,7 +1813,35 @@ export const modelsHandlers: GatewayRequestHandlers = {
               })),
             ]),
           ),
-          modelConfigs: storage.models,
+          modelConfigs: Object.fromEntries(
+            Object.entries(storage.models).map(([providerId, modelList]) => {
+              // 计算该供应商的已知模型集合（用于标注 unlisted）
+              const providerInstance = storage.providers.find((p) => p.id === providerId);
+              const knownModels = providerInstance?.knownModels;
+              // 若供应商没有 knownModels（未刷新过或不支持目录查询），不标注 unlisted
+              const knownSet =
+                knownModels && knownModels.length > 0
+                  ? new Set(knownModels.map((m: string) => m.toLowerCase()))
+                  : null;
+              return [
+                providerId,
+                modelList.map((model) => {
+                  const isUnlisted = knownSet
+                    ? !knownSet.has(model.modelName.toLowerCase())
+                    : false;
+                  if (isUnlisted) {
+                    console.log(
+                      `[Models] models.list: ${providerId}/${model.modelName} marked as unlisted (knownSet has ${knownSet?.size} entries)`,
+                    );
+                  }
+                  return {
+                    ...model,
+                    unlisted: isUnlisted,
+                  };
+                }),
+              ];
+            }),
+          ),
           defaultAuthId: storage.defaultAuthId,
           // API模板库（预置）
           apiTemplates: API_TEMPLATES,
@@ -1772,7 +1858,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
   // ============ 供应商管理 ============
 
   // 获取API模板列表（预置）
-  "models.apiTemplates.list": async ({ params, respond }) => {
+  "models.apiTemplates.list": async ({ respond }) => {
     try {
       respond(true, { templates: API_TEMPLATES }, undefined);
     } catch (err) {
@@ -1781,7 +1867,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
   },
 
   // 获取供应商实例列表
-  "models.providers.list": async ({ params, respond }) => {
+  "models.providers.list": async ({ respond }) => {
     try {
       const storage = await loadModelManagement();
       respond(true, { providers: storage.providers }, undefined);
@@ -1848,13 +1934,13 @@ export const modelsHandlers: GatewayRequestHandlers = {
       };
 
       storage.providers.push(provider);
-      
+
       // 从删除黑名单中移除（如果存在）
       if (storage.deletedProviders?.includes(id)) {
-        storage.deletedProviders = storage.deletedProviders.filter(pid => pid !== id);
+        storage.deletedProviders = storage.deletedProviders.filter((pid) => pid !== id);
         console.log(`[Models] Removed provider from deleted blacklist: ${id}`);
       }
-      
+
       await saveModelManagement(storage);
 
       console.log(`[Models] Added custom provider: ${id} (${name})`);
@@ -2005,7 +2091,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       // 删除供应商
       storage.providers = storage.providers.filter((p) => p.id !== id);
-      
+
       // 添加到已删除黑名单，防止自动添加回来
       if (!storage.deletedProviders) {
         storage.deletedProviders = [];
@@ -2013,7 +2099,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
       if (!storage.deletedProviders.includes(id)) {
         storage.deletedProviders.push(id);
       }
-      
+
       await saveModelManagement(storage);
 
       console.log(`[Models] Deleted provider: ${id}`);
@@ -2173,11 +2259,12 @@ export const modelsHandlers: GatewayRequestHandlers = {
   // 添加模型配置
   "models.config.add": async ({ params, respond }) => {
     try {
-      const { authId, provider, modelName, nickname, config } = params as {
+      const { authId, provider, modelName, nickname, enabled, config } = params as {
         authId: string;
         provider: string;
         modelName: string;
         nickname?: string;
+        enabled?: boolean; // 前端传来的启用状态（勾选框）
         config?: Partial<ModelConfig>;
       };
 
@@ -2190,7 +2277,19 @@ export const modelsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const modelConfig = await addModelConfig({ authId, provider, modelName, nickname, config });
+      // 将前端传来的 enabled 合并进 config，优先级：前端明确勾选 > 默认 true
+      const mergedConfig: Partial<ModelConfig> = {
+        ...config,
+        ...(enabled !== undefined ? { enabled } : {}),
+      };
+
+      const modelConfig = await addModelConfig({
+        authId,
+        provider,
+        modelName,
+        nickname,
+        config: mergedConfig,
+      });
       respond(true, { config: modelConfig }, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
@@ -2319,24 +2418,23 @@ export const modelsHandlers: GatewayRequestHandlers = {
       // 创建供应商可用模型的Set
       const availableModelNames = new Set(availableModels.map((m) => m.toLowerCase()));
 
-      // 更新已配置模型的deprecated状态
+      // 更新已配置模型的 deprecated 状态
+      // 行业通用标准：模型不在刷新列表中不代表已停用（可能是 API 不支持列表、列表不完整或手动添加的模型）
+      // 只有模型出现在刷新列表中时，才主动清除其 deprecated 标记（说明模型仍然存活）
+      // deprecated 标记只应由明确的 API 级别错误（如 404/410）触发，刷新操作不主动设置 deprecated
       let hasChanges = false;
       for (const model of configuredModels) {
         const isAvailable = availableModelNames.has(model.modelName.toLowerCase());
-        const shouldBeDeprecated = !isAvailable;
 
-        if (model.deprecated !== shouldBeDeprecated) {
-          model.deprecated = shouldBeDeprecated;
+        // 若模型出现在刷新列表中，清除其 deprecated 标记（模型已恢复可用）
+        if (isAvailable && model.deprecated) {
+          model.deprecated = false;
           hasChanges = true;
-
-          // 如果模型被停用，自动禁用它
-          if (shouldBeDeprecated && model.enabled) {
-            model.enabled = false;
-            console.log(
-              `[Models] Model ${model.provider}/${model.modelName} deprecated, auto-disabled`,
-            );
-          }
+          console.log(
+            `[Models] Model ${model.provider}/${model.modelName} is available again, cleared deprecated flag`,
+          );
         }
+        // 不在列表中：保持现状，不自动标记 deprecated，也不自动禁用
       }
 
       // 如果有变化，保存配置
@@ -2344,7 +2442,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
         await saveModelManagement(storage);
       }
 
-      // 标记新模型和已配置的模型
+      // 标记供应商目录中的模型
       const models = availableModels.map((modelName) => {
         const isConfigured = configuredModelNames.has(modelName.toLowerCase());
         const config = configuredModels.find(
@@ -2355,9 +2453,33 @@ export const modelsHandlers: GatewayRequestHandlers = {
           isConfigured,
           isEnabled: config?.enabled || false,
           isDeprecated: config?.deprecated || false,
+          isUnlisted: false, // 在供应商目录里，不是 unlisted
           configId: config?.configId,
         };
       });
+
+      // 追加「已配置但不在供应商目录中」的模型（unlisted）
+      // 很多供应商的目录 API 不会列出全部模型（如手动添加的、目录不完整的）
+      for (const model of configuredModels) {
+        const alreadyIncluded = availableModelNames.has(model.modelName.toLowerCase());
+        if (!alreadyIncluded) {
+          models.push({
+            modelName: model.modelName,
+            isConfigured: true,
+            isEnabled: model.enabled,
+            isDeprecated: model.deprecated || false,
+            isUnlisted: true, // 不在供应商目录中，仅作提示
+            configId: model.configId,
+          });
+          console.log(
+            `[Models] refreshModels: model ${model.provider}/${model.modelName} is unlisted (not in provider directory), kept as-is`,
+          );
+        }
+      }
+
+      console.log(
+        `[Models] refreshModels: provider=${auth.provider} authId=${authId} total=${models.length} (inDirectory=${availableModels.length}, unlisted=${models.filter((m) => m.isUnlisted).length})`,
+      );
 
       respond(true, { models, total: models.length }, undefined);
     } catch (err) {
@@ -2396,25 +2518,25 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       // 对于OAuth认证，从AuthProfileStore获取token
       let actualApiKey = auth.apiKey;
-      console.log('[models.auth.test] Auth info:', {
+      console.log("[models.auth.test] Auth info:", {
         authId,
         provider: auth.provider,
         apiKeyPrefix: auth.apiKey?.slice(0, 30),
         baseUrl: auth.baseUrl,
       });
 
-      if (auth.provider === 'qwen-portal' && auth.apiKey.startsWith('qwen-oauth:')) {
+      if (auth.provider === "qwen-portal" && auth.apiKey.startsWith("qwen-oauth:")) {
         try {
           const { ensureAuthProfileStore } = await import("../../agents/auth-profiles.js");
           const store = ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
           const profileId = `${auth.provider}:default`;
           const profile = store.profiles[profileId];
-          
-          if (profile && profile.type === 'oauth' && profile.access) {
+
+          if (profile && profile.type === "oauth" && profile.access) {
             actualApiKey = profile.access;
           }
         } catch (err) {
-          console.error('[models.auth.test] Failed to load OAuth token:', err);
+          console.error("[models.auth.test] Failed to load OAuth token:", err);
         }
       }
 
@@ -2437,32 +2559,41 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       const startTime = Date.now();
 
-      // 选择默认测试模型：优先使用供应商的 knownModels 的第一个
-      let defaultTestModel = "gpt-4o-mini";
-      if (providerInstance?.knownModels && providerInstance.knownModels.length > 0) {
-        defaultTestModel = providerInstance.knownModels[0];
+      // 选择 chat 探针模型：
+      // 优先用调用者传入的 modelName；否则用该认证下第一个启用的模型；
+      // 始终不使用硬编码的 fallback 名称（如 gpt-4o-mini），避免供应商不支持导致误报
+      let chatProbeModel: string | undefined = modelName;
+      if (!chatProbeModel) {
+        const configuredModels = storage.models[auth.provider] || [];
+        const firstEnabled = configuredModels.find(
+          (m) => m.authId === auth.authId && m.enabled && !m.deprecated,
+        );
+        chatProbeModel = firstEnabled?.modelName; // 可能仍为 undefined，此时 /models 失败才真报错
       }
 
       if (templateId === "anthropic-compatible") {
-        // Anthropic 测试
+        // Anthropic 测试：必须有模型名才能发请求
+        // 优先用已配置的模型名；没有时才用 Anthropic 官方最通用的免费模型名
         result = await testAnthropicConnection({
           baseUrl,
-          apiKey: actualApiKey,  // ✅ 使用实际的OAuth token
-          modelName: modelName || "claude-3-5-sonnet-20241022",
+          apiKey: actualApiKey,
+          modelName: chatProbeModel || "claude-3-haiku-20240307", // 官方最小/最通用模型，作为最后兜底
         });
       } else if (templateId === "google-gemini") {
-        // Google Gemini 测试（使用API Key作为query参数）
+        // Google Gemini：先通过 GET /models 验证（最佳实践），该函数内部已处理
+        // 优先用已配置的模型名；没有时用免费额度最大的模型
         result = await testGoogleGeminiConnection({
           baseUrl,
-          apiKey: actualApiKey,  // ✅ 使用实际的OAuth token
-          modelName: modelName || "gemini-1.5-flash",
+          apiKey: actualApiKey,
+          modelName: chatProbeModel || "gemini-2.0-flash", // 当前最通用的免费模型
         });
       } else {
-        // OpenAI 兼容测试（默认）
+        // OpenAI 兼容：先走 GET /models（无需模型名）；失败时才用已配置模型名做 chat 探针
+        // chatProbeModel 为 undefined 时，/models 失败会直接报错（不用 hardcoded fallback）
         result = await testOpenAIConnection({
           baseUrl,
-          apiKey: actualApiKey,  // ✅ 使用实际的OAuth token
-          modelName: modelName || defaultTestModel,
+          apiKey: actualApiKey,
+          modelName: chatProbeModel, // undefined 时不做 chat fallback，/models 失败直接报错
         });
       }
 
@@ -2548,7 +2679,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
         authId,
         provider,
         modelName,
-        enabled: false, // 新导入的模型默认禁用
+        enabled: true, // 新导入的模型默认启用（与手动添加保持一致）
         deprecated: false, // 新导入的模型默认不是停用状态
       }));
 
@@ -2582,19 +2713,21 @@ export const modelsHandlers: GatewayRequestHandlers = {
   "models.auth.status": async ({ params, respond }) => {
     try {
       const authIdParam = params?.authId;
-      const authId = typeof authIdParam === 'string' ? authIdParam.trim() : '';
+      const authId = typeof authIdParam === "string" ? authIdParam.trim() : "";
       if (!authId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "authId is required"));
         return;
       }
 
       const storage = await loadModelManagement();
-      
+
       // 查找认证
       let auth: ProviderAuth | undefined;
       for (const auths of Object.values(storage.auths)) {
         auth = auths.find((a) => a.authId === authId);
-        if (auth) {break;}
+        if (auth) {
+          break;
+        }
       }
 
       if (!auth) {
@@ -2604,10 +2737,9 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       // 检查OAuth认证状态
       const { ensureAuthProfileStore } = await import("../../agents/auth-profiles.js");
-      const { buildAuthHealthSummary, DEFAULT_OAUTH_WARN_MS } = await import(
-        "../../agents/auth-health.js"
-      );
-      
+      const { buildAuthHealthSummary, DEFAULT_OAUTH_WARN_MS } =
+        await import("../../agents/auth-health.js");
+
       const store = ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
       const health = buildAuthHealthSummary({
         store,
@@ -2627,15 +2759,16 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       if (profileHealth) {
         authType = profileHealth.type;
-        status = profileHealth.status === "ok" || profileHealth.status === "static" 
-          ? "ok" 
-          : profileHealth.status === "expiring" 
-          ? "expiring" 
-          : profileHealth.status === "expired" 
-          ? "expired" 
-          : "unknown";
+        status =
+          profileHealth.status === "ok" || profileHealth.status === "static"
+            ? "ok"
+            : profileHealth.status === "expiring"
+              ? "expiring"
+              : profileHealth.status === "expired"
+                ? "expired"
+                : "unknown";
         expiresAt = profileHealth.expiresAt;
-        
+
         // OAuth类型且有refresh token可以刷新
         const profile = store.profiles[profileHealth.profileId];
         if (profile?.type === "oauth" && profile.refresh) {
@@ -2668,7 +2801,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
   "models.auth.refresh": async ({ params, respond }) => {
     try {
       const authIdParam = params?.authId;
-      const authId = typeof authIdParam === 'string' ? authIdParam.trim() : '';
+      const authId = typeof authIdParam === "string" ? authIdParam.trim() : "";
       const force = Boolean(params?.force);
 
       if (!authId) {
@@ -2677,12 +2810,14 @@ export const modelsHandlers: GatewayRequestHandlers = {
       }
 
       const storage = await loadModelManagement();
-      
+
       // 查找认证
       let auth: ProviderAuth | undefined;
       for (const auths of Object.values(storage.auths)) {
         auth = auths.find((a) => a.authId === authId);
-        if (auth) {break;}
+        if (auth) {
+          break;
+        }
       }
 
       if (!auth) {
@@ -2691,11 +2826,10 @@ export const modelsHandlers: GatewayRequestHandlers = {
       }
 
       // 检查是否为OAuth认证
-      const { ensureAuthProfileStore, saveAuthProfileStore } = await import(
-        "../../agents/auth-profiles.js"
-      );
+      const { ensureAuthProfileStore, saveAuthProfileStore } =
+        await import("../../agents/auth-profiles.js");
       const store = ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
-      
+
       // 查找OAuth profile
       const profileId = `${auth.provider}:default`; // 假设使用默认profile
       const profile = store.profiles[profileId];
@@ -2737,13 +2871,12 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       // 执行刷新
       let newCredentials;
-      
+
       try {
         switch (auth.provider) {
           case "qwen-portal": {
-            const { refreshQwenPortalCredentials } = await import(
-              "../../providers/qwen-portal-oauth.js"
-            );
+            const { refreshQwenPortalCredentials } =
+              await import("../../providers/qwen-portal-oauth.js");
             newCredentials = await refreshQwenPortalCredentials(profile);
             break;
           }
@@ -2797,7 +2930,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
   "models.auth.reauth": async ({ params, respond }) => {
     try {
       const authIdParam = params?.authId;
-      const authId = typeof authIdParam === 'string' ? authIdParam.trim() : '';
+      const authId = typeof authIdParam === "string" ? authIdParam.trim() : "";
 
       if (!authId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "authId is required"));
@@ -2805,12 +2938,14 @@ export const modelsHandlers: GatewayRequestHandlers = {
       }
 
       const storage = await loadModelManagement();
-      
+
       // 查找认证
       let auth: ProviderAuth | undefined;
       for (const auths of Object.values(storage.auths)) {
         auth = auths.find((a) => a.authId === authId);
-        if (auth) {break;}
+        if (auth) {
+          break;
+        }
       }
 
       if (!auth) {
@@ -2835,7 +2970,8 @@ export const modelsHandlers: GatewayRequestHandlers = {
       try {
         // 导入qwen OAuth模块
         const oauthModule = await import("../../../extensions/qwen-portal-auth/oauth.js");
-        
+        void oauthModule; // reserved for future oauth flow
+
         // 生成PKCE
         const { randomBytes, createHash } = await import("node:crypto");
         const verifier = randomBytes(32).toString("base64url");
@@ -2890,7 +3026,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
         // 存储verifier以供后续轮询使用
         // TODO: 将verifier存储到临时存储，供前端轮询时使用
-        
+
         respond(
           true,
           {
@@ -2927,8 +3063,8 @@ export const modelsHandlers: GatewayRequestHandlers = {
     try {
       const deviceCodeParam = params?.deviceCode;
       const verifierParam = params?.verifier;
-      const deviceCode = typeof deviceCodeParam === 'string' ? deviceCodeParam.trim() : '';
-      const verifier = typeof verifierParam === 'string' ? verifierParam.trim() : '';
+      const deviceCode = typeof deviceCodeParam === "string" ? deviceCodeParam.trim() : "";
+      const verifier = typeof verifierParam === "string" ? verifierParam.trim() : "";
 
       if (!deviceCode || !verifier) {
         respond(
@@ -2982,11 +3118,11 @@ export const modelsHandlers: GatewayRequestHandlers = {
       }
 
       // 类型守卫:检查tokenData结构
-      if (typeof tokenData !== 'object' || tokenData === null) {
+      if (typeof tokenData !== "object" || tokenData === null) {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.UNAVAILABLE, 'Invalid token response format'),
+          errorShape(ErrorCodes.UNAVAILABLE, "Invalid token response format"),
         );
         return;
       }
@@ -3010,7 +3146,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
             undefined,
             errorShape(
               ErrorCodes.UNAVAILABLE,
-              `Authorization failed: ${tokenObj.error_description || tokenObj.error}`,
+              `Authorization failed: ${JSON.stringify(tokenObj.error_description ?? tokenObj.error)}`,
             ),
           );
           return;
@@ -3018,22 +3154,25 @@ export const modelsHandlers: GatewayRequestHandlers = {
       }
 
       // 授权成功！更新认证信息
-      const accessToken = typeof tokenObj.access_token === 'string' ? tokenObj.access_token : undefined;
-      const refreshToken = typeof tokenObj.refresh_token === 'string' ? tokenObj.refresh_token : undefined;
-      const expiresIn = typeof tokenObj.expires_in === 'number' ? tokenObj.expires_in : undefined;
-      const resourceUrl = typeof tokenObj.resource_url === 'string' ? tokenObj.resource_url : undefined;
+      const accessToken =
+        typeof tokenObj.access_token === "string" ? tokenObj.access_token : undefined;
+      const refreshToken =
+        typeof tokenObj.refresh_token === "string" ? tokenObj.refresh_token : undefined;
+      const expiresIn = typeof tokenObj.expires_in === "number" ? tokenObj.expires_in : undefined;
+      const resourceUrl =
+        typeof tokenObj.resource_url === "string" ? tokenObj.resource_url : undefined;
 
-      console.log('[models.auth.poll] ========== QWEN TOKEN RESPONSE ==========');
-      console.log('[models.auth.poll] Raw tokenData keys:', Object.keys(tokenObj));
-      console.log('[models.auth.poll] access_token length:', accessToken?.length);
-      console.log('[models.auth.poll] refresh_token length:', refreshToken?.length);
-      console.log('[models.auth.poll] expires_in:', expiresIn);
-      console.log('[models.auth.poll] resource_url:', resourceUrl);
-      console.log('[models.auth.poll] Full tokenData:', JSON.stringify(tokenObj).slice(0, 500));
-      console.log('[models.auth.poll] ===============================================');
+      console.log("[models.auth.poll] ========== QWEN TOKEN RESPONSE ==========");
+      console.log("[models.auth.poll] Raw tokenData keys:", Object.keys(tokenObj));
+      console.log("[models.auth.poll] access_token length:", accessToken?.length);
+      console.log("[models.auth.poll] refresh_token length:", refreshToken?.length);
+      console.log("[models.auth.poll] expires_in:", expiresIn);
+      console.log("[models.auth.poll] resource_url:", resourceUrl);
+      console.log("[models.auth.poll] Full tokenData:", JSON.stringify(tokenObj).slice(0, 500));
+      console.log("[models.auth.poll] ===============================================");
 
       if (!accessToken || !refreshToken || !expiresIn) {
-        console.error('[models.auth.poll] ❌ Missing required token fields!');
+        console.error("[models.auth.poll] ❌ Missing required token fields!");
         respond(
           false,
           undefined,
@@ -3044,7 +3183,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       // 从 params 中获取 authId
       const authIdFromParams = params?.authId;
-      const authId = typeof authIdFromParams === 'string' ? authIdFromParams.trim() : '';
+      const authId = typeof authIdFromParams === "string" ? authIdFromParams.trim() : "";
       if (!authId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "authId is required"));
         return;
@@ -3071,9 +3210,8 @@ export const modelsHandlers: GatewayRequestHandlers = {
       // 更新OAuth凭据
       // 保存到 AuthProfileStore
       try {
-        const { ensureAuthProfileStore, saveAuthProfileStore } = await import(
-          "../../agents/auth-profiles.js"
-        );
+        const { ensureAuthProfileStore, saveAuthProfileStore } =
+          await import("../../agents/auth-profiles.js");
         const store = ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
 
         const profileId = `${auth.provider}:default`;
@@ -3089,24 +3227,24 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
         saveAuthProfileStore(store, undefined);
       } catch (err) {
-        console.error('[models.auth.poll] Failed to save to AuthProfileStore:', err);
+        console.error("[models.auth.poll] Failed to save to AuthProfileStore:", err);
       }
 
       // 同时更新 models.json 中的 apiKey（用于UI显示）
       auth.apiKey = `qwen-oauth:${accessToken.slice(0, 20)}...`;
-      
+
       // 更新 baseUrl 为 Qwen 返回的 resource_url
       if (resourceUrl) {
-        const normalizedBaseUrl = resourceUrl.startsWith('http') 
-          ? resourceUrl 
+        const normalizedBaseUrl = resourceUrl.startsWith("http")
+          ? resourceUrl
           : `https://${resourceUrl}`;
-        const finalBaseUrl = normalizedBaseUrl.endsWith('/v1') 
-          ? normalizedBaseUrl 
+        const finalBaseUrl = normalizedBaseUrl.endsWith("/v1")
+          ? normalizedBaseUrl
           : `${normalizedBaseUrl}/v1`;
-        
+
         auth.baseUrl = finalBaseUrl;
       }
-      
+
       await saveModelManagement(storage);
 
       respond(
@@ -3118,7 +3256,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
         undefined,
       );
     } catch (err) {
-      console.error('[models.auth.poll] Error:', err);
+      console.error("[models.auth.poll] Error:", err);
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }
   },

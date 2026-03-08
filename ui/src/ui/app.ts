@@ -354,7 +354,7 @@ export class OpenClawApp extends LitElement {
   @state() messagesLoading = false;
   @state() messagesList: import("./controllers/friends.ts").DirectMessage[] = [];
   @state() sendingMessage = false;
-  @state() friendsActiveSubPanel: "list" | "requests" | "chat" = "list";
+  @state() friendsActiveSubPanel: "list" | "requests" = "list";
   @state() draftMessage = "";
   // Monitor 协作监控状态
   @state() monitorActiveSubPanel: "sessions" | "flows" | "forwarding" | "metrics" | "alerts" =
