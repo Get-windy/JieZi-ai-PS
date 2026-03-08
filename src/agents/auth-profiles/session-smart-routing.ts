@@ -196,8 +196,11 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
   }
 
   // 3. 如果启用了会话固定且已有智能路由选择的账号，则检查是否需要重新路由
+  // 业界最佳实践（LiteLLM Router / BentoML）：会话粘性默认开启，避免每次消息都重新路由
+  // enableSessionPinning 未配置时视为 true（即默认启用会话粘性）
+  const sessionPinningEnabled = modelAccountsConfig.enableSessionPinning !== false;
   if (
-    modelAccountsConfig.enableSessionPinning &&
+    sessionPinningEnabled &&
     sessionEntry?.authProfileOverride &&
     sessionEntry?.authProfileOverrideSource === "smart-routing" &&
     !isNewSession
@@ -286,13 +289,10 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
     }
 
     // 8. 持久化到 session（如果需要）
-    if (
-      sessionEntry &&
-      sessionStore &&
-      sessionKey &&
-      (sessionEntry.authProfileOverride !== resolvedProfileId ||
-        sessionEntry.authProfileOverrideSource !== "smart-routing")
-    ) {
+    const isAccountChanged =
+      sessionEntry?.authProfileOverride !== resolvedProfileId ||
+      sessionEntry?.authProfileOverrideSource !== "smart-routing";
+    if (sessionEntry && sessionStore && sessionKey && isAccountChanged) {
       sessionEntry.authProfileOverride = resolvedProfileId;
       sessionEntry.authProfileOverrideSource = "smart-routing";
       sessionEntry.updatedAt = Date.now();
