@@ -5,6 +5,7 @@ import {
   resolveAgentConfig,
   resolveAgentEffectiveModelPrimary,
   resolveAgentModelAccounts,
+  resolveDefaultAgentId,
 } from "./agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
 import type { ModelCatalogEntry } from "./model-catalog.js";
@@ -320,27 +321,26 @@ export function resolveDefaultModelForAgent(params: {
   cfg: OpenClawConfig;
   agentId?: string;
 }): ModelRef {
+  // 如果没有传入 agentId，用系统动态默认助手（而不是硬编码 DEFAULT_PROVIDER/MODEL）
+  const effectiveAgentId = params.agentId ?? resolveDefaultAgentId(params.cfg);
+
   // ============ 本地增强：优先使用 modelAccounts.defaultAccountId ============
   // 如果助手配置了 modelAccounts.defaultAccountId，优先使用它
-  if (params.agentId) {
-    const modelAccountsConfig = resolveAgentModelAccounts(params.cfg, params.agentId);
-    if (modelAccountsConfig?.defaultAccountId) {
-      const defaultModelId = modelAccountsConfig.defaultAccountId;
-      // 解析 modelId 格式：providerId/modelName
-      const slashIndex = defaultModelId.indexOf("/");
-      if (slashIndex !== -1) {
-        const provider = defaultModelId.substring(0, slashIndex);
-        const model = defaultModelId.substring(slashIndex + 1);
-        return { provider, model };
-      }
+  const modelAccountsConfig = resolveAgentModelAccounts(params.cfg, effectiveAgentId);
+  if (modelAccountsConfig?.defaultAccountId) {
+    const defaultModelId = modelAccountsConfig.defaultAccountId;
+    // 解析 modelId 格式：providerId/modelName
+    const slashIndex = defaultModelId.indexOf("/");
+    if (slashIndex !== -1) {
+      const provider = defaultModelId.substring(0, slashIndex);
+      const model = defaultModelId.substring(slashIndex + 1);
+      return { provider, model };
     }
   }
   // ============ 本地增强结束 ============
 
-  // 回退到上游逻辑：使用 agents.list[].model 或 agents.defaults.model.primary
-  const agentModelOverride = params.agentId
-    ? resolveAgentEffectiveModelPrimary(params.cfg, params.agentId)
-    : undefined;
+  // 回退到上游逻辑：使用 agents.list[agentId].model 或 agents.defaults.model.primary
+  const agentModelOverride = resolveAgentEffectiveModelPrimary(params.cfg, effectiveAgentId);
   const cfg =
     agentModelOverride && agentModelOverride.length > 0
       ? {

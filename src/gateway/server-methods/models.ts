@@ -635,41 +635,222 @@ async function syncRuntimeFiles(storage: ModelManagementStorage): Promise<void> 
 
 // 同步认证信息到 auth-profiles.json
 async function syncAuthProfiles(storage: ModelManagementStorage): Promise<void> {
+  // 收集所有已存在的 agent auth-profiles.json 路径
   const { resolveOpenClawAgentDir } = require("../../agents/agent-paths.js");
-  const agentDir = resolveOpenClawAgentDir();
-  const authProfilesPath = path.join(agentDir, "auth-profiles.json");
+  const mainAgentDir = resolveOpenClawAgentDir();
 
-  // 构建 auth-profiles.json 格式
+  // ── Step 1: 从默认智能助手读取真实 auth-profiles 和默认模型信息 ──
+  // 默认助手变更时自动随之变更（每次同步时动态读）
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const authProfiles: any = {
-    version: 1,
-    profiles: {},
+  let defaultAgentRealProfiles: Record<string, any> = {};
+  let defaultAgentDefaultProvider: string | undefined;
+  try {
+    const cfg = loadConfig();
+    const { resolveDefaultAgentId, resolveAgentDir } = require("../../agents/agent-scope.js");
+    const { resolveDefaultModelForAgent } = require("../../agents/model-selection.js");
+    const defaultAgentId = resolveDefaultAgentId(cfg);
+    const defaultAgentDir = resolveAgentDir(cfg, defaultAgentId);
+
+    // 读取默认助手的默认模型，获取其 provider
+    const defaultModel = resolveDefaultModelForAgent({ cfg, agentId: defaultAgentId });
+    defaultAgentDefaultProvider = defaultModel.provider;
+    console.log(
+      `[Models] Default agent (${defaultAgentId}) uses provider: ${defaultAgentDefaultProvider}`,
+    );
+
+    // 读取默认助手的真实 auth-profiles
+    const defaultAuthPath = path.join(defaultAgentDir, "auth-profiles.json");
+    const raw = await fs.readFile(defaultAuthPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (parsed?.profiles) {
+      defaultAgentRealProfiles = parsed.profiles;
+    }
+    console.log(
+      `[Models] Loaded real auth-profiles from default agent (${defaultAgentId}): ${Object.keys(defaultAgentRealProfiles).length} profiles`,
+    );
+  } catch {
+    // 默认助手信息读取失败，继续
+  }
+
+  // ── Step 2: 构建本次 model-management.json 中管理的认证条目 ──
+  // 占位符回退策略（优先级依次降低）：
+  //   1. 默认助手在用的同 provider 有真实凭据 → 使用它
+  //   2. 默认助手的默认模型所属 provider 有真实凭据 → 用默认模型 provider 的凭据替代
+  //   3. 两者均无 → 跳过，不写入任何假数据
+  const managedProfiles: Record<
+    string,
+    { type: string; provider: string; key: string; baseUrl?: string }
+  > = {};
+
+  // 辅助函数：在默认助手真实 profiles 中找指定 provider 的第一个真实凭据
+  const findRealProfileForProvider = (targetProvider: string) => {
+    return Object.entries(defaultAgentRealProfiles).find(([, p]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const profile = p;
+      if (profile.provider !== targetProvider) {
+        return false;
+      }
+      if (profile.type === "oauth" || profile.type === "token") {
+        return true;
+      }
+      if (profile.type === "api_key") {
+        const k = profile.key?.trim() ?? "";
+        return k && !/^[a-z0-9-]+-oauth$/i.test(k) && k !== "placeholder" && k !== "PLACEHOLDER";
+      }
+      return false;
+    });
   };
 
-  // 遍历所有认证，转换为 auth-profiles 格式
   for (const [providerId, auths] of Object.entries(storage.auths)) {
     if (!auths || auths.length === 0) {
       continue;
     }
-
     for (const auth of auths) {
       if (!auth.enabled) {
         continue;
-      } // 只同步启用的认证
+      }
+      const apiKey = auth.apiKey?.trim() ?? "";
+      const isPlaceholder =
+        !apiKey ||
+        /^[a-z0-9-]+-oauth$/i.test(apiKey) ||
+        apiKey === "placeholder" ||
+        apiKey === "PLACEHOLDER";
 
-      const profileId = `${providerId}:${auth.name.replace(/[^a-zA-Z0-9-_]/g, "-")}`;
-      authProfiles.profiles[profileId] = {
-        type: "api_key",
-        provider: providerId,
-        key: auth.apiKey,
-        ...(auth.baseUrl && { baseUrl: normalizeProviderBaseUrl(auth.baseUrl) }),
-      };
+      if (!isPlaceholder) {
+        // 真实 apiKey，直接使用
+        const profileId = `${providerId}:${auth.name.replace(/[^a-zA-Z0-9-_]/g, "-")}`;
+        managedProfiles[profileId] = {
+          type: "api_key",
+          provider: providerId,
+          key: apiKey,
+          ...(auth.baseUrl && { baseUrl: normalizeProviderBaseUrl(auth.baseUrl) }),
+        };
+      } else {
+        // 占位符回退策略：优先找同 provider，再找默认模型 provider
+        let realEntry = findRealProfileForProvider(providerId);
+
+        if (
+          !realEntry &&
+          defaultAgentDefaultProvider &&
+          defaultAgentDefaultProvider !== providerId
+        ) {
+          // 该 provider 在默认助手中没有真实凭据
+          // 回退到默认助手的默认模型所属 provider 的凭据
+          realEntry = findRealProfileForProvider(defaultAgentDefaultProvider);
+          if (realEntry) {
+            console.log(
+              `[Models] Provider ${providerId} has no real credential; falling back to default agent's default model provider (${defaultAgentDefaultProvider})`,
+            );
+          }
+        }
+
+        if (realEntry) {
+          const [realProfileId, realProfile] = realEntry;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rp = realProfile;
+          if (rp.type === "oauth" || rp.type === "token") {
+            managedProfiles[realProfileId] = rp;
+          } else {
+            managedProfiles[realProfileId] = {
+              type: "api_key",
+              provider: rp.provider,
+              key: rp.key,
+              ...(rp.baseUrl && { baseUrl: rp.baseUrl }),
+            };
+          }
+          console.log(
+            `[Models] Resolved placeholder for ${providerId} → using profile: ${realProfileId} (provider: ${rp.provider})`,
+          );
+        } else {
+          console.log(
+            `[Models] Skipping placeholder for provider: ${providerId} (auth: ${auth.name}) - no fallback credential available`,
+          );
+        }
+      }
     }
   }
 
-  await fs.writeFile(authProfilesPath, JSON.stringify(authProfiles, null, 2), "utf-8");
-  console.log("[Models] Synced to auth-profiles.json:", authProfilesPath);
-  console.log(`[Models] Auth profiles count: ${Object.keys(authProfiles.profiles).length}`);
+  // ── Step 3: 扫描所有 agents/<agentId>/agent/ 目录 ──
+  const agentsBaseDir = path.join(STATE_DIR, "agents");
+  const authProfilePaths: string[] = [];
+  try {
+    const agentDirs = await fs.readdir(agentsBaseDir);
+    for (const agentId of agentDirs) {
+      const agentAuthPath = path.join(agentsBaseDir, agentId, "agent", "auth-profiles.json");
+      try {
+        await fs.access(agentAuthPath);
+        authProfilePaths.push(agentAuthPath);
+      } catch {
+        // 该 agent 没有 auth-profiles.json，跳过
+      }
+    }
+  } catch {
+    // agents 目录不存在，退回到 main agent
+  }
+
+  // 确保 main agent 路径始终包含（即使目录刚创建还没有文件）
+  const mainAuthPath = path.join(mainAgentDir, "auth-profiles.json");
+  if (!authProfilePaths.includes(mainAuthPath)) {
+    authProfilePaths.push(mainAuthPath);
+  }
+
+  // ── Step 4: 对每个 agent 目录执行合并写入 ──
+  for (const authProfilesPath of authProfilePaths) {
+    // 读取现有文件（保留真实凭据）
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let existing: any = { version: 1, profiles: {} };
+    try {
+      const raw = await fs.readFile(authProfilesPath, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && parsed.profiles) {
+        existing = parsed;
+      }
+    } catch {
+      // 文件不存在或解析失败，从空开始
+    }
+
+    // 合并策略：
+    // 1. 保留现有文件中所有 type: "oauth" / type: "token" 的 profile（上游 OAuth 凭据）
+    // 2. 保留现有文件中 type: "api_key" 且 key 不是占位符的 profile
+    // 3. 用 managedProfiles 覆盖/新增对应条目（包含从默认助手补充的真实凭据）
+    const mergedProfiles: Record<string, unknown> = {};
+
+    // 先把现有的真实凭据放进去
+    for (const [pid, profile] of Object.entries(existing.profiles ?? {})) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const p = profile as any;
+      if (p.type === "oauth" || p.type === "token") {
+        mergedProfiles[pid] = p;
+      } else if (p.type === "api_key") {
+        const existingKey = p.key?.trim() ?? "";
+        const isExistingPlaceholder =
+          !existingKey || /^[a-z0-9-]+-oauth$/i.test(existingKey) || existingKey === "placeholder";
+        if (!isExistingPlaceholder) {
+          mergedProfiles[pid] = p;
+        }
+        // 占位符丢弃
+      }
+    }
+
+    // 用 managedProfiles 覆盖/新增（包含从默认助手真实凭据补充的条目）
+    for (const [pid, profile] of Object.entries(managedProfiles)) {
+      mergedProfiles[pid] = profile;
+    }
+
+    const result = {
+      version: existing.version ?? 1,
+      profiles: mergedProfiles,
+      ...(existing.order && { order: existing.order }),
+      ...(existing.lastGood && { lastGood: existing.lastGood }),
+      ...(existing.usageStats && { usageStats: existing.usageStats }),
+    };
+
+    await fs.mkdir(path.dirname(authProfilesPath), { recursive: true });
+    await fs.writeFile(authProfilesPath, JSON.stringify(result, null, 2), "utf-8");
+    console.log(
+      `[Models] Merged auth-profiles.json: ${authProfilesPath} (${Object.keys(mergedProfiles).length} profiles)`,
+    );
+  }
 }
 
 // 保存模型管理配置（同时同步到官方 models.json 和 auth-profiles.json）
