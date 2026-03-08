@@ -1,6 +1,6 @@
 /**
  * Phase 5: 工作空间与文档系统 - 群组工作空间管理
- * 
+ *
  * 职责:
  * 1. 创建和管理群组工作空间
  * 2. 管理群组成员
@@ -8,15 +8,15 @@
  * 4. 管理群组权限
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import * as fs from "fs";
+import * as path from "path";
+import { resolveStateDir } from "../config/paths.js";
 import {
   GroupWorkspace,
   GroupBootstrapFile,
   GroupMemberPermissions,
   WorkspaceStats,
-} from './types.js';
+} from "./types.js";
 
 /**
  * 群组工作空间管理器（单例）
@@ -27,8 +27,8 @@ export class GroupWorkspaceManager {
   private rootDir: string;
 
   private constructor() {
-    // 默认群组工作空间根目录: ~/.openclaw/groups/
-    this.rootDir = path.join(os.homedir(), '.openclaw', 'groups');
+    // 使用系统状态目录（受环境变量 OPENCLAW_STATE_DIR 控制），而非硬编码 ~/.openclaw/groups/
+    this.rootDir = path.join(resolveStateDir(process.env), "groups");
     this.ensureRootDir();
   }
 
@@ -69,7 +69,7 @@ export class GroupWorkspaceManager {
   public ensureGroupWorkspace(
     groupId: string,
     groupName: string,
-    creatorId: string
+    creatorId: string,
   ): GroupWorkspace {
     // 检查缓存
     if (this.workspaces.has(groupId)) {
@@ -77,7 +77,7 @@ export class GroupWorkspaceManager {
     }
 
     const groupDir = path.join(this.rootDir, groupId);
-    
+
     // 检查目录是否已存在
     if (fs.existsSync(groupDir)) {
       return this.loadExistingWorkspace(groupId);
@@ -92,37 +92,43 @@ export class GroupWorkspaceManager {
    */
   private loadExistingWorkspace(groupId: string): GroupWorkspace {
     const groupDir = path.join(this.rootDir, groupId);
-    const groupInfoPath = path.join(groupDir, 'GROUP_INFO.md');
+    const groupInfoPath = path.join(groupDir, "GROUP_INFO.md");
 
     // 读取 GROUP_INFO.md 获取群组信息
     let groupName = groupId;
     let createdAt = Date.now();
-    let createdBy = 'system';
+    let createdBy = "system";
     let members: string[] = [];
     let admins: string[] = [];
 
     if (fs.existsSync(groupInfoPath)) {
-      const content = fs.readFileSync(groupInfoPath, 'utf-8');
+      const content = fs.readFileSync(groupInfoPath, "utf-8");
       const nameMatch = content.match(/## 群组名称\s*\n\s*(.+)/);
       const createdAtMatch = content.match(/## 创建时间\s*\n\s*(\d+)/);
       const createdByMatch = content.match(/## 创建者\s*\n\s*(.+)/);
       const membersMatch = content.match(/## 成员列表\s*\n([\s\S]*?)(?=\n##|$)/);
       const adminsMatch = content.match(/## 管理员\s*\n([\s\S]*?)(?=\n##|$)/);
 
-      if (nameMatch) groupName = nameMatch[1].trim();
-      if (createdAtMatch) createdAt = parseInt(createdAtMatch[1]);
-      if (createdByMatch) createdBy = createdByMatch[1].trim();
+      if (nameMatch) {
+        groupName = nameMatch[1].trim();
+      }
+      if (createdAtMatch) {
+        createdAt = parseInt(createdAtMatch[1]);
+      }
+      if (createdByMatch) {
+        createdBy = createdByMatch[1].trim();
+      }
       if (membersMatch) {
         members = membersMatch[1]
-          .split('\n')
-          .map(line => line.trim().replace(/^-\s*/, ''))
-          .filter(line => line.length > 0);
+          .split("\n")
+          .map((line) => line.trim().replace(/^-\s*/, ""))
+          .filter((line) => line.length > 0);
       }
       if (adminsMatch) {
         admins = adminsMatch[1]
-          .split('\n')
-          .map(line => line.trim().replace(/^-\s*/, ''))
-          .filter(line => line.length > 0);
+          .split("\n")
+          .map((line) => line.trim().replace(/^-\s*/, ""))
+          .filter((line) => line.length > 0);
       }
     }
 
@@ -130,14 +136,14 @@ export class GroupWorkspaceManager {
       groupId,
       groupName,
       dir: groupDir,
-      groupInfoPath: path.join(groupDir, 'GROUP_INFO.md'),
-      membersPath: path.join(groupDir, 'MEMBERS.md'),
-      sharedMemoryPath: path.join(groupDir, 'SHARED_MEMORY.md'),
-      rulesPath: path.join(groupDir, 'RULES.md'),
-      sharedDir: path.join(groupDir, 'shared'),
-      historyDir: path.join(groupDir, 'history'),
-      meetingNotesDir: path.join(groupDir, 'meeting-notes'),
-      decisionsDir: path.join(groupDir, 'decisions'),
+      groupInfoPath: path.join(groupDir, "GROUP_INFO.md"),
+      membersPath: path.join(groupDir, "MEMBERS.md"),
+      sharedMemoryPath: path.join(groupDir, "SHARED_MEMORY.md"),
+      rulesPath: path.join(groupDir, "RULES.md"),
+      sharedDir: path.join(groupDir, "shared"),
+      historyDir: path.join(groupDir, "history"),
+      meetingNotesDir: path.join(groupDir, "meeting-notes"),
+      decisionsDir: path.join(groupDir, "decisions"),
       members,
       admins,
       createdAt,
@@ -154,30 +160,30 @@ export class GroupWorkspaceManager {
   private createNewWorkspace(
     groupId: string,
     groupName: string,
-    creatorId: string
+    creatorId: string,
   ): GroupWorkspace {
     const groupDir = path.join(this.rootDir, groupId);
     const now = Date.now();
 
     // 创建目录结构
     fs.mkdirSync(groupDir, { recursive: true });
-    fs.mkdirSync(path.join(groupDir, 'shared'), { recursive: true });
-    fs.mkdirSync(path.join(groupDir, 'history'), { recursive: true });
-    fs.mkdirSync(path.join(groupDir, 'meeting-notes'), { recursive: true });
-    fs.mkdirSync(path.join(groupDir, 'decisions'), { recursive: true });
+    fs.mkdirSync(path.join(groupDir, "shared"), { recursive: true });
+    fs.mkdirSync(path.join(groupDir, "history"), { recursive: true });
+    fs.mkdirSync(path.join(groupDir, "meeting-notes"), { recursive: true });
+    fs.mkdirSync(path.join(groupDir, "decisions"), { recursive: true });
 
     const workspace: GroupWorkspace = {
       groupId,
       groupName,
       dir: groupDir,
-      groupInfoPath: path.join(groupDir, 'GROUP_INFO.md'),
-      membersPath: path.join(groupDir, 'MEMBERS.md'),
-      sharedMemoryPath: path.join(groupDir, 'SHARED_MEMORY.md'),
-      rulesPath: path.join(groupDir, 'RULES.md'),
-      sharedDir: path.join(groupDir, 'shared'),
-      historyDir: path.join(groupDir, 'history'),
-      meetingNotesDir: path.join(groupDir, 'meeting-notes'),
-      decisionsDir: path.join(groupDir, 'decisions'),
+      groupInfoPath: path.join(groupDir, "GROUP_INFO.md"),
+      membersPath: path.join(groupDir, "MEMBERS.md"),
+      sharedMemoryPath: path.join(groupDir, "SHARED_MEMORY.md"),
+      rulesPath: path.join(groupDir, "RULES.md"),
+      sharedDir: path.join(groupDir, "shared"),
+      historyDir: path.join(groupDir, "history"),
+      meetingNotesDir: path.join(groupDir, "meeting-notes"),
+      decisionsDir: path.join(groupDir, "decisions"),
       members: [creatorId],
       admins: [creatorId],
       createdAt: now,
@@ -213,10 +219,10 @@ ${workspace.createdAt}
 ${workspace.createdBy}
 
 ## 成员列表
-${workspace.members.map((m: string) => `- ${m}`).join('\n')}
+${workspace.members.map((m: string) => `- ${m}`).join("\n")}
 
 ## 管理员
-${workspace.admins?.map((a: string) => `- ${a}`).join('\n') || '- ' + workspace.createdBy}
+${workspace.admins?.map((a: string) => `- ${a}`).join("\n") || "- " + workspace.createdBy}
 
 ## 目录结构
 - \`shared/\`: 共享文档目录
@@ -225,7 +231,7 @@ ${workspace.admins?.map((a: string) => `- ${a}`).join('\n') || '- ' + workspace.
 - \`decisions/\`: 决策记录目录
 `;
 
-    fs.writeFileSync(workspace.groupInfoPath, content, 'utf-8');
+    fs.writeFileSync(workspace.groupInfoPath, content, "utf-8");
   }
 
   /**
@@ -236,12 +242,16 @@ ${workspace.admins?.map((a: string) => `- ${a}`).join('\n') || '- ' + workspace.
 
 ## 成员列表
 
-${workspace.members.map((m: string) => `### ${m}
+${workspace.members
+  .map(
+    (m: string) => `### ${m}
 - 加入时间: ${workspace.createdAt}
-- 权限: ${workspace.admins?.includes(m) ? '管理员' : '普通成员'}`).join('\n\n')}
+- 权限: ${workspace.admins?.includes(m) ? "管理员" : "普通成员"}`,
+  )
+  .join("\n\n")}
 `;
 
-    fs.writeFileSync(workspace.membersPath, content, 'utf-8');
+    fs.writeFileSync(workspace.membersPath, content, "utf-8");
   }
 
   /**
@@ -260,7 +270,7 @@ ${workspace.groupName} 的共享知识库。
 （此处记录常用的链接和资源）
 `;
 
-    fs.writeFileSync(workspace.sharedMemoryPath, content, 'utf-8');
+    fs.writeFileSync(workspace.sharedMemoryPath, content, "utf-8");
   }
 
   /**
@@ -284,7 +294,7 @@ ${workspace.groupName} 的共享知识库。
 - **私密文件隔离**: 成员的私密记忆文件（MEMORY.md）在群组中不可访问
 `;
 
-    fs.writeFileSync(workspace.rulesPath, content, 'utf-8');
+    fs.writeFileSync(workspace.rulesPath, content, "utf-8");
   }
 
   /**
@@ -303,9 +313,9 @@ ${workspace.groupName} 的共享知识库。
     // 1. GROUP_INFO.md (优先级: 1)
     if (fs.existsSync(workspace.groupInfoPath)) {
       files.push({
-        type: 'group-info',
+        type: "group-info",
         path: workspace.groupInfoPath,
-        content: fs.readFileSync(workspace.groupInfoPath, 'utf-8'),
+        content: fs.readFileSync(workspace.groupInfoPath, "utf-8"),
         readonly: true,
         priority: 1,
       });
@@ -314,9 +324,9 @@ ${workspace.groupName} 的共享知识库。
     // 2. MEMBERS.md (优先级: 2)
     if (fs.existsSync(workspace.membersPath)) {
       files.push({
-        type: 'members',
+        type: "members",
         path: workspace.membersPath,
-        content: fs.readFileSync(workspace.membersPath, 'utf-8'),
+        content: fs.readFileSync(workspace.membersPath, "utf-8"),
         readonly: true,
         priority: 2,
       });
@@ -325,9 +335,9 @@ ${workspace.groupName} 的共享知识库。
     // 3. SHARED_MEMORY.md (优先级: 3)
     if (fs.existsSync(workspace.sharedMemoryPath)) {
       files.push({
-        type: 'shared-memory',
+        type: "shared-memory",
         path: workspace.sharedMemoryPath,
-        content: fs.readFileSync(workspace.sharedMemoryPath, 'utf-8'),
+        content: fs.readFileSync(workspace.sharedMemoryPath, "utf-8"),
         readonly: false,
         priority: 3,
       });
@@ -336,9 +346,9 @@ ${workspace.groupName} 的共享知识库。
     // 4. RULES.md (优先级: 4)
     if (fs.existsSync(workspace.rulesPath)) {
       files.push({
-        type: 'rules',
+        type: "rules",
         path: workspace.rulesPath,
-        content: fs.readFileSync(workspace.rulesPath, 'utf-8'),
+        content: fs.readFileSync(workspace.rulesPath, "utf-8"),
         readonly: true,
         priority: 4,
       });
@@ -533,7 +543,9 @@ ${workspace.groupName} 的共享知识库。
     let lastModified = workspace.createdAt;
 
     const countFilesInDir = (dir: string): void => {
-      if (!fs.existsSync(dir)) return;
+      if (!fs.existsSync(dir)) {
+        return;
+      }
 
       const items = fs.readdirSync(dir);
       for (const item of items) {

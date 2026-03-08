@@ -10,8 +10,8 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { resolveStateDir } from "../config/paths.js";
 import { groupWorkspaceManager } from "../workspace/group-workspace.js";
 import type { GroupMessage, GroupSessionMetadata } from "./group-message-storage.js";
 import { groupMessageStorage } from "./group-message-storage.js";
@@ -186,7 +186,8 @@ export class GroupManager {
   private readonly persistPath: string;
 
   constructor() {
-    this.persistPath = join(homedir(), ".openclaw", "groups");
+    // 使用系统状态目录（受环境变量 OPENCLAW_STATE_DIR 控制），而非硬编码 ~/.openclaw
+    this.persistPath = join(resolveStateDir(process.env), "groups");
     this._loadFromDisk();
   }
 
