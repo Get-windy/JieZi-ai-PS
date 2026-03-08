@@ -11,14 +11,14 @@ import { runCliAgent } from "../../agents/cli-runner.js";
 import { getCliSessionId, setCliSessionId } from "../../agents/cli-session.js";
 import { lookupContextTokens } from "../../agents/context.js";
 import { resolveCronStyleNow } from "../../agents/current-time.js";
-import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../../agents/defaults.js";
+import { DEFAULT_CONTEXT_TOKENS, DEFAULT_PROVIDER } from "../../agents/defaults.js";
 import { loadModelCatalog } from "../../agents/model-catalog.js";
 import { runWithModelFallback } from "../../agents/model-fallback.js";
 import {
   getModelRefStatus,
   isCliProvider,
   resolveAllowedModelRef,
-  resolveConfiguredModelRef,
+  resolveDefaultModelForAgent,
   resolveHooksGmailModel,
   resolveThinkingDefault,
 } from "../../agents/model-selection.js";
@@ -146,10 +146,11 @@ export async function runCronIsolatedAgentTurn(params: {
   });
   const workspaceDir = workspace.dir;
 
-  const resolvedDefault = resolveConfiguredModelRef({
+  // 优先读取 agentId 的 modelAccounts.defaultAccountId，再 fallback 到 agents.list[agentId].model，
+  // 最后才回退到全局 agents.defaults.model.primary（openclaw.json 兜底）
+  const resolvedDefault = resolveDefaultModelForAgent({
     cfg: cfgWithAgentDefaults,
-    defaultProvider: DEFAULT_PROVIDER,
-    defaultModel: DEFAULT_MODEL,
+    agentId,
   });
   let provider = resolvedDefault.provider;
   let model = resolvedDefault.model;
