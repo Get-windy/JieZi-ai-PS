@@ -11,7 +11,12 @@ import {
 import { buildChannelAccountSnapshot } from "../../channels/plugins/status.js";
 import type { ChannelAccountSnapshot, ChannelPlugin } from "../../channels/plugins/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
-import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../config/config.js";
+import {
+  loadConfig,
+  readConfigFileSnapshot,
+  readConfigFileSnapshotForWrite,
+  writeConfigFile,
+} from "../../config/config.js";
 import { getChannelActivity } from "../../infra/channel-activity.js";
 import { DEFAULT_ACCOUNT_ID } from "../../routing/session-key.js";
 import { defaultRuntime } from "../../runtime.js";
@@ -307,7 +312,8 @@ export const channelsHandlers: GatewayRequestHandlers = {
    * 保存通道账号配置
    *
    * 参数：channelId, accountId, name, config
-   * 通过插件的 setup.applyAccountConfig / setup.applyAccountName 写入配置文件
+   * 逻辑：先用 setup.applyAccountName 写入显示名称，
+   *       再用 setup.applyAccountConfig 写入其他 config 字段（仅新建时）
    */
   "channels.account.save": async ({ params, respond }) => {
     const {
@@ -315,11 +321,13 @@ export const channelsHandlers: GatewayRequestHandlers = {
       accountId: rawAccountId,
       name,
       config: accountConfig,
+      isNew: isNewRaw,
     } = (params ?? {}) as {
       channelId?: unknown;
       accountId?: unknown;
       name?: unknown;
       config?: unknown;
+      isNew?: unknown;
     };
 
     const channelId = typeof rawChannelId === "string" ? normalizeChannelId(rawChannelId) : null;
@@ -355,35 +363,60 @@ export const channelsHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const snapshot = await readConfigFileSnapshot();
-    if (!snapshot.valid) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "config invalid; fix it before saving account"),
-      );
-      return;
-    }
-
     try {
-      let cfg: OpenClawConfig = snapshot.config ?? {};
+      // 使用 ForWrite 变体以正确保留 env var 引用（如 ${TELEGRAM_BOT_TOKEN}）
+      const { snapshot, writeOptions } = await readConfigFileSnapshotForWrite();
+      let cfg: OpenClawConfig = snapshot.config ?? loadConfig();
 
-      // 通过插件 setup adapter 写入账号配置
-      if (plugin.setup?.applyAccountConfig) {
+      const nameStr = typeof name === "string" ? name.trim() : "";
+      const isNew = isNewRaw === true || !plugin.config.listAccountIds(cfg).includes(accountId);
+
+      if (isNew && plugin.setup?.applyAccountConfig) {
+        // 新建账号：调用完整的 applyAccountConfig（写入 enabled + 所有 config 字段）
         cfg = plugin.setup.applyAccountConfig({
           cfg,
           accountId,
           input: {
-            name: typeof name === "string" ? name : undefined,
+            name: nameStr || undefined,
             ...(accountConfig && typeof accountConfig === "object" ? accountConfig : {}),
           },
         });
-      } else if (plugin.setup?.applyAccountName && typeof name === "string" && name.trim()) {
-        // 部分插件只支持 applyAccountName，退而求其次
-        cfg = plugin.setup.applyAccountName({ cfg, accountId, name: name.trim() });
+        // 如果 applyAccountConfig 没有写入名称，再单独写一次
+        if (nameStr && plugin.setup.applyAccountName) {
+          cfg = plugin.setup.applyAccountName({ cfg, accountId, name: nameStr });
+        }
+      } else {
+        // 编辑已有账号：只更新名称（applyAccountName）+ 各 config 字段（逐字段 merge）
+        if (nameStr && plugin.setup?.applyAccountName) {
+          cfg = plugin.setup.applyAccountName({ cfg, accountId, name: nameStr });
+        }
+        // 将 accountConfig 中的字段 merge 到对应账号的配置节点
+        if (accountConfig && typeof accountConfig === "object" && !Array.isArray(accountConfig)) {
+          const sectionKey = channelId as string;
+          const channels = (cfg.channels ?? {}) as Record<string, unknown>;
+          const section = (channels[sectionKey] ?? {}) as Record<string, unknown>;
+          const accounts = (section.accounts ?? {}) as Record<string, Record<string, unknown>>;
+          const existing = accounts[accountId] ?? {};
+          cfg = {
+            ...cfg,
+            channels: {
+              ...channels,
+              [sectionKey]: {
+                ...section,
+                accounts: {
+                  ...accounts,
+                  [accountId]: {
+                    ...existing,
+                    ...(accountConfig as Record<string, unknown>),
+                  },
+                },
+              },
+            },
+          } as OpenClawConfig;
+        }
       }
 
-      await writeConfigFile(cfg);
+      await writeConfigFile(cfg, writeOptions);
       respond(true, { ok: true }, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
@@ -447,19 +480,13 @@ export const channelsHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const snapshot = await readConfigFileSnapshot();
-    if (!snapshot.valid) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "config invalid; fix it before deleting account"),
-      );
-      return;
-    }
-
     try {
-      const cfg = plugin.config.deleteAccount({ cfg: snapshot.config ?? {}, accountId });
-      await writeConfigFile(cfg);
+      const { snapshot, writeOptions } = await readConfigFileSnapshotForWrite();
+      const cfg = plugin.config.deleteAccount({
+        cfg: snapshot.config ?? loadConfig(),
+        accountId,
+      });
+      await writeConfigFile(cfg, writeOptions);
       respond(true, { ok: true }, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));

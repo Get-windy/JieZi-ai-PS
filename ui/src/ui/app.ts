@@ -1027,6 +1027,10 @@ export class OpenClawApp extends LitElement {
       return;
     }
 
+    // 判断是新建（handleAddAccount 初始化时 accountId 为空）还是编辑已有账号
+    const existingAccounts = this.channelsSnapshot?.channelAccounts?.[channelId] ?? [];
+    const isNew = !existingAccounts.some((a) => a.accountId === accountId);
+
     this.creatingChannelAccount = true;
     try {
       await this.client.request("channels.account.save", {
@@ -1034,6 +1038,7 @@ export class OpenClawApp extends LitElement {
         accountId,
         name,
         config,
+        isNew,
       });
 
       // 刷新配置和通道状态
