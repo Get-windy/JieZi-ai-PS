@@ -1,3 +1,5 @@
+// 添加配对请求加载函数
+import { loadAllChannelPairingRequests } from "../../channels/pairing-requests.js";
 import { buildChannelUiCatalog } from "../../channels/plugins/catalog.js";
 import { resolveChannelDefaultAccountId } from "../../channels/plugins/helpers.js";
 import {
@@ -9,7 +11,7 @@ import {
 import { buildChannelAccountSnapshot } from "../../channels/plugins/status.js";
 import type { ChannelAccountSnapshot, ChannelPlugin } from "../../channels/plugins/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
-import { loadConfig, readConfigFileSnapshot } from "../../config/config.js";
+import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../config/config.js";
 import { getChannelActivity } from "../../infra/channel-activity.js";
 import { DEFAULT_ACCOUNT_ID } from "../../routing/session-key.js";
 import { defaultRuntime } from "../../runtime.js";
@@ -22,8 +24,6 @@ import {
 } from "../protocol/index.js";
 import { formatForLog } from "../ws-log.js";
 import type { GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
-// 添加配对请求加载函数
-import { loadAllChannelPairingRequests } from "../../channels/pairing-requests.js";
 
 type ChannelLogoutPayload = {
   channel: ChannelId;
@@ -298,6 +298,169 @@ export const channelsHandlers: GatewayRequestHandlers = {
         plugin,
       });
       respond(true, payload, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+    }
+  },
+
+  /**
+   * 保存通道账号配置
+   *
+   * 参数：channelId, accountId, name, config
+   * 通过插件的 setup.applyAccountConfig / setup.applyAccountName 写入配置文件
+   */
+  "channels.account.save": async ({ params, respond }) => {
+    const {
+      channelId: rawChannelId,
+      accountId: rawAccountId,
+      name,
+      config: accountConfig,
+    } = (params ?? {}) as {
+      channelId?: unknown;
+      accountId?: unknown;
+      name?: unknown;
+      config?: unknown;
+    };
+
+    const channelId = typeof rawChannelId === "string" ? normalizeChannelId(rawChannelId) : null;
+    if (!channelId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "channels.account.save: missing channelId"),
+      );
+      return;
+    }
+
+    const accountId = typeof rawAccountId === "string" ? rawAccountId.trim() : "";
+    if (!accountId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "channels.account.save: missing accountId"),
+      );
+      return;
+    }
+
+    const plugin = getChannelPlugin(channelId);
+    if (!plugin) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `channels.account.save: unknown channel ${channelId}`,
+        ),
+      );
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "config invalid; fix it before saving account"),
+      );
+      return;
+    }
+
+    try {
+      let cfg: OpenClawConfig = snapshot.config ?? {};
+
+      // 通过插件 setup adapter 写入账号配置
+      if (plugin.setup?.applyAccountConfig) {
+        cfg = plugin.setup.applyAccountConfig({
+          cfg,
+          accountId,
+          input: {
+            name: typeof name === "string" ? name : undefined,
+            ...(accountConfig && typeof accountConfig === "object" ? accountConfig : {}),
+          },
+        });
+      } else if (plugin.setup?.applyAccountName && typeof name === "string" && name.trim()) {
+        // 部分插件只支持 applyAccountName，退而求其次
+        cfg = plugin.setup.applyAccountName({ cfg, accountId, name: name.trim() });
+      }
+
+      await writeConfigFile(cfg);
+      respond(true, { ok: true }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+    }
+  },
+
+  /**
+   * 删除通道账号配置
+   *
+   * 参数：channelId, accountId
+   * 通过插件的 config.deleteAccount 从配置文件中删除账号
+   */
+  "channels.account.delete": async ({ params, respond }) => {
+    const { channelId: rawChannelId, accountId: rawAccountId } = (params ?? {}) as {
+      channelId?: unknown;
+      accountId?: unknown;
+    };
+
+    const channelId = typeof rawChannelId === "string" ? normalizeChannelId(rawChannelId) : null;
+    if (!channelId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "channels.account.delete: missing channelId"),
+      );
+      return;
+    }
+
+    const accountId = typeof rawAccountId === "string" ? rawAccountId.trim() : "";
+    if (!accountId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "channels.account.delete: missing accountId"),
+      );
+      return;
+    }
+
+    const plugin = getChannelPlugin(channelId);
+    if (!plugin) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `channels.account.delete: unknown channel ${channelId}`,
+        ),
+      );
+      return;
+    }
+
+    if (!plugin.config.deleteAccount) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `channel ${channelId} does not support account deletion`,
+        ),
+      );
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "config invalid; fix it before deleting account"),
+      );
+      return;
+    }
+
+    try {
+      const cfg = plugin.config.deleteAccount({ cfg: snapshot.config ?? {}, accountId });
+      await writeConfigFile(cfg);
+      respond(true, { ok: true }, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
     }
