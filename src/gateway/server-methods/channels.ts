@@ -201,6 +201,36 @@ export const channelsHandlers: GatewayRequestHandlers = {
     };
 
     const uiCatalog = buildChannelUiCatalog(plugins);
+
+    // 构建每个通道的账号级配置 Schema（用于 UI 编辑弹窗动态渲染表单字段）
+    // 优先取 configSchema.schema.properties.accounts.additionalProperties（账号层独立 schema）
+    // 否则降级使用整个 configSchema.schema（删除 accounts 字段）
+    const channelConfigSchemas: Record<string, Record<string, unknown>> = {};
+    for (const plugin of plugins) {
+      const rawSchema = plugin.configSchema?.schema;
+      if (!rawSchema) {
+        continue;
+      }
+      const properties = rawSchema.properties as Record<string, unknown> | undefined;
+      const accountsField = properties?.accounts as Record<string, unknown> | undefined;
+      const accountAdditional = accountsField?.additionalProperties as
+        | Record<string, unknown>
+        | undefined;
+
+      if (accountAdditional?.properties) {
+        // 有明确的账号级 schema
+        channelConfigSchemas[plugin.id] = accountAdditional;
+      } else if (properties) {
+        // 降级：删除 accounts 字段，用全局 schema作为账号 schema
+        const { accounts: _accounts, ...restProperties } = properties;
+        void _accounts;
+        channelConfigSchemas[plugin.id] = {
+          ...rawSchema,
+          properties: restProperties,
+        };
+      }
+    }
+
     const payload: Record<string, unknown> = {
       ts: Date.now(),
       channelOrder: uiCatalog.order,
@@ -211,6 +241,7 @@ export const channelsHandlers: GatewayRequestHandlers = {
       channels: {} as Record<string, unknown>,
       channelAccounts: {} as Record<string, unknown>,
       channelDefaultAccountId: {} as Record<string, unknown>,
+      channelConfigSchemas,
     };
     const channelsMap = payload.channels as Record<string, unknown>;
     const accountsMap = payload.channelAccounts as Record<string, unknown>;

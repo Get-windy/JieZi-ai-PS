@@ -958,7 +958,7 @@ export class OpenClawApp extends LitElement {
       name: "",
       config: {},
     };
-    this.managingChannelId = null;
+    // 保留 managingChannelId，编辑弹窗将叠加在管理列表弹窗上方
     this.viewingChannelAccount = null;
   }
 
@@ -996,7 +996,7 @@ export class OpenClawApp extends LitElement {
       name: resolvedName,
       config: accountConfig,
     };
-    this.managingChannelId = null;
+    // 保留 managingChannelId，编辑弹窗叠加在管理列表弹窗上方
     this.viewingChannelAccount = null;
   }
 
