@@ -424,16 +424,22 @@ export const channelsHandlers: GatewayRequestHandlers = {
           );
         }
         // 将 accountConfig 中的字段 merge 到对应账号的配置节点
+        // 注意：如果 accountConfig 中含有旧的 name 字段，用顶层 nameStr 覆盖，避免旧值污染
         if (accountConfig && typeof accountConfig === "object" && !Array.isArray(accountConfig)) {
           const sectionKey = channelId as string;
           const channels = (cfg.channels ?? {}) as Record<string, unknown>;
           const section = (channels[sectionKey] ?? {}) as Record<string, unknown>;
           const accounts = (section.accounts ?? {}) as Record<string, Record<string, unknown>>;
           const existing = accounts[accountId] ?? {};
+          // nameStr 优先：若有新名称则覆盖 accountConfig.name（防止旧乱码名称通过 config 字段 merge 进来）
+          const incomingConfig = {
+            ...(accountConfig as Record<string, unknown>),
+            ...(nameStr ? { name: nameStr } : {}),
+          };
           console.log(
             `[channels.account.save] merging config fields into accounts.${accountId}:`,
             `existing=${JSON.stringify(existing)}`,
-            `incoming=${JSON.stringify(accountConfig)}`,
+            `incoming=${JSON.stringify(incomingConfig)}`,
           );
           cfg = {
             ...cfg,
@@ -445,7 +451,7 @@ export const channelsHandlers: GatewayRequestHandlers = {
                   ...accounts,
                   [accountId]: {
                     ...existing,
-                    ...(accountConfig as Record<string, unknown>),
+                    ...incomingConfig,
                   },
                 },
               },
