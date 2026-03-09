@@ -1,3 +1,5 @@
+import fsPromises from "node:fs/promises";
+import nodePath from "node:path";
 import { formatCliCommand } from "../cli/command-format.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { readConfigFileSnapshot, resolveGatewayPort, writeConfigFile } from "../config/config.js";
@@ -8,6 +10,7 @@ import { defaultRuntime } from "../runtime.js";
 import { note } from "../terminal/note.js";
 import { resolveUserPath } from "../utils.js";
 import { createClackPrompter } from "../wizard/clack-prompter.js";
+import { resolveOnboardingSecretInputString } from "../wizard/onboarding.secret-input.js";
 import { WizardCancelledError } from "../wizard/prompts.js";
 import { removeChannelConfigWizard } from "./configure.channels.js";
 import { maybeInstallDaemon } from "./configure.daemon.js";
@@ -44,6 +47,23 @@ import { promptRemoteGatewayConfig } from "./onboard-remote.js";
 import { setupSkills } from "./onboard-skills.js";
 
 type ConfigureSectionChoice = WizardSection | "__continue";
+
+async function resolveGatewaySecretInputForWizard(params: {
+  cfg: OpenClawConfig;
+  value: unknown;
+  path: string;
+}): Promise<string | undefined> {
+  try {
+    return await resolveOnboardingSecretInputString({
+      config: params.cfg,
+      value: params.value,
+      path: params.path,
+      env: process.env,
+    });
+  } catch {
+    return undefined;
+  }
+}
 
 async function promptConfigureSection(
   runtime: RuntimeEnv,
@@ -204,16 +224,37 @@ export async function runConfigureWizard(
     }
 
     const localUrl = "ws://127.0.0.1:18789";
+    const baseLocalProbeToken = await resolveGatewaySecretInputForWizard({
+      cfg: baseConfig,
+      value: baseConfig.gateway?.auth?.token,
+      path: "gateway.auth.token",
+    });
+    const baseLocalProbePassword = await resolveGatewaySecretInputForWizard({
+      cfg: baseConfig,
+      value: baseConfig.gateway?.auth?.password,
+      path: "gateway.auth.password",
+    });
     const localProbe = await probeGatewayReachable({
       url: localUrl,
-      token: baseConfig.gateway?.auth?.token ?? process.env.OPENCLAW_GATEWAY_TOKEN,
-      password: baseConfig.gateway?.auth?.password ?? process.env.OPENCLAW_GATEWAY_PASSWORD,
+      token:
+        process.env.OPENCLAW_GATEWAY_TOKEN ??
+        process.env.CLAWDBOT_GATEWAY_TOKEN ??
+        baseLocalProbeToken,
+      password:
+        process.env.OPENCLAW_GATEWAY_PASSWORD ??
+        process.env.CLAWDBOT_GATEWAY_PASSWORD ??
+        baseLocalProbePassword,
     });
     const remoteUrl = baseConfig.gateway?.remote?.url?.trim() ?? "";
+    const baseRemoteProbeToken = await resolveGatewaySecretInputForWizard({
+      cfg: baseConfig,
+      value: baseConfig.gateway?.remote?.token,
+      path: "gateway.remote.token",
+    });
     const remoteProbe = remoteUrl
       ? await probeGatewayReachable({
           url: remoteUrl,
-          token: baseConfig.gateway?.remote?.token,
+          token: baseRemoteProbeToken,
         })
       : null;
 
@@ -224,9 +265,7 @@ export async function runConfigureWizard(
           {
             value: "local",
             label: "本地（此计算机）",
-            hint: localProbe.ok
-              ? `Gateway 可访问 (${localUrl})`
-              : `未检测到 Gateway (${localUrl})`,
+            hint: localProbe.ok ? `Gateway 可访问 (${localUrl})` : `未检测到 Gateway (${localUrl})`,
           },
           {
             value: "remote",
@@ -271,10 +310,6 @@ export async function runConfigureWizard(
       baseConfig.agents?.defaults?.workspace ??
       DEFAULT_WORKSPACE;
     let gatewayPort = resolveGatewayPort(baseConfig);
-    let gatewayToken: string | undefined =
-      nextConfig.gateway?.auth?.token ??
-      baseConfig.gateway?.auth?.token ??
-      process.env.OPENCLAW_GATEWAY_TOKEN;
 
     const persistConfig = async () => {
       nextConfig = applyWizardMetadata(nextConfig, {
@@ -285,7 +320,7 @@ export async function runConfigureWizard(
       logConfigUpdated(runtime);
     };
 
-    const configureWorkspace = async () => {
+    const _configureWorkspace = async () => {
       const workspaceInput = guardCancel(
         await text({
           message: "Workspace directory",
@@ -294,6 +329,32 @@ export async function runConfigureWizard(
         runtime,
       );
       workspaceDir = resolveUserPath(String(workspaceInput ?? "").trim() || DEFAULT_WORKSPACE);
+      if (!snapshot.exists) {
+        const indicators = ["MEMORY.md", "memory", ".git"].map((name) =>
+          nodePath.join(workspaceDir, name),
+        );
+        const hasExistingContent = (
+          await Promise.all(
+            indicators.map(async (candidate) => {
+              try {
+                await fsPromises.access(candidate);
+                return true;
+              } catch {
+                return false;
+              }
+            }),
+          )
+        ).some(Boolean);
+        if (hasExistingContent) {
+          note(
+            [
+              `检测到现有工作区 ${workspaceDir}`,
+              "现有文件将被保留。缺失的模板可能会被创建，但不会被覆盖。",
+            ].join("\n"),
+            "现有工作区",
+          );
+        }
+      }
       nextConfig = {
         ...nextConfig,
         agents: {
@@ -322,7 +383,7 @@ export async function runConfigureWizard(
       }
     };
 
-    const promptDaemonPort = async () => {
+    const _promptDaemonPort = async () => {
       const portInput = guardCancel(
         await text({
           message: "Gateway port for service install",
@@ -375,7 +436,6 @@ export async function runConfigureWizard(
         const gateway = await promptGatewayConfig(nextConfig, runtime);
         nextConfig = gateway.config;
         gatewayPort = gateway.port;
-        gatewayToken = gateway.token;
       }
 
       if (selected.includes("channels")) {
@@ -402,7 +462,7 @@ export async function runConfigureWizard(
           gatewayPort = Number.parseInt(String(portInput), 10);
         }
 
-        await maybeInstallDaemon({ runtime, port: gatewayPort, gatewayToken });
+        await maybeInstallDaemon({ runtime, port: gatewayPort });
       }
 
       if (selected.includes("health")) {
@@ -415,13 +475,13 @@ export async function runConfigureWizard(
         const remoteUrl = nextConfig.gateway?.remote?.url?.trim();
         const wsUrl =
           nextConfig.gateway?.mode === "remote" && remoteUrl ? remoteUrl : localLinks.wsUrl;
-        const token = nextConfig.gateway?.auth?.token ?? process.env.OPENCLAW_GATEWAY_TOKEN;
-        const password =
+        const rawToken = nextConfig.gateway?.auth?.token ?? process.env.OPENCLAW_GATEWAY_TOKEN;
+        const rawPassword =
           nextConfig.gateway?.auth?.password ?? process.env.OPENCLAW_GATEWAY_PASSWORD;
         await waitForGatewayReachable({
           url: wsUrl,
-          token,
-          password,
+          token: typeof rawToken === "string" ? rawToken : undefined,
+          password: typeof rawPassword === "string" ? rawPassword : undefined,
           deadlineMs: 15_000,
         });
         try {
@@ -486,7 +546,6 @@ export async function runConfigureWizard(
           const gateway = await promptGatewayConfig(nextConfig, runtime);
           nextConfig = gateway.config;
           gatewayPort = gateway.port;
-          gatewayToken = gateway.token;
           didConfigureGateway = true;
           await persistConfig();
         }
@@ -517,7 +576,6 @@ export async function runConfigureWizard(
           await maybeInstallDaemon({
             runtime,
             port: gatewayPort,
-            gatewayToken,
           });
         }
 
@@ -531,13 +589,13 @@ export async function runConfigureWizard(
           const remoteUrl = nextConfig.gateway?.remote?.url?.trim();
           const wsUrl =
             nextConfig.gateway?.mode === "remote" && remoteUrl ? remoteUrl : localLinks.wsUrl;
-          const token = nextConfig.gateway?.auth?.token ?? process.env.OPENCLAW_GATEWAY_TOKEN;
-          const password =
+          const rawToken2 = nextConfig.gateway?.auth?.token ?? process.env.OPENCLAW_GATEWAY_TOKEN;
+          const rawPassword2 =
             nextConfig.gateway?.auth?.password ?? process.env.OPENCLAW_GATEWAY_PASSWORD;
           await waitForGatewayReachable({
             url: wsUrl,
-            token,
-            password,
+            token: typeof rawToken2 === "string" ? rawToken2 : undefined,
+            password: typeof rawPassword2 === "string" ? rawPassword2 : undefined,
             deadlineMs: 15_000,
           });
           try {
@@ -582,19 +640,22 @@ export async function runConfigureWizard(
     // Try both new and old passwords since gateway may still have old config.
     const newPassword = nextConfig.gateway?.auth?.password ?? process.env.OPENCLAW_GATEWAY_PASSWORD;
     const oldPassword = baseConfig.gateway?.auth?.password ?? process.env.OPENCLAW_GATEWAY_PASSWORD;
-    const token = nextConfig.gateway?.auth?.token ?? process.env.OPENCLAW_GATEWAY_TOKEN;
+    const rawFinalToken = nextConfig.gateway?.auth?.token ?? process.env.OPENCLAW_GATEWAY_TOKEN;
+    const token = typeof rawFinalToken === "string" ? rawFinalToken : undefined;
+    const newPasswordStr = typeof newPassword === "string" ? newPassword : undefined;
+    const oldPasswordStr = typeof oldPassword === "string" ? oldPassword : undefined;
 
     let gatewayProbe = await probeGatewayReachable({
       url: links.wsUrl,
       token,
-      password: newPassword,
+      password: newPasswordStr,
     });
     // If new password failed and it's different from old password, try old too.
-    if (!gatewayProbe.ok && newPassword !== oldPassword && oldPassword) {
+    if (!gatewayProbe.ok && newPasswordStr !== oldPasswordStr && oldPasswordStr) {
       gatewayProbe = await probeGatewayReachable({
         url: links.wsUrl,
         token,
-        password: oldPassword,
+        password: oldPasswordStr,
       });
     }
     const gatewayStatusLine = gatewayProbe.ok
