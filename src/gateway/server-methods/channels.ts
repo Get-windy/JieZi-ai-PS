@@ -460,34 +460,67 @@ export const channelsHandlers: GatewayRequestHandlers = {
           const sectionKey = channelId as string;
           const channels = (cfg.channels ?? {}) as Record<string, unknown>;
           const section = (channels[sectionKey] ?? {}) as Record<string, unknown>;
-          const accounts = (section.accounts ?? {}) as Record<string, Record<string, unknown>>;
-          const existing = accounts[accountId] ?? {};
-          // nameStr 优先：若有新名称则覆盖 accountConfig.name（防止旧乱码名称通过 config 字段 merge 进来）
+          const accountsNode = section.accounts as Record<string, unknown> | undefined;
+          // nameStr 优先：若有新名称则覆盖 accountConfig.name
           const incomingConfig = {
             ...(accountConfig as Record<string, unknown>),
             ...(nameStr ? { name: nameStr } : {}),
           };
+
+          // 判断是子账号（channels[ch].accounts[accountId] 有 key）还是顶层账号
+          const isSubAccount = accountsNode !== undefined && accountId in accountsNode;
+
           console.log(
-            `[channels.account.save] merging config fields into accounts.${accountId}:`,
-            `existing=${JSON.stringify(existing)}`,
+            `[channels.account.save] merging config fields,` +
+              ` isSubAccount=${isSubAccount} accountId=${accountId}:`,
+            `existing=${
+              isSubAccount
+                ? JSON.stringify(accountsNode[accountId])
+                : JSON.stringify({ ...section, accounts: undefined })
+            }`,
             `incoming=${JSON.stringify(incomingConfig)}`,
           );
-          cfg = {
-            ...cfg,
-            channels: {
-              ...channels,
-              [sectionKey]: {
-                ...section,
-                accounts: {
-                  ...accounts,
-                  [accountId]: {
-                    ...existing,
-                    ...incomingConfig,
+
+          if (isSubAccount) {
+            // 子账号：merge 到 channels[ch].accounts[accountId]
+            const accounts = accountsNode as Record<string, Record<string, unknown>>;
+            const existing = accounts[accountId] ?? {};
+            cfg = {
+              ...cfg,
+              channels: {
+                ...channels,
+                [sectionKey]: {
+                  ...section,
+                  accounts: {
+                    ...accounts,
+                    [accountId]: { ...existing, ...incomingConfig },
                   },
                 },
               },
-            },
-          } as OpenClawConfig;
+            } as OpenClawConfig;
+          } else {
+            // 顶层账号：merge 到 channels[ch]（保留 accounts 子节点）
+            const { accounts: existingAccounts, ...sectionWithoutAccounts } = section;
+            const merged: Record<string, unknown> = {
+              ...sectionWithoutAccounts,
+              ...incomingConfig,
+            };
+            // 保留原有的 accounts 子节点（如果有）
+            if (existingAccounts !== undefined) {
+              merged.accounts = existingAccounts;
+            }
+            // 顶层账号不写 name 到 channel 顶层（一般顶层无 name 字段）
+            if (!nameStr) {
+              delete merged.name;
+            }
+            cfg = {
+              ...cfg,
+              channels: {
+                ...channels,
+                [sectionKey]: merged,
+              },
+            } as OpenClawConfig;
+          }
         }
       }
 

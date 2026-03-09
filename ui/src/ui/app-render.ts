@@ -421,16 +421,18 @@ export function renderApp(state: AppViewState) {
                 onNostrProfileSave: () => state.handleNostrProfileSave(),
                 onNostrProfileImport: () => state.handleNostrProfileImport(),
                 onNostrProfileToggleAdvanced: () => state.handleNostrProfileToggleAdvanced(),
-                // 账号管理回调 - TODO: 实现这些回调
+                // 账号管理回调
                 onManageAccounts: (channelId) => {
                   state.managingChannelId = channelId;
+                  // 关闭其他弹窗
+                  state.editingChannelAccount = null;
+                  state.viewingChannelAccount = null;
                 },
                 onAddAccount: (channelId) => {
-                  state.creatingChannelAccount = true;
-                  state.managingChannelId = channelId;
+                  (state as unknown as OpenClawApp).handleAddAccount(channelId);
                 },
                 onViewAccount: (channelId, accountId) => {
-                  state.viewingChannelAccount = { channelId, accountId };
+                  (state as unknown as OpenClawApp).handleViewAccount(channelId, accountId);
                 },
                 onEditAccount: (channelId, accountId) => {
                   (state as unknown as OpenClawApp).handleEditAccount(channelId, accountId);
