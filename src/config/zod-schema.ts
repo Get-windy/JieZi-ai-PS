@@ -4,7 +4,7 @@ import { ToolsSchema } from "../../upstream/src/config/zod-schema.agent-runtime.
 // AgentsSchema 使用我们的扩展版本（包含企业级权限系统）
 import { AgentsSchema, AudioSchema, BindingsSchema, BroadcastSchema } from "./zod-schema.agents.js";
 import { ApprovalsSchema } from "./zod-schema.approvals.js";
-import { HexColorSchema, ModelsConfigSchema } from "./zod-schema.core.js";
+import { HexColorSchema, ModelsConfigSchema, SecretInputSchema } from "./zod-schema.core.js";
 import { HookMappingSchema, HooksGmailSchema, InternalHooksSchema } from "./zod-schema.hooks.js";
 import { InstallRecordShape } from "./zod-schema.installs.js";
 import { ChannelsSchema } from "./zod-schema.providers.js";
@@ -123,6 +123,50 @@ const HttpUrlSchema = z
     return protocol === "http:" || protocol === "https:";
   }, "Expected http:// or https:// URL");
 
+const TalkProviderEntrySchema = z
+  .object({
+    voiceId: z.string().optional(),
+    voiceAliases: z.record(z.string(), z.string()).optional(),
+    modelId: z.string().optional(),
+    outputFormat: z.string().optional(),
+    apiKey: SecretInputSchema.optional().register(sensitive),
+  })
+  .catchall(z.unknown());
+
+const TalkSchema = z
+  .object({
+    provider: z.string().optional(),
+    providers: z.record(z.string(), TalkProviderEntrySchema).optional(),
+    voiceId: z.string().optional(),
+    voiceAliases: z.record(z.string(), z.string()).optional(),
+    modelId: z.string().optional(),
+    outputFormat: z.string().optional(),
+    apiKey: SecretInputSchema.optional().register(sensitive),
+    interruptOnSpeech: z.boolean().optional(),
+    silenceTimeoutMs: z.number().int().positive().optional(),
+  })
+  .strict()
+  .superRefine((talk, ctx) => {
+    const provider = talk.provider?.trim().toLowerCase();
+    const providers = talk.providers ? Object.keys(talk.providers) : [];
+
+    if (provider && providers.length > 0 && !(provider in talk.providers!)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["provider"],
+        message: `talk.provider must match a key in talk.providers (missing "${provider}")`,
+      });
+    }
+
+    if (!provider && providers.length > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["provider"],
+        message: "talk.provider is required when talk.providers defines multiple providers",
+      });
+    }
+  });
+
 export const OpenClawSchema = z
   .object({
     $schema: z.string().optional(),
@@ -230,6 +274,7 @@ export const OpenClawSchema = z
         headless: z.boolean().optional(),
         noSandbox: z.boolean().optional(),
         attachOnly: z.boolean().optional(),
+        cdpPortRangeStart: z.number().int().min(1).max(65535).optional(),
         defaultProfile: z.string().optional(),
         snapshotDefaults: BrowserSnapshotDefaultsSchema,
         ssrfPolicy: z
@@ -249,7 +294,10 @@ export const OpenClawSchema = z
               .object({
                 cdpPort: z.number().int().min(1).max(65535).optional(),
                 cdpUrl: z.string().optional(),
-                driver: z.union([z.literal("clawd"), z.literal("extension")]).optional(),
+                driver: z
+                  .union([z.literal("openclaw"), z.literal("clawd"), z.literal("extension")])
+                  .optional(),
+                attachOnly: z.boolean().optional(),
                 color: HexColorSchema,
               })
               .strict()
@@ -258,6 +306,8 @@ export const OpenClawSchema = z
               }),
           )
           .optional(),
+        extraArgs: z.array(z.string()).optional(),
+        relayBindHost: z.union([z.string().ipv4(), z.string().ipv6()]).optional(),
       })
       .strict()
       .optional(),
@@ -391,17 +441,7 @@ export const OpenClawSchema = z
       })
       .strict()
       .optional(),
-    talk: z
-      .object({
-        voiceId: z.string().optional(),
-        voiceAliases: z.record(z.string(), z.string()).optional(),
-        modelId: z.string().optional(),
-        outputFormat: z.string().optional(),
-        apiKey: z.string().optional().register(sensitive),
-        interruptOnSpeech: z.boolean().optional(),
-      })
-      .strict()
-      .optional(),
+    talk: TalkSchema.optional(),
     gateway: z
       .object({
         port: z.number().int().positive().optional(),
@@ -422,8 +462,10 @@ export const OpenClawSchema = z
             basePath: z.string().optional(),
             root: z.string().optional(),
             allowedOrigins: z.array(z.string()).optional(),
+            dangerouslyAllowHostHeaderOriginFallback: z.boolean().optional(),
             allowInsecureAuth: z.boolean().optional(),
             dangerouslyDisableDeviceAuth: z.boolean().optional(),
+            autoOpen: z.boolean().optional(),
           })
           .strict()
           .optional(),
@@ -437,8 +479,8 @@ export const OpenClawSchema = z
                 z.literal("trusted-proxy"),
               ])
               .optional(),
-            token: z.string().optional().register(sensitive),
-            password: z.string().optional().register(sensitive),
+            token: SecretInputSchema.optional().register(sensitive),
+            password: SecretInputSchema.optional().register(sensitive),
             allowTailscale: z.boolean().optional(),
             rateLimit: z
               .object({
@@ -481,8 +523,8 @@ export const OpenClawSchema = z
           .object({
             url: z.string().optional(),
             transport: z.union([z.literal("ssh"), z.literal("direct")]).optional(),
-            token: z.string().optional().register(sensitive),
-            password: z.string().optional().register(sensitive),
+            token: SecretInputSchema.optional().register(sensitive),
+            password: SecretInputSchema.optional().register(sensitive),
             tlsFingerprint: z.string().optional(),
             sshTarget: z.string().optional(),
             sshIdentity: z.string().optional(),
@@ -519,6 +561,20 @@ export const OpenClawSchema = z
                 chatCompletions: z
                   .object({
                     enabled: z.boolean().optional(),
+                    maxBodyBytes: z.number().int().positive().optional(),
+                    maxImageParts: z.number().int().nonnegative().optional(),
+                    maxTotalImageBytes: z.number().int().positive().optional(),
+                    images: z
+                      .object({
+                        allowUrl: z.boolean().optional(),
+                        urlAllowlist: z.array(z.string()).optional(),
+                        allowedMimes: z.array(z.string()).optional(),
+                        maxBytes: z.number().int().positive().optional(),
+                        maxRedirects: z.number().int().nonnegative().optional(),
+                        timeoutMs: z.number().int().positive().optional(),
+                      })
+                      .strict()
+                      .optional(),
                   })
                   .strict()
                   .optional(),

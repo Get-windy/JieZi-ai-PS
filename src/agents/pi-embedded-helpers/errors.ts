@@ -64,6 +64,11 @@ function isReasoningConstraintErrorMessage(raw: string): boolean {
   );
 }
 
+function hasRateLimitTpmHint(raw: string): boolean {
+  const lower = raw.toLowerCase();
+  return /\btpm\b/i.test(lower) || lower.includes("tokens per minute");
+}
+
 export function isContextOverflowError(errorMessage?: string): boolean {
   if (!errorMessage) {
     return false;
@@ -71,7 +76,7 @@ export function isContextOverflowError(errorMessage?: string): boolean {
   const lower = errorMessage.toLowerCase();
 
   // Groq uses 413 for TPM (tokens per minute) limits, which is a rate limit, not context overflow.
-  if (lower.includes("tpm") || lower.includes("tokens per minute")) {
+  if (hasRateLimitTpmHint(errorMessage)) {
     return false;
   }
 
@@ -99,6 +104,9 @@ export function isContextOverflowError(errorMessage?: string): boolean {
     (lower.includes("max_tokens") && lower.includes("exceed") && lower.includes("context")) ||
     (lower.includes("input length") && lower.includes("exceed") && lower.includes("context")) ||
     (lower.includes("413") && lower.includes("too large")) ||
+    // Anthropic API and OpenAI-compatible providers (e.g. ZhipuAI/GLM) return this stop reason
+    // when the context window is exceeded. pi-ai surfaces it as "Unhandled stop reason: model_context_window_exceeded".
+    lower.includes("context_window_exceeded") ||
     // Chinese proxy error messages for context overflow
     errorMessage.includes("上下文过长") ||
     errorMessage.includes("上下文超出") ||
@@ -112,7 +120,7 @@ const CONTEXT_WINDOW_TOO_SMALL_RE = /context window.*(too small|minimum is)/i;
 const CONTEXT_OVERFLOW_HINT_RE =
   /context.*overflow|context window.*(too (?:large|long)|exceed|over|limit|max(?:imum)?|requested|sent|tokens)|prompt.*(too (?:large|long)|exceed|over|limit|max(?:imum)?)|(?:request|input).*(?:context|window|length|token).*(too (?:large|long)|exceed|over|limit|max(?:imum)?)/i;
 const RATE_LIMIT_HINT_RE =
-  /rate limit|too many requests|requests per (?:minute|hour|day)|quota|throttl|429\b/i;
+  /rate limit|too many requests|requests per (?:minute|hour|day)|quota|throttl|429\b|tokens per day/i;
 
 export function isLikelyContextOverflowError(errorMessage?: string): boolean {
   if (!errorMessage) {
@@ -120,8 +128,7 @@ export function isLikelyContextOverflowError(errorMessage?: string): boolean {
   }
 
   // Groq uses 413 for TPM (tokens per minute) limits, which is a rate limit, not context overflow.
-  const lower = errorMessage.toLowerCase();
-  if (lower.includes("tpm") || lower.includes("tokens per minute")) {
+  if (hasRateLimitTpmHint(errorMessage)) {
     return false;
   }
 
