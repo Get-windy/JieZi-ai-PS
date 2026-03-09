@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidNonNegativeByteSizeString } from "./byte-size.js";
 import {
   HeartbeatSchema,
   AgentSandboxSchema,
@@ -84,10 +85,32 @@ export const AgentDefaultsSchema = z
         keepRecentTokens: z.number().int().positive().optional(),
         reserveTokensFloor: z.number().int().nonnegative().optional(),
         maxHistoryShare: z.number().min(0.1).max(0.9).optional(),
+        identifierPolicy: z
+          .union([z.literal("strict"), z.literal("off"), z.literal("custom")])
+          .optional(),
+        identifierInstructions: z.string().optional(),
+        recentTurnsPreserve: z.number().int().min(0).max(12).optional(),
+        qualityGuard: z
+          .object({
+            enabled: z.boolean().optional(),
+            maxRetries: z.number().int().nonnegative().optional(),
+          })
+          .strict()
+          .optional(),
+        postCompactionSections: z.array(z.string()).optional(),
+        model: z.string().optional(),
         memoryFlush: z
           .object({
             enabled: z.boolean().optional(),
             softThresholdTokens: z.number().int().nonnegative().optional(),
+            forceFlushTranscriptBytes: z
+              .union([
+                z.number().int().nonnegative(),
+                z
+                  .string()
+                  .refine(isValidNonNegativeByteSizeString, "Expected byte size string like 2mb"),
+              ])
+              .optional(),
             prompt: z.string().optional(),
             systemPrompt: z.string().optional(),
           })
@@ -104,6 +127,7 @@ export const AgentDefaultsSchema = z
         z.literal("medium"),
         z.literal("high"),
         z.literal("xhigh"),
+        z.literal("adaptive"),
       ])
       .optional(),
     verboseDefault: z.union([z.literal("off"), z.literal("on"), z.literal("full")]).optional(),
@@ -146,6 +170,7 @@ export const AgentDefaultsSchema = z
         archiveAfterMinutes: z.number().int().positive().optional(),
         model: AgentModelSchema.optional(),
         thinking: z.string().optional(),
+        runTimeoutSeconds: z.number().int().min(0).optional(),
         announceTimeoutMs: z.number().int().positive().optional(),
       })
       .strict()
