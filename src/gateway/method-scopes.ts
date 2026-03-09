@@ -33,11 +33,13 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "exec.approval.request",
     "exec.approval.waitDecision",
     "exec.approval.resolve",
-    // 第2阶段：审批流程
-    "approval.request",
+    // 审批流程（Gateway RPC）
+    "approval.create",
     "approval.approve",
     "approval.reject",
-    "approval.status",
+    "approval.cancel",
+    "approval.get_status",
+    "approval.list_pending",
   ],
   [PAIRING_SCOPE]: [
     "node.pair.request",
@@ -112,9 +114,26 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "groups.get",
     // 任务：查询类
     "task.list",
-    // 审批：查询类
-    "approval.get_status",
-    "approval.list_pending",
+    "task.get",
+    // 组织：查询类（补充缺失）
+    "organization.list",
+    "organization.data.get",
+    "organization.tree.get",
+    "org.hierarchy.isAncestor",
+    "org.hierarchy.isSibling",
+    "org.hierarchy.commonAncestor",
+    "org.hierarchy.depth",
+    "org.hierarchy.tree",
+    "org.hierarchy.path",
+    "org.hierarchy.allMembers",
+    "org.hierarchy.isMember",
+    "org.hierarchy.agentOrganizations",
+    "org.hierarchy.primaryOrganization",
+    "org.hierarchy.totalQuota",
+    "org.hierarchy.statistics",
+    "org.hierarchy.batchStatistics",
+    "org.hierarchy.globalStatistics",
+    // 审批：查询类（由 APPROVALS_SCOPE 覆盖，此处保留为兼容）
     // 好友：查询类
     "friends.list",
     // 组织：查询类
@@ -146,18 +165,19 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "groups.addMember",
     "groups.remove_member",
     "groups.removeMember",
-    // 任务：写操作
+    // 任务：写操作（基础 + 扩展）
     "task.create",
     "task.update",
     "task.delete",
     "task.assign",
     "task.complete",
-    // 审批：写操作
-    "approval.create",
-    "approval.approve",
-    "approval.reject",
-    "approval.cancel",
-    // 权限管理：写操作
+    "task.status.update",
+    "task.comment.add",
+    "task.attachment.add",
+    "task.worklog.add",
+    "task.subtask.create",
+    "task.dependency.add",
+    "task.block",
     "permission_mgmt.grant",
     "permission_mgmt.revoke",
     "permission_mgmt.delegate",
@@ -200,6 +220,16 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "organization.agent.recruit",
     "organization.agent.recruit.approve",
     "organization.agent.recruit.list",
+    // 组织：写操作（补充缺失）
+    "organization.create",
+    "organization.update",
+    "organization.delete",
+    "organization.member.add",
+    "organization.member.update",
+    "organization.member.remove",
+    "organization.relation.create",
+    "organization.relation.delete",
+    // 任务：写操作（补充缺失部分已合并到上方，此处保留 agent 相关）
     // Agent 发现与通信
     "agent.assign_task",
     "agent.communicate",
