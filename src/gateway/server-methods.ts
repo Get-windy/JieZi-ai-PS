@@ -5,6 +5,7 @@ import { ErrorCodes, errorShape } from "./protocol/index.js";
 import { isRoleAuthorizedForMethod, parseGatewayRole } from "./role-policy.js";
 import { coreGatewayHandlers } from "./server-methods/index.js";
 export { coreGatewayHandlers } from "./server-methods/index.js";
+import { withPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
 import type { GatewayRequestHandlers, GatewayRequestOptions } from "./server-methods/types.js";
 
 const CONTROL_PLANE_WRITE_METHODS = new Set(["config.apply", "config.patch", "update.run"]);
@@ -81,12 +82,17 @@ export async function handleGatewayRequest(
     );
     return;
   }
-  await handler({
-    req,
-    params: (req.params ?? {}) as Record<string, unknown>,
-    client,
-    isWebchatConnect,
-    respond,
-    context,
-  });
+  const invokeHandler = () =>
+    handler({
+      req,
+      params: (req.params ?? {}) as Record<string, unknown>,
+      client,
+      isWebchatConnect,
+      respond,
+      context,
+    });
+  // All handlers run inside a request scope so that plugin runtime
+  // subagent methods (e.g. context engine tools spawning sub-agents
+  // during tool execution) can dispatch back into the gateway.
+  await withPluginRuntimeGatewayRequestScope({ context, isWebchatConnect }, invokeHandler);
 }

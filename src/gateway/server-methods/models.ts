@@ -1,6 +1,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { resolveOpenClawAgentDir } from "../../agents/agent-paths.js";
+import { resolveDefaultAgentId, resolveAgentDir } from "../../agents/agent-scope.js";
 import { resetModelCatalogCacheForTest } from "../../agents/model-catalog.js";
+import { resolveDefaultModelForAgent } from "../../agents/model-selection.js";
 import { loadConfig } from "../../config/config.js";
 import { STATE_DIR } from "../../config/paths.js";
 // DEFAULT_PROVIDER and buildAllowedModelSet are reserved for future use
@@ -19,7 +22,6 @@ const MODEL_MANAGEMENT_FILE = path.join(STATE_DIR, "model-management.json");
 
 // 官方运行时配置路径（用于同步）
 const getAgentModelsPath = () => {
-  const { resolveOpenClawAgentDir } = require("../../agents/agent-paths.js");
   const agentDir = resolveOpenClawAgentDir();
   return path.join(agentDir, "models.json");
 };
@@ -658,7 +660,6 @@ async function syncRuntimeFiles(storage: ModelManagementStorage): Promise<void> 
 // 同步认证信息到 auth-profiles.json
 async function syncAuthProfiles(storage: ModelManagementStorage): Promise<void> {
   // 收集所有已存在的 agent auth-profiles.json 路径
-  const { resolveOpenClawAgentDir } = require("../../agents/agent-paths.js");
   const mainAgentDir = resolveOpenClawAgentDir();
 
   // ── Step 1: 从默认智能助手读取真实 auth-profiles 和默认模型信息 ──
@@ -668,8 +669,6 @@ async function syncAuthProfiles(storage: ModelManagementStorage): Promise<void> 
   let defaultAgentDefaultProvider: string | undefined;
   try {
     const cfg = loadConfig();
-    const { resolveDefaultAgentId, resolveAgentDir } = require("../../agents/agent-scope.js");
-    const { resolveDefaultModelForAgent } = require("../../agents/model-selection.js");
     const defaultAgentId = resolveDefaultAgentId(cfg);
     const defaultAgentDir = resolveAgentDir(cfg, defaultAgentId);
 
