@@ -1,3 +1,5 @@
+export type TaglineMode = "random" | "default" | "off";
+
 const DEFAULT_TAGLINE = "All your chats, one OpenClaw.";
 
 const HOLIDAY_TAGLINES = {
@@ -240,6 +242,7 @@ export interface TaglineOptions {
   env?: NodeJS.ProcessEnv;
   random?: () => number;
   now?: () => Date;
+  mode?: TaglineMode;
 }
 
 export function activeTaglines(options: TaglineOptions = {}): string[] {

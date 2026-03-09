@@ -1,4 +1,9 @@
+import {
+  DISCORD_DEFAULT_INBOUND_WORKER_TIMEOUT_MS,
+  DISCORD_DEFAULT_LISTENER_TIMEOUT_MS,
+} from "../discord/monitor/timeouts.js";
 import { IRC_FIELD_HELP } from "./schema.irc.js";
+import { describeTalkSilenceTimeoutDefaults } from "./talk-defaults.js";
 
 export const FIELD_HELP: Record<string, string> = {
   meta: "Metadata fields automatically maintained by OpenClaw to record write/version history for this config file. Keep these values system-managed and avoid manual edits unless debugging migration history.",
@@ -1355,4 +1360,179 @@ export const FIELD_HELP: Record<string, string> = {
     'Direct message access control ("pairing" recommended). "open" requires channels.slack.allowFrom=["*"] (legacy: channels.slack.dm.allowFrom).',
   "channels.slack.dmPolicy":
     'Direct message access control ("pairing" recommended). "open" requires channels.slack.allowFrom=["*"].',
+  "cli.banner":
+    "CLI startup banner controls for title/version line and tagline style behavior. Keep banner enabled for fast version/context checks, then tune tagline mode to your preferred noise level.",
+  "cli.banner.taglineMode":
+    'Controls tagline style in the CLI startup banner: "random" (default) picks from the rotating tagline pool, "default" always shows the neutral default tagline, and "off" hides tagline text while keeping the banner version line.',
+  "talk.provider": 'Active Talk provider id (for example "elevenlabs").',
+  "talk.providers":
+    "Provider-specific Talk settings keyed by provider id. During migration, prefer this over legacy talk.* keys.",
+  "talk.providers.*.voiceId": "Provider default voice ID for Talk mode.",
+  "talk.providers.*.voiceAliases": "Optional provider voice alias map for Talk directives.",
+  "talk.providers.*.modelId": "Provider default model ID for Talk mode.",
+  "talk.providers.*.outputFormat": "Provider default output format for Talk mode.",
+  "talk.providers.*.apiKey": "Provider API key for Talk mode.", // pragma: allowlist secret
+  "talk.silenceTimeoutMs": `Milliseconds of user silence before Talk mode finalizes and sends the current transcript. Leave unset to keep the platform default pause window (${describeTalkSilenceTimeoutDefaults()}).`,
+  acp: "ACP runtime controls for enabling dispatch, selecting backends, constraining allowed agent targets, and tuning streamed turn projection behavior.",
+  "acp.enabled":
+    "Global ACP feature gate. Keep disabled unless ACP runtime + policy are configured.",
+  "acp.dispatch.enabled":
+    "Independent dispatch gate for ACP session turns (default: true). Set false to keep ACP commands available while blocking ACP turn execution.",
+  "acp.backend":
+    "Default ACP runtime backend id (for example: acpx). Must match a registered ACP runtime plugin backend.",
+  "acp.defaultAgent":
+    "Fallback ACP target agent id used when ACP spawns do not specify an explicit target.",
+  "acp.allowedAgents":
+    "Allowlist of ACP target agent ids permitted for ACP runtime sessions. Empty means no additional allowlist restriction.",
+  "acp.maxConcurrentSessions":
+    "Maximum concurrently active ACP sessions across this gateway process.",
+  "acp.stream":
+    "ACP streaming projection controls for chunk sizing, metadata visibility, and deduped delivery behavior.",
+  "acp.stream.coalesceIdleMs":
+    "Coalescer idle flush window in milliseconds for ACP streamed text before block replies are emitted.",
+  "acp.stream.maxChunkChars":
+    "Maximum chunk size for ACP streamed block projection before splitting into multiple block replies.",
+  "acp.stream.repeatSuppression":
+    "When true (default), suppress repeated ACP status/tool projection lines in a turn while keeping raw ACP events unchanged.",
+  "acp.stream.deliveryMode":
+    "ACP delivery style: live streams projected output incrementally, final_only buffers all projected ACP output until terminal turn events.",
+  "acp.stream.hiddenBoundarySeparator":
+    "Separator inserted before next visible assistant text when hidden ACP tool lifecycle events occurred (none|space|newline|paragraph). Default: paragraph.",
+  "acp.stream.maxOutputChars":
+    "Maximum assistant output characters projected per ACP turn before truncation notice is emitted.",
+  "acp.stream.maxSessionUpdateChars":
+    "Maximum characters for projected ACP session/update lines (tool/status updates).",
+  "acp.stream.tagVisibility":
+    "Per-sessionUpdate visibility overrides for ACP projection (for example usage_update, available_commands_update).",
+  "acp.runtime.ttlMinutes":
+    "Idle runtime TTL in minutes for ACP session workers before eligible cleanup.",
+  "acp.runtime.installCommand":
+    "Optional operator install/setup command shown by `/acp install` and `/acp doctor` when ACP backend wiring is missing.",
+  "browser.cdpPortRangeStart":
+    "Starting local CDP port used for auto-allocated browser profile ports. Increase this when host-level port defaults conflict with other local services.",
+  "browser.relayBindHost":
+    "Bind IP address for the Chrome extension relay listener. Leave unset for loopback-only access, or set an explicit non-loopback IP such as 0.0.0.0 only when the relay must be reachable across network namespaces (for example WSL2) and the surrounding network is already trusted.",
+  "browser.ssrfPolicy.dangerouslyAllowPrivateNetwork":
+    "Allows access to private-network address ranges from browser tooling. Default is enabled for trusted-network operator setups; disable to enforce strict public-only resolution checks.",
+  "agents.defaults.sandbox.docker.dangerouslyAllowContainerNamespaceJoin":
+    "DANGEROUS break-glass override that allows sandbox Docker network mode container:<id>. This joins another container namespace and weakens sandbox isolation.",
+  "agents.list[].sandbox.docker.dangerouslyAllowContainerNamespaceJoin":
+    "Per-agent DANGEROUS override for container namespace joins in sandbox Docker network mode.",
+  "gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback":
+    "DANGEROUS toggle that enables Host-header based origin fallback for Control UI/WebChat websocket checks. This mode is supported when your deployment intentionally relies on Host-header origin policy; explicit gateway.controlUi.allowedOrigins remains the recommended hardened default.",
+  "gateway.http.endpoints.chatCompletions.maxBodyBytes":
+    "Max request body size in bytes for `/v1/chat/completions` (default: 20MB).",
+  "gateway.http.endpoints.chatCompletions.maxImageParts":
+    "Max number of `image_url` parts accepted from the latest user message (default: 8).",
+  "gateway.http.endpoints.chatCompletions.maxTotalImageBytes":
+    "Max cumulative decoded bytes across all `image_url` parts in one request (default: 20MB).",
+  "gateway.http.endpoints.chatCompletions.images":
+    "Image fetch/validation controls for OpenAI-compatible `image_url` parts.",
+  "gateway.http.endpoints.chatCompletions.images.allowUrl":
+    "Allow server-side URL fetches for `image_url` parts (default: false; data URIs remain supported).",
+  "gateway.http.endpoints.chatCompletions.images.urlAllowlist":
+    "Optional hostname allowlist for `image_url` URL fetches; supports exact hosts and `*.example.com` wildcards.",
+  "gateway.http.endpoints.chatCompletions.images.allowedMimes":
+    "Allowed MIME types for `image_url` parts (case-insensitive list).",
+  "gateway.http.endpoints.chatCompletions.images.maxBytes":
+    "Max bytes per fetched/decoded `image_url` image (default: 10MB).",
+  "gateway.http.endpoints.chatCompletions.images.maxRedirects":
+    "Max HTTP redirects allowed when fetching `image_url` URLs (default: 3).",
+  "gateway.http.endpoints.chatCompletions.images.timeoutMs":
+    "Timeout in milliseconds for `image_url` URL fetches (default: 10000).",
+  "media.ttlHours":
+    "Optional retention window in hours for persisted inbound media cleanup across the full media tree. Leave unset to preserve legacy behavior, or set values like 24 (1 day) or 168 (7 days) when you want automatic cleanup.",
+  "diagnostics.stuckSessionWarnMs":
+    "Age threshold in milliseconds for emitting stuck-session warnings while a session remains in processing state. Increase for long multi-tool turns to reduce false positives; decrease for faster hang detection.",
+  "tools.web.search.brave.mode":
+    'Brave Search mode: "web" (URL results) or "llm-context" (pre-extracted page content for LLM grounding).',
+  "agents.defaults.bootstrapPromptTruncationWarning":
+    'Inject agent-visible warning text when bootstrap files are truncated: "off", "once" (default), or "always".',
+  "plugins.slots.contextEngine":
+    "Selects the active context engine plugin by id so one plugin provides context orchestration behavior.",
+  "agents.defaults.pdfModel.primary":
+    "Optional PDF model (provider/model) for the PDF analysis tool. Defaults to imageModel, then session model.",
+  "agents.defaults.pdfModel.fallbacks": "Ordered fallback PDF models (provider/model).",
+  "agents.defaults.pdfMaxBytesMb":
+    "Maximum PDF file size in megabytes for the PDF tool (default: 10).",
+  "agents.defaults.pdfMaxPages":
+    "Maximum number of PDF pages to process for the PDF tool (default: 20).",
+  "agents.defaults.compaction.identifierPolicy":
+    'Identifier-preservation policy for compaction summaries: "strict" prepends built-in opaque-identifier retention guidance (default), "off" disables this prefix, and "custom" uses identifierInstructions. Keep "strict" unless you have a specific compatibility need.',
+  "agents.defaults.compaction.identifierInstructions":
+    'Custom identifier-preservation instruction text used when identifierPolicy="custom". Keep this explicit and safety-focused so compaction summaries do not rewrite opaque IDs, URLs, hosts, or ports.',
+  "agents.defaults.compaction.recentTurnsPreserve":
+    "Number of most recent user/assistant turns kept verbatim outside safeguard summarization (default: 3). Raise this to preserve exact recent dialogue context, or lower it to maximize compaction savings.",
+  "agents.defaults.compaction.qualityGuard":
+    "Optional quality-audit retry settings for safeguard compaction summaries. Leave this disabled unless you explicitly want summary audits and one-shot regeneration on failed checks.",
+  "agents.defaults.compaction.qualityGuard.enabled":
+    "Enables summary quality audits and regeneration retries for safeguard compaction. Default: false, so safeguard mode alone does not turn on retry behavior.",
+  "agents.defaults.compaction.qualityGuard.maxRetries":
+    "Maximum number of regeneration retries after a failed safeguard summary quality audit. Use small values to bound extra latency and token cost.",
+  "agents.defaults.compaction.postCompactionSections":
+    'AGENTS.md H2/H3 section names re-injected after compaction so the agent reruns critical startup guidance. Leave unset to use "Session Startup"/"Red Lines" with legacy fallback to "Every Session"/"Safety"; set to [] to disable reinjection entirely.',
+  "agents.defaults.compaction.model":
+    "Optional provider/model override used only for compaction summarization. Set this when you want compaction to run on a different model than the session default, and leave it unset to keep using the primary agent model.",
+  "agents.defaults.compaction.memoryFlush.forceFlushTranscriptBytes":
+    'Forces pre-compaction memory flush when transcript file size reaches this threshold (bytes or strings like "2mb"). Use this to prevent long-session hangs even when token counters are stale; set to 0 to disable.',
+  "agents.defaults.embeddedPi":
+    "Embedded Pi runner hardening controls for how workspace-local Pi settings are trusted and applied in OpenClaw sessions.",
+  "agents.defaults.embeddedPi.projectSettingsPolicy":
+    'How embedded Pi handles workspace-local `.pi/config/settings.json`: "sanitize" (default) strips shellPath/shellCommandPrefix, "ignore" disables project settings entirely, and "trusted" applies project settings as-is.',
+  "session.parentForkMaxTokens":
+    "Maximum parent-session token count allowed for thread/session inheritance forking. If the parent exceeds this, OpenClaw starts a fresh thread session instead of forking; set 0 to disable this protection.",
+  "session.threadBindings.idleHours":
+    "Default inactivity window in hours for thread-bound sessions across providers/channels (0 disables idle auto-unfocus). Default: 24.",
+  "session.threadBindings.maxAgeHours":
+    "Optional hard max age in hours for thread-bound sessions across providers/channels (0 disables hard cap). Default: 0.",
+  "session.maintenance.resetArchiveRetention":
+    "Retention for reset transcript archives (`*.reset.<timestamp>`). Accepts a duration (for example `30d`), or `false` to disable cleanup. Defaults to pruneAfter so reset artifacts do not grow forever.",
+  "session.maintenance.maxDiskBytes":
+    "Optional per-agent sessions-directory disk budget (for example `500mb`). Use this to cap session storage per agent; when exceeded, warn mode reports pressure and enforce mode performs oldest-first cleanup.",
+  "session.maintenance.highWaterBytes":
+    "Target size after disk-budget cleanup (high-water mark). Defaults to 80% of maxDiskBytes; set explicitly for tighter reclaim behavior on constrained disks.",
+  "agents.defaults.heartbeat.directPolicy":
+    'Controls whether heartbeat delivery may target direct/DM chats: "allow" (default) permits DM delivery and "block" suppresses direct-target sends.',
+  "agents.list.*.heartbeat.directPolicy":
+    'Per-agent override for heartbeat direct/DM delivery policy; use "block" for agents that should only send heartbeat alerts to non-DM destinations.',
+  "channels.discord.allowBots":
+    'Allow bot-authored messages to trigger Discord replies (default: false). Set "mentions" to only accept bot messages that mention the bot.',
+  "channels.telegram.threadBindings.enabled":
+    "Enable Telegram conversation binding features (/focus, /unfocus, /agents, and /session idle|max-age). Overrides session.threadBindings.enabled when set.",
+  "channels.telegram.threadBindings.idleHours":
+    "Inactivity window in hours for Telegram bound sessions. Set 0 to disable idle auto-unfocus (default: 24). Overrides session.threadBindings.idleHours when set.",
+  "channels.telegram.threadBindings.maxAgeHours":
+    "Optional hard max age in hours for Telegram bound sessions. Set 0 to disable hard cap (default: 0). Overrides session.threadBindings.maxAgeHours when set.",
+  "channels.telegram.threadBindings.spawnSubagentSessions":
+    "Allow subagent spawns with thread=true to auto-bind Telegram current conversations when supported.",
+  "channels.telegram.threadBindings.spawnAcpSessions":
+    "Allow ACP spawns with thread=true to auto-bind Telegram current conversations when supported.",
+  "channels.discord.inboundWorker.runTimeoutMs": `Optional queued Discord inbound worker timeout in ms. This is separate from Carbon listener timeouts; defaults to ${DISCORD_DEFAULT_INBOUND_WORKER_TIMEOUT_MS} and can be disabled with 0. Set per account via channels.discord.accounts.<id>.inboundWorker.runTimeoutMs.`,
+  "channels.discord.eventQueue.listenerTimeout": `Canonical Discord listener timeout control in ms for gateway normalization/enqueue handlers. Default is ${DISCORD_DEFAULT_LISTENER_TIMEOUT_MS} in OpenClaw; set per account via channels.discord.accounts.<id>.eventQueue.listenerTimeout.`,
+  "channels.discord.eventQueue.maxQueueSize":
+    "Optional Discord EventQueue capacity override (max queued events before backpressure). Set per account via channels.discord.accounts.<id>.eventQueue.maxQueueSize.",
+  "channels.discord.eventQueue.maxConcurrency":
+    "Optional Discord EventQueue concurrency override (max concurrent handler executions). Set per account via channels.discord.accounts.<id>.eventQueue.maxConcurrency.",
+  "channels.discord.threadBindings.idleHours":
+    "Inactivity window in hours for Discord thread-bound sessions (/focus and spawned thread sessions). Set 0 to disable idle auto-unfocus (default: 24). Overrides session.threadBindings.idleHours when set.",
+  "channels.discord.threadBindings.maxAgeHours":
+    "Optional hard max age in hours for Discord thread-bound sessions. Set 0 to disable hard cap (default: 0). Overrides session.threadBindings.maxAgeHours when set.",
+  "channels.discord.threadBindings.spawnAcpSessions":
+    "Allow /acp spawn to auto-create and bind Discord threads for ACP sessions (default: false; opt-in). Set true to enable thread-bound ACP spawns for this account/channel.",
+  "channels.discord.voice.daveEncryption":
+    "Toggle DAVE end-to-end encryption for Discord voice joins (default: true in @discordjs/voice; Discord may require this).",
+  "channels.discord.voice.decryptionFailureTolerance":
+    "Consecutive decrypt failures before DAVE attempts session recovery (passed to @discordjs/voice; default: 24).",
+  "channels.discord.autoPresence.enabled":
+    "Enable automatic Discord bot presence updates based on runtime/model availability signals. When enabled: healthy=>online, degraded/unknown=>idle, exhausted/unavailable=>dnd.",
+  "channels.discord.autoPresence.intervalMs":
+    "How often to evaluate Discord auto-presence state in milliseconds (default: 30000).",
+  "channels.discord.autoPresence.minUpdateIntervalMs":
+    "Minimum time between actual Discord presence update calls in milliseconds (default: 15000). Prevents status spam on noisy state changes.",
+  "channels.discord.autoPresence.healthyText":
+    "Optional custom status text while runtime is healthy (online). If omitted, falls back to static channels.discord.activity when set.",
+  "channels.discord.autoPresence.degradedText":
+    "Optional custom status text while runtime/model availability is degraded or unknown (idle).",
+  "channels.discord.autoPresence.exhaustedText":
+    "Optional custom status text while runtime detects exhausted/unavailable model quota (dnd). Supports {reason} template placeholder.",
 };
