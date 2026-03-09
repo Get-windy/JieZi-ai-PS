@@ -980,6 +980,16 @@ export class OpenClawApp extends LitElement {
     const resolvedName =
       account?.name || (typeof accountConfig.name === "string" ? accountConfig.name : "") || "";
 
+    console.log(
+      `[handleEditAccount] channel=${channelId} accountId=${accountId}`,
+      `accountSnapshot=`,
+      account,
+      `accountConfig=`,
+      accountConfig,
+      `resolvedName=`,
+      resolvedName,
+    );
+
     this.editingChannelAccount = {
       channelId,
       accountId,
@@ -1031,6 +1041,16 @@ export class OpenClawApp extends LitElement {
     const existingAccounts = this.channelsSnapshot?.channelAccounts?.[channelId] ?? [];
     const isNew = !existingAccounts.some((a) => a.accountId === accountId);
 
+    console.log(
+      `[handleSaveAccount] channel=${channelId} accountId=${accountId}`,
+      `name=`,
+      name,
+      `config=`,
+      config,
+      `isNew=`,
+      isNew,
+    );
+
     this.creatingChannelAccount = true;
     try {
       await this.client.request("channels.account.save", {
@@ -1040,6 +1060,7 @@ export class OpenClawApp extends LitElement {
         config,
         isNew,
       });
+      console.log(`[handleSaveAccount] request succeeded for ${channelId}/${accountId}`);
 
       // 刷新配置和通道状态
       const { loadConfig } = await import("./controllers/config.js");

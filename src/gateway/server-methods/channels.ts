@@ -369,7 +369,16 @@ export const channelsHandlers: GatewayRequestHandlers = {
       let cfg: OpenClawConfig = snapshot.config ?? loadConfig();
 
       const nameStr = typeof name === "string" ? name.trim() : "";
-      const isNew = isNewRaw === true || !plugin.config.listAccountIds(cfg).includes(accountId);
+      const existingIds = plugin.config.listAccountIds(cfg);
+      const isNew = isNewRaw === true || !existingIds.includes(accountId);
+
+      console.log(
+        `[channels.account.save] channel=${channelId} accountId=${accountId}` +
+          ` name=${JSON.stringify(nameStr)} isNew=${isNew} isNewRaw=${String(isNewRaw)}` +
+          ` existingIds=${JSON.stringify(existingIds)}` +
+          ` config=${JSON.stringify(accountConfig)}` +
+          ` snapshot.valid=${snapshot.valid}`,
+      );
 
       if (isNew && plugin.setup?.applyAccountConfig) {
         // 新建账号：调用完整的 applyAccountConfig（写入 enabled + 所有 config 字段）
@@ -385,10 +394,34 @@ export const channelsHandlers: GatewayRequestHandlers = {
         if (nameStr && plugin.setup.applyAccountName) {
           cfg = plugin.setup.applyAccountName({ cfg, accountId, name: nameStr });
         }
+        console.log(
+          `[channels.account.save] NEW account written via applyAccountConfig` +
+            ` → channels.${channelId}=${JSON.stringify((cfg.channels as Record<string, unknown>)?.[channelId])}`,
+        );
       } else {
         // 编辑已有账号：只更新名称（applyAccountName）+ 各 config 字段（逐字段 merge）
         if (nameStr && plugin.setup?.applyAccountName) {
           cfg = plugin.setup.applyAccountName({ cfg, accountId, name: nameStr });
+          console.log(
+            `[channels.account.save] applyAccountName done` +
+              ` → channels.${channelId}.accounts.${accountId}.name=` +
+              JSON.stringify(
+                (
+                  (
+                    (cfg.channels as Record<string, unknown>)?.[channelId] as Record<
+                      string,
+                      unknown
+                    >
+                  )?.accounts as Record<string, Record<string, unknown>>
+                )?.[accountId]?.name,
+              ),
+          );
+        } else if (!nameStr) {
+          console.log(`[channels.account.save] name is empty, skipping applyAccountName`);
+        } else {
+          console.log(
+            `[channels.account.save] plugin has no applyAccountName, skipping name update`,
+          );
         }
         // 将 accountConfig 中的字段 merge 到对应账号的配置节点
         if (accountConfig && typeof accountConfig === "object" && !Array.isArray(accountConfig)) {
@@ -397,6 +430,11 @@ export const channelsHandlers: GatewayRequestHandlers = {
           const section = (channels[sectionKey] ?? {}) as Record<string, unknown>;
           const accounts = (section.accounts ?? {}) as Record<string, Record<string, unknown>>;
           const existing = accounts[accountId] ?? {};
+          console.log(
+            `[channels.account.save] merging config fields into accounts.${accountId}:`,
+            `existing=${JSON.stringify(existing)}`,
+            `incoming=${JSON.stringify(accountConfig)}`,
+          );
           cfg = {
             ...cfg,
             channels: {
@@ -417,8 +455,10 @@ export const channelsHandlers: GatewayRequestHandlers = {
       }
 
       await writeConfigFile(cfg, writeOptions);
+      console.log(`[channels.account.save] writeConfigFile OK for ${channelId}/${accountId}`);
       respond(true, { ok: true }, undefined);
     } catch (err) {
+      console.error(`[channels.account.save] ERROR:`, err);
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
     }
   },
@@ -482,13 +522,21 @@ export const channelsHandlers: GatewayRequestHandlers = {
 
     try {
       const { snapshot, writeOptions } = await readConfigFileSnapshotForWrite();
+      const cfgBefore = snapshot.config ?? loadConfig();
       const cfg = plugin.config.deleteAccount({
-        cfg: snapshot.config ?? loadConfig(),
+        cfg: cfgBefore,
         accountId,
       });
+      console.log(
+        `[channels.account.delete] channel=${channelId} accountId=${accountId}` +
+          ` snapshot.valid=${snapshot.valid}` +
+          ` accountsAfter=${JSON.stringify(plugin.config.listAccountIds(cfg))}`,
+      );
       await writeConfigFile(cfg, writeOptions);
+      console.log(`[channels.account.delete] writeConfigFile OK for ${channelId}/${accountId}`);
       respond(true, { ok: true }, undefined);
     } catch (err) {
+      console.error(`[channels.account.delete] ERROR:`, err);
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
     }
   },
