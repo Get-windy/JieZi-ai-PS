@@ -12,6 +12,7 @@ export {
 export {
   clearRuntimeConfigSnapshot,
   getRuntimeConfigSnapshot,
+  getRuntimeConfigSourceSnapshot,
   setRuntimeConfigSnapshot,
 } from "@upstream/config/io.js";
 export { migrateLegacyConfig } from "./legacy-migrate.js";
