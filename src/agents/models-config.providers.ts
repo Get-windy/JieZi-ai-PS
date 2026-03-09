@@ -6,13 +6,7 @@ import {
   DEFAULT_COPILOT_API_BASE_URL,
   resolveCopilotApiToken,
 } from "../providers/github-copilot-token.js";
-import {
-  KILOCODE_BASE_URL,
-  KILOCODE_DEFAULT_CONTEXT_WINDOW,
-  KILOCODE_DEFAULT_COST,
-  KILOCODE_DEFAULT_MAX_TOKENS,
-  KILOCODE_MODEL_CATALOG,
-} from "../providers/kilocode-shared.js";
+import { KILOCODE_BASE_URL } from "../providers/kilocode-shared.js";
 import { normalizeOptionalSecretInput } from "../utils/normalize-secret-input.js";
 import { ensureAuthProfileStore, listProfilesForProvider } from "./auth-profiles.js";
 import { discoverBedrockModels } from "./bedrock-discovery.js";
@@ -40,6 +34,7 @@ import {
   HUGGINGFACE_MODEL_CATALOG,
   buildHuggingfaceModelDefinition,
 } from "./huggingface-models.js";
+import { discoverKilocodeModels } from "./kilocode-models.js";
 import { resolveAwsSdkEnvVarName, resolveEnvApiKey } from "./model-auth.js";
 import { OLLAMA_NATIVE_BASE_URL } from "./ollama-stream.js";
 import {
@@ -53,6 +48,7 @@ import {
   buildTogetherModelDefinition,
 } from "./together-models.js";
 import { discoverVeniceModels, VENICE_BASE_URL } from "./venice-models.js";
+import { discoverVercelAiGatewayModels, VERCEL_AI_GATEWAY_BASE_URL } from "./vercel-ai-gateway.js";
 
 type ModelsConfig = NonNullable<OpenClawConfig["models"]>;
 export type ProviderConfig = NonNullable<ModelsConfig["providers"]>[string];
@@ -144,6 +140,8 @@ const QWEN_PORTAL_DEFAULT_COST = {
 
 const OLLAMA_BASE_URL = OLLAMA_NATIVE_BASE_URL;
 const OLLAMA_API_BASE_URL = OLLAMA_BASE_URL;
+const OLLAMA_SHOW_CONCURRENCY = 8;
+const OLLAMA_SHOW_MAX_MODELS = 200;
 const OLLAMA_DEFAULT_CONTEXT_WINDOW = 128000;
 const OLLAMA_DEFAULT_MAX_TOKENS = 8192;
 const OLLAMA_DEFAULT_COST = {
@@ -236,7 +234,42 @@ export function resolveOllamaApiBase(configuredBaseUrl?: string): string {
   return trimmed.replace(/\/v1$/i, "");
 }
 
-async function discoverOllamaModels(baseUrl?: string): Promise<ModelDefinitionConfig[]> {
+async function queryOllamaContextWindow(
+  apiBase: string,
+  modelName: string,
+): Promise<number | undefined> {
+  try {
+    const response = await fetch(`${apiBase}/api/show`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: modelName }),
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+    const data = (await response.json()) as { model_info?: Record<string, unknown> };
+    if (!data.model_info) {
+      return undefined;
+    }
+    for (const [key, value] of Object.entries(data.model_info)) {
+      if (key.endsWith(".context_length") && typeof value === "number" && Number.isFinite(value)) {
+        const contextWindow = Math.floor(value);
+        if (contextWindow > 0) {
+          return contextWindow;
+        }
+      }
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function discoverOllamaModels(
+  baseUrl?: string,
+  opts?: { quiet?: boolean },
+): Promise<ModelDefinitionConfig[]> {
   // Skip Ollama discovery in test environments
   if (process.env.VITEST || process.env.NODE_ENV === "test") {
     return [];
@@ -247,30 +280,49 @@ async function discoverOllamaModels(baseUrl?: string): Promise<ModelDefinitionCo
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) {
-      log.warn(`Failed to discover Ollama models: ${response.status}`);
+      if (!opts?.quiet) {
+        log.warn(`Failed to discover Ollama models: ${response.status}`);
+      }
       return [];
     }
     const data = (await response.json()) as OllamaTagsResponse;
     if (!data.models || data.models.length === 0) {
-      log.warn("No Ollama models found on local instance");
+      log.debug("No Ollama models found on local instance");
       return [];
     }
-    return data.models.map((model) => {
-      const modelId = model.name;
-      const isReasoning =
-        modelId.toLowerCase().includes("r1") || modelId.toLowerCase().includes("reasoning");
-      return {
-        id: modelId,
-        name: modelId,
-        reasoning: isReasoning,
-        input: ["text"],
-        cost: OLLAMA_DEFAULT_COST,
-        contextWindow: OLLAMA_DEFAULT_CONTEXT_WINDOW,
-        maxTokens: OLLAMA_DEFAULT_MAX_TOKENS,
-      };
-    });
+    const modelsToInspect = data.models.slice(0, OLLAMA_SHOW_MAX_MODELS);
+    if (modelsToInspect.length < data.models.length && !opts?.quiet) {
+      log.warn(
+        `Capping Ollama /api/show inspection to ${OLLAMA_SHOW_MAX_MODELS} models (received ${data.models.length})`,
+      );
+    }
+    const discovered: ModelDefinitionConfig[] = [];
+    for (let index = 0; index < modelsToInspect.length; index += OLLAMA_SHOW_CONCURRENCY) {
+      const batch = modelsToInspect.slice(index, index + OLLAMA_SHOW_CONCURRENCY);
+      const batchDiscovered = await Promise.all(
+        batch.map(async (model) => {
+          const modelId = model.name;
+          const contextWindow = await queryOllamaContextWindow(apiBase, modelId);
+          const isReasoning =
+            modelId.toLowerCase().includes("r1") || modelId.toLowerCase().includes("reasoning");
+          return {
+            id: modelId,
+            name: modelId,
+            reasoning: isReasoning,
+            input: ["text"],
+            cost: OLLAMA_DEFAULT_COST,
+            contextWindow: contextWindow ?? OLLAMA_DEFAULT_CONTEXT_WINDOW,
+            maxTokens: OLLAMA_DEFAULT_MAX_TOKENS,
+          } satisfies ModelDefinitionConfig;
+        }),
+      );
+      discovered.push(...batchDiscovered);
+    }
+    return discovered;
   } catch (error) {
-    log.warn(`Failed to discover Ollama models: ${String(error)}`);
+    if (!opts?.quiet) {
+      log.warn(`Failed to discover Ollama models: ${String(error)}`);
+    }
     return [];
   }
 }
@@ -328,14 +380,19 @@ async function discoverVllmModels(
   }
 }
 
+const ENV_VAR_NAME_RE = /^[A-Z_][A-Z0-9_]*$/;
+
 function normalizeApiKeyConfig(value: string): string {
   const trimmed = value.trim();
   const match = /^\$\{([A-Z0-9_]+)\}$/.exec(trimmed);
   return match?.[1] ?? trimmed;
 }
 
-function resolveEnvApiKeyVarName(provider: string): string | undefined {
-  const resolved = resolveEnvApiKey(provider);
+function resolveEnvApiKeyVarName(
+  provider: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const resolved = resolveEnvApiKey(provider, env);
   if (!resolved) {
     return undefined;
   }
@@ -343,39 +400,95 @@ function resolveEnvApiKeyVarName(provider: string): string | undefined {
   return match ? match[1] : undefined;
 }
 
-function resolveAwsSdkApiKeyVarName(): string {
-  return resolveAwsSdkEnvVarName() ?? "AWS_PROFILE";
+function resolveAwsSdkApiKeyVarName(env: NodeJS.ProcessEnv = process.env): string {
+  return resolveAwsSdkEnvVarName(env) ?? "AWS_PROFILE";
+}
+
+type ProfileApiKeyResolution = {
+  apiKey: string;
+  source: "plaintext" | "env-ref" | "non-env-ref";
+  /** Optional secret value that may be used for provider discovery only. */
+  discoveryApiKey?: string;
+};
+
+function toDiscoveryApiKey(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return trimmed;
+}
+
+function resolveApiKeyFromCredential(
+  cred: ReturnType<typeof ensureAuthProfileStore>["profiles"][string] | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): ProfileApiKeyResolution | undefined {
+  if (!cred) {
+    return undefined;
+  }
+  if (cred.type === "api_key") {
+    const keyRef = coerceSecretRef(cred.keyRef);
+    if (keyRef && keyRef.id.trim()) {
+      if (keyRef.source === "env") {
+        const envVar = keyRef.id.trim();
+        return {
+          apiKey: envVar,
+          source: "env-ref",
+          discoveryApiKey: toDiscoveryApiKey(env[envVar]),
+        };
+      }
+      return {
+        apiKey: `__secretref:${keyRef.source}__`,
+        source: "non-env-ref",
+      };
+    }
+    if (cred.key?.trim()) {
+      return {
+        apiKey: cred.key,
+        source: "plaintext",
+        discoveryApiKey: toDiscoveryApiKey(cred.key),
+      };
+    }
+    return undefined;
+  }
+  if (cred.type === "token") {
+    const tokenRef = coerceSecretRef(cred.tokenRef);
+    if (tokenRef && tokenRef.id.trim()) {
+      if (tokenRef.source === "env") {
+        const envVar = tokenRef.id.trim();
+        return {
+          apiKey: envVar,
+          source: "env-ref",
+          discoveryApiKey: toDiscoveryApiKey(env[envVar]),
+        };
+      }
+      return {
+        apiKey: `__secretref:${tokenRef.source}__`,
+        source: "non-env-ref",
+      };
+    }
+    if (cred.token?.trim()) {
+      return {
+        apiKey: cred.token,
+        source: "plaintext",
+        discoveryApiKey: toDiscoveryApiKey(cred.token),
+      };
+    }
+  }
+  return undefined;
 }
 
 function resolveApiKeyFromProfiles(params: {
   provider: string;
   store: ReturnType<typeof ensureAuthProfileStore>;
-}): string | undefined {
+  env?: NodeJS.ProcessEnv;
+}): ProfileApiKeyResolution | undefined {
+  const env = params.env ?? process.env;
   const ids = listProfilesForProvider(params.store, params.provider);
   for (const id of ids) {
-    const cred = params.store.profiles[id];
-    if (!cred) {
-      continue;
-    }
-    if (cred.type === "api_key") {
-      if (cred.key?.trim()) {
-        return cred.key;
-      }
-      const keyRef = coerceSecretRef(cred.keyRef);
-      if (keyRef?.source === "env" && keyRef.id.trim()) {
-        return keyRef.id.trim();
-      }
-      continue;
-    }
-    if (cred.type === "token") {
-      if (cred.token?.trim()) {
-        return cred.token;
-      }
-      const tokenRef = coerceSecretRef(cred.tokenRef);
-      if (tokenRef?.source === "env" && tokenRef.id.trim()) {
-        return tokenRef.id.trim();
-      }
-      continue;
+    const resolved = resolveApiKeyFromCredential(params.store.profiles[id], env);
+    if (resolved) {
+      return resolved;
     }
   }
   return undefined;
@@ -386,6 +499,18 @@ export function normalizeGoogleModelId(id: string): string {
     return "gemini-3-pro-preview";
   }
   if (id === "gemini-3-flash") {
+    return "gemini-3-flash-preview";
+  }
+  if (id === "gemini-3.1-pro") {
+    return "gemini-3.1-pro-preview";
+  }
+  if (id === "gemini-3.1-flash-lite") {
+    return "gemini-3.1-flash-lite-preview";
+  }
+  // Preserve compatibility with earlier OpenClaw docs/config that pointed at a
+  // non-existent Gemini Flash preview ID. Google's current Flash text model is
+  // `gemini-3-flash-preview`.
+  if (id === "gemini-3.1-flash" || id === "gemini-3.1-flash-preview") {
     return "gemini-3-flash-preview";
   }
   return id;
@@ -427,11 +552,19 @@ function normalizeAntigravityProvider(provider: ProviderConfig): ProviderConfig 
 export function normalizeProviders(params: {
   providers: ModelsConfig["providers"];
   agentDir: string;
+  env?: NodeJS.ProcessEnv;
+  secretDefaults?: {
+    env?: string;
+    file?: string;
+    exec?: string;
+  };
+  secretRefManagedProviders?: Set<string>;
 }): ModelsConfig["providers"] {
   const { providers } = params;
   if (!providers) {
     return providers;
   }
+  const env = params.env ?? process.env;
   const authStore = ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
@@ -440,6 +573,13 @@ export function normalizeProviders(params: {
 
   for (const [key, provider] of Object.entries(providers)) {
     const normalizedKey = key.trim();
+    if (!normalizedKey) {
+      mutated = true;
+      continue;
+    }
+    if (normalizedKey !== key) {
+      mutated = true;
+    }
     let normalizedProvider = provider;
     const configuredApiKey = normalizedProvider.apiKey;
 
@@ -455,6 +595,27 @@ export function normalizeProviders(params: {
       };
     }
 
+    const profileApiKey = resolveApiKeyFromProfiles({
+      provider: normalizedKey,
+      store: authStore,
+      env,
+    });
+
+    // Reverse-lookup: if apiKey looks like a resolved secret value (not an env
+    // var name), check whether it matches the canonical env var for this provider.
+    const currentApiKey = normalizedProvider.apiKey;
+    if (
+      typeof currentApiKey === "string" &&
+      currentApiKey.trim() &&
+      !ENV_VAR_NAME_RE.test(currentApiKey.trim())
+    ) {
+      const envVarName = resolveEnvApiKeyVarName(normalizedKey, env);
+      if (envVarName && env[envVarName] === currentApiKey) {
+        mutated = true;
+        normalizedProvider = { ...normalizedProvider, apiKey: envVarName };
+      }
+    }
+
     // If a provider defines models, pi's ModelRegistry requires apiKey to be set.
     // Fill it from the environment or auth profiles when possible.
     const hasModels =
@@ -465,16 +626,12 @@ export function normalizeProviders(params: {
       const authMode =
         normalizedProvider.auth ?? (normalizedKey === "amazon-bedrock" ? "aws-sdk" : undefined);
       if (authMode === "aws-sdk") {
-        const apiKey = resolveAwsSdkApiKeyVarName();
+        const apiKey = resolveAwsSdkApiKeyVarName(env);
         mutated = true;
         normalizedProvider = { ...normalizedProvider, apiKey };
       } else {
-        const fromEnv = resolveEnvApiKeyVarName(normalizedKey);
-        const fromProfiles = resolveApiKeyFromProfiles({
-          provider: normalizedKey,
-          store: authStore,
-        });
-        const apiKey = fromEnv ?? fromProfiles;
+        const fromEnv = resolveEnvApiKeyVarName(normalizedKey, env);
+        const apiKey = fromEnv ?? profileApiKey?.apiKey;
         if (apiKey?.trim()) {
           mutated = true;
           normalizedProvider = { ...normalizedProvider, apiKey };
@@ -498,7 +655,17 @@ export function normalizeProviders(params: {
       normalizedProvider = antigravityNormalized;
     }
 
-    next[key] = normalizedProvider;
+    const existing = next[normalizedKey];
+    if (existing) {
+      mutated = true;
+      next[normalizedKey] = {
+        ...existing,
+        ...normalizedProvider,
+        models: normalizedProvider.models ?? existing.models,
+      };
+      continue;
+    }
+    next[normalizedKey] = normalizedProvider;
   }
 
   return mutated ? next : providers;
@@ -690,8 +857,19 @@ async function buildVeniceProvider(): Promise<ProviderConfig> {
   };
 }
 
-async function buildOllamaProvider(configuredBaseUrl?: string): Promise<ProviderConfig> {
-  const models = await discoverOllamaModels(configuredBaseUrl);
+async function buildVercelAiGatewayProvider(): Promise<ProviderConfig> {
+  return {
+    baseUrl: VERCEL_AI_GATEWAY_BASE_URL,
+    api: "anthropic-messages",
+    models: await discoverVercelAiGatewayModels(),
+  };
+}
+
+async function buildOllamaProvider(
+  configuredBaseUrl?: string,
+  opts?: { quiet?: boolean },
+): Promise<ProviderConfig> {
+  const models = await discoverOllamaModels(configuredBaseUrl, opts);
   return {
     baseUrl: resolveOllamaApiBase(configuredBaseUrl),
     api: "ollama",
@@ -826,74 +1004,100 @@ export function buildNvidiaProvider(): ProviderConfig {
   };
 }
 
-export function buildKilocodeProvider(): ProviderConfig {
+export async function buildKilocodeProvider(): Promise<ProviderConfig> {
+  const models = await discoverKilocodeModels();
   return {
     baseUrl: KILOCODE_BASE_URL,
     api: "openai-completions",
-    models: KILOCODE_MODEL_CATALOG.map((model) => ({
-      id: model.id,
-      name: model.name,
-      reasoning: model.reasoning,
-      input: model.input,
-      cost: KILOCODE_DEFAULT_COST,
-      contextWindow: model.contextWindow ?? KILOCODE_DEFAULT_CONTEXT_WINDOW,
-      maxTokens: model.maxTokens ?? KILOCODE_DEFAULT_MAX_TOKENS,
-    })),
+    models,
   };
 }
 
-export async function resolveImplicitProviders(params: {
+async function buildKilocodeProviderWithDiscovery(): Promise<ProviderConfig> {
+  return buildKilocodeProvider();
+}
+
+type ImplicitProviderParams = {
   agentDir: string;
+  config?: OpenClawConfig;
+  env?: NodeJS.ProcessEnv;
   explicitProviders?: Record<string, ProviderConfig> | null;
-}): Promise<ModelsConfig["providers"]> {
+};
+
+export async function resolveImplicitProviders(
+  params: ImplicitProviderParams,
+): Promise<ModelsConfig["providers"]> {
   const providers: Record<string, ProviderConfig> = {};
+  const env = params.env ?? process.env;
   const authStore = ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
 
-  const minimaxKey =
-    resolveEnvApiKeyVarName("minimax") ??
-    resolveApiKeyFromProfiles({ provider: "minimax", store: authStore });
+  const resolveProviderApiKey = (
+    provider: string,
+  ): { apiKey: string | undefined; discoveryApiKey?: string } => {
+    const envVar = resolveEnvApiKeyVarName(provider, env);
+    if (envVar) {
+      return {
+        apiKey: envVar,
+        discoveryApiKey: toDiscoveryApiKey(env[envVar]),
+      };
+    }
+    const fromProfiles = resolveApiKeyFromProfiles({ provider, store: authStore, env });
+    return {
+      apiKey: fromProfiles?.apiKey,
+      discoveryApiKey: fromProfiles?.discoveryApiKey,
+    };
+  };
+
+  // ── Minimax ──────────────────────────────────────────────────────────
+  const { apiKey: minimaxKey } = resolveProviderApiKey("minimax");
   if (minimaxKey) {
     providers.minimax = { ...buildMinimaxProvider(), apiKey: minimaxKey };
   }
 
+  const minimaxEnvKey = resolveEnvApiKeyVarName("minimax-portal", env);
   const minimaxOauthProfile = listProfilesForProvider(authStore, "minimax-portal");
-  if (minimaxOauthProfile.length > 0) {
+  if (minimaxEnvKey || minimaxOauthProfile.length > 0) {
     providers["minimax-portal"] = {
       ...buildMinimaxPortalProvider(),
       apiKey: MINIMAX_OAUTH_PLACEHOLDER,
     };
   }
 
-  const moonshotKey =
-    resolveEnvApiKeyVarName("moonshot") ??
-    resolveApiKeyFromProfiles({ provider: "moonshot", store: authStore });
+  // ── Moonshot / Kimi ──────────────────────────────────────────────────
+  const { apiKey: moonshotKey } = resolveProviderApiKey("moonshot");
   if (moonshotKey) {
     providers.moonshot = { ...buildMoonshotProvider(), apiKey: moonshotKey };
   }
 
-  const kimiCodingKey =
-    resolveEnvApiKeyVarName("kimi-coding") ??
-    resolveApiKeyFromProfiles({ provider: "kimi-coding", store: authStore });
+  const { apiKey: kimiCodingKey } = resolveProviderApiKey("kimi-coding");
   if (kimiCodingKey) {
     providers["kimi-coding"] = { ...buildKimiCodingProvider(), apiKey: kimiCodingKey };
   }
 
-  const syntheticKey =
-    resolveEnvApiKeyVarName("synthetic") ??
-    resolveApiKeyFromProfiles({ provider: "synthetic", store: authStore });
+  // ── Synthetic ─────────────────────────────────────────────────────────
+  const { apiKey: syntheticKey } = resolveProviderApiKey("synthetic");
   if (syntheticKey) {
     providers.synthetic = { ...buildSyntheticProvider(), apiKey: syntheticKey };
   }
 
-  const veniceKey =
-    resolveEnvApiKeyVarName("venice") ??
-    resolveApiKeyFromProfiles({ provider: "venice", store: authStore });
+  // ── Venice ────────────────────────────────────────────────────────────
+  const { apiKey: veniceKey } = resolveProviderApiKey("venice");
   if (veniceKey) {
     providers.venice = { ...(await buildVeniceProvider()), apiKey: veniceKey };
   }
 
+  // ── Vercel AI Gateway ─────────────────────────────────────────────────
+  const { apiKey: vercelKey } = resolveProviderApiKey("vercel-ai-gateway");
+  if (vercelKey) {
+    providers["vercel-ai-gateway"] = {
+      ...(await buildVercelAiGatewayProvider()),
+      apiKey: vercelKey,
+    };
+  }
+
+  // ── Qwen Portal ───────────────────────────────────────────────────────
   const qwenProfiles = listProfilesForProvider(authStore, "qwen-portal");
   if (qwenProfiles.length > 0) {
     providers["qwen-portal"] = {
@@ -902,35 +1106,26 @@ export async function resolveImplicitProviders(params: {
     };
   }
 
-  const volcengineKey =
-    resolveEnvApiKeyVarName("volcengine") ??
-    resolveApiKeyFromProfiles({ provider: "volcengine", store: authStore });
+  // ── Volcengine (Doubao) + BytePlus (paired) ───────────────────────────
+  const { apiKey: volcengineKey } = resolveProviderApiKey("volcengine");
   if (volcengineKey) {
     providers.volcengine = { ...buildDoubaoProvider(), apiKey: volcengineKey };
-    providers["volcengine-plan"] = {
-      ...buildDoubaoCodingProvider(),
-      apiKey: volcengineKey,
-    };
+    providers["volcengine-plan"] = { ...buildDoubaoCodingProvider(), apiKey: volcengineKey };
   }
 
-  const byteplusKey =
-    resolveEnvApiKeyVarName("byteplus") ??
-    resolveApiKeyFromProfiles({ provider: "byteplus", store: authStore });
+  const { apiKey: byteplusKey } = resolveProviderApiKey("byteplus");
   if (byteplusKey) {
     providers.byteplus = { ...buildBytePlusProvider(), apiKey: byteplusKey };
-    providers["byteplus-plan"] = {
-      ...buildBytePlusCodingProvider(),
-      apiKey: byteplusKey,
-    };
+    providers["byteplus-plan"] = { ...buildBytePlusCodingProvider(), apiKey: byteplusKey };
   }
 
-  const xiaomiKey =
-    resolveEnvApiKeyVarName("xiaomi") ??
-    resolveApiKeyFromProfiles({ provider: "xiaomi", store: authStore });
+  // ── Xiaomi ────────────────────────────────────────────────────────────
+  const { apiKey: xiaomiKey } = resolveProviderApiKey("xiaomi");
   if (xiaomiKey) {
     providers.xiaomi = { ...buildXiaomiProvider(), apiKey: xiaomiKey };
   }
 
+  // ── Cloudflare AI Gateway ─────────────────────────────────────────────
   const cloudflareProfiles = listProfilesForProvider(authStore, "cloudflare-ai-gateway");
   for (const profileId of cloudflareProfiles) {
     const cred = authStore.profiles[profileId];
@@ -946,94 +1141,130 @@ export async function resolveImplicitProviders(params: {
     if (!baseUrl) {
       continue;
     }
-    const apiKey = resolveEnvApiKeyVarName("cloudflare-ai-gateway") ?? cred.key?.trim() ?? "";
-    if (!apiKey) {
+    const envVarKey = resolveEnvApiKeyVarName("cloudflare-ai-gateway", env);
+    const profileCredKey = resolveApiKeyFromCredential(cred, env)?.apiKey;
+    const cfApiKey = envVarKey ?? profileCredKey ?? "";
+    if (!cfApiKey) {
       continue;
     }
     providers["cloudflare-ai-gateway"] = {
       baseUrl,
       api: "anthropic-messages",
-      apiKey,
+      apiKey: cfApiKey,
       models: [buildCloudflareAiGatewayModelDefinition()],
     };
     break;
   }
 
-  // Ollama provider - only add if explicitly configured.
-  // Use the user's configured baseUrl (from explicit providers) for model
-  // discovery so that remote / non-default Ollama instances are reachable.
-  const ollamaKey =
-    resolveEnvApiKeyVarName("ollama") ??
-    resolveApiKeyFromProfiles({ provider: "ollama", store: authStore });
-  if (ollamaKey) {
-    const ollamaBaseUrl = params.explicitProviders?.ollama?.baseUrl;
-    providers.ollama = { ...(await buildOllamaProvider(ollamaBaseUrl)), apiKey: ollamaKey };
+  // ── Ollama ────────────────────────────────────────────────────────────
+  const { apiKey: ollamaKey } = resolveProviderApiKey("ollama");
+  const explicitOllama = params.explicitProviders?.ollama;
+  const hasExplicitOllamaModels =
+    Array.isArray(explicitOllama?.models) && explicitOllama.models.length > 0;
+  if (hasExplicitOllamaModels && explicitOllama) {
+    providers.ollama = {
+      ...explicitOllama,
+      baseUrl: resolveOllamaApiBase(explicitOllama.baseUrl),
+      api: explicitOllama.api ?? "ollama",
+      apiKey: ollamaKey ?? explicitOllama.apiKey ?? "ollama-local",
+    };
+  } else {
+    const ollamaBaseUrl = explicitOllama?.baseUrl;
+    const hasExplicitOllamaConfig = Boolean(explicitOllama);
+    const ollamaProvider = await buildOllamaProvider(ollamaBaseUrl, {
+      quiet: !ollamaKey && !hasExplicitOllamaConfig,
+    });
+    if (ollamaProvider.models.length > 0 || ollamaKey || explicitOllama?.apiKey) {
+      providers.ollama = {
+        ...ollamaProvider,
+        apiKey: ollamaKey ?? explicitOllama?.apiKey ?? "ollama-local",
+      };
+    }
   }
 
-  // vLLM provider - OpenAI-compatible local server (opt-in via env/profile).
-  // If explicitly configured, keep user-defined models/settings as-is.
+  // ── vLLM ──────────────────────────────────────────────────────────────
   if (!params.explicitProviders?.vllm) {
-    const vllmEnvVar = resolveEnvApiKeyVarName("vllm");
-    const vllmProfileKey = resolveApiKeyFromProfiles({ provider: "vllm", store: authStore });
-    const vllmKey = vllmEnvVar ?? vllmProfileKey;
+    const { apiKey: vllmKey, discoveryApiKey: vllmDiscoveryKey } = resolveProviderApiKey("vllm");
     if (vllmKey) {
-      const discoveryApiKey = vllmEnvVar
-        ? (process.env[vllmEnvVar]?.trim() ?? "")
-        : (vllmProfileKey ?? "");
       providers.vllm = {
-        ...(await buildVllmProvider({ apiKey: discoveryApiKey || undefined })),
+        ...(await buildVllmProvider({ apiKey: vllmDiscoveryKey })),
         apiKey: vllmKey,
       };
     }
   }
 
-  const togetherKey =
-    resolveEnvApiKeyVarName("together") ??
-    resolveApiKeyFromProfiles({ provider: "together", store: authStore });
+  // ── Together ──────────────────────────────────────────────────────────
+  const { apiKey: togetherKey } = resolveProviderApiKey("together");
   if (togetherKey) {
-    providers.together = {
-      ...buildTogetherProvider(),
-      apiKey: togetherKey,
-    };
+    providers.together = { ...buildTogetherProvider(), apiKey: togetherKey };
   }
 
-  const huggingfaceKey =
-    resolveEnvApiKeyVarName("huggingface") ??
-    resolveApiKeyFromProfiles({ provider: "huggingface", store: authStore });
+  // ── Huggingface ───────────────────────────────────────────────────────
+  const { apiKey: huggingfaceKey, discoveryApiKey: hfDiscoveryKey } =
+    resolveProviderApiKey("huggingface");
   if (huggingfaceKey) {
-    const hfProvider = await buildHuggingfaceProvider(huggingfaceKey);
     providers.huggingface = {
-      ...hfProvider,
+      ...(await buildHuggingfaceProvider(hfDiscoveryKey)),
       apiKey: huggingfaceKey,
     };
   }
 
-  const qianfanKey =
-    resolveEnvApiKeyVarName("qianfan") ??
-    resolveApiKeyFromProfiles({ provider: "qianfan", store: authStore });
+  // ── Qianfan ───────────────────────────────────────────────────────────
+  const { apiKey: qianfanKey } = resolveProviderApiKey("qianfan");
   if (qianfanKey) {
     providers.qianfan = { ...buildQianfanProvider(), apiKey: qianfanKey };
   }
 
-  const openrouterKey =
-    resolveEnvApiKeyVarName("openrouter") ??
-    resolveApiKeyFromProfiles({ provider: "openrouter", store: authStore });
+  // ── OpenRouter ────────────────────────────────────────────────────────
+  const { apiKey: openrouterKey } = resolveProviderApiKey("openrouter");
   if (openrouterKey) {
     providers.openrouter = { ...buildOpenrouterProvider(), apiKey: openrouterKey };
   }
 
-  const nvidiaKey =
-    resolveEnvApiKeyVarName("nvidia") ??
-    resolveApiKeyFromProfiles({ provider: "nvidia", store: authStore });
+  // ── NVIDIA ────────────────────────────────────────────────────────────
+  const { apiKey: nvidiaKey } = resolveProviderApiKey("nvidia");
   if (nvidiaKey) {
     providers.nvidia = { ...buildNvidiaProvider(), apiKey: nvidiaKey };
   }
 
-  const kilocodeKey =
-    resolveEnvApiKeyVarName("kilocode") ??
-    resolveApiKeyFromProfiles({ provider: "kilocode", store: authStore });
+  // ── Kilocode ──────────────────────────────────────────────────────────
+  const { apiKey: kilocodeKey } = resolveProviderApiKey("kilocode");
   if (kilocodeKey) {
-    providers.kilocode = { ...buildKilocodeProvider(), apiKey: kilocodeKey };
+    providers.kilocode = {
+      ...(await buildKilocodeProviderWithDiscovery()),
+      apiKey: kilocodeKey,
+    };
+  }
+
+  // ── GitHub Copilot ────────────────────────────────────────────────────
+  if (!providers["github-copilot"]) {
+    const implicitCopilot = await resolveImplicitCopilotProvider({
+      agentDir: params.agentDir,
+      env,
+    });
+    if (implicitCopilot) {
+      providers["github-copilot"] = implicitCopilot;
+    }
+  }
+
+  // ── Amazon Bedrock ────────────────────────────────────────────────────
+  const implicitBedrock = await resolveImplicitBedrockProvider({
+    agentDir: params.agentDir,
+    config: params.config,
+    env,
+  });
+  if (implicitBedrock) {
+    const existing = providers["amazon-bedrock"];
+    providers["amazon-bedrock"] = existing
+      ? {
+          ...implicitBedrock,
+          ...existing,
+          models:
+            Array.isArray(existing.models) && existing.models.length > 0
+              ? existing.models
+              : implicitBedrock.models,
+        }
+      : implicitBedrock;
   }
 
   return providers;
