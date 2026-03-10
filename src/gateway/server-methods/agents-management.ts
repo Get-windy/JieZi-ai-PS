@@ -17,6 +17,7 @@
  * - agent.channelAccounts.available - 获取可用但未绑定的通道账号
  */
 
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -26,6 +27,7 @@ import {
   resolveAgentWorkspaceDir,
 } from "../../agents/agent-scope.js";
 import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
+import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
 import { getChannelPlugin, listChannelPlugins } from "../../channels/plugins/index.js";
 import { listAgentEntries, findAgentEntryIndex } from "../../commands/agents.config.js";
 import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../config/config.js";
@@ -1905,16 +1907,215 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           workspace,
         },
       },
+      // 同步写入 groups.workspace.root：群组工作空间放在系统根目录的 groups/ 子目录下
+      groups: {
+        ...(cfg as any).groups,
+        workspace: {
+          ...(cfg as any).groups?.workspace,
+          root: path.join(workspace, "groups"),
+        },
+      },
     };
 
     try {
       await writeConfigFile(updatedConfig);
+      // 同步更新内存中群组工作空间管理器
+      groupWorkspaceManager.setRootDir(path.join(workspace, "groups"));
       respond(true, { success: true, workspace }, undefined);
     } catch (err) {
       respond(
         false,
         undefined,
         errorShape(ErrorCodes.UNAVAILABLE, `Failed to save config: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * workspace.backup - 备份整个工作空间根目录
+   * 将 workspacesDir 整个复制到 backupDir（可指定，默认为 workspacesDir + "_backup_" + 时间戳）
+   */
+  "workspace.backup": async ({ params, respond }) => {
+    const cfg = loadConfig();
+    const currentRoot = cfg.agents?.defaults?.workspace || resolveDefaultAgentWorkspaceDir();
+    const customBackupDir = String(
+      (params as { backupDir?: string | number })?.backupDir ?? "",
+    ).trim();
+
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[:.]/g, "-")
+      .replace("T", "_")
+      .slice(0, 19);
+    const backupDir = customBackupDir || `${currentRoot}_backup_${timestamp}`;
+
+    try {
+      await fs.access(currentRoot);
+    } catch {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `Workspace root does not exist: ${currentRoot}`),
+      );
+      return;
+    }
+
+    const copyDir = async (src: string, dest: string): Promise<number> => {
+      await fs.mkdir(dest, { recursive: true });
+      const entries = await fs.readdir(src, { withFileTypes: true });
+      let count = 0;
+      for (const entry of entries) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+          count += await copyDir(srcPath, destPath);
+        } else {
+          await fs.copyFile(srcPath, destPath);
+          count++;
+        }
+      }
+      return count;
+    };
+
+    try {
+      const fileCount = await copyDir(currentRoot, backupDir);
+      respond(true, { success: true, sourceDir: currentRoot, backupDir, fileCount }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Backup failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * workspace.migrate.all - 批量迁移整个工作空间根目录到新路径
+   * 1. 复制 currentRoot/* 到 newRoot/*
+   * 2. 更新 agents.defaults.workspace + groups.workspace.root
+   * 3. 更新每个 agent 的 workspace 字段为新路径下对应子目录
+   */
+  "workspace.migrate.all": async ({ params, respond }) => {
+    const newRoot = String((params as { newRoot?: string | number })?.newRoot ?? "").trim();
+    if (!newRoot) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "newRoot is required"));
+      return;
+    }
+
+    const snapshot = await readConfigFileSnapshot();
+    if (!snapshot.valid) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before migrating"),
+      );
+      return;
+    }
+    const cfg = snapshot.config;
+    const oldRoot = cfg.agents?.defaults?.workspace || resolveDefaultAgentWorkspaceDir();
+    const newRootResolved = path.resolve(newRoot);
+
+    if (path.resolve(oldRoot) === newRootResolved) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "New root is the same as the current root"),
+      );
+      return;
+    }
+
+    // 确保新根目录存在
+    try {
+      await fs.mkdir(newRootResolved, { recursive: true });
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `Cannot create new root directory: ${String(err)}`),
+      );
+      return;
+    }
+
+    // 复制目录递归
+    const copyDir = async (src: string, dest: string): Promise<number> => {
+      await fs.mkdir(dest, { recursive: true });
+      let count = 0;
+      try {
+        const entries = await fs.readdir(src, { withFileTypes: true });
+        for (const entry of entries) {
+          const srcPath = path.join(src, entry.name);
+          const destPath = path.join(dest, entry.name);
+          if (entry.isDirectory()) {
+            count += await copyDir(srcPath, destPath);
+          } else {
+            await fs.copyFile(srcPath, destPath);
+            count++;
+          }
+        }
+      } catch {
+        // 源不存在则跳过
+      }
+      return count;
+    };
+
+    try {
+      // 复制整个 oldRoot 到 newRoot
+      let totalFiles = 0;
+      try {
+        await fs.access(oldRoot);
+        totalFiles = await copyDir(oldRoot, newRootResolved);
+      } catch {
+        // oldRoot 不存在，跳过复制，只更新配置
+      }
+
+      // 更新每个 agent 的 workspace 字段：把 oldRoot 前缀替换为 newRootResolved
+      const agents = listAgentEntries(cfg);
+      const updatedAgents = agents.map((agent) => {
+        const agentWorkspace = agent.workspace;
+        if (agentWorkspace && path.resolve(agentWorkspace).startsWith(path.resolve(oldRoot))) {
+          const rel = path.relative(path.resolve(oldRoot), path.resolve(agentWorkspace));
+          return { ...agent, workspace: path.join(newRootResolved, rel) };
+        }
+        return agent;
+      });
+
+      // 更新配置
+      const updatedConfig: OpenClawConfig = {
+        ...cfg,
+        agents: {
+          ...cfg.agents,
+          defaults: { ...cfg.agents?.defaults, workspace: newRoot },
+          list: updatedAgents,
+        },
+        groups: {
+          ...(cfg as any).groups,
+          workspace: {
+            ...(cfg as any).groups?.workspace,
+            root: path.join(newRootResolved, "groups"),
+          },
+        },
+      };
+
+      await writeConfigFile(updatedConfig);
+      // 同步内存中群组工作空间路径
+      groupWorkspaceManager.setRootDir(path.join(newRootResolved, "groups"));
+
+      respond(
+        true,
+        {
+          success: true,
+          oldRoot,
+          newRoot: newRootResolved,
+          filesCopied: totalFiles,
+          agentsMigrated: updatedAgents.length,
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Migration failed: ${String(err)}`),
       );
     }
   },
@@ -2443,6 +2644,160 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         undefined,
         errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete workspace: ${String(err)}`),
       );
+    }
+  },
+
+  /**
+   * workspace.openFolder - 用系统文件管理器打开指定文件夹
+   */
+  "workspace.openFolder": async ({ params, respond }) => {
+    const folderPath = String((params as { path?: string | number })?.path ?? "").trim();
+    if (!folderPath) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "path is required"));
+      return;
+    }
+    try {
+      const resolved = path.resolve(folderPath);
+      // 确保目录存在
+      await fs.mkdir(resolved, { recursive: true });
+      const platform = process.platform;
+      if (platform === "win32") {
+        execFile("explorer", [resolved]);
+      } else if (platform === "darwin") {
+        execFile("open", [resolved]);
+      } else {
+        execFile("xdg-open", [resolved]);
+      }
+      respond(true, { success: true, path: resolved }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to open folder: ${String(err)}`));
+    }
+  },
+
+  /**
+   * groups.files.list - 列出群组工作空间的文件
+   */
+  "groups.files.list": async ({ params, respond }) => {
+    const groupId = String((params as { groupId?: string | number })?.groupId ?? "").trim();
+    if (!groupId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "groupId is required"));
+      return;
+    }
+    try {
+      const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(groupId);
+      // 确保目录存在
+      await fs.mkdir(groupDir, { recursive: true });
+      const entries = await fs.readdir(groupDir, { withFileTypes: true });
+      const files = await Promise.all(
+        entries
+          .filter((e) => e.isFile())
+          .map(async (e) => {
+            const filePath = path.join(groupDir, e.name);
+            try {
+              const stat = await fs.stat(filePath);
+              return {
+                name: e.name,
+                path: filePath,
+                size: stat.size,
+                updatedAtMs: stat.mtimeMs,
+                missing: false,
+              };
+            } catch {
+              return { name: e.name, path: filePath, size: 0, updatedAtMs: null, missing: true };
+            }
+          }),
+      );
+      respond(true, { groupId, workspace: groupDir, files }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to list group files: ${String(err)}`));
+    }
+  },
+
+  /**
+   * groups.files.get - 读取群组工作空间中的文件内容
+   */
+  "groups.files.get": async ({ params, respond }) => {
+    const groupId = String((params as { groupId?: string; name?: string })?.groupId ?? "").trim();
+    const name = String((params as { groupId?: string; name?: string })?.name ?? "").trim();
+    if (!groupId || !name) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "groupId and name are required"));
+      return;
+    }
+    try {
+      const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(groupId);
+      const filePath = path.resolve(path.join(groupDir, name));
+      // 安全检查：不允许路径穿越
+      if (!filePath.startsWith(path.resolve(groupDir))) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Invalid file path"));
+        return;
+      }
+      let content = "";
+      let missing = false;
+      let size = 0;
+      let updatedAtMs: number | null = null;
+      try {
+        const stat = await fs.stat(filePath);
+        content = await fs.readFile(filePath, "utf-8");
+        size = stat.size;
+        updatedAtMs = stat.mtimeMs;
+      } catch {
+        missing = true;
+      }
+      respond(true, { file: { name, path: filePath, content, size, updatedAtMs, missing } }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to get group file: ${String(err)}`));
+    }
+  },
+
+  /**
+   * groups.files.set - 写入群组工作空间中的文件
+   */
+  "groups.files.set": async ({ params, respond }) => {
+    const groupId = String((params as { groupId?: string; name?: string; content?: string })?.groupId ?? "").trim();
+    const name = String((params as { groupId?: string; name?: string; content?: string })?.name ?? "").trim();
+    const content = String((params as { groupId?: string; name?: string; content?: string })?.content ?? "");
+    if (!groupId || !name) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "groupId and name are required"));
+      return;
+    }
+    try {
+      const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(groupId);
+      const filePath = path.resolve(path.join(groupDir, name));
+      // 安全检查
+      if (!filePath.startsWith(path.resolve(groupDir))) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Invalid file path"));
+        return;
+      }
+      await fs.mkdir(groupDir, { recursive: true });
+      await fs.writeFile(filePath, content, "utf-8");
+      const stat = await fs.stat(filePath);
+      respond(true, { file: { name, path: filePath, content, size: stat.size, updatedAtMs: stat.mtimeMs, missing: false } }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to set group file: ${String(err)}`));
+    }
+  },
+
+  /**
+   * groups.files.delete - 删除群组工作空间中的文件
+   */
+  "groups.files.delete": async ({ params, respond }) => {
+    const groupId = String((params as { groupId?: string; name?: string })?.groupId ?? "").trim();
+    const name = String((params as { groupId?: string; name?: string })?.name ?? "").trim();
+    if (!groupId || !name) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "groupId and name are required"));
+      return;
+    }
+    try {
+      const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(groupId);
+      const filePath = path.resolve(path.join(groupDir, name));
+      if (!filePath.startsWith(path.resolve(groupDir))) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Invalid file path"));
+        return;
+      }
+      await fs.unlink(filePath);
+      respond(true, { success: true, groupId, name }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete group file: ${String(err)}`));
     }
   },
 };

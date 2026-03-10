@@ -1,6 +1,7 @@
 import { html, nothing } from "lit";
 import { parseAgentSessionKey } from "../../../upstream/src/routing/session-key.js";
 import { refreshChatAvatar } from "./app-chat.ts";
+import { startMonitorPolling, stopMonitorPolling } from "./app-polling.ts";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
 import type { AppViewState } from "./app-view-state.ts";
 import type { OpenClawApp } from "./app.ts";
@@ -97,6 +98,13 @@ import {
   removeGroupMember,
   updateGroupMemberRole,
 } from "./controllers/groups.ts";
+import {
+  loadGroupFiles,
+  loadGroupFileContent,
+  saveGroupFile,
+  deleteGroupFile,
+  migrateGroupWorkspace,
+} from "./controllers/group-files.ts";
 import { loadLogs } from "./controllers/logs.ts";
 import {
   loadQueueStatus,
@@ -357,6 +365,7 @@ export function renderApp(state: AppViewState) {
                 cronEnabled: state.cronStatus?.enabled ?? null,
                 cronNext,
                 lastChannelsRefresh: state.channelsLastSuccess,
+                workspacesDir: (state as unknown as { workspacesDir: string }).workspacesDir ?? "",
                 onSettingsChange: (next) => state.applySettings(next),
                 onPasswordChange: (next) => (state.password = next),
                 onSessionKeyChange: (next) => {
@@ -372,6 +381,26 @@ export function renderApp(state: AppViewState) {
                 },
                 onConnect: () => state.connect(),
                 onRefresh: () => state.loadOverview(),
+                onWorkspacesDirSave: async (newDir) => {
+                  await setDefaultWorkspace(state, newDir);
+                  (state as unknown as { workspacesDir: string }).workspacesDir = newDir;
+                },
+                onWorkspaceBackup: async (backupDir) => {
+                  const result = await state.client!.request("workspace.backup", backupDir ? { backupDir } : {});
+                  const r = result as { backupDir?: string; fileCount?: number };
+                  return { backupDir: r.backupDir ?? "", fileCount: r.fileCount ?? 0 };
+                },
+                onWorkspaceMigrateAll: async (newRoot) => {
+                  const result = await state.client!.request("workspace.migrate.all", { newRoot });
+                  const r = result as { oldRoot?: string; newRoot?: string; filesCopied?: number; agentsMigrated?: number };
+                  (state as unknown as { workspacesDir: string }).workspacesDir = r.newRoot ?? newRoot;
+                  return {
+                    oldRoot: r.oldRoot ?? "",
+                    newRoot: r.newRoot ?? newRoot,
+                    filesCopied: r.filesCopied ?? 0,
+                    agentsMigrated: r.agentsMigrated ?? 0,
+                  };
+                },
               })
             : nothing
         }
@@ -421,16 +450,18 @@ export function renderApp(state: AppViewState) {
                 onNostrProfileSave: () => state.handleNostrProfileSave(),
                 onNostrProfileImport: () => state.handleNostrProfileImport(),
                 onNostrProfileToggleAdvanced: () => state.handleNostrProfileToggleAdvanced(),
-                // 账号管理回调 - TODO: 实现这些回调
+                // 账号管理回调
                 onManageAccounts: (channelId) => {
                   state.managingChannelId = channelId;
+                  // 关闭其他弹窗
+                  state.editingChannelAccount = null;
+                  state.viewingChannelAccount = null;
                 },
                 onAddAccount: (channelId) => {
-                  state.creatingChannelAccount = true;
-                  state.managingChannelId = channelId;
+                  (state as unknown as OpenClawApp).handleAddAccount(channelId);
                 },
                 onViewAccount: (channelId, accountId) => {
-                  state.viewingChannelAccount = { channelId, accountId };
+                  (state as unknown as OpenClawApp).handleViewAccount(channelId, accountId);
                 },
                 onEditAccount: (channelId, accountId) => {
                   (state as unknown as OpenClawApp).handleEditAccount(channelId, accountId);
@@ -1597,6 +1628,18 @@ export function renderApp(state: AppViewState) {
                     state.agentFileDrafts[name] ?? state.agentFileContents[name] ?? "";
                   void saveAgentFile(state, resolvedAgentId, name, content);
                 },
+                onAddFile: (agentId, name) => {
+                  // 创建空文件：直接以空内容调用 saveAgentFile
+                  void saveAgentFile(state, agentId, name, "").then(() => {
+                    // 创建后自动选中
+                    state.agentFileActive = name;
+                    void loadAgentFileContent(state, agentId, name, { force: true });
+                  });
+                },
+                onOpenFolder: (folderPath) => {
+                  if (!state.client) {return;}
+                  void state.client.request("workspace.openFolder", { path: folderPath }).catch(() => {});
+                },
                 onToolsProfileChange: (agentId, profile, clearAllow) => {
                   if (!configValue) {
                     return;
@@ -2582,6 +2625,7 @@ export function renderApp(state: AppViewState) {
                   activePanel: state.groupsActivePanel,
                   creatingGroup: state.creatingGroup,
                   editingGroup: state.editingGroup,
+                  agentsList: state.agentsList,
                   onRefresh: () => loadGroups(state),
                   onSelectGroup: (groupId) => {
                     state.groupsSelectedId = groupId;
@@ -2611,14 +2655,20 @@ export function renderApp(state: AppViewState) {
                   },
                   onSaveGroup: async () => {
                     try {
+                      const defaultOwnerId = state.agentsList?.defaultId ?? "main";
                       const group = state.editingGroup || {
                         id: "",
                         name: "",
                         description: "",
                         isPublic: false,
                       };
+                      // 确保 ownerId 不为空
+                      const groupWithOwner = {
+                        ...group,
+                        ownerId: (group as any).ownerId || defaultOwnerId,
+                      };
                       // oxlint-disable-next-line typescript/no-explicit-any
-                      await createGroup(state, group as any);
+                      await createGroup(state, groupWithOwner as any);
                       state.creatingGroup = false;
                       state.editingGroup = null;
                     } catch (err) {
@@ -2633,10 +2683,11 @@ export function renderApp(state: AppViewState) {
                     if (state.editingGroup) {
                       state.editingGroup = { ...state.editingGroup, [field]: value };
                     } else if (state.creatingGroup) {
+                      const defaultOwnerId = state.agentsList?.defaultId ?? "main";
                       state.editingGroup = {
                         id: "",
                         name: "",
-                        ownerId: "",
+                        ownerId: defaultOwnerId,
                         createdAt: Date.now(),
                         members: [],
                         isPublic: false,
@@ -2665,6 +2716,64 @@ export function renderApp(state: AppViewState) {
                     } catch (err) {
                       alert(`更新角色失败：${err instanceof Error ? err.message : String(err)}`);
                     }
+                  },
+                  // 群组文件管理 Props
+                  groupFilesLoading: state.groupFilesLoading,
+                  groupFilesError: state.groupFilesError,
+                  groupFilesList: state.groupFilesList,
+                  groupFileActive: state.groupFileActive,
+                  groupFileContents: state.groupFileContents,
+                  groupFileDrafts: state.groupFileDrafts,
+                  groupFileSaving: state.groupFileSaving,
+                  onLoadGroupFiles: (groupId) => {
+                    void loadGroupFiles(state, groupId);
+                  },
+                  onSelectGroupFile: (name) => {
+                    const groupId = state.groupsSelectedId;
+                    if (!groupId) {return;}
+                    state.groupFileActive = name;
+                    void loadGroupFileContent(state, groupId, name);
+                  },
+                  onGroupFileDraftChange: (name, content) => {
+                    state.groupFileDrafts = { ...state.groupFileDrafts, [name]: content };
+                  },
+                  onGroupFileReset: (name) => {
+                    state.groupFileDrafts = {
+                      ...state.groupFileDrafts,
+                      [name]: state.groupFileContents[name] ?? "",
+                    };
+                  },
+                  onGroupFileSave: (name) => {
+                    const groupId = state.groupsSelectedId;
+                    if (!groupId) {return;}
+                    const content = state.groupFileDrafts[name] ?? "";
+                    void saveGroupFile(state, groupId, name, content);
+                  },
+                  onAddGroupFile: (groupId, name) => {
+                    void saveGroupFile(state, groupId, name, "").then(() => {
+                      state.groupFileActive = name;
+                      void loadGroupFileContent(state, groupId, name, { force: true });
+                    });
+                  },
+                  onDeleteGroupFile: async (groupId, name) => {
+                    if (confirm(`确定要删除文件 ${name} 吗？`)) {
+                      await deleteGroupFile(state, groupId, name);
+                    }
+                  },
+                  onOpenGroupFolder: (folderPath) => {
+                    if (!state.client) {return;}
+                    void state.client.request("workspace.openFolder", { path: folderPath }).catch(() => {});
+                  },
+                  // 群组工作空间迁移
+                  groupWorkspaceMigrating: state.groupWorkspaceMigrating,
+                  onMigrateGroupWorkspace: (groupId, newDir) => {
+                    void migrateGroupWorkspace(state, groupId, newDir).then((res) => {
+                      if (res?.success) {
+                        alert(`迁移成功！共迁移 ${res.fileCount} 个文件到：${res.newDir}`);
+                      } else if (res !== null) {
+                        alert(`迁移失败，请检查错误信息。`);
+                      }
+                    });
                   },
                 },
                 friendsProps: {
@@ -3138,6 +3247,14 @@ export function renderApp(state: AppViewState) {
                 onNavSelectContext: (context) => {
                   console.log("[Nav:调试] 点击导航节点", JSON.stringify(context));
                   state.chatNavCurrentContext = context;
+
+                  // V3: 监控视图轮询管理
+                  const isMonitor = context.type === "contact" || context.type === "all" || context.type === "agent-all";
+                  if (isMonitor) {
+                    startMonitorPolling(state as unknown as Parameters<typeof startMonitorPolling>[0]);
+                  } else {
+                    stopMonitorPolling(state as unknown as Parameters<typeof stopMonitorPolling>[0]);
+                  }
                   // Z1: 上下文感知的 sessionKey 解析，将 group/contact 解析为后端可识别的 sessionKey
                   const nextKey = resolveBackendSessionKey(context);
                   console.log(

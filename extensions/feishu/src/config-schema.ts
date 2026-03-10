@@ -21,6 +21,7 @@ const DmConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
     systemPrompt: z.string().optional(),
+    name: z.string().optional(), // Display name for directory lookup (e.g. "杨生淮")
   })
   .strict()
   .optional();

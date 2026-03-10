@@ -19,11 +19,15 @@ export type OverviewProps = {
   cronEnabled: boolean | null;
   cronNext: number | null;
   lastChannelsRefresh: number | null;
+  workspacesDir: string;
   onSettingsChange: (next: UiSettings) => void;
   onPasswordChange: (next: string) => void;
   onSessionKeyChange: (next: string) => void;
   onConnect: () => void;
   onRefresh: () => void;
+  onWorkspacesDirSave: (newDir: string) => Promise<void>;
+  onWorkspaceBackup: (backupDir?: string) => Promise<{ backupDir: string; fileCount: number }>;
+  onWorkspaceMigrateAll: (newRoot: string) => Promise<{ oldRoot: string; newRoot: string; filesCopied: number; agentsMigrated: number }>;
 };
 
 export function renderOverview(props: OverviewProps) {
@@ -40,6 +44,9 @@ export function renderOverview(props: OverviewProps) {
     : t("common.na");
   const authMode = snapshot?.authMode;
   const isTrustedProxy = authMode === "trusted-proxy";
+
+  // 工作空间目录本地状态（可编辑框）
+  let workspacesDirInput = props.workspacesDir;
 
   const pairingHint = (() => {
     if (!shouldShowPairingHint(props.connected, props.lastError, props.lastErrorCode)) {
@@ -354,6 +361,109 @@ export function renderOverview(props: OverviewProps) {
           <div class="note-title">${t("overview.notes.cronTitle")}</div>
           <div class="muted">${t("overview.notes.cronText")}</div>
         </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top: 18px;">
+      <div class="card-title">📂 系统工作空间设置</div>
+      <div class="card-sub">所有智能助手的个人工作空间和群组工作空间均在此目录下自动创建</div>
+
+      <div class="form-grid" style="margin-top: 16px;">
+        <label class="field">
+          <span>工作空间根目录</span>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <input
+              style="flex: 1;"
+              .value=${workspacesDirInput}
+              @input=${(e: Event) => {
+                workspacesDirInput = (e.target as HTMLInputElement).value;
+              }}
+              placeholder="例如: H:\\OpenClaw_Workspace"
+            />
+          </div>
+        </label>
+      </div>
+      <div class="callout" style="margin-top: 12px; font-size: 12px;">
+        📦 目录结构：
+        <code style="display: block; margin-top: 6px; padding: 8px; background: var(--bg2, #f5f5f5); border-radius: 4px; font-family: monospace;">
+          {workspacesDir}/<br/>
+          &nbsp;&nbsp;{agentId}/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&larr; 个人助手工作空间<br/>
+          &nbsp;&nbsp;groups/{groupId}/&nbsp;&larr; 群组工作空间
+        </code>
+      </div>
+
+      <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 12px;">
+
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <strong style="font-size: 13px; min-width: 80px;">⚙️ 修改</strong>
+          <button
+            class="btn btn-primary"
+            ?disabled=${!props.connected}
+            @click=${async () => {
+              const newDir = workspacesDirInput.trim();
+              if (!newDir) { alert("请输入工作空间目录"); return; }
+              if (newDir === props.workspacesDir) { alert("路径未变化"); return; }
+              try {
+                await props.onWorkspacesDirSave(newDir);
+                alert("✅ 配置已更新，不复制文件。如需迁移数据请使用「迁移」功能。");
+              } catch (err) {
+                alert("❌ 保存失败：" + (err instanceof Error ? err.message : String(err)));
+              }
+            }}
+          >修改根目录</button>
+          <span class="muted" style="font-size: 12px;">仅更新配置，不移动历史文件</span>
+        </div>
+
+        <div style="border-top: 1px solid var(--border, #e0e0e0); padding-top: 12px; display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap;">
+          <strong style="font-size: 13px; min-width: 80px; padding-top: 2px;">📦 备份</strong>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button
+                class="btn"
+                ?disabled=${!props.connected}
+                @click=${async () => {
+                  if (!props.workspacesDir) { alert("请先设置工作空间根目录"); return; }
+                  const customDir = prompt("备份目录（留空自动生成）:");
+                  if (customDir === null) {return;}
+                  try {
+                    const result = await props.onWorkspaceBackup(customDir.trim() || undefined);
+                    alert("✅ 备份完成！\n备份目录: " + result.backupDir + "\n已复制: " + result.fileCount + " 个文件");
+                  } catch (err) {
+                    alert("❌ 备份失败：" + (err instanceof Error ? err.message : String(err)));
+                  }
+                }}
+              >备份工作空间</button>
+              <span class="muted" style="font-size: 12px;">将整个工作空间复制到备份位置</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid var(--border, #e0e0e0); padding-top: 12px; display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap;">
+          <strong style="font-size: 13px; min-width: 80px; padding-top: 2px;">🚚 迁移</strong>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="font-size: 12px; color: var(--fg2, #888);">将当前工作空间的所有文件复制到新目录，并更新所有 Agent + 群组配置路径。建议先备份。</div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button
+                class="btn"
+                ?disabled=${!props.connected}
+                @click=${async () => {
+                  if (!props.workspacesDir) { alert("请先设置当前工作空间根目录"); return; }
+                  const newRoot = prompt("新的工作空间目录:");
+                  if (!newRoot || !newRoot.trim()) {return;}
+                  if (!confirm("确认将整个工作空间迁移到: " + newRoot.trim() + "\n\n这不会删除原目录。建议先备份。")) {return;}
+                  try {
+                    const result = await props.onWorkspaceMigrateAll(newRoot.trim());
+                    alert("✅ 迁移完成！\n原目录: " + result.oldRoot + "\n新目录: " + result.newRoot + "\n已复制: " + result.filesCopied + " 个文件\n已更新 Agent: " + result.agentsMigrated + " 个");
+                  } catch (err) {
+                    alert("❌ 迁移失败：" + (err instanceof Error ? err.message : String(err)));
+                  }
+                }}
+              >迁移工作空间</button>
+              <span class="muted" style="font-size: 12px;">复制文件 + 更新配置路径</span>
+            </div>
+          </div>
+        </div>
+
       </div>
     </section>
   `;

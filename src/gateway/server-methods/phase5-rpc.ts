@@ -6,7 +6,10 @@
 import type { GatewayRequestHandlers } from "./types.js";
 import { listAgentIds } from "../../agents/agent-scope.js";
 import { loadConfig, writeConfigFile } from "../../config/config.js";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import { approvalSystem } from "../../permissions/approval-system.js";
+import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 
 /**
@@ -69,7 +72,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
       }
 
       // 返回模型账号配置
-      const modelAccountsConfig = (agent as any).modelAccounts || {
+      const modelAccountsConfig = (agent).modelAccounts || {
         accounts: [],
         routingMode: "manual",
       };
@@ -113,7 +116,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
       }
 
       // 返回通道策略配置
-      const channelPoliciesConfig = (agent as any).channelPolicies || {
+      const channelPoliciesConfig = (agent).channelPolicies || {
         bindings: [],
         defaultPolicy: "private",
       };
@@ -127,6 +130,60 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
           ErrorCodes.UNAVAILABLE,
           `Failed to get channel policies config: ${String(error)}`,
         ),
+      );
+    }
+  },
+
+  /**
+   * 获取群组工作空间目录
+   */
+  "groups.workspace.getDir": async ({ respond }) => {
+    try {
+      const currentDir = groupWorkspaceManager.getRootDir();
+      respond(true, { dir: currentDir }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to get group workspace dir: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 设置群组工作空间目录（同时持久化到 openclaw.json 的 groups.workspace.root）
+   */
+  "groups.workspace.setDir": async ({ params, respond }) => {
+    try {
+      const dir = params?.dir ? String(params.dir).trim() : "";
+      if (!dir) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "dir is required"));
+        return;
+      }
+
+      // 应用到内存中的管理器
+      groupWorkspaceManager.setRootDir(dir);
+
+      // 持久化到 openclaw.json
+      const currentConfig = loadConfig();
+      const updatedConfig = {
+        ...currentConfig,
+        groups: {
+          ...(currentConfig as any).groups,
+          workspace: {
+            ...(currentConfig as any).groups?.workspace,
+            root: dir,
+          },
+        },
+      };
+      await writeConfigFile(updatedConfig);
+
+      respond(true, { success: true, dir }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to set group workspace dir: ${String(error)}`),
       );
     }
   },
@@ -382,10 +439,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
         }
 
         // 自动添加虚拟 agent 到配置文件
-        agents.push({
-          id: agentId,
-          modelAccounts: config as any,
-        });
+        (agents as any[]).push({ id: agentId, modelAccounts: config } as any);
       } else {
         // 更新现有 agent 的模型账号配置
         (agents[agentIndex] as any).modelAccounts = config;
@@ -450,10 +504,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
         }
 
         // 自动添加虚拟 agent 到配置文件
-        agents.push({
-          id: agentId,
-          channelPolicies: config as any,
-        });
+        (agents as any[]).push({ id: agentId, channelPolicies: config } as any);
       } else {
         // 更新现有 agent 的通道策略配置
         (agents[agentIndex] as any).channelPolicies = config;
@@ -479,6 +530,111 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
           ErrorCodes.UNAVAILABLE,
           `Failed to update channel policies config: ${String(error)}`,
         ),
+      );
+    }
+  },
+
+  /**
+   * 迁移单个群组工作空间到新目录
+   */
+  "groups.workspace.migrate": async ({ params, respond }) => {
+    try {
+      const groupId = params?.groupId ? String(params.groupId).trim() : "";
+      const newDir = params?.newDir ? String(params.newDir).trim() : "";
+
+      if (!groupId || !newDir) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "groupId and newDir are required"),
+        );
+        return;
+      }
+
+      const oldDir = groupWorkspaceManager.getGroupWorkspaceDir(groupId);
+      if (!oldDir) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Group workspace not found for "${groupId}"`),
+        );
+        return;
+      }
+
+      const newDirResolved = path.resolve(newDir);
+      const oldDirResolved = path.resolve(oldDir);
+
+      if (oldDirResolved === newDirResolved) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "New path is the same as the current path"),
+        );
+        return;
+      }
+
+      // 复制目录递归
+      const copyDir = async (src: string, dest: string): Promise<number> => {
+        await fs.mkdir(dest, { recursive: true });
+        let count = 0;
+        const entries = await fs.readdir(src, { withFileTypes: true });
+        for (const entry of entries) {
+          const srcPath = path.join(src, entry.name);
+          const destPath = path.join(dest, entry.name);
+          if (entry.isDirectory()) {
+            count += await copyDir(srcPath, destPath);
+          } else {
+            await fs.copyFile(srcPath, destPath);
+            count++;
+          }
+        }
+        return count;
+      };
+
+      let migrated = false;
+      let fileCount = 0;
+      try {
+        await fs.access(oldDirResolved);
+        fileCount = await copyDir(oldDirResolved, newDirResolved);
+        migrated = true;
+      } catch (copyErr) {
+        // 源目录不存在则只创建目标目录，否则抛出真实错误
+        let isNotExist = false;
+        try { await fs.access(oldDirResolved); } catch { isNotExist = true; }
+        if (isNotExist) {
+          await fs.mkdir(newDirResolved, { recursive: true });
+        } else {
+          throw copyErr;
+        }
+      }
+
+      // 更新群组工作空间管理器中的路径（内存）
+      groupWorkspaceManager.updateGroupWorkspaceDir(groupId, newDirResolved);
+
+      // 持久化到 openclaw.json： groups.overrides.<groupId>.workspaceDir
+      const currentConfig = loadConfig();
+      const existingOverrides = (currentConfig as any)?.groups?.overrides ?? {};
+      const updatedConfig = {
+        ...currentConfig,
+        groups: {
+          ...(currentConfig as any).groups,
+          overrides: {
+            ...existingOverrides,
+            [groupId]: {
+              ...existingOverrides[groupId],
+              workspaceDir: newDirResolved,
+            },
+          },
+        },
+      };
+      await writeConfigFile(updatedConfig);
+
+      respond(true, { success: true, groupId, oldDir: oldDirResolved, newDir: newDirResolved, migrated, fileCount }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to migrate group workspace: ${String(error)}`),
       );
     }
   },

@@ -180,30 +180,53 @@ export function renderMessageGroup(
           : null;
 
   const isAgentComm = Boolean(firstCommMeta);
-  const who = isAgentComm
-    ? firstCommMeta!.senderId
-    : normalizedRole === "user"
-      ? "You"
-      : normalizedRole === "assistant"
-        ? assistantName
-        : normalizedRole;
-  const roleClass = isAgentComm
-    ? "agent-comm"
-    : normalizedRole === "user"
-      ? "user"
-      : normalizedRole === "assistant"
-        ? "assistant"
-        : "other";
+
+  // OpenClaw group chat: use __group_sender_name / __group_sender_id from the group
+  const isGroupChatMsg = Boolean(group.groupSenderId);
+  const groupSenderName = group.groupSenderName ?? group.groupSenderId ?? "Agent";
+  // Determine if the sender is the human user
+  const isGroupUser = group.groupSenderId === "user";
+
+  const who = isGroupChatMsg
+    ? (isGroupUser ? "You" : groupSenderName)
+    : isAgentComm
+      ? firstCommMeta!.senderId
+      : normalizedRole === "user"
+        ? "You"
+        : normalizedRole === "assistant"
+          ? assistantName
+          : normalizedRole;
+  const roleClass = isGroupChatMsg
+    ? (isGroupUser ? "user" : "agent-comm")
+    : isAgentComm
+      ? "agent-comm"
+      : normalizedRole === "user"
+        ? "user"
+        : normalizedRole === "assistant"
+          ? "assistant"
+          : "other";
   const timestamp = formatMessageTimestamp(group.timestamp);
+
+  // For group chat, build a custom avatar showing the sender's initial
+  const groupSenderInitial = isGroupUser
+    ? "U"
+    : groupSenderName.charAt(0).toUpperCase() || "A";
 
   return html`
     <div class="chat-group ${roleClass}">
-      ${renderAvatar(isAgentComm ? "agent-comm" : group.role, {
-        name: assistantName,
-        avatar: opts.assistantAvatar ?? null,
-      })}
+      ${
+        isGroupChatMsg
+          ? isGroupUser
+            ? renderAvatar("user", { name: "You", avatar: null })
+            : html`<div class="chat-avatar agent-comm" title="${groupSenderName}">${groupSenderInitial}</div>`
+          : renderAvatar(isAgentComm ? "agent-comm" : group.role, {
+              name: assistantName,
+              avatar: opts.assistantAvatar ?? null,
+            })
+      }
       <div class="chat-group-messages">
-        ${isAgentComm ? html`<div class="chat-agent-name">${who}</div>` : nothing}
+        ${isAgentComm && !isGroupChatMsg ? html`<div class="chat-agent-name">${who}</div>` : nothing}
+        ${isGroupChatMsg ? html`<div class="chat-agent-name">${who}</div>` : nothing}
         ${group.messages.map((item, index) =>
           renderGroupedMessage(
             item.message,
@@ -215,7 +238,7 @@ export function renderMessageGroup(
           ),
         )}
         <div class="chat-group-footer">
-          ${!isAgentComm ? html`<span class="chat-sender-name">${who}</span>` : nothing}
+          ${!isAgentComm && !isGroupChatMsg ? html`<span class="chat-sender-name">${who}</span>` : nothing}
           <span class="chat-group-timestamp">${timestamp}</span>
         </div>
       </div>

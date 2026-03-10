@@ -736,6 +736,28 @@ export const OpenClawSchema = z
       })
       .strict()
       .optional(),
+    groups: z
+      .object({
+        workspace: z
+          .object({
+            root: z.string().optional(),
+            enabled: z.boolean().optional(),
+          })
+          .passthrough()
+          .optional(),
+        overrides: z
+          .record(
+            z.string(),
+            z
+              .object({
+                workspaceDir: z.string().optional(),
+              })
+              .passthrough(),
+          )
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
   })
   .strict()
   .superRefine((cfg, ctx) => {

@@ -1,3 +1,5 @@
+// 添加配对请求加载函数
+import { loadAllChannelPairingRequests } from "../../channels/pairing-requests.js";
 import { buildChannelUiCatalog } from "../../channels/plugins/catalog.js";
 import { resolveChannelDefaultAccountId } from "../../channels/plugins/helpers.js";
 import {
@@ -9,7 +11,12 @@ import {
 import { buildChannelAccountSnapshot } from "../../channels/plugins/status.js";
 import type { ChannelAccountSnapshot, ChannelPlugin } from "../../channels/plugins/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
-import { loadConfig, readConfigFileSnapshot } from "../../config/config.js";
+import {
+  loadConfig,
+  readConfigFileSnapshot,
+  readConfigFileSnapshotForWrite,
+  writeConfigFile,
+} from "../../config/config.js";
 import { getChannelActivity } from "../../infra/channel-activity.js";
 import { DEFAULT_ACCOUNT_ID } from "../../routing/session-key.js";
 import { defaultRuntime } from "../../runtime.js";
@@ -22,8 +29,6 @@ import {
 } from "../protocol/index.js";
 import { formatForLog } from "../ws-log.js";
 import type { GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
-// 添加配对请求加载函数
-import { loadAllChannelPairingRequests } from "../../channels/pairing-requests.js";
 
 type ChannelLogoutPayload = {
   channel: ChannelId;
@@ -196,6 +201,36 @@ export const channelsHandlers: GatewayRequestHandlers = {
     };
 
     const uiCatalog = buildChannelUiCatalog(plugins);
+
+    // 构建每个通道的账号级配置 Schema（用于 UI 编辑弹窗动态渲染表单字段）
+    // 优先取 configSchema.schema.properties.accounts.additionalProperties（账号层独立 schema）
+    // 否则降级使用整个 configSchema.schema（删除 accounts 字段）
+    const channelConfigSchemas: Record<string, Record<string, unknown>> = {};
+    for (const plugin of plugins) {
+      const rawSchema = plugin.configSchema?.schema;
+      if (!rawSchema) {
+        continue;
+      }
+      const properties = rawSchema.properties as Record<string, unknown> | undefined;
+      const accountsField = properties?.accounts as Record<string, unknown> | undefined;
+      const accountAdditional = accountsField?.additionalProperties as
+        | Record<string, unknown>
+        | undefined;
+
+      if (accountAdditional?.properties) {
+        // 有明确的账号级 schema
+        channelConfigSchemas[plugin.id] = accountAdditional;
+      } else if (properties) {
+        // 降级：删除 accounts 字段，用全局 schema作为账号 schema
+        const { accounts: _accounts, ...restProperties } = properties;
+        void _accounts;
+        channelConfigSchemas[plugin.id] = {
+          ...rawSchema,
+          properties: restProperties,
+        };
+      }
+    }
+
     const payload: Record<string, unknown> = {
       ts: Date.now(),
       channelOrder: uiCatalog.order,
@@ -206,6 +241,7 @@ export const channelsHandlers: GatewayRequestHandlers = {
       channels: {} as Record<string, unknown>,
       channelAccounts: {} as Record<string, unknown>,
       channelDefaultAccountId: {} as Record<string, unknown>,
+      channelConfigSchemas,
     };
     const channelsMap = payload.channels as Record<string, unknown>;
     const accountsMap = payload.channelAccounts as Record<string, unknown>;
@@ -299,6 +335,278 @@ export const channelsHandlers: GatewayRequestHandlers = {
       });
       respond(true, payload, undefined);
     } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+    }
+  },
+
+  /**
+   * 保存通道账号配置
+   *
+   * 参数：channelId, accountId, name, config
+   * 逻辑：先用 setup.applyAccountName 写入显示名称，
+   *       再用 setup.applyAccountConfig 写入其他 config 字段（仅新建时）
+   */
+  "channels.account.save": async ({ params, respond }) => {
+    const {
+      channelId: rawChannelId,
+      accountId: rawAccountId,
+      name,
+      config: accountConfig,
+      isNew: isNewRaw,
+    } = (params ?? {}) as {
+      channelId?: unknown;
+      accountId?: unknown;
+      name?: unknown;
+      config?: unknown;
+      isNew?: unknown;
+    };
+
+    const channelId = typeof rawChannelId === "string" ? normalizeChannelId(rawChannelId) : null;
+    if (!channelId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "channels.account.save: missing channelId"),
+      );
+      return;
+    }
+
+    const accountId = typeof rawAccountId === "string" ? rawAccountId.trim() : "";
+    if (!accountId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "channels.account.save: missing accountId"),
+      );
+      return;
+    }
+
+    const plugin = getChannelPlugin(channelId);
+    if (!plugin) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `channels.account.save: unknown channel ${channelId}`,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // 使用 ForWrite 变体以正确保留 env var 引用（如 ${TELEGRAM_BOT_TOKEN}）
+      const { snapshot, writeOptions } = await readConfigFileSnapshotForWrite();
+      let cfg: OpenClawConfig = snapshot.config ?? loadConfig();
+
+      const nameStr = typeof name === "string" ? name.trim() : "";
+      const existingIds = plugin.config.listAccountIds(cfg);
+      const isNew = isNewRaw === true || !existingIds.includes(accountId);
+
+      console.log(
+        `[channels.account.save] channel=${channelId} accountId=${accountId}` +
+          ` name=${JSON.stringify(nameStr)} isNew=${isNew} isNewRaw=${String(isNewRaw)}` +
+          ` existingIds=${JSON.stringify(existingIds)}` +
+          ` config=${JSON.stringify(accountConfig)}` +
+          ` snapshot.valid=${snapshot.valid}`,
+      );
+
+      if (isNew && plugin.setup?.applyAccountConfig) {
+        // 新建账号：调用完整的 applyAccountConfig（写入 enabled + 所有 config 字段）
+        cfg = plugin.setup.applyAccountConfig({
+          cfg,
+          accountId,
+          input: {
+            name: nameStr || undefined,
+            ...(accountConfig && typeof accountConfig === "object" ? accountConfig : {}),
+          },
+        });
+        // 如果 applyAccountConfig 没有写入名称，再单独写一次
+        if (nameStr && plugin.setup.applyAccountName) {
+          cfg = plugin.setup.applyAccountName({ cfg, accountId, name: nameStr });
+        }
+        console.log(
+          `[channels.account.save] NEW account written via applyAccountConfig` +
+            ` → channels.${channelId}=${JSON.stringify((cfg.channels as Record<string, unknown>)?.[channelId])}`,
+        );
+      } else {
+        // 编辑已有账号：只更新名称（applyAccountName）+ 各 config 字段（逐字段 merge）
+        if (nameStr && plugin.setup?.applyAccountName) {
+          cfg = plugin.setup.applyAccountName({ cfg, accountId, name: nameStr });
+          console.log(
+            `[channels.account.save] applyAccountName done` +
+              ` → channels.${channelId}.accounts.${accountId}.name=` +
+              JSON.stringify(
+                (
+                  (
+                    (cfg.channels as Record<string, unknown>)?.[channelId] as Record<
+                      string,
+                      unknown
+                    >
+                  )?.accounts as Record<string, Record<string, unknown>>
+                )?.[accountId]?.name,
+              ),
+          );
+        } else if (!nameStr) {
+          console.log(`[channels.account.save] name is empty, skipping applyAccountName`);
+        } else {
+          console.log(
+            `[channels.account.save] plugin has no applyAccountName, skipping name update`,
+          );
+        }
+        // 将 accountConfig 中的字段 merge 到对应账号的配置节点
+        // 注意：如果 accountConfig 中含有旧的 name 字段，用顶层 nameStr 覆盖，避免旧值污染
+        if (accountConfig && typeof accountConfig === "object" && !Array.isArray(accountConfig)) {
+          const sectionKey = channelId as string;
+          const channels = (cfg.channels ?? {}) as Record<string, unknown>;
+          const section = (channels[sectionKey] ?? {}) as Record<string, unknown>;
+          const accountsNode = section.accounts as Record<string, unknown> | undefined;
+          // nameStr 优先：若有新名称则覆盖 accountConfig.name
+          const incomingConfig = {
+            ...(accountConfig as Record<string, unknown>),
+            ...(nameStr ? { name: nameStr } : {}),
+          };
+
+          // 判断是子账号（channels[ch].accounts[accountId] 有 key）还是顶层账号
+          const isSubAccount = accountsNode !== undefined && accountId in accountsNode;
+
+          console.log(
+            `[channels.account.save] merging config fields,` +
+              ` isSubAccount=${isSubAccount} accountId=${accountId}:`,
+            `existing=${
+              isSubAccount
+                ? JSON.stringify(accountsNode[accountId])
+                : JSON.stringify({ ...section, accounts: undefined })
+            }`,
+            `incoming=${JSON.stringify(incomingConfig)}`,
+          );
+
+          if (isSubAccount) {
+            // 子账号：merge 到 channels[ch].accounts[accountId]
+            const accounts = accountsNode as Record<string, Record<string, unknown>>;
+            const existing = accounts[accountId] ?? {};
+            cfg = {
+              ...cfg,
+              channels: {
+                ...channels,
+                [sectionKey]: {
+                  ...section,
+                  accounts: {
+                    ...accounts,
+                    [accountId]: { ...existing, ...incomingConfig },
+                  },
+                },
+              },
+            } as OpenClawConfig;
+          } else {
+            // 顶层账号：merge 到 channels[ch]（保留 accounts 子节点）
+            const { accounts: existingAccounts, ...sectionWithoutAccounts } = section;
+            const merged: Record<string, unknown> = {
+              ...sectionWithoutAccounts,
+              ...incomingConfig,
+            };
+            // 保留原有的 accounts 子节点（如果有）
+            if (existingAccounts !== undefined) {
+              merged.accounts = existingAccounts;
+            }
+            // 顶层账号不写 name 到 channel 顶层（一般顶层无 name 字段）
+            if (!nameStr) {
+              delete merged.name;
+            }
+            cfg = {
+              ...cfg,
+              channels: {
+                ...channels,
+                [sectionKey]: merged,
+              },
+            } as OpenClawConfig;
+          }
+        }
+      }
+
+      await writeConfigFile(cfg, writeOptions);
+      console.log(`[channels.account.save] writeConfigFile OK for ${channelId}/${accountId}`);
+      respond(true, { ok: true }, undefined);
+    } catch (err) {
+      console.error(`[channels.account.save] ERROR:`, err);
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+    }
+  },
+
+  /**
+   * 删除通道账号配置
+   *
+   * 参数：channelId, accountId
+   * 通过插件的 config.deleteAccount 从配置文件中删除账号
+   */
+  "channels.account.delete": async ({ params, respond }) => {
+    const { channelId: rawChannelId, accountId: rawAccountId } = (params ?? {}) as {
+      channelId?: unknown;
+      accountId?: unknown;
+    };
+
+    const channelId = typeof rawChannelId === "string" ? normalizeChannelId(rawChannelId) : null;
+    if (!channelId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "channels.account.delete: missing channelId"),
+      );
+      return;
+    }
+
+    const accountId = typeof rawAccountId === "string" ? rawAccountId.trim() : "";
+    if (!accountId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "channels.account.delete: missing accountId"),
+      );
+      return;
+    }
+
+    const plugin = getChannelPlugin(channelId);
+    if (!plugin) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `channels.account.delete: unknown channel ${channelId}`,
+        ),
+      );
+      return;
+    }
+
+    if (!plugin.config.deleteAccount) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `channel ${channelId} does not support account deletion`,
+        ),
+      );
+      return;
+    }
+
+    try {
+      const { snapshot, writeOptions } = await readConfigFileSnapshotForWrite();
+      const cfgBefore = snapshot.config ?? loadConfig();
+      const cfg = plugin.config.deleteAccount({
+        cfg: cfgBefore,
+        accountId,
+      });
+      console.log(
+        `[channels.account.delete] channel=${channelId} accountId=${accountId}` +
+          ` snapshot.valid=${snapshot.valid}` +
+          ` accountsAfter=${JSON.stringify(plugin.config.listAccountIds(cfg))}`,
+      );
+      await writeConfigFile(cfg, writeOptions);
+      console.log(`[channels.account.delete] writeConfigFile OK for ${channelId}/${accountId}`);
+      respond(true, { ok: true }, undefined);
+    } catch (err) {
+      console.error(`[channels.account.delete] ERROR:`, err);
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
     }
   },

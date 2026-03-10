@@ -50,7 +50,9 @@ import {
   createGroupListTool,
   createGroupAddMemberTool,
   createGroupRemoveMemberTool,
+  createGroupUpdateMemberRoleTool,
   createGroupDeleteTool,
+  createGroupSendTool,
 } from "./tools/group-management-tools.js";
 import {
   createDeactivateAgentTool,
@@ -165,6 +167,8 @@ export function createOpenClawTools(options?: {
   requesterSenderId?: string | null;
   /** Whether the requesting sender is an owner. */
   senderIsOwner?: boolean;
+  /** Session ID for plugin tool context. */
+  sessionId?: string;
 }): AnyAgentTool[] {
   const workspaceDir = resolveWorkspaceRoot(options?.workspaceDir);
   const imageTool = options?.agentDir?.trim()
@@ -340,7 +344,19 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
     }),
+    createGroupUpdateMemberRoleTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
     createGroupDeleteTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createGroupSendTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
         config: options?.config,
@@ -723,6 +739,7 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
       sessionKey: options?.agentSessionKey,
+      sessionId: options?.sessionId,
       messageChannel: options?.agentChannel,
       agentAccountId: options?.agentAccountId,
       sandboxed: options?.sandboxed,

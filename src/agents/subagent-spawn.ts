@@ -4,7 +4,7 @@ import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
 import { loadConfig } from "../config/config.js";
 import { callGateway } from "../gateway/call.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
-import { normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.js";
+import { isValidAgentId, isCronSessionKey, normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.js";
 import { normalizeDeliveryContext } from "../utils/delivery-context.js";
 import { resolveAgentConfig } from "./agent-scope.js";
 import { AGENT_LANE_SUBAGENT } from "./lanes.js";
@@ -48,7 +48,7 @@ export type SpawnSubagentContext = {
 };
 
 export const SUBAGENT_SPAWN_ACCEPTED_NOTE =
-  "auto-announces on completion, do not poll/sleep. The response will be sent back as an user message.";
+  "Auto-announce is push-based. After spawning children, do NOT call sessions_list, sessions_history, exec sleep, or any polling tool. Wait for completion events to arrive as user messages, track expected child session keys, and only send your final answer after ALL expected completions arrive. If a child completion event arrives AFTER your final answer, reply ONLY with NO_REPLY.";
 export const SUBAGENT_SPAWN_SESSION_ACCEPTED_NOTE =
   "thread-bound session stays active after this task; continue in-thread for follow-ups.";
 
@@ -165,7 +165,18 @@ export async function spawnSubagentDirect(
 ): Promise<SpawnSubagentResult> {
   const task = params.task;
   const label = params.label?.trim() || "";
-  const requestedAgentId = params.agentId;
+  const requestedAgentId = params.agentId?.trim();
+
+  // Reject malformed agentId before normalizeAgentId can mangle it.
+  // Without this gate, error-message strings like "Agent not found: xyz" pass
+  // through normalizeAgentId and become "agent-not-found--xyz", which later
+  // creates ghost workspace directories and triggers cascading cron loops (#31311).
+  if (requestedAgentId && !isValidAgentId(requestedAgentId)) {
+    return {
+      status: "error",
+      error: `Invalid agentId "${requestedAgentId}". Agent IDs must match [a-z0-9][a-z0-9_-]{0,63}. Use agents_list to discover valid targets.`,
+    };
+  }
   const modelOverride = params.model;
   const thinkingOverrideRaw = params.thinking;
   const requestThreadBinding = params.thread === true;
@@ -193,14 +204,21 @@ export async function spawnSubagentDirect(
     threadId: ctx.agentThreadId,
   });
   const hookRunner = getGlobalHookRunner();
+  const cfg = loadConfig();
+
+  // When agent omits runTimeoutSeconds, use the config default.
+  // Falls back to 0 (no timeout) if config key is also unset.
+  const cfgSubagentTimeout =
+    typeof cfg?.agents?.defaults?.subagents?.runTimeoutSeconds === "number" &&
+    Number.isFinite(cfg.agents.defaults.subagents.runTimeoutSeconds)
+      ? Math.max(0, Math.floor(cfg.agents.defaults.subagents.runTimeoutSeconds))
+      : 0;
   const runTimeoutSeconds =
     typeof params.runTimeoutSeconds === "number" && Number.isFinite(params.runTimeoutSeconds)
       ? Math.max(0, Math.floor(params.runTimeoutSeconds))
-      : 0;
+      : cfgSubagentTimeout;
   let modelApplied = false;
   let threadBindingReady = false;
-
-  const cfg = loadConfig();
   const { mainKey, alias } = resolveMainSessionAlias(cfg);
   const requesterSessionKey = ctx.agentSessionKey;
   const requesterInternalKey = requesterSessionKey
@@ -515,13 +533,23 @@ export async function spawnSubagentDirect(
     }
   }
 
+  // Check if we're in a cron isolated session - don't add "do not poll" note
+  // because cron sessions end immediately after the agent produces a response,
+  // so the agent needs to wait for subagent results to keep the turn alive.
+  const isCronSession = isCronSessionKey(ctx.agentSessionKey);
+  const note =
+    spawnMode === "session"
+      ? SUBAGENT_SPAWN_SESSION_ACCEPTED_NOTE
+      : isCronSession
+        ? undefined
+        : SUBAGENT_SPAWN_ACCEPTED_NOTE;
+
   return {
     status: "accepted",
     childSessionKey,
     runId: childRunId,
     mode: spawnMode,
-    note:
-      spawnMode === "session" ? SUBAGENT_SPAWN_SESSION_ACCEPTED_NOTE : SUBAGENT_SPAWN_ACCEPTED_NOTE,
+    note,
     modelApplied: resolvedModel ? modelApplied : undefined,
   };
 }

@@ -121,6 +121,18 @@ const GroupRemoveMemberToolSchema = Type.Object({
 });
 
 /**
+ * group_update_member_role 工具参数 schema
+ */
+const GroupUpdateMemberRoleToolSchema = Type.Object({
+  /** 群组ID（必填） */
+  groupId: Type.String({ minLength: 1, maxLength: 128 }),
+  /** 成员ID（必填） */
+  agentId: Type.String({ minLength: 1, maxLength: 64 }),
+  /** 新角色（必填） */
+  role: Type.Union([Type.Literal("member"), Type.Literal("admin")]),
+});
+
+/**
  * group_delete 工具参数 schema
  */
 const GroupDeleteToolSchema = Type.Object({
@@ -225,16 +237,16 @@ export function createGroupAddMemberTool(_opts?: {
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
-        // 调用 groups.addMember RPC（可能需要逐个添加）
+        // 调用 groups.addMember RPC（逐个添加）
         const addedMembers = [];
-        for (const memberId of memberIds) {
+        for (const agentId of memberIds) {
           try {
             await callGatewayTool("groups.addMember", gatewayOpts, {
               groupId,
-              memberId,
+              agentId,  // 后端读取字段名为 agentId
               role: role || "member",
             });
-            addedMembers.push(memberId);
+            addedMembers.push(agentId);
           } catch {
             // 忽略单个成员添加失败
           }
@@ -289,18 +301,18 @@ export function createGroupRemoveMemberTool(_opts?: {
       try {
         // 调用 groups.removeMember RPC（可能需要逐个移除）
         const removedMembers = [];
-        const failedRemovals: Array<{ memberId: string; reason: string }> = [];
+        const failedRemovals: Array<{ agentId: string; reason: string }> = [];
 
-        for (const memberId of memberIds) {
+        for (const agentId of memberIds) {
           try {
             await callGatewayTool("groups.removeMember", gatewayOpts, {
               groupId,
-              memberId,
+              agentId,  // 后端读取字段名为 agentId
             });
-            removedMembers.push(memberId);
+            removedMembers.push(agentId);
           } catch (error) {
             failedRemovals.push({
-              memberId,
+              agentId,
               reason: error instanceof Error ? error.message : "Unknown error",
             });
           }
@@ -328,6 +340,48 @@ export function createGroupRemoveMemberTool(_opts?: {
         return jsonResult({
           success: false,
           error: `Failed to remove members: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * 创建更新成员角色工具
+ */
+export function createGroupUpdateMemberRoleTool(_opts?: {
+  /** 当前操作者的智能助手ID */
+  currentAgentId?: string;
+}): AnyAgentTool {
+  return {
+    label: "Group Update Member Role",
+    name: "group_update_member_role",
+    description:
+      "Update a group member's role. Requires owner or admin permissions. Roles: 'member' (regular member) or 'admin' (can manage members). The group owner's role cannot be changed.",
+    parameters: GroupUpdateMemberRoleToolSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const groupId = readStringParam(params, "groupId", { required: true });
+      const agentId = readStringParam(params, "agentId", { required: true });
+      const role = readStringParam(params, "role", { required: true }) as "member" | "admin";
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        await callGatewayTool("groups.updateMemberRole", gatewayOpts, {
+          groupId,
+          agentId,
+          role,
+        });
+
+        return jsonResult({
+          success: true,
+          message: `Successfully updated member "${agentId}" role to "${role}" in group "${groupId}"`,
+          updated: { groupId, agentId, role, updatedAt: Date.now() },
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to update member role: ${error instanceof Error ? error.message : String(error)}`,
         });
       }
     },
@@ -370,6 +424,67 @@ export function createGroupDeleteTool(_opts?: {
         return jsonResult({
           success: false,
           error: `Failed to delete group: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * group_send 工具参数 schema
+ */
+const GroupSendToolSchema = Type.Object({
+  /** 群组ID（必填） */
+  groupId: Type.String({ minLength: 1, maxLength: 128 }),
+  /** 消息内容（必填） */
+  content: Type.String({ minLength: 1, maxLength: 10000 }),
+  /** 发送者昵称（可选，默认为当前 agent ID） */
+  senderName: Type.Optional(Type.String()),
+});
+
+/**
+ * 创建群聊发送工具
+ *
+ * agent 在群组中工作时，使用此工具将消息写入群聊存储，
+ * 让人类用户在群聊窗口里看到 agent 的发言。
+ */
+export function createGroupSendTool(opts?: {
+  /** 当前操作者的智能助手 ID */
+  currentAgentId?: string;
+}): AnyAgentTool {
+  return {
+    label: "Group Send",
+    name: "group_send",
+    description:
+      "Send a message to an OpenClaw internal group chat (NOT Feishu/DingTalk/Slack/Discord). The groupId must be an OpenClaw group ID obtained from group_list (format: group_XXXXXXX). This writes the message to the OpenClaw platform group chat window so human operators can see it. Do NOT use Feishu/DingTalk chatIds here - use the message tool for external channels.",
+    parameters: GroupSendToolSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const groupId = readStringParam(params, "groupId", { required: true });
+      const content = readStringParam(params, "content", { required: true });
+      const senderName = readStringParam(params, "senderName") || opts?.currentAgentId || "agent";
+      const senderId = opts?.currentAgentId || "agent";
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        const response = await callGatewayTool("groups.chat.send", gatewayOpts, {
+          groupId,
+          content,
+          senderId,
+          senderName,
+        });
+
+        const result = response as { messageId?: string; success?: boolean };
+        return jsonResult({
+          success: true,
+          messageId: result?.messageId,
+          groupId,
+          message: "Message sent to group chat successfully",
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to send group message: ${error instanceof Error ? error.message : String(error)}`,
         });
       }
     },

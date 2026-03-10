@@ -340,7 +340,17 @@ export class OpenClawApp extends LitElement {
   @state() groupsList: import("./views/groups.ts").GroupsListResult | null = null;
   @state() groupsError: string | null = null;
   @state() groupsSelectedId: string | null = null;
-  @state() groupsActivePanel: "list" | "members" | "settings" = "list";
+  @state() groupsActivePanel: "list" | "members" | "settings" | "files" = "list";
+  // 群组文件管理状态
+  @state() groupFilesLoading = false;
+  @state() groupFileContentLoading = false;
+  @state() groupFilesError: string | null = null;
+  @state() groupFilesList: import("./controllers/group-files.ts").GroupFilesListResult | null = null;
+  @state() groupFileContents: Record<string, string> = {};
+  @state() groupFileDrafts: Record<string, string> = {};
+  @state() groupFileActive: string | null = null;
+  @state() groupFileSaving = false;
+  @state() groupWorkspaceMigrating = false;
   @state() creatingGroup = false;
   @state() editingGroup: import("./views/groups.ts").GroupInfo | null = null;
   // Friends 好友关系状态
@@ -541,6 +551,8 @@ export class OpenClawApp extends LitElement {
   @state() chatNavChannelForceJoined = false;
   // Z2 + Z4: 未读消息计数映射（sessionKey → 未读消息数）
   @state() unreadSessionMessages: Record<string, number> = {};
+  // 系统工作空间根目录（概览页设置卡片用）
+  @state() workspacesDir = "";
   // 注意：channelBindings 现在由后端 agent.list 直接返回，不再需要单独加载
 
   @state() queueLoading = false;
@@ -672,6 +684,7 @@ export class OpenClawApp extends LitElement {
   private nodesPollInterval: number | null = null;
   private logsPollInterval: number | null = null;
   private debugPollInterval: number | null = null;
+  private monitorPollInterval: number | null = null;
   private logsScrollFrame: number | null = null;
   private toolStreamById = new Map<string, ToolStreamEntry>();
   private toolStreamOrder: string[] = [];
@@ -958,7 +971,7 @@ export class OpenClawApp extends LitElement {
       name: "",
       config: {},
     };
-    this.managingChannelId = null;
+    // 保留 managingChannelId，编辑弹窗将叠加在管理列表弹窗上方
     this.viewingChannelAccount = null;
   }
 
@@ -980,13 +993,23 @@ export class OpenClawApp extends LitElement {
     const resolvedName =
       account?.name || (typeof accountConfig.name === "string" ? accountConfig.name : "") || "";
 
+    console.log(
+      `[handleEditAccount] channel=${channelId} accountId=${accountId}`,
+      `accountSnapshot=`,
+      account,
+      `accountConfig=`,
+      accountConfig,
+      `resolvedName=`,
+      resolvedName,
+    );
+
     this.editingChannelAccount = {
       channelId,
       accountId,
       name: resolvedName,
       config: accountConfig,
     };
-    this.managingChannelId = null;
+    // 保留 managingChannelId，编辑弹窗叠加在管理列表弹窗上方
     this.viewingChannelAccount = null;
   }
 
@@ -1027,6 +1050,20 @@ export class OpenClawApp extends LitElement {
       return;
     }
 
+    // 判断是新建（handleAddAccount 初始化时 accountId 为空）还是编辑已有账号
+    const existingAccounts = this.channelsSnapshot?.channelAccounts?.[channelId] ?? [];
+    const isNew = !existingAccounts.some((a) => a.accountId === accountId);
+
+    console.log(
+      `[handleSaveAccount] channel=${channelId} accountId=${accountId}`,
+      `name=`,
+      name,
+      `config=`,
+      config,
+      `isNew=`,
+      isNew,
+    );
+
     this.creatingChannelAccount = true;
     try {
       await this.client.request("channels.account.save", {
@@ -1034,7 +1071,9 @@ export class OpenClawApp extends LitElement {
         accountId,
         name,
         config,
+        isNew,
       });
+      console.log(`[handleSaveAccount] request succeeded for ${channelId}/${accountId}`);
 
       // 刷新配置和通道状态
       const { loadConfig } = await import("./controllers/config.js");

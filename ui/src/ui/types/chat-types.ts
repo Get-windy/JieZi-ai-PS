@@ -17,6 +17,10 @@ export type MessageGroup = {
   messages: Array<{ message: unknown; key: string }>;
   timestamp: number;
   isStreaming: boolean;
+  /** OpenClaw group chat sender ID (from __group_sender_id field) */
+  groupSenderId?: string;
+  /** OpenClaw group chat sender display name (from __group_sender_name field) */
+  groupSenderName?: string;
 };
 
 /** Content item types in a normalized message */

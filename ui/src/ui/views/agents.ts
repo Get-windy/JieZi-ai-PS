@@ -296,6 +296,10 @@ export type AgentsProps = {
   onMigrateWorkspace?: (agentId: string) => void | Promise<void>;
   onConfigureDefaultWorkspace?: () => void | Promise<void>;
   onSetDefaultAgent?: (agentId: string) => void | Promise<void>;
+  /** 添加新文件到助手工作空间 */
+  onAddFile?: (agentId: string, name: string) => void;
+  /** 用系统文件管理器打开工作空间文件夹 */
+  onOpenFolder?: (folderPath: string) => void;
 };
 
 // 从 tool-catalog.ts 动态派生 —— 以后只需在 tool-catalog.ts + i18n.ts 添加工具，此处自动同步
@@ -1643,6 +1647,8 @@ export function renderAgents(props: AgentsProps) {
                       onFileDraftChange: props.onFileDraftChange,
                       onFileReset: props.onFileReset,
                       onFileSave: props.onFileSave,
+                      onAddFile: props.onAddFile,
+                      onOpenFolder: props.onOpenFolder,
                     })
                   : nothing
               }
@@ -2526,6 +2532,8 @@ function renderAgentFiles(params: {
   onFileDraftChange: (name: string, content: string) => void;
   onFileReset: (name: string) => void;
   onFileSave: (name: string) => void;
+  onAddFile?: (agentId: string, name: string) => void;
+  onOpenFolder?: (folderPath: string) => void;
 }) {
   const list = params.agentFilesList?.agentId === params.agentId ? params.agentFilesList : null;
   const files = list?.files ?? [];
@@ -2542,13 +2550,38 @@ function renderAgentFiles(params: {
           <div class="card-title">${t("agents.files.title")}</div>
           <div class="card-sub">${t("agents.files.subtitle")}</div>
         </div>
-        <button
-          class="btn btn--sm"
-          ?disabled=${params.agentFilesLoading}
-          @click=${() => params.onLoadFiles(params.agentId)}
-        >
-          ${params.agentFilesLoading ? t("agents.loading") : t("agents.refresh")}
-        </button>
+        <div class="row" style="gap: 8px;">
+          ${list && params.onOpenFolder ? html`
+            <button
+              class="btn btn--sm"
+              @click=${() => params.onOpenFolder!(list.workspace)}
+              title="\u5728\u6587\u4ef6\u5939\u4e2d\u6253\u5f00"
+            >
+              \u{1F4C2} \u5728\u6587\u4ef6\u5939\u4e2d\u6253\u5f00
+            </button>
+          ` : nothing}
+          ${params.onAddFile ? html`
+            <button
+              class="btn btn--sm"
+              ?disabled=${params.agentFilesLoading}
+              @click=${() => {
+                const name = prompt("\u8bf7\u8f93\u5165\u65b0\u6587\u4ef6\u540d\uff1a");
+                if (name?.trim()) {
+                  params.onAddFile!(params.agentId, name.trim());
+                }
+              }}
+            >
+              + \u6dfb\u52a0\u6587\u4ef6
+            </button>
+          ` : nothing}
+          <button
+            class="btn btn--sm"
+            ?disabled=${params.agentFilesLoading}
+            @click=${() => params.onLoadFiles(params.agentId)}
+          >
+            ${params.agentFilesLoading ? t("agents.loading") : t("agents.refresh")}
+          </button>
+        </div>
       </div>
       ${list ? html`<div class="muted mono" style="margin-top: 8px;">${t("agents.files.workspace").replace("{workspace}", list.workspace)}</div>` : nothing}
       ${
@@ -2619,6 +2652,7 @@ function renderAgentFiles(params: {
                           <label class="field" style="margin-top: 12px;">
                             <span>${t("agents.files.content")}</span>
                             <textarea
+                              rows="20"
                               .value=${draft}
                               @input=${(e: Event) =>
                                 params.onFileDraftChange(

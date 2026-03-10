@@ -7,6 +7,8 @@ const BASE_METHODS = [
   "logs.tail",
   "channels.status",
   "channels.logout",
+  "channels.account.save",
+  "channels.account.delete",
   "status",
   "usage.status",
   "usage.cost",
@@ -163,6 +165,9 @@ const BASE_METHODS = [
   "groups.addFriend",
   "groups.confirmFriend",
   "groups.removeFriend",
+  // Group Chat
+  "groups.chat.history",
+  "groups.chat.send",
   // Phase 7: Admin & Super Admin Management
   "phase7.initialize",
   "phase7.status",
@@ -341,6 +346,22 @@ const BASE_METHODS = [
   "chat.history",
   "chat.abort",
   "chat.send",
+  // Workspace Management
+  "agent.workspace.getDefault",
+  "agent.workspace.setDefault",
+  "agent.workspace.migrate",
+  "workspace.backup",
+  "workspace.migrate.all",
+  "workspace.openFolder",
+  // Group Files
+  "groups.files.list",
+  "groups.files.get",
+  "groups.files.set",
+  "groups.files.delete",
+  // Group Workspace
+  "groups.workspace.getDir",
+  "groups.workspace.setDir",
+  "groups.workspace.migrate",
 ];
 
 export function listGatewayMethods(): string[] {
