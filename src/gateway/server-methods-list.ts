@@ -362,6 +362,11 @@ const BASE_METHODS = [
   "groups.workspace.getDir",
   "groups.workspace.setDir",
   "groups.workspace.migrate",
+  // Memory Blocks (主动记忆写入层)
+  "memory.save",
+  "memory.delete",
+  "memory.list",
+  "memory.namespace.stats",
 ];
 
 export function listGatewayMethods(): string[] {

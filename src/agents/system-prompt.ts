@@ -49,22 +49,57 @@ function buildMemorySection(params: {
   if (params.isMinimal) {
     return [];
   }
-  if (!params.availableTools.has("memory_search") && !params.availableTools.has("memory_get")) {
+  const hasSearch = params.availableTools.has("memory_search");
+  const hasGet = params.availableTools.has("memory_get");
+  const hasSave = params.availableTools.has("memory_save");
+  const hasDelete = params.availableTools.has("memory_delete");
+  const hasList = params.availableTools.has("memory_list");
+
+  if (!hasSearch && !hasGet && !hasSave) {
     return [];
   }
-  const lines = [
-    "## Memory Recall",
-    "Before answering anything about prior work, decisions, dates, people, preferences, or todos: run memory_search on MEMORY.md + memory/*.md; then use memory_get to pull only the needed lines. If low confidence after search, say you checked.",
-  ];
-  if (params.citationsMode === "off") {
+
+  const lines: string[] = ["## Memory"];
+
+  // 1. Recall
+  if (hasSearch || hasGet) {
     lines.push(
-      "Citations are disabled: do not mention file paths or line numbers in replies unless the user explicitly asks.",
+      "**Recall** — Before answering anything about prior work, decisions, dates, people, preferences, or todos: run memory_search on MEMORY.md + memory/*.md; then use memory_get to pull only the needed lines. If low confidence after search, say you checked.",
     );
-  } else {
+    if (params.citationsMode === "off") {
+      lines.push(
+        "Citations are disabled: do not mention file paths or line numbers in replies unless the user explicitly asks.",
+      );
+    } else {
+      lines.push(
+        "Citations: include Source: <path#line> when it helps the user verify memory snippets.",
+      );
+    }
+  }
+
+  // 2. Proactive Save
+  if (hasSave) {
     lines.push(
-      "Citations: include Source: <path#line> when it helps the user verify memory snippets.",
+      "**Proactive Save** — When you learn something important that should persist across sessions (user preferences, key decisions, project context, facts, constraints), call memory_save IMMEDIATELY—do NOT wait for /new or session reset.",
+      "  Namespaces: 'preferences' (habits/settings) | 'decisions' (choices made) | 'context' (project/task state, default) | 'facts' (rules/knowledge).",
+      "  The backend auto-deduplicates: semantically similar content is merged (UPDATE) or skipped (SKIP) instead of creating duplicates.",
     );
   }
+
+  // 3. Memory Blocks
+  if (hasList) {
+    lines.push(
+      "**Memory Blocks** — Use memory_list to audit stored entries by namespace/tag, or to find memoryId values before deleting. Use memory_search for semantic content search.",
+    );
+  }
+
+  // 4. Delete
+  if (hasDelete) {
+    lines.push(
+      "**Delete** — Use memory_delete when a memory is outdated, incorrect, or superseded. Find its memoryId first with memory_search or memory_list.",
+    );
+  }
+
   lines.push("");
   return lines;
 }

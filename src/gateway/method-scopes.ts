@@ -123,6 +123,9 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     // 群组文件：查询
     "groups.files.list",
     "groups.files.get",
+    // 记忆块：查询
+    "memory.list",
+    "memory.namespace.stats",
     // 任务：查询类
     "task.list",
     "task.get",
@@ -189,6 +192,9 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "groups.removeMember",
     // 群组聊天：写操作
     "groups.chat.send",
+    // 记忆块：写操作
+    "memory.save",
+    "memory.delete",
     // 任务：写操作（基础 + 扩展）
     "task.create",
     "task.update",

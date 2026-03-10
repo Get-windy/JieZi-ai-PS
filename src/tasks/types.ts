@@ -1,6 +1,6 @@
 /**
  * Phase 5: 任务与会议系统 - 类型定义
- * 
+ *
  * 定义任务协作、会议管理等核心类型
  * P2.1: 任务协作系统数据模型
  */
@@ -78,7 +78,7 @@ export interface AgentWorkLog {
   duration?: number; // 操作持续时间（毫秒）
   result?: "success" | "failure" | "partial"; // 操作结果
   errorMessage?: string; // 错误信息（如果失败）
-  metadata?: Record<string, any>; // 额外元数据
+  metadata?: Record<string, unknown>; // 额外元数据
   createdAt: number;
 }
 
@@ -114,43 +114,43 @@ export interface Task {
   id: string;
   title: string;
   description: string;
-  
+
   // 创建者信息
   creatorId: string; // 创建者ID
   creatorType: MemberType; // 创建者类型
-  
+
   // 分配信息
   assignees: TaskAssignee[]; // 执行者列表（支持人类和智能助手）
-  
+
   // 任务属性
   status: TaskStatus;
   priority: TaskPriority;
   type?: TaskType;
-  
+
   // 组织归属
   organizationId?: string; // 所属组织
   teamId?: string; // 所属团队ID
   projectId?: string; // 所属项目ID
-  
+
   // 任务关系
   parentTaskId?: string; // 父任务ID（用于子任务）
   dependencies?: string[]; // 依赖的任务ID列表
   blockedBy?: string[]; // 阻塞此任务的任务ID列表
   subtasks?: string[]; // 子任务ID列表
-  
+
   // 时间管理
   dueDate?: number; // 截止时间
   timeTracking: TaskTimeTracking; // 时间追踪
-  
+
   // 协作内容
   comments?: TaskComment[]; // 评论列表
   attachments?: TaskAttachment[]; // 附件列表
   workLogs?: AgentWorkLog[]; // 智能助手工作日志
-  
+
   // 标签与分类
   tags?: string[]; // 标签
   labels?: string[]; // 标签（颜色编码）
-  
+
   // 元数据
   createdAt: number;
   updatedAt?: number;
@@ -322,52 +322,52 @@ export interface Meeting {
   id: string;
   title: string;
   description?: string;
-  
+
   // 组织者信息
   organizerId: string; // 组织者ID
   organizerType: MemberType;
-  
+
   // 参会者
   participants: MeetingParticipant[]; // 参会者列表
-  
+
   // 会议属性
   type: MeetingType;
   status: MeetingStatus;
-  
+
   // 时间安排
   scheduledAt: number; // 计划开始时间
   duration: number; // 预计时长（分钟）
   startedAt?: number; // 实际开始时间
   endedAt?: number; // 实际结束时间
-  
+
   // 组织归属
   organizationId?: string;
   teamId?: string;
   projectId?: string;
-  
+
   // 议程
   agenda: MeetingAgendaItem[]; // 议程列表
   currentAgendaIndex?: number; // 当前进行的议程索引
-  
+
   // 会议记录
   transcript?: string; // 会议记录/对话记录
   notes?: string; // 会议笔记
   decisions: MeetingDecision[]; // 决策列表
   actionItems: MeetingActionItem[]; // 行动项列表
-  
+
   // 会议消息
   messages?: MeetingMessage[]; // 会议中的消息
-  
+
   // 会议资源
   meetingRoomUrl?: string; // 会议室链接
   recordingUrl?: string; // 录制链接
   attachments?: string[]; // 附件
-  
+
   // 重复会议
   isRecurring?: boolean; // 是否为重复会议
   recurrenceRule?: string; // 重复规则（如：每周一 10:00）
   parentMeetingId?: string; // 如果是重复会议，指向系列会议的ID
-  
+
   // 元数据
   createdAt: number;
   updatedAt?: number;
@@ -383,35 +383,35 @@ export interface MeetingSummary {
   title: string;
   date: number; // 会议日期
   duration: number; // 实际时长（分钟）
-  
+
   // 参会者信息
   attendees: Array<{
     id: string;
     type: MemberType;
     attended: boolean; // 是否实际参加
   }>;
-  
+
   // 内容摘要
   summary: string; // AI生成的会议摘要
   keyPoints: string[]; // 关键要点
-  
+
   // 议程回顾
   agendaReview: Array<{
     topic: string;
     completed: boolean;
     notes?: string;
   }>;
-  
+
   // 决策与行动
   decisions: MeetingDecision[]; // 会议决策
   actionItems: MeetingActionItem[]; // 行动项
-  
+
   // 下次会议
   nextMeeting?: {
     scheduledAt: number;
     topics: string[];
   };
-  
+
   // 生成信息
   generatedAt: number;
   generatedBy?: string; // 生成者ID（通常是智能助手）

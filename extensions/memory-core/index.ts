@@ -1,5 +1,10 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
+import {
+  createMemorySaveTool,
+  createMemoryDeleteTool,
+  createMemoryListTool,
+} from "../../src/agents/tools/memory-write-tool.js";
 
 const memoryCorePlugin = {
   id: "memory-core",
@@ -25,6 +30,17 @@ const memoryCorePlugin = {
       },
       { names: ["memory_search", "memory_get"] },
     );
+
+    // 主动记忆写入工具（借鉴 Letta core_memory_append + Mem0 语义去重）
+    api.registerTool((ctx) => createMemorySaveTool({ agentId: ctx.agentId }), {
+      names: ["memory_save"],
+    });
+    api.registerTool((ctx) => createMemoryDeleteTool({ agentId: ctx.agentId }), {
+      names: ["memory_delete"],
+    });
+    api.registerTool((ctx) => createMemoryListTool({ agentId: ctx.agentId }), {
+      names: ["memory_list"],
+    });
 
     api.registerCli(
       ({ program }) => {
