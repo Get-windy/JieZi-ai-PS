@@ -448,7 +448,7 @@ function renderGroupFiles(group: GroupInfo, props: GroupsProps) {
             ?disabled=${props.groupFilesLoading}
             @click=${() => {
               const n = prompt("\u8bf7\u8f93\u5165\u65b0\u6587\u4ef6\u540d\uff1a");
-              if (n?.trim()) props.onAddGroupFile(group.id, n.trim());
+              if (n?.trim()) {props.onAddGroupFile(group.id, n.trim());}
             }}
           >+ \u6dfb\u52a0\u6587\u4ef6</button>
           <button class="btn btn--sm" ?disabled=${props.groupFilesLoading} @click=${() => props.onLoadGroupFiles(group.id)}>
@@ -488,7 +488,7 @@ function renderGroupFiles(group: GroupInfo, props: GroupsProps) {
                         <div class="agent-file-actions">
                           <button class="btn btn--sm btn--danger" @click=${() => {
                             if (confirm(`\u786e\u5b9a\u8981\u5220\u9664\u6587\u4ef6 ${activeEntry.name} \u5417\uff1f`))
-                              props.onDeleteGroupFile(group.id, activeEntry.name);
+                              {props.onDeleteGroupFile(group.id, activeEntry.name);}
                           }}>\u5220\u9664</button>
                           <button class="btn btn--sm" ?disabled=${!isDirty} @click=${() => props.onGroupFileReset(activeEntry.name)}>\u91cd\u7f6e</button>
                           <button class="btn btn--sm primary" ?disabled=${props.groupFileSaving || !isDirty} @click=${() => props.onGroupFileSave(activeEntry.name)}>

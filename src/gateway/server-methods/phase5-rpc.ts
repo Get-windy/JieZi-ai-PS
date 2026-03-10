@@ -72,7 +72,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
       }
 
       // 返回模型账号配置
-      const modelAccountsConfig = (agent as any).modelAccounts || {
+      const modelAccountsConfig = (agent).modelAccounts || {
         accounts: [],
         routingMode: "manual",
       };
@@ -116,7 +116,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
       }
 
       // 返回通道策略配置
-      const channelPoliciesConfig = (agent as any).channelPolicies || {
+      const channelPoliciesConfig = (agent).channelPolicies || {
         bindings: [],
         defaultPolicy: "private",
       };
@@ -171,7 +171,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
         groups: {
           ...(currentConfig as any).groups,
           workspace: {
-            ...((currentConfig as any).groups?.workspace ?? {}),
+            ...(currentConfig as any).groups?.workspace,
             root: dir,
           },
         },
@@ -621,7 +621,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
           overrides: {
             ...existingOverrides,
             [groupId]: {
-              ...(existingOverrides[groupId] ?? {}),
+              ...existingOverrides[groupId],
               workspaceDir: newDirResolved,
             },
           },

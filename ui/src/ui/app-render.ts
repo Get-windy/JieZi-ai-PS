@@ -1637,7 +1637,7 @@ export function renderApp(state: AppViewState) {
                   });
                 },
                 onOpenFolder: (folderPath) => {
-                  if (!state.client) return;
+                  if (!state.client) {return;}
                   void state.client.request("workspace.openFolder", { path: folderPath }).catch(() => {});
                 },
                 onToolsProfileChange: (agentId, profile, clearAllow) => {
@@ -2730,7 +2730,7 @@ export function renderApp(state: AppViewState) {
                   },
                   onSelectGroupFile: (name) => {
                     const groupId = state.groupsSelectedId;
-                    if (!groupId) return;
+                    if (!groupId) {return;}
                     state.groupFileActive = name;
                     void loadGroupFileContent(state, groupId, name);
                   },
@@ -2745,7 +2745,7 @@ export function renderApp(state: AppViewState) {
                   },
                   onGroupFileSave: (name) => {
                     const groupId = state.groupsSelectedId;
-                    if (!groupId) return;
+                    if (!groupId) {return;}
                     const content = state.groupFileDrafts[name] ?? "";
                     void saveGroupFile(state, groupId, name, content);
                   },
@@ -2761,7 +2761,7 @@ export function renderApp(state: AppViewState) {
                     }
                   },
                   onOpenGroupFolder: (folderPath) => {
-                    if (!state.client) return;
+                    if (!state.client) {return;}
                     void state.client.request("workspace.openFolder", { path: folderPath }).catch(() => {});
                   },
                   // 群组工作空间迁移

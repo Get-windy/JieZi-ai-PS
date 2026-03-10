@@ -479,7 +479,7 @@ export async function loadOverview(host: SettingsHost) {
     (async () => {
       try {
         const app = host as unknown as OpenClawApp;
-        if (!app.client) return;
+        if (!app.client) {return;}
         const result = await app.client.request("agent.workspace.getDefault", {});
         if (result) {
           (app as unknown as { workspacesDir: string }).workspacesDir =

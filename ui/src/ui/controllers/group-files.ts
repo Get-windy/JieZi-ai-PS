@@ -36,7 +36,7 @@ function mergeGroupFileEntry(
   list: GroupFilesListResult | null,
   entry: GroupFileEntry & { content?: string },
 ): GroupFilesListResult | null {
-  if (!list) return list;
+  if (!list) {return list;}
   const { content: _content, ...fileEntry } = entry;
   const hasEntry = list.files.some((f) => f.name === fileEntry.name);
   const nextFiles = hasEntry
@@ -46,7 +46,7 @@ function mergeGroupFileEntry(
 }
 
 export async function loadGroupFiles(state: GroupFilesState, groupId: string) {
-  if (!state.client || !state.connected || state.groupFilesLoading) return;
+  if (!state.client || !state.connected || state.groupFilesLoading) {return;}
   state.groupFilesLoading = true;
   state.groupFilesError = null;
   try {
@@ -75,10 +75,10 @@ export async function loadGroupFileContent(
   name: string,
   opts?: { force?: boolean },
 ) {
-  if (!state.client || !state.connected) return;
+  if (!state.client || !state.connected) {return;}
   // 已缓存且非强制刷新时跳过，但 missing 文件不缓存（路径可能已修复）
   const cachedEntry = state.groupFilesList?.files.find((f) => f.name === name);
-  if (!opts?.force && Object.hasOwn(state.groupFileContents, name) && !cachedEntry?.missing) return;
+  if (!opts?.force && Object.hasOwn(state.groupFileContents, name) && !cachedEntry?.missing) {return;}
   state.groupFileContentLoading = true;
   state.groupFilesError = null;
   try {
@@ -112,7 +112,7 @@ export async function saveGroupFile(
   name: string,
   content: string,
 ) {
-  if (!state.client || !state.connected || state.groupFileSaving) return;
+  if (!state.client || !state.connected || state.groupFileSaving) {return;}
   state.groupFileSaving = true;
   state.groupFilesError = null;
   try {
@@ -138,7 +138,7 @@ export async function deleteGroupFile(
   groupId: string,
   name: string,
 ) {
-  if (!state.client || !state.connected) return;
+  if (!state.client || !state.connected) {return;}
   state.groupFilesError = null;
   try {
     await state.client.request("groups.files.delete", { groupId, name });
@@ -174,7 +174,7 @@ export async function migrateGroupWorkspace(
   groupId: string,
   newDir: string,
 ): Promise<MigrateGroupWorkspaceResult | null> {
-  if (!state.client || !state.connected || state.groupWorkspaceMigrating) return null;
+  if (!state.client || !state.connected || state.groupWorkspaceMigrating) {return null;}
   state.groupWorkspaceMigrating = true;
   state.groupFilesError = null;
   try {

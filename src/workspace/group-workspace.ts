@@ -27,7 +27,7 @@ function resolveGroupRootFromConfig(): string | undefined {
     // 读取 openclaw.json 配置文件
     const stateDir = resolveStateDir(process.env);
     const configPath = path.join(stateDir, "openclaw.json");
-    if (!fs.existsSync(configPath)) return undefined;
+    if (!fs.existsSync(configPath)) {return undefined;}
     const raw = fs.readFileSync(configPath, "utf-8");
     const config = JSON.parse(raw);
     const root = config?.groups?.workspace?.root;
@@ -56,11 +56,11 @@ function resolveGroupOverridesFromConfig(): Record<string, string> {
   try {
     const stateDir = resolveStateDir(process.env);
     const configPath = path.join(stateDir, "openclaw.json");
-    if (!fs.existsSync(configPath)) return {};
+    if (!fs.existsSync(configPath)) {return {};}
     const raw = fs.readFileSync(configPath, "utf-8");
     const config = JSON.parse(raw);
     const overrides = config?.groups?.overrides;
-    if (!overrides || typeof overrides !== "object") return {};
+    if (!overrides || typeof overrides !== "object") {return {};}
     const result: Record<string, string> = {};
     for (const [groupId, val] of Object.entries(overrides)) {
       const dir = (val as any)?.workspaceDir;

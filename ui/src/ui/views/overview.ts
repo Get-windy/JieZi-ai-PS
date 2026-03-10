@@ -424,7 +424,7 @@ export function renderOverview(props: OverviewProps) {
                 @click=${async () => {
                   if (!props.workspacesDir) { alert("请先设置工作空间根目录"); return; }
                   const customDir = prompt("备份目录（留空自动生成）:");
-                  if (customDir === null) return;
+                  if (customDir === null) {return;}
                   try {
                     const result = await props.onWorkspaceBackup(customDir.trim() || undefined);
                     alert("✅ 备份完成！\n备份目录: " + result.backupDir + "\n已复制: " + result.fileCount + " 个文件");
@@ -449,8 +449,8 @@ export function renderOverview(props: OverviewProps) {
                 @click=${async () => {
                   if (!props.workspacesDir) { alert("请先设置当前工作空间根目录"); return; }
                   const newRoot = prompt("新的工作空间目录:");
-                  if (!newRoot || !newRoot.trim()) return;
-                  if (!confirm("确认将整个工作空间迁移到: " + newRoot.trim() + "\n\n这不会删除原目录。建议先备份。")) return;
+                  if (!newRoot || !newRoot.trim()) {return;}
+                  if (!confirm("确认将整个工作空间迁移到: " + newRoot.trim() + "\n\n这不会删除原目录。建议先备份。")) {return;}
                   try {
                     const result = await props.onWorkspaceMigrateAll(newRoot.trim());
                     alert("✅ 迁移完成！\n原目录: " + result.oldRoot + "\n新目录: " + result.newRoot + "\n已复制: " + result.filesCopied + " 个文件\n已更新 Agent: " + result.agentsMigrated + " 个");

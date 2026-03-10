@@ -145,10 +145,10 @@ function getMonitorColor(index: number, isDark = false): MonitorColorScheme {
 function extractMonitorSenderId(msg: unknown): string | null {
   const m = msg as Record<string, unknown>;
   // 群聊消息
-  if (typeof m.__group_sender_id === "string") return m.__group_sender_id;
+  if (typeof m.__group_sender_id === "string") {return m.__group_sender_id;}
   // agent 间通信
   const interagent = m.__interagent as Record<string, unknown> | undefined;
-  if (typeof interagent?.senderId === "string") return interagent.senderId;
+  if (typeof interagent?.senderId === "string") {return interagent.senderId;}
   // provenance
   const prov = m.provenance as Record<string, unknown> | undefined;
   if (prov?.kind === "inter_session" && typeof prov.sourceSessionKey === "string") {
@@ -171,7 +171,7 @@ function renderMonitorBubble(
   const role = typeof m.role === "string" ? m.role.toLowerCase() : "assistant";
   const isUser = role === "user" || senderId === "user";
   const isSystem = role === "system" || role === "toolresult";
-  if (isSystem) return nothing;
+  if (isSystem) {return nothing;}
 
   const color = senderId && agentColorMap.has(senderId)
     ? agentColorMap.get(senderId)!
@@ -194,7 +194,7 @@ function renderMonitorBubble(
   } else if (typeof m.text === "string") {
     text = m.text;
   }
-  if (!text.trim()) return nothing;
+  if (!text.trim()) {return nothing;}
 
   const ts = typeof m.timestamp === "number" ? m.timestamp : Date.now();
   const timeStr = new Date(ts).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -255,7 +255,7 @@ function renderMonitorView(props: ChatProps) {
 
   // 参与者信息栏
   const participants = [...agentColorMap.entries()].filter(([id]) => {
-    if (id === "user") return false;
+    if (id === "user") {return false;}
     return messages.some((m) => {
       const sid = extractMonitorSenderId(m);
       return sid === id || (m as Record<string, unknown>).role === "assistant";
@@ -339,17 +339,17 @@ function detectMentionToken(
   // 只在光标前扫描，找最近的 @ 且 @ 后面没有空格
   const before = text.slice(0, cursor);
   const idx = before.lastIndexOf("@");
-  if (idx === -1) return null;
+  if (idx === -1) {return null;}
   const after = before.slice(idx + 1);
   // 如果 @ 之后有空格，说明已经完成了一个 mention
-  if (/\s/.test(after)) return null;
+  if (/\s/.test(after)) {return null;}
   return { token: after.toLowerCase(), start: idx };
 }
 
 /** 关闭 mention 下拉 */
 function closeMentionDropdown(container: HTMLElement) {
   const existing = container.querySelector(".chat-mention-dropdown");
-  if (existing) existing.remove();
+  if (existing) {existing.remove();}
 }
 
 /** 渲染 mention 下拉列表，选中后把 @label 插入 textarea */
@@ -361,7 +361,7 @@ function openMentionDropdown(
   onInsert: (newDraft: string) => void,
 ) {
   closeMentionDropdown(container);
-  if (candidates.length === 0) return;
+  if (candidates.length === 0) {return;}
 
   const dropdown = document.createElement("div");
   dropdown.className = "chat-mention-dropdown";
@@ -369,7 +369,7 @@ function openMentionDropdown(
   candidates.forEach((c, i) => {
     const item = document.createElement("div");
     item.className = "chat-mention-item";
-    if (i === 0) item.classList.add("chat-mention-item--active");
+    if (i === 0) {item.classList.add("chat-mention-item--active");}
     item.textContent = `${c.emoji} ${c.label}`;
     item.addEventListener("mousedown", (ev) => {
       ev.preventDefault(); // 防止 textarea 失焦
@@ -739,7 +739,7 @@ export function renderChatParticipantsInline(props: ChatProps) {
 
 /** 判断当前 context 是否应使用监控视图（只读/不可输入） */
 function isMonitorContext(context: ChatConversationContext | null): boolean {
-  if (!context) return false;
+  if (!context) {return false;}
   return context.type === "contact" || context.type === "all" || context.type === "agent-all";
 }
 
@@ -1065,7 +1065,7 @@ export function renderChat(props: ChatProps) {
                 props.onDraftChange(target.value);
                 // @ mention 提及逻辑（仅在群聊 context）
                 const isGroupCtx = props.navCurrentContext?.type === "group";
-                const wrap = target.closest(".chat-compose__mention-wrap") as HTMLElement | null;
+                const wrap = target.closest(".chat-compose__mention-wrap");
                 if (isGroupCtx && wrap) {
                   const cursor = target.selectionStart ?? target.value.length;
                   const mention = detectMentionToken(target.value, cursor);

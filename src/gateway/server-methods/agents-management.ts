@@ -1911,7 +1911,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       groups: {
         ...(cfg as any).groups,
         workspace: {
-          ...((cfg as any).groups?.workspace ?? {}),
+          ...(cfg as any).groups?.workspace,
           root: path.join(workspace, "groups"),
         },
       },
@@ -2071,7 +2071,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       // 更新每个 agent 的 workspace 字段：把 oldRoot 前缀替换为 newRootResolved
       const agents = listAgentEntries(cfg);
       const updatedAgents = agents.map((agent) => {
-        const agentWorkspace = agent.workspace as string | undefined;
+        const agentWorkspace = agent.workspace;
         if (agentWorkspace && path.resolve(agentWorkspace).startsWith(path.resolve(oldRoot))) {
           const rel = path.relative(path.resolve(oldRoot), path.resolve(agentWorkspace));
           return { ...agent, workspace: path.join(newRootResolved, rel) };
@@ -2090,7 +2090,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         groups: {
           ...(cfg as any).groups,
           workspace: {
-            ...((cfg as any).groups?.workspace ?? {}),
+            ...(cfg as any).groups?.workspace,
             root: path.join(newRootResolved, "groups"),
           },
         },
