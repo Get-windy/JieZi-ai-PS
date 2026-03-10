@@ -1,5 +1,6 @@
 import type { OpenClawApp } from "./app.ts";
 import { loadDebug } from "./controllers/debug.ts";
+import { loadChatHistory } from "./controllers/chat.ts";
 import { loadLogs } from "./controllers/logs.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 
@@ -7,6 +8,7 @@ type PollingHost = {
   nodesPollInterval: number | null;
   logsPollInterval: number | null;
   debugPollInterval: number | null;
+  monitorPollInterval: number | null;
   tab: string;
 };
 
@@ -66,4 +68,23 @@ export function stopDebugPolling(host: PollingHost) {
   }
   clearInterval(host.debugPollInterval);
   host.debugPollInterval = null;
+}
+
+/** 开始监控轮询（每 3s 重新加载消息历史） */
+export function startMonitorPolling(host: PollingHost) {
+  if (host.monitorPollInterval != null) {
+    return;
+  }
+  host.monitorPollInterval = window.setInterval(() => {
+    void loadChatHistory(host as unknown as OpenClawApp);
+  }, 3000);
+}
+
+/** 停止监控轮询 */
+export function stopMonitorPolling(host: PollingHost) {
+  if (host.monitorPollInterval == null) {
+    return;
+  }
+  clearInterval(host.monitorPollInterval);
+  host.monitorPollInterval = null;
 }

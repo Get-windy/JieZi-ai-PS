@@ -2363,11 +2363,14 @@
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   gap: 16px;
+  min-height: 480px;
+  align-items: start;
 }
 
 .agent-files-list {
   display: grid;
   gap: 8px;
+  align-content: start;
 }
 
 .agent-file-row {
@@ -2409,6 +2412,25 @@
   border-radius: var(--radius-lg);
   padding: 16px;
   background: var(--card);
+  display: flex;
+  flex-direction: column;
+  min-height: 480px;
+}
+
+.agent-files-editor .field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.agent-files-editor .field textarea {
+  flex: 1;
+  min-height: 360px;
+  resize: vertical;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .agent-file-header {

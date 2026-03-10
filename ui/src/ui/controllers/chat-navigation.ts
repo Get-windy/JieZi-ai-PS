@@ -335,6 +335,52 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
     });
   }
 
+  // ---- 顶级：👁 协作监控（agent 间直接会话监控，只读）----
+  // 把所有 contact 节点（好友/直接会话）汇总到独立的监控分区
+  {
+    const allContactItems: ChatNavigationNode[] = [];
+    for (const agent of agentList) {
+      for (const friend of friendList) {
+        allContactItems.push({
+          id: `monitor-contact-${agent.id}-${friend.id}`,
+          label: `${agent.identity?.name || agent.id} ↔ ${friend.agentName || friend.agentId}`,
+          icon: "💬",
+          nodeType: "item" as const,
+          unreadCount: getUnread(`agent:${friend.agentId}:main`),
+          context: {
+            type: "contact" as const,
+            agentId: agent.id,
+            contactAgentId: friend.agentId,
+            contactAgentName: friend.agentName || friend.agentId,
+            sessionKey: `agent:${friend.agentId}:main`,
+          },
+        });
+      }
+    }
+    // 「全部 Agent 通信」节点
+    const monitorAllNode: ChatNavigationNode = {
+      id: "monitor-all",
+      label: "所有 Agent 通信流",
+      icon: "📡",
+      nodeType: "item" as const,
+      unreadCount: sumAllUnread(),
+      context: {
+        type: "all",
+        sessionKey: defaultSessionKey,
+      },
+    };
+    const monitorChildren = [monitorAllNode, ...allContactItems];
+    rootNodes.push({
+      id: "monitor-root",
+      label: "协作监控",
+      icon: "👁",
+      nodeType: "category" as const,
+      unreadCount: sumAllUnread(),
+      context: monitorAllNode.context,
+      children: monitorChildren,
+    });
+  }
+
   // ---- 顶级：👥 群聊（独立栏目，不重复挂在每个 agent 下）----
   // 始终显示群聊根节点（即使暂无群组），方便用户通过 collaboration 面板创建群组
   {

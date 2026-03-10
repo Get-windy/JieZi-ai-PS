@@ -1,12 +1,12 @@
-import type { RuntimeApi } from "openclaw/plugin-sdk";
+import type { PluginRuntime } from "openclaw/plugin-sdk";
 
-let runtime: RuntimeApi | null = null;
+let runtime: PluginRuntime | null = null;
 
-export function setDingtalkRuntime(api: RuntimeApi): void {
-  runtime = api;
+export function setDingTalkRuntime(next: PluginRuntime): void {
+  runtime = next;
 }
 
-export function getDingtalkRuntime(): RuntimeApi {
+export function getDingTalkRuntime(): PluginRuntime {
   if (!runtime) {
     throw new Error("DingTalk runtime not initialized");
   }

@@ -256,7 +256,17 @@ export type AppViewState = {
   groupsList: import("./views/groups.ts").GroupsListResult | null;
   groupsError: string | null;
   groupsSelectedId: string | null;
-  groupsActivePanel: "list" | "members" | "settings";
+  groupsActivePanel: "list" | "members" | "settings" | "files";
+  // 群组文件管理状态
+  groupFilesLoading: boolean;
+  groupFileContentLoading: boolean;
+  groupFilesError: string | null;
+  groupFilesList: import("./controllers/group-files.ts").GroupFilesListResult | null;
+  groupFileContents: Record<string, string>;
+  groupFileDrafts: Record<string, string>;
+  groupFileActive: string | null;
+  groupFileSaving: boolean;
+  groupWorkspaceMigrating: boolean;
   creatingGroup: boolean;
   editingGroup: import("./views/groups.ts").GroupInfo | null;
   // Friends 好友关系状态
@@ -657,6 +667,9 @@ export type AppViewState = {
   // Z2 + Z4: 未读消息计数映射（sessionKey → 未读消息数）
   unreadSessionMessages: Record<string, number>;
   // 注意：channelBindings 现在由后端 agent.list 直接返回，不再需要单独加载
+
+  // 系统工作空间根目录（概览页设置卡片用）
+  workspacesDir: string;
 
   client: GatewayBrowserClient | null;
   refreshSessionsAfterChat: Set<string>;

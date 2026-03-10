@@ -24,6 +24,18 @@ export async function listFeishuDirectoryPeers(params: {
   const account = resolveFeishuAccount({ cfg: params.cfg, accountId: params.accountId });
   const feishuCfg = account.config;
   const q = params.query?.trim().toLowerCase() || "";
+
+  // Build a map of id -> name from dms config
+  const dmNames = new Map<string, string>();
+  for (const [userId, dmCfg] of Object.entries(feishuCfg?.dms ?? {})) {
+    const trimmed = userId.trim();
+    const normalizedId = normalizeFeishuTarget(trimmed) ?? trimmed;
+    const name = (dmCfg as { name?: string } | null | undefined)?.name?.trim();
+    if (normalizedId && name) {
+      dmNames.set(normalizedId, name);
+    }
+  }
+
   const ids = new Set<string>();
 
   for (const entry of feishuCfg?.allowFrom ?? []) {
@@ -44,9 +56,13 @@ export async function listFeishuDirectoryPeers(params: {
     .map((raw) => raw.trim())
     .filter(Boolean)
     .map((raw) => normalizeFeishuTarget(raw) ?? raw)
-    .filter((id) => (q ? id.toLowerCase().includes(q) : true))
+    .filter((id) => {
+      if (!q) return true;
+      const name = dmNames.get(id) ?? "";
+      return id.toLowerCase().includes(q) || name.toLowerCase().includes(q);
+    })
     .slice(0, params.limit && params.limit > 0 ? params.limit : undefined)
-    .map((id) => ({ kind: "user" as const, id }));
+    .map((id) => ({ kind: "user" as const, id, name: dmNames.get(id) }));
 }
 
 export async function listFeishuDirectoryGroups(params: {
@@ -93,6 +109,18 @@ export async function listFeishuDirectoryPeersLive(params: {
     return listFeishuDirectoryPeers(params);
   }
 
+  // Build static name map from dms config to supplement live results
+  const feishuCfg = account.config;
+  const dmNames = new Map<string, string>();
+  for (const [userId, dmCfg] of Object.entries(feishuCfg?.dms ?? {})) {
+    const trimmed = userId.trim();
+    const normalizedId = normalizeFeishuTarget(trimmed) ?? trimmed;
+    const name = (dmCfg as { name?: string } | null | undefined)?.name?.trim();
+    if (normalizedId && name) {
+      dmNames.set(normalizedId, name);
+    }
+  }
+
   try {
     const client = createFeishuClient(account);
     const peers: FeishuDirectoryPeer[] = [];
@@ -108,7 +136,7 @@ export async function listFeishuDirectoryPeersLive(params: {
       for (const user of response.data.items) {
         if (user.open_id) {
           const q = params.query?.trim().toLowerCase() || "";
-          const name = user.name || "";
+          const name = user.name || dmNames.get(user.open_id) || "";
           if (!q || user.open_id.toLowerCase().includes(q) || name.toLowerCase().includes(q)) {
             peers.push({
               kind: "user",
@@ -119,6 +147,19 @@ export async function listFeishuDirectoryPeersLive(params: {
         }
         if (peers.length >= limit) {
           break;
+        }
+      }
+    }
+
+    // Merge with static entries that have names configured but may not appear in API results
+    if (dmNames.size > 0) {
+      const liveIds = new Set(peers.map((p) => p.id));
+      for (const [id, name] of dmNames.entries()) {
+        if (!liveIds.has(id)) {
+          const q = params.query?.trim().toLowerCase() || "";
+          if (!q || id.toLowerCase().includes(q) || name.toLowerCase().includes(q)) {
+            peers.push({ kind: "user", id, name });
+          }
         }
       }
     }

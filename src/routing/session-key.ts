@@ -181,6 +181,11 @@ export function sanitizeAgentId(value: string | undefined | null): string {
   return normalizeAgentId(value);
 }
 
+export function isValidAgentId(value: string | undefined | null): boolean {
+  const trimmed = (value ?? "").trim();
+  return Boolean(trimmed) && VALID_ID_RE.test(trimmed);
+}
+
 export function buildAgentMainSessionKey(params: {
   agentId: string;
   mainKey?: string | undefined;

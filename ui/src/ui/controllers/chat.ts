@@ -34,9 +34,18 @@ export type ChatEventPayload = {
   errorMessage?: string;
 };
 
-// ============ Z5: 竞态保护 ============
+// ============ Z5: 竜态保护 ============
 // Module-level counter to guard against stale loadChatHistory responses
 let _chatLoadRequestId = 0;
+
+/**
+ * 从 sessionKey 中提取 groupId（格式: agent:{agentId}:group:{groupId}）
+ * 如果不是群聊 session 则返回 null
+ */
+function extractGroupIdFromSessionKey(sessionKey: string): string | null {
+  const match = /^agent:[^:]+:group:(.+)$/.exec(sessionKey);
+  return match ? match[1] : null;
+}
 
 export async function loadChatHistory(state: ChatState) {
   if (!state.client || !state.connected) {
@@ -55,6 +64,28 @@ export async function loadChatHistory(state: ChatState) {
   state.chatLoading = true;
   state.lastError = null;
   try {
+    // 群聊窗口：改用 groups.chat.history
+    const groupId = extractGroupIdFromSessionKey(state.sessionKey);
+    if (groupId) {
+      const res = await state.client.request<{ messages?: Array<unknown>; groupId?: string }>(
+        "groups.chat.history",
+        { groupId, limit: 200 },
+      );
+      if (requestId !== _chatLoadRequestId) {
+        console.warn(
+          `[Chat:调试] loadChatHistory 竜态丢弃 requestId=${requestId}，当前=${_chatLoadRequestId}`,
+        );
+        return;
+      }
+      const msgCount = Array.isArray(res.messages) ? res.messages.length : 0;
+      console.log(
+        `[Chat:调试] loadChatHistory [群聊] 响应 groupId="${groupId}" 消息数=${msgCount}`,
+      );
+      state.chatMessages = Array.isArray(res.messages) ? res.messages : [];
+      state.chatThinkingLevel = null;
+      return;
+    }
+
     const res = await state.client.request<{ messages?: Array<unknown>; thinkingLevel?: string }>(
       "chat.history",
       {
@@ -62,7 +93,7 @@ export async function loadChatHistory(state: ChatState) {
         limit: 200,
       },
     );
-    // Z5: 竞态保护 — 如果在请求期间 sessionKey 已切换（新请求已发出），丢弃本次过期响应
+    // Z5: 竜态保护 — 如果在请求期间 sessionKey 已切换，丢弃过期响应
     if (requestId !== _chatLoadRequestId) {
       console.warn(
         `[Chat:调试] loadChatHistory 竞态丢弃 requestId=${requestId}，当前=${_chatLoadRequestId}`,
@@ -321,6 +352,19 @@ export async function sendChatMessage(
     : undefined;
 
   try {
+    // 群聊窗口：改用 groups.chat.send
+    const groupId = extractGroupIdFromSessionKey(state.sessionKey);
+    if (groupId) {
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      await state.client.request("groups.chat.send", {
+        groupId,
+        content: msg,
+        senderId: "user",
+        senderName: "用户",
+      });
+      return messageId;
+    }
+
     await state.client.request("chat.send", {
       sessionKey: state.sessionKey,
       message: msg,

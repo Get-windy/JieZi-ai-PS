@@ -6,6 +6,7 @@
 
 import type { GroupMemberRole } from "../../sessions/group-manager.js";
 import { groupManager } from "../../sessions/group-manager.js";
+import { groupMessageStorage } from "../../sessions/group-message-storage.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 import type { GatewayRequestHandlers } from "./types.js";
 
@@ -638,6 +639,99 @@ export const groupsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(ErrorCodes.UNAVAILABLE, `Failed to update group settings: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 读取群聊消息历史（供前端群聊窗口使用）
+   */
+  "groups.chat.history": async ({ params, respond }) => {
+    try {
+      const groupId = params?.groupId ? String(params.groupId) : "";
+      if (!groupId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "groupId is required"));
+        return;
+      }
+      const limit = typeof params?.limit === "number" ? params.limit : 200;
+      const messages = await groupMessageStorage.loadMessages(groupId, { limit });
+
+      // 将 GroupMessage 转换为前端 chat.history 兼容的格式
+      const formatted = messages.map((msg) => ({
+        role: msg.senderId === "user" ? "user" : "assistant",
+        content: [{ type: "text", text: msg.content }],
+        timestamp: msg.timestamp,
+        // 附加群聊专属字段，供前端区分发言者
+        __group_sender_id: msg.senderId,
+        __group_sender_name: msg.senderName ?? msg.senderId,
+        __group_msg_type: msg.type,
+        __group_msg_id: msg.id,
+      }));
+
+      respond(true, { messages: formatted, groupId }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to load group chat history: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 人类用户在群聊窗口发送消息（写入 GroupMessageStorage，并通知所有成员 agent）
+   */
+  "groups.chat.send": async ({ params, respond }) => {
+    try {
+      const groupId = params?.groupId ? String(params.groupId) : "";
+      const content = params?.content ? String(params.content) : "";
+      const senderId = params?.senderId ? String(params.senderId) : "user";
+      const senderName = params?.senderName ? String(params.senderName) : "用户";
+
+      if (!groupId || !content) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "groupId and content are required"),
+        );
+        return;
+      }
+
+      const group = groupManager.getGroup(groupId);
+      if (!group) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Group "${groupId}" not found`),
+        );
+        return;
+      }
+
+      // 保存消息到群组存储
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const message = {
+        id: messageId,
+        groupId,
+        senderId,
+        senderName,
+        content,
+        type: "text" as const,
+        timestamp: Date.now(),
+      };
+      await groupMessageStorage.saveMessage(message);
+
+      // 通知所有成员 agent（让他们意识到群里有新消息）
+      // 这里只做保存，不强制触发 agent 运行（避免每次用户发消息都打断所有 agent）
+      console.log(
+        `[Group Chat] User message saved to group ${groupId}, members: ${group.members.map((m) => m.agentId).join(", ")}`,
+      );
+
+      respond(true, { success: true, messageId, groupId }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to send group chat message: ${String(error)}`),
       );
     }
   },

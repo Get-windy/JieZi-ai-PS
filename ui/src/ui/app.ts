@@ -340,7 +340,17 @@ export class OpenClawApp extends LitElement {
   @state() groupsList: import("./views/groups.ts").GroupsListResult | null = null;
   @state() groupsError: string | null = null;
   @state() groupsSelectedId: string | null = null;
-  @state() groupsActivePanel: "list" | "members" | "settings" = "list";
+  @state() groupsActivePanel: "list" | "members" | "settings" | "files" = "list";
+  // 群组文件管理状态
+  @state() groupFilesLoading = false;
+  @state() groupFileContentLoading = false;
+  @state() groupFilesError: string | null = null;
+  @state() groupFilesList: import("./controllers/group-files.ts").GroupFilesListResult | null = null;
+  @state() groupFileContents: Record<string, string> = {};
+  @state() groupFileDrafts: Record<string, string> = {};
+  @state() groupFileActive: string | null = null;
+  @state() groupFileSaving = false;
+  @state() groupWorkspaceMigrating = false;
   @state() creatingGroup = false;
   @state() editingGroup: import("./views/groups.ts").GroupInfo | null = null;
   // Friends 好友关系状态
@@ -541,6 +551,8 @@ export class OpenClawApp extends LitElement {
   @state() chatNavChannelForceJoined = false;
   // Z2 + Z4: 未读消息计数映射（sessionKey → 未读消息数）
   @state() unreadSessionMessages: Record<string, number> = {};
+  // 系统工作空间根目录（概览页设置卡片用）
+  @state() workspacesDir = "";
   // 注意：channelBindings 现在由后端 agent.list 直接返回，不再需要单独加载
 
   @state() queueLoading = false;
@@ -672,6 +684,7 @@ export class OpenClawApp extends LitElement {
   private nodesPollInterval: number | null = null;
   private logsPollInterval: number | null = null;
   private debugPollInterval: number | null = null;
+  private monitorPollInterval: number | null = null;
   private logsScrollFrame: number | null = null;
   private toolStreamById = new Map<string, ToolStreamEntry>();
   private toolStreamOrder: string[] = [];

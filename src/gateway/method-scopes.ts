@@ -114,6 +114,15 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     // 群组：查询类
     "groups.list",
     "groups.get",
+    // 群组聊天：查询
+    "groups.chat.history",
+    // 群组工作空间：查询
+    "groups.workspace.getDir",
+    // 工作空间管理：查询
+    "agent.workspace.getDefault",
+    // 群组文件：查询
+    "groups.files.list",
+    "groups.files.get",
     // 任务：查询类
     "task.list",
     "task.get",
@@ -159,6 +168,17 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "chat.abort",
     "browser.request",
     "push.test",
+    // 群组工作空间：写操作
+    "groups.workspace.setDir",
+    "groups.workspace.migrate",
+    // 工作空间管理：写操作
+    "agent.workspace.setDefault",
+    "workspace.backup",
+    "workspace.migrate.all",
+    "workspace.openFolder",
+    // 群组文件：写操作
+    "groups.files.set",
+    "groups.files.delete",
     // 群组：写操作
     "groups.create",
     "groups.update",
@@ -167,6 +187,8 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "groups.addMember",
     "groups.remove_member",
     "groups.removeMember",
+    // 群组聊天：写操作
+    "groups.chat.send",
     // 任务：写操作（基础 + 扩展）
     "task.create",
     "task.update",

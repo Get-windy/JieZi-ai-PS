@@ -19,16 +19,80 @@ import {
 } from "./types.js";
 
 /**
+ * 从 openclaw.json 读取 groups.workspace.root 配置
+ * 若未配置则返回 undefined
+ */
+function resolveGroupRootFromConfig(): string | undefined {
+  try {
+    // 读取 openclaw.json 配置文件
+    const stateDir = resolveStateDir(process.env);
+    const configPath = path.join(stateDir, "openclaw.json");
+    if (!fs.existsSync(configPath)) return undefined;
+    const raw = fs.readFileSync(configPath, "utf-8");
+    const config = JSON.parse(raw);
+    const root = config?.groups?.workspace?.root;
+    if (root && typeof root === "string") {
+      // 展开 ~ 前缀
+      if (root.startsWith("~")) {
+        const home = process.env.OPENCLAW_HOME?.trim() ||
+          process.env.HOME ||
+          process.env.USERPROFILE ||
+          "";
+        return path.resolve(home, root.slice(1).replace(/^\//, "").replace(/^\\/, ""));
+      }
+      return path.resolve(root);
+    }
+  } catch {
+    // 配置未加载或字段不存在，忽略
+  }
+  return undefined;
+}
+
+/**
+ * 从 openclaw.json 读取所有群组工作空间目录覆盖配置
+ * 格式: groups.overrides.<groupId>.workspaceDir
+ */
+function resolveGroupOverridesFromConfig(): Record<string, string> {
+  try {
+    const stateDir = resolveStateDir(process.env);
+    const configPath = path.join(stateDir, "openclaw.json");
+    if (!fs.existsSync(configPath)) return {};
+    const raw = fs.readFileSync(configPath, "utf-8");
+    const config = JSON.parse(raw);
+    const overrides = config?.groups?.overrides;
+    if (!overrides || typeof overrides !== "object") return {};
+    const result: Record<string, string> = {};
+    for (const [groupId, val] of Object.entries(overrides)) {
+      const dir = (val as any)?.workspaceDir;
+      if (dir && typeof dir === "string") {
+        result[groupId] = dir;
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+/**
  * 群组工作空间管理器（单例）
  */
 export class GroupWorkspaceManager {
   private static instance: GroupWorkspaceManager;
   private workspaces: Map<string, GroupWorkspace> = new Map();
   private rootDir: string;
+  /** 每个群组的独立工作空间目录覆盖（迁移后写入，重启后从配置恢复） */
+  private groupDirOverrides: Record<string, string> = {};
 
   private constructor() {
-    // 使用系统状态目录（受环境变量 OPENCLAW_STATE_DIR 控制），而非硬编码 ~/.openclaw/groups/
-    this.rootDir = path.join(resolveStateDir(process.env), "groups");
+    // 优先级：
+    // 1. openclaw.json 中的 groups.workspace.root 配置
+    // 2. 环境变量 OPENCLAW_STATE_DIR/groups
+    // 3. 默认 ~/.openclaw/groups
+    const configRoot = resolveGroupRootFromConfig();
+    this.rootDir = configRoot ?? path.join(resolveStateDir(process.env), "groups");
+    // 加载每个群组的自定义目录覆盖
+    this.groupDirOverrides = resolveGroupOverridesFromConfig();
     this.ensureRootDir();
   }
 
@@ -48,6 +112,49 @@ export class GroupWorkspaceManager {
   public setRootDir(rootDir: string): void {
     this.rootDir = rootDir;
     this.ensureRootDir();
+  }
+
+  /**
+   * 获取某个群组的工作空间目录路径
+   * @param groupId 群组ID
+   * @returns 群组工作空间目录路径，若群组不存在则返回默认路径
+   */
+  public getGroupWorkspaceDir(groupId: string): string {
+    const workspace = this.workspaces.get(groupId);
+    if (workspace) {
+      return workspace.dir;
+    }
+    // 优先使用迁移后的覆盖路径，否则使用默认根目录
+    return this.groupDirOverrides[groupId] ?? path.join(this.rootDir, groupId);
+  }
+
+  /**
+   * 更新群组工作空间目录路径（仅更新内存缓存，不移动文件）
+   * @param groupId 群组ID
+   * @param newDir 新的工作空间目录路径
+   */
+  public updateGroupWorkspaceDir(groupId: string, newDir: string): void {
+    // 同步内存覆盖记录（持久化由调用方负责）
+    this.groupDirOverrides[groupId] = newDir;
+    const workspace = this.workspaces.get(groupId);
+    if (workspace) {
+      workspace.dir = newDir;
+      workspace.groupInfoPath = path.join(newDir, "GROUP_INFO.md");
+      workspace.membersPath = path.join(newDir, "MEMBERS.md");
+      workspace.sharedMemoryPath = path.join(newDir, "SHARED_MEMORY.md");
+      workspace.rulesPath = path.join(newDir, "RULES.md");
+      workspace.sharedDir = path.join(newDir, "shared");
+      workspace.historyDir = path.join(newDir, "history");
+      workspace.meetingNotesDir = path.join(newDir, "meeting-notes");
+      workspace.decisionsDir = path.join(newDir, "decisions");
+    }
+  }
+
+  /**
+   * 获取群组工作空间根目录
+   */
+  public getRootDir(): string {
+    return this.rootDir;
   }
 
   /**
@@ -76,7 +183,8 @@ export class GroupWorkspaceManager {
       return this.workspaces.get(groupId)!;
     }
 
-    const groupDir = path.join(this.rootDir, groupId);
+    // 优先使用覆盖路径（迁移过的群组），否则使用默认根目录
+    const groupDir = this.groupDirOverrides[groupId] ?? path.join(this.rootDir, groupId);
 
     // 检查目录是否已存在
     if (fs.existsSync(groupDir)) {
@@ -91,7 +199,7 @@ export class GroupWorkspaceManager {
    * 加载已存在的群组工作空间
    */
   private loadExistingWorkspace(groupId: string): GroupWorkspace {
-    const groupDir = path.join(this.rootDir, groupId);
+    const groupDir = this.groupDirOverrides[groupId] ?? path.join(this.rootDir, groupId);
     const groupInfoPath = path.join(groupDir, "GROUP_INFO.md");
 
     // 读取 GROUP_INFO.md 获取群组信息

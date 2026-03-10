@@ -1,18 +1,16 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { dingtalkPlugin } from "./src/channel.js";
-import { setDingtalkRuntime } from "./src/runtime.js";
+import { setDingTalkRuntime } from "./src/runtime.js";
+import type { DingtalkPluginModule } from "./src/types.js";
 
-export { monitorDingtalkProvider, sendMessageDingtalk } from "./src/gateway.js";
-export { dingtalkPlugin } from "./src/channel.js";
-
-const plugin = {
+const plugin: DingtalkPluginModule = {
   id: "dingtalk",
-  name: "DingTalk",
-  description: "DingTalk channel plugin (钉钉通道插件)",
+  name: "DingTalk Channel",
+  description: "DingTalk (钉钉) messaging channel via Stream mode",
   configSchema: emptyPluginConfigSchema(),
-  register(api: OpenClawPluginApi) {
-    setDingtalkRuntime(api.runtime);
+  register(api: OpenClawPluginApi): void {
+    setDingTalkRuntime(api.runtime);
     api.registerChannel({ plugin: dingtalkPlugin });
   },
 };

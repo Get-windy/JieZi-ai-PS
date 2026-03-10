@@ -50,7 +50,9 @@ import {
   createGroupListTool,
   createGroupAddMemberTool,
   createGroupRemoveMemberTool,
+  createGroupUpdateMemberRoleTool,
   createGroupDeleteTool,
+  createGroupSendTool,
 } from "./tools/group-management-tools.js";
 import {
   createDeactivateAgentTool,
@@ -342,7 +344,19 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
     }),
+    createGroupUpdateMemberRoleTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
     createGroupDeleteTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createGroupSendTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
         config: options?.config,

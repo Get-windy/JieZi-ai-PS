@@ -1,5 +1,10 @@
 import { html, nothing } from "lit";
 import { t } from "../i18n.ts";
+import type { GroupFilesListResult } from "../controllers/group-files.ts";
+import type { AgentsListResult } from "../types.ts";
+
+// 重新导出 GroupFileEntry 供外部使用
+export type { GroupFilesListResult } from "../controllers/group-files.ts";
 
 /**
  * 群组成员角色
@@ -46,12 +51,13 @@ export type GroupsProps = {
   error: string | null;
   groupsList: GroupsListResult | null;
   selectedGroupId: string | null;
-  activePanel: "list" | "members" | "settings";
+  activePanel: "list" | "members" | "settings" | "files";
   creatingGroup: boolean;
   editingGroup: GroupInfo | null;
+  agentsList: AgentsListResult | null;
   onRefresh: () => void;
   onSelectGroup: (groupId: string) => void;
-  onSelectPanel: (panel: "list" | "members" | "settings") => void;
+  onSelectPanel: (panel: "list" | "members" | "settings" | "files") => void;
   onCreateGroup: () => void;
   onEditGroup: (groupId: string) => void;
   onDeleteGroup: (groupId: string) => void;
@@ -61,6 +67,25 @@ export type GroupsProps = {
   onAddMember: (groupId: string, agentId: string, role: GroupMemberRole) => void;
   onRemoveMember: (groupId: string, agentId: string) => void;
   onUpdateMemberRole: (groupId: string, agentId: string, role: GroupMemberRole) => void;
+  // 文件管理
+  groupFilesLoading: boolean;
+  groupFilesError: string | null;
+  groupFilesList: GroupFilesListResult | null;
+  groupFileActive: string | null;
+  groupFileContents: Record<string, string>;
+  groupFileDrafts: Record<string, string>;
+  groupFileSaving: boolean;
+  onLoadGroupFiles: (groupId: string) => void;
+  onSelectGroupFile: (name: string) => void;
+  onGroupFileDraftChange: (name: string, content: string) => void;
+  onGroupFileReset: (name: string) => void;
+  onGroupFileSave: (name: string) => void;
+  onAddGroupFile: (groupId: string, name: string) => void;
+  onDeleteGroupFile: (groupId: string, name: string) => void;
+  onOpenGroupFolder: (folderPath: string) => void;
+  // 工作空间迁移
+  groupWorkspaceMigrating: boolean;
+  onMigrateGroupWorkspace: (groupId: string, newDir: string) => void;
 };
 
 export function renderGroups(props: GroupsProps) {
@@ -163,7 +188,9 @@ export function renderGroups(props: GroupsProps) {
                     ? renderGroupOverview(selectedGroup)
                     : props.activePanel === "members"
                       ? renderGroupMembers(selectedGroup, props)
-                      : renderGroupSettings(selectedGroup, props)
+                      : props.activePanel === "files"
+                        ? renderGroupFiles(selectedGroup, props)
+                        : renderGroupSettings(selectedGroup, props)
                 }
               `
             : html`
@@ -178,12 +205,13 @@ export function renderGroups(props: GroupsProps) {
 }
 
 function renderGroupTabs(
-  active: "list" | "members" | "settings",
-  onSelect: (panel: "list" | "members" | "settings") => void,
+  active: "list" | "members" | "settings" | "files",
+  onSelect: (panel: "list" | "members" | "settings" | "files") => void,
 ) {
   const tabs = [
     { id: "list" as const, label: "概览" },
     { id: "members" as const, label: "成员管理" },
+    { id: "files" as const, label: "文件管理" },
     { id: "settings" as const, label: "群组设置" },
   ];
 
@@ -375,6 +403,117 @@ function renderGroupSettings(group: GroupInfo, props: GroupsProps) {
   `;
 }
 
+function renderGroupFiles(group: GroupInfo, props: GroupsProps) {
+  const list =
+    props.groupFilesList?.groupId === group.id ? props.groupFilesList : null;
+  const files = list?.files ?? [];
+  const active = props.groupFileActive ?? null;
+  const activeEntry = active ? (files.find((f) => f.name === active) ?? null) : null;
+  const baseContent = active ? (props.groupFileContents[active] ?? "") : "";
+  const draft = active ? (props.groupFileDrafts[active] ?? baseContent) : "";
+  const isDirty = active ? draft !== baseContent : false;
+  const fmt = (size: number) =>
+    size < 1024 ? `${size} B` : size < 1048576 ? `${(size / 1024).toFixed(1)} KB` : `${(size / 1048576).toFixed(1)} MB`;
+
+  return html`
+    <section class="card" style="margin-top: 16px;">
+      <div class="row" style="justify-content: space-between;">
+        <div>
+          <div class="card-title">\u7fa4\u7ec4\u6587\u4ef6</div>
+          <div class="card-sub">\u7fa4\u7ec4\u5171\u4eab\u5de5\u4f5c\u7a7a\u95f4\u6587\u4ef6\u7ba1\u7406</div>
+        </div>
+        <div class="row" style="gap: 8px;">
+          ${list ? html`
+            <button class="btn btn--sm" @click=${() => props.onOpenGroupFolder(list.workspace)}>
+              \u{1F4C2} \u5728\u6587\u4ef6\u5939\u4e2d\u6253\u5f00
+            </button>
+            <button
+              class="btn btn--sm"
+              ?disabled=${props.groupWorkspaceMigrating}
+              @click=${() => {
+                const newPath = prompt(
+                  `\u5c06\u7fa4\u7ec4\u5de5\u4f5c\u7a7a\u95f4\u8fc1\u79fb\u5230\u65b0\u76ee\u5f55\uff1a\n\u5f53\u524d\u8def\u5f84\uff1a${list.workspace}`,
+                  list.workspace
+                );
+                if (newPath?.trim() && newPath.trim() !== list.workspace) {
+                  props.onMigrateGroupWorkspace(group.id, newPath.trim());
+                }
+              }}
+            >
+              ${props.groupWorkspaceMigrating ? '\u8fc1\u79fb\u4e2d...' : '\u{1F4E6} \u8fc1\u79fb\u76ee\u5f55'}
+            </button>
+          ` : nothing}
+          <button
+            class="btn btn--sm"
+            ?disabled=${props.groupFilesLoading}
+            @click=${() => {
+              const n = prompt("\u8bf7\u8f93\u5165\u65b0\u6587\u4ef6\u540d\uff1a");
+              if (n?.trim()) props.onAddGroupFile(group.id, n.trim());
+            }}
+          >+ \u6dfb\u52a0\u6587\u4ef6</button>
+          <button class="btn btn--sm" ?disabled=${props.groupFilesLoading} @click=${() => props.onLoadGroupFiles(group.id)}>
+            ${props.groupFilesLoading ? "\u52a0\u8f7d\u4e2d..." : "\u5237\u65b0"}
+          </button>
+        </div>
+      </div>
+      ${list ? html`<div class="muted mono" style="margin-top: 8px;">\u5de5\u4f5c\u7a7a\u95f4\uff1a${list.workspace}</div>` : nothing}
+      ${props.groupFilesError ? html`<div class="callout danger" style="margin-top: 12px;">${props.groupFilesError}</div>` : nothing}
+      ${
+        !list
+          ? html`<div class="callout info" style="margin-top: 12px;">\u70b9\u51fb\u300c\u5237\u65b0\u300d\u52a0\u8f7d\u7fa4\u7ec4\u5de5\u4f5c\u7a7a\u95f4\u6587\u4ef6\u5217\u8868\u3002</div>`
+          : html`
+            <div class="agent-files-grid" style="margin-top: 16px;">
+              <div class="agent-files-list">
+                ${files.length === 0
+                  ? html`<div class="muted">\u6682\u65e0\u6587\u4ef6\u3002</div>`
+                  : files.map((file) => html`
+                      <button type="button" class="agent-file-row ${active === file.name ? "active" : ""}" @click=${() => props.onSelectGroupFile(file.name)}>
+                        <div>
+                          <div class="agent-file-name mono">${file.name}</div>
+                          <div class="agent-file-meta">${file.missing ? "\u6587\u4ef6\u4e22\u5931" : `${fmt(file.size)} \u00b7 ${file.updatedAtMs ? new Date(file.updatedAtMs).toLocaleString() : "-"}`}</div>
+                        </div>
+                        ${file.missing ? html`<span class="agent-pill warn">\u4e22\u5931</span>` : nothing}
+                      </button>`)
+                }
+              </div>
+              <div class="agent-files-editor">
+                ${!activeEntry
+                  ? html`<div class="muted">\u9009\u62e9\u4e00\u4e2a\u6587\u4ef6\u8fdb\u884c\u7f16\u8f91\u3002</div>`
+                  : html`
+                      <div class="agent-file-header">
+                        <div>
+                          <div class="agent-file-title mono">${activeEntry.name}</div>
+                          <div class="agent-file-sub mono">${activeEntry.path}</div>
+                        </div>
+                        <div class="agent-file-actions">
+                          <button class="btn btn--sm btn--danger" @click=${() => {
+                            if (confirm(`\u786e\u5b9a\u8981\u5220\u9664\u6587\u4ef6 ${activeEntry.name} \u5417\uff1f`))
+                              props.onDeleteGroupFile(group.id, activeEntry.name);
+                          }}>\u5220\u9664</button>
+                          <button class="btn btn--sm" ?disabled=${!isDirty} @click=${() => props.onGroupFileReset(activeEntry.name)}>\u91cd\u7f6e</button>
+                          <button class="btn btn--sm primary" ?disabled=${props.groupFileSaving || !isDirty} @click=${() => props.onGroupFileSave(activeEntry.name)}>
+                            ${props.groupFileSaving ? "\u4fdd\u5b58\u4e2d..." : "\u4fdd\u5b58"}
+                          </button>
+                        </div>
+                      </div>
+                      <label class="field" style="margin-top: 12px;">
+                        <span>\u6587\u4ef6\u5185\u5bb9</span>
+                        <textarea
+                          rows="20"
+                          .value=${draft}
+                          @input=${(e: Event) => props.onGroupFileDraftChange(activeEntry.name, (e.target as HTMLTextAreaElement).value)}
+                        ></textarea>
+                      </label>
+                    `
+                }
+              </div>
+            </div>
+          `
+      }
+    </section>
+  `;
+}
+
 function renderGroupEditModal(props: GroupsProps) {
   const isNew = props.creatingGroup;
   const group = props.editingGroup || {
@@ -385,6 +524,8 @@ function renderGroupEditModal(props: GroupsProps) {
     isPublic: false,
     tags: [],
   };
+  const agents = props.agentsList?.agents ?? [];
+  const defaultOwnerId = props.agentsList?.defaultId ?? "";
 
   return html`
     <div class="modal-overlay" @click=${props.onCancelEdit}>
@@ -419,6 +560,35 @@ function renderGroupEditModal(props: GroupsProps) {
                   props.onGroupFormChange("name", (e.target as HTMLInputElement).value)}
               />
             </div>
+
+            ${isNew ? html`
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label class="form-label">群主（创建者）</label>
+              ${agents.length > 0
+                ? html`<select
+                    class="form-control"
+                    .value=${(group as GroupInfo).ownerId || defaultOwnerId}
+                    @change=${(e: Event) =>
+                      props.onGroupFormChange("ownerId", (e.target as HTMLSelectElement).value)}
+                  >
+                    ${agents.map((a) => html`
+                      <option
+                        value=${a.id}
+                        ?selected=${((group as GroupInfo).ownerId || defaultOwnerId) === a.id}
+                      >${a.id}${a.id === defaultOwnerId ? " (默认)" : ""}</option>
+                    `)}
+                  </select>`
+                : html`<input
+                    type="text"
+                    class="form-control"
+                    .value=${(group as GroupInfo).ownerId || defaultOwnerId}
+                    placeholder="智能助手ID，例：main"
+                    @input=${(e: Event) =>
+                      props.onGroupFormChange("ownerId", (e.target as HTMLInputElement).value)}
+                  />`
+              }
+              <small class="form-text muted">群主拥有群组的最高权限</small>
+            </div>` : nothing}
 
             <div class="form-group" style="margin-bottom: 12px;">
               <label class="form-label">群组描述（可选）</label>
@@ -468,7 +638,7 @@ function renderGroupEditModal(props: GroupsProps) {
             <button class="btn" @click=${props.onCancelEdit}>取消</button>
             <button
               class="btn btn--primary"
-              ?disabled=${!group.id || !group.name}
+              ?disabled=${!group.id || !group.name || (isNew && !((group as GroupInfo).ownerId || defaultOwnerId))}
               @click=${props.onSaveGroup}
             >
               ${isNew ? "创建" : "保存"}

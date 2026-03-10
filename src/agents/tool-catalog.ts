@@ -398,6 +398,13 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
   },
   // ─── 群组管理 ───
   {
+    id: "group_list",
+    label: "group_list",
+    description: "List groups",
+    sectionId: "group_mgmt",
+    profiles: [],
+  },
+  {
     id: "group_create",
     label: "group_create",
     description: "Create group",
@@ -419,9 +426,23 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     profiles: [],
   },
   {
+    id: "group_update_member_role",
+    label: "group_update_member_role",
+    description: "Update group member role",
+    sectionId: "group_mgmt",
+    profiles: [],
+  },
+  {
     id: "group_delete",
     label: "group_delete",
     description: "Delete group",
+    sectionId: "group_mgmt",
+    profiles: [],
+  },
+  {
+    id: "group_send",
+    label: "group_send",
+    description: "Send message to group chat",
     sectionId: "group_mgmt",
     profiles: [],
   },

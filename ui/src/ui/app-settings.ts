@@ -475,6 +475,20 @@ export async function loadOverview(host: SettingsHost) {
     loadSessions(host as unknown as OpenClawApp),
     loadCronStatus(host as unknown as OpenClawApp),
     loadDebug(host as unknown as OpenClawApp),
+    // 加载系统工作空间根目录
+    (async () => {
+      try {
+        const app = host as unknown as OpenClawApp;
+        if (!app.client) return;
+        const result = await app.client.request("agent.workspace.getDefault", {});
+        if (result) {
+          (app as unknown as { workspacesDir: string }).workspacesDir =
+            (result as { defaultWorkspace?: string }).defaultWorkspace ?? "";
+        }
+      } catch {
+        /* 未连接时忽略 */
+      }
+    })(),
   ]);
 }
 
