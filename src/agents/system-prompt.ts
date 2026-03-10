@@ -104,6 +104,70 @@ function buildMemorySection(params: {
   return lines;
 }
 
+function buildSelfEvolutionSection(params: { isMinimal: boolean; availableTools: Set<string> }) {
+  if (params.isMinimal) {
+    return [];
+  }
+  const hasReflect = params.availableTools.has("agent_reflect");
+  const hasSkillSave = params.availableTools.has("agent_skill_save");
+  const hasSkillList = params.availableTools.has("agent_skill_list");
+
+  if (!hasReflect && !hasSkillSave && !hasSkillList) {
+    return [];
+  }
+
+  const lines: string[] = ["## Self-Evolution"];
+
+  lines.push(
+    "You have tools to learn from experience and grow over time. Use them proactively.",
+    "",
+  );
+
+  // Reflexion
+  if (hasReflect) {
+    lines.push(
+      "**Reflexion (agent_reflect)** — After completing any non-trivial task, call agent_reflect to record:",
+      "  - `outcome`: 'success' | 'partial' | 'failure' (be honest; partial/failure logs are most valuable)",
+      "  - `reflection`: What went well? What was harder than expected? What would you do differently?",
+      "  - `lessons`: Concrete, actionable rules to apply in future similar tasks.",
+      "  - `tags`: Domain tags for retrieval (e.g., ['git', 'typescript', 'api', 'debugging']).",
+      "  Timing: call agent_reflect ONCE per task, after the final result is ready (not mid-task).",
+      "  Do NOT reflect on trivial exchanges (single-turn Q&A, simple lookups).",
+      "",
+    );
+  }
+
+  // Voyager Skill Library
+  if (hasSkillSave || hasSkillList) {
+    lines.push(
+      "**Skill Library (agent_skill_save / agent_skill_list)** — When you discover a reusable pattern:",
+    );
+    if (hasSkillSave) {
+      lines.push(
+        "  - agent_skill_save: Compress successful workflows into a named, reusable skill.",
+        "    Categories: 'workflow' | 'code' | 'strategy' | 'template'",
+        "    Include `triggers` (keywords that should recall this skill) and step-by-step `content`.",
+        "    Same-name skills are auto-updated (no duplicates).",
+      );
+    }
+    if (hasSkillList) {
+      lines.push(
+        "  - agent_skill_list: Query the skill library before starting a complex task—you may already have a proven pattern.",
+        "    Use `query` for keyword search; use `category` to narrow by type.",
+      );
+    }
+    lines.push("");
+  }
+
+  lines.push(
+    "**Injected Context** — At the start of each session, recent reflections and relevant skills are automatically prepended.",
+    "Read them before acting; they represent your own prior learning.",
+    "",
+  );
+
+  return lines;
+}
+
 function buildUserIdentitySection(ownerLine: string | undefined, isMinimal: boolean) {
   if (!ownerLine || isMinimal) {
     return [];
@@ -438,6 +502,10 @@ export function buildAgentSystemPrompt(params: {
     availableTools,
     citationsMode: params.memoryCitationsMode,
   });
+  const selfEvolutionSection = buildSelfEvolutionSection({
+    isMinimal,
+    availableTools,
+  });
   const docsSection = buildDocsSection({
     docsPath: params.docsPath,
     isMinimal,
@@ -499,7 +567,7 @@ export function buildAgentSystemPrompt(params: {
     "",
     ...skillsSection,
     ...memorySection,
-    // Skip self-update for subagent/none modes
+    ...selfEvolutionSection,
     hasGateway && !isMinimal ? "## OpenClaw Self-Update" : "",
     hasGateway && !isMinimal
       ? [

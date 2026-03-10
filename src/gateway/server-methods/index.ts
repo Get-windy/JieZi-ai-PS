@@ -35,6 +35,7 @@ import { cronHandlers } from "./cron.js";
 import { dataScopeHandlers } from "./data-scope-rpc.js";
 import { deviceHandlers } from "./devices.js";
 import { doctorHandlers } from "./doctor.js";
+import { evolveRpc } from "./evolve-rpc.js";
 import { execApprovalsHandlers } from "./exec-approvals.js";
 import { friendsHandlers } from "./friends-rpc.js";
 import { groupsHandlers } from "./groups-rpc.js";
@@ -207,6 +208,9 @@ const hardcodedHandlers: GatewayRequestHandlers = {
 
   // 记忆块（主动写入层）
   ...memoryRpc,
+
+  // 自我进化（Reflexion 反思 + Voyager 技能库）
+  ...evolveRpc,
 
   // Web & 浏览器
   ...webHandlers,

@@ -367,6 +367,13 @@ const BASE_METHODS = [
   "memory.delete",
   "memory.list",
   "memory.namespace.stats",
+  // Self-Evolution（Reflexion 反思 + Voyager 技能库）
+  "evolve.reflect.save",
+  "evolve.reflect.list",
+  "evolve.skill.save",
+  "evolve.skill.list",
+  "evolve.skill.use",
+  "evolve.stats",
 ];
 
 export function listGatewayMethods(): string[] {
