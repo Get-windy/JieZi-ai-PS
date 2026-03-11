@@ -16,22 +16,25 @@ import type { Task, TaskPriority } from "./types.js";
 
 /**
  * 老化阈值配置（毫秒）
+ *
+ * Agent 系统是全年无休的高频工作模式，不是人类 Sprint 节奏！
+ * 阈值必须足够激进，确保任务不会在待办池中沉淀超过几小时
  */
 export const AGING_THRESHOLDS = {
-  /** 未分配任务超过 7 天触发提醒 */
-  UNASSIGNED_REMIND: 7 * 24 * 60 * 60 * 1000,
+  /** 未分配任务超过 2 小时触发提醒 */
+  UNASSIGNED_REMIND: 2 * 60 * 60 * 1000,
 
-  /** 未分配任务超过 14 天自动升级给主管 */
-  UNASSIGNED_ESCALATE: 14 * 24 * 60 * 60 * 1000,
+  /** 未分配任务超过 6 小时自动升级给主管 */
+  UNASSIGNED_ESCALATE: 6 * 60 * 60 * 1000,
 
-  /** 未分配任务超过 30 天标记为低优先级或归档 */
-  UNASSIGNED_ARCHIVE: 30 * 24 * 60 * 60 * 1000,
+  /** 未分配任务超过 24 小时标记为低优先级或归档 */
+  UNASSIGNED_ARCHIVE: 24 * 60 * 60 * 1000,
 
-  /** 进行中的任务超过 3 天无进展提醒 */
-  IN_PROGRESS_STALE: 3 * 24 * 60 * 60 * 1000,
+  /** 进行中的任务超过 1 小时无进展提醒 */
+  IN_PROGRESS_STALE: 1 * 60 * 60 * 1000,
 
-  /** 阻塞状态超过 2 天无响应升级 */
-  BLOCKED_ESCALATE: 2 * 24 * 60 * 60 * 1000,
+  /** 阻塞状态超过 30 分钟无响应升级 */
+  BLOCKED_ESCALATE: 30 * 60 * 1000,
 } as const;
 
 /**
@@ -59,41 +62,43 @@ export function getDaysSinceLastActivity(task: Task): number {
 }
 
 /**
- * 判断任务老化级别
+ * 判断任务老化级别（Agent 高频工作模式）
  */
 export function getAgingLevel(task: Task): AgingLevel {
-  const ageInDays = getTaskAgeInDays(task);
-  const daysInactive = getDaysSinceLastActivity(task);
+  const ageInHours = (Date.now() - task.createdAt) / (1000 * 60 * 60);
+  const hoursInactive =
+    (Date.now() - (task.timeTracking.lastActivityAt ?? task.updatedAt ?? task.createdAt)) /
+    (1000 * 60 * 60);
 
   // 已完成或取消的任务不参与老化
   if (task.status === "done" || task.status === "cancelled") {
     return "fresh";
   }
 
-  // 未分配的任务
+  // 未分配的任务（Agent 系统必须快速响应！）
   if (!task.assignees || task.assignees.length === 0) {
-    if (ageInDays >= 30) {
+    if (ageInHours >= 24) {
       return "critical";
-    }
-    if (ageInDays >= 14) {
+    } // 超过 24 小时无人认领
+    if (ageInHours >= 6) {
       return "stale";
-    }
-    if (ageInDays >= 7) {
+    } // 超过 6 小时
+    if (ageInHours >= 2) {
       return "aging";
-    }
+    } // 超过 2 小时
     return "fresh";
   }
 
-  // 已分配但长期无活动的任务
-  if (daysInactive >= 7) {
+  // 已分配但长期无活动的任务（Agent 应该持续工作！）
+  if (hoursInactive >= 6) {
     return "critical";
-  }
-  if (daysInactive >= 3) {
+  } // 超过 6 小时无进展
+  if (hoursInactive >= 1) {
     return "stale";
-  }
-  if (daysInactive >= 1) {
+  } // 超过 1 小时
+  if (hoursInactive >= 0.5) {
     return "aging";
-  }
+  } // 超过 30 分钟
   return "fresh";
 }
 
@@ -283,7 +288,7 @@ export async function reassignBlockedTask(task: Task, _projectId?: string): Prom
 /**
  * 扫描所有项目中的老化任务并执行自动操作
  *
- * 建议配置为每小时运行一次，或每天运行一次
+ * Agent 系统建议配置为每 10-30 分钟运行一次，确保任务不会积压！
  */
 export async function scanAndProcessAgingTasks(options?: {
   projectId?: string;
@@ -391,29 +396,31 @@ export async function scanAndProcessAgingTasks(options?: {
 let agingTaskSchedulerInterval: NodeJS.Timeout | null = null;
 
 export function startAgingTaskScheduler(options?: {
-  intervalHours?: number;
+  intervalMinutes?: number; // 改为按分钟计算，更灵活
   projectId?: string;
   enableReminders?: boolean;
   enableEscalation?: boolean;
   enableArchive?: boolean;
 }): void {
-  const intervalHours = options?.intervalHours ?? 24; // 默认每天一次
+  const intervalMinutes = options?.intervalMinutes ?? 10; // 默认每 10 分钟一次！
 
   if (agingTaskSchedulerInterval) {
     clearInterval(agingTaskSchedulerInterval);
   }
 
-  console.log(`[Task Aging] Starting scheduler: running every ${intervalHours} hours`);
+  console.log(
+    `[Task Aging] Starting scheduler: running every ${intervalMinutes} minutes (Agent mode!)`,
+  );
 
   // 立即运行一次
   void scanAndProcessAgingTasks(options);
 
-  // 定时运行
+  // 定时运行（Agent 全年无休！）
   agingTaskSchedulerInterval = setInterval(
     () => {
       void scanAndProcessAgingTasks(options);
     },
-    intervalHours * 60 * 60 * 1000,
+    intervalMinutes * 60 * 1000,
   );
 }
 

@@ -1,7 +1,7 @@
 /**
  * 任务老化检测定时任务
  *
- * 每小时扫描一次待办池，防止任务长期沉淀
+ * Agent 系统全年无休！每 10 分钟扫描一次待办池，确保任务不会沉淀超过几小时
  */
 
 import { loadConfig } from "../../config/config.js";
@@ -17,19 +17,21 @@ export function initTaskAgingScheduler(): void {
     const cfg = loadConfig();
 
     // 从配置中读取项目列表
-    const projectIds = cfg.projects?.map((p) => p.id) ?? [];
+    const projectIds = cfg.projects?.map((p: { id: string }) => p.id) ?? [];
 
     if (projectIds.length === 0) {
       console.log("[Task Aging] No projects configured, skipping aging scheduler");
       return;
     }
 
-    console.log(`[Task Aging] Initializing scheduler for ${projectIds.length} projects...`);
+    console.log(
+      `[Task Aging] Initializing scheduler for ${projectIds.length} projects (Agent mode - high frequency!)`,
+    );
 
-    // 为每个项目启动独立的扫描任务
+    // 为每个项目启动独立的扫描任务，每 10 分钟一次（不是人类的 Sprint 节奏！）
     for (const projectId of projectIds) {
       startAgingTaskScheduler({
-        intervalHours: 1, // 每小时扫描一次
+        intervalMinutes: 10, // 每 10 分钟一次！Agent 全年无休！
         projectId,
         enableReminders: true, // 启用提醒
         enableEscalation: true, // 启用升级
