@@ -681,7 +681,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
   /**
    * 人类用户在群聊窗口发送消息（写入 GroupMessageStorage，并通知所有成员 agent）
    */
-  "groups.chat.send": async ({ params, respond }) => {
+  "groups.chat.send": async ({ params, respond, context }) => {
     try {
       const groupId = params?.groupId ? String(params.groupId) : "";
       const content = params?.content ? String(params.content) : "";
@@ -720,10 +720,51 @@ export const groupsHandlers: GatewayRequestHandlers = {
       };
       await groupMessageStorage.saveMessage(message);
 
-      // 通知所有成员 agent（让他们意识到群里有新消息）
-      // 这里只做保存，不强制触发 agent 运行（避免每次用户发消息都打断所有 agent）
+      // 向每个 Agent 成员的群聊 session 推送 chat 事件，使 Agent 感知到新消息
+      // sessionKey 格式: agent:{agentId}:group:{groupId}
+      const chatNotifyPayload = {
+        runId: `group-msg-${messageId}`,
+        sessionKey: "", // 每个成员单独设置
+        seq: 1,
+        state: "final" as const,
+        message: {
+          role: senderId === "user" ? "user" : "assistant",
+          content: [{ type: "text", text: content }],
+          timestamp: message.timestamp,
+          __group_sender_id: senderId,
+          __group_sender_name: senderName,
+          __group_msg_id: messageId,
+          __group_msg_type: "text",
+        },
+      };
+      for (const member of group.members) {
+        const memberSessionKey = `agent:${member.agentId}:group:${groupId}`;
+        context.nodeSendToSession(memberSessionKey, "chat", {
+          ...chatNotifyPayload,
+          sessionKey: memberSessionKey,
+        });
+      }
       console.log(
-        `[Group Chat] User message saved to group ${groupId}, members: ${group.members.map((m) => m.agentId).join(", ")}`,
+        `[Group Chat] Message ${messageId} delivered to ${group.members.length} member sessions in group ${groupId}`,
+      );
+
+      // 向前端广播群聊新消息事件，使会话窗口实时更新
+      context.broadcast(
+        "group.chat.message",
+        {
+          groupId,
+          message: {
+            id: messageId,
+            groupId,
+            senderId,
+            senderName,
+            content,
+            type: "text",
+            timestamp: message.timestamp,
+          },
+          members: group.members.map((m) => m.agentId),
+        },
+        { dropIfSlow: false },
       );
 
       respond(true, { success: true, messageId, groupId }, undefined);
