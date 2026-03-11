@@ -6,8 +6,8 @@
  * 新增功能：防敷衍汇报机制（Outcome-Based Accountability）
  */
 
-import { loadConfig } from "../../config/config.js";
-import { startAgingTaskScheduler } from "../../tasks/task-aging.js";
+import { loadConfig } from "../config/config.js";
+import { startAgingTaskScheduler } from "../tasks/task-aging.js";
 
 /**
  * 初始化任务老化检测系统
@@ -29,8 +29,16 @@ export function initTaskAgingScheduler(): void {
   try {
     const cfg = loadConfig();
 
-    // 从配置中读取项目列表
-    const projectIds = cfg.projects?.map((p: { id: string }) => p.id) ?? [];
+    // 从配置中读取项目列表（使用 agents.list 作为项目/团队 ID）
+    const projectIds: string[] = [];
+
+    if (cfg.agents?.list && Array.isArray(cfg.agents.list)) {
+      for (const agent of cfg.agents.list) {
+        if (agent.id) {
+          projectIds.push(agent.id);
+        }
+      }
+    }
 
     if (projectIds.length === 0) {
       console.log("[Task Aging] No projects configured, skipping aging scheduler");
