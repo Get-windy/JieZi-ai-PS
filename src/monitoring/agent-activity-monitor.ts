@@ -550,3 +550,130 @@ export function generateAgentAlert(report: AgentActivityReport): {
 
   return null;
 }
+
+// ============================================================================
+// 奖惩与信誉系统（基于业界最佳实践）
+// ============================================================================
+
+/**
+ * Agent 信誉积分接口
+ *
+ * 基于业界最佳实践：
+ * - 多层评估：结构层、任务层、语义层、行为层、质量层
+ * - 结果导向：不仅看是否完成，还要看完成质量
+ * - 防止作弊：平衡速度、质量、成本等多个维度
+ */
+export interface AgentReputation {
+  /** Agent ID */
+  agentId: string;
+
+  /** 基础信誉分 (0-1000) */
+  baseScore: number;
+
+  /** 等级：bronze/silver/gold/diamond */
+  level: "bronze" | "silver" | "gold" | "diamond";
+
+  /** 声誉系数（影响任务分配优先级） */
+  priorityMultiplier: number;
+
+  /** 惩罚计数 */
+  penaltyCount: number;
+
+  /** 奖励计数 */
+  rewardCount: number;
+
+  /** 最后更新时间 */
+  lastUpdated: number;
+}
+
+/**
+ * 应用惩罚（针对失联、敷衍等行为）
+ */
+export function applyPenalty(
+  currentReputation: AgentReputation,
+  reason: "inactive" | "low_quality" | "failed_task" | "safety_violation",
+  severity: "light" | "medium" | "heavy",
+): AgentReputation {
+  const penaltyPoints = {
+    light: 10, // 轻微：扣 10 分
+    medium: 30, // 中等：扣 30 分
+    heavy: 100, // 严重：扣 100 分
+  };
+
+  const newBaseScore = Math.max(0, currentReputation.baseScore - penaltyPoints[severity]);
+
+  // 重新计算等级和优先级系数
+  let newLevel: AgentReputation["level"];
+  let newPriorityMultiplier: number;
+
+  if (newBaseScore >= 800) {
+    newLevel = "diamond";
+    newPriorityMultiplier = 2.0;
+  } else if (newBaseScore >= 600) {
+    newLevel = "gold";
+    newPriorityMultiplier = 1.5;
+  } else if (newBaseScore >= 400) {
+    newLevel = "silver";
+    newPriorityMultiplier = 1.0;
+  } else {
+    newLevel = "bronze";
+    newPriorityMultiplier = 0.5;
+  }
+
+  console.log(
+    `[Reputation] Applied ${severity} penalty to ${currentReputation.agentId}: ` +
+      `-${penaltyPoints[severity]} points (reason: ${reason}, new score: ${newBaseScore})`,
+  );
+
+  return {
+    ...currentReputation,
+    baseScore: newBaseScore,
+    level: newLevel,
+    priorityMultiplier: newPriorityMultiplier,
+    penaltyCount: currentReputation.penaltyCount + 1,
+    lastUpdated: Date.now(),
+  };
+}
+
+/**
+ * 应用奖励（针对高质量完成任务）
+ */
+export function applyReward(
+  currentReputation: AgentReputation,
+  reason: "high_quality" | "early_completion" | "exceptional_performance",
+  bonusPoints: number,
+): AgentReputation {
+  const newBaseScore = Math.min(1000, currentReputation.baseScore + bonusPoints);
+
+  // 重新计算等级和优先级系数
+  let newLevel: AgentReputation["level"];
+  let newPriorityMultiplier: number;
+
+  if (newBaseScore >= 800) {
+    newLevel = "diamond";
+    newPriorityMultiplier = 2.0;
+  } else if (newBaseScore >= 600) {
+    newLevel = "gold";
+    newPriorityMultiplier = 1.5;
+  } else if (newBaseScore >= 400) {
+    newLevel = "silver";
+    newPriorityMultiplier = 1.0;
+  } else {
+    newLevel = "bronze";
+    newPriorityMultiplier = 0.5;
+  }
+
+  console.log(
+    `[Reputation] Applied reward to ${currentReputation.agentId}: ` +
+      `+${bonusPoints} points (reason: ${reason}, new score: ${newBaseScore})`,
+  );
+
+  return {
+    ...currentReputation,
+    baseScore: newBaseScore,
+    level: newLevel,
+    priorityMultiplier: newPriorityMultiplier,
+    rewardCount: currentReputation.rewardCount + 1,
+    lastUpdated: Date.now(),
+  };
+}
