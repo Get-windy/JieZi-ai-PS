@@ -13,6 +13,17 @@ import { startAgingTaskScheduler } from "../../tasks/task-aging.js";
  * 初始化任务老化检测系统
  *
  * 在项目启动时自动运行，定期扫描待办任务
+ *
+ * ⚠️ 注意：需要在主程序中调用此函数才能启用定时任务
+ * 示例：
+ * ```typescript
+ * import { initTaskAgingScheduler } from './cron/task-aging-scheduler.js';
+ * import { initAgentActivityMonitor } from './cron/agent-activity-scheduler.js';
+ *
+ * // 在系统启动时调用
+ * initTaskAgingScheduler();
+ * initAgentActivityMonitor();
+ * ```
  */
 export function initTaskAgingScheduler(): void {
   try {
