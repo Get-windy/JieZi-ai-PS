@@ -168,6 +168,64 @@ function buildSelfEvolutionSection(params: { isMinimal: boolean; availableTools:
   return lines;
 }
 
+function buildPlanningSection(params: { isMinimal: boolean; availableTools: Set<string> }) {
+  if (params.isMinimal) {
+    return [];
+  }
+  const hasPlanCreate = params.availableTools.has("plan_create");
+  const hasPlanStepDone = params.availableTools.has("plan_step_done");
+  const hasPlanComplete = params.availableTools.has("plan_complete");
+
+  if (!hasPlanCreate && !hasPlanStepDone && !hasPlanComplete) {
+    return [];
+  }
+
+  const lines: string[] = ["## Planning (Plan-and-Execute)"];
+
+  lines.push(
+    "For complex, multi-step tasks, use the structured planning tools before diving into execution.",
+    "",
+  );
+
+  if (hasPlanCreate) {
+    lines.push(
+      "**plan_create** — Start by creating a plan:",
+      "  - `goal`: A concise statement of what you want to achieve.",
+      "  - `steps`: Ordered list of concrete, independently executable steps.",
+      "  Best practice: create the plan BEFORE starting work on any step.",
+      "  Returns a `planId` to track progress.",
+      "",
+    );
+  }
+
+  if (hasPlanStepDone) {
+    lines.push(
+      "**plan_step_done** — Mark each step complete as you finish it:",
+      "  - Call this AFTER successfully completing each step.",
+      "  - Optionally add a `note` with findings or outcomes from the step.",
+      "  - The response shows remaining steps so you always know what's next.",
+      "",
+    );
+  }
+
+  if (hasPlanComplete) {
+    lines.push(
+      "**plan_complete** — Finalize the plan when ALL steps are done:",
+      "  - Optionally provide a `summary` of what was accomplished.",
+      "  - This signals structured task completion.",
+      "",
+    );
+  }
+
+  lines.push(
+    "**When to plan**: Use plan_create for tasks with 3+ distinct steps, or any task where mistakes are costly.",
+    "**When NOT to plan**: Simple Q&A, single-step tasks, or quick lookups don't need a plan.",
+    "",
+  );
+
+  return lines;
+}
+
 function buildUserIdentitySection(ownerLine: string | undefined, isMinimal: boolean) {
   if (!ownerLine || isMinimal) {
     return [];
@@ -506,6 +564,10 @@ export function buildAgentSystemPrompt(params: {
     isMinimal,
     availableTools,
   });
+  const planningSection = buildPlanningSection({
+    isMinimal,
+    availableTools,
+  });
   const docsSection = buildDocsSection({
     docsPath: params.docsPath,
     isMinimal,
@@ -568,6 +630,7 @@ export function buildAgentSystemPrompt(params: {
     ...skillsSection,
     ...memorySection,
     ...selfEvolutionSection,
+    ...planningSection,
     hasGateway && !isMinimal ? "## OpenClaw Self-Update" : "",
     hasGateway && !isMinimal
       ? [

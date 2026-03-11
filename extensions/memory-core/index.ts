@@ -5,6 +5,7 @@ import {
   createMemoryDeleteTool,
   createMemoryListTool,
 } from "../../src/agents/tools/memory-write-tool.js";
+import { createPlanTaskTools } from "../../src/agents/tools/plan-task-tool.js";
 import {
   createAgentReflectTool,
   createAgentSkillSaveTool,
@@ -69,6 +70,11 @@ const memoryCorePlugin = {
     // 团队编排工具（借鉴 OpenProse fan-out-fan-in + adversarial-validation + pipeline-composition）
     api.registerTool((ctx) => createTeamRunTool({ agentId: ctx.agentId ?? "" }), {
       names: ["team_run"],
+    });
+
+    // Plan-and-Execute 规划工具（结构化任务拆解与执行追踪）
+    api.registerTool(() => createPlanTaskTools(), {
+      names: ["plan_create", "plan_step_done", "plan_complete"],
     });
 
     // ========================================================================
