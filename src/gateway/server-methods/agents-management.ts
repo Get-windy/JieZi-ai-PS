@@ -3141,7 +3141,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       // 过滤出目标 Agent 的任务
       const filteredTasks = allTasks
         .filter((t) => {
-          const assigneeIds = new Set(t.assignees.map((a) => a.id));
+          const assigneeIds = new Set(t.assignees?.map((a) => a.id) ?? []);
           // 如果指定了 agentIds，过滤
           if (agentIds.length > 0) {
             return agentIds.some((id) => assigneeIds.has(id));
@@ -3175,7 +3175,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       >();
 
       for (const t of filteredTasks) {
-        for (const assignee of t.assignees) {
+        // 防御性检查：确保 assignees 存在
+        const assignees = t.assignees ?? [];
+        for (const assignee of assignees) {
           const agentId = assignee.id;
           if (!agentTaskMap.has(agentId)) {
             agentTaskMap.set(agentId, {
