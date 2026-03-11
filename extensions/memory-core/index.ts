@@ -16,6 +16,8 @@ import { loadConfig } from "../../src/config/config.js";
 import {
   getRecentReflectionsSummary,
   findRelevantSkills,
+  autoSaveReflection,
+  updateSkillUsageCount,
 } from "../../src/gateway/server-methods/evolve-rpc.js";
 import { groupManager } from "../../src/sessions/group-manager.js";
 import { groupMessageStorage } from "../../src/sessions/group-message-storage.js";
@@ -81,13 +83,43 @@ const memoryCorePlugin = {
     // Lifecycle Hooks — 自我进化自动闭环
     // ========================================================================
 
-    // agent_end 钩子：运行结束时自动提示 Agent 做反思（Reflexion 自动闭环）
-    // 仅当本次运行成功且对话有实质内容时触发，避免噪音反思
+    // agent_end 钩子：运行结束后自动记录轻量反思（Reflexion 自动闭环）
+    // 判断依据：event.success 字段、对话长度、最后一条 assistant 消息的内容
+    // 60s 冷却：同一 Agent 在 60s 内只写一次，避免每次小交互都写
     api.on("agent_end", async (event, ctx) => {
       if (!event.messages || event.messages.length < 2) {
         return;
       }
-      // 提取最后一条 assistant 消息文本，用来判断是否有实质内容
+
+      // 提取首条 user 消息作为 taskSummary
+      let taskSummary = "";
+      for (const msg of event.messages) {
+        if (!msg || typeof msg !== "object") continue;
+        const msgObj = msg as Record<string, unknown>;
+        if (msgObj.role !== "user") continue;
+        const content = msgObj.content;
+        if (typeof content === "string") {
+          taskSummary = content.slice(0, 200).trim();
+        } else if (Array.isArray(content)) {
+          for (const block of content) {
+            if (
+              block &&
+              typeof block === "object" &&
+              (block as Record<string, unknown>).type === "text" &&
+              typeof (block as Record<string, unknown>).text === "string"
+            ) {
+              taskSummary = ((block as Record<string, unknown>).text as string)
+                .slice(0, 200)
+                .trim();
+              break;
+            }
+          }
+        }
+        if (taskSummary) break;
+      }
+      if (!taskSummary || taskSummary.length < 10) return;
+
+      // 提取最后一条 assistant 消息，用于判断是否有实质性内容
       let lastAssistant = "";
       for (let i = event.messages.length - 1; i >= 0; i--) {
         const msg = event.messages[i];
@@ -96,17 +128,16 @@ const memoryCorePlugin = {
         if (msgObj.role !== "assistant") continue;
         const content = msgObj.content;
         if (typeof content === "string") {
-          lastAssistant = content.slice(0, 200);
+          lastAssistant = content.trim();
         } else if (Array.isArray(content)) {
           for (const block of content) {
             if (
               block &&
               typeof block === "object" &&
-              "type" in block &&
               (block as Record<string, unknown>).type === "text" &&
               typeof (block as Record<string, unknown>).text === "string"
             ) {
-              lastAssistant = ((block as Record<string, unknown>).text as string).slice(0, 200);
+              lastAssistant = ((block as Record<string, unknown>).text as string).trim();
               break;
             }
           }
@@ -114,13 +145,36 @@ const memoryCorePlugin = {
         if (lastAssistant) break;
       }
 
-      // 只有在有实质性输出时（非空回复、非纯系统消息）才触发
-      if (lastAssistant.trim().length < 20) return;
+      // 只有在 assistant 有实质性回复时才触发（过滤掉纯系统消息、单词回复）
+      if (lastAssistant.length < 20) return;
 
-      // 记录到 agent_end 元数据：供外部监控用，不直接写反思（由 Agent 自主判断）
-      // 真正的反思由 agent_reflect 工具在 Agent 认为合适时主动调用
-      // 这里仅记录 agentId 供调试
-      void ctx.agentId; // 无操作，保留钩子扩展点
+      const outcome: "success" | "failure" | "partial" = event.success
+        ? "success"
+        : event.error
+          ? "failure"
+          : "partial";
+
+      // 自动反思内容：将本次对话结果压缩为简要
+      const durationNote =
+        typeof event.durationMs === "number"
+          ? ` (completed in ${Math.round(event.durationMs / 1000)}s)`
+          : "";
+      const errorNote = event.error ? ` Error: ${event.error.slice(0, 100)}` : "";
+      const reflection = `[Auto] Task ${outcome}${durationNote}.${errorNote} Response summary: ${lastAssistant.slice(0, 300)}`;
+
+      const lessons: string[] = [];
+      if (outcome === "failure" && event.error) {
+        lessons.push(`Encountered error: ${event.error.slice(0, 100)}`);
+      }
+
+      autoSaveReflection({
+        agentId: ctx.agentId,
+        taskSummary,
+        outcome,
+        reflection,
+        lessons,
+        durationMs: typeof event.durationMs === "number" ? event.durationMs : undefined,
+      });
     });
 
     // before_prompt_build 钩子：自动注入历史反思摘要 + 相关技能（Voyager 技能召回）
@@ -195,7 +249,7 @@ const memoryCorePlugin = {
       }
 
       // ----------------------------------------------------------------
-      // 4. 注入相关技能（Voyager 技能召回）
+      // 4. 注入相关技能（Voyager 技能召回）并同步更新 usageCount
       // ----------------------------------------------------------------
       const relevantSkills = findRelevantSkills(agentId, prompt, 3);
       if (relevantSkills.length > 0) {
@@ -208,6 +262,14 @@ const memoryCorePlugin = {
         parts.push(
           `<skill-library>\nRelevant reusable skills from past experience (consider using these):\n${skillLines}\n</skill-library>`,
         );
+        // 同步更新技能使用计数（不走 RPC，直接写文件）
+        try {
+          for (const s of relevantSkills) {
+            updateSkillUsageCount(agentId, s.id);
+          }
+        } catch {
+          // 计数更新失败不影响注入
+        }
       }
 
       if (parts.length === 0) return;
