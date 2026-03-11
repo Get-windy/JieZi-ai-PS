@@ -529,14 +529,37 @@ export const tasksRpc: GatewayRequestHandlers = {
         });
       }
 
-      // 向后兼容：如果使用了 assigneeId 但没有结果，尝试将其视为 agentId 再次查询
-      // 这确保通过 agent_assign_task 分配给 Agent 的任务也能被检索到
-      if (assigneeId && filteredTasks.length === 0) {
-        const agentFilter = { ...filter, assigneeId: undefined };
-        const allTasks = await storage.listTasks(agentFilter);
-        filteredTasks = allTasks.filter((task) =>
+      // 重要修复：确保 agent_assign_task 分配的任务始终可见
+      // 当指定了 assigneeId 时，直接按 assignee ID 过滤，避免权限检查或其他过滤条件遗漏任务
+      if (assigneeId) {
+        // 重新从数据库加载所有任务，移除 assigneeId 过滤条件
+        const allTasksWithoutAssigneeFilter = await storage.listTasks({
+          ...filter,
+          assigneeId: undefined,
+        });
+        // 手动过滤出 assignees 数组中包含该 ID 的任务
+        const directFilteredTasks = allTasksWithoutAssigneeFilter.filter((task) =>
           (task.assignees ?? []).some((a) => a.id === assigneeId),
         );
+
+        // 如果有指定 requesterId，再次应用权限检查
+        if (requesterId) {
+          filteredTasks = directFilteredTasks.filter((task) => {
+            const assigneeIds = (task.assignees ?? []).map((a) => a.id);
+            const permCheck = checkTaskAccess(
+              task.creatorId,
+              assigneeIds,
+              task.organizationId,
+              task.teamId,
+              requesterId,
+              undefined,
+              undefined,
+            );
+            return permCheck.allowed;
+          });
+        } else {
+          filteredTasks = directFilteredTasks;
+        }
       }
 
       respond(true, { tasks: filteredTasks, total: filteredTasks.length }, undefined);
