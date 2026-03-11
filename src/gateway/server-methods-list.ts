@@ -362,6 +362,41 @@ const BASE_METHODS = [
   "groups.workspace.getDir",
   "groups.workspace.setDir",
   "groups.workspace.migrate",
+  // Memory Blocks (主动记忆写入层)
+  "memory.save",
+  "memory.delete",
+  "memory.list",
+  "memory.namespace.stats",
+  // Self-Evolution（Reflexion 反思 + Voyager 技能库）
+  "evolve.reflect.save",
+  "evolve.reflect.list",
+  "evolve.skill.save",
+  "evolve.skill.list",
+  "evolve.skill.use",
+  "evolve.stats",
+  // Scenarios 自动化协作场景
+  "scenarios.list",
+  "scenarios.get",
+  "scenarios.create",
+  "scenarios.update",
+  "scenarios.delete",
+  "scenarios.run",
+  "scenarios.runs",
+  "scenarios.recommendations",
+  // Monitor 协作监控
+  "monitor.sessions",
+  "monitor.messageFlows",
+  "monitor.forwardingRules",
+  "monitor.addForwardingRule",
+  "monitor.updateForwardingRule",
+  "monitor.deleteForwardingRule",
+  "monitor.performanceMetrics",
+  "monitor.alerts",
+  "monitor.acknowledgeAlert",
+  "monitor.healthCheck",
+  "monitor.metrics.record",
+  "monitor.metrics.query",
+  "monitor.sessions.update",
 ];
 
 export function listGatewayMethods(): string[] {

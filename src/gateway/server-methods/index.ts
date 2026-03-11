@@ -35,6 +35,7 @@ import { cronHandlers } from "./cron.js";
 import { dataScopeHandlers } from "./data-scope-rpc.js";
 import { deviceHandlers } from "./devices.js";
 import { doctorHandlers } from "./doctor.js";
+import { evolveRpc } from "./evolve-rpc.js";
 import { execApprovalsHandlers } from "./exec-approvals.js";
 import { friendsHandlers } from "./friends-rpc.js";
 import { groupsHandlers } from "./groups-rpc.js";
@@ -45,6 +46,7 @@ import { knowledgeSinkHandlers } from "./knowledge-sink.js";
 import { lifecycleHandlers } from "./lifecycle-rpc.js";
 import { logsHandlers } from "./logs.js";
 import { meetingsRpc } from "./meetings-rpc.js";
+import { memoryRpc } from "./memory-rpc.js";
 import { mentorshipHandlers } from "./mentorship-rpc.js";
 import { messageQueueHandlers } from "./message-queue-rpc.js";
 import { modelsHandlers } from "./models.js";
@@ -203,6 +205,12 @@ const hardcodedHandlers: GatewayRequestHandlers = {
 
   // 会议
   ...meetingsRpc,
+
+  // 记忆块（主动写入层）
+  ...memoryRpc,
+
+  // 自我进化（Reflexion 反思 + Voyager 技能库）
+  ...evolveRpc,
 
   // Web & 浏览器
   ...webHandlers,

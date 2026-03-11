@@ -129,6 +129,19 @@ export type AgentConfig = {
   /** Optional per-agent stream params (e.g. cacheRetention, temperature). */
   params?: Record<string, unknown>;
   tools?: AgentToolsConfig;
+  /**
+   * Agent 角色/人格 System Prompt（借鉴 agent-specialization 最佳实践）
+   *
+   * 支持多行文本，在每次会话开始时作为 extraSystemPrompt 自动注入。
+   *
+   * 示例：
+   * ```yaml
+   * rolePrompt: |
+   *   你是首席技术官（CTO），专注于技术架构和代码质量。
+   *   回答时优先考虑可维护性、性能和安全性。
+   * ```
+   */
+  rolePrompt?: string;
 };
 
 export type AgentsConfig = {

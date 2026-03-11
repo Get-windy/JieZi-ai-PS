@@ -123,6 +123,26 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     // 群组文件：查询
     "groups.files.list",
     "groups.files.get",
+    // 记忆块：查询
+    "memory.list",
+    "memory.namespace.stats",
+    // 自我进化：查询类
+    "evolve.reflect.list",
+    "evolve.skill.list",
+    "evolve.stats",
+    // Scenarios 场景：查询类
+    "scenarios.list",
+    "scenarios.get",
+    "scenarios.runs",
+    "scenarios.recommendations",
+    // Monitor 监控：查询类
+    "monitor.sessions",
+    "monitor.messageFlows",
+    "monitor.forwardingRules",
+    "monitor.performanceMetrics",
+    "monitor.alerts",
+    "monitor.healthCheck",
+    "monitor.metrics.query",
     // 任务：查询类
     "task.list",
     "task.get",
@@ -189,6 +209,25 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "groups.removeMember",
     // 群组聊天：写操作
     "groups.chat.send",
+    // 记忆块：写操作
+    "memory.save",
+    "memory.delete",
+    // 自我进化：写操作
+    "evolve.reflect.save",
+    "evolve.skill.save",
+    "evolve.skill.use",
+    // Scenarios 场景：写操作
+    "scenarios.create",
+    "scenarios.update",
+    "scenarios.delete",
+    "scenarios.run",
+    // Monitor 监控：写操作
+    "monitor.addForwardingRule",
+    "monitor.updateForwardingRule",
+    "monitor.deleteForwardingRule",
+    "monitor.acknowledgeAlert",
+    "monitor.metrics.record",
+    "monitor.sessions.update",
     // 任务：写操作（基础 + 扩展）
     "task.create",
     "task.update",

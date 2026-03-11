@@ -49,23 +49,122 @@ function buildMemorySection(params: {
   if (params.isMinimal) {
     return [];
   }
-  if (!params.availableTools.has("memory_search") && !params.availableTools.has("memory_get")) {
+  const hasSearch = params.availableTools.has("memory_search");
+  const hasGet = params.availableTools.has("memory_get");
+  const hasSave = params.availableTools.has("memory_save");
+  const hasDelete = params.availableTools.has("memory_delete");
+  const hasList = params.availableTools.has("memory_list");
+
+  if (!hasSearch && !hasGet && !hasSave) {
     return [];
   }
-  const lines = [
-    "## Memory Recall",
-    "Before answering anything about prior work, decisions, dates, people, preferences, or todos: run memory_search on MEMORY.md + memory/*.md; then use memory_get to pull only the needed lines. If low confidence after search, say you checked.",
-  ];
-  if (params.citationsMode === "off") {
+
+  const lines: string[] = ["## Memory"];
+
+  // 1. Recall
+  if (hasSearch || hasGet) {
     lines.push(
-      "Citations are disabled: do not mention file paths or line numbers in replies unless the user explicitly asks.",
+      "**Recall** — Before answering anything about prior work, decisions, dates, people, preferences, or todos: run memory_search on MEMORY.md + memory/*.md; then use memory_get to pull only the needed lines. If low confidence after search, say you checked.",
     );
-  } else {
+    if (params.citationsMode === "off") {
+      lines.push(
+        "Citations are disabled: do not mention file paths or line numbers in replies unless the user explicitly asks.",
+      );
+    } else {
+      lines.push(
+        "Citations: include Source: <path#line> when it helps the user verify memory snippets.",
+      );
+    }
+  }
+
+  // 2. Proactive Save
+  if (hasSave) {
     lines.push(
-      "Citations: include Source: <path#line> when it helps the user verify memory snippets.",
+      "**Proactive Save** — When you learn something important that should persist across sessions (user preferences, key decisions, project context, facts, constraints), call memory_save IMMEDIATELY—do NOT wait for /new or session reset.",
+      "  Namespaces: 'preferences' (habits/settings) | 'decisions' (choices made) | 'context' (project/task state, default) | 'facts' (rules/knowledge).",
+      "  The backend auto-deduplicates: semantically similar content is merged (UPDATE) or skipped (SKIP) instead of creating duplicates.",
     );
   }
+
+  // 3. Memory Blocks
+  if (hasList) {
+    lines.push(
+      "**Memory Blocks** — Use memory_list to audit stored entries by namespace/tag, or to find memoryId values before deleting. Use memory_search for semantic content search.",
+    );
+  }
+
+  // 4. Delete
+  if (hasDelete) {
+    lines.push(
+      "**Delete** — Use memory_delete when a memory is outdated, incorrect, or superseded. Find its memoryId first with memory_search or memory_list.",
+    );
+  }
+
   lines.push("");
+  return lines;
+}
+
+function buildSelfEvolutionSection(params: { isMinimal: boolean; availableTools: Set<string> }) {
+  if (params.isMinimal) {
+    return [];
+  }
+  const hasReflect = params.availableTools.has("agent_reflect");
+  const hasSkillSave = params.availableTools.has("agent_skill_save");
+  const hasSkillList = params.availableTools.has("agent_skill_list");
+
+  if (!hasReflect && !hasSkillSave && !hasSkillList) {
+    return [];
+  }
+
+  const lines: string[] = ["## Self-Evolution"];
+
+  lines.push(
+    "You have tools to learn from experience and grow over time. Use them proactively.",
+    "",
+  );
+
+  // Reflexion
+  if (hasReflect) {
+    lines.push(
+      "**Reflexion (agent_reflect)** — After completing any non-trivial task, call agent_reflect to record:",
+      "  - `outcome`: 'success' | 'partial' | 'failure' (be honest; partial/failure logs are most valuable)",
+      "  - `reflection`: What went well? What was harder than expected? What would you do differently?",
+      "  - `lessons`: Concrete, actionable rules to apply in future similar tasks.",
+      "  - `tags`: Domain tags for retrieval (e.g., ['git', 'typescript', 'api', 'debugging']).",
+      "  Timing: call agent_reflect ONCE per task, after the final result is ready (not mid-task).",
+      "  Do NOT reflect on trivial exchanges (single-turn Q&A, simple lookups).",
+      "",
+    );
+  }
+
+  // Voyager Skill Library
+  if (hasSkillSave || hasSkillList) {
+    lines.push(
+      "**Skill Library (agent_skill_save / agent_skill_list)** — When you discover a reusable pattern:",
+    );
+    if (hasSkillSave) {
+      lines.push(
+        "  - agent_skill_save: Compress successful workflows into a named, reusable skill.",
+        "    Categories: 'workflow' | 'code' | 'strategy' | 'template'",
+        "    Include `triggers` (keywords that should recall this skill) and step-by-step `content`.",
+        "    Same-name skills are auto-updated (no duplicates).",
+      );
+    }
+    if (hasSkillList) {
+      lines.push(
+        "  - agent_skill_list: Query the skill library before starting a complex task—you may already have a proven pattern.",
+        "    Use `query` for keyword search; use `category` to narrow by type.",
+      );
+    }
+    lines.push("");
+  }
+
+  lines.push(
+    "**Injected Context** — At the start of each session, recent reflections and relevant skills are automatically prepended.",
+    "Read them before acting; they represent your own prior learning.",
+    "",
+  );
+
   return lines;
 }
 
@@ -403,6 +502,10 @@ export function buildAgentSystemPrompt(params: {
     availableTools,
     citationsMode: params.memoryCitationsMode,
   });
+  const selfEvolutionSection = buildSelfEvolutionSection({
+    isMinimal,
+    availableTools,
+  });
   const docsSection = buildDocsSection({
     docsPath: params.docsPath,
     isMinimal,
@@ -464,7 +567,7 @@ export function buildAgentSystemPrompt(params: {
     "",
     ...skillsSection,
     ...memorySection,
-    // Skip self-update for subagent/none modes
+    ...selfEvolutionSection,
     hasGateway && !isMinimal ? "## OpenClaw Self-Update" : "",
     hasGateway && !isMinimal
       ? [
