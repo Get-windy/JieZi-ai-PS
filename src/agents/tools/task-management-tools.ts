@@ -21,14 +21,12 @@ const TaskPriority = Type.Union([
 ]);
 
 /**
- * 任务状态枚举（与存储层保持一致）
+ * 任务状态枚举
  */
 const TaskStatus = Type.Union([
-  Type.Literal("todo"),
-  Type.Literal("in-progress"),
-  Type.Literal("review"),
-  Type.Literal("blocked"),
-  Type.Literal("done"),
+  Type.Literal("pending"),
+  Type.Literal("in_progress"),
+  Type.Literal("completed"),
   Type.Literal("cancelled"),
 ]);
 
@@ -146,8 +144,9 @@ export function createTaskCreateTool(opts?: {
           dueDate,
           assignee,
           tags,
-          status: "todo",
+          status: "pending",
           createdAt: Date.now(),
+          // 工具层以 pending 表示待处理，后端映射为存储层的 todo
         });
 
         return jsonResult({
@@ -157,7 +156,7 @@ export function createTaskCreateTool(opts?: {
             id: taskId,
             title,
             description,
-            status: "todo",
+            status: "pending",
             priority,
             dueDate,
             assignee,
@@ -186,7 +185,7 @@ export function createTaskListTool(opts?: {
     label: "Task List",
     name: "task_list",
     description:
-      "List tasks with optional filters: status (todo/in-progress/review/blocked/done/cancelled), priority, assignee, tag, dueToday. Returns a list of tasks matching the criteria.",
+      "List tasks with optional filters: status (pending/in_progress/completed/cancelled), priority, assignee, tag, dueToday. Returns a list of tasks matching the criteria.",
     parameters: TaskListToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;

@@ -460,7 +460,32 @@ export const tasksRpc: GatewayRequestHandlers = {
         (params?.assigneeId ? String(params.assigneeId) : null) ||
         (params?.assignee ? String(params.assignee) : undefined);
       const creatorId = params?.creatorId ? String(params.creatorId) : undefined;
-      const status = params?.status ? (params.status as TaskStatus | TaskStatus[]) : undefined;
+      // 兼容工具层状态别名（pending→todo, in_progress→in-progress, completed→done）
+      const STATUS_ALIASES: Record<string, string> = {
+        pending: "todo",
+        in_progress: "in-progress",
+        inprogress: "in-progress",
+        "in progress": "in-progress",
+        completed: "done",
+        complete: "done",
+        done: "done",
+        finish: "done",
+        finished: "done",
+        closed: "done",
+        open: "todo",
+        new: "todo",
+        todo: "todo",
+        cancel: "cancelled",
+        wip: "in-progress",
+      };
+      const rawStatus = params?.status ? (params.status as TaskStatus | TaskStatus[]) : undefined;
+      const status = rawStatus
+        ? Array.isArray(rawStatus)
+          ? rawStatus.map(
+              (s) => (STATUS_ALIASES[String(s).toLowerCase()] ?? String(s)) as TaskStatus,
+            )
+          : ((STATUS_ALIASES[String(rawStatus).toLowerCase()] ?? String(rawStatus)) as TaskStatus)
+        : undefined;
       const priority = params?.priority
         ? (params.priority as TaskPriority | TaskPriority[])
         : undefined;
