@@ -9,6 +9,7 @@ import { spawn } from "child_process";
 import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { join } from "path";
+import * as storage from "../tasks/storage.js";
 
 // ============================================================================
 // 配置参数
@@ -79,13 +80,19 @@ export interface AgentActivityReport {
   /** Agent ID */
   agentId: string;
 
+  /** 是否有工作任务（有关联的任务且任务状态为进行中） */
+  hasActiveTasks: boolean;
+
+  /** 关联的任务 ID 列表 */
+  assignedTaskIds: string[];
+
   /** 最后活动时间 */
   lastActivityAt: number;
 
   /** 无活动时长（毫秒） */
   inactiveDuration: number;
 
-  /** 健康状态 */
+  /** 健康状态（仅在有任务时才有意义） */
   healthStatus: AgentHealthStatus;
 
   /** 活动证据列表（最近 N 条） */
@@ -101,7 +108,7 @@ export interface AgentActivityReport {
     averageInterval: number;
   };
 
-  /** 是否需要告警 */
+  /** 是否需要告警（仅在有任务且失联时才告警） */
   needsAlert: boolean;
 }
 
@@ -110,17 +117,85 @@ export interface AgentActivityReport {
 // ============================================================================
 
 /**
+ * 检查 Agent 是否有正在执行的任务
+ */
+async function checkAgentTaskAssignment(
+  agentId: string,
+  projectId?: string,
+): Promise<{
+  hasActiveTasks: boolean;
+  taskIds: string[];
+}> {
+  try {
+    const allTasks = await storage.listTasks({
+      projectId,
+      status: ["in-progress", "blocked"], // 进行中和阻塞的任务
+    });
+
+    // 筛选出分配给该 Agent 的任务
+    const assignedTasks = allTasks.filter((task) => task.assignees?.some((a) => a.id === agentId));
+
+    return {
+      hasActiveTasks: assignedTasks.length > 0,
+      taskIds: assignedTasks.map((t) => t.id),
+    };
+  } catch (error) {
+    console.error(`[Agent Activity] Failed to check task assignment for ${agentId}:`, error);
+    return {
+      hasActiveTasks: false,
+      taskIds: [],
+    };
+  }
+}
+
+/**
  * 检测 Agent 的代码/程序活动
  *
  * @param agentId Agent 标识
  * @param workspaceRoot 工作区根目录
+ * @param options 可选配置
  */
 export async function detectAgentActivity(
   agentId: string,
   workspaceRoot: string,
+  options?: {
+    /** 是否检查任务关联（默认 true） */
+    checkTaskAssignment?: boolean;
+    /** 项目 ID（用于查询任务） */
+    projectId?: string;
+  },
 ): Promise<AgentActivityReport> {
   const now = Date.now();
   const evidence: ActivityEvidence[] = [];
+
+  // 检查 Agent 是否有工作任务
+  let hasActiveTasks = false;
+  let assignedTaskIds: string[] = [];
+
+  if (options?.checkTaskAssignment !== false) {
+    const taskAssignment = await checkAgentTaskAssignment(agentId, options?.projectId);
+    hasActiveTasks = taskAssignment.hasActiveTasks;
+    assignedTaskIds = taskAssignment.taskIds;
+  }
+
+  // 如果没有工作任务，Agent 不需要工作，直接返回"健康"状态
+  if (!hasActiveTasks) {
+    return {
+      agentId,
+      hasActiveTasks: false,
+      assignedTaskIds: [],
+      lastActivityAt: now, // 视为"正在休息"，无活动
+      inactiveDuration: 0,
+      healthStatus: "healthy", // 休息中，健康状态
+      recentActivities: [],
+      statistics: {
+        activitiesLastHour: 0,
+        activitiesLastDay: 0,
+        averageInterval: 0,
+      },
+      needsAlert: false, // 不需要告警
+    };
+  }
 
   // 检测维度 1: 文件系统活动（最近修改的文件）
   const fileActivities = await detectFileSystemActivity(agentId, workspaceRoot);
@@ -167,6 +242,8 @@ export async function detectAgentActivity(
 
   return {
     agentId,
+    hasActiveTasks: true, // 有任务才到达这里
+    assignedTaskIds,
     lastActivityAt,
     inactiveDuration,
     healthStatus,
@@ -424,6 +501,11 @@ export function generateAgentAlert(report: AgentActivityReport): {
   message: string;
   suggestions: string[];
 } | null {
+  // 关键改进：没有工作任务时不告警！
+  if (!report.hasActiveTasks) {
+    return null; // Agent 在休息，不需要告警
+  }
+
   if (!report.needsAlert) {
     return null;
   }
