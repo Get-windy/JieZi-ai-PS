@@ -600,7 +600,10 @@ export function createAgentTeamStatusTool(opts?: {
 
         return jsonResult({
           success: true,
-          teamStatus: response,
+          summary: response.summary ?? null,
+          teamStatus: response.teamStatus ?? [],
+          supervisorId: response.supervisorId ?? supervisorId ?? null,
+          projectId: response.projectId ?? projectId ?? null,
         });
       } catch (error) {
         return jsonResult({

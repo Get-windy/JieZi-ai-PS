@@ -146,6 +146,8 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     // 任务：查询类
     "task.list",
     "task.get",
+    // 团队监控：查询类（只读，不修改任何数据）
+    "agent.team.status",
     // 组织：查询类（补充缺失）
     "organization.list",
     "organization.data.get",
@@ -296,9 +298,8 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     // Agent 发现与通信
     "agent.assign_task",
     "agent.communicate",
-    // Agent 任务汇报与团队监控
+    // Agent 任务汇报（写操作：更新任务状态、发送通知）
     "agent.task.report",
-    "agent.team.status",
   ],
   [ADMIN_SCOPE]: [
     "channels.logout",
