@@ -529,6 +529,16 @@ export const tasksRpc: GatewayRequestHandlers = {
         });
       }
 
+      // 向后兼容：如果使用了 assigneeId 但没有结果，尝试将其视为 agentId 再次查询
+      // 这确保通过 agent_assign_task 分配给 Agent 的任务也能被检索到
+      if (assigneeId && filteredTasks.length === 0) {
+        const agentFilter = { ...filter, assigneeId: undefined };
+        const allTasks = await storage.listTasks(agentFilter);
+        filteredTasks = allTasks.filter((task) =>
+          (task.assignees ?? []).some((a) => a.id === assigneeId),
+        );
+      }
+
       respond(true, { tasks: filteredTasks, total: filteredTasks.length }, undefined);
     } catch (err) {
       respond(

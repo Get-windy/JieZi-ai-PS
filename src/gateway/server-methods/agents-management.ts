@@ -2479,6 +2479,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * 实现方式：
    * 1. 将任务写入任务系统（task storage），建立可追踪的任务记录
    * 2. 将任务格式化为结构化消息，内部调用 chat.send 投递到目标 agent 的 main session
+   * 3. 附加 senderIsOwner: true 标志，使目标 Agent 把任务当作来自主人的指令
+   * 4. 携带 projectId/teamId 上下文，确保任务在项目空间内执行
    */
   "agent.assign_task": async (callCtx) => {
     const { params, respond } = callCtx;
@@ -2567,9 +2569,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       console.warn(`[agent.assign_task] Failed to write task to storage: ${String(taskErr)}`);
     }
 
-    // === 步骤2：格式化任务消息并投递到目标 Agent ===
+    // === 步骤 2：格式化任务消息并投递到目标 Agent ===
+    // 增强任务消息格式，使其更像"命令"而非"通知"
     const taskLines = [
-      `[TASK ASSIGNMENT]`,
+      `[TASK ASSIGNMENT - EXECUTE NOW]`,
       `Task ID: ${taskId}`,
       `From: ${requesterId}`,
       `Priority: ${priority}`,
@@ -2579,7 +2582,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       task,
       p?.context ? `\nContext: ${JSON.stringify(p.context, null, 2)}` : null,
       ``,
-      `Instructions: When you complete this task, use the task_report_to_supervisor tool to report results back. Task ID: ${taskId}`,
+      `Instructions:`,
+      `- This is a DIRECT COMMAND from your supervisor. You MUST execute this task immediately.`,
+      `- When you complete this task, use the task_report_to_supervisor tool to report results back. Task ID: ${taskId}`,
+      `- If you encounter any issues, report them immediately using agent_communicate or task_report_to_supervisor with status "blocked".`,
     ]
       .filter(Boolean)
       .join("\n");
@@ -2621,13 +2627,24 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     };
 
     try {
+      // 携带项目/团队上下文信息，确保任务在正确的项目空间内执行
+      const chatSendParams: Record<string, unknown> = {
+        sessionKey,
+        message: taskLines,
+        idempotencyKey: taskId,
+      };
+
+      // 如果有 projectId/teamId，添加到消息上下文中（供 prompt 使用）
+      if (p?.projectId) {
+        chatSendParams.projectContext = p.projectId;
+      }
+      if (p?.teamId) {
+        chatSendParams.teamContext = p.teamId;
+      }
+
       await chatSendHandler({
         ...callCtx,
-        params: {
-          sessionKey,
-          message: taskLines,
-          idempotencyKey: taskId,
-        },
+        params: chatSendParams,
         respond: innerRespond as RespondFn,
       });
     } catch (err) {
