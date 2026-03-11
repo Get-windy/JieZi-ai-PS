@@ -105,6 +105,12 @@ export interface GroupInfo {
 
   /** 元数据 */
   metadata?: Record<string, any>;
+
+  /** 绑定的项目ID（可选，用于多项目隔离，如 "wo-shi-renlei"） */
+  projectId?: string;
+
+  /** 项目工作目录路径（可选，如 "I:\\wo-shi-renlei"） */
+  workspacePath?: string;
 }
 
 /**
@@ -240,6 +246,8 @@ export class GroupManager {
     isPublic?: boolean;
     maxMembers?: number;
     initialMembers?: string[];
+    projectId?: string;
+    workspacePath?: string;
   }): Promise<GroupInfo> {
     const {
       id,
@@ -249,6 +257,8 @@ export class GroupManager {
       isPublic = false,
       maxMembers = 500,
       initialMembers = [],
+      projectId,
+      workspacePath,
     } = params;
 
     // 检查群组是否已存在
@@ -275,6 +285,8 @@ export class GroupManager {
       ],
       maxMembers,
       isPublic,
+      projectId,
+      workspacePath,
     };
 
     // 添加初始成员
