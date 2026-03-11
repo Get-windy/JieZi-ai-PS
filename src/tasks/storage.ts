@@ -252,13 +252,13 @@ export async function listTasks(filter?: TaskFilter): Promise<Task[]> {
   // 应用筛选条件
   if (filter.assigneeId) {
     results = results.filter((task) =>
-      task.assignees.some((assignee) => assignee.id === filter.assigneeId),
+      (task.assignees ?? []).some((assignee) => assignee.id === filter.assigneeId),
     );
   }
 
   if (filter.assigneeType) {
     results = results.filter((task) =>
-      task.assignees.some((assignee) => assignee.type === filter.assigneeType),
+      (task.assignees ?? []).some((assignee) => assignee.type === filter.assigneeType),
     );
   }
 

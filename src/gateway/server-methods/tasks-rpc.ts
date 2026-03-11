@@ -222,7 +222,7 @@ export const tasksRpc: GatewayRequestHandlers = {
       // 权限检查 - 需要创建者、执行者或管理员权限
       const requesterId = params?.requesterId ? String(params.requesterId) : undefined;
       if (requesterId) {
-        const ownerIds = task.assignees.filter((a) => a.role === "owner").map((a) => a.id);
+        const ownerIds = (task.assignees ?? []).filter((a) => a.role === "owner").map((a) => a.id);
         const permCheck = checkTaskModifyAccess(
           task.creatorId,
           ownerIds,
@@ -244,13 +244,13 @@ export const tasksRpc: GatewayRequestHandlers = {
 
       // 处理 assignee 字段（单人负责人更新）
       const assignee = params?.assignee ? String(params.assignee) : undefined;
-      let updatedAssignees = task.assignees;
+      let updatedAssignees = task.assignees ?? [];
       if (assignee) {
         // 如果已经有该 assignee，不重复添加；否则替换第一个 owner 或直接添加
-        const alreadyAssigned = task.assignees.some((a) => a.id === assignee);
+        const alreadyAssigned = (task.assignees ?? []).some((a) => a.id === assignee);
         if (!alreadyAssigned) {
           updatedAssignees = [
-            ...task.assignees,
+            ...(task.assignees ?? []),
             {
               id: assignee,
               type: "agent" as MemberType,
@@ -403,7 +403,7 @@ export const tasksRpc: GatewayRequestHandlers = {
       // 权限检查 - 验证请求者有权限查看此任务
       const requesterId = params?.requesterId ? String(params.requesterId) : undefined;
       if (requesterId) {
-        const assigneeIds = task.assignees.map((a) => a.id);
+        const assigneeIds = (task.assignees ?? []).map((a) => a.id);
         const permCheck = checkTaskAccess(
           task.creatorId,
           assigneeIds,
@@ -490,7 +490,7 @@ export const tasksRpc: GatewayRequestHandlers = {
 
       if (requesterId) {
         filteredTasks = tasks.filter((task) => {
-          const assigneeIds = task.assignees.map((a) => a.id);
+          const assigneeIds = (task.assignees ?? []).map((a) => a.id);
           const permCheck = checkTaskAccess(
             task.creatorId,
             assigneeIds,
@@ -545,7 +545,7 @@ export const tasksRpc: GatewayRequestHandlers = {
       // 权限检查 - 需要任务owner或管理员权限
       const requesterId = params?.requesterId ? String(params.requesterId) : undefined;
       if (requesterId) {
-        const ownerIds = task.assignees.filter((a) => a.role === "owner").map((a) => a.id);
+        const ownerIds = (task.assignees ?? []).filter((a) => a.role === "owner").map((a) => a.id);
         const permCheck = checkTaskModifyAccess(
           task.creatorId,
           ownerIds,
@@ -566,7 +566,7 @@ export const tasksRpc: GatewayRequestHandlers = {
       }
 
       // 验证被分配者不重复
-      const existingAssignee = task.assignees.find((a) => a.id === assigneeId);
+      const existingAssignee = (task.assignees ?? []).find((a) => a.id === assigneeId);
       if (existingAssignee) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "该用户已经是任务执行者"));
         return;
@@ -581,7 +581,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         assignedBy,
       };
 
-      task.assignees.push(newAssignee);
+      (task.assignees ?? (task.assignees = [])).push(newAssignee);
       await storage.updateTask(taskId, { assignees: task.assignees });
 
       // 通知被分配者
@@ -634,7 +634,7 @@ export const tasksRpc: GatewayRequestHandlers = {
       // 权限检查 - 需要执行者或管理员权限
       const requesterId = params?.requesterId ? String(params.requesterId) : updatedBy;
       if (requesterId) {
-        const ownerIds = task.assignees.filter((a) => a.role === "owner").map((a) => a.id);
+        const ownerIds = (task.assignees ?? []).filter((a) => a.role === "owner").map((a) => a.id);
         const permCheck = checkTaskModifyAccess(
           task.creatorId,
           ownerIds,
@@ -748,7 +748,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         return;
       }
 
-      const assigneeIds = task.assignees.map((a) => a.id);
+      const assigneeIds = (task.assignees ?? []).map((a) => a.id);
       const permCheck = checkTaskAccess(
         task.creatorId,
         assigneeIds,
@@ -824,7 +824,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         return;
       }
 
-      const assigneeIds = task.assignees.map((a) => a.id);
+      const assigneeIds = (task.assignees ?? []).map((a) => a.id);
       const permCheck = checkTaskAccess(
         task.creatorId,
         assigneeIds,
@@ -912,7 +912,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         return;
       }
 
-      const isAssignee = task.assignees.some((a) => a.id === agentId && a.type === "agent");
+      const isAssignee = (task.assignees ?? []).some((a) => a.id === agentId && a.type === "agent");
       if (!isAssignee) {
         respond(
           false,
@@ -1084,7 +1084,7 @@ export const tasksRpc: GatewayRequestHandlers = {
       const requesterId = params?.requesterId ? String(params.requesterId) : createdBy;
 
       // 检查主任务访问权限
-      const taskAssigneeIds = task.assignees.map((a) => a.id);
+      const taskAssigneeIds = (task.assignees ?? []).map((a) => a.id);
       const taskPermCheck = checkTaskAccess(
         task.creatorId,
         taskAssigneeIds,
@@ -1100,7 +1100,7 @@ export const tasksRpc: GatewayRequestHandlers = {
       }
 
       // 检查依赖任务访问权限
-      const depTaskAssigneeIds = dependsOnTask.assignees.map((a) => a.id);
+      const depTaskAssigneeIds = (dependsOnTask.assignees ?? []).map((a) => a.id);
       const depTaskPermCheck = checkTaskAccess(
         dependsOnTask.creatorId,
         depTaskAssigneeIds,
@@ -1232,7 +1232,7 @@ export const tasksRpc: GatewayRequestHandlers = {
       const requesterId = params?.requesterId ? String(params.requesterId) : blockedBy;
       const permCheck = checkTaskModifyAccess(
         task.creatorId,
-        task.assignees.filter((a) => a.role === "owner").map((a) => a.id),
+        (task.assignees ?? []).filter((a) => a.role === "owner").map((a) => a.id),
         task.organizationId,
         task.teamId,
         requesterId,
