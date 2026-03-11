@@ -2,6 +2,8 @@
  * 任务老化检测定时任务
  *
  * Agent 系统全年无休！每 10 分钟扫描一次待办池，确保任务不会沉淀超过几小时
+ *
+ * 新增功能：防敷衍汇报机制（Outcome-Based Accountability）
  */
 
 import { loadConfig } from "../../config/config.js";
