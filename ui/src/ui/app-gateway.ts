@@ -297,6 +297,19 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
       host.execApprovalQueue = removeExecApproval(host.execApprovalQueue, resolved.id);
     }
   }
+
+  if (evt.event === "group.chat.message") {
+    const payload = evt.payload as { groupId?: string } | undefined;
+    const groupId = payload?.groupId ? String(payload.groupId) : null;
+    if (groupId) {
+      // 当前 sessionKey 格式: agent:{agentId}:group:{groupId}
+      const isGroupSession = host.sessionKey.includes(`:group:${groupId}`);
+      if (isGroupSession) {
+        void loadChatHistory(host as unknown as OpenClawApp);
+      }
+    }
+    return;
+  }
 }
 
 export function applySnapshot(host: GatewayHost, hello: GatewayHelloOk) {

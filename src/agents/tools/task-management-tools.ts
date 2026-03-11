@@ -146,6 +146,7 @@ export function createTaskCreateTool(opts?: {
           tags,
           status: "pending",
           createdAt: Date.now(),
+          // 工具层以 pending 表示待处理，后端映射为存储层的 todo
         });
 
         return jsonResult({
@@ -184,7 +185,7 @@ export function createTaskListTool(opts?: {
     label: "Task List",
     name: "task_list",
     description:
-      "List tasks with optional filters: status, priority, assignee, tag, dueToday. Returns a list of tasks matching the criteria.",
+      "List tasks with optional filters: status (pending/in_progress/completed/cancelled), priority, assignee, tag, dueToday. Returns a list of tasks matching the criteria.",
     parameters: TaskListToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
