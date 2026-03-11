@@ -2,7 +2,7 @@
  * Monitor RPC 处理器
  *
  * 协作监控 - 实时监控智能助手之间的协作活动
- * 
+ *
  * 功能特性：
  * - 活动会话监控：追踪智能助手的实时连接状态
  * - 消息流统计：分析消息交互模式和响应时间
@@ -11,10 +11,14 @@
  * - 异常告警管理：自动检测并记录异常情况
  * - 健康状态检查：评估系统健康度并提供建议
  * - 自定义指标记录：支持灵活的指标上报
+ * - 数据持久化：转发规则、指标、告警 JSON 文件落盘，进程重启不丢数据
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
+import type { GatewayRequestHandlers } from "./types.js";
 
 /**
  * 活动会话信息
@@ -91,6 +95,56 @@ const activeSessions = new Map<string, ActiveSession>();
 const messageFlows = new Map<string, MessageFlow>();
 const forwardingRules = new Map<string, ForwardingRule>();
 const alerts = new Map<string, Alert>();
+
+// ============================================================================
+// 数据持久化 — JSON 文件落盘，进程重启不丢数据
+// ============================================================================
+const PERSIST_DIR = path.join(os.homedir(), ".openclaw", "monitor");
+
+function ensurePersistDir(): void {
+  if (!fs.existsSync(PERSIST_DIR)) {
+    fs.mkdirSync(PERSIST_DIR, { recursive: true });
+  }
+}
+
+function persistPath(name: string): string {
+  return path.join(PERSIST_DIR, `${name}.json`);
+}
+
+function persistData(name: string, data: unknown): void {
+  try {
+    ensurePersistDir();
+    fs.writeFileSync(persistPath(name), JSON.stringify(data, null, 2), "utf-8");
+  } catch {
+    // 落盘失败不影响内存操作
+  }
+}
+
+function loadPersistedData<T>(name: string, fallback: T): T {
+  try {
+    const filePath = persistPath(name);
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, "utf-8");
+      return JSON.parse(raw) as T;
+    }
+  } catch {
+    // 加载失败返回默认值
+  }
+  return fallback;
+}
+
+// 启动时自动加载持久化数据
+function initPersistedData(): void {
+  const savedRules = loadPersistedData<ForwardingRule[]>("forwarding-rules", []);
+  for (const rule of savedRules) {
+    forwardingRules.set(rule.id, rule);
+  }
+  const savedAlerts = loadPersistedData<Alert[]>("alerts", []);
+  for (const alert of savedAlerts) {
+    alerts.set(alert.id, alert);
+  }
+}
+initPersistedData();
 
 // 新增：指标历史记录（简化版，实际应使用时序数据库）
 interface MetricRecord {
@@ -182,6 +236,7 @@ export const monitorHandlers: GatewayRequestHandlers = {
       };
 
       forwardingRules.set(ruleId, rule);
+      persistData("forwarding-rules", Array.from(forwardingRules.values()));
       respond(true, { rule }, undefined);
     } catch (err) {
       respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
@@ -210,6 +265,7 @@ export const monitorHandlers: GatewayRequestHandlers = {
         Object.assign(rule, updates);
       }
 
+      persistData("forwarding-rules", Array.from(forwardingRules.values()));
       respond(true, { rule }, undefined);
     } catch (err) {
       respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
@@ -234,6 +290,7 @@ export const monitorHandlers: GatewayRequestHandlers = {
         return;
       }
 
+      persistData("forwarding-rules", Array.from(forwardingRules.values()));
       respond(true, { success: true }, undefined);
     } catch (err) {
       respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
@@ -268,20 +325,20 @@ export const monitorHandlers: GatewayRequestHandlers = {
       if (unacknowledgedOnly) {
         alertsList = alertsList.filter((a) => !a.acknowledged);
       }
-      
+
       // 按严重程度筛选
       if (severity) {
         alertsList = alertsList.filter((a) => a.severity === severity);
       }
-      
+
       // 按类型筛选
       if (type) {
         alertsList = alertsList.filter((a) => a.type === type);
       }
-      
+
       // 按时间排序（最新的在前）
       alertsList.sort((a, b) => b.timestamp - a.timestamp);
-      
+
       // 限制数量
       if (limit && typeof limit === "number") {
         alertsList = alertsList.slice(0, limit);
@@ -314,7 +371,7 @@ export const monitorHandlers: GatewayRequestHandlers = {
       alert.acknowledged = true;
       alert.acknowledgedBy = typeof acknowledgedBy === "string" ? acknowledgedBy : "system";
       alert.acknowledgedAt = Date.now();
-      
+
       respond(true, { alert }, undefined);
     } catch (err) {
       respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
@@ -568,10 +625,10 @@ export const monitorHandlers: GatewayRequestHandlers = {
         tags: (tags || {}) as Record<string, string>,
         timestamp: Date.now(),
       };
-      
+
       // 添加到历史记录
       metricsHistory.push(metric);
-      
+
       // 保持历史记录数量在限制内
       if (metricsHistory.length > MAX_METRICS_HISTORY) {
         metricsHistory.splice(0, metricsHistory.length - MAX_METRICS_HISTORY);
@@ -582,74 +639,74 @@ export const monitorHandlers: GatewayRequestHandlers = {
       respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }
   },
-  
+
   /**
    * 获取指标历史记录
    */
   "monitor.metricsHistory": async ({ params, respond }) => {
     const { metricName, startTime, endTime, limit } = params || {};
-    
+
     try {
       let records = [...metricsHistory];
-      
+
       // 按指标名筛选
       if (metricName && typeof metricName === "string") {
-        records = records.filter(r => r.name === metricName);
+        records = records.filter((r) => r.name === metricName);
       }
-      
+
       // 按时间范围筛选
       if (startTime && typeof startTime === "number") {
-        records = records.filter(r => r.timestamp >= startTime);
+        records = records.filter((r) => r.timestamp >= startTime);
       }
       if (endTime && typeof endTime === "number") {
-        records = records.filter(r => r.timestamp <= endTime);
+        records = records.filter((r) => r.timestamp <= endTime);
       }
-      
+
       // 按时间排序（最新的在前）
       records.sort((a, b) => b.timestamp - a.timestamp);
-      
+
       // 限制数量
       if (limit && typeof limit === "number") {
         records = records.slice(0, limit);
       }
-      
+
       respond(true, { records, total: records.length }, undefined);
     } catch (err) {
       respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }
   },
-  
+
   /**
    * 获取指标聚合统计
    */
   "monitor.metricsAggregation": async ({ params, respond }) => {
     const { metricName, aggregationType, startTime, endTime } = params || {};
-    
+
     if (!metricName || typeof metricName !== "string") {
       respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Missing metricName"));
       return;
     }
-    
+
     const aggType = (aggregationType as string) || "avg";
     if (!["avg", "sum", "min", "max", "count"].includes(aggType)) {
       respond(false, null, errorShape(ErrorCodes.INVALID_REQUEST, "Invalid aggregationType"));
       return;
     }
-    
+
     try {
-      let records = metricsHistory.filter(r => r.name === metricName);
-      
+      let records = metricsHistory.filter((r) => r.name === metricName);
+
       // 按时间范围筛选
       if (startTime && typeof startTime === "number") {
-        records = records.filter(r => r.timestamp >= startTime);
+        records = records.filter((r) => r.timestamp >= startTime);
       }
       if (endTime && typeof endTime === "number") {
-        records = records.filter(r => r.timestamp <= endTime);
+        records = records.filter((r) => r.timestamp <= endTime);
       }
-      
+
       let result: number;
-      const values = records.map(r => r.value);
-      
+      const values = records.map((r) => r.value);
+
       switch (aggType) {
         case "sum":
           result = values.reduce((sum, v) => sum + v, 0);
@@ -669,19 +726,23 @@ export const monitorHandlers: GatewayRequestHandlers = {
         default:
           result = 0;
       }
-      
-      respond(true, {
-        metricName,
-        aggregationType: aggType,
-        value: result,
-        recordCount: records.length,
-        timeRange: { startTime, endTime },
-      }, undefined);
+
+      respond(
+        true,
+        {
+          metricName,
+          aggregationType: aggType,
+          value: result,
+          recordCount: records.length,
+          timeRange: { startTime, endTime },
+        },
+        undefined,
+      );
     } catch (err) {
       respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }
   },
-  
+
   /**
    * 获取系统概览仪表板
    */
@@ -689,7 +750,7 @@ export const monitorHandlers: GatewayRequestHandlers = {
     try {
       const now = Date.now();
       const uptime = now - performanceMetrics.uptime;
-      
+
       // 计算健康分数
       const idleSessions = Array.from(activeSessions.values()).filter(
         (s) => s.status === "idle",
@@ -703,7 +764,7 @@ export const monitorHandlers: GatewayRequestHandlers = {
       const criticalAlerts = Array.from(alerts.values()).filter(
         (a) => a.severity === "critical" && !a.acknowledged,
       ).length;
-      
+
       let healthScore = 100;
       if (activeSessions.size > 0) {
         healthScore -= (errorSessions / activeSessions.size) * 30;
@@ -712,7 +773,7 @@ export const monitorHandlers: GatewayRequestHandlers = {
       healthScore -= criticalAlerts * 10;
       healthScore -= unacknowledgedAlerts * 2;
       healthScore = Math.max(0, Math.min(100, healthScore));
-      
+
       // 构建仪表板数据
       const dashboard = {
         timestamp: now,
@@ -742,10 +803,10 @@ export const monitorHandlers: GatewayRequestHandlers = {
         },
         forwardingRules: {
           total: forwardingRules.size,
-          enabled: Array.from(forwardingRules.values()).filter(r => r.enabled).length,
+          enabled: Array.from(forwardingRules.values()).filter((r) => r.enabled).length,
         },
       };
-      
+
       respond(true, { dashboard }, undefined);
     } catch (err) {
       respond(false, null, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
@@ -802,8 +863,8 @@ export function recordMessageFlow(flow: MessageFlow): void {
  */
 export function addAlert(alert: Omit<Alert, "id" | "acknowledged">): void {
   const alertId = `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  alerts.set(alertId, { 
-    ...alert, 
+  alerts.set(alertId, {
+    ...alert,
     id: alertId,
     acknowledged: false,
     severity: alert.severity || "medium", // 默认中等严重程度

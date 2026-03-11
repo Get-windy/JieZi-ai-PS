@@ -10,10 +10,14 @@ import {
   createAgentSkillSaveTool,
   createAgentSkillListTool,
 } from "../../src/agents/tools/self-evolve-tool.js";
+import { createTeamRunTool } from "../../src/agents/tools/team-orchestrate-tool.js";
+import { loadConfig } from "../../src/config/config.js";
 import {
   getRecentReflectionsSummary,
   findRelevantSkills,
 } from "../../src/gateway/server-methods/evolve-rpc.js";
+import { groupManager } from "../../src/sessions/group-manager.js";
+import { groupMessageStorage } from "../../src/sessions/group-message-storage.js";
 
 const memoryCorePlugin = {
   id: "memory-core",
@@ -60,6 +64,11 @@ const memoryCorePlugin = {
     });
     api.registerTool((ctx) => createAgentSkillListTool({ agentId: ctx.agentId }), {
       names: ["agent_skill_list"],
+    });
+
+    // 团队编排工具（借鉴 OpenProse fan-out-fan-in + adversarial-validation + pipeline-composition）
+    api.registerTool((ctx) => createTeamRunTool({ agentId: ctx.agentId ?? "" }), {
+      names: ["team_run"],
     });
 
     // ========================================================================
@@ -109,6 +118,8 @@ const memoryCorePlugin = {
     });
 
     // before_prompt_build 钩子：自动注入历史反思摘要 + 相关技能（Voyager 技能召回）
+    // + Agent rolePrompt 角色人格（agent-specialization 最佳实践）
+    // + 群组共享记忆（MetaGPT/AutoGen 共享上下文最佳实践）
     api.on("before_prompt_build", async (event, ctx) => {
       const prompt = event.prompt;
       if (!prompt || prompt.length < 5) return;
@@ -116,7 +127,60 @@ const memoryCorePlugin = {
       const agentId = ctx.agentId;
       const parts: string[] = [];
 
-      // 1. 注入最近 5 条历史反思摘要（Reflexion LAST_ATTEMPT_AND_REFLEXION 策略）
+      // ----------------------------------------------------------------
+      // 1. Agent rolePrompt 角色/人格注入（agent-specialization）
+      // ----------------------------------------------------------------
+      try {
+        const cfg = loadConfig();
+        const agentList = cfg.agents?.list ?? [];
+        const agentCfg = agentList.find(
+          (a) => a && typeof a === "object" && (a as Record<string, unknown>).id === agentId,
+        ) as Record<string, unknown> | undefined;
+        const rolePrompt =
+          typeof agentCfg?.rolePrompt === "string" ? agentCfg.rolePrompt.trim() : "";
+        if (rolePrompt) {
+          parts.push(`<agent-role>\n${rolePrompt}\n</agent-role>`);
+        }
+      } catch {
+        // loadConfig 失败时静默跳过
+      }
+
+      // ----------------------------------------------------------------
+      // 2. 群组共享记忆注入（MetaGPT/AutoGen 共享上下文）
+      // ----------------------------------------------------------------
+      try {
+        if (agentId) {
+          const agentGroups = groupManager.getAgentGroups(agentId);
+          if (agentGroups.length > 0) {
+            const sharedContextLines: string[] = [];
+            for (const group of agentGroups.slice(0, 3)) {
+              // 取每个群组最近 5 条消息作为共享上下文
+              const msgs = await groupMessageStorage.loadMessages(group.id, { limit: 5 });
+              const recentMsgs = msgs
+                .map((m) => `  [${m.senderName ?? m.senderId}]: ${m.content.slice(0, 200)}`)
+                .join("\n");
+              if (recentMsgs) {
+                sharedContextLines.push(
+                  `Group \u00ab${group.name}\u00bb recent context:\n${recentMsgs}`,
+                );
+              }
+            }
+            if (sharedContextLines.length > 0) {
+              const groupCtx =
+                "<group-shared-memory>\nYou are a member of the following team groups. Use this shared context to stay aligned:\n" +
+                sharedContextLines.join("\n\n") +
+                "\n</group-shared-memory>";
+              parts.push(groupCtx);
+            }
+          }
+        }
+      } catch {
+        // groupManager 访问失败时静默跳过
+      }
+
+      // ----------------------------------------------------------------
+      // 3. 注入最近 5 条历史反思摘要（Reflexion LAST_ATTEMPT_AND_REFLEXION 策略）
+      // ----------------------------------------------------------------
       const reflectionsSummary = getRecentReflectionsSummary(agentId, 5);
       if (reflectionsSummary) {
         parts.push(
@@ -124,7 +188,9 @@ const memoryCorePlugin = {
         );
       }
 
-      // 2. 注入相关技能（Voyager 技能召回）
+      // ----------------------------------------------------------------
+      // 4. 注入相关技能（Voyager 技能召回）
+      // ----------------------------------------------------------------
       const relevantSkills = findRelevantSkills(agentId, prompt, 3);
       if (relevantSkills.length > 0) {
         const skillLines = relevantSkills
