@@ -12,8 +12,7 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import type { AnyAgentTool } from "../agent-tool.js";
-import { jsonResult } from "../tool-result.js";
+import { type AnyAgentTool, jsonResult } from "./common.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,7 +78,7 @@ export function createPlanCreateTool(): AnyAgentTool {
     description:
       "Create a structured execution plan with ordered steps. Use this at the start of a complex task to decompose it into concrete, actionable steps before executing them one by one. Returns a planId to track progress.",
     parameters: PlanCreateSchema,
-    execute: async (_toolCallId, args) => {
+    execute: async (_toolCallId: string, args: Record<string, unknown>) => {
       const params = args as { goal: string; steps: string[] };
 
       if (!params.goal || typeof params.goal !== "string") {
@@ -143,7 +142,7 @@ export function createPlanStepDoneTool(): AnyAgentTool {
     description:
       "Mark a plan step as completed. Call this after successfully executing each step in your plan. Returns remaining steps so you know what to do next.",
     parameters: PlanStepDoneSchema,
-    execute: async (_toolCallId, args) => {
+    execute: async (_toolCallId: string, args: Record<string, unknown>) => {
       const params = args as { planId: string; stepId: string; note?: string };
 
       const plan = PLAN_REGISTRY.get(params.planId);
@@ -234,7 +233,7 @@ export function createPlanCompleteTool(): AnyAgentTool {
     description:
       "Finalize and close a plan after all steps have been completed. Returns a summary of the executed plan. Use this to signal task completion in a structured way.",
     parameters: PlanCompleteSchema,
-    execute: async (_toolCallId, args) => {
+    execute: async (_toolCallId: string, args: Record<string, unknown>) => {
       const params = args as { planId: string; summary?: string };
 
       const plan = PLAN_REGISTRY.get(params.planId);
