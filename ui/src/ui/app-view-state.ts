@@ -35,6 +35,7 @@ import type {
 } from "./types.ts";
 import type { ChatAttachment, ChatQueueItem, CronFormState } from "./ui-types.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
+import type { AgentTeamStatus, TeamSummary, AssignTaskForm } from "./views/team-monitor.ts";
 import type { SessionLogEntry } from "./views/usage.ts";
 
 export type AppViewState = {
@@ -236,7 +237,7 @@ export type AppViewState = {
     | "channelPolicies"
     | "permissionsConfig";
   // Collaboration 协作管理状态
-  collaborationActivePanel: "groups" | "friends" | "monitor" | "scenarios";
+  collaborationActivePanel: "groups" | "friends" | "monitor" | "scenarios" | "team-monitor";
   agentFilesLoading: boolean;
   agentFilesError: string | null;
   agentFilesList: AgentsFilesListResult | null;
@@ -670,6 +671,20 @@ export type AppViewState = {
 
   // 系统工作空间根目录（概览页设置卡片用）
   workspacesDir: string;
+
+  // 团队监控页面状态
+  teamMonitorStatus: AgentTeamStatus[];
+  teamMonitorSummary: TeamSummary | null;
+  teamMonitorLoading: boolean;
+  teamMonitorError: string | null;
+  teamMonitorFilterAgentId: string | null;
+  teamMonitorFilterProjectId: string | null;
+  teamMonitorFilterStatus: string | null;
+  teamMonitorSearchKeyword: string;
+  teamMonitorAssignDialogOpen: boolean;
+  teamMonitorAssignSaving: boolean;
+  teamMonitorAssignError: string | null;
+  teamMonitorAssignForm: AssignTaskForm;
 
   client: GatewayBrowserClient | null;
   refreshSessionsAfterChat: Set<string>;
