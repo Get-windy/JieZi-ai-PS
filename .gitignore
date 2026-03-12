@@ -77,6 +77,13 @@ apps/ios/*.dSYM.zip
 # provisioning profiles (local)
 apps/ios/*.mobileprovision
 
+# Debug/temp output files (local only)
+build-out*.txt
+build-output*.txt
+build*.txt
+tsdown*.txt
+tsdown_*.txt
+
 # Local untracked files
 .local/
 docs/.local/

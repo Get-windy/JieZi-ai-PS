@@ -91,6 +91,13 @@ import {
   updateExecApprovalsFormValue,
 } from "./controllers/exec-approvals.ts";
 import {
+  loadGroupFiles,
+  loadGroupFileContent,
+  saveGroupFile,
+  deleteGroupFile,
+  migrateGroupWorkspace,
+} from "./controllers/group-files.ts";
+import {
   loadGroups,
   createGroup,
   deleteGroup,
@@ -98,13 +105,6 @@ import {
   removeGroupMember,
   updateGroupMemberRole,
 } from "./controllers/groups.ts";
-import {
-  loadGroupFiles,
-  loadGroupFileContent,
-  saveGroupFile,
-  deleteGroupFile,
-  migrateGroupWorkspace,
-} from "./controllers/group-files.ts";
 import { loadLogs } from "./controllers/logs.ts";
 import {
   loadQueueStatus,
@@ -168,6 +168,79 @@ import {
   changeFilterSource,
 } from "./controllers/skills.ts";
 import { loadSuperAdmins } from "./controllers/super-admin.ts";
+
+/**
+ * 加载团队监控数据
+ */
+async function loadTeamMonitor(state: AppViewState): Promise<void> {
+  if (state.teamMonitorLoading) {
+    return;
+  }
+  state.teamMonitorLoading = true;
+  state.teamMonitorError = null;
+  try {
+    const rawResult = await state.client!.request("agent.team.status", {
+      supervisorId: state.teamMonitorFilterAgentId ? undefined : undefined,
+      projectId: state.teamMonitorFilterProjectId ?? undefined,
+      includeCompleted: false,
+    });
+    const result = rawResult as {
+      teamStatus?: typeof state.teamMonitorStatus;
+      summary?: typeof state.teamMonitorSummary;
+    };
+    state.teamMonitorStatus = result?.teamStatus ?? [];
+    state.teamMonitorSummary = result?.summary ?? null;
+    // 将 agentName 填充（从 agentsList 解析）
+    const agents = state.agentsList?.agents ?? [];
+    for (const entry of state.teamMonitorStatus) {
+      const agent = agents.find((a) => a.id === entry.agentId);
+      if (agent) {
+        entry.agentName = (agent as { name?: string; id: string }).name || agent.id;
+      }
+    }
+  } catch (err) {
+    state.teamMonitorError = err instanceof Error ? err.message : String(err);
+  } finally {
+    state.teamMonitorLoading = false;
+  }
+}
+
+/**
+ * 提交团队任务分配
+ */
+async function submitTeamAssignTask(state: AppViewState): Promise<void> {
+  const form = state.teamMonitorAssignForm ?? {
+    targetAgentId: "",
+    title: "",
+    task: "",
+    priority: "medium" as const,
+  };
+  if (!form.targetAgentId || !form.task?.trim()) {
+    state.teamMonitorAssignError = "请填写目标成员和任务描述";
+    return;
+  }
+  state.teamMonitorAssignSaving = true;
+  state.teamMonitorAssignError = null;
+  try {
+    await state.client!.request("agent.assign_task", {
+      targetAgentId: form.targetAgentId,
+      title: form.title?.trim() || undefined,
+      task: form.task.trim(),
+      priority: form.priority ?? "medium",
+      deadline: form.deadline || undefined,
+      projectId: form.projectId?.trim() || undefined,
+    });
+    // 关闭对话框并刷新
+    state.teamMonitorAssignDialogOpen = false;
+    state.teamMonitorAssignForm = { targetAgentId: "", title: "", task: "", priority: "medium" };
+    // 延迟刷新任务列表
+    setTimeout(() => void loadTeamMonitor(state), 1500);
+  } catch (err) {
+    state.teamMonitorAssignError = err instanceof Error ? err.message : String(err);
+  } finally {
+    state.teamMonitorAssignSaving = false;
+  }
+}
 import type { UsageState } from "./controllers/usage.ts";
 import { loadUsage, loadSessionTimeSeries, loadSessionLogs } from "./controllers/usage.ts";
 import { t } from "./i18n.js";
@@ -386,14 +459,23 @@ export function renderApp(state: AppViewState) {
                   (state as unknown as { workspacesDir: string }).workspacesDir = newDir;
                 },
                 onWorkspaceBackup: async (backupDir) => {
-                  const result = await state.client!.request("workspace.backup", backupDir ? { backupDir } : {});
+                  const result = await state.client!.request(
+                    "workspace.backup",
+                    backupDir ? { backupDir } : {},
+                  );
                   const r = result as { backupDir?: string; fileCount?: number };
                   return { backupDir: r.backupDir ?? "", fileCount: r.fileCount ?? 0 };
                 },
                 onWorkspaceMigrateAll: async (newRoot) => {
                   const result = await state.client!.request("workspace.migrate.all", { newRoot });
-                  const r = result as { oldRoot?: string; newRoot?: string; filesCopied?: number; agentsMigrated?: number };
-                  (state as unknown as { workspacesDir: string }).workspacesDir = r.newRoot ?? newRoot;
+                  const r = result as {
+                    oldRoot?: string;
+                    newRoot?: string;
+                    filesCopied?: number;
+                    agentsMigrated?: number;
+                  };
+                  (state as unknown as { workspacesDir: string }).workspacesDir =
+                    r.newRoot ?? newRoot;
                   return {
                     oldRoot: r.oldRoot ?? "",
                     newRoot: r.newRoot ?? newRoot,
@@ -1637,8 +1719,12 @@ export function renderApp(state: AppViewState) {
                   });
                 },
                 onOpenFolder: (folderPath) => {
-                  if (!state.client) {return;}
-                  void state.client.request("workspace.openFolder", { path: folderPath }).catch(() => {});
+                  if (!state.client) {
+                    return;
+                  }
+                  void state.client
+                    .request("workspace.openFolder", { path: folderPath })
+                    .catch(() => {});
                 },
                 onToolsProfileChange: (agentId, profile, clearAllow) => {
                   if (!configValue) {
@@ -2616,6 +2702,10 @@ export function renderApp(state: AppViewState) {
                     // TODO: 加载好友列表，需要当前智能助手 ID
                     // void loadFriends(state, "current-agent-id");
                   }
+                  // 切换到团队监控时加载数据
+                  if (panel === "team-monitor") {
+                    void loadTeamMonitor(state);
+                  }
                 },
                 groupsProps: {
                   loading: state.groupsLoading,
@@ -2665,7 +2755,8 @@ export function renderApp(state: AppViewState) {
                       // 确保 ownerId 不为空
                       const groupWithOwner = {
                         ...group,
-                        ownerId: (group as any).ownerId || defaultOwnerId,
+                        ownerId:
+                          (group as unknown as { ownerId?: string }).ownerId || defaultOwnerId,
                       };
                       // oxlint-disable-next-line typescript/no-explicit-any
                       await createGroup(state, groupWithOwner as any);
@@ -2730,7 +2821,9 @@ export function renderApp(state: AppViewState) {
                   },
                   onSelectGroupFile: (name) => {
                     const groupId = state.groupsSelectedId;
-                    if (!groupId) {return;}
+                    if (!groupId) {
+                      return;
+                    }
                     state.groupFileActive = name;
                     void loadGroupFileContent(state, groupId, name);
                   },
@@ -2745,7 +2838,9 @@ export function renderApp(state: AppViewState) {
                   },
                   onGroupFileSave: (name) => {
                     const groupId = state.groupsSelectedId;
-                    if (!groupId) {return;}
+                    if (!groupId) {
+                      return;
+                    }
                     const content = state.groupFileDrafts[name] ?? "";
                     void saveGroupFile(state, groupId, name, content);
                   },
@@ -2761,8 +2856,12 @@ export function renderApp(state: AppViewState) {
                     }
                   },
                   onOpenGroupFolder: (folderPath) => {
-                    if (!state.client) {return;}
-                    void state.client.request("workspace.openFolder", { path: folderPath }).catch(() => {});
+                    if (!state.client) {
+                      return;
+                    }
+                    void state.client
+                      .request("workspace.openFolder", { path: folderPath })
+                      .catch(() => {});
                   },
                   // 群组工作空间迁移
                   groupWorkspaceMigrating: state.groupWorkspaceMigrating,
@@ -3025,6 +3124,72 @@ export function renderApp(state: AppViewState) {
                     }
                   },
                 },
+                teamMonitorProps: {
+                  loading: state.teamMonitorLoading,
+                  error: state.teamMonitorError,
+                  teamStatus: state.teamMonitorStatus,
+                  summary: state.teamMonitorSummary,
+                  filterAgentId: state.teamMonitorFilterAgentId,
+                  filterProjectId: state.teamMonitorFilterProjectId,
+                  filterStatus: state.teamMonitorFilterStatus,
+                  searchKeyword: state.teamMonitorSearchKeyword,
+                  assignDialogOpen: state.teamMonitorAssignDialogOpen,
+                  assignForm: state.teamMonitorAssignForm,
+                  assignSaving: state.teamMonitorAssignSaving,
+                  assignError: state.teamMonitorAssignError,
+                  selectedReportTaskId: null,
+                  availableAgents: (state.agentsList?.agents ?? []).map((a) => ({
+                    id: a.id,
+                    name: (a as { name?: string; id: string }).name || a.id,
+                  })),
+                  onRefresh: () => {
+                    void loadTeamMonitor(state);
+                  },
+                  onFilterAgentChange: (agentId) => {
+                    state.teamMonitorFilterAgentId = agentId;
+                  },
+                  onFilterProjectChange: (projectId) => {
+                    state.teamMonitorFilterProjectId = projectId;
+                  },
+                  onFilterStatusChange: (status) => {
+                    state.teamMonitorFilterStatus = status;
+                  },
+                  onSearchChange: (keyword) => {
+                    state.teamMonitorSearchKeyword = keyword;
+                  },
+                  onOpenAssignDialog: (targetAgentId) => {
+                    state.teamMonitorAssignDialogOpen = true;
+                    state.teamMonitorAssignError = null;
+                    if (targetAgentId) {
+                      state.teamMonitorAssignForm = {
+                        ...state.teamMonitorAssignForm,
+                        targetAgentId,
+                      };
+                    }
+                  },
+                  onCloseAssignDialog: () => {
+                    state.teamMonitorAssignDialogOpen = false;
+                    state.teamMonitorAssignError = null;
+                    state.teamMonitorAssignForm = {
+                      targetAgentId: "",
+                      title: "",
+                      task: "",
+                      priority: "medium",
+                    };
+                  },
+                  onAssignFormChange: (field, value) => {
+                    state.teamMonitorAssignForm = {
+                      ...state.teamMonitorAssignForm,
+                      [field]: value,
+                    };
+                  },
+                  onSubmitAssign: () => {
+                    void submitTeamAssignTask(state);
+                  },
+                  onViewTaskDetail: (taskId) => {
+                    console.log("[team-monitor] View task detail:", taskId);
+                  },
+                },
               })
             : nothing
         }
@@ -3249,11 +3414,18 @@ export function renderApp(state: AppViewState) {
                   state.chatNavCurrentContext = context;
 
                   // V3: 监控视图轮询管理
-                  const isMonitor = context.type === "contact" || context.type === "all" || context.type === "agent-all";
+                  const isMonitor =
+                    context.type === "contact" ||
+                    context.type === "all" ||
+                    context.type === "agent-all";
                   if (isMonitor) {
-                    startMonitorPolling(state as unknown as Parameters<typeof startMonitorPolling>[0]);
+                    startMonitorPolling(
+                      state as unknown as Parameters<typeof startMonitorPolling>[0],
+                    );
                   } else {
-                    stopMonitorPolling(state as unknown as Parameters<typeof stopMonitorPolling>[0]);
+                    stopMonitorPolling(
+                      state as unknown as Parameters<typeof stopMonitorPolling>[0],
+                    );
                   }
                   // Z1: 上下文感知的 sessionKey 解析，将 group/contact 解析为后端可识别的 sessionKey
                   const nextKey = resolveBackendSessionKey(context);
@@ -3580,6 +3752,7 @@ export function renderApp(state: AppViewState) {
               })
             : nothing
         }
+
       </main>
       ${renderExecApprovalPrompt(state)}
       ${renderGatewayUrlConfirmation(state)}

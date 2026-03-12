@@ -165,5 +165,20 @@ export function listEnabledTelegramAccounts(cfg: OpenClawConfig): ResolvedTelegr
     .filter((account) => account.enabled);
 }
 
-// Re-export upstream additions
-export { resolveTelegramPollActionGateState } from "@upstream/telegram/accounts.js";
+export type TelegramPollActionGateState = {
+  sendMessageEnabled: boolean;
+  pollEnabled: boolean;
+  enabled: boolean;
+};
+
+export function resolveTelegramPollActionGateState(
+  isActionEnabled: (key: keyof TelegramActionConfig, defaultValue?: boolean) => boolean,
+): TelegramPollActionGateState {
+  const sendMessageEnabled = isActionEnabled("sendMessage");
+  const pollEnabled = isActionEnabled("poll");
+  return {
+    sendMessageEnabled,
+    pollEnabled,
+    enabled: sendMessageEnabled && pollEnabled,
+  };
+}

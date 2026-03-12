@@ -24,7 +24,13 @@ export const groupsHandlers: GatewayRequestHandlers = {
 
       // 如果指定了 agentId，只返回该智能助手所在的群组
       const agentId = params?.agentId ? String(params.agentId) : undefined;
-      const groups = agentId ? groupManager.getAgentGroups(agentId) : allGroups;
+      // 如果指定了 projectId，只返回该项目下的群组
+      const projectId = params?.projectId ? String(params.projectId) : undefined;
+
+      let groups = agentId ? groupManager.getAgentGroups(agentId) : allGroups;
+      if (projectId) {
+        groups = groups.filter((g) => g.projectId === projectId);
+      }
 
       respond(
         true,
@@ -105,6 +111,8 @@ export const groupsHandlers: GatewayRequestHandlers = {
         initialMembers: Array.isArray(params?.initialMembers)
           ? params.initialMembers.map(String)
           : [],
+        projectId: params?.projectId ? String(params.projectId) : undefined,
+        workspacePath: params?.workspacePath ? String(params.workspacePath) : undefined,
       });
 
       respond(true, group, undefined);
@@ -617,7 +625,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
 
       const settings: Parameters<typeof groupManager.updateGroupSettings>[1] = {};
       if (params?.type) {
-        settings.type = String(params.type);
+        settings.type = String(params.type) as import("../../sessions/group-manager.js").GroupType;
       }
       if (typeof params?.requireApproval === "boolean") {
         settings.requireApproval = params.requireApproval;

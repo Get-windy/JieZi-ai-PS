@@ -114,6 +114,13 @@ function genId(prefix: string): string {
 }
 
 // ============================================================================
+// 防重复写入：60s 内同 agentId 不重复触发自动反思
+// ============================================================================
+
+const autoReflectCooldown = new Map<string, number>(); // key -> lastWriteTs
+const AUTO_REFLECT_COOLDOWN_MS = 60_000; // 60 秒冷却
+
+// ============================================================================
 // 技能相似度匹配（简单关键词匹配，用于技能检索）
 // ============================================================================
 
@@ -470,7 +477,61 @@ export const evolveRpc: GatewayRequestHandlers = {
 // ============================================================================
 
 /**
+ * autoSaveReflection — 由 agent_end 钩子直接调用，无需走 RPC
+ *
+ * - 60s 冷却：同一 agentId 在冷却期内不重复写入，避免同一次任务多次触发
+ * - 自动判断 outcome：通过 event.success 字段
+ * - 自动生成简洁摘要：提取首条 user 消息作为 taskSummary
+ */
+export function autoSaveReflection(params: {
+  agentId: string | undefined;
+  taskSummary: string;
+  outcome: ReflectionOutcome;
+  reflection: string;
+  lessons?: string[];
+  durationMs?: number;
+}): void {
+  try {
+    const key = params.agentId ?? "_global";
+    const now = Date.now();
+    const lastWrite = autoReflectCooldown.get(key) ?? 0;
+    if (now - lastWrite < AUTO_REFLECT_COOLDOWN_MS) {
+      // 冷却中，跳过
+      return;
+    }
+    autoReflectCooldown.set(key, now);
+
+    const filePath = resolveReflectionsFile(params.agentId);
+    const store = loadJson<ReflectionStore>(filePath, { version: 1, entries: [] });
+
+    const id = genId("ref");
+    const entry: ReflectionEntry = {
+      id,
+      agentId: params.agentId,
+      taskSummary: params.taskSummary.slice(0, 300),
+      outcome: params.outcome,
+      reflection: params.reflection.slice(0, 1000),
+      lessons: (params.lessons ?? []).slice(0, 3),
+      tags: ["auto"],
+      createdAt: now,
+    };
+
+    store.entries.push(entry);
+
+    // 保留最近 200 条，按时间倒序截断
+    if (store.entries.length > 200) {
+      store.entries = store.entries.toSorted((a, b) => b.createdAt - a.createdAt).slice(0, 200);
+    }
+
+    saveJson(filePath, store);
+  } catch {
+    // 自动反思写失败不应影响主流程
+  }
+}
+
+/**
  * 获取最近 N 条反思摘要（用于 before_prompt_build 注入）
+ * 优先返回 failure/partial（更有学习价值），其次 success
  * 返回简洁的摘要文本，不返回完整 JSON
  */
 export function getRecentReflectionsSummary(agentId: string | undefined, limit = 5): string {
@@ -481,9 +542,18 @@ export function getRecentReflectionsSummary(agentId: string | undefined, limit =
       return "";
     }
 
-    const recent = store.entries.toSorted((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+    // 优先 failure/partial（最有学习价值），不足时补 success
+    const sorted = store.entries.toSorted((a, b) => b.createdAt - a.createdAt);
+    const failures = sorted.filter((r) => r.outcome === "failure" || r.outcome === "partial");
+    const successes = sorted.filter((r) => r.outcome === "success");
+    // 失败优先：最多取 ceil(limit*0.7) 条失败，剩余补成功
+    const failLimit = Math.ceil(limit * 0.7);
+    const picked = [
+      ...failures.slice(0, failLimit),
+      ...successes.slice(0, limit - Math.min(failures.length, failLimit)),
+    ].slice(0, limit);
 
-    const lines = recent.map((r) => {
+    const lines = picked.map((r) => {
       const outcomeEmoji = r.outcome === "success" ? "✓" : r.outcome === "failure" ? "✗" : "~";
       const lessonsText =
         r.lessons.length > 0 ? ` Lessons: ${r.lessons.slice(0, 2).join("; ")}` : "";
@@ -515,5 +585,28 @@ export function findRelevantSkills(
     return matched.toSorted((a, b) => b.usageCount - a.usageCount).slice(0, limit);
   } catch {
     return [];
+  }
+}
+
+/**
+ * updateSkillUsageCount — 技能被注入时直接更新使用计数（不走 RPC）
+ */
+export function updateSkillUsageCount(agentId: string | undefined, skillId: string): void {
+  try {
+    const filePath = resolveSkillsFile(agentId);
+    const store = loadJson<SkillStore>(filePath, { version: 1, entries: [] });
+    const idx = store.entries.findIndex((e) => e.id === skillId);
+    if (idx === -1) {
+      return;
+    }
+    const skill = store.entries[idx];
+    if (skill) {
+      skill.usageCount += 1;
+      skill.lastUsedAt = Date.now();
+      store.entries[idx] = skill;
+      saveJson(filePath, store);
+    }
+  } catch {
+    // 更新失败不影响主流程
   }
 }

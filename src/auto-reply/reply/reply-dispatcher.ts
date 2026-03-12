@@ -8,7 +8,10 @@ import type { TypingController } from "./typing.js";
 
 export type ReplyDispatchKind = "tool" | "block" | "final";
 
-type ReplyDispatchErrorHandler = (err: unknown, info: { kind: ReplyDispatchKind }) => void;
+type ReplyDispatchErrorHandler = (
+  err: unknown,
+  info: { kind: ReplyDispatchKind },
+) => void | Promise<void>;
 
 type ReplyDispatchSkipHandler = (
   payload: ReplyPayload,
@@ -155,8 +158,15 @@ export function createReplyDispatcher(options: ReplyDispatcherOptions): ReplyDis
         // throw becomes a rejection that flows through .catch()/.finally(), ensuring cleanup.
         await options.deliver(normalized, { kind });
       })
-      .catch((err) => {
-        options.onError?.(err, { kind });
+      .catch(async (err) => {
+        // Await onError so that if it is async, its Promise stays within the sendChain
+        // and any error it throws is caught here rather than becoming an unhandledRejection.
+        try {
+          await Promise.resolve(options.onError?.(err, { kind }));
+        } catch (onErrorErr) {
+          // onError itself threw - log and swallow so we don't crash the gateway
+          console.error("[reply-dispatcher] onError handler threw:", onErrorErr);
+        }
       })
       .finally(() => {
         pending -= 1;

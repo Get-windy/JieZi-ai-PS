@@ -59,8 +59,8 @@ const AgentChannelPoliciesSchema = z
   .passthrough();
 
 // 扩展 AgentEntrySchema，添加所有本地扩展字段
-// 注意：上游 AgentEntrySchema 使用 .strict()，必须在 .extend() 中声明所有本地字段，否则保存时校验报 Unrecognized key
-const AgentEntrySchema = UpstreamAgentEntry.extend({
+// 注意：上游 AgentEntrySchema 含有 .superRefine()，Zod v4 要求用 .safeExtend() 而非 .extend()
+const AgentEntrySchema = UpstreamAgentEntry.safeExtend({
   permissions: AgentPermissionsConfigSchema.optional(),
   /** 智能助手模型账号智能路由配置 */
   modelAccounts: AgentModelAccountsSchema.optional(),

@@ -1,3 +1,4 @@
+import path from "node:path";
 import { z } from "zod";
 import { isSafeExecutableValue } from "../infra/exec-safety.js";
 import { createAllowDenyChannelRulesSchema } from "./zod-schema.allowdeny.js";
@@ -581,5 +582,153 @@ export const ProviderCommandsSchema = z
   .strict()
   .optional();
 
-// Re-export upstream additions
-export { SecretProviderSchema } from "@upstream/config/zod-schema.core.js";
+// ============ Secrets Provider Schemas (缺失的上游导出) ============
+// 以下 schema 在上游 zod-schema.core.ts 中定义并被其他文件导入，本地覆盖必须补充
+
+const WINDOWS_ABS_PATH_PATTERN = /^[A-Za-z]:[\\/]/;
+const WINDOWS_UNC_PATH_PATTERN = /^\\\\[^\\]+\\[^\\]+/;
+
+function _isAbsolutePath(value: string): boolean {
+  return (
+    path.isAbsolute(value) ||
+    WINDOWS_ABS_PATH_PATTERN.test(value) ||
+    WINDOWS_UNC_PATH_PATTERN.test(value)
+  );
+}
+
+const SecretsEnvProviderSchema = z
+  .object({
+    source: z.literal("env"),
+    allowlist: z.array(z.string().regex(ENV_SECRET_REF_ID_PATTERN)).max(256).optional(),
+  })
+  .strict();
+
+const SecretsFileProviderSchema = z
+  .object({
+    source: z.literal("file"),
+    path: z.string().min(1),
+    mode: z.union([z.literal("singleValue"), z.literal("json")]).optional(),
+    timeoutMs: z.number().int().positive().max(120000).optional(),
+    maxBytes: z
+      .number()
+      .int()
+      .positive()
+      .max(20 * 1024 * 1024)
+      .optional(),
+  })
+  .strict();
+
+const SecretsExecProviderSchema = z
+  .object({
+    source: z.literal("exec"),
+    command: z
+      .string()
+      .min(1)
+      .refine((value) => isSafeExecutableValue(value), "secrets.providers.*.command is unsafe.")
+      .refine(
+        (value) => _isAbsolutePath(value),
+        "secrets.providers.*.command must be an absolute path.",
+      ),
+    args: z.array(z.string().max(1024)).max(128).optional(),
+    timeoutMs: z.number().int().positive().max(120000).optional(),
+    noOutputTimeoutMs: z.number().int().positive().max(120000).optional(),
+    maxOutputBytes: z
+      .number()
+      .int()
+      .positive()
+      .max(20 * 1024 * 1024)
+      .optional(),
+    jsonOnly: z.boolean().optional(),
+    env: z.record(z.string(), z.string()).optional(),
+    passEnv: z.array(z.string().regex(ENV_SECRET_REF_ID_PATTERN)).max(128).optional(),
+    trustedDirs: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .refine((value) => _isAbsolutePath(value), "trustedDirs entries must be absolute paths."),
+      )
+      .max(64)
+      .optional(),
+    allowInsecurePath: z.boolean().optional(),
+    allowSymlinkCommand: z.boolean().optional(),
+  })
+  .strict();
+
+export const SecretProviderSchema = z.discriminatedUnion("source", [
+  SecretsEnvProviderSchema,
+  SecretsFileProviderSchema,
+  SecretsExecProviderSchema,
+]);
+
+export const SecretsConfigSchema = z
+  .object({
+    providers: z
+      .object({
+        // Keep this as a record so users can define multiple providers per source.
+      })
+      .catchall(SecretProviderSchema)
+      .optional(),
+    defaults: z
+      .object({
+        env: z.string().regex(SECRET_PROVIDER_ALIAS_PATTERN).optional(),
+        file: z.string().regex(SECRET_PROVIDER_ALIAS_PATTERN).optional(),
+        exec: z.string().regex(SECRET_PROVIDER_ALIAS_PATTERN).optional(),
+      })
+      .strict()
+      .optional(),
+    resolution: z
+      .object({
+        maxProviderConcurrency: z.number().int().positive().max(16).optional(),
+        maxRefsPerProvider: z.number().int().positive().max(4096).optional(),
+        maxBatchBytes: z
+          .number()
+          .int()
+          .positive()
+          .max(5 * 1024 * 1024)
+          .optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .optional();
+
+export const ReplyRuntimeConfigSchemaShape = {
+  historyLimit: z.number().int().min(0).optional(),
+  dmHistoryLimit: z.number().int().min(0).optional(),
+  dms: z.record(z.string(), DmConfigSchema.optional()).optional(),
+  textChunkLimit: z.number().int().positive().optional(),
+  chunkMode: z.enum(["length", "newline"]).optional(),
+  blockStreaming: z.boolean().optional(),
+  blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
+  responsePrefix: z.string().optional(),
+  mediaMaxMb: z.number().positive().optional(),
+};
+
+/**
+ * Validate that dmPolicy="allowlist" has a non-empty allowFrom array.
+ * Without this, all DMs are silently dropped because the allowlist is empty
+ * and no senders can match.
+ */
+export const requireAllowlistAllowFrom = (params: {
+  policy?: string;
+  allowFrom?: Array<string | number>;
+  ctx: z.RefinementCtx;
+  path: Array<string | number>;
+  message: string;
+}) => {
+  if (params.policy !== "allowlist") {
+    return;
+  }
+  const allow = normalizeAllowFrom(params.allowFrom);
+  if (allow.length > 0) {
+    return;
+  }
+  params.ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: params.path,
+    message: params.message,
+  });
+};
+// ============ End Secrets Provider Schemas ============

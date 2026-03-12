@@ -27,7 +27,6 @@ import {
   resolveAgentWorkspaceDir,
 } from "../../agents/agent-scope.js";
 import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
-import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
 import { getChannelPlugin, listChannelPlugins } from "../../channels/plugins/index.js";
 import { listAgentEntries, findAgentEntryIndex } from "../../commands/agents.config.js";
 import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../config/config.js";
@@ -36,6 +35,9 @@ import type { AgentChannelBindings } from "../../config/types.channel-bindings.j
 import type { OpenClawConfig } from "../../config/types.js";
 import { listBindings } from "../../routing/bindings.js";
 import { normalizeAgentId, DEFAULT_AGENT_ID } from "../../routing/session-key.js";
+import * as taskStorage from "../../tasks/storage.js";
+import type { Task } from "../../tasks/types.js";
+import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 import { chatHandlers } from "./chat.js";
 import type { GatewayRequestHandlers, RespondFn } from "./types.js";
@@ -1909,9 +1911,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       },
       // 同步写入 groups.workspace.root：群组工作空间放在系统根目录的 groups/ 子目录下
       groups: {
-        ...(cfg as any).groups,
+        ...cfg.groups,
         workspace: {
-          ...(cfg as any).groups?.workspace,
+          ...cfg.groups?.workspace,
           root: path.join(workspace, "groups"),
         },
       },
@@ -1942,11 +1944,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       (params as { backupDir?: string | number })?.backupDir ?? "",
     ).trim();
 
-    const timestamp = new Date()
-      .toISOString()
-      .replace(/[:.]/g, "-")
-      .replace("T", "_")
-      .slice(0, 19);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, 19);
     const backupDir = customBackupDir || `${currentRoot}_backup_${timestamp}`;
 
     try {
@@ -2088,9 +2086,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           list: updatedAgents,
         },
         groups: {
-          ...(cfg as any).groups,
+          ...cfg.groups,
           workspace: {
-            ...(cfg as any).groups?.workspace,
+            ...cfg.groups?.workspace,
             root: path.join(newRootResolved, "groups"),
           },
         },
@@ -2478,18 +2476,26 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
   /**
    * agent.assign_task - 向目标智能助手分配任务
    *
-   * 实现方式：将任务格式化为结构化消息，内部调用 chat.send 投递到目标 agent 的 main session
+   * 实现方式：
+   * 1. 将任务写入任务系统（task storage），建立可追踪的任务记录
+   * 2. 将任务格式化为结构化消息，内部调用 chat.send 投递到目标 agent 的 main session
+   * 3. 附加 senderIsOwner: true 标志，使目标 Agent 把任务当作来自主人的指令
+   * 4. 携带 projectId/teamId 上下文，确保任务在项目空间内执行
    */
   "agent.assign_task": async (callCtx) => {
     const { params, respond } = callCtx;
     const p = params as {
       targetAgentId?: string;
       task?: string;
+      title?: string;
       priority?: string;
       deadline?: string;
       context?: unknown;
       taskId?: string;
       requesterId?: string;
+      projectId?: string;
+      teamId?: string;
+      organizationId?: string;
     };
 
     const targetAgentId = String(p?.targetAgentId ?? "").trim();
@@ -2516,11 +2522,57 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const sessionKey = `agent:${normalizeAgentId(targetAgentId)}:main`;
     const taskId = p?.taskId ?? `task_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     const requesterId = p?.requesterId ?? "system";
-    const priority = p?.priority ?? "medium";
+    const priority = (p?.priority ?? "medium") as Task["priority"];
+    const title = (p?.title ?? task.slice(0, 100)).trim();
 
-    // 构建结构化任务消息
+    // === 步骤1：写入任务系统，建立可追踪任务记录 ===
+    try {
+      const newTask: Task = {
+        id: taskId,
+        title,
+        description: task,
+        creatorId: requesterId,
+        creatorType: requesterId === "system" ? "human" : "agent",
+        assignees: [
+          {
+            id: targetAgentId,
+            type: "agent",
+            role: "assignee",
+            assignedAt: Date.now(),
+            assignedBy: requesterId,
+          },
+        ],
+        status: "in-progress",
+        priority,
+        organizationId: p?.organizationId ? String(p.organizationId) : undefined,
+        teamId: p?.teamId ? String(p.teamId) : undefined,
+        projectId: p?.projectId ? String(p.projectId) : undefined,
+        dueDate: p?.deadline ? new Date(p.deadline).getTime() || undefined : undefined,
+        timeTracking: {
+          timeSpent: 0,
+          startedAt: Date.now(),
+          lastActivityAt: Date.now(),
+        },
+        metadata: {
+          assignedVia: "agent.assign_task",
+          supervisorId: requesterId,
+          context: p?.context,
+        },
+        createdAt: Date.now(),
+      };
+      await taskStorage.createTask(newTask);
+      console.log(
+        `[agent.assign_task] Task ${taskId} written to task system for agent ${targetAgentId}`,
+      );
+    } catch (taskErr) {
+      // 写入任务系统失败不阻止消息投递，但记录警告
+      console.warn(`[agent.assign_task] Failed to write task to storage: ${String(taskErr)}`);
+    }
+
+    // === 步骤 2：格式化任务消息并投递到目标 Agent ===
+    // 增强任务消息格式，使其更像"命令"而非"通知"
     const taskLines = [
-      `[TASK ASSIGNMENT]`,
+      `[TASK ASSIGNMENT - EXECUTE NOW]`,
       `Task ID: ${taskId}`,
       `From: ${requesterId}`,
       `Priority: ${priority}`,
@@ -2529,6 +2581,11 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       `Task:`,
       task,
       p?.context ? `\nContext: ${JSON.stringify(p.context, null, 2)}` : null,
+      ``,
+      `Instructions:`,
+      `- This is a DIRECT COMMAND from your supervisor. You MUST execute this task immediately.`,
+      `- When you complete this task, use the task_report_to_supervisor tool to report results back. Task ID: ${taskId}`,
+      `- If you encounter any issues, report them immediately using agent_communicate or task_report_to_supervisor with status "blocked".`,
     ]
       .filter(Boolean)
       .join("\n");
@@ -2559,6 +2616,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             sessionKey,
             priority,
             assignedAt: Date.now(),
+            trackedInTaskSystem: true,
             chatResponse: payload,
           },
           undefined,
@@ -2569,13 +2627,24 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     };
 
     try {
+      // 携带项目/团队上下文信息，确保任务在正确的项目空间内执行
+      const chatSendParams: Record<string, unknown> = {
+        sessionKey,
+        message: taskLines,
+        idempotencyKey: taskId,
+      };
+
+      // 如果有 projectId/teamId，添加到消息上下文中（供 prompt 使用）
+      if (p?.projectId) {
+        chatSendParams.projectContext = p.projectId;
+      }
+      if (p?.teamId) {
+        chatSendParams.teamContext = p.teamId;
+      }
+
       await chatSendHandler({
         ...callCtx,
-        params: {
-          sessionKey,
-          message: taskLines,
-          idempotencyKey: taskId,
-        },
+        params: chatSendParams,
         respond: innerRespond as RespondFn,
       });
     } catch (err) {
@@ -2670,7 +2739,11 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       }
       respond(true, { success: true, path: resolved }, undefined);
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to open folder: ${String(err)}`));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to open folder: ${String(err)}`),
+      );
     }
   },
 
@@ -2709,7 +2782,11 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       );
       respond(true, { groupId, workspace: groupDir, files }, undefined);
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to list group files: ${String(err)}`));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to list group files: ${String(err)}`),
+      );
     }
   },
 
@@ -2720,7 +2797,11 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const groupId = String((params as { groupId?: string; name?: string })?.groupId ?? "").trim();
     const name = String((params as { groupId?: string; name?: string })?.name ?? "").trim();
     if (!groupId || !name) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "groupId and name are required"));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "groupId and name are required"),
+      );
       return;
     }
     try {
@@ -2743,9 +2824,17 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       } catch {
         missing = true;
       }
-      respond(true, { file: { name, path: filePath, content, size, updatedAtMs, missing } }, undefined);
+      respond(
+        true,
+        { file: { name, path: filePath, content, size, updatedAtMs, missing } },
+        undefined,
+      );
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to get group file: ${String(err)}`));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to get group file: ${String(err)}`),
+      );
     }
   },
 
@@ -2753,11 +2842,21 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * groups.files.set - 写入群组工作空间中的文件
    */
   "groups.files.set": async ({ params, respond }) => {
-    const groupId = String((params as { groupId?: string; name?: string; content?: string })?.groupId ?? "").trim();
-    const name = String((params as { groupId?: string; name?: string; content?: string })?.name ?? "").trim();
-    const content = String((params as { groupId?: string; name?: string; content?: string })?.content ?? "");
+    const groupId = String(
+      (params as { groupId?: string; name?: string; content?: string })?.groupId ?? "",
+    ).trim();
+    const name = String(
+      (params as { groupId?: string; name?: string; content?: string })?.name ?? "",
+    ).trim();
+    const content = String(
+      (params as { groupId?: string; name?: string; content?: string })?.content ?? "",
+    );
     if (!groupId || !name) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "groupId and name are required"));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "groupId and name are required"),
+      );
       return;
     }
     try {
@@ -2771,9 +2870,26 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       await fs.mkdir(groupDir, { recursive: true });
       await fs.writeFile(filePath, content, "utf-8");
       const stat = await fs.stat(filePath);
-      respond(true, { file: { name, path: filePath, content, size: stat.size, updatedAtMs: stat.mtimeMs, missing: false } }, undefined);
+      respond(
+        true,
+        {
+          file: {
+            name,
+            path: filePath,
+            content,
+            size: stat.size,
+            updatedAtMs: stat.mtimeMs,
+            missing: false,
+          },
+        },
+        undefined,
+      );
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to set group file: ${String(err)}`));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to set group file: ${String(err)}`),
+      );
     }
   },
 
@@ -2784,7 +2900,11 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const groupId = String((params as { groupId?: string; name?: string })?.groupId ?? "").trim();
     const name = String((params as { groupId?: string; name?: string })?.name ?? "").trim();
     if (!groupId || !name) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "groupId and name are required"));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "groupId and name are required"),
+      );
       return;
     }
     try {
@@ -2797,7 +2917,338 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       await fs.unlink(filePath);
       respond(true, { success: true, groupId, name }, undefined);
     } catch (err) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete group file: ${String(err)}`));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete group file: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * agent.task.report - 成员Agent向主管汇报任务完成情况
+   *
+   * 功能：
+   * 1. 更新任务系统中该任务的状态和结果
+   * 2. 向监管者（supervisorId）的 main session 发送结构化汇报消息
+   */
+  "agent.task.report": async (callCtx) => {
+    const { params, respond } = callCtx;
+    const p = params as {
+      taskId?: string;
+      reporterId?: string; // 汇报者（完成任务的Agent ID）
+      status?: string; // 任务最终状态: done | blocked | cancelled
+      result?: string; // 工作成果文字描述
+      errorMessage?: string; // 如果失败，错误信息
+      supervisorId?: string; // 明确指定主管ID（可选）
+    };
+
+    const taskId = String(p?.taskId ?? "").trim();
+    const reporterId = String(p?.reporterId ?? "").trim();
+    const rawStatus = String(p?.status ?? "done").trim();
+    const result = String(p?.result ?? "").trim();
+
+    if (!taskId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId is required"));
+      return;
+    }
+    if (!reporterId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "reporterId is required"));
+      return;
+    }
+
+    // 映射常见别名
+    const STATUS_MAP: Record<string, string> = {
+      completed: "done",
+      complete: "done",
+      finish: "done",
+      finished: "done",
+      failed: "cancelled",
+      error: "cancelled",
+      stuck: "blocked",
+    };
+    const finalStatus = (STATUS_MAP[rawStatus.toLowerCase()] ??
+      rawStatus) as import("../../tasks/types.js").TaskStatus;
+
+    // === 步骤1：更新任务系统中的任务状态 ===
+    let task: Task | undefined;
+    let supervisorId = p?.supervisorId ? String(p.supervisorId).trim() : undefined;
+    try {
+      task = await taskStorage.getTask(taskId);
+      if (task) {
+        // 如果未明确指定 supervisorId，从任务元数据中提取
+        if (!supervisorId && task.metadata) {
+          const meta = task.metadata;
+          const rawSupervisorId = meta.supervisorId;
+          supervisorId =
+            typeof rawSupervisorId === "string" && rawSupervisorId ? rawSupervisorId : undefined;
+        }
+        const updates: Partial<Task> = {
+          status: finalStatus,
+          updatedAt: Date.now(),
+        };
+        if (finalStatus === "done") {
+          updates.completedAt = Date.now();
+          updates.timeTracking = {
+            ...task.timeTracking,
+            completedAt: Date.now(),
+            lastActivityAt: Date.now(),
+            timeSpent: task.timeTracking.startedAt
+              ? Date.now() - task.timeTracking.startedAt
+              : task.timeTracking.timeSpent,
+          };
+        }
+        if (finalStatus === "cancelled") {
+          updates.cancelledAt = Date.now();
+          if (p?.errorMessage) {
+            updates.cancelReason = p.errorMessage;
+          }
+        }
+        await taskStorage.updateTask(taskId, updates);
+
+        // 添加工作日志
+        const workLog: import("../../tasks/types.js").AgentWorkLog = {
+          id: `wl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+          taskId,
+          agentId: reporterId,
+          action:
+            finalStatus === "done" ? "completed" : finalStatus === "blocked" ? "blocked" : "failed",
+          details: result || `Task ${finalStatus} by agent ${reporterId}`,
+          result:
+            finalStatus === "done" ? "success" : finalStatus === "blocked" ? "partial" : "failure",
+          errorMessage: p?.errorMessage,
+          createdAt: Date.now(),
+        };
+        await taskStorage.addWorklog(workLog);
+        console.log(
+          `[agent.task.report] Task ${taskId} updated to ${finalStatus} by ${reporterId}`,
+        );
+      } else {
+        console.warn(
+          `[agent.task.report] Task ${taskId} not found in storage, proceeding with notification only`,
+        );
+      }
+    } catch (storageErr) {
+      console.warn(`[agent.task.report] Storage update failed: ${String(storageErr)}`);
+    }
+
+    // === 步骤2：向主管发送汇报消息 ===
+    let notifiedSupervisor = false;
+    if (supervisorId) {
+      const cfg = loadConfig();
+      const normalized = normalizeAgentId(supervisorId);
+      const allowed = new Set(listAgentIds(cfg));
+      if (allowed.has(normalized)) {
+        const supervisorSession = `agent:${normalized}:main`;
+        const statusLabel =
+          finalStatus === "done"
+            ? "✅ 已完成"
+            : finalStatus === "blocked"
+              ? "⚠️ 已阻塞"
+              : finalStatus === "cancelled"
+                ? "❌ 已取消"
+                : `状态: ${finalStatus}`;
+
+        const reportLines = [
+          `[TASK REPORT]`,
+          `Task ID: ${taskId}`,
+          `Reporter: ${reporterId}`,
+          `Status: ${statusLabel}`,
+          result ? `Result:\n${result}` : null,
+          p?.errorMessage ? `Error: ${p.errorMessage}` : null,
+          `Reported at: ${new Date().toISOString()}`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        const chatSendHandler = chatHandlers["chat.send"];
+        if (chatSendHandler) {
+          try {
+            await new Promise<void>((resolve, _reject) => {
+              void chatSendHandler({
+                ...callCtx,
+                params: {
+                  sessionKey: supervisorSession,
+                  message: reportLines,
+                  idempotencyKey: `report_${taskId}_${Date.now()}`,
+                },
+                respond: (ok) => {
+                  notifiedSupervisor = ok;
+                  resolve();
+                },
+              });
+            }).catch(() => {});
+          } catch {
+            // 通知失败不阻止响应
+          }
+        }
+      }
+    }
+
+    respond(
+      true,
+      {
+        success: true,
+        taskId,
+        finalStatus,
+        taskFound: !!task,
+        notifiedSupervisor,
+        supervisorId: supervisorId ?? null,
+        reportedAt: Date.now(),
+      },
+      undefined,
+    );
+  },
+
+  /**
+   * agent.team.status - 主管Agent查询团队当前任务状态
+   *
+   * 一次查询多个下属的所有任务，返回团队监控数据
+   * 可按 supervisorId 、projectId、agentIds 等条件查询
+   */
+  "agent.team.status": async ({ params, respond }) => {
+    const p = params as {
+      supervisorId?: string; // 主管ID，查询其下达的任务
+      agentIds?: string[]; // 明确指定多个Agent ID
+      projectId?: string; // 按项目过滤
+      includeCompleted?: boolean; // 是否包含已完成任务
+      limit?: number;
+    };
+
+    try {
+      const supervisorId = p?.supervisorId ? String(p.supervisorId).trim() : undefined;
+      const agentIds = Array.isArray(p?.agentIds) ? p.agentIds.map(String) : [];
+      const projectId = p?.projectId ? String(p.projectId).trim() : undefined;
+      const includeCompleted =
+        typeof p?.includeCompleted === "boolean" ? p.includeCompleted : false;
+      const limit = typeof p?.limit === "number" ? Math.min(p.limit, 500) : 200;
+
+      // 获取相关任务
+      const allTasks = await taskStorage.listTasks({
+        projectId,
+        ...(includeCompleted
+          ? {}
+          : {
+              status: [
+                "todo",
+                "in-progress",
+                "review",
+                "blocked",
+              ] as import("../../tasks/types.js").TaskStatus[],
+            }),
+      });
+
+      // 过滤出目标 Agent 的任务
+      const filteredTasks = allTasks
+        .filter((t) => {
+          const assigneeIds = new Set(t.assignees?.map((a) => a.id) ?? []);
+          // 如果指定了 agentIds，过滤
+          if (agentIds.length > 0) {
+            return agentIds.some((id) => assigneeIds.has(id));
+          }
+          // 如果指定了 supervisorId，查找为该主管下达的任务
+          if (supervisorId) {
+            const meta = t.metadata ?? {};
+            return meta.supervisorId === supervisorId || t.creatorId === supervisorId;
+          }
+          return true;
+        })
+        .slice(0, limit);
+
+      // 按 Agent 分组统计
+      const agentTaskMap = new Map<
+        string,
+        {
+          agentId: string;
+          tasks: typeof filteredTasks;
+          counts: {
+            total: number;
+            todo: number;
+            inProgress: number;
+            review: number;
+            blocked: number;
+            done: number;
+            cancelled: number;
+          };
+          lastActivity: number;
+        }
+      >();
+
+      for (const t of filteredTasks) {
+        // 防御性检查：确保 assignees 存在
+        const assignees = t.assignees ?? [];
+        for (const assignee of assignees) {
+          const agentId = assignee.id;
+          if (!agentTaskMap.has(agentId)) {
+            agentTaskMap.set(agentId, {
+              agentId,
+              tasks: [],
+              counts: {
+                total: 0,
+                todo: 0,
+                inProgress: 0,
+                review: 0,
+                blocked: 0,
+                done: 0,
+                cancelled: 0,
+              },
+              lastActivity: 0,
+            });
+          }
+          const entry = agentTaskMap.get(agentId)!;
+          entry.tasks.push(t);
+          entry.counts.total++;
+          const statusKey =
+            t.status === "in-progress" ? "inProgress" : (t.status as keyof typeof entry.counts);
+          if (statusKey in entry.counts) {
+            (entry.counts as Record<string, number>)[statusKey]++;
+          }
+          const activityTs = t.timeTracking?.lastActivityAt ?? t.updatedAt ?? t.createdAt;
+          if (activityTs > entry.lastActivity) {
+            entry.lastActivity = activityTs;
+          }
+        }
+      }
+
+      const teamStatus = Array.from(agentTaskMap.values()).map((entry) => ({
+        agentId: entry.agentId,
+        taskCounts: entry.counts,
+        lastActivity: entry.lastActivity,
+        activeTasks: entry.tasks
+          .filter((t) => ["in-progress", "review", "blocked"].includes(t.status))
+          .map((t) => ({
+            id: t.id,
+            title: t.title,
+            status: t.status,
+            priority: t.priority,
+            dueDate: t.dueDate,
+            createdAt: t.createdAt,
+            supervisorId: (t.metadata ?? {}).supervisorId ?? t.creatorId,
+          })),
+      }));
+
+      // 全局小结
+      const summary = {
+        totalTasks: filteredTasks.length,
+        agentCount: teamStatus.length,
+        tasksByStatus: {
+          todo: filteredTasks.filter((t) => t.status === "todo").length,
+          inProgress: filteredTasks.filter((t) => t.status === "in-progress").length,
+          review: filteredTasks.filter((t) => t.status === "review").length,
+          blocked: filteredTasks.filter((t) => t.status === "blocked").length,
+          done: filteredTasks.filter((t) => t.status === "done").length,
+          cancelled: filteredTasks.filter((t) => t.status === "cancelled").length,
+        },
+        queriedAt: Date.now(),
+      };
+
+      respond(true, { summary, teamStatus, supervisorId, projectId }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to get team status: ${String(err)}`),
+      );
     }
   },
 };

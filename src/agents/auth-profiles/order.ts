@@ -1,5 +1,13 @@
 import type { OpenClawConfig } from "../../config/config.js";
-import { findNormalizedProviderValue, normalizeProviderId } from "../model-selection.js";
+import {
+  findNormalizedProviderValue,
+  normalizeProviderId,
+  normalizeProviderIdForAuth,
+} from "../model-selection.js";
+import {
+  evaluateStoredCredentialEligibility,
+  type AuthCredentialReasonCode,
+} from "./credential-state.js";
 import { dedupeProfileIds, listProfilesForProvider } from "./profiles.js";
 import type { AuthProfileStore } from "./types.js";
 import {
@@ -188,9 +196,50 @@ function orderProfilesByMode(order: string[], store: AuthProfileStore): string[]
   return [...sorted, ...cooldownSorted];
 }
 
-// Re-export upstream additions
-export {
-  type AuthProfileEligibility,
-  type AuthProfileEligibilityReasonCode,
-  resolveAuthProfileEligibility,
-} from "@upstream/agents/auth-profiles/order.js";
+export type AuthProfileEligibilityReasonCode =
+  | AuthCredentialReasonCode
+  | "profile_missing"
+  | "provider_mismatch"
+  | "mode_mismatch";
+
+export type AuthProfileEligibility = {
+  eligible: boolean;
+  reasonCode: AuthProfileEligibilityReasonCode;
+};
+
+export function resolveAuthProfileEligibility(params: {
+  cfg?: OpenClawConfig;
+  store: AuthProfileStore;
+  provider: string;
+  profileId: string;
+  now?: number;
+}): AuthProfileEligibility {
+  const providerAuthKey = normalizeProviderIdForAuth(params.provider);
+  const cred = params.store.profiles[params.profileId];
+  if (!cred) {
+    return { eligible: false, reasonCode: "profile_missing" };
+  }
+  if (normalizeProviderIdForAuth(cred.provider) !== providerAuthKey) {
+    return { eligible: false, reasonCode: "provider_mismatch" };
+  }
+  const profileConfig = params.cfg?.auth?.profiles?.[params.profileId];
+  if (profileConfig) {
+    if (normalizeProviderIdForAuth(profileConfig.provider) !== providerAuthKey) {
+      return { eligible: false, reasonCode: "provider_mismatch" };
+    }
+    if (profileConfig.mode !== cred.type) {
+      const oauthCompatible = profileConfig.mode === "oauth" && cred.type === "token";
+      if (!oauthCompatible) {
+        return { eligible: false, reasonCode: "mode_mismatch" };
+      }
+    }
+  }
+  const credentialEligibility = evaluateStoredCredentialEligibility({
+    credential: cred,
+    now: params.now,
+  });
+  return {
+    eligible: credentialEligibility.eligible,
+    reasonCode: credentialEligibility.reasonCode,
+  };
+}

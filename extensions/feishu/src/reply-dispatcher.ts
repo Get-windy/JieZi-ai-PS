@@ -196,9 +196,25 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
         }
       },
       onError: async (error, info) => {
-        params.runtime.error?.(
-          `feishu[${account.accountId}] ${info.kind} reply failed: ${String(error)}`,
-        );
+        // Distinguish message-withdrawn / not-found errors from real failures.
+        // These are expected when users recall messages before the bot replies.
+        const axiosCode =
+          error &&
+          typeof error === "object" &&
+          typeof (error as { response?: { data?: { code?: unknown } } }).response?.data?.code ===
+            "number"
+            ? (error as { response: { data: { code: number } } }).response.data.code
+            : undefined;
+        const isMessageGone = axiosCode === 230011 || axiosCode === 231003 || axiosCode === 230013;
+        if (isMessageGone) {
+          params.runtime.log?.(
+            `feishu[${account.accountId}] ${info.kind} reply skipped: message was withdrawn or deleted (code=${axiosCode})`,
+          );
+        } else {
+          params.runtime.error?.(
+            `feishu[${account.accountId}] ${info.kind} reply failed: ${String(error)}`,
+          );
+        }
         await closeStreaming();
         typingCallbacks.onIdle?.();
       },

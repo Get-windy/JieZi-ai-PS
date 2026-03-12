@@ -22,16 +22,22 @@ const JS_TO_TS: Record<string, string[]> = {
 
 function tryResolveFile(basePath: string): string | null {
   // 精确路径
-  if (existsSync(basePath)) return basePath;
+  if (existsSync(basePath)) {
+    return basePath;
+  }
   // 附加扩展名
   for (const ext of TS_EXTENSIONS) {
     const p = basePath + ext;
-    if (existsSync(p)) return p;
+    if (existsSync(p)) {
+      return p;
+    }
   }
   // 索引文件
   for (const ext of TS_EXTENSIONS) {
     const p = path.join(basePath, "index" + ext);
-    if (existsSync(p)) return p;
+    if (existsSync(p)) {
+      return p;
+    }
   }
   // JS → TS 扩展名映射（例如 import "./foo.js" 实际指向 ./foo.ts）
   const currentExt = path.extname(basePath);
@@ -40,7 +46,9 @@ function tryResolveFile(basePath: string): string | null {
     const base = basePath.slice(0, -currentExt.length);
     for (const tsExt of tsExts) {
       const p = base + tsExt;
-      if (existsSync(p)) return p;
+      if (existsSync(p)) {
+        return p;
+      }
     }
   }
   return null;
@@ -51,7 +59,9 @@ function upstreamOverlayPlugin() {
     name: "upstream-overlay",
     resolveId(source: string, importer: string | undefined) {
       // 跳过虚拟模块、node_modules、非路径标识符
-      if (!source || source.startsWith("\0") || source.includes("node_modules")) return null;
+      if (!source || source.startsWith("\0") || source.includes("node_modules")) {
+        return null;
+      }
 
       let absTarget: string | null = null;
 
@@ -76,7 +86,9 @@ function upstreamOverlayPlugin() {
 
       // Case 1: 目标在 src/ 下 → 本地优先，不存在则回退到 upstream/src/
       if (absTarget.startsWith(SRC_DIR + SEP) || absTarget === SRC_DIR) {
-        if (tryResolveFile(absTarget)) return null; // 本地存在，让默认解析处理
+        if (tryResolveFile(absTarget)) {
+          return null;
+        } // 本地存在，让默认解析处理
         const rel = path.relative(SRC_DIR, absTarget);
         const upPath = path.join(UP_SRC_DIR, rel);
         return tryResolveFile(upPath);
@@ -87,7 +99,14 @@ function upstreamOverlayPlugin() {
         const rel = path.relative(UP_SRC_DIR, absTarget);
         const localPath = path.join(SRC_DIR, rel);
         const localResult = tryResolveFile(localPath);
-        if (localResult) return localResult; // 本地有覆盖版本，使用它
+        if (localResult) {
+          // 自循环检测：如果找到的本地覆盖文件就是 importer 自身，跳过，直接用 upstream
+          const importerNorm = importer ? path.normalize(importer) : null;
+          if (importerNorm && path.normalize(localResult) === importerNorm) {
+            return null; // 让默认解析处理 upstream 文件，避免自循环
+          }
+          return localResult; // 本地有覆盖版本，使用它
+        }
         // 无本地覆盖，让默认解析处理 upstream 文件
       }
 

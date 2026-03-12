@@ -46,6 +46,8 @@ const TaskCreateToolSchema = Type.Object({
   assignee: Type.Optional(Type.String({ maxLength: 64 })),
   /** 任务标签（可选） */
   tags: Type.Optional(Type.Array(Type.String({ maxLength: 32 }))),
+  /** 所属项目ID（可选，用于多项目隔离，如 "wo-shi-renlei"） */
+  project: Type.Optional(Type.String({ maxLength: 128 })),
 });
 
 /**
@@ -64,6 +66,8 @@ const TaskListToolSchema = Type.Object({
   dueToday: Type.Optional(Type.Boolean()),
   /** 最大返回数量（可选，默认20） */
   limit: Type.Optional(Type.Number({ minimum: 1, maximum: 100 })),
+  /** 过滤所属项目（可选，如 "wo-shi-renlei"） */
+  project: Type.Optional(Type.String({ maxLength: 128 })),
 });
 
 /**
@@ -119,7 +123,7 @@ export function createTaskCreateTool(opts?: {
     label: "Task Create",
     name: "task_create",
     description:
-      "Create a new task with title, description, priority, due date, assignee and tags. Returns the created task with a unique ID.",
+      "Create a new task with title, description, priority, due date, assignee, tags and optional project ID for multi-project isolation. Returns the created task with a unique ID.",
     parameters: TaskCreateToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -129,6 +133,7 @@ export function createTaskCreateTool(opts?: {
       const dueDate = readStringParam(params, "dueDate");
       const assignee = readStringParam(params, "assignee") || opts?.currentAgentId;
       const tags = Array.isArray(params.tags) ? params.tags.map(String) : [];
+      const project = readStringParam(params, "project");
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
@@ -147,6 +152,7 @@ export function createTaskCreateTool(opts?: {
           status: "pending",
           createdAt: Date.now(),
           // 工具层以 pending 表示待处理，后端映射为存储层的 todo
+          projectId: project || undefined,
         });
 
         return jsonResult({
@@ -161,6 +167,7 @@ export function createTaskCreateTool(opts?: {
             dueDate,
             assignee,
             tags,
+            project: project || undefined,
             createdAt: Date.now(),
           },
         });
@@ -185,7 +192,7 @@ export function createTaskListTool(opts?: {
     label: "Task List",
     name: "task_list",
     description:
-      "List tasks with optional filters: status (pending/in_progress/completed/cancelled), priority, assignee, tag, dueToday. Returns a list of tasks matching the criteria.",
+      "List tasks with optional filters: status (pending/in_progress/completed/cancelled), priority, assignee, tag, dueToday, project (project ID for multi-project isolation). Returns a list of tasks matching the criteria.",
     parameters: TaskListToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -195,6 +202,7 @@ export function createTaskListTool(opts?: {
       const tag = readStringParam(params, "tag");
       const dueToday = typeof params.dueToday === "boolean" ? params.dueToday : undefined;
       const limit = typeof params.limit === "number" ? params.limit : 20;
+      const project = readStringParam(params, "project");
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
@@ -206,6 +214,7 @@ export function createTaskListTool(opts?: {
           tag,
           dueToday,
           limit,
+          projectId: project || undefined,
         });
 
         // 服务端返回 { tasks, total } 对象
@@ -226,6 +235,7 @@ export function createTaskListTool(opts?: {
             assignee,
             tag,
             dueToday,
+            project: project || undefined,
           },
         });
       } catch (error) {

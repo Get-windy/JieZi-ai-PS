@@ -11,6 +11,8 @@ import {
   createAgentCapabilitiesTool,
   createAgentAssignTaskTool,
   createAgentCommunicateTool,
+  createTaskReportToSupervisorTool,
+  createAgentTeamStatusTool,
 } from "./tools/agent-discovery-tools.js";
 import {
   createAgentSpawnTool,
@@ -477,6 +479,18 @@ export function createOpenClawTools(options?: {
       }),
     }),
     createAgentCommunicateTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTaskReportToSupervisorTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentTeamStatusTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
         config: options?.config,

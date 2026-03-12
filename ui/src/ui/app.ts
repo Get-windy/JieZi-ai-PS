@@ -83,6 +83,7 @@ import type {
 import { type ChatAttachment, type ChatQueueItem, type CronFormState } from "./ui-types.ts";
 import type { ModelAccountsConfig, ChannelPoliciesConfig } from "./views/agents.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
+import type { AgentTeamStatus, TeamSummary, AssignTaskForm } from "./views/team-monitor.ts";
 
 declare global {
   interface Window {
@@ -334,7 +335,12 @@ export class OpenClawApp extends LitElement {
     | "channelPolicies"
     | "permissionsConfig" = "overview"; // 权限配置tab
   // Collaboration 协作管理状态
-  @state() collaborationActivePanel: "groups" | "friends" | "monitor" | "scenarios" = "groups";
+  @state() collaborationActivePanel:
+    | "groups"
+    | "friends"
+    | "monitor"
+    | "scenarios"
+    | "team-monitor" = "groups";
   // 群组管理状态
   @state() groupsLoading = false;
   @state() groupsList: import("./views/groups.ts").GroupsListResult | null = null;
@@ -345,7 +351,8 @@ export class OpenClawApp extends LitElement {
   @state() groupFilesLoading = false;
   @state() groupFileContentLoading = false;
   @state() groupFilesError: string | null = null;
-  @state() groupFilesList: import("./controllers/group-files.ts").GroupFilesListResult | null = null;
+  @state() groupFilesList: import("./controllers/group-files.ts").GroupFilesListResult | null =
+    null;
   @state() groupFileContents: Record<string, string> = {};
   @state() groupFileDrafts: Record<string, string> = {};
   @state() groupFileActive: string | null = null;
@@ -554,6 +561,25 @@ export class OpenClawApp extends LitElement {
   // 系统工作空间根目录（概览页设置卡片用）
   @state() workspacesDir = "";
   // 注意：channelBindings 现在由后端 agent.list 直接返回，不再需要单独加载
+
+  // 团队监控页面状态
+  @state() teamMonitorStatus: AgentTeamStatus[] = [];
+  @state() teamMonitorSummary: TeamSummary | null = null;
+  @state() teamMonitorLoading = false;
+  @state() teamMonitorError: string | null = null;
+  @state() teamMonitorFilterAgentId: string | null = null;
+  @state() teamMonitorFilterProjectId: string | null = null;
+  @state() teamMonitorFilterStatus: string | null = null;
+  @state() teamMonitorSearchKeyword = "";
+  @state() teamMonitorAssignDialogOpen = false;
+  @state() teamMonitorAssignSaving = false;
+  @state() teamMonitorAssignError: string | null = null;
+  @state() teamMonitorAssignForm: AssignTaskForm = {
+    targetAgentId: "",
+    title: "",
+    task: "",
+    priority: "medium",
+  };
 
   @state() queueLoading = false;
   @state() queueError: string | null = null;

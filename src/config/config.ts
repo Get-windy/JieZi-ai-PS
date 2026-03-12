@@ -14,7 +14,7 @@ export {
   getRuntimeConfigSnapshot,
   getRuntimeConfigSourceSnapshot,
   setRuntimeConfigSnapshot,
-} from "@upstream/config/io.js";
+} from "../../upstream/src/config/io.js";
 export { migrateLegacyConfig } from "./legacy-migrate.js";
 export * from "./paths.js";
 export * from "./runtime-overrides.js";

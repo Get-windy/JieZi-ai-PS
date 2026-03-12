@@ -4,6 +4,7 @@ import { renderFriendsView, type FriendsProps } from "./friends.ts";
 import { renderGroups, type GroupsProps } from "./groups.ts";
 import { renderMonitorView, type MonitorProps } from "./monitor.ts";
 import { renderScenariosView, type ScenariosProps } from "./scenarios.ts";
+import { renderTeamMonitor, type TeamMonitorProps } from "./team-monitor.ts";
 
 /**
  * Collaboration 协作管理页面
@@ -15,7 +16,7 @@ import { renderScenariosView, type ScenariosProps } from "./scenarios.ts";
  * - Scenarios: 协作场景
  */
 
-export type CollaborationPanel = "groups" | "friends" | "monitor" | "scenarios";
+export type CollaborationPanel = "groups" | "friends" | "monitor" | "scenarios" | "team-monitor";
 
 export type CollaborationProps = {
   activePanel: CollaborationPanel;
@@ -32,6 +33,9 @@ export type CollaborationProps = {
 
   // Scenarios 协作场景 Props
   scenariosProps: ScenariosProps;
+
+  // TeamMonitor 团队监控 Props
+  teamMonitorProps: TeamMonitorProps;
 };
 
 export function renderCollaboration(props: CollaborationProps) {
@@ -54,7 +58,9 @@ export function renderCollaboration(props: CollaborationProps) {
               ? renderFriendsView(props.friendsProps)
               : props.activePanel === "monitor"
                 ? renderMonitorView(props.monitorProps)
-                : renderScenariosView(props.scenariosProps)
+                : props.activePanel === "team-monitor"
+                  ? renderTeamMonitor(props.teamMonitorProps)
+                  : renderScenariosView(props.scenariosProps)
         }
       </div>
     </section>
@@ -70,6 +76,7 @@ function renderCollaborationTabs(
     { id: "friends" as const, label: "直接会话", icon: "💬" },
     { id: "monitor" as const, label: "协作监控", icon: "📊" },
     { id: "scenarios" as const, label: "协作场景", icon: "🎯" },
+    { id: "team-monitor" as const, label: "团队监控", icon: "📋" },
   ];
 
   return html`

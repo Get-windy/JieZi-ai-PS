@@ -1,6 +1,6 @@
 /**
  * 智能体发现与管理工具
- * 
+ *
  * 提供发现、查询、管理其他智能体的工具
  * 仅限有权限的智能体使用
  */
@@ -24,7 +24,7 @@ const AgentDiscoverToolSchema = Type.Object({
       Type.Literal("busy"),
       Type.Literal("idle"),
       Type.Literal("all"),
-    ])
+    ]),
   ),
   /** 过滤角色/职能（可选） */
   role: Type.Optional(Type.String({ maxLength: 64 })),
@@ -63,7 +63,7 @@ const AgentStatusToolSchema = Type.Object({
       Type.Literal("offline"),
       Type.Literal("busy"),
       Type.Literal("idle"),
-    ])
+    ]),
   ),
   /** 状态消息（可选） */
   statusMessage: Type.Optional(Type.String({ maxLength: 256 })),
@@ -83,6 +83,8 @@ const AgentCapabilitiesToolSchema = Type.Object({
 const AgentAssignTaskToolSchema = Type.Object({
   /** 目标智能体ID（必填） */
   targetAgentId: Type.String({ minLength: 1, maxLength: 64 }),
+  /** 任务标题（可选，不填则取 task 的前100字符） */
+  title: Type.Optional(Type.String({ maxLength: 200 })),
   /** 任务描述（必填） */
   task: Type.String({ minLength: 1, maxLength: 2000 }),
   /** 任务优先级（可选） */
@@ -92,12 +94,14 @@ const AgentAssignTaskToolSchema = Type.Object({
       Type.Literal("medium"),
       Type.Literal("high"),
       Type.Literal("urgent"),
-    ])
+    ]),
   ),
   /** 截止时间（可选，ISO 8601格式） */
   deadline: Type.Optional(Type.String()),
   /** 任务上下文数据（可选） */
   context: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  /** 所属项目 ID（可选） */
+  projectId: Type.Optional(Type.String({ maxLength: 128 })),
 });
 
 /**
@@ -115,7 +119,7 @@ const AgentCommunicateToolSchema = Type.Object({
       Type.Literal("notification"),
       Type.Literal("query"),
       Type.Literal("command"),
-    ])
+    ]),
   ),
   /** 是否等待回复（可选，默认false） */
   waitForReply: Type.Optional(Type.Boolean()),
@@ -142,7 +146,8 @@ export function createAgentDiscoverTool(opts?: {
       const status = readStringParam(params, "status") || "all";
       const role = readStringParam(params, "role");
       const tags = Array.isArray(params.tags) ? params.tags.map(String) : undefined;
-      const includePrivate = typeof params.includePrivate === "boolean" ? params.includePrivate : false;
+      const includePrivate =
+        typeof params.includePrivate === "boolean" ? params.includePrivate : false;
       const limit = typeof params.limit === "number" ? params.limit : 50;
       const gatewayOpts = readGatewayCallOptions(params);
 
@@ -163,7 +168,7 @@ export function createAgentDiscoverTool(opts?: {
         return jsonResult({
           success: true,
           count: agents.length,
-          agents: agents.map((agent: any) => ({
+          agents: agents.map((agent: Record<string, unknown>) => ({
             id: agent.id,
             name: agent.name,
             status: agent.status,
@@ -202,9 +207,11 @@ export function createAgentInspectTool(opts?: {
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
       const targetAgentId = readStringParam(params, "targetAgentId", { required: true });
-      const includeConfig = typeof params.includeConfig === "boolean" ? params.includeConfig : false;
+      const includeConfig =
+        typeof params.includeConfig === "boolean" ? params.includeConfig : false;
       const includeStats = typeof params.includeStats === "boolean" ? params.includeStats : true;
-      const includeSessions = typeof params.includeSessions === "boolean" ? params.includeSessions : false;
+      const includeSessions =
+        typeof params.includeSessions === "boolean" ? params.includeSessions : false;
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
@@ -364,10 +371,12 @@ export function createAgentAssignTaskTool(opts?: {
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
       const targetAgentId = readStringParam(params, "targetAgentId", { required: true });
+      const title = readStringParam(params, "title");
       const task = readStringParam(params, "task", { required: true });
       const priority = readStringParam(params, "priority") || "medium";
       const deadline = readStringParam(params, "deadline");
       const context = typeof params.context === "object" ? params.context : undefined;
+      const projectId = readStringParam(params, "projectId");
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
@@ -379,10 +388,12 @@ export function createAgentAssignTaskTool(opts?: {
           taskId,
           requesterId: opts?.currentAgentId,
           targetAgentId,
+          title,
           task,
           priority,
           deadline,
           context,
+          projectId,
           assignedAt: Date.now(),
         });
 
@@ -395,7 +406,9 @@ export function createAgentAssignTaskTool(opts?: {
             description: task,
             priority,
             deadline,
-            status: "queued",
+            projectId,
+            status: "in-progress",
+            trackedInTaskSystem: response?.trackedInTaskSystem ?? false,
             assignedBy: opts?.currentAgentId,
             assignedAt: Date.now(),
           },
@@ -466,6 +479,136 @@ export function createAgentCommunicateTool(opts?: {
         return jsonResult({
           success: false,
           error: `Failed to communicate with agent: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * task_report_to_supervisor 工具参数 schema
+ */
+const TaskReportToSupervisorToolSchema = Type.Object({
+  /** 任务ID（必填，由 agent.assign_task 返回） */
+  taskId: Type.String({ minLength: 1, maxLength: 128 }),
+  /** 最终状态 */
+  status: Type.Union([Type.Literal("done"), Type.Literal("blocked"), Type.Literal("cancelled")]),
+  /** 工作成果文字描述（可选） */
+  result: Type.Optional(Type.String({ maxLength: 4000 })),
+  /** 错误信息（如果失败） */
+  errorMessage: Type.Optional(Type.String({ maxLength: 1000 })),
+  /** 主管ID（可选，有则直接向其发送汇报） */
+  supervisorId: Type.Optional(Type.String({ maxLength: 64 })),
+});
+
+/**
+ * agent_team_status 工具参数 schema
+ */
+const AgentTeamStatusToolSchema = Type.Object({
+  /** 主管ID（可选，过滤其下达任务） */
+  supervisorId: Type.Optional(Type.String({ maxLength: 64 })),
+  /** 指定多个Agent ID（可选） */
+  agentIds: Type.Optional(Type.Array(Type.String({ maxLength: 64 }))),
+  /** 按项目过滤（可选） */
+  projectId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 是否包含已完成任务（默认false） */
+  includeCompleted: Type.Optional(Type.Boolean()),
+});
+
+/**
+ * 创建任务汇报工具（成员Agent完成任务后调用）
+ */
+export function createTaskReportToSupervisorTool(opts?: {
+  /** 当前操作者的智能助手 ID */
+  currentAgentId?: string;
+}): AnyAgentTool {
+  return {
+    label: "Task Report to Supervisor",
+    name: "task_report_to_supervisor",
+    description:
+      "Report task completion or failure back to the supervisor agent. Call this when you finish a task assigned via agent_assign_task. Updates task status in the task system and notifies the supervisor.",
+    parameters: TaskReportToSupervisorToolSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const taskId = readStringParam(params, "taskId", { required: true });
+      const status = readStringParam(params, "status") || "done";
+      const result = readStringParam(params, "result");
+      const errorMessage = readStringParam(params, "errorMessage");
+      const supervisorId = readStringParam(params, "supervisorId");
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        const response = await callGatewayTool("agent.task.report", gatewayOpts, {
+          taskId,
+          reporterId: opts?.currentAgentId,
+          status,
+          result,
+          errorMessage,
+          supervisorId,
+        });
+
+        return jsonResult({
+          success: true,
+          message: `Task ${taskId} reported as ${status}`,
+          report: {
+            taskId,
+            finalStatus: response?.finalStatus ?? status,
+            notifiedSupervisor: response?.notifiedSupervisor ?? false,
+            supervisorId: response?.supervisorId ?? supervisorId ?? null,
+            reportedAt: Date.now(),
+          },
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to report task: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * 创建团队状态查询工具（主管Agent调用）
+ */
+export function createAgentTeamStatusTool(opts?: {
+  /** 当前操作者的智能助手 ID */
+  currentAgentId?: string;
+}): AnyAgentTool {
+  return {
+    label: "Agent Team Status",
+    name: "agent_team_status",
+    description:
+      "Query the current task status of your team members. Returns who is doing what, task progress, blocked tasks, and team-wide summary. Use this to supervise and monitor your team's work.",
+    parameters: AgentTeamStatusToolSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const supervisorId = readStringParam(params, "supervisorId") ?? opts?.currentAgentId;
+      const agentIds = Array.isArray(params.agentIds) ? params.agentIds.map(String) : undefined;
+      const projectId = readStringParam(params, "projectId");
+      const includeCompleted =
+        typeof params.includeCompleted === "boolean" ? params.includeCompleted : false;
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        const response = await callGatewayTool("agent.team.status", gatewayOpts, {
+          supervisorId,
+          agentIds,
+          projectId,
+          includeCompleted,
+        });
+
+        return jsonResult({
+          success: true,
+          summary: response.summary ?? null,
+          teamStatus: response.teamStatus ?? [],
+          supervisorId: response.supervisorId ?? supervisorId ?? null,
+          projectId: response.projectId ?? projectId ?? null,
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to get team status: ${error instanceof Error ? error.message : String(error)}`,
         });
       }
     },

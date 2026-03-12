@@ -157,6 +157,7 @@ export interface Task {
   completedAt?: number; // 完成时间
   cancelledAt?: number; // 取消时间
   cancelReason?: string; // 取消原因
+  metadata?: Record<string, unknown>; // 扩展元数据（如 supervisorId、assignedVia 等）
 }
 
 /**

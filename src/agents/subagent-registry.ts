@@ -24,6 +24,8 @@ import {
 import {
   countActiveDescendantRunsFromRuns,
   countActiveRunsForSessionFromRuns,
+  countPendingDescendantRunsExcludingRunFromRuns,
+  countPendingDescendantRunsFromRuns,
   findRunIdsByChildSessionKeyFromRuns,
   listDescendantRunsForRequesterFromRuns,
   listRunsForRequesterFromRuns,
@@ -945,10 +947,23 @@ export function initSubagentRegistry() {
 }
 
 // Re-export upstream additions
-export {
-  countPendingDescendantRuns,
-  countPendingDescendantRunsExcludingRun,
-} from "@upstream/agents/subagent-registry.js";
+export function countPendingDescendantRuns(rootSessionKey: string): number {
+  return countPendingDescendantRunsFromRuns(
+    getSubagentRunsSnapshotForRead(subagentRuns),
+    rootSessionKey,
+  );
+}
+
+export function countPendingDescendantRunsExcludingRun(
+  rootSessionKey: string,
+  excludeRunId: string,
+): number {
+  return countPendingDescendantRunsExcludingRunFromRuns(
+    getSubagentRunsSnapshotForRead(subagentRuns),
+    rootSessionKey,
+    excludeRunId,
+  );
+}
 
 export function shouldIgnorePostCompletionAnnounceForSession(childSessionKey: string): boolean {
   return shouldIgnorePostCompletionAnnounceForSessionFromRuns(
