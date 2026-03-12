@@ -193,4 +193,4 @@ export {
   type AuthProfileEligibility,
   type AuthProfileEligibilityReasonCode,
   resolveAuthProfileEligibility,
-} from "@upstream/agents/auth-profiles/order.js";
+} from "../../../upstream/src/agents/auth-profiles/order.js";

@@ -174,4 +174,4 @@ export async function cleanupGlobalRenameDirs(params: {
 }
 
 // Re-export upstream additions
-export { globalInstallFallbackArgs } from "@upstream/infra/update-global.js";
+export { globalInstallFallbackArgs } from "../../upstream/src/infra/update-global.js";

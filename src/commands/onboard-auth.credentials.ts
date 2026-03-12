@@ -380,4 +380,4 @@ export {
   setVolcengineApiKey,
   setKilocodeApiKey,
   KILOCODE_DEFAULT_MODEL_REF,
-} from "@upstream/commands/onboard-auth.credentials.js";
+} from "../../upstream/src/commands/onboard-auth.credentials.js";

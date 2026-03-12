@@ -9,9 +9,9 @@ export {
   resolveSenderAllowMatch,
   type AllowFromMatch,
   type NormalizedAllowFrom,
-} from "@upstream/telegram/bot-access.js";
+} from "../../upstream/src/telegram/bot-access.js";
 
-import { normalizeDmAllowFromWithStore } from "@upstream/telegram/bot-access.js";
+import { normalizeDmAllowFromWithStore } from "../../upstream/src/telegram/bot-access.js";
 
 /** @deprecated 已改名为 normalizeDmAllowFromWithStore，保留此别名兼容本地代码 */
 export const normalizeAllowFromWithStore = normalizeDmAllowFromWithStore;

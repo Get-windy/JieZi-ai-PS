@@ -948,7 +948,7 @@ export function initSubagentRegistry() {
 export {
   countPendingDescendantRuns,
   countPendingDescendantRunsExcludingRun,
-} from "@upstream/agents/subagent-registry.js";
+} from "../../upstream/src/agents/subagent-registry.js";
 
 export function shouldIgnorePostCompletionAnnounceForSession(childSessionKey: string): boolean {
   return shouldIgnorePostCompletionAnnounceForSessionFromRuns(

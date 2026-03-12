@@ -6,9 +6,9 @@ export {
   resolveThreadBindingFarewellText,
   resolveThreadBindingIntroText,
   resolveThreadBindingThreadName,
-} from "@upstream/discord/monitor/thread-bindings.messages.js";
+} from "../../../upstream/src/discord/monitor/thread-bindings.messages.js";
 
-import { formatThreadBindingDurationLabel } from "@upstream/discord/monitor/thread-bindings.messages.js";
+import { formatThreadBindingDurationLabel } from "../../../upstream/src/discord/monitor/thread-bindings.messages.js";
 
 /**
  * Format a TTL (time-to-live) duration in milliseconds as a human-readable label.

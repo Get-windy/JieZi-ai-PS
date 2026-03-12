@@ -528,4 +528,4 @@ export async function requestExecApprovalViaSocket(params: {
 }
 
 // Re-export upstream additions (moved to exec-approvals-analysis.ts)
-export { resolvePlannedSegmentArgv } from "@upstream/infra/exec-approvals-analysis.js";
+export { resolvePlannedSegmentArgv } from "../../upstream/src/infra/exec-approvals-analysis.js";

@@ -180,4 +180,4 @@ export {
   writeFileWithinRoot,
   copyFileWithinRoot,
   writeFileFromPathWithinRoot,
-} from "@upstream/infra/fs-safe.js";
+} from "../../upstream/src/infra/fs-safe.js";

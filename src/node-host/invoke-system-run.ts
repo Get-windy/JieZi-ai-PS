@@ -359,4 +359,4 @@ export async function handleSystemRunInvoke(opts: {
 }
 
 // Re-export upstream additions
-export { buildSystemRunApprovalPlan } from "@upstream/node-host/invoke-system-run.js";
+export { buildSystemRunApprovalPlan } from "../../upstream/src/node-host/invoke-system-run.js";

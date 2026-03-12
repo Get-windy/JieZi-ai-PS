@@ -209,4 +209,4 @@ export function buildXaiModelDefinition(): ModelDefinitionConfig {
 export {
   KILOCODE_DEFAULT_MODEL_ID,
   buildKilocodeModelDefinition,
-} from "@upstream/commands/onboard-auth.models.js";
+} from "../../upstream/src/commands/onboard-auth.models.js";

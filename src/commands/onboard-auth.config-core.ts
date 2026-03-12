@@ -520,4 +520,4 @@ export {
   KILOCODE_BASE_URL,
   applyKilocodeProviderConfig,
   applyKilocodeConfig,
-} from "@upstream/commands/onboard-auth.config-core.js";
+} from "../../upstream/src/commands/onboard-auth.config-core.js";

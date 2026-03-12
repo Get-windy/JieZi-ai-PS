@@ -470,4 +470,4 @@ export async function installPluginFromPath(params: {
 }
 
 // Re-export upstream additions
-export { PLUGIN_INSTALL_ERROR_CODE } from "@upstream/plugins/install.js";
+export { PLUGIN_INSTALL_ERROR_CODE } from "../../upstream/src/plugins/install.js";

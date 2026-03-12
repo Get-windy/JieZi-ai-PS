@@ -1300,4 +1300,4 @@ export async function runSubagentAnnounceFlow(params: {
 }
 
 // Re-export upstream additions (added in upstream refactor)
-export { captureSubagentCompletionReply } from "@upstream/agents/subagent-announce.js";
+export { captureSubagentCompletionReply } from "../../upstream/src/agents/subagent-announce.js";

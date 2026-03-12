@@ -30,4 +30,4 @@ export function isSlackSenderAllowListed(params: {
 export {
   type SlackSystemEventAuthResult,
   authorizeSlackSystemEventSender,
-} from "@upstream/slack/monitor/auth.js";
+} from "../../../upstream/src/slack/monitor/auth.js";

@@ -435,4 +435,4 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
 }
 
 // Re-export upstream additions
-export { pickFirstExistingAgentId } from "@upstream/routing/resolve-route.js";
+export { pickFirstExistingAgentId } from "../../upstream/src/routing/resolve-route.js";
