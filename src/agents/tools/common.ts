@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
-import { detectMime } from "../../media/mime.js";
+import { detectMime } from "../../../upstream/src/media/mime.js";
 import type { ImageSanitizationLimits } from "../image-sanitization.js";
 import { sanitizeToolResultImages } from "../tool-images.js";
 
