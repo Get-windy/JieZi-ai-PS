@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { defineConfig } from "tsdown";
 
@@ -104,6 +104,21 @@ function upstreamOverlayPlugin() {
           const normalizedImporter = importer ? path.normalize(importer) : null;
           if (normalizedImporter && localResult === normalizedImporter) {
             return tryResolveFile(absTarget);
+          }
+          // 防止转发文件链式循环：如果本地覆盖文件是纯转发文件（内容仅含 export * from upstream），
+          // 且 importer 来自 upstream/src/，说明已经在 upstream 链路中，直接用 upstream 避免循环
+          if (normalizedImporter && normalizedImporter.startsWith(UP_SRC_DIR + SEP)) {
+            try {
+              const content = readFileSync(localResult, "utf8");
+              if (
+                content.includes("转发到 upstream") ||
+                (content.includes("export * from") && content.includes("upstream/src/"))
+              ) {
+                return tryResolveFile(absTarget);
+              }
+            } catch {
+              // ignore read errors
+            }
           }
           return localResult;
         } // 本地有覆盖版本，使用它
