@@ -100,6 +100,11 @@ function upstreamOverlayPlugin() {
         const localPath = path.join(SRC_DIR, rel);
         const localResult = tryResolveFile(localPath);
         if (localResult) {
+          // 防止转发文件自循环：如果本地覆盖文件就是 importer 自身，跳过直接用 upstream
+          const normalizedImporter = importer ? path.normalize(importer) : null;
+          if (normalizedImporter && localResult === normalizedImporter) {
+            return tryResolveFile(absTarget);
+          }
           return localResult;
         } // 本地有覆盖版本，使用它
         // 无本地覆盖，返回 upstream 文件路径
