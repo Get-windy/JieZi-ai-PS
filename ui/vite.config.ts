@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
@@ -25,16 +25,22 @@ const JS_TO_TS: Record<string, string[]> = {
 
 function tryResolveFile(basePath: string): string | null {
   // 精确路径
-  if (existsSync(basePath)) return basePath;
+  if (existsSync(basePath)) {
+    return basePath;
+  }
   // 附加扩展名
   for (const ext of TS_EXTENSIONS) {
     const p = basePath + ext;
-    if (existsSync(p)) return p;
+    if (existsSync(p)) {
+      return p;
+    }
   }
   // 索引文件
   for (const ext of TS_EXTENSIONS) {
     const p = path.join(basePath, "index" + ext);
-    if (existsSync(p)) return p;
+    if (existsSync(p)) {
+      return p;
+    }
   }
   // JS → TS 扩展名映射
   const currentExt = path.extname(basePath);
@@ -43,7 +49,9 @@ function tryResolveFile(basePath: string): string | null {
     const base = basePath.slice(0, -currentExt.length);
     for (const tsExt of tsExts) {
       const p = base + tsExt;
-      if (existsSync(p)) return p;
+      if (existsSync(p)) {
+        return p;
+      }
     }
   }
   return null;
@@ -55,7 +63,9 @@ function upstreamOverlayPlugin(): Plugin {
     enforce: "pre", // 在 Vite 默认解析之前运行
     resolveId(source: string, importer: string | undefined) {
       // 跳过虚拟模块、node_modules、非路径标识符
-      if (!source || source.startsWith("\0") || source.includes("node_modules")) return null;
+      if (!source || source.startsWith("\0") || source.includes("node_modules")) {
+        return null;
+      }
 
       let absTarget: string | null = null;
 
@@ -76,7 +86,27 @@ function upstreamOverlayPlugin(): Plugin {
 
       // Case 1: 目标在 src/ 下 → 本地优先，不存在则回退到 upstream/src/
       if (absTarget.startsWith(SRC_DIR + SEP) || absTarget === SRC_DIR) {
-        if (tryResolveFile(absTarget)) return null; // 本地存在，让默认解析处理
+        const localResult = tryResolveFile(absTarget);
+        if (localResult) {
+          // 如果本地文件是纯转发文件，直接返回 upstream 原文件，避免 rollup 静态分析 export * 失败
+          try {
+            const content = readFileSync(localResult, "utf8");
+            if (
+              content.includes("转发到 upstream") ||
+              (content.includes("export * from") && content.includes("upstream/src/"))
+            ) {
+              const rel = path.relative(SRC_DIR, absTarget);
+              const upPath = path.join(UP_SRC_DIR, rel);
+              const upResult = tryResolveFile(upPath);
+              if (upResult) {
+                return upResult;
+              }
+            }
+          } catch {
+            /* ignore */
+          }
+          return null; // 本地文件存在且不是转发文件，让默认解析处理
+        }
         const rel = path.relative(SRC_DIR, absTarget);
         const upPath = path.join(UP_SRC_DIR, rel);
         const resolved = tryResolveFile(upPath);
@@ -88,7 +118,28 @@ function upstreamOverlayPlugin(): Plugin {
         const rel = path.relative(UP_SRC_DIR, absTarget);
         const localPath = path.join(SRC_DIR, rel);
         const localResult = tryResolveFile(localPath);
-        if (localResult) return localResult; // 本地有覆盖版本，使用它
+        if (localResult) {
+          // 防止转发文件链式循环：importer 来自 upstream/src/ 时，若本地覆盖是纯转发文件，直接用 upstream
+          const normalizedImporter = importer ? path.normalize(importer) : null;
+          if (
+            normalizedImporter &&
+            (normalizedImporter.startsWith(UP_SRC_DIR + SEP) ||
+              normalizedImporter.startsWith(UI_SRC_DIR + SEP))
+          ) {
+            try {
+              const content = readFileSync(localResult, "utf8");
+              if (
+                content.includes("转发到 upstream") ||
+                (content.includes("export * from") && content.includes("upstream/src/"))
+              ) {
+                return null; // 跳过转发文件，让 vite 直接解析 upstream 原文件
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+          return localResult; // 本地有覆盖版本，使用它
+        }
         // 无本地覆盖，让默认解析处理 upstream 文件
       }
 
