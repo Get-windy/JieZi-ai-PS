@@ -20,6 +20,27 @@ const JS_TO_TS: Record<string, string[]> = {
   ".cjs": [".cts"],
 };
 
+// 转发文件内容缓存（避免 resolveId 钩子中重复读文件）
+const fwdFileCache = new Map<string, boolean>();
+
+function isForwardFile(filePath: string): boolean {
+  const cached = fwdFileCache.get(filePath);
+  if (cached !== undefined) {
+    return cached;
+  }
+  try {
+    const content = readFileSync(filePath, "utf8");
+    const result =
+      content.includes("转发到 upstream") ||
+      (content.includes("export * from") && content.includes("upstream/src/"));
+    fwdFileCache.set(filePath, result);
+    return result;
+  } catch {
+    fwdFileCache.set(filePath, false);
+    return false;
+  }
+}
+
 function tryResolveFile(basePath: string): string | null {
   // 精确路径
   if (existsSync(basePath)) {
@@ -108,16 +129,8 @@ function upstreamOverlayPlugin() {
           // 防止转发文件链式循环：如果本地覆盖文件是纯转发文件（内容仅含 export * from upstream），
           // 且 importer 来自 upstream/src/，说明已经在 upstream 链路中，直接用 upstream 避免循环
           if (normalizedImporter && normalizedImporter.startsWith(UP_SRC_DIR + SEP)) {
-            try {
-              const content = readFileSync(localResult, "utf8");
-              if (
-                content.includes("转发到 upstream") ||
-                (content.includes("export * from") && content.includes("upstream/src/"))
-              ) {
-                return tryResolveFile(absTarget);
-              }
-            } catch {
-              // ignore read errors
+            if (isForwardFile(localResult)) {
+              return tryResolveFile(absTarget);
             }
           }
           return localResult;
