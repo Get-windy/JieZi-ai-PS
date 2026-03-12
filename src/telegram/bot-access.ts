@@ -1,17 +1,100 @@
 // 本地覆盖：在上游 bot-access.ts 基础上补充 normalizeAllowFromWithStore 别名
 // 上游已将该函数改名为 normalizeDmAllowFromWithStore，本地代码仍使用旧名称
 
-export {
+import {
   firstDefined,
-  isSenderAllowed,
-  normalizeAllowFrom,
-  normalizeDmAllowFromWithStore,
-  resolveSenderAllowMatch,
-  type AllowFromMatch,
-  type NormalizedAllowFrom,
-} from "../../upstream/src/telegram/bot-access.js";
+  isSenderIdAllowed,
+  mergeDmAllowFromSources,
+} from "../channels/allow-from.js";
+import type { AllowlistMatch } from "../channels/allowlist-match.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 
-import { normalizeDmAllowFromWithStore } from "../../upstream/src/telegram/bot-access.js";
+export type NormalizedAllowFrom = {
+  entries: string[];
+  hasWildcard: boolean;
+  hasEntries: boolean;
+  invalidEntries: string[];
+};
 
-/** @deprecated 已改名为 normalizeDmAllowFromWithStore，保留此别名兼容本地代码 */
+export type AllowFromMatch = AllowlistMatch<"wildcard" | "id">;
+
+const warnedInvalidEntries = new Set<string>();
+const log = createSubsystemLogger("telegram/bot-access");
+
+function warnInvalidAllowFromEntries(entries: string[]) {
+  if (process.env.VITEST || process.env.NODE_ENV === "test") {
+    return;
+  }
+  for (const entry of entries) {
+    if (warnedInvalidEntries.has(entry)) {
+      continue;
+    }
+    warnedInvalidEntries.add(entry);
+    log.warn(
+      [
+        "Invalid allowFrom entry:",
+        JSON.stringify(entry),
+        "- allowFrom/groupAllowFrom authorization expects numeric Telegram sender user IDs only.",
+        'To allow a Telegram group or supergroup, add its negative chat ID under "channels.telegram.groups" instead.',
+        'If you had "@username" entries, re-run onboarding (it resolves @username to IDs) or replace them manually.',
+      ].join(" "),
+    );
+  }
+}
+
+export const normalizeAllowFrom = (list?: Array<string | number>): NormalizedAllowFrom => {
+  const entries = (list ?? []).map((value) => String(value).trim()).filter(Boolean);
+  const hasWildcard = entries.includes("*");
+  const normalized = entries
+    .filter((value) => value !== "*")
+    .map((value) => value.replace(/^(telegram|tg):/i, ""));
+  const invalidEntries = normalized.filter((value) => !/^\d+$/.test(value));
+  if (invalidEntries.length > 0) {
+    warnInvalidAllowFromEntries([...new Set(invalidEntries)]);
+  }
+  const ids = normalized.filter((value) => /^\d+$/.test(value));
+  return {
+    entries: ids,
+    hasWildcard,
+    hasEntries: entries.length > 0,
+    invalidEntries,
+  };
+};
+
+export const normalizeDmAllowFromWithStore = (params: {
+  allowFrom?: Array<string | number>;
+  storeAllowFrom?: string[];
+  dmPolicy?: string;
+}): NormalizedAllowFrom => normalizeAllowFrom(mergeDmAllowFromSources(params));
+
+export const isSenderAllowed = (params: {
+  allow: NormalizedAllowFrom;
+  senderId?: string;
+  senderUsername?: string;
+}) => {
+  const { allow, senderId } = params;
+  return isSenderIdAllowed(allow, senderId, true);
+};
+
+export { firstDefined };
+
+export const resolveSenderAllowMatch = (params: {
+  allow: NormalizedAllowFrom;
+  senderId?: string;
+  senderUsername?: string;
+}): AllowFromMatch => {
+  const { allow, senderId } = params;
+  if (allow.hasWildcard) {
+    return { allowed: true, matchKey: "*", matchSource: "wildcard" };
+  }
+  if (!allow.hasEntries) {
+    return { allowed: false };
+  }
+  if (senderId && allow.entries.includes(senderId)) {
+    return { allowed: true, matchKey: senderId, matchSource: "id" };
+  }
+  return { allowed: false };
+};
+
+/** @deprecated 已改名为 normalizeDmAllowFromWithStore，保留此别名密容本地代码 */
 export const normalizeAllowFromWithStore = normalizeDmAllowFromWithStore;

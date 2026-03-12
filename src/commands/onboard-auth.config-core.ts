@@ -29,6 +29,7 @@ import {
 } from "../agents/venice-models.js";
 import type { OpenClawConfig } from "../config/config.js";
 import type { ModelApi } from "../config/types.models.js";
+import { KILOCODE_BASE_URL, KILOCODE_DEFAULT_MODEL_REF } from "../providers/kilocode-shared.js";
 import {
   HUGGINGFACE_DEFAULT_MODEL_REF,
   MISTRAL_DEFAULT_MODEL_REF,
@@ -60,6 +61,7 @@ import {
 import {
   buildMistralModelDefinition,
   buildZaiModelDefinition,
+  buildKilocodeModelDefinition,
   buildMoonshotModelDefinition,
   buildXaiModelDefinition,
   MISTRAL_BASE_URL,
@@ -515,9 +517,28 @@ export function applyQianfanConfig(cfg: OpenClawConfig): OpenClawConfig {
   return applyAgentDefaultModelPrimary(next, QIANFAN_DEFAULT_MODEL_REF);
 }
 
-// Re-export upstream additions (Kilocode provider config)
-export {
-  KILOCODE_BASE_URL,
-  applyKilocodeProviderConfig,
-  applyKilocodeConfig,
-} from "../../upstream/src/commands/onboard-auth.config-core.js";
+// Re-export KILOCODE_BASE_URL (already imported from kilocode-shared)
+export { KILOCODE_BASE_URL };
+
+export function applyKilocodeProviderConfig(cfg: OpenClawConfig): OpenClawConfig {
+  const models = { ...cfg.agents?.defaults?.models };
+  models[KILOCODE_DEFAULT_MODEL_REF] = {
+    ...models[KILOCODE_DEFAULT_MODEL_REF],
+    alias: models[KILOCODE_DEFAULT_MODEL_REF]?.alias ?? "Kilo Gateway",
+  };
+
+  const catalogModels = [buildKilocodeModelDefinition()];
+
+  return applyProviderConfigWithModelCatalog(cfg, {
+    agentModels: models,
+    providerId: "kilocode",
+    api: "openai-completions",
+    baseUrl: KILOCODE_BASE_URL,
+    catalogModels,
+  });
+}
+
+export function applyKilocodeConfig(cfg: OpenClawConfig): OpenClawConfig {
+  const next = applyKilocodeProviderConfig(cfg);
+  return applyAgentDefaultModelPrimary(next, KILOCODE_DEFAULT_MODEL_REF);
+}

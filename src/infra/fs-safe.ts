@@ -168,16 +168,3 @@ export async function readLocalFileSafely(params: {
     await opened.handle.close().catch(() => {});
   }
 }
-
-// Re-export upstream's new file-write functions (added in upstream refactor)
-export {
-  readFileWithinRoot,
-  readPathWithinRoot,
-  createRootScopedReadFile,
-  type SafeWritableOpenResult,
-  resolveOpenedFileRealPathForHandle,
-  openWritableFileWithinRoot,
-  writeFileWithinRoot,
-  copyFileWithinRoot,
-  writeFileFromPathWithinRoot,
-} from "../../upstream/src/infra/fs-safe.js";

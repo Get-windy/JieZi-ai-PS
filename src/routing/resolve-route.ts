@@ -111,7 +111,7 @@ function listAgents(cfg: OpenClawConfig) {
   return Array.isArray(agents) ? agents : [];
 }
 
-function pickFirstExistingAgentId(cfg: OpenClawConfig, agentId: string): string {
+export function pickFirstExistingAgentId(cfg: OpenClawConfig, agentId: string): string {
   const trimmed = (agentId ?? "").trim();
   if (!trimmed) {
     return sanitizeAgentId(resolveDefaultAgentId(cfg));
@@ -433,6 +433,3 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
 
   return choose(resolveDefaultAgentId(input.cfg), "default");
 }
-
-// Re-export upstream additions
-export { pickFirstExistingAgentId } from "../../upstream/src/routing/resolve-route.js";

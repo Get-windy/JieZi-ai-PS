@@ -52,6 +52,22 @@ import { compareOpenClawVersions } from "./version.js";
 export { CircularIncludeError, ConfigIncludeError } from "./includes.js";
 export { MissingEnvVarError } from "./env-substitution.js";
 
+export type RuntimeConfigSnapshotRefreshParams = {
+  sourceConfig: OpenClawConfig;
+};
+
+export type RuntimeConfigSnapshotRefreshHandler = {
+  refresh: (params: RuntimeConfigSnapshotRefreshParams) => boolean | Promise<boolean>;
+  clearOnRefreshFailure?: () => void;
+};
+
+export class ConfigRuntimeRefreshError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "ConfigRuntimeRefreshError";
+  }
+}
+
 const SHELL_ENV_EXPECTED_KEYS = [
   "OPENAI_API_KEY",
   "ANTHROPIC_API_KEY",
@@ -1228,6 +1244,9 @@ let configCache: {
   expiresAt: number;
   config: OpenClawConfig;
 } | null = null;
+let runtimeConfigSnapshot: OpenClawConfig | null = null;
+let runtimeConfigSourceSnapshot: OpenClawConfig | null = null;
+let runtimeConfigSnapshotRefreshHandler: RuntimeConfigSnapshotRefreshHandler | null = null;
 
 function resolveConfigCacheMs(env: NodeJS.ProcessEnv): number {
   const raw = env.OPENCLAW_CONFIG_CACHE_MS?.trim();
@@ -1292,10 +1311,74 @@ export async function writeConfigFile(
   options: ConfigWriteOptions = {},
 ): Promise<void> {
   const io = createConfigIO();
+  let nextCfg = cfg;
+  const hadRuntimeSnapshot = Boolean(runtimeConfigSnapshot);
+  const hadBothSnapshots = Boolean(runtimeConfigSnapshot && runtimeConfigSourceSnapshot);
+  if (hadBothSnapshots) {
+    const runtimePatch = createMergePatch(runtimeConfigSnapshot!, cfg);
+    nextCfg = coerceConfig(applyMergePatch(runtimeConfigSourceSnapshot!, runtimePatch));
+  }
   const sameConfigPath =
     options.expectedConfigPath === undefined || options.expectedConfigPath === io.configPath;
-  await io.writeConfigFile(cfg, {
+  await io.writeConfigFile(nextCfg, {
     envSnapshotForRestore: sameConfigPath ? options.envSnapshotForRestore : undefined,
     unsetPaths: options.unsetPaths,
   });
+  const refreshHandler = runtimeConfigSnapshotRefreshHandler;
+  if (refreshHandler) {
+    try {
+      const refreshed = await refreshHandler.refresh({ sourceConfig: nextCfg });
+      if (refreshed) {
+        return;
+      }
+    } catch (error) {
+      try {
+        refreshHandler.clearOnRefreshFailure?.();
+      } catch {
+        // Keep the original refresh failure as the surfaced error.
+      }
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new ConfigRuntimeRefreshError(
+        `Config was written to ${io.configPath}, but runtime snapshot refresh failed: ${detail}`,
+        { cause: error },
+      );
+    }
+  }
+  if (hadBothSnapshots) {
+    const fresh = io.loadConfig();
+    setRuntimeConfigSnapshot(fresh, nextCfg);
+    return;
+  }
+  if (hadRuntimeSnapshot) {
+    clearRuntimeConfigSnapshot();
+  }
+}
+
+export function setRuntimeConfigSnapshot(
+  config: OpenClawConfig,
+  sourceConfig?: OpenClawConfig,
+): void {
+  runtimeConfigSnapshot = config;
+  runtimeConfigSourceSnapshot = sourceConfig ?? null;
+  clearConfigCache();
+}
+
+export function clearRuntimeConfigSnapshot(): void {
+  runtimeConfigSnapshot = null;
+  runtimeConfigSourceSnapshot = null;
+  clearConfigCache();
+}
+
+export function getRuntimeConfigSnapshot(): OpenClawConfig | null {
+  return runtimeConfigSnapshot;
+}
+
+export function getRuntimeConfigSourceSnapshot(): OpenClawConfig | null {
+  return runtimeConfigSourceSnapshot;
+}
+
+export function setRuntimeConfigSnapshotRefreshHandler(
+  refreshHandler: RuntimeConfigSnapshotRefreshHandler | null,
+): void {
+  runtimeConfigSnapshotRefreshHandler = refreshHandler;
 }

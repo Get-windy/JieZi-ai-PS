@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import { diagnosticLogger as diag, logLaneDequeue, logLaneEnqueue } from "../logging/diagnostic.js";
 import { CommandLane } from "./lanes.js";
 /**
@@ -27,32 +26,6 @@ export class GatewayDrainingError extends Error {
 // Set while gateway is draining for restart; new enqueues are rejected.
 let gatewayDraining = false;
 
-// ─── 心跳机制 ────────────────────────────────────────────────────────────────
-// 用 AsyncLocalStorage 追踪当前任务上下文，任务内任意位置可调用
-// touchHeartbeat() 来告知监控器「我还活着，在等 I/O 返回」。
-// 监控器依据心跳距今时长（而非总运行时长）来判断是否真正卡死。
-
-type TaskHeartbeatContext = {
-  taskId: number;
-  lane: string;
-};
-
-const heartbeatStorage = new AsyncLocalStorage<TaskHeartbeatContext>();
-
-// taskId → 上次活跃时间（由 touchHeartbeat / I/O 恢复时自动更新）
-const taskHeartbeats = new Map<number, number>();
-
-/**
- * 任务内部主动上报心跳：表示「我还在工作，不是卡死」。
- * 在耗时的 LLM 流式处理、工具调用等关键路径上调用。
- */
-export function touchHeartbeat(): void {
-  const ctx = heartbeatStorage.getStore();
-  if (ctx) {
-    taskHeartbeats.set(ctx.taskId, Date.now());
-  }
-}
-
 // Minimal in-process queue to serialize command executions.
 // Default lane ("main") preserves the existing behavior. Additional lanes allow
 // low-risk parallelism (e.g. cron jobs) without interleaving stdin / logs for
@@ -67,10 +40,9 @@ type QueueEntry = {
   onWait?: (waitMs: number, queuedAhead: number) => void;
 };
 
-// 超时阈值配置（毫秒）
-const TASK_INITIAL_TIMEOUT_MS = 5 * 60 * 1000; // 5 分钟后开始检测
-const HEARTBEAT_DEAD_TIMEOUT_MS = 10 * 60 * 1000; // 10 分钟无心跳 → 判定卡死（LLM 单次 streaming 最慢约 5-6 分钟）
-const STUCK_TASK_CHECK_INTERVAL_MS = 30 * 1000; // 30 秒巡检一次
+// 性能优化：超时阈值配置（毫秒）
+const TASK_TIMEOUT_MS = 5 * 60 * 1000; // 5 分钟 - 超过此时间视为卡住
+const STUCK_TASK_CHECK_INTERVAL_MS = 30 * 1000; // 30 秒检查一次
 
 type LaneState = {
   lane: string;
@@ -99,32 +71,16 @@ function startStuckTaskMonitoring(): void {
     for (const [laneName, state] of lanes.entries()) {
       for (const [taskId, startTime] of state.activeTaskStartTimes.entries()) {
         const runningTime = now - startTime;
-        // 只有运行超过初始阈值的任务才进入心跳检测
-        if (runningTime <= TASK_INITIAL_TIMEOUT_MS) {
-          continue;
-        }
-
-        const lastHeartbeat = taskHeartbeats.get(taskId) ?? startTime;
-        const heartbeatAge = now - lastHeartbeat;
-
-        if (heartbeatAge <= HEARTBEAT_DEAD_TIMEOUT_MS) {
-          // 心跳新鲜：任务还在努力工作（等待 I/O 中），仅打警告日志，不干预
+        if (runningTime > TASK_TIMEOUT_MS) {
           diag.warn(
-            `slow task detected: lane=${laneName} taskId=${taskId} runningTime=${runningTime}ms heartbeatAge=${heartbeatAge}ms - still active, waiting`,
+            `stuck task detected: lane=${laneName} taskId=${taskId} runningTime=${runningTime}ms - forcing cleanup`,
           );
-          continue;
+          // 强制清理卡住的任务（从 activeTaskIds 中移除，但保留执行）
+          state.activeTaskIds.delete(taskId);
+          state.activeTaskStartTimes.delete(taskId);
+          // 触发 pump，让其他任务可以继续
+          drainLane(laneName);
         }
-
-        // 心跳过期：10 分钟内无任何活动，判定为真卡死，强制释放占位
-        diag.warn(
-          `stuck task detected: lane=${laneName} taskId=${taskId} runningTime=${runningTime}ms heartbeatAge=${heartbeatAge}ms - forcing cleanup`,
-        );
-        state.activeTaskIds.delete(taskId);
-        state.activeTaskStartTimes.delete(taskId);
-        taskHeartbeats.delete(taskId);
-        // 修复 bug：清理后必须重置 draining 标志，否则 drainLane 会直接 return
-        state.draining = false;
-        drainLane(laneName);
       }
     }
   }, STUCK_TASK_CHECK_INTERVAL_MS);
@@ -165,7 +121,6 @@ function completeTask(state: LaneState, taskId: number, taskGeneration: number):
   }
   state.activeTaskIds.delete(taskId);
   state.activeTaskStartTimes.delete(taskId);
-  taskHeartbeats.delete(taskId);
   return true;
 }
 
@@ -201,12 +156,10 @@ function drainLane(lane: string) {
         const taskGeneration = state.generation;
         state.activeTaskIds.add(taskId);
         state.activeTaskStartTimes.set(taskId, Date.now());
-        taskHeartbeats.set(taskId, Date.now()); // 初始心跳
-        const heartbeatCtx: TaskHeartbeatContext = { taskId, lane };
         void (async () => {
           const startTime = Date.now();
           try {
-            const result = await heartbeatStorage.run(heartbeatCtx, () => entry.task());
+            const result = await entry.task();
             const completedCurrentGeneration = completeTask(state, taskId, taskGeneration);
             if (completedCurrentGeneration) {
               diag.debug(
@@ -342,13 +295,11 @@ export function resetAllLanes(): void {
   for (const state of lanes.values()) {
     state.generation += 1;
     state.activeTaskIds.clear();
-    state.activeTaskStartTimes.clear();
     state.draining = false;
     if (state.queue.length > 0) {
       lanesToDrain.push(state.lane);
     }
   }
-  taskHeartbeats.clear();
   // Drain after the full reset pass so all lanes are in a clean state first.
   for (const lane of lanesToDrain) {
     drainLane(lane);

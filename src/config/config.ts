@@ -8,8 +8,13 @@ export {
   resolveConfigSnapshotHash,
   writeConfigFile,
 } from "./io.js";
-// Re-export upstream additions from io (injected via overlay from upstream/src/config/config.ts)
-// Note: getRuntimeConfigSnapshot etc. are exported by upstream/src/config/config.ts via overlay
+// Re-export upstream additions from io
+export {
+  clearRuntimeConfigSnapshot,
+  getRuntimeConfigSnapshot,
+  getRuntimeConfigSourceSnapshot,
+  setRuntimeConfigSnapshot,
+} from "../../upstream/src/config/io.js";
 export { migrateLegacyConfig } from "./legacy-migrate.js";
 export * from "./paths.js";
 export * from "./runtime-overrides.js";

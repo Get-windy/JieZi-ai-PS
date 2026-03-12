@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { defineConfig } from "tsdown";
 
@@ -19,27 +19,6 @@ const JS_TO_TS: Record<string, string[]> = {
   ".mjs": [".mts"],
   ".cjs": [".cts"],
 };
-
-// 转发文件内容缓存（避免 resolveId 钩子中重复读文件）
-const fwdFileCache = new Map<string, boolean>();
-
-function isForwardFile(filePath: string): boolean {
-  const cached = fwdFileCache.get(filePath);
-  if (cached !== undefined) {
-    return cached;
-  }
-  try {
-    const content = readFileSync(filePath, "utf8");
-    const result =
-      content.includes("转发到 upstream") ||
-      (content.includes("export * from") && content.includes("upstream/src/"));
-    fwdFileCache.set(filePath, result);
-    return result;
-  } catch {
-    fwdFileCache.set(filePath, false);
-    return false;
-  }
-}
 
 function tryResolveFile(basePath: string): string | null {
   // 精确路径
@@ -121,22 +100,14 @@ function upstreamOverlayPlugin() {
         const localPath = path.join(SRC_DIR, rel);
         const localResult = tryResolveFile(localPath);
         if (localResult) {
-          // 防止转发文件自循环：如果本地覆盖文件就是 importer 自身，跳过直接用 upstream
-          const normalizedImporter = importer ? path.normalize(importer) : null;
-          if (normalizedImporter && localResult === normalizedImporter) {
-            return tryResolveFile(absTarget);
+          // 自循环检测：如果找到的本地覆盖文件就是 importer 自身，跳过，直接用 upstream
+          const importerNorm = importer ? path.normalize(importer) : null;
+          if (importerNorm && path.normalize(localResult) === importerNorm) {
+            return null; // 让默认解析处理 upstream 文件，避免自循环
           }
-          // 防止转发文件链式循环：如果本地覆盖文件是纯转发文件（内容仅含 export * from upstream），
-          // 且 importer 来自 upstream/src/，说明已经在 upstream 链路中，直接用 upstream 避免循环
-          if (normalizedImporter && normalizedImporter.startsWith(UP_SRC_DIR + SEP)) {
-            if (isForwardFile(localResult)) {
-              return tryResolveFile(absTarget);
-            }
-          }
-          return localResult;
-        } // 本地有覆盖版本，使用它
-        // 无本地覆盖，返回 upstream 文件路径
-        return tryResolveFile(absTarget);
+          return localResult; // 本地有覆盖版本，使用它
+        }
+        // 无本地覆盖，让默认解析处理 upstream 文件
       }
 
       return null;

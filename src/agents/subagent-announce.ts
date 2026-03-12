@@ -1300,4 +1300,15 @@ export async function runSubagentAnnounceFlow(params: {
 }
 
 // Re-export upstream additions (added in upstream refactor)
-export { captureSubagentCompletionReply } from "../../upstream/src/agents/subagent-announce.js";
+export async function captureSubagentCompletionReply(
+  sessionKey: string,
+): Promise<string | undefined> {
+  const immediate = await readLatestSubagentOutput(sessionKey);
+  if (immediate?.trim()) {
+    return immediate;
+  }
+  return await readLatestSubagentOutputWithRetry({
+    sessionKey,
+    maxWaitMs: FAST_TEST_MODE ? 50 : 1_500,
+  });
+}

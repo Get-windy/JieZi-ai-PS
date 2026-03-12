@@ -469,5 +469,10 @@ export async function installPluginFromPath(params: {
   });
 }
 
-// Re-export upstream additions
-export { PLUGIN_INSTALL_ERROR_CODE } from "../../upstream/src/plugins/install.js";
+export const PLUGIN_INSTALL_ERROR_CODE = {
+  INVALID_NPM_SPEC: "invalid_npm_spec",
+  MISSING_OPENCLAW_EXTENSIONS: "missing_openclaw_extensions",
+  EMPTY_OPENCLAW_EXTENSIONS: "empty_openclaw_extensions",
+  NPM_PACKAGE_NOT_FOUND: "npm_package_not_found",
+  PLUGIN_ID_MISMATCH: "plugin_id_mismatch",
+} as const;

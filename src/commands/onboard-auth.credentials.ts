@@ -373,11 +373,36 @@ export async function setMistralApiKey(key: string, agentDir?: string) {
   });
 }
 
-// Re-export upstream additions (Kilocode + new auth key setters)
-export {
-  setOpenaiApiKey,
-  setByteplusApiKey,
-  setVolcengineApiKey,
-  setKilocodeApiKey,
-  KILOCODE_DEFAULT_MODEL_REF,
-} from "../../upstream/src/commands/onboard-auth.credentials.js";
+export async function setOpenaiApiKey(key: string, agentDir?: string) {
+  upsertAuthProfile({
+    profileId: "openai:default",
+    credential: { type: "api_key", provider: "openai", key },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
+
+export async function setByteplusApiKey(key: string, agentDir?: string) {
+  upsertAuthProfile({
+    profileId: "byteplus:default",
+    credential: { type: "api_key", provider: "byteplus", key },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
+
+export async function setVolcengineApiKey(key: string, agentDir?: string) {
+  upsertAuthProfile({
+    profileId: "volcengine:default",
+    credential: { type: "api_key", provider: "volcengine", key },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
+
+export async function setKilocodeApiKey(key: string, agentDir?: string) {
+  upsertAuthProfile({
+    profileId: "kilocode:default",
+    credential: { type: "api_key", provider: "kilocode", key },
+    agentDir: resolveAuthAgentDir(agentDir),
+  });
+}
+
+export { KILOCODE_DEFAULT_MODEL_REF } from "../providers/kilocode-shared.js";

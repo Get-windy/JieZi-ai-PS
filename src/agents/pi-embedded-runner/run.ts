@@ -5,7 +5,7 @@ import { resolveAgentModelFallbackValues } from "../../config/model-input.js";
 import { generateSecureToken } from "../../infra/secure-random.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import type { PluginHookBeforeAgentStartResult } from "../../plugins/types.js";
-import { enqueueCommandInLane, touchHeartbeat } from "../../process/command-queue.js";
+import { enqueueCommandInLane } from "../../process/command-queue.js";
 import { isMarkdownCapableMessageChannel } from "../../utils/message-channel.js";
 import { resolveOpenClawAgentDir } from "../agent-paths.js";
 import {
@@ -561,7 +561,6 @@ export async function runEmbeddedPiAgent(
             };
           }
           runLoopIterations += 1;
-          touchHeartbeat(); // 新一轮 LLM 迭代开始，上报活跃心跳
           attemptedThinking.add(thinkLevel);
           await fs.mkdir(resolvedWorkspace, { recursive: true });
 
@@ -612,12 +611,7 @@ export async function runEmbeddedPiAgent(
             abortSignal: params.abortSignal,
             shouldEmitToolResult: params.shouldEmitToolResult,
             shouldEmitToolOutput: params.shouldEmitToolOutput,
-            onPartialReply: params.onPartialReply
-              ? (...args) => {
-                  touchHeartbeat();
-                  return params.onPartialReply!(...args);
-                }
-              : params.onPartialReply,
+            onPartialReply: params.onPartialReply,
             onAssistantMessageStart: params.onAssistantMessageStart,
             onBlockReply: params.onBlockReply,
             onBlockReplyFlush: params.onBlockReplyFlush,
