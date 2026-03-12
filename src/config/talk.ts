@@ -7,4 +7,4 @@ export {
   buildTalkConfigResponse,
   readTalkApiKeyFromProfile,
   resolveTalkApiKey,
-} from "@upstream/config/talk.js";
+} from "../../upstream/src/config/talk.js";
