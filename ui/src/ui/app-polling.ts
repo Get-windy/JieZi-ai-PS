@@ -1,6 +1,6 @@
 import type { OpenClawApp } from "./app.ts";
-import { loadDebug } from "./controllers/debug.ts";
 import { loadChatHistory } from "./controllers/chat.ts";
+import { loadDebug } from "./controllers/debug.ts";
 import { loadLogs } from "./controllers/logs.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 
@@ -70,12 +70,16 @@ export function stopDebugPolling(host: PollingHost) {
   host.debugPollInterval = null;
 }
 
-/** 开始监控轮询（每 3s 重新加载消息历史） */
+/** 开始监控轮询（每 3s 重新加载消息历史，仅在 chat tab 下有效） */
 export function startMonitorPolling(host: PollingHost) {
   if (host.monitorPollInterval != null) {
     return;
   }
   host.monitorPollInterval = window.setInterval(() => {
+    // 离开 chat tab 后自动跳过，保险层防止 stop 调用遗漏
+    if (host.tab !== "chat") {
+      return;
+    }
     void loadChatHistory(host as unknown as OpenClawApp);
   }, 3000);
 }

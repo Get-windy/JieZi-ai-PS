@@ -13,14 +13,54 @@
 /* ============ 左侧导航侧栏 ============ */
 
 .chat-nav-sidebar {
-  flex: 0 0 240px;
-  min-width: 200px;
-  max-width: 300px;
+  flex: 0 0 var(--nav-sidebar-width, 240px);
+  min-width: 160px;
+  max-width: 360px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
   background: var(--panel);
   overflow: hidden;
+  position: relative;
+}
+
+/* ============ 侧栏拖拽调整手柄 ============ */
+
+.chat-nav-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 20;
+  background: transparent;
+  transition: background 150ms ease;
+}
+
+.chat-nav-resize-handle:hover,
+.chat-nav-resize-handle--active {
+  background: var(--accent, #3b82f6);
+  opacity: 0.5;
+}
+
+.chat-nav-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 24px;
+  border-radius: 1px;
+  background: var(--muted);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.chat-nav-resize-handle:hover::after,
+.chat-nav-resize-handle--active::after {
+  opacity: 0.8;
 }
 
 /* ============ 右侧聊天主区域 ============ */
@@ -203,8 +243,12 @@
 }
 
 .chat-nav-loading__spinner {
-  font-size: 24px;
-  animation: chat-nav-spin 1s linear infinite;
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid var(--border, rgba(255,255,255,0.15));
+  border-top-color: var(--accent, #3b82f6);
+  border-radius: 50%;
+  animation: chat-nav-spin 0.7s linear infinite;
 }
 
 @keyframes chat-nav-spin {
@@ -317,22 +361,56 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  font-size: 8px;
   flex-shrink: 0;
   color: var(--muted);
-  transition: transform 120ms ease-out;
+  transition: transform 150ms ease-out;
+}
+
+.chat-nav-toggle svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chat-nav-toggle--expanded {
+  transform: rotate(90deg);
 }
 
 .chat-nav-toggle--sm {
   width: 14px;
   height: 14px;
-  font-size: 7px;
+}
+
+.chat-nav-toggle--sm svg {
+  width: 10px;
+  height: 10px;
 }
 
 .chat-nav-toggle-placeholder {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
+}
+
+/* ============ nodeType CSS class mapping ============ */
+
+.chat-nav-item--agent > .chat-nav-item__content {
+  font-weight: 500;
+}
+
+.chat-nav-item--category > .chat-nav-item__content {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.chat-nav-item--item > .chat-nav-item__content {
+  font-weight: 400;
 }
 
 /* ============ 子节点容器 ============ */
@@ -596,7 +674,72 @@
 }
 
 @media (max-width: 480px) {
+  /* Mobile drawer: sidebar slides in from left as an overlay */
   .chat-nav-sidebar {
-    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 1000;
+    flex: none;
+    min-width: 280px;
+    max-width: 320px;
+    width: 85vw;
+    transform: translateX(-100%);
+    transition: transform 250ms ease, box-shadow 250ms ease;
+    box-shadow: none;
   }
+
+  /* Open state — toggled via JS by adding this class */
+  .chat-nav-sidebar--open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.25);
+  }
+
+  /* Overlay backdrop */
+  .chat-nav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(2px);
+  }
+
+  .chat-nav-backdrop--visible {
+    display: block;
+  }
+
+  /* Hamburger toggle button (shown only on mobile) */
+  .chat-nav-mobile-toggle {
+    display: flex !important;
+  }
+}
+
+/* Hide hamburger on desktop */
+.chat-nav-mobile-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  cursor: pointer;
+  color: var(--text);
+  flex-shrink: 0;
+  transition: background 150ms ease;
+}
+
+.chat-nav-mobile-toggle:hover {
+  background: var(--bg-hover);
+}
+
+.chat-nav-mobile-toggle svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2px;
 }

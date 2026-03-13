@@ -446,3 +446,56 @@ img.chat-avatar {
 :root[data-theme="light"] .chat-agent-name {
   color: #4f46e5;
 }
+
+/* =============================================
+   MESSAGE HOVER ACTION BAR
+   ============================================= */
+
+.chat-msg-actions {
+  position: absolute;
+  top: -10px;
+  right: 8px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+  z-index: 2;
+}
+
+.chat-bubble:hover .chat-msg-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chat-msg-action-btn {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  border-radius: var(--radius-md);
+  padding: 2px 5px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 120ms ease-out,
+    color 120ms ease-out;
+}
+
+.chat-msg-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.chat-msg-action-btn[data-copied="1"] {
+  border-color: var(--ok-subtle);
+  background: var(--ok-subtle);
+  color: var(--ok);
+}
+
+@media (hover: none) {
+  .chat-msg-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}

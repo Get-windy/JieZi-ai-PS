@@ -9,6 +9,7 @@ import { spawn } from "child_process";
 import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { join } from "path";
+import { t } from "../i18n/index.js";
 import * as storage from "../tasks/storage.js";
 
 // ============================================================================
@@ -137,10 +138,10 @@ async function checkAgentTaskAssignment(
 
     return {
       hasActiveTasks: assignedTasks.length > 0,
-      taskIds: assignedTasks.map((t) => t.id),
+      taskIds: assignedTasks.map((task) => task.id),
     };
   } catch (error) {
-    console.error(`[Agent Activity] Failed to check task assignment for ${agentId}:`, error);
+    console.error(t("monitor.agent.task_check_failed", { agentId }), error);
     return {
       hasActiveTasks: false,
       taskIds: [],
@@ -296,7 +297,7 @@ async function detectFileSystemActivity(
       }
     }
   } catch (error) {
-    console.error(`[Agent Activity] Failed to detect file system activity for ${agentId}:`, error);
+    console.error(t("monitor.agent.fs_activity_failed", { agentId }), error);
   }
 
   return evidence;
@@ -356,7 +357,7 @@ async function detectGitActivity(
     }
   } catch {
     // Git 命令失败时忽略（可能没有 git 或没有提交）
-    console.debug(`[Agent Activity] No git activity for ${agentId}`);
+    console.debug(t("monitor.agent.no_git_activity", { agentId }));
   }
 
   return evidence;
@@ -401,7 +402,7 @@ async function detectProcessActivity(agentId: string): Promise<ActivityEvidence[
       });
     }
   } catch {
-    console.debug(`[Agent Activity] Failed to detect process activity for ${agentId}`);
+    console.debug(t("monitor.agent.process_check_failed", { agentId }));
   }
 
   return evidence;
@@ -431,7 +432,7 @@ async function detectLogActivity(
       });
     }
   } catch {
-    console.debug(`[Agent Activity] No log activity for ${agentId}`);
+    console.debug(t("monitor.agent.no_log_activity", { agentId }));
   }
 
   return evidence;
@@ -481,7 +482,7 @@ export async function monitorAllAgentsActivity(
       const report = await detectAgentActivity(agentId, workspaceRoot);
       reports.set(agentId, report);
     } catch (error) {
-      console.error(`[Agent Activity] Failed to monitor ${agentId}:`, error);
+      console.error(t("monitor.agent.monitor_single_failed", { agentId }), error);
     }
   }
 
@@ -621,8 +622,13 @@ export function applyPenalty(
   }
 
   console.log(
-    `[Reputation] Applied ${severity} penalty to ${currentReputation.agentId}: ` +
-      `-${penaltyPoints[severity]} points (reason: ${reason}, new score: ${newBaseScore})`,
+    t("reputation.penalty_applied", {
+      agentId: currentReputation.agentId,
+      severity,
+      points: String(penaltyPoints[severity]),
+      reason,
+      score: String(newBaseScore),
+    }),
   );
 
   return {
@@ -664,8 +670,12 @@ export function applyReward(
   }
 
   console.log(
-    `[Reputation] Applied reward to ${currentReputation.agentId}: ` +
-      `+${bonusPoints} points (reason: ${reason}, new score: ${newBaseScore})`,
+    t("reputation.reward_applied", {
+      agentId: currentReputation.agentId,
+      points: String(bonusPoints),
+      reason,
+      score: String(newBaseScore),
+    }),
   );
 
   return {

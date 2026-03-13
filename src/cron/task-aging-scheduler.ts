@@ -7,6 +7,7 @@
  */
 
 import { loadConfig } from "../config/config.js";
+import { t } from "../i18n/index.js";
 import { startAgingTaskScheduler } from "../tasks/task-aging.js";
 
 /**
@@ -41,29 +42,27 @@ export function initTaskAgingScheduler(): void {
     }
 
     if (projectIds.length === 0) {
-      console.log("[Task Aging] No projects configured, skipping aging scheduler");
+      console.log(t("task.aging.init_no_projects"));
       return;
     }
 
-    console.log(
-      `[Task Aging] Initializing scheduler for ${projectIds.length} projects (Agent mode - high frequency!)`,
-    );
+    console.log(t("task.aging.init_starting", { count: String(projectIds.length) }));
 
-    // 为每个项目启动独立的扫描任务，每 10 分钟一次（不是人类的 Sprint 节奏！）
+    // 为每个项目启动独立的扫描任务，每 10 分钟一次
     for (const projectId of projectIds) {
       startAgingTaskScheduler({
-        intervalMinutes: 10, // 每 10 分钟一次！Agent 全年无休！
+        intervalMinutes: 10,
         projectId,
-        enableReminders: true, // 启用提醒
-        enableEscalation: true, // 启用升级
-        enableArchive: false, // 默认不自动归档（需手动确认）
+        enableReminders: true,
+        enableEscalation: true,
+        enableArchive: false,
       });
 
-      console.log(`[Task Aging] Scheduler started for project: ${projectId}`);
+      console.log(t("task.aging.init_project_started", { projectId }));
     }
 
-    console.log("[Task Aging] All schedulers initialized successfully");
+    console.log(t("task.aging.init_done"));
   } catch (error) {
-    console.error("[Task Aging] Failed to initialize scheduler:", error);
+    console.error(t("task.aging.init_failed"), error);
   }
 }

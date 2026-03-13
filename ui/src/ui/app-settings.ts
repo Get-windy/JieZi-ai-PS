@@ -4,6 +4,7 @@ import {
   stopLogsPolling,
   startDebugPolling,
   stopDebugPolling,
+  stopMonitorPolling,
 } from "./app-polling.ts";
 import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll.ts";
 import type { OpenClawApp } from "./app.ts";
@@ -164,6 +165,10 @@ export function setTab(host: SettingsHost, next: Tab) {
     startDebugPolling(host as unknown as Parameters<typeof startDebugPolling>[0]);
   } else {
     stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
+  }
+  // 离开 chat 页面时停止监控轮询（导航节点切换时启动，tab 切走时必须停止）
+  if (next !== "chat") {
+    stopMonitorPolling(host as unknown as Parameters<typeof stopMonitorPolling>[0]);
   }
   if (next === "models") {
     // 切换到模型管理页面时，启动自动刷新
@@ -479,7 +484,9 @@ export async function loadOverview(host: SettingsHost) {
     (async () => {
       try {
         const app = host as unknown as OpenClawApp;
-        if (!app.client) {return;}
+        if (!app.client) {
+          return;
+        }
         const result = await app.client.request("agent.workspace.getDefault", {});
         if (result) {
           (app as unknown as { workspacesDir: string }).workspacesDir =

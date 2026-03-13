@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { resolveAgentConfig } from "../../agents/agent-scope.js";
 import { resolveSessionAuthProfileOverride } from "../../agents/auth-profiles/session-override.js";
 import { resolveSessionAuthProfileWithSmartRouting } from "../../agents/auth-profiles/session-smart-routing.js";
 import type { ExecToolDefaults } from "../../agents/bash-tools.js";
@@ -18,6 +19,7 @@ import {
 // 使用本地扩展的 SessionEntry 类型
 import type { SessionEntry } from "../../config/sessions/types.js";
 import { logVerbose } from "../../globals.js";
+import { t } from "../../i18n/index.js";
 import { clearCommandLane, getQueueSize } from "../../process/command-queue.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
 import { isReasoningTagProvider } from "../../utils/provider-utils.js";
@@ -473,7 +475,13 @@ export async function runPreparedReply(
         smartRoutingResult.reason !== "User manually selected"
       ) {
         console.log(
-          `[SmartRouting] Using routed model: ${provider}/${model} (${smartRoutingResult.reason})`,
+          t("routing.smart.selected", {
+            provider,
+            model,
+            agentName: resolveAgentConfig(cfg, agentId)?.name ?? agentId,
+            sessionKey: sessionKey ?? "",
+            reason: smartRoutingResult.reason,
+          }),
         );
       }
     }

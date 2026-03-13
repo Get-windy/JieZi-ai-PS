@@ -1,6 +1,7 @@
 import { html, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import type { AssistantIdentity } from "../assistant-identity.ts";
+import { t } from "../i18n.ts";
 import { toSanitizedMarkdownHtml } from "../markdown.ts";
 import { detectTextDirection } from "../text-direction.ts";
 import type { AgentCommMeta, MessageGroup } from "../types/chat-types.ts";
@@ -91,7 +92,7 @@ export function renderStreamingGroup(
   assistant?: AssistantIdentity,
 ) {
   const timestamp = formatMessageTimestamp(startedAt);
-  const name = assistant?.name ?? "Assistant";
+  const name = assistant?.name ?? t("chat.role.assistant_default");
 
   return html`
     <div class="chat-group assistant">
@@ -122,10 +123,11 @@ export function renderMessageGroup(
     showReasoning: boolean;
     assistantName?: string;
     assistantAvatar?: string | null;
+    onQuote?: (text: string) => void;
   },
 ) {
   const normalizedRole = normalizeRoleForGrouping(group.role);
-  const assistantName = opts.assistantName ?? "Assistant";
+  const assistantName = opts.assistantName ?? t("chat.role.assistant_default");
 
   // Detect agent-comm role: check if the first message has an agent-comm prefix
   const firstMsg = group.messages[0]?.message as Record<string, unknown> | undefined;
@@ -188,16 +190,20 @@ export function renderMessageGroup(
   const isGroupUser = group.groupSenderId === "user";
 
   const who = isGroupChatMsg
-    ? (isGroupUser ? "You" : groupSenderName)
+    ? isGroupUser
+      ? t("chat.you")
+      : groupSenderName
     : isAgentComm
       ? firstCommMeta!.senderId
       : normalizedRole === "user"
-        ? "You"
+        ? t("chat.you")
         : normalizedRole === "assistant"
           ? assistantName
           : normalizedRole;
   const roleClass = isGroupChatMsg
-    ? (isGroupUser ? "user" : "agent-comm")
+    ? isGroupUser
+      ? "user"
+      : "agent-comm"
     : isAgentComm
       ? "agent-comm"
       : normalizedRole === "user"
@@ -208,16 +214,14 @@ export function renderMessageGroup(
   const timestamp = formatMessageTimestamp(group.timestamp);
 
   // For group chat, build a custom avatar showing the sender's initial
-  const groupSenderInitial = isGroupUser
-    ? "U"
-    : groupSenderName.charAt(0).toUpperCase() || "A";
+  const groupSenderInitial = isGroupUser ? "U" : groupSenderName.charAt(0).toUpperCase() || "A";
 
   return html`
     <div class="chat-group ${roleClass}">
       ${
         isGroupChatMsg
           ? isGroupUser
-            ? renderAvatar("user", { name: "You", avatar: null })
+            ? renderAvatar("user", { name: t("chat.you"), avatar: null })
             : html`<div class="chat-avatar agent-comm" title="${groupSenderName}">${groupSenderInitial}</div>`
           : renderAvatar(isAgentComm ? "agent-comm" : group.role, {
               name: assistantName,
@@ -233,6 +237,7 @@ export function renderMessageGroup(
             {
               isStreaming: group.isStreaming && index === group.messages.length - 1,
               showReasoning: opts.showReasoning,
+              onQuote: opts.onQuote,
             },
             opts.onOpenSidebar,
           ),
@@ -248,7 +253,7 @@ export function renderMessageGroup(
 
 function renderAvatar(role: string, assistant?: Pick<AssistantIdentity, "name" | "avatar">) {
   const normalized = normalizeRoleForGrouping(role);
-  const assistantName = assistant?.name?.trim() || "Assistant";
+  const assistantName = assistant?.name?.trim() || t("chat.role.assistant_default");
   const assistantAvatar = assistant?.avatar?.trim() || "";
   // agent-comm: robot emoji avatar
   if (role === "agent-comm") {
@@ -363,7 +368,7 @@ function renderMessageImages(images: ImageBlock[]) {
 
 function renderGroupedMessage(
   message: unknown,
-  opts: { isStreaming: boolean; showReasoning: boolean },
+  opts: { isStreaming: boolean; showReasoning: boolean; onQuote?: (text: string) => void },
   onOpenSidebar?: (content: string) => void,
 ) {
   const m = message as Record<string, unknown>;
@@ -460,9 +465,14 @@ function renderGroupedMessage(
     return nothing;
   }
 
+  // Hover action bar — copy + quote (only for non-streaming messages with text)
+  const actionBar =
+    !opts.isStreaming && markdown ? renderMessageActions(markdown, opts.onQuote) : nothing;
+
   return html`
     <div class="${bubbleClasses}">
       ${canCopyMarkdown ? renderCopyAsMarkdownButton(markdown!) : nothing}
+      ${actionBar}
       ${renderMessageImages(images)}
       ${
         reasoningMarkdown
@@ -477,6 +487,59 @@ function renderGroupedMessage(
           : nothing
       }
       ${toolCards.map((card) => renderToolCardSidebar(card, onOpenSidebar))}
+    </div>
+  `;
+}
+
+/**
+ * Render hover action buttons (Copy, Quote) for a message bubble.
+ */
+function renderMessageActions(text: string, onQuote?: (text: string) => void) {
+  const handleCopy = (e: Event) => {
+    e.stopPropagation();
+    const btn = e.currentTarget as HTMLElement;
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        btn.setAttribute("data-copied", "1");
+        setTimeout(() => btn.removeAttribute("data-copied"), 1500);
+      })
+      .catch(() => {
+        /* ignore */
+      });
+  };
+
+  const handleQuote = onQuote
+    ? (e: Event) => {
+        e.stopPropagation();
+        // Build markdown quote block
+        const quoted = text
+          .split("\n")
+          .slice(0, 5) // limit to first 5 lines
+          .map((line) => `> ${line}`)
+          .join("\n");
+        onQuote(quoted + "\n\n");
+      }
+    : null;
+
+  return html`
+    <div class="chat-msg-actions">
+      <button
+        class="chat-msg-action-btn"
+        type="button"
+        title="${t("chat.action.copy")}"
+        @click=${handleCopy}
+      >📋</button>
+      ${
+        handleQuote
+          ? html`<button
+            class="chat-msg-action-btn"
+            type="button"
+            title="${t("chat.action.quote")}"
+            @click=${handleQuote}
+          >💬</button>`
+          : nothing
+      }
     </div>
   `;
 }

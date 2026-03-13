@@ -1,4 +1,5 @@
 import { html, nothing } from "lit";
+import { t } from "../i18n.ts";
 import { icons } from "../icons.ts";
 import { formatToolDetail, resolveToolDisplay } from "../tool-display.ts";
 import type { ToolCard } from "../types/chat-types.ts";
@@ -71,10 +72,12 @@ export function renderToolCardSidebar(card: ToolCard, onOpenSidebar?: (content: 
   const showCollapsed = hasText && !isShort;
   const showInline = hasText && isShort;
   const isEmpty = !hasText;
+  // Cards with collapsed preview content should be collapsible
+  const isCollapsible = showCollapsed;
 
   return html`
     <div
-      class="chat-tool-card ${canClick ? "chat-tool-card--clickable" : ""}"
+      class="chat-tool-card ${canClick ? "chat-tool-card--clickable" : ""} ${isCollapsible ? "chat-tool-card--collapsible" : ""}"
       @click=${handleClick}
       role=${canClick ? "button" : nothing}
       tabindex=${canClick ? "0" : nothing}
@@ -97,7 +100,7 @@ export function renderToolCardSidebar(card: ToolCard, onOpenSidebar?: (content: 
         </div>
         ${
           canClick
-            ? html`<span class="chat-tool-card__action">${hasText ? "View" : ""} ${icons.check}</span>`
+            ? html`<span class="chat-tool-card__action">${hasText ? t("chat.tool.view") : ""} ${icons.check}</span>`
             : nothing
         }
         ${isEmpty && !canClick ? html`<span class="chat-tool-card__status">${icons.check}</span>` : nothing}
@@ -106,7 +109,7 @@ export function renderToolCardSidebar(card: ToolCard, onOpenSidebar?: (content: 
       ${
         isEmpty
           ? html`
-              <div class="chat-tool-card__status-text muted">Completed</div>
+              <div class="chat-tool-card__status-text muted">${t("chat.tool.completed")}</div>
             `
           : nothing
       }
@@ -116,6 +119,24 @@ export function renderToolCardSidebar(card: ToolCard, onOpenSidebar?: (content: 
           : nothing
       }
       ${showInline ? html`<div class="chat-tool-card__inline mono">${card.text}</div>` : nothing}
+      ${
+        isCollapsible
+          ? html`
+        <button
+          class="chat-tool-card__toggle"
+          type="button"
+          @click=${(e: Event) => {
+            e.stopPropagation();
+            const card = (e.target as HTMLElement).closest(".chat-tool-card");
+            if (card) {
+              card.classList.toggle("chat-tool-card--expanded");
+              card.classList.toggle("chat-tool-card--collapsible");
+            }
+          }}
+        >${icons.chevronDown} ${t("chat.tool.expand")}</button>
+      `
+          : nothing
+      }
     </div>
   `;
 }

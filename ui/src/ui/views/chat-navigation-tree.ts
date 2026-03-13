@@ -11,12 +11,10 @@
  */
 
 import { html, nothing, type TemplateResult } from "lit";
-import type {
-  ChatConversationContext,
-  ChatNavigationNode,
-  ChatNavigationTreeProps,
-} from "../types.ts";
 import { isSameContext, filterNavigationNodes } from "../controllers/chat-navigation.ts";
+import { t } from "../i18n.ts";
+import { icons } from "../icons.ts";
+import type { ChatNavigationNode, ChatNavigationTreeProps } from "../types.ts";
 
 // ============ 主渲染函数 ============
 
@@ -26,8 +24,8 @@ export function renderChatNavigationTree(props: ChatNavigationTreeProps) {
     return html`
       <div class="chat-nav-tree">
         <div class="chat-nav-loading">
-          <span class="chat-nav-loading__spinner">⏳</span>
-          <span>加载中...</span>
+          <span class="chat-nav-loading__spinner"></span>
+          <span>${t("chat.nav.loading")}</span>
         </div>
       </div>
     `;
@@ -39,14 +37,16 @@ export function renderChatNavigationTree(props: ChatNavigationTreeProps) {
       <div class="chat-nav-tree">
         <div class="chat-nav-error">
           <span class="chat-nav-error__icon">⚠️</span>
-          <span class="chat-nav-error__message">加载失败: ${props.error}</span>
-          ${props.onRetry
-            ? html`
+          <span class="chat-nav-error__message">${t("chat.nav.error_prefix", { error: props.error })}</span>
+          ${
+            props.onRetry
+              ? html`
                 <button class="chat-nav-error__retry" type="button" @click=${props.onRetry}>
-                  重试
+                  ${t("chat.nav.retry")}
                 </button>
               `
-            : nothing}
+              : nothing
+          }
         </div>
       </div>
     `;
@@ -63,25 +63,27 @@ export function renderChatNavigationTree(props: ChatNavigationTreeProps) {
         <input
           type="text"
           class="chat-nav-search__input"
-          placeholder="搜索对话..."
+          placeholder=${t("chat.nav.search_placeholder")}
           .value=${props.searchQuery}
           @input=${(e: Event) => {
             const target = e.target as HTMLInputElement;
             props.onSearchChange(target.value);
           }}
         />
-        ${props.searchQuery
-          ? html`
+        ${
+          props.searchQuery
+            ? html`
               <button
                 class="chat-nav-search__clear"
                 type="button"
                 @click=${() => props.onSearchChange("")}
-                title="清除搜索"
+                title=${t("chat.nav.search_clear")}
               >
                 ✕
               </button>
             `
-          : nothing}
+            : nothing
+        }
       </div>
 
       <!-- 通道观察模式提示 -->
@@ -89,9 +91,11 @@ export function renderChatNavigationTree(props: ChatNavigationTreeProps) {
 
       <!-- 导航树节点 -->
       <div class="chat-nav-nodes">
-        ${displayNodes.length === 0
-          ? renderEmptyState(props)
-          : displayNodes.map((node) => renderRootNode(node, props))}
+        ${
+          displayNodes.length === 0
+            ? renderEmptyState(props)
+            : displayNodes.map((node) => renderRootNode(node, props))
+        }
       </div>
     </div>
   `;
@@ -113,27 +117,37 @@ function renderRootNode(node: ChatNavigationNode, props: ChatNavigationTreeProps
           if (hasChildren) {
             props.onToggleNode(node.id);
           }
-          // 点击根节点时也选中其 context（包括智能体节点）
-          props.onSelectContext(node.context);
+          // 分类节点（有子节点）只展开/折叠，不跳转
+          if (!hasChildren) {
+            props.onSelectContext(node.context);
+          }
         }}
       >
-        ${hasChildren
-          ? html`<span class="chat-nav-toggle">${expanded ? "▼" : "▶"}</span>`
-          : html`<span class="chat-nav-toggle-placeholder"></span>`}
+        ${
+          hasChildren
+            ? html`<span class="chat-nav-toggle ${expanded ? "chat-nav-toggle--expanded" : ""}">${icons.chevronRight}</span>`
+            : html`
+                <span class="chat-nav-toggle-placeholder"></span>
+              `
+        }
         <span class="chat-nav-root__icon">${node.icon}</span>
         <span class="chat-nav-root__label">${node.label}</span>
-        ${totalUnread > 0
-          ? html`<span class="chat-nav-badge">${totalUnread > 99 ? "99+" : totalUnread}</span>`
-          : nothing}
+        ${
+          totalUnread > 0
+            ? html`<span class="chat-nav-badge">${totalUnread > 99 ? "99+" : totalUnread}</span>`
+            : nothing
+        }
       </div>
 
-      ${expanded && hasChildren
-        ? html`
+      ${
+        expanded && hasChildren
+          ? html`
             <div class="chat-nav-children">
               ${node.children!.map((child) => renderChildNode(child, props, 1))}
             </div>
           `
-        : nothing}
+          : nothing
+      }
     </div>
   `;
 }
@@ -150,37 +164,46 @@ function renderChildNode(
   const isActive = isSameContext(node.context, props.currentContext);
 
   return html`
-    <div class="chat-nav-item chat-nav-item--level-${Math.min(level, 3)}">
+    <div class="chat-nav-item chat-nav-item--level-${Math.min(level, 3)} ${node.nodeType ? `chat-nav-item--${node.nodeType}` : ""}">
       <div
         class="chat-nav-item__content ${isActive ? "chat-nav-item--active" : ""}"
         @click=${() => {
           if (hasChildren) {
             props.onToggleNode(node.id);
           }
-          props.onSelectContext(node.context);
+          // 分类节点（有子节点）只展开/折叠，不跳转
+          if (!hasChildren) {
+            props.onSelectContext(node.context);
+          }
         }}
       >
-        ${hasChildren
-          ? html`<span class="chat-nav-toggle chat-nav-toggle--sm"
-              >${expanded ? "▼" : "▶"}</span
+        ${
+          hasChildren
+            ? html`<span class="chat-nav-toggle chat-nav-toggle--sm ${expanded ? "chat-nav-toggle--expanded" : ""}"
+              >${icons.chevronRight}</span
             >`
-          : nothing}
+            : nothing
+        }
         <span class="chat-nav-item__icon">${node.icon}</span>
         <span class="chat-nav-item__label">${node.label}</span>
-        ${node.unreadCount && node.unreadCount > 0
-          ? html`<span class="chat-nav-badge"
+        ${
+          node.unreadCount && node.unreadCount > 0
+            ? html`<span class="chat-nav-badge"
               >${node.unreadCount > 99 ? "99+" : node.unreadCount}</span
             >`
-          : nothing}
+            : nothing
+        }
       </div>
 
-      ${expanded && hasChildren
-        ? html`
+      ${
+        expanded && hasChildren
+          ? html`
             <div class="chat-nav-children">
               ${node.children!.map((child) => renderChildNode(child, props, level + 1))}
             </div>
           `
-        : nothing}
+          : nothing
+      }
     </div>
   `;
 }
@@ -189,39 +212,43 @@ function renderChildNode(
 
 function renderChannelModeIndicator(props: ChatNavigationTreeProps) {
   const ctx = props.currentContext;
-  if (!ctx || ctx.type !== "channel-observe") {return nothing;}
+  if (!ctx || ctx.type !== "channel-observe") {
+    return nothing;
+  }
 
   return html`
     <div
       class="chat-nav-channel-mode ${props.channelForceJoined ? "chat-nav-channel-mode--joined" : ""}"
     >
-      ${props.channelForceJoined
-        ? html`
+      ${
+        props.channelForceJoined
+          ? html`
             <div class="chat-nav-channel-mode__text">
               <span>🔧</span>
-              <span>强行接入模式</span>
+              <span>${t("chat.nav.channel.force_joined")}</span>
             </div>
             <button
               class="chat-nav-channel-mode__btn chat-nav-channel-mode__btn--exit"
               type="button"
               @click=${props.onChannelForceJoinToggle}
             >
-              退出接入
+              ${t("chat.nav.channel.exit")}
             </button>
           `
-        : html`
+          : html`
             <div class="chat-nav-channel-mode__text">
               <span>👀</span>
-              <span>只读观察</span>
+              <span>${t("chat.nav.channel.readonly")}</span>
             </div>
             <button
               class="chat-nav-channel-mode__btn"
               type="button"
               @click=${props.onChannelForceJoinToggle}
             >
-              强行接入
+              ${t("chat.nav.channel.force_join")}
             </button>
-          `}
+          `
+      }
     </div>
   `;
 }
@@ -246,13 +273,13 @@ function renderEmptyState(props: ChatNavigationTreeProps) {
     return html`
       <div class="chat-nav-empty">
         <span class="chat-nav-empty__icon">🔍</span>
-        <span class="chat-nav-empty__text">无匹配结果</span>
+        <span class="chat-nav-empty__text">${t("chat.nav.no_results")}</span>
         <button
           class="chat-nav-empty__action"
           type="button"
           @click=${() => props.onSearchChange("")}
         >
-          清除搜索
+          ${t("chat.nav.search_clear")}
         </button>
       </div>
     `;
@@ -262,8 +289,8 @@ function renderEmptyState(props: ChatNavigationTreeProps) {
   return html`
     <div class="chat-nav-empty">
       <span class="chat-nav-empty__icon">💭</span>
-      <span class="chat-nav-empty__text">暂无对话</span>
-      <span class="chat-nav-empty__hint">切换到其他标签页配置智能体和通道</span>
+      <span class="chat-nav-empty__text">${t("chat.nav.empty")}</span>
+      <span class="chat-nav-empty__hint">${t("chat.nav.empty_hint")}</span>
     </div>
   `;
 }

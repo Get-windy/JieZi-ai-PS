@@ -13,6 +13,7 @@
  * - friends: 来自 friends.list (collaboration tab)
  */
 
+import { t } from "../i18n.ts";
 import type {
   AgentsListResult,
   ChannelsStatusSnapshot,
@@ -89,22 +90,18 @@ export interface BuildNavigationTreeOptions {
 /**
  * 构建完整的导航树数据（按智能体分组）
  *
- * 结构（匹配设计文档 2.2）：
- * 📊 全部 (聚合所有智能体消息)
- * ├─ 🤖 智能助手 A (main)
- * │  ├─ 📋 全部 (该智能体所有消息)
- * │  ├─ 📱 通道 ▼
- * │  │  ├─ 📦 全部通道 (聚合)
- * │  │  ├─ 💬 Discord - 服务器A
- * │  │  └─ ✈️ Telegram - 个人助手
- * │  ├─ 👥 群聊 ▼
- * │  │  ├─ 💼 研发团队群
- * │  │  └─ 🎨 产品讨论组
- * │  └─ 🤝 好友 ▼
- * │     ├─ 🤖 智能助手B
- * │     └─ 🤖 智能助手C
- * ├─ 🤖 智能助手 B
- * └─ 🤖 智能助手 C
+ * 结构（精简版，参考 Slack/Discord 设计）：
+ * 📋 全部会话 (聚合所有智能体的会话列表)
+ * 🤖 智能助手 A (main) ← 点击直接进入主会话
+ * │  └─ 📱 通道 ▼
+ * │     ├─ 💬 Discord - 服务器A
+ * │     └─ ✈️ Telegram - 个人助手
+ * 🤖 智能助手 B ...
+ * 🤝 Agent 间通信 (唯一入口，不与 agent 子树重复)
+ * │  ├─ Agent A ↔ Agent B
+ * │  └─ Agent A ↔ Agent C
+ * 👥 群聊
+ * │  └─ 研发团队群 ...
  *
  * 防御性处理：
  * - 所有数据源都有安全的默认值（空数组）
@@ -204,8 +201,8 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
 
   rootNodes.push({
     id: "__all__",
-    label: "全部会话",
-    icon: "📊",
+    label: t("chat.nav.all_sessions"),
+    icon: "📋",
     nodeType: "root",
     unreadCount: sumAllUnread(),
     context: {
@@ -222,23 +219,10 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
     const agentSessionKey = `agent:${agent.id}:main`;
     const agentChildren: ChatNavigationNode[] = [];
 
-    // 1) 📋 全部（该智能体所有消息）
-    agentChildren.push({
-      id: `agent-all-${agent.id}`,
-      label: "全部",
-      icon: "📋",
-      nodeType: "item",
-      unreadCount: sumUnreadByPrefix(`agent:${agent.id}:`),
-      context: {
-        type: "agent-all",
-        agentId: agent.id,
-        agentName,
-        agentEmoji,
-        sessionKey: agentSessionKey,
-      },
-    });
+    // 「📋 全部」子项已删除 — 点击 Agent 根节点即为该智能体主会话（Slack 模式）
+    // Agent 间通信（好友/直接会话）统一在顶级「协作监控」入口
 
-    // 2) 📱 通道（只显示该智能体绑定的通道，直接从 agent.channelBindings 获取）
+    // 📱 通道（只显示该智能体绑定的通道，直接从 agent.channelBindings 获取）
     const agentBindings: AgentChannelBinding[] =
       agent.channelBindings?.bindings?.map((b) => ({
         channelId: b.channelId,
@@ -267,7 +251,7 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
           : undefined;
       agentChildren.push({
         id: `channels-${agent.id}`,
-        label: "通道",
+        label: t("chat.nav.channels"),
         icon: "📱",
         nodeType: "category",
         unreadCount: channelsUnread,
@@ -281,35 +265,7 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       });
     }
 
-    // 3) 🤝 好友（群聊已移至顶级独立栏目，不再挂在 agent 子树下）
-    if (friendList.length > 0) {
-      const friendItems: ChatNavigationNode[] = friendList.map((friend) => ({
-        id: `friend-${agent.id}-${friend.id}`,
-        label: friend.agentName || friend.agentId,
-        icon: "🤖",
-        nodeType: "item" as const,
-        // 未读数：好友消息存在目标 agent main session，按对应的 sessionKey 计数
-        unreadCount: getUnread(`agent:${friend.agentId}:main`),
-        context: {
-          type: "contact" as const,
-          agentId: agent.id,
-          contactAgentId: friend.agentId,
-          contactAgentName: friend.agentName || friend.agentId,
-          // 关键修复：sessionKey 指向目标 agent 的 main session
-          // agent_communicate 产生的消息就存在这里
-          sessionKey: `agent:${friend.agentId}:main`,
-        },
-      }));
-
-      agentChildren.push({
-        id: `friends-${agent.id}`,
-        label: "直接会话",
-        icon: "💬",
-        nodeType: "category",
-        context: friendItems[0].context,
-        children: friendItems,
-      });
-    }
+    // 好友/直接会话已移至顶级「协作监控」栏目，不再在每个 agent 子树下重复显示
 
     // 智能体根节点（未读数覆盖通道 + 直接对话两种前缀）
     const agentUnread = (() => {
@@ -335,49 +291,55 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
     });
   }
 
-  // ---- 顶级：👁 协作监控（agent 间直接会话监控，只读）----
-  // 把所有 contact 节点（好友/直接会话）汇总到独立的监控分区
+  // ---- 顶级：🤝 协作监控（Agent 间通信的唯一入口）----
+  // 好友/直接会话只在这里出现，不在每个 agent 子树中重复
+  // 不再包含「全部 Agent 通信」节点（与「全部会话」功能完全等同，已删除）
   {
     const allContactItems: ChatNavigationNode[] = [];
-    for (const agent of agentList) {
-      for (const friend of friendList) {
-        allContactItems.push({
-          id: `monitor-contact-${agent.id}-${friend.id}`,
-          label: `${agent.identity?.name || agent.id} ↔ ${friend.agentName || friend.agentId}`,
-          icon: "💬",
-          nodeType: "item" as const,
-          unreadCount: getUnread(`agent:${friend.agentId}:main`),
-          context: {
-            type: "contact" as const,
-            agentId: agent.id,
-            contactAgentId: friend.agentId,
-            contactAgentName: friend.agentName || friend.agentId,
-            sessionKey: `agent:${friend.agentId}:main`,
-          },
-        });
+    const seenFriendIds = new Set<string>();
+    for (const friend of friendList) {
+      if (seenFriendIds.has(friend.agentId)) {
+        continue;
       }
+      seenFriendIds.add(friend.agentId);
+      const monitorAgentId = defaultAgent?.id ?? agentList[0]?.id ?? "main";
+      const monitorAgentName = defaultAgent?.identity?.name || defaultAgent?.id || monitorAgentId;
+      allContactItems.push({
+        id: `monitor-contact-${friend.agentId}`,
+        label: `${monitorAgentName} ↔ ${friend.agentName || friend.agentId}`,
+        icon: "💬",
+        nodeType: "item" as const,
+        unreadCount: getUnread(`agent:${friend.agentId}:main`),
+        context: {
+          type: "contact" as const,
+          agentId: monitorAgentId,
+          contactAgentId: friend.agentId,
+          contactAgentName: friend.agentName || friend.agentId,
+          sessionKey: `agent:${friend.agentId}:main`,
+        },
+      });
     }
-    // 「全部 Agent 通信」节点
-    const monitorAllNode: ChatNavigationNode = {
-      id: "monitor-all",
-      label: "所有 Agent 通信流",
-      icon: "📡",
-      nodeType: "item" as const,
-      unreadCount: sumAllUnread(),
-      context: {
-        type: "all",
-        sessionKey: defaultSessionKey,
-      },
+    // 根节点 context：有子节点时指向第一个 contact，无子节点时 fallback 到 defaultSessionKey
+    const monitorRootContext: ChatConversationContext = allContactItems[0]?.context ?? {
+      type: "all" as const,
+      sessionKey: defaultSessionKey,
     };
-    const monitorChildren = [monitorAllNode, ...allContactItems];
+    // 计算 agent 间通信的未读数（仅统计 contact 相关的 sessionKey）
+    const monitorUnread = (() => {
+      let total = 0;
+      for (const item of allContactItems) {
+        total += item.unreadCount ?? 0;
+      }
+      return total > 0 ? total : undefined;
+    })();
     rootNodes.push({
       id: "monitor-root",
-      label: "协作监控",
-      icon: "👁",
+      label: t("chat.nav.monitor"),
+      icon: "🤝",
       nodeType: "category" as const,
-      unreadCount: sumAllUnread(),
-      context: monitorAllNode.context,
-      children: monitorChildren,
+      unreadCount: monitorUnread,
+      context: monitorRootContext,
+      children: allContactItems.length > 0 ? allContactItems : undefined,
     });
   }
 
@@ -405,23 +367,19 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
     });
 
     const groupsRootContext = groupItems[0]?.context ?? {
-      type: "agent-direct" as const,
-      agentId: groupAgentId,
-      sessionKey: `agent:${groupAgentId}:main:main`,
+      type: "all" as const,
+      sessionKey: `agent:${groupAgentId}:main`,
     };
 
     rootNodes.push({
       id: "groups-root",
-      label: "群聊",
+      label: t("chat.nav.groups"),
       icon: "👥",
       nodeType: "category",
       unreadCount: sumUnreadByPrefix(`agent:${groupAgentId}:group:`),
       context: groupsRootContext,
       children: groupItems.length > 0 ? groupItems : undefined,
     });
-    console.log(
-      `[NavTree:调试] 群聊节点已加入rootNodes，groups数量=${groupItems.length}，总节点数=${rootNodes.length}`,
-    );
   }
 
   return rootNodes;
@@ -496,21 +454,7 @@ function buildAgentChannelItems(
       }
     }
   }
-  // 调试：打印 sessions.list 里所有通道会话的 lastChannel/lastAccountId
-  if (sessionsResult?.sessions) {
-    const channelSessions = sessionsResult.sessions.filter((s) => s.lastChannel || s.channel);
-    console.log(
-      `[NavTree:调试] sessions.list 通道相关会话数=${channelSessions.length}，channelSessionMap keys=`,
-      [...channelSessionMap.keys()],
-      "\n前5条:",
-      channelSessions.slice(0, 5).map((s) => ({
-        key: s.key,
-        lastChannel: s.lastChannel,
-        lastAccountId: s.lastAccountId,
-        channel: s.channel,
-      })),
-    );
-  }
+  // (Debug logging removed)
 
   for (const channelId of channelOrder) {
     const accounts = channelAccounts[channelId] ?? [];
@@ -542,16 +486,6 @@ function buildAgentChannelItems(
       ];
       // 过滤属于该 agent 的 session
       const agentSessions = matchedSessions.filter((s) => s.key.startsWith(`agent:${agent.id}:`));
-
-      // 调试：打印匹配情况
-      console.log(
-        `[NavTree:调试] 通道匹配 channelId=${channelId} accountId=${accountId} bindingKey=${bindingKey}`,
-        `\n  matchedSessions数=${matchedSessions.length} agentSessions数=${agentSessions.length}`,
-        `\n  channelSessionMap中的key: feishu:xxx =`,
-        [...channelSessionMap.entries()]
-          .filter(([k]) => k.startsWith(channelId))
-          .map(([k, v]) => ({ key: k, sessions: v.map((s) => s.key) })),
-      );
 
       if (agentSessions.length > 0) {
         // 有真实 session：每个 session 生成一个子节点，或合并为一个节点（取最近更新的）

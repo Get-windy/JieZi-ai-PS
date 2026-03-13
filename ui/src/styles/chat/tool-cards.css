@@ -9,9 +9,65 @@
   transition:
     border-color 150ms ease-out,
     background 150ms ease-out;
-  /* Fixed max-height to ensure cards don't expand too much */
-  max-height: 120px;
+  /* No fixed max-height — use fold/expand for long content */
   overflow: hidden;
+}
+
+/* Collapsed state (default for long content) */
+.chat-tool-card--collapsible {
+  max-height: 120px;
+  position: relative;
+}
+
+/* Expanded state */
+.chat-tool-card--expanded {
+  max-height: none;
+}
+
+/* Fade-out overlay for collapsed cards */
+.chat-tool-card--collapsible:not(.chat-tool-card--expanded)::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  background: linear-gradient(transparent, var(--card));
+  pointer-events: none;
+}
+
+/* Toggle button for fold/expand */
+.chat-tool-card__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 10px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.chat-tool-card__toggle:hover {
+  background: var(--bg-hover);
+}
+
+.chat-tool-card__toggle svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2px;
+  transition: transform 200ms ease;
+}
+
+.chat-tool-card--expanded .chat-tool-card__toggle svg {
+  transform: rotate(180deg);
 }
 
 .chat-tool-card:hover {

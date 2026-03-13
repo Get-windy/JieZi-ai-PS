@@ -7,7 +7,8 @@
 
 import type { OpenClawConfig } from "../../config/config.js";
 import { updateSessionStore, type SessionEntry } from "../../config/sessions.js";
-import { resolveAgentModelAccounts } from "../agent-scope.js";
+import { t } from "../../i18n/index.js";
+import { resolveAgentConfig, resolveAgentModelAccounts } from "../agent-scope.js";
 import { ensureAuthProfileStore } from "../auth-profiles.js";
 import {
   routeToOptimalModelAccount,
@@ -284,7 +285,7 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
       });
     }
     if (!resolvedProfileId) {
-      console.warn(`[SmartRouting] Selected account ${selectedAccountId} not found in auth store`);
+      console.warn(t("routing.smart.account_not_found", { accountId: selectedAccountId }));
       return undefined;
     }
 
@@ -304,10 +305,15 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
         });
       }
 
+      const agentName = resolveAgentConfig(cfg, agentId)?.name ?? agentId;
       console.log(
-        `[SmartRouting] Selected account ${resolvedProfileId} (from ${selectedAccountId}) for session ${sessionKey}`,
+        t("routing.smart.fallback", {
+          accountId: resolvedProfileId,
+          agentName,
+          sessionKey: sessionKey ?? "",
+          reason: routingResult.reason,
+        }),
       );
-      console.log(`[SmartRouting] Reason: ${routingResult.reason}`);
     }
 
     // 9. 从 accountId（provider/model 格式）解析 provider 和 model
@@ -319,7 +325,7 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
       reason: routingResult.reason,
     };
   } catch (err) {
-    console.error("[SmartRouting] Failed to route:", err);
+    console.error(t("routing.smart.route_failed"), err);
     // 路由失败，返回 undefined 让调用方回退到默认逻辑
     return undefined;
   }
