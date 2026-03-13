@@ -4,9 +4,10 @@
  * 检测失联、停滞、假死的 Agent
  */
 
+import { dispatchInboundMessage } from "../auto-reply/dispatch.js";
+import { createReplyDispatcher } from "../auto-reply/reply/reply-dispatcher.js";
+import type { MsgContext } from "../auto-reply/templating.js";
 import { loadConfig } from "../config/config.js";
-import { chatHandlers } from "../gateway/server-methods/chat.js";
-import type { GatewayRequestHandlerOptions } from "../gateway/server-methods/types.js";
 import { t } from "../i18n/index.js";
 import {
   generateAgentAlert,
@@ -234,18 +235,29 @@ async function notifyRestartToDefaultAgentsAndTeamAdmins(): Promise<void> {
     for (const agentId of [...defaultAgents, ...teamAgents]) {
       try {
         const sessionKey = `agent:${agentId}:main`;
-
-        await new Promise<void>((resolve) => {
-          (chatHandlers["chat.send"] as unknown as (opts: GatewayRequestHandlerOptions) => void)({
-            params: {
-              sessionKey,
-              message: reminderMessage,
-              idempotencyKey: `agent-restart-reminder-${agentId}-${Date.now()}`,
-            },
-            respond: () => resolve(),
-          } as unknown as GatewayRequestHandlerOptions);
+        const ctx: MsgContext = {
+          Body: reminderMessage,
+          BodyForAgent: reminderMessage,
+          BodyForCommands: reminderMessage,
+          RawBody: reminderMessage,
+          CommandBody: reminderMessage,
+          SessionKey: sessionKey,
+          Provider: "internal",
+          Surface: "internal",
+          OriginatingChannel: "internal",
+          ChatType: "direct",
+          CommandAuthorized: true,
+          MessageSid: `agent-restart-reminder-${agentId}-${Date.now()}`,
+        };
+        const dispatcher = createReplyDispatcher({
+          deliver: async () => {
+            /* 内部消息，无需外部投递 */
+          },
+          onError: (err) => {
+            console.error(t("monitor.agent.restart_failed", { agentId }), err);
+          },
         });
-
+        await dispatchInboundMessage({ ctx, cfg, dispatcher });
         console.log(t("monitor.agent.restart_sent", { agentId }));
       } catch (agentError) {
         console.error(t("monitor.agent.restart_failed", { agentId }), agentError);
@@ -275,6 +287,7 @@ async function sendAlertToAdmin(
   }
 
   try {
+    const cfg = loadConfig();
     // 获取管理员 ID（从配置中读取或默认）
     const adminId = "admin"; // TODO: 从配置中读取
 
@@ -292,18 +305,30 @@ async function sendAlertToAdmin(
       `请立即检查该 Agent 的工作状态！`,
     ].join("\n");
 
-    // 通过 chat.send 发送告警
-    await new Promise<void>((resolve) => {
-      (chatHandlers["chat.send"] as unknown as (opts: GatewayRequestHandlerOptions) => void)({
-        params: {
-          sessionKey,
-          message: alertMessage,
-          idempotencyKey: `agent-activity-alert-${agentId}-${Date.now()}`,
-        },
-        respond: () => resolve(),
-      } as unknown as GatewayRequestHandlerOptions);
+    // 通过 dispatchInboundMessage 发送告警（不依赖 gateway context）
+    const ctx: MsgContext = {
+      Body: alertMessage,
+      BodyForAgent: alertMessage,
+      BodyForCommands: alertMessage,
+      RawBody: alertMessage,
+      CommandBody: alertMessage,
+      SessionKey: sessionKey,
+      Provider: "internal",
+      Surface: "internal",
+      OriginatingChannel: "internal",
+      ChatType: "direct",
+      CommandAuthorized: true,
+      MessageSid: `agent-activity-alert-${agentId}-${Date.now()}`,
+    };
+    const dispatcher = createReplyDispatcher({
+      deliver: async () => {
+        /* 内部消息，无需外部投递 */
+      },
+      onError: (err) => {
+        console.error(t("monitor.agent.alert_failed", { agentId }), err);
+      },
     });
-
+    await dispatchInboundMessage({ ctx, cfg, dispatcher });
     console.log(t("monitor.agent.alert_sent", { agentId }));
   } catch (error) {
     console.error(t("monitor.agent.alert_failed", { agentId }), error);
