@@ -89,6 +89,111 @@ const translations: Record<Locale, Record<string, string>> = {
     "chat.compose.send": "Send",
     "chat.compose.queue": "Queue",
     "chat.history.showing": "Showing last {count} messages ({hidden} hidden).",
+    "chat.you": "You",
+    "chat.role.assistant_default": "Assistant",
+    "chat.compaction_divider": "Compaction",
+    "chat.fallback.selected": "Selected: {model}",
+    "chat.fallback.current": "Current: {model}",
+    "chat.fallback.previous": "Previous fallback: {model}",
+    "chat.fallback.reason": "Reason: {reason}",
+    "chat.fallback.attempts": "Attempts: {attempts}",
+    "chat.fallback.cleared": "Model recovered: {model}",
+    "chat.fallback.active": "Model fallback: {model}",
+    "chat.tool.view": "View",
+    "chat.tool.completed": "Completed",
+    "chat.tool.expand": "Show more",
+    "chat.tool.collapse": "Show less",
+
+    // Chat navigation tree
+    "chat.nav.loading": "Loading…",
+    "chat.nav.error_prefix": "Load failed: {error}",
+    "chat.nav.retry": "Retry",
+    "chat.nav.search_placeholder": "Search conversations…",
+    "chat.nav.search_clear": "Clear search",
+    "chat.nav.no_results": "No results",
+    "chat.nav.empty": "No conversations",
+    "chat.nav.empty_hint": "Switch to other tabs to configure agents and channels",
+    "chat.nav.channel.force_joined": "Force-joined mode",
+    "chat.nav.channel.exit": "Exit",
+    "chat.nav.channel.readonly": "Read-only",
+    "chat.nav.channel.force_join": "Force join",
+    // Chat navigation controller labels
+    "chat.nav.all_sessions": "All Sessions",
+    "chat.nav.channels": "Channels",
+    "chat.nav.monitor": "Agent Communication",
+    "chat.nav.groups": "Groups",
+    "chat.nav.sessions_count": "{count} sessions",
+    // Chat monitor view
+    "chat.monitor.user": "👤 User",
+    "chat.monitor.title": "Collaboration Monitor",
+    "chat.monitor.contact_title": "{agent} ↔ {contact}",
+    "chat.monitor.contact_desc": "Real-time Agent communication monitoring, read-only",
+    "chat.monitor.all_title": "All Agent communication",
+    "chat.monitor.all_desc":
+      "Aggregated display of all agents' message activity, real-time updates",
+    "chat.monitor.agent_all_title": "{agent} all messages",
+    "chat.monitor.agent_all_desc":
+      "Aggregated messages from all channels and conversations of this agent",
+    "chat.monitor.polling": "Live monitoring",
+    "chat.monitor.loading": "Loading…",
+    "chat.monitor.empty": "No communication records",
+    "chat.monitor.empty_hint":
+      "Messages will appear here in real-time once agents start collaborating",
+    "chat.monitor.agent_label": "Agent",
+    "chat.monitor.responding": "Responding…",
+    "chat.monitor.readonly_tip":
+      "👁 Monitor mode: read-only. Switch to group or direct chat to participate",
+    // Chat header/context labels
+    "chat.header.all_conversations": "All conversations",
+    "chat.header.channel_title": "{agent} · {channel}",
+    "chat.header.all_channels_title": "{name} · All channels",
+    "chat.header.group_unnamed": "Group · {groupId}",
+    "chat.participants.overflow": "+{count} more",
+    // Context usage warning
+    "chat.context.warn": "⚠️ Context {pct}% used ({used}k / {max}k tokens)",
+    "chat.context.danger":
+      "🔴 Context nearly full: {pct}% ({used}k / {max}k tokens) — older messages may be trimmed",
+    "chat.context.warn_hint": "Tip: use /compact to compress context, or /new to start fresh",
+    "chat.context.danger_hint": "⚡ Recommended: /compact to free space, or /new for a new session",
+    "chat.context.auto_compact": "🔄 Context usage high — auto-compacting…",
+    // Chat readonly bars
+    "chat.readonly.contact_bar":
+      "💬 Direct conversation (read-only): Viewing conversation with {name}. To send messages, have the Agent use the agent_communicate tool.",
+    "chat.readonly.channel_bar":
+      "👁️ Channel observation (read-only): Observing messages from {channel}",
+    "chat.readonly.force_join": "🔧 Force join",
+    "chat.readonly.force_joined_warning":
+      "⚠️ You are replying to channel messages as an admin. Please proceed with caution",
+    "chat.readonly.exit_join": "Exit",
+
+    // Slash commands
+    "chat.slash.new": "Start a new session",
+    "chat.slash.stop": "Stop current generation",
+    "chat.slash.clear": "Clear current conversation",
+    "chat.slash.compact": "Compact context (reduce token usage)",
+    "chat.slash.copy": "Copy last assistant reply",
+    "chat.slash.focus": "Toggle focus mode",
+    "chat.slash.help": "Show available commands",
+    "chat.slash.status": "Show current context token usage",
+    // Slash command aliases (i18n: same as name for EN, localized for other languages)
+    "chat.slash.new.alias": "new",
+    "chat.slash.stop.alias": "stop",
+    "chat.slash.clear.alias": "clear",
+    "chat.slash.compact.alias": "compact",
+    "chat.slash.copy.alias": "copy",
+    "chat.slash.focus.alias": "focus",
+    "chat.slash.help.alias": "help",
+    "chat.slash.status.alias": "status",
+    "chat.slash.frequent": "Frequently used",
+
+    // Message actions
+    "chat.action.copy": "Copy",
+    "chat.action.quote": "Quote",
+    "chat.action.copied": "Copied!",
+
+    // Drag-drop upload
+    "chat.dropzone.label": "Drop images here",
+    "chat.dropzone.hint": "Release to upload",
 
     // Chat controls
     "chat.controls.refresh": "Refresh chat data",
@@ -3004,6 +3109,104 @@ const translations: Record<Locale, Record<string, string>> = {
     "chat.compose.send": "发送",
     "chat.compose.queue": "加入队列",
     "chat.history.showing": "显示最后 {count} 条消息（隐藏 {hidden} 条）。",
+    "chat.you": "你",
+    "chat.role.assistant_default": "智能助手",
+    "chat.compaction_divider": "上下文压缩",
+    "chat.fallback.selected": "已选择: {model}",
+    "chat.fallback.current": "当前: {model}",
+    "chat.fallback.previous": "上次降级: {model}",
+    "chat.fallback.reason": "原因: {reason}",
+    "chat.fallback.attempts": "尝试: {attempts}",
+    "chat.fallback.cleared": "模型已恢复: {model}",
+    "chat.fallback.active": "模型降级中: {model}",
+    "chat.tool.view": "查看",
+    "chat.tool.completed": "已完成",
+    "chat.tool.expand": "展开更多",
+    "chat.tool.collapse": "收起",
+
+    // 聊天导航树
+    "chat.nav.loading": "加载中…",
+    "chat.nav.error_prefix": "加载失败: {error}",
+    "chat.nav.retry": "重试",
+    "chat.nav.search_placeholder": "搜索对话...",
+    "chat.nav.search_clear": "清除搜索",
+    "chat.nav.no_results": "无匹配结果",
+    "chat.nav.empty": "暂无对话",
+    "chat.nav.empty_hint": "切换到其他标签页配置智能体和通道",
+    "chat.nav.channel.force_joined": "强行接入模式",
+    "chat.nav.channel.exit": "退出接入",
+    "chat.nav.channel.readonly": "只读观察",
+    "chat.nav.channel.force_join": "强行接入",
+    // 聊天导航控制器标签
+    "chat.nav.all_sessions": "全部会话",
+    "chat.nav.channels": "通道",
+    "chat.nav.monitor": "Agent 间通信",
+    "chat.nav.groups": "群聊",
+    "chat.nav.sessions_count": "{count} 个会话",
+    // 聊天监控视图
+    "chat.monitor.user": "👤 用户",
+    "chat.monitor.title": "协作监控",
+    "chat.monitor.contact_title": "{agent} ↔ {contact}",
+    "chat.monitor.contact_desc": "实时监控 Agent 间通信，只读模式",
+    "chat.monitor.all_title": "所有 Agent 通信流",
+    "chat.monitor.all_desc": "聚合展示所有智能体的消息动态，实时更新",
+    "chat.monitor.agent_all_title": "{agent} 全部消息",
+    "chat.monitor.agent_all_desc": "该智能体所有通道和对话的消息聚合，实时更新",
+    "chat.monitor.polling": "实时监控中",
+    "chat.monitor.loading": "加载中...",
+    "chat.monitor.empty": "暂无通信记录",
+    "chat.monitor.empty_hint": "Agent 开始协作后消息将实时显示在这里",
+    "chat.monitor.agent_label": "智能体",
+    "chat.monitor.responding": "回复中...",
+    "chat.monitor.readonly_tip": "👁 监控模式：只读，如需参与请切换到对应群组或直接对话",
+    // 聊天头部/上下文标签
+    "chat.header.all_conversations": "所有对话",
+    "chat.header.channel_title": "{agent} · {channel}",
+    "chat.header.all_channels_title": "{name} · 所有通道",
+    "chat.header.group_unnamed": "群组·{groupId}",
+    "chat.participants.overflow": "还有{count}位",
+    // 上下文用量警告
+    "chat.context.warn": "⚠️ 上下文已用 {pct}%（{used}k / {max}k tokens）",
+    "chat.context.danger": "🔴 上下文即将满载：{pct}%（{used}k / {max}k tokens）— 旧消息可能被裁剪",
+    "chat.context.warn_hint": "提示：使用 /compact 压缩上下文，或 /new 开始新会话",
+    "chat.context.danger_hint": "⚡ 建议：/compact 释放空间，或 /new 开始全新会话",
+    "chat.context.auto_compact": "🔄 上下文用量过高 — 正在自动压缩…",
+    // 聊天只读栏
+    "chat.readonly.contact_bar":
+      "💬 直接会话（只读）：正在查看与 {name} 的直接会话记录。如需发送消息，请由 Agent 调用 agent_communicate 工具。",
+    "chat.readonly.channel_bar": "👁️ 通道观察模式（只读）：正在观察 {channel} 的消息",
+    "chat.readonly.force_join": "🔧 强行接入",
+    "chat.readonly.force_joined_warning": "⚠️ 您正在以管理员身份直接回复通道消息，请谨慎操作",
+    "chat.readonly.exit_join": "退出接入",
+
+    // 斜杠命令
+    "chat.slash.new": "开始新会话",
+    "chat.slash.stop": "停止当前生成",
+    "chat.slash.clear": "清除当前会话",
+    "chat.slash.compact": "压缩上下文（减少 Token 用量）",
+    "chat.slash.copy": "复制上次助手回复",
+    "chat.slash.focus": "切换专注模式",
+    "chat.slash.help": "显示可用命令",
+    "chat.slash.status": "查看当前上下文 Token 用量",
+    // 斜杠命令别名（中文用户可输入 /新会话 等效 /new）
+    "chat.slash.new.alias": "新会话",
+    "chat.slash.stop.alias": "停止",
+    "chat.slash.clear.alias": "清除",
+    "chat.slash.compact.alias": "压缩",
+    "chat.slash.copy.alias": "复制",
+    "chat.slash.focus.alias": "专注",
+    "chat.slash.help.alias": "帮助",
+    "chat.slash.status.alias": "状态",
+    "chat.slash.frequent": "常用",
+
+    // 消息操作
+    "chat.action.copy": "复制",
+    "chat.action.quote": "引用",
+    "chat.action.copied": "已复制！",
+
+    // 拖拽上传
+    "chat.dropzone.label": "拖放图片到此处",
+    "chat.dropzone.hint": "松开即可上传",
 
     // 聊天控制
     "chat.controls.refresh": "刷新聊天数据",

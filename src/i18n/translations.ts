@@ -267,6 +267,85 @@ export const translations: Translations = {
       "Thanksgiving: Grateful for stable ports, working DNS, and a bot that reads the logs so nobody has to.",
     "tagline.77":
       "Valentine's Day: Roses are typed, violets are piped—I'll automate the chores so you can spend time with humans.",
+
+    // Agent Activity Monitor
+    "monitor.agent.starting": "[Background] Starting Agent health monitoring...",
+    "monitor.agent.started":
+      "[Background] Agent health monitoring started (checking every {interval} minutes)",
+    "monitor.agent.stopped": "[Background] Agent health monitoring stopped",
+    "monitor.agent.no_agents": "[Background] No agents configured, skipping health check",
+    "monitor.agent.scanning": "[Background] Running health check on {count} agent(s)...",
+    "monitor.agent.scan_complete":
+      "[Background] Health check complete — Healthy: {healthy}, Warning: {warning}, Critical: {critical}, Dead: {dead}",
+    "monitor.agent.warning":
+      "[Background] ⚠️ Agent [{agentId}] appears stalled ({minutes} min inactive)",
+    "monitor.agent.critical":
+      "[Background] 🔴 Agent [{agentId}] not responding ({hours} hours inactive)",
+    "monitor.agent.dead": "[Background] 💀 Agent [{agentId}] appears dead ({hours} hours inactive)",
+    "monitor.agent.alert_sent": "[Background] Alert sent to admin for agent [{agentId}]",
+    "monitor.agent.alert_failed": "[Background] Failed to send alert for agent [{agentId}]",
+    "monitor.agent.monitor_failed": "[Background] Agent health monitoring encountered an error",
+    "monitor.agent.notifying_restart":
+      "[Background] System restarted, notifying agents to check pending tasks...",
+    "monitor.agent.restart_sent": "[Background] Restart reminder sent to agent [{agentId}]",
+    "monitor.agent.restart_failed": "[Background] Failed to notify agent [{agentId}]",
+    "monitor.agent.restart_complete":
+      "[Background] Restart notifications complete (default: {defaultCount}, team: {teamCount})",
+
+    // Task Aging
+    "task.aging.scheduler_starting":
+      "[Background] Task aging detection started (checking every {interval} minutes)",
+    "task.aging.scanning": "[Background] Scanning {count} active task(s) for stale detection...",
+    "task.aging.scan_complete":
+      "[Background] Task scan complete — Reminded: {reminded}, Escalated: {escalated}, Archived: {archived}",
+    "task.aging.scan_failed": "[Background] Task scan encountered an error",
+    "task.aging.reminder_sent": "[Background] Stale reminder sent for task [{taskId}]",
+    "task.aging.reminder_failed": "[Background] Failed to send stale reminder for task [{taskId}]",
+    "task.aging.escalated": "[Background] Task [{taskId}] escalated to supervisor (stale)",
+    "task.aging.escalate_failed": "[Background] Failed to escalate task [{taskId}]",
+    "task.aging.archived": "[Background] Task [{taskId}] auto-downgraded to low priority (stale)",
+    "task.aging.archive_failed": "[Background] Failed to auto-archive task [{taskId}]",
+    "task.aging.blocked_reassign":
+      "[Background] Task [{taskId}] blocked too long, consider reassignment",
+    "task.aging.scheduler_stopped": "[Background] Task aging detection stopped",
+    "task.aging.init_no_projects":
+      "[Background] No projects configured, skipping task aging detection",
+    "task.aging.init_starting":
+      "[Background] Starting task aging detection for {count} project(s)...",
+    "task.aging.init_project_started":
+      "[Background] Task aging detection ready for project [{projectId}]",
+    "task.aging.init_done": "[Background] All project task aging detectors started",
+    "task.aging.init_failed": "[Background] Task aging detection initialization failed",
+
+    // SmartRouting
+    "routing.smart.selected":
+      "[SmartRouting] Using {provider}/{model} for agent [{agentName}] (session: {sessionKey}, reason: {reason})",
+    "routing.smart.fallback":
+      "[SmartRouting] Fell back to account {accountId} for agent [{agentName}] (session: {sessionKey}, reason: {reason})",
+    "routing.smart.account_not_found":
+      "[SmartRouting] Selected account {accountId} not found in auth store",
+    "routing.smart.route_failed": "[SmartRouting] Failed to route",
+
+    // Agent Activity Monitor (internal)
+    "monitor.agent.task_check_failed":
+      "[Background] Failed to check task assignment for agent [{agentId}]",
+    "monitor.agent.fs_activity_failed":
+      "[Background] Failed to detect file system activity for agent [{agentId}]",
+    "monitor.agent.no_git_activity": "[Background] No git activity for agent [{agentId}]",
+    "monitor.agent.process_check_failed":
+      "[Background] Failed to detect process activity for agent [{agentId}]",
+    "monitor.agent.no_log_activity": "[Background] No log activity for agent [{agentId}]",
+    "monitor.agent.monitor_single_failed": "[Background] Failed to monitor agent [{agentId}]",
+
+    // Reputation
+    "reputation.penalty_applied":
+      "[Background] Applied {severity} penalty to agent [{agentId}]: -{points} points (reason: {reason}, new score: {score})",
+    "reputation.reward_applied":
+      "[Background] Applied reward to agent [{agentId}]: +{points} points (reason: {reason}, new score: {score})",
+
+    // Task Aging (internal)
+    "task.aging.task_process_error": "[Background] Error processing task [{taskId}]",
+    "task.aging.reassign_failed": "[Background] Failed to reassign blocked task [{taskId}]",
   },
   "zh-CN": {
     // CLI Banner
@@ -1440,6 +1519,73 @@ export const translations: Translations = {
     "config.label.logging.redactPatterns": "编辑模式",
     "config.label.discovery.wideArea.enabled": "启用广域发现",
     "config.label.discovery.wideArea.domain": "广域发现域名",
+
+    // Agent Activity Monitor
+    "monitor.agent.starting": "[后台] 正在启动 Agent 健康监控...",
+    "monitor.agent.started": "[后台] Agent 健康监控已启动（每 {interval} 分钟巡检一次）",
+    "monitor.agent.stopped": "[后台] Agent 健康监控已停止",
+    "monitor.agent.no_agents": "[后台] 暂无配置的 Agent，跳过健康巡检",
+    "monitor.agent.scanning": "[后台] 正在对 {count} 个 Agent 进行健康巡检...",
+    "monitor.agent.scan_complete":
+      "[后台] 健康巡检完成 — 正常: {healthy}，警告: {warning}，严重: {critical}，失联: {dead}",
+    "monitor.agent.warning": "[后台] ⚠️ Agent [{agentId}] 疑似停滞（已 {minutes} 分钟无活动）",
+    "monitor.agent.critical": "[后台] 🔴 Agent [{agentId}] 长时间无响应（已 {hours} 小时无活动）",
+    "monitor.agent.dead": "[后台] 💀 Agent [{agentId}] 疑似失联（已 {hours} 小时无活动）",
+    "monitor.agent.alert_sent": "[后台] 已向管理员发送 Agent [{agentId}] 的异常告警",
+    "monitor.agent.alert_failed": "[后台] Agent [{agentId}] 告警发送失败",
+    "monitor.agent.monitor_failed": "[后台] Agent 健康巡检出现异常",
+    "monitor.agent.notifying_restart": "[后台] 系统重启完成，正在通知各 Agent 检查待处理任务...",
+    "monitor.agent.restart_sent": "[后台] 已通知 Agent [{agentId}] 检查重启后的待处理任务",
+    "monitor.agent.restart_failed": "[后台] 通知 Agent [{agentId}] 失败",
+    "monitor.agent.restart_complete":
+      "[后台] 重启通知完成（默认 Agent: {defaultCount} 个，团队 Agent: {teamCount} 个）",
+
+    // Task Aging
+    "task.aging.scheduler_starting": "[后台] 任务超时检测已启动（每 {interval} 分钟巡查一次）",
+    "task.aging.scanning": "[后台] 正在扫描 {count} 个进行中的任务，检测是否有长期停滞...",
+    "task.aging.scan_complete":
+      "[后台] 任务扫描完成 — 提醒: {reminded} 条，升级: {escalated} 条，归档: {archived} 条",
+    "task.aging.scan_failed": "[后台] 任务扫描出现异常",
+    "task.aging.reminder_sent": "[后台] 已向负责人发送任务 [{taskId}] 的停滞提醒",
+    "task.aging.reminder_failed": "[后台] 任务 [{taskId}] 停滞提醒发送失败",
+    "task.aging.escalated": "[后台] 任务 [{taskId}] 长期未处理，已升级通知主管",
+    "task.aging.escalate_failed": "[后台] 任务 [{taskId}] 升级通知失败",
+    "task.aging.archived": "[后台] 任务 [{taskId}] 超时未处理，已自动降级为低优先级",
+    "task.aging.archive_failed": "[后台] 任务 [{taskId}] 自动降级失败",
+    "task.aging.blocked_reassign": "[后台] 任务 [{taskId}] 长期阻塞，建议重新分配执行者",
+    "task.aging.scheduler_stopped": "[后台] 任务超时检测已停止",
+    "task.aging.init_no_projects": "[后台] 暂无配置的项目，跳过任务超时检测",
+    "task.aging.init_starting": "[后台] 正在为 {count} 个项目启动任务超时检测...",
+    "task.aging.init_project_started": "[后台] 项目 [{projectId}] 的任务超时检测已就绪",
+    "task.aging.init_done": "[后台] 所有项目的任务超时检测已启动",
+    "task.aging.init_failed": "[后台] 任务超时检测初始化失败",
+
+    // SmartRouting
+    "routing.smart.selected":
+      "[智能路由] 为 Agent [{agentName}]（会话: {sessionKey}）选择模型 {provider}/{model}（原因: {reason}）",
+    "routing.smart.fallback":
+      "[智能路由] 为 Agent [{agentName}]（会话: {sessionKey}）已回退到账号 {accountId}（原因: {reason}）",
+    "routing.smart.account_not_found":
+      "[智能路由] 路由选中的账号 {accountId} 在认证库中不存在，回退到默认策略",
+    "routing.smart.route_failed": "[智能路由] 路由失败，已回退到默认策略",
+
+    // Agent Activity Monitor (internal)
+    "monitor.agent.task_check_failed": "[后台] 检查 Agent [{agentId}] 任务分配状态失败",
+    "monitor.agent.fs_activity_failed": "[后台] 检测 Agent [{agentId}] 文件系统活动失败",
+    "monitor.agent.no_git_activity": "[后台] Agent [{agentId}] 无 Git 提交活动",
+    "monitor.agent.process_check_failed": "[后台] 检测 Agent [{agentId}] 进程状态失败",
+    "monitor.agent.no_log_activity": "[后台] Agent [{agentId}] 无日志文件活动",
+    "monitor.agent.monitor_single_failed": "[后台] 监控 Agent [{agentId}] 时出现异常",
+
+    // Reputation
+    "reputation.penalty_applied":
+      "[后台] 对 Agent [{agentId}] 执行{severity}惩罚：-{points} 分（原因: {reason}，当前分数: {score}）",
+    "reputation.reward_applied":
+      "[后台] 对 Agent [{agentId}] 执行奖励：+{points} 分（原因: {reason}，当前分数: {score}）",
+
+    // Task Aging (internal)
+    "task.aging.task_process_error": "[后台] 处理任务 [{taskId}] 时出现异常",
+    "task.aging.reassign_failed": "[后台] 重新分配阻塞任务 [{taskId}] 失败",
   },
   "en-US": {
     // ... existing code ...

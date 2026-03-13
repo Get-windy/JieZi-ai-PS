@@ -236,6 +236,16 @@ export const icons = {
       <path d="M18 9a9 9 0 0 1-9 9" />
     </svg>
   `,
+  chevronDown: html`
+    <svg viewBox="0 0 24 24">
+      <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  `,
+  chevronRight: html`
+    <svg viewBox="0 0 24 24">
+      <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  `,
 } as const;
 
 export type IconName = keyof typeof icons;
@@ -249,10 +259,7 @@ export function renderIcon(name: IconName, className = "nav-item__icon"): Templa
 }
 
 // Legacy function for compatibility
-export function renderEmojiIcon(
-  iconContent: string | TemplateResult,
-  className: string,
-): TemplateResult {
+export function renderEmojiIcon(iconContent: string, className: string): TemplateResult {
   return html`<span class=${className} aria-hidden="true">${iconContent}</span>`;
 }
 

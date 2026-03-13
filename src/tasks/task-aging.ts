@@ -7,6 +7,7 @@
 
 import { chatHandlers } from "../gateway/server-methods/chat.js";
 import type { GatewayRequestHandlerOptions } from "../gateway/server-methods/types.js";
+import { t } from "../i18n/index.js";
 import * as storage from "./storage.js";
 import type { Task, TaskPriority } from "./types.js";
 
@@ -183,9 +184,9 @@ export async function sendAgingReminder(task: Task, supervisorId: string): Promi
       } as unknown as GatewayRequestHandlerOptions);
     });
 
-    console.log(`[Task Aging] Sent reminder for task ${task.id} to ${supervisorId}`);
+    console.log(t("task.aging.reminder_sent", { taskId: task.id }));
   } catch (error) {
-    console.error(`[Task Aging] Failed to send reminder for task ${task.id}:`, error);
+    console.error(t("task.aging.reminder_failed", { taskId: task.id }), error);
   }
 }
 
@@ -231,9 +232,9 @@ export async function escalateTask(task: Task, supervisorId: string): Promise<vo
       } as unknown as GatewayRequestHandlerOptions);
     });
 
-    console.log(`[Task Aging] Escalated task ${task.id} to ${supervisorId}`);
+    console.log(t("task.aging.escalated", { taskId: task.id }));
   } catch (error) {
-    console.error(`[Task Aging] Failed to escalate task ${task.id}:`, error);
+    console.error(t("task.aging.escalate_failed", { taskId: task.id }), error);
   }
 }
 
@@ -255,9 +256,9 @@ export async function archiveStaleTask(task: Task): Promise<void> {
       },
     });
 
-    console.log(`[Task Aging] Auto-archived task ${task.id} with low priority`);
+    console.log(t("task.aging.archived", { taskId: task.id }));
   } catch (error) {
-    console.error(`[Task Aging] Failed to archive task ${task.id}:`, error);
+    console.error(t("task.aging.archive_failed", { taskId: task.id }), error);
   }
 }
 
@@ -272,12 +273,12 @@ export async function reassignBlockedTask(task: Task, _projectId?: string): Prom
 
     // 尝试找到其他可用的执行者
     // 这里可以集成能力发现系统
-    console.log(`[Task Aging] Task ${task.id} is blocked for too long, consider reassignment`);
+    console.log(t("task.aging.blocked_reassign", { taskId: task.id }));
 
     // TODO: 调用 agent_discover 查找有相关能力的 Agent
     // TODO: 自动重新分配或添加协作者
   } catch (error) {
-    console.error(`[Task Aging] Failed to reassign blocked task ${task.id}:`, error);
+    console.error(t("task.aging.reassign_failed", { taskId: task.id }), error);
   }
 }
 
@@ -320,7 +321,11 @@ export async function scanAndProcessAgingTasks(options?: {
       status: ["todo", "in-progress", "blocked"],
     });
 
-    console.log(`[Task Aging] Scanning ${allTasks.length} tasks for aging detection...`);
+    if (allTasks.length === 0) {
+      return stats;
+    }
+
+    console.log(t("task.aging.scanning", { count: String(allTasks.length) }));
 
     for (const task of allTasks) {
       try {
@@ -369,15 +374,19 @@ export async function scanAndProcessAgingTasks(options?: {
           await reassignBlockedTask(task, projectId);
         }
       } catch (taskError) {
-        console.error(`[Task Aging] Error processing task ${task.id}:`, taskError);
+        console.error(t("task.aging.task_process_error", { taskId: task.id }), taskError);
       }
     }
 
     console.log(
-      `[Task Aging] Scan completed. Reminded: ${stats.reminded}, Escalated: ${stats.escalated}, Archived: ${stats.archived}`,
+      t("task.aging.scan_complete", {
+        reminded: String(stats.reminded),
+        escalated: String(stats.escalated),
+        archived: String(stats.archived),
+      }),
     );
   } catch (error) {
-    console.error("[Task Aging] Failed to scan tasks:", error);
+    console.error(t("task.aging.scan_failed"), error);
   }
 
   return stats;
@@ -408,9 +417,7 @@ export function startAgingTaskScheduler(options?: {
     clearInterval(agingTaskSchedulerInterval);
   }
 
-  console.log(
-    `[Task Aging] Starting scheduler: running every ${intervalMinutes} minutes (Agent mode!)`,
-  );
+  console.log(t("task.aging.scheduler_starting", { interval: String(intervalMinutes) }));
 
   // 立即运行一次
   void scanAndProcessAgingTasks(options);
@@ -431,6 +438,6 @@ export function stopAgingTaskScheduler(): void {
   if (agingTaskSchedulerInterval) {
     clearInterval(agingTaskSchedulerInterval);
     agingTaskSchedulerInterval = null;
-    console.log("[Task Aging] Scheduler stopped");
+    console.log(t("task.aging.scheduler_stopped"));
   }
 }

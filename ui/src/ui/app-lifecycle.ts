@@ -6,6 +6,7 @@ import {
   stopNodesPolling,
   startDebugPolling,
   stopDebugPolling,
+  stopMonitorPolling,
 } from "./app-polling.ts";
 import { observeTopbar, scheduleChatScroll, scheduleLogsScroll } from "./app-scroll.ts";
 import {
@@ -67,6 +68,7 @@ export function handleDisconnected(host: LifecycleHost) {
   stopNodesPolling(host as unknown as Parameters<typeof stopNodesPolling>[0]);
   stopLogsPolling(host as unknown as Parameters<typeof stopLogsPolling>[0]);
   stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
+  stopMonitorPolling(host as unknown as Parameters<typeof stopMonitorPolling>[0]);
   host.client?.stop();
   host.client = null;
   host.connected = false;

@@ -7,6 +7,7 @@
 import { loadConfig } from "../config/config.js";
 import { chatHandlers } from "../gateway/server-methods/chat.js";
 import type { GatewayRequestHandlerOptions } from "../gateway/server-methods/types.js";
+import { t } from "../i18n/index.js";
 import {
   generateAgentAlert,
   monitorAllAgentsActivity,
@@ -28,7 +29,7 @@ let monitoringInterval: NodeJS.Timeout | null = null;
  * 启动 Agent 活动监控系统
  */
 export function startAgentActivityMonitoring(): void {
-  console.log("[Agent Activity] Starting activity monitoring system...");
+  console.log(t("monitor.agent.starting"));
 
   // 立即执行一次
   void runActivityMonitoring();
@@ -43,9 +44,7 @@ export function startAgentActivityMonitoring(): void {
     void runActivityMonitoring();
   }, MONITORING_INTERVAL_MS);
 
-  console.log(
-    `[Agent Activity] Monitoring started (interval: ${MONITORING_INTERVAL_MS / 60000} minutes)`,
-  );
+  console.log(t("monitor.agent.started", { interval: String(MONITORING_INTERVAL_MS / 60000) }));
 }
 
 /**
@@ -55,7 +54,7 @@ export function stopAgentActivityMonitoring(): void {
   if (monitoringInterval) {
     clearInterval(monitoringInterval);
     monitoringInterval = null;
-    console.log("[Agent Activity] Monitoring stopped");
+    console.log(t("monitor.agent.stopped"));
   }
 }
 
@@ -70,8 +69,9 @@ async function runActivityMonitoring(): Promise<void> {
   try {
     const cfg = loadConfig();
     const agentIds: string[] = [];
-    if (cfg.agents && Array.isArray(cfg.agents)) {
-      for (const agent of cfg.agents as unknown[]) {
+    const agentList = cfg.agents?.list;
+    if (Array.isArray(agentList)) {
+      for (const agent of agentList as unknown[]) {
         const maybeAgent = agent as { id?: unknown } | null | undefined;
         if (maybeAgent && typeof maybeAgent.id === "string") {
           agentIds.push(maybeAgent.id);
@@ -80,11 +80,11 @@ async function runActivityMonitoring(): Promise<void> {
     }
 
     if (agentIds.length === 0) {
-      console.log("[Agent Activity] No agents configured, skipping monitoring");
+      console.log(t("monitor.agent.no_agents"));
       return;
     }
 
-    console.log(`[Agent Activity] Scanning ${agentIds.length} agents...`);
+    console.log(t("monitor.agent.scanning", { count: String(agentIds.length) }));
 
     // 批量检测所有 Agent
     const reports = await monitorAllAgentsActivity(agentIds, process.cwd());
@@ -104,19 +104,28 @@ async function runActivityMonitoring(): Promise<void> {
         case "warning":
           warningCount++;
           console.log(
-            `⚠️ [Agent Activity] ${agentId}: Warning (${(report.inactiveDuration / 60000).toFixed(1)} min inactive)`,
+            t("monitor.agent.warning", {
+              agentId,
+              minutes: (report.inactiveDuration / 60000).toFixed(1),
+            }),
           );
           break;
         case "critical":
           criticalCount++;
           console.log(
-            `🔴 [Agent Activity] ${agentId}: Critical (${(report.inactiveDuration / 3600000).toFixed(1)} hours inactive)`,
+            t("monitor.agent.critical", {
+              agentId,
+              hours: (report.inactiveDuration / 3600000).toFixed(1),
+            }),
           );
           break;
         case "dead":
           deadCount++;
           console.log(
-            `💀 [Agent Activity] ${agentId}: DEAD (${(report.inactiveDuration / 3600000).toFixed(1)} hours inactive)`,
+            t("monitor.agent.dead", {
+              agentId,
+              hours: (report.inactiveDuration / 3600000).toFixed(1),
+            }),
           );
           break;
       }
@@ -129,10 +138,15 @@ async function runActivityMonitoring(): Promise<void> {
     }
 
     console.log(
-      `[Agent Activity] Scan complete. Healthy: ${healthyCount}, Warning: ${warningCount}, Critical: ${criticalCount}, Dead: ${deadCount}`,
+      t("monitor.agent.scan_complete", {
+        healthy: String(healthyCount),
+        warning: String(warningCount),
+        critical: String(criticalCount),
+        dead: String(deadCount),
+      }),
     );
   } catch (error) {
-    console.error("[Agent Activity] Monitoring failed:", error);
+    console.error(t("monitor.agent.monitor_failed"), error);
   }
 }
 
@@ -149,8 +163,9 @@ async function notifyRestartToDefaultAgentsAndTeamAdmins(): Promise<void> {
 
     // 1. 获取所有配置的 Agent
     const allAgentIds: string[] = [];
-    if (cfg.agents && Array.isArray(cfg.agents)) {
-      for (const agent of cfg.agents as unknown[]) {
+    const allAgentList = cfg.agents?.list;
+    if (Array.isArray(allAgentList)) {
+      for (const agent of allAgentList as unknown[]) {
         const maybeAgent = agent as { id?: unknown; default?: unknown } | null | undefined;
         if (maybeAgent && typeof maybeAgent.id === "string") {
           allAgentIds.push(maybeAgent.id);
@@ -162,14 +177,14 @@ async function notifyRestartToDefaultAgentsAndTeamAdmins(): Promise<void> {
       return;
     }
 
-    console.log(`[Agent Activity] Notifying agents after restart...`);
+    console.log(t("monitor.agent.notifying_restart"));
 
     // 2. 识别默认 Agent 和团队相关 Agent
     const defaultAgents: string[] = [];
     const teamAgents: string[] = [];
 
-    if (cfg.agents && Array.isArray(cfg.agents)) {
-      for (const agent of cfg.agents as unknown[]) {
+    if (Array.isArray(allAgentList)) {
+      for (const agent of allAgentList as unknown[]) {
         const maybeAgent = agent as
           | { id?: string; default?: boolean; name?: string }
           | null
@@ -231,14 +246,17 @@ async function notifyRestartToDefaultAgentsAndTeamAdmins(): Promise<void> {
           } as unknown as GatewayRequestHandlerOptions);
         });
 
-        console.log(`[Agent Activity] Restart reminder sent to ${agentId}`);
+        console.log(t("monitor.agent.restart_sent", { agentId }));
       } catch (agentError) {
-        console.error(`[Agent Activity] Failed to notify ${agentId}:`, agentError);
+        console.error(t("monitor.agent.restart_failed", { agentId }), agentError);
       }
     }
 
     console.log(
-      `[Agent Activity] Restart notifications complete. Default: ${defaultAgents.length}, Team: ${teamAgents.length}`,
+      t("monitor.agent.restart_complete", {
+        defaultCount: String(defaultAgents.length),
+        teamCount: String(teamAgents.length),
+      }),
     );
   } catch (error) {
     console.error("[Agent Activity] Failed to send restart reminders:", error);
@@ -286,9 +304,9 @@ async function sendAlertToAdmin(
       } as unknown as GatewayRequestHandlerOptions);
     });
 
-    console.log(`[Agent Activity] Alert sent to admin for agent ${agentId}`);
+    console.log(t("monitor.agent.alert_sent", { agentId }));
   } catch (error) {
-    console.error(`[Agent Activity] Failed to send alert for ${agentId}:`, error);
+    console.error(t("monitor.agent.alert_failed", { agentId }), error);
   }
 }
 
