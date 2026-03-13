@@ -5,8 +5,6 @@
  */
 
 import { loadConfig } from "../config/config.js";
-import { chatHandlers } from "../gateway/server-methods/chat.js";
-import type { GatewayRequestHandlerOptions } from "../gateway/server-methods/types.js";
 import { t } from "../i18n/index.js";
 import {
   generateAgentAlert,
@@ -33,11 +31,6 @@ export function startAgentActivityMonitoring(): void {
 
   // 立即执行一次
   void runActivityMonitoring();
-
-  // 重启后首次扫描：提醒默认 Agent 和团队群组管理员（延迟 5 秒执行，避免启动时资源竞争）
-  setTimeout(() => {
-    void notifyRestartToDefaultAgentsAndTeamAdmins();
-  }, 5000);
 
   // 定时执行
   monitoringInterval = setInterval(() => {
@@ -130,10 +123,10 @@ async function runActivityMonitoring(): Promise<void> {
           break;
       }
 
-      // 生成告警并发送给管理员
+      // 生成告警并记录日志
       const alert = generateAgentAlert(report);
       if (alert) {
-        await sendAlertToAdmin(agentId, alert);
+        console.warn(`[Agent Monitor] ${agentId}: ${alert.title} - ${alert.message}`);
       }
     }
 
@@ -147,166 +140,6 @@ async function runActivityMonitoring(): Promise<void> {
     );
   } catch (error) {
     console.error(t("monitor.agent.monitor_failed"), error);
-  }
-}
-
-// ============================================================================
-// 发送告警
-// ============================================================================
-
-/**
- * 重启后通知默认 Agent 和团队群组管理员
- */
-async function notifyRestartToDefaultAgentsAndTeamAdmins(): Promise<void> {
-  try {
-    const cfg = loadConfig();
-
-    // 1. 获取所有配置的 Agent
-    const allAgentIds: string[] = [];
-    const allAgentList = cfg.agents?.list;
-    if (Array.isArray(allAgentList)) {
-      for (const agent of allAgentList as unknown[]) {
-        const maybeAgent = agent as { id?: unknown; default?: unknown } | null | undefined;
-        if (maybeAgent && typeof maybeAgent.id === "string") {
-          allAgentIds.push(maybeAgent.id);
-        }
-      }
-    }
-
-    if (allAgentIds.length === 0) {
-      return;
-    }
-
-    console.log(t("monitor.agent.notifying_restart"));
-
-    // 2. 识别默认 Agent 和团队相关 Agent
-    const defaultAgents: string[] = [];
-    const teamAgents: string[] = [];
-
-    if (Array.isArray(allAgentList)) {
-      for (const agent of allAgentList as unknown[]) {
-        const maybeAgent = agent as
-          | { id?: string; default?: boolean; name?: string }
-          | null
-          | undefined;
-        if (!maybeAgent || !maybeAgent.id) {
-          continue;
-        }
-
-        const agentId = maybeAgent.id;
-        const agentName = maybeAgent.name?.toLowerCase() || "";
-
-        // 默认 Agent
-        if (maybeAgent.default === true) {
-          defaultAgents.push(agentId);
-        }
-
-        // 团队相关 Agent（team-member, team-lead, coordinator 等）
-        if (
-          agentName.includes("team") ||
-          agentName.includes("coordinator") ||
-          agentName.includes("manager")
-        ) {
-          teamAgents.push(agentId);
-        }
-      }
-    }
-
-    // 3. 发送重启提醒
-    const reminderMessage = [
-      `🔄 **系统重启完成，请立即检查工作！**`,
-      ``,
-      `系统刚刚完成了重启，请执行以下检查：`,
-      ``,
-      `**检查清单**：`,
-      `1️⃣ 扫描自己的工作空间（workspace）`,
-      `2️⃣ 检查是否有待处理的工作任务`,
-      `3️⃣ 如果有工作任务，立即重启执行`,
-      `4️⃣ 如果管理团队，检查团队成员的任务和工作空间`,
-      ``,
-      `📋 **重要**：`,
-      `- 确保没有任务被遗漏或卡住`,
-      `- 如有任务已完成，请及时汇报进展`,
-      `- 如遇阻塞，立即上报并说明原因`,
-    ].join("\n");
-
-    // 发送给默认 Agent
-    for (const agentId of [...defaultAgents, ...teamAgents]) {
-      try {
-        const sessionKey = `agent:${agentId}:main`;
-
-        await new Promise<void>((resolve) => {
-          (chatHandlers["chat.send"] as unknown as (opts: GatewayRequestHandlerOptions) => void)({
-            params: {
-              sessionKey,
-              message: reminderMessage,
-              idempotencyKey: `agent-restart-reminder-${agentId}-${Date.now()}`,
-            },
-            respond: () => resolve(),
-          } as unknown as GatewayRequestHandlerOptions);
-        });
-
-        console.log(t("monitor.agent.restart_sent", { agentId }));
-      } catch (agentError) {
-        console.error(t("monitor.agent.restart_failed", { agentId }), agentError);
-      }
-    }
-
-    console.log(
-      t("monitor.agent.restart_complete", {
-        defaultCount: String(defaultAgents.length),
-        teamCount: String(teamAgents.length),
-      }),
-    );
-  } catch (error) {
-    console.error("[Agent Activity] Failed to send restart reminders:", error);
-  }
-}
-
-/**
- * 向人类管理员发送告警通知
- */
-async function sendAlertToAdmin(
-  agentId: string,
-  alert: ReturnType<typeof generateAgentAlert>,
-): Promise<void> {
-  if (!alert) {
-    return;
-  }
-
-  try {
-    // 获取管理员 ID（从配置中读取或默认）
-    const adminId = "admin"; // TODO: 从配置中读取
-
-    const sessionKey = `agent:${adminId}:main`;
-
-    const alertMessage = [
-      alert.title,
-      ``,
-      `**Agent**: ${agentId}`,
-      `**,详情**: ${alert.message}`,
-      ``,
-      `**建议操作**:`,
-      ...alert.suggestions.map((s: string, i: number) => `${i + 1}. ${s}`),
-      ``,
-      `请立即检查该 Agent 的工作状态！`,
-    ].join("\n");
-
-    // 通过 chat.send 发送告警
-    await new Promise<void>((resolve) => {
-      (chatHandlers["chat.send"] as unknown as (opts: GatewayRequestHandlerOptions) => void)({
-        params: {
-          sessionKey,
-          message: alertMessage,
-          idempotencyKey: `agent-activity-alert-${agentId}-${Date.now()}`,
-        },
-        respond: () => resolve(),
-      } as unknown as GatewayRequestHandlerOptions);
-    });
-
-    console.log(t("monitor.agent.alert_sent", { agentId }));
-  } catch (error) {
-    console.error(t("monitor.agent.alert_failed", { agentId }), error);
   }
 }
 
