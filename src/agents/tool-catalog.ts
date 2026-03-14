@@ -41,6 +41,7 @@ const CORE_TOOL_SECTION_ORDER: Array<{ id: string; label: string }> = [
   { id: "agent_lifecycle", label: "Agent Lifecycle" },
   { id: "agent_discovery", label: "Agent Discovery" },
   { id: "task_mgmt", label: "Task Management" },
+  { id: "project_mgmt", label: "Project Management" },
   { id: "group_mgmt", label: "Group Management" },
   { id: "social", label: "Social" },
   { id: "approval", label: "Approval" },
@@ -394,6 +395,14 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     label: "task_delete",
     description: "Delete task",
     sectionId: "task_mgmt",
+    profiles: [],
+  },
+  // ─── 项目管理 ───
+  {
+    id: "project_create",
+    label: "project_create",
+    description: "Create project with workspace and configuration",
+    sectionId: "project_mgmt",
     profiles: [],
   },
   // ─── 群组管理 ───

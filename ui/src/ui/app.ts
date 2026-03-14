@@ -360,6 +360,15 @@ export class OpenClawApp extends LitElement {
   @state() groupWorkspaceMigrating = false;
   @state() creatingGroup = false;
   @state() editingGroup: import("./views/groups.ts").GroupInfo | null = null;
+  // 项目管理状态
+  @state() projectsLoading = false;
+  @state() projectsList: import("./views/groups.ts").ProjectsListResult | null = null;
+  @state() projectsError: string | null = null;
+  @state() selectedProjectId: string | null = null;
+  @state() activeProjectPanel: "list" | "config" = "list";
+  @state() creatingProject = false;
+  @state() editingProject: import("./views/groups.ts").ProjectInfo | null = null;
+  @state() upgradingGroupToProject = false;
   // Friends 好友关系状态
   @state() friendsLoading = false;
   @state() friendsError: string | null = null;
@@ -1192,6 +1201,131 @@ export class OpenClawApp extends LitElement {
     await saveConfig(this);
 
     this.editingChannelGlobalConfig = null;
+  }
+
+  // ========== 项目管理 Handlers ==========
+
+  async handleProjectsRefresh() {
+    const { loadProjects } = await import("./controllers/projects.js");
+    await loadProjects(this, this.client);
+  }
+
+  async handleCreateProject(projectData: {
+    projectId: string;
+    name: string;
+    description?: string;
+    workspaceRoot?: string;
+    codeDir?: string;
+    createGroup?: boolean;
+  }) {
+    const { createProject } = await import("./controllers/projects.js");
+    await createProject(this, this.client, projectData);
+  }
+
+  async handleUpgradeGroupToProject(groupId: string, projectId: string) {
+    const { upgradeGroupToProject } = await import("./controllers/projects.js");
+    await upgradeGroupToProject(this, this.client, groupId, projectId);
+  }
+
+  handleSelectProject(projectId: string) {
+    this.selectedProjectId = projectId;
+  }
+
+  handleSelectProjectPanel(panel: "list" | "config") {
+    this.activeProjectPanel = panel;
+  }
+
+  handleEditProject(project: import("./views/groups.ts").ProjectInfo) {
+    this.editingProject = project;
+  }
+
+  handleCancelProjectEdit() {
+    this.editingProject = null;
+  }
+
+  handleProjectFormChange(field: string, value: unknown) {
+    if (!this.editingProject) {
+      return;
+    }
+    this.editingProject = {
+      ...this.editingProject,
+      [field]: value,
+    };
+  }
+
+  async handleSaveProject() {
+    if (!this.editingProject) {
+      return;
+    }
+
+    // TODO: 实现更新项目配置的逻辑，需要调用 projects.update RPC 或直接修改 PROJECT_CONFIG.json
+    console.log("[App] Save project:", this.editingProject);
+    
+    // 暂时只是关闭编辑模式，后续需要补充实际保存逻辑
+    this.editingProject = null;
+  }
+
+  // ========== 群组管理 Handlers ==========
+
+  async handleGroupsRefresh() {
+    const { loadGroups } = await import("./controllers/groups.js");
+    await loadGroups(this, this.client);
+  }
+
+  async handleCreateGroup(groupData: {
+    id: string;
+    name: string;
+    ownerId: string;
+    description?: string;
+    isPublic?: boolean;
+    maxMembers?: number;
+    projectId?: string;
+    workspacePath?: string;
+  }) {
+    const { createGroup } = await import("./controllers/groups.js");
+    await createGroup(this, this.client, groupData);
+  }
+
+  handleSelectGroup(groupId: string) {
+    this.groupsSelectedId = groupId;
+  }
+
+  handleSelectPanel(panel: "list" | "members" | "settings" | "files") {
+    this.groupsActivePanel = panel;
+  }
+
+  handleEditGroup(group: import("./views/groups.ts").GroupInfo) {
+    this.editingGroup = group;
+  }
+
+  handleCancelEdit() {
+    this.editingGroup = null;
+  }
+
+  async handleDeleteGroup(groupId: string) {
+    const { deleteGroup } = await import("./controllers/groups.js");
+    await deleteGroup(this, this.client, groupId);
+  }
+
+  handleGroupFormChange(field: string, value: unknown) {
+    if (!this.editingGroup) {
+      return;
+    }
+    this.editingGroup = {
+      ...this.editingGroup,
+      [field]: value,
+    };
+  }
+
+  async handleSaveGroup() {
+    if (!this.editingGroup) {
+      return;
+    }
+
+    const { updateGroup } = await import("./controllers/groups.js");
+    await updateGroup(this, this.client, this.editingGroup.id, this.editingGroup);
+    
+    this.editingGroup = null;
   }
 
   handleAccountFormChange(field: string, value: unknown) {

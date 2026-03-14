@@ -1,7 +1,9 @@
 ---
 name: feishu-drive
 description: |
-  Feishu cloud storage file management. Activate when user mentions cloud space, folders, drive.
+  Feishu cloud storage file management. 
+  ⚠️ ONLY for Feishu channel contexts. Do NOT use for OpenClaw group workspaces.
+  Activate when user mentions Feishu cloud space, folders, drive in a Feishu chat.
 ---
 
 # Feishu Drive Tool

@@ -10,6 +10,9 @@ import type { SsrFPolicy } from "../../infra/net/ssrf.js";
 const WEB_TOOLS_TRUSTED_NETWORK_SSRF_POLICY: SsrFPolicy = {
   dangerouslyAllowPrivateNetwork: true,
   allowRfc2544BenchmarkRange: true,
+  // 允许本地开发环境
+  allowedHostnames: ["localhost", "127.0.0.1", "::1"],
+  hostnameAllowlist: ["localhost", "*.localhost", "127.0.0.1"],
 };
 
 type WebToolGuardedFetchOptions = Omit<

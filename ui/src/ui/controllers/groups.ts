@@ -1,34 +1,50 @@
-import type { GatewayBrowserClient } from "../gateway.ts";
-import type { GroupInfo, GroupMemberRole, GroupsListResult } from "../views/groups.ts";
+/**
+ * Groups Controller
+ * 
+ * 群组管理相关控制器：
+ * - 加载群组列表
+ * - 创建群组
+ * - 更新群组信息
+ * - 添加/移除成员
+ */
 
-export type GroupsState = {
-  client: GatewayBrowserClient | null;
-  connected: boolean;
-  groupsLoading: boolean;
-  groupsList: GroupsListResult | null;
-  groupsError: string | null;
-};
+import type { App } from "../app.js";
+import type { GatewayClient } from "../gateway.js";
+import type { GroupInfo, GroupsListResult } from "../views/groups.js";
 
 /**
  * 加载群组列表
  */
-export async function loadGroups(state: GroupsState): Promise<void> {
-  if (!state.client || !state.connected) {
-    return;
-  }
-
-  state.groupsLoading = true;
-  state.groupsError = null;
+export async function loadGroups(app: App, client: GatewayClient): Promise<void> {
+  app.groupsLoading = true;
+  app.groupsError = null;
 
   try {
-    const result = await state.client.request<GroupsListResult>("groups.list", {});
-    if (result) {
-      state.groupsList = result;
-    }
-  } catch (err) {
-    state.groupsError = String(err instanceof Error ? err.message : err);
+    // 调用 groups.list RPC
+    const response = await client.request("groups.list", {});
+    const groups = Array.isArray((response as any)?.groups) ? (response as any).groups : [];
+    
+    app.groupsList = {
+      groups: groups.map((g: any) => ({
+        id: g.id,
+        name: g.name,
+        description: g.description,
+        ownerId: g.ownerId,
+        createdAt: g.createdAt,
+        members: Array.isArray(g.members) ? g.members : [],
+        maxMembers: g.maxMembers,
+        isPublic: g.isPublic,
+        tags: g.tags,
+        projectId: g.projectId,
+        workspacePath: g.workspacePath,
+      })),
+      total: groups.length,
+    };
+  } catch (error) {
+    console.error("[Groups] Failed to load groups:", error);
+    app.groupsError = String(error);
   } finally {
-    state.groupsLoading = false;
+    app.groupsLoading = false;
   }
 }
 
@@ -36,103 +52,186 @@ export async function loadGroups(state: GroupsState): Promise<void> {
  * 创建群组
  */
 export async function createGroup(
-  state: GroupsState,
-  group: {
+  app: App,
+  client: GatewayClient,
+  groupData: {
     id: string;
     name: string;
+    ownerId: string;
     description?: string;
+    isPublic?: boolean;
     maxMembers?: number;
-    isPublic: boolean;
-    initialMembers?: string[];
+    projectId?: string;
+    workspacePath?: string;
   },
 ): Promise<void> {
-  if (!state.client || !state.connected) {
-    throw new Error("Not connected to gateway");
+  app.creatingGroup = true;
+  app.groupsError = null;
+
+  try {
+    // 调用 groups.create RPC
+    await client.request("groups.create", {
+      id: groupData.id,
+      name: groupData.name,
+      ownerId: groupData.ownerId,
+      description: groupData.description,
+      initialMembers: [],
+      isPublic: groupData.isPublic || false,
+      maxMembers: groupData.maxMembers,
+      projectId: groupData.projectId,
+      workspacePath: groupData.workspacePath,
+    });
+    
+    console.log("[Groups] Group created:", groupData);
+    
+    // 刷新群组列表
+    await loadGroups(app, client);
+  } catch (error) {
+    console.error("[Groups] Failed to create group:", error);
+    app.groupsError = String(error);
+    throw error;
+  } finally {
+    app.creatingGroup = false;
   }
-
-  await state.client.request("groups.create", group);
-
-  // 重新加载群组列表
-  await loadGroups(state);
 }
 
 /**
  * 删除群组
  */
-export async function deleteGroup(state: GroupsState, groupId: string): Promise<void> {
-  if (!state.client || !state.connected) {
-    throw new Error("Not connected to gateway");
+export async function deleteGroup(app: App, client: GatewayClient, groupId: string): Promise<void> {
+  app.groupsError = null;
+
+  try {
+    // 调用 groups.delete RPC
+    await client.request("groups.delete", { groupId });
+    
+    console.log("[Groups] Group deleted:", groupId);
+    
+    // 刷新群组列表
+    await loadGroups(app, client);
+  } catch (error) {
+    console.error("[Groups] Failed to delete group:", error);
+    app.groupsError = String(error);
+    throw error;
   }
-
-  await state.client.request("groups.delete", { groupId });
-
-  // 重新加载群组列表
-  await loadGroups(state);
 }
 
 /**
- * 添加成员
+ * 添加群成员
  */
 export async function addGroupMember(
-  state: GroupsState,
+  app: App,
+  client: GatewayClient,
   groupId: string,
   agentId: string,
-  role: GroupMemberRole = "member",
+  role?: "member" | "admin",
 ): Promise<void> {
-  if (!state.client || !state.connected) {
-    throw new Error("Not connected to gateway");
+  app.groupsError = null;
+
+  try {
+    // 调用 groups.addMember RPC
+    await client.request("groups.addMember", {
+      groupId,
+      agentId,
+      role: role || "member",
+    });
+    
+    console.log("[Groups] Member added:", agentId, "to", groupId);
+    
+    // 刷新群组列表
+    await loadGroups(app, client);
+  } catch (error) {
+    console.error("[Groups] Failed to add member:", error);
+    app.groupsError = String(error);
+    throw error;
   }
-
-  await state.client.request("groups.addMember", {
-    groupId,
-    agentId,
-    role,
-  });
-
-  // 重新加载群组列表
-  await loadGroups(state);
 }
 
 /**
- * 移除成员
+ * 移除群成员
  */
 export async function removeGroupMember(
-  state: GroupsState,
+  app: App,
+  client: GatewayClient,
   groupId: string,
   agentId: string,
 ): Promise<void> {
-  if (!state.client || !state.connected) {
-    throw new Error("Not connected to gateway");
+  app.groupsError = null;
+
+  try {
+    // 调用 groups.removeMember RPC
+    await client.request("groups.removeMember", {
+      groupId,
+      agentId,
+    });
+    
+    console.log("[Groups] Member removed:", agentId, "from", groupId);
+    
+    // 刷新群组列表
+    await loadGroups(app, client);
+  } catch (error) {
+    console.error("[Groups] Failed to remove member:", error);
+    app.groupsError = String(error);
+    throw error;
   }
-
-  await state.client.request("groups.removeMember", {
-    groupId,
-    agentId,
-  });
-
-  // 重新加载群组列表
-  await loadGroups(state);
 }
 
 /**
- * 更新成员角色
+ * 更新群成员角色
  */
 export async function updateGroupMemberRole(
-  state: GroupsState,
+  app: App,
+  client: GatewayClient,
   groupId: string,
   agentId: string,
-  role: GroupMemberRole,
+  role: "member" | "admin",
 ): Promise<void> {
-  if (!state.client || !state.connected) {
-    throw new Error("Not connected to gateway");
+  app.groupsError = null;
+
+  try {
+    // 调用 groups.updateMemberRole RPC
+    await client.request("groups.updateMemberRole", {
+      groupId,
+      agentId,
+      role,
+    });
+    
+    console.log("[Groups] Member role updated:", agentId, "to", role, "in", groupId);
+    
+    // 刷新群组列表
+    await loadGroups(app, client);
+  } catch (error) {
+    console.error("[Groups] Failed to update member role:", error);
+    app.groupsError = String(error);
+    throw error;
   }
+}
 
-  await state.client.request("groups.updateMemberRole", {
-    groupId,
-    agentId,
-    role,
-  });
+/**
+ * 更新群组信息
+ */
+export async function updateGroup(
+  app: App,
+  client: GatewayClient,
+  groupId: string,
+  updates: Partial<GroupInfo>,
+): Promise<void> {
+  app.groupsError = null;
 
-  // 重新加载群组列表
-  await loadGroups(state);
+  try {
+    // 调用 groups.update RPC
+    await client.request("groups.update", {
+      groupId,
+      ...updates,
+    });
+    
+    console.log("[Groups] Group updated:", groupId, updates);
+    
+    // 刷新群组列表
+    await loadGroups(app, client);
+  } catch (error) {
+    console.error("[Groups] Failed to update group:", error);
+    app.groupsError = String(error);
+    throw error;
+  }
 }

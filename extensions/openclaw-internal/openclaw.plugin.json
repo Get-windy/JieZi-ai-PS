@@ -1,0 +1,10 @@
+{
+  "id": "openclaw-internal",
+  "name": "OpenClaw Internal Tools",
+  "description": "Internal tools registry for custom development and team-specific utilities",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

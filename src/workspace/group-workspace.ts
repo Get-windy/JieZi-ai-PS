@@ -317,7 +317,7 @@ export class GroupWorkspaceManager {
 ## 群组名称
 ${workspace.groupName}
 
-## 群组ID
+## 群组 ID
 ${workspace.groupId}
 
 ## 创建时间
@@ -337,6 +337,52 @@ ${workspace.admins?.map((a: string) => `- ${a}`).join("\n") || "- " + workspace.
 - \`history/\`: 历史记录目录
 - \`meeting-notes/\`: 会议纪要目录
 - \`decisions/\`: 决策记录目录
+
+## 💬 群聊使用说明
+
+### Agent 发言机制
+1. **自动群聊**: 当 Agent 在群组中处理任务时，会自动使用 \`group_send\` 工具在群聊中发言
+2. **发言内容**: 包括任务进展、问题反馈、完成通知等
+3. **发言标识**: 每条消息都会显示 \`__group_sender_id\` 和 \`__group_sender_name\`,方便识别是哪个 Agent 发言
+
+### 项目群组特殊说明
+- **项目绑定**: 如果本群组是项目群组，则所有讨论和决策都与指定项目相关
+- **工作空间**: 项目工作空间路径：\`H:\\OpenClaw_Workspace\\groups\\{projectId}\`
+- **代码目录**: 实际代码可能在外部目录 (如 \`I:\\{projectName}\`),通过 PROJECT_CONFIG.json 配置
+- **记忆隔离**: 每个项目有独立的 SHARED_MEMORY.md,存储项目特定的知识和上下文
+
+### 常用工具
+- \`group_list\`: 查看群组列表
+- \`group_create\`: 创建新群组 (可指定 projectId 和 workspacePath)
+- \`group_send\`: 向群聊发送消息
+- \`group_add_member\`: 添加群成员
+- \`group_remove_member\`: 移除群成员
+
+## 📁 项目配置 (如果是项目群组)
+
+### PROJECT_CONFIG.json
+项目群组工作空间应包含 PROJECT_CONFIG.json 文件，定义:
+\`\`\`json
+{
+  "projectId": "{projectId}",
+  "workspacePath": "H:\\OpenClaw_Workspace\\groups\\{projectId}",
+  "codeDir": "I:\\{projectName}",  // 实际代码目录
+  "docsDir": "H:\\OpenClaw_Workspace\\groups\\{projectId}\\docs"
+}
+\`\`\`
+
+### 配置说明
+- **projectId**: 项目唯一标识符 (如：wo-shi-renlei, PolyVault, LifeMirror)
+- **workspacePath**: 项目工作空间路径 (存放文档、记忆、决策)
+- **codeDir**: 实际代码目录位置 (可以独立在任何位置)
+- **docsDir**: 项目文档目录
+
+### 矩阵管理模式
+同一套专业人员 (产品分析师、QA 负责人、开发人员) 同时服务多个项目:
+- 根据任务的 \`projectId\` 动态切换到对应项目
+- 加载项目的 SHARED_MEMORY.md 获取上下文
+- 在项目指定的代码目录中工作
+- 所有讨论和决策记录在项目群组工作空间中
 `;
 
     fs.writeFileSync(workspace.groupInfoPath, content, "utf-8");

@@ -55,7 +55,9 @@ import {
   createGroupUpdateMemberRoleTool,
   createGroupDeleteTool,
   createGroupSendTool,
+  createGroupUpgradeToProjectTool,
 } from "./tools/group-management-tools.js";
+import { createProjectCreateTool } from "./tools/project-management-tools.js";
 import {
   createDeactivateAgentTool,
   createActivateAgentTool,
@@ -322,6 +324,7 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
     }),
+    createProjectCreateTool(),
     createGroupListTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
@@ -364,6 +367,7 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
     }),
+    createGroupUpgradeToProjectTool(),
     createOrganizationCreateTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,

@@ -784,4 +784,115 @@ export const groupsHandlers: GatewayRequestHandlers = {
       );
     }
   },
+
+  /**
+   * 升级群组为项目群
+   */
+  "groups.upgradeToProject": async ({ params, respond, context }) => {
+    try {
+      const groupId = params?.groupId ? String(params.groupId) : "";
+      const projectId = params?.projectId ? String(params.projectId) : "";
+
+      if (!groupId || !projectId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "groupId and projectId are required"),
+        );
+        return;
+      }
+
+      // 获取群组信息
+      const group = groupManager.getGroup(groupId);
+      if (!group) {
+        respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `Group "${groupId}" not found`));
+        return;
+      }
+
+      // 检查是否已经是项目群
+      if (group.projectId) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.FAILED_PRECONDITION,
+            `Group "${groupId}" is already a project group (bound to project "${group.projectId}")`,
+          ),
+        );
+        return;
+      }
+
+      // 验证项目是否存在 (通过检查项目工作空间)
+      const projectWorkspaceExists = await import("../../utils/project-context.js").then(
+        (m) => m.projectWorkspaceExists,
+      );
+      
+      if (!projectWorkspaceExists(projectId)) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.NOT_FOUND, `Project "${projectId}" not found`),
+        );
+        return;
+      }
+
+      // 获取项目工作空间路径
+      const buildProjectContext = await import("../../utils/project-context.js").then(
+        (m) => m.buildProjectContext,
+      );
+      const projectCtx = buildProjectContext(projectId);
+      const projectWorkspacePath = projectCtx.workspacePath;
+
+      // 更新群组信息，绑定项目
+      const updatedGroup = await groupManager.updateGroup(groupId, {
+        projectId,
+        workspacePath: projectWorkspacePath,
+      });
+
+      // 迁移群组工作空间到项目工作空间
+      const groupWorkspaceManager = await import("../../workspace/group-workspace.js").then(
+        (m) => m.GroupWorkspaceManager.getInstance(),
+      );
+      
+      // 更新群组工作空间目录映射
+      groupWorkspaceManager.updateGroupWorkspaceDir(groupId, projectWorkspacePath);
+
+      // 同步 PROJECT_CONFIG.json 配置（如果存在）
+      const fs = await import("fs");
+      const path = await import("path");
+      const projectConfigPath = path.join(projectWorkspacePath, "PROJECT_CONFIG.json");
+      
+      if (fs.existsSync(projectConfigPath)) {
+        // 项目配置已存在，无需额外操作
+        console.log(
+          `[Group Upgrade] Group ${groupId} upgraded to project group for project ${projectId}`,
+        );
+      } else {
+        // 项目配置不存在，记录警告
+        console.warn(
+          `[Group Upgrade] PROJECT_CONFIG.json not found in project workspace: ${projectWorkspacePath}`,
+        );
+      }
+
+      // 发送系统消息通知所有成员
+      await groupManager.sendSystemMessage(
+        groupId,
+        `🎉 群组已升级为项目群！
+
+绑定项目：${projectId}
+工作空间：${projectWorkspacePath}
+
+⚠️ 注意：项目群无法降级为普通群。
+💡 提示：项目工作空间和项目群工作空间已完全绑定，任意一方更新都会同步到另一方。`,
+      );
+
+      respond(true, { success: true, group: updatedGroup, workspacePath: projectWorkspacePath }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to upgrade group to project: ${String(error)}`),
+      );
+    }
+  },
 };
