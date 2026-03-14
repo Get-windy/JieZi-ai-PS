@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AuthProfileStore } from "../agents/auth-profiles.js";
+import type { ProviderWizardOption } from "../plugins/provider-wizard.js";
 import {
   buildAuthChoiceGroups,
   buildAuthChoiceOptions,
@@ -16,6 +17,61 @@ function getOptions(includeSkip = false) {
 }
 
 describe("buildAuthChoiceOptions", () => {
+  it("includes core and provider-specific auth choices", () => {
+    resolveProviderWizardOptions.mockReturnValue([
+      {
+        value: "ollama",
+        label: "Ollama",
+        hint: "Cloud and local open models",
+        groupId: "ollama",
+        groupLabel: "Ollama",
+      },
+      {
+        value: "vllm",
+        label: "vLLM",
+        hint: "Local/self-hosted OpenAI-compatible server",
+        groupId: "vllm",
+        groupLabel: "vLLM",
+      },
+      {
+        value: "sglang",
+        label: "SGLang",
+        hint: "Fast self-hosted OpenAI-compatible server",
+        groupId: "sglang",
+        groupLabel: "SGLang",
+      },
+    ]);
+    const options = getOptions();
+
+    for (const value of [
+      "github-copilot",
+      "token",
+      "zai-api-key",
+      "xiaomi-api-key",
+      "minimax-global-api",
+      "minimax-cn-api",
+      "minimax-global-oauth",
+      "moonshot-api-key",
+      "moonshot-api-key-cn",
+      "kimi-code-api-key",
+      "together-api-key",
+      "ai-gateway-api-key",
+      "cloudflare-ai-gateway-api-key",
+      "synthetic-api-key",
+      "chutes",
+      "qwen-portal",
+      "xai-api-key",
+      "mistral-api-key",
+      "volcengine-api-key",
+      "byteplus-api-key",
+      "vllm",
+      "opencode-go",
+      "ollama",
+      "sglang",
+    ]) {
+      expect(options.some((opt) => opt.value === value)).toBe(true);
+    }
+  });
   it("includes GitHub Copilot", () => {
     const options = getOptions();
 
@@ -79,14 +135,35 @@ describe("buildAuthChoiceOptions", () => {
     expect(cliChoices).toContain("codex-cli");
   });
 
-  it("shows Chutes in grouped provider selection", () => {
+  it("groups OpenCode Zen and Go under one OpenCode entry", () => {
     const { groups } = buildAuthChoiceGroups({
       store: EMPTY_STORE,
       includeSkip: false,
     });
-    const chutesGroup = groups.find((group) => group.value === "chutes");
+    const openCodeGroup = groups.find((group) => group.value === "opencode");
 
-    expect(chutesGroup).toBeDefined();
-    expect(chutesGroup?.options.some((opt) => opt.value === "chutes")).toBe(true);
+    expect(openCodeGroup).toBeDefined();
+    expect(openCodeGroup?.options.some((opt) => opt.value === "opencode-zen")).toBe(true);
+    expect(openCodeGroup?.options.some((opt) => opt.value === "opencode-go")).toBe(true);
+  });
+
+  it("shows Ollama in grouped provider selection", () => {
+    resolveProviderWizardOptions.mockReturnValue([
+      {
+        value: "ollama",
+        label: "Ollama",
+        hint: "Cloud and local open models",
+        groupId: "ollama",
+        groupLabel: "Ollama",
+      },
+    ]);
+    const { groups } = buildAuthChoiceGroups({
+      store: EMPTY_STORE,
+      includeSkip: false,
+    });
+    const ollamaGroup = groups.find((group) => group.value === "ollama");
+
+    expect(ollamaGroup).toBeDefined();
+    expect(ollamaGroup?.options.some((opt) => opt.value === "ollama")).toBe(true);
   });
 });

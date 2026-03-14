@@ -7,6 +7,10 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 const getMemorySearchManager = vi.fn();
 const loadConfig = vi.fn(() => ({}));
 const resolveDefaultAgentId = vi.fn(() => "main");
+const resolveCommandSecretRefsViaGateway = vi.fn(async ({ config }: { config: unknown }) => ({
+  resolvedConfig: config,
+  diagnostics: [] as string[],
+}));
 
 vi.mock("../memory/index.js", () => ({
   getMemorySearchManager,
@@ -18,6 +22,10 @@ vi.mock("../config/config.js", () => ({
 
 vi.mock("../agents/agent-scope.js", () => ({
   resolveDefaultAgentId,
+}));
+
+vi.mock("./command-secret-gateway.js", () => ({
+  resolveCommandSecretRefsViaGateway,
 }));
 
 let registerMemoryCli: typeof import("./memory-cli.js").registerMemoryCli;
@@ -34,6 +42,7 @@ beforeAll(async () => {
 afterEach(() => {
   vi.restoreAllMocks();
   getMemorySearchManager.mockClear();
+  resolveCommandSecretRefsViaGateway.mockClear();
   process.exitCode = undefined;
   setVerbose(false);
 });
@@ -50,6 +59,8 @@ describe("memory cli", () => {
   function firstLoggedJson(log: ReturnType<typeof vi.spyOn>) {
     return JSON.parse(String(log.mock.calls[0]?.[0] ?? "null")) as Record<string, unknown>;
   }
+
+  const inactiveMemorySecretDiagnostic = "agents.defaults.memorySearch.remote.apiKey inactive"; // pragma: allowlist secret
 
   function expectCliSync(sync: ReturnType<typeof vi.fn>) {
     expect(sync).toHaveBeenCalledWith(

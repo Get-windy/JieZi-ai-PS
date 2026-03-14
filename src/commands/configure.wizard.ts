@@ -65,6 +65,58 @@ async function resolveGatewaySecretInputForWizard(params: {
   }
 }
 
+async function runGatewayHealthCheck(params: {
+  cfg: OpenClawConfig;
+  runtime: RuntimeEnv;
+  port: number;
+}): Promise<void> {
+  const localLinks = resolveControlUiLinks({
+    bind: params.cfg.gateway?.bind ?? "loopback",
+    port: params.port,
+    customBindHost: params.cfg.gateway?.customBindHost,
+    basePath: undefined,
+  });
+  const remoteUrl = params.cfg.gateway?.remote?.url?.trim();
+  const wsUrl = params.cfg.gateway?.mode === "remote" && remoteUrl ? remoteUrl : localLinks.wsUrl;
+  const configuredToken = await resolveGatewaySecretInputForWizard({
+    cfg: params.cfg,
+    value: params.cfg.gateway?.auth?.token,
+    path: "gateway.auth.token",
+  });
+  const configuredPassword = await resolveGatewaySecretInputForWizard({
+    cfg: params.cfg,
+    value: params.cfg.gateway?.auth?.password,
+    path: "gateway.auth.password",
+  });
+  const token =
+    process.env.OPENCLAW_GATEWAY_TOKEN ?? process.env.CLAWDBOT_GATEWAY_TOKEN ?? configuredToken;
+  const password =
+    process.env.OPENCLAW_GATEWAY_PASSWORD ??
+    process.env.CLAWDBOT_GATEWAY_PASSWORD ??
+    configuredPassword;
+
+  await waitForGatewayReachable({
+    url: wsUrl,
+    token,
+    password,
+    deadlineMs: 15_000,
+  });
+
+  try {
+    await healthCommand({ json: false, timeoutMs: 10_000 }, params.runtime);
+  } catch (err) {
+    params.runtime.error(formatHealthCheckFailure(err));
+    note(
+      [
+        "Docs:",
+        "https://docs.openclaw.ai/gateway/health",
+        "https://docs.openclaw.ai/gateway/troubleshooting",
+      ].join("\n"),
+      "Health check help",
+    );
+  }
+}
+
 async function promptConfigureSection(
   runtime: RuntimeEnv,
   hasSelection: boolean,

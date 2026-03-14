@@ -1,5 +1,8 @@
 import type { AuthProfileStore } from "../agents/auth-profiles.js";
+import type { OpenClawConfig } from "../config/config.js";
+import { resolveProviderWizardOptions } from "../plugins/provider-wizard.js";
 import { AUTH_CHOICE_LEGACY_ALIASES_FOR_CLI } from "./auth-choice-legacy.js";
+import { ONBOARD_PROVIDER_AUTH_FLAGS } from "./onboard-provider-auth-flags.js";
 import type { AuthChoice, AuthChoiceGroupId } from "./onboard-types.js";
 
 export type { AuthChoiceGroupId };
@@ -50,7 +53,7 @@ const AUTH_CHOICE_GROUP_DEFS: {
     value: "minimax",
     label: "MiniMax",
     hint: "M2.5 (recommended)",
-    choices: ["minimax-portal", "minimax-api", "minimax-api-key-cn", "minimax-api-lightning"],
+    choices: ["minimax-global-oauth", "minimax-global-api", "minimax-cn-oauth", "minimax-cn-api"],
   },
   {
     value: "moonshot",
@@ -125,10 +128,10 @@ const AUTH_CHOICE_GROUP_DEFS: {
     choices: ["ai-gateway-api-key"],
   },
   {
-    value: "opencode-zen",
-    label: "OpenCode Zen",
-    hint: "API key",
-    choices: ["opencode-zen"],
+    value: "opencode",
+    label: "OpenCode",
+    hint: "Shared API key for Zen + Go catalogs",
+    choices: ["opencode-zen", "opencode-go"],
   },
   {
     value: "xiaomi",
@@ -207,6 +210,11 @@ const BASE_AUTH_CHOICE_OPTIONS: ReadonlyArray<AuthChoiceOption> = [
   },
   { value: "openrouter-api-key", label: "OpenRouter API key" },
   {
+    value: "kilocode-api-key",
+    label: "Kilo Gateway API key",
+    hint: "OpenRouter-compatible gateway",
+  },
+  {
     value: "litellm-api-key",
     label: "LiteLLM API key",
     hint: "Unified gateway for 100+ LLM providers",
@@ -284,22 +292,25 @@ const BASE_AUTH_CHOICE_OPTIONS: ReadonlyArray<AuthChoiceOption> = [
     value: "xiaomi-api-key",
     label: "Xiaomi API key",
   },
+  { value: "minimax-global-oauth", label: "MiniMax Global OAuth" },
   {
-    value: "minimax-portal",
-    label: "MiniMax OAuth",
-    hint: "Oauth plugin for MiniMax",
+    value: "minimax-global-api",
+    label: "MiniMax M2.5 (Global)",
+    hint: "Global endpoint (api.minimax.io)",
+  },
+  { value: "minimax-cn-oauth", label: "MiniMax CN OAuth" },
+  {
+    value: "minimax-cn-api",
+    label: "MiniMax M2.5 (CN)",
+    hint: "China endpoint (api.minimaxi.com)",
   },
   { value: "qwen-portal", label: "Qwen OAuth" },
-  {
-    value: "copilot-proxy",
-    label: "Copilot Proxy (local)",
-    hint: "Local proxy for VS Code Copilot models",
-  },
+  { value: "copilot-proxy", label: "Copilot Proxy (local proxy for VS Code)" },
   { value: "apiKey", label: "Anthropic API key" },
   {
-    value: "opencode-zen",
-    label: "OpenCode Zen (multi-model proxy)",
-    hint: "Claude, GPT, Gemini via opencode.ai/zen",
+    value: "opencode-go",
+    label: "OpenCode Go (Kimi/GLM/MiniMax)",
+    hint: "Go catalog via opencode.ai/go",
   },
   { value: "minimax-api", label: "MiniMax M2.5" },
   {

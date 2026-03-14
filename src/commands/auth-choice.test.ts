@@ -46,6 +46,7 @@ vi.mock("./zai-endpoint-detect.js", () => ({
 
 type StoredAuthProfile = {
   key?: string;
+  keyRef?: { source: string; provider: string; id: string };
   access?: string;
   refresh?: string;
   provider?: string;
@@ -126,6 +127,7 @@ describe("applyAuthChoice", () => {
     loginOpenAICodexOAuth.mockReset();
     loginOpenAICodexOAuth.mockResolvedValue(null);
     await lifecycle.cleanup();
+    activeStateDir = null;
   });
 
   it("does not throw when openai-codex oauth fails", async () => {

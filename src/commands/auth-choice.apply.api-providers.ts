@@ -97,6 +97,8 @@ const API_KEY_TOKEN_PROVIDER_AUTH_CHOICE: Record<string, AuthChoice> = {
   huggingface: "huggingface-api-key",
   mistral: "mistral-api-key",
   opencode: "opencode-zen",
+  "opencode-go": "opencode-go",
+  kilocode: "kilocode-api-key",
   qianfan: "qianfan-api-key",
 };
 

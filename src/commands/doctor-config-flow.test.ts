@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { withTempHome } from "../../test/helpers/temp-home.js";
+import * as noteModule from "../terminal/note.js";
 import { loadAndMaybeMigrateDoctorConfig } from "./doctor-config-flow.js";
 import { runDoctorConfigWithInput } from "./doctor-config-flow.test-utils.js";
 
@@ -18,6 +19,21 @@ function expectGoogleChatDmAllowFromRepaired(cfg: unknown) {
   expect(typed.channels.googlechat.allowFrom).toBeUndefined();
 }
 
+async function collectDoctorWarnings(config: Record<string, unknown>): Promise<string[]> {
+  const noteSpy = vi.spyOn(noteModule, "note").mockImplementation(() => {});
+  try {
+    await runDoctorConfigWithInput({
+      config,
+      run: loadAndMaybeMigrateDoctorConfig,
+    });
+    return noteSpy.mock.calls
+      .filter((call) => call[1] === "Doctor warnings")
+      .map((call) => String(call[0]));
+  } finally {
+    noteSpy.mockRestore();
+  }
+}
+
 type DiscordGuildRule = {
   users: string[];
   roles: string[];
@@ -25,14 +41,14 @@ type DiscordGuildRule = {
 };
 
 type DiscordAccountRule = {
-  allowFrom: string[];
-  dm: { allowFrom: string[]; groupChannels: string[] };
-  execApprovals: { approvers: string[] };
-  guilds: Record<string, DiscordGuildRule>;
+  allowFrom?: string[];
+  dm?: { allowFrom: string[]; groupChannels: string[] };
+  execApprovals?: { approvers: string[] };
+  guilds?: Record<string, DiscordGuildRule>;
 };
 
 type RepairedDiscordPolicy = {
-  allowFrom: string[];
+  allowFrom?: string[];
   dm: { allowFrom: string[]; groupChannels: string[] };
   execApprovals: { approvers: string[] };
   guilds: Record<string, DiscordGuildRule>;
@@ -52,6 +68,96 @@ describe("doctor config flow", () => {
     expect((result.cfg as Record<string, unknown>).gateway).toEqual({
       auth: { mode: "token", token: 123 },
     });
+  });
+
+  it("does not warn on mutable account allowlists when dangerous name matching is inherited", async () => {
+    const doctorWarnings = await collectDoctorWarnings({
+      channels: {
+        slack: {
+          dangerouslyAllowNameMatching: true,
+          accounts: {
+            work: {
+              allowFrom: ["alice"],
+            },
+          },
+        },
+      },
+    });
+    expect(doctorWarnings.some((line) => line.includes("mutable allowlist"))).toBe(false);
+  });
+
+  it("does not warn about sender-based group allowlist for googlechat", async () => {
+    const doctorWarnings = await collectDoctorWarnings({
+      channels: {
+        googlechat: {
+          groupPolicy: "allowlist",
+          accounts: {
+            work: {
+              groupPolicy: "allowlist",
+            },
+          },
+        },
+      },
+    });
+
+    expect(
+      doctorWarnings.some(
+        (line) => line.includes('groupPolicy is "allowlist"') && line.includes("groupAllowFrom"),
+      ),
+    ).toBe(false);
+  });
+
+  it("warns on mutable Zalouser group entries when dangerous name matching is disabled", async () => {
+    const doctorWarnings = await collectDoctorWarnings({
+      channels: {
+        zalouser: {
+          groups: {
+            "Ops Room": { allow: true },
+          },
+        },
+      },
+    });
+
+    expect(
+      doctorWarnings.some(
+        (line) =>
+          line.includes("mutable allowlist") && line.includes("channels.zalouser.groups: Ops Room"),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not warn on mutable Zalouser group entries when dangerous name matching is enabled", async () => {
+    const doctorWarnings = await collectDoctorWarnings({
+      channels: {
+        zalouser: {
+          dangerouslyAllowNameMatching: true,
+          groups: {
+            "Ops Room": { allow: true },
+          },
+        },
+      },
+    });
+
+    expect(doctorWarnings.some((line) => line.includes("channels.zalouser.groups"))).toBe(false);
+  });
+
+  it("warns when imessage group allowlist is empty even if allowFrom is set", async () => {
+    const doctorWarnings = await collectDoctorWarnings({
+      channels: {
+        imessage: {
+          groupPolicy: "allowlist",
+          allowFrom: ["+15551234567"],
+        },
+      },
+    });
+
+    expect(
+      doctorWarnings.some(
+        (line) =>
+          line.includes('channels.imessage.groupPolicy is "allowlist"') &&
+          line.includes("does not fall back to allowFrom"),
+      ),
+    ).toBe(true);
   });
 
   it("drops unknown keys on repair", async () => {
