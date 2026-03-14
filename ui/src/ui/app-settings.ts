@@ -265,7 +265,7 @@ export async function refreshActiveTab(host: SettingsHost) {
     const agentId = app.agentsList?.defaultId ?? "main";
     await Promise.all([
       !app.channelsSnapshot ? loadChannels(app, false) : Promise.resolve(),
-      !app.groupsList ? loadGroups(app) : Promise.resolve(),
+      !app.groupsList ? loadGroups(app, app.client) : Promise.resolve(),
       app.friendsList?.length === 0 ? loadFriends(app, agentId) : Promise.resolve(),
       // 加载会话列表，用于通道节点匹配真实 sessionKey（lastChannel+lastAccountId）
       loadSessions(app as unknown as import("./controllers/sessions.ts").SessionsState),
@@ -306,7 +306,7 @@ export async function refreshActiveTab(host: SettingsHost) {
   }
   if (host.tab === "collaboration") {
     // 默认加载群组管理数据
-    await loadGroups(host as unknown as OpenClawApp);
+    await loadGroups(host as unknown as OpenClawApp, (host as unknown as OpenClawApp).client);
   }
 }
 

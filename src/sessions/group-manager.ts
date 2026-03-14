@@ -267,7 +267,15 @@ export class GroupManager {
     }
 
     // 创建群组工作空间
-    groupWorkspaceManager.ensureGroupWorkspace(id, name, ownerId);
+    // 如果是项目群，使用项目的共享工作空间；否则使用默认配置
+    if (projectId && workspacePath) {
+      // 项目群：直接使用项目的工作空间路径
+      groupWorkspaceManager.updateGroupWorkspaceDir(id, workspacePath);
+      groupWorkspaceManager.ensureGroupWorkspace(id, name, ownerId);
+    } else {
+      // 普通群：从配置动态读取工作空间根目录并创建
+      groupWorkspaceManager.ensureGroupWorkspace(id, name, ownerId);
+    }
 
     // 创建群组信息
     const group: GroupInfo = {
@@ -333,7 +341,7 @@ export class GroupManager {
    */
   async updateGroup(
     groupId: string,
-    updates: Partial<Pick<GroupInfo, "name" | "description" | "isPublic" | "maxMembers" | "tags">>,
+    updates: Partial<Pick<GroupInfo, "name" | "description" | "isPublic" | "maxMembers" | "tags" | "projectId" | "workspacePath">>,
   ): Promise<GroupInfo> {
     const group = this.groups.get(groupId);
     if (!group) {
@@ -531,7 +539,7 @@ export class GroupManager {
   /**
    * 发送系统消息
    */
-  private async sendSystemMessage(groupId: string, content: string): Promise<void> {
+  async sendSystemMessage(groupId: string, content: string): Promise<void> {
     const message: GroupMessage = {
       id: `system-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       groupId,

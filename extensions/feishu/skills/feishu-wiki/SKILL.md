@@ -1,7 +1,9 @@
 ---
 name: feishu-wiki
 description: |
-  Feishu knowledge base navigation. Activate when user mentions knowledge base, wiki, or wiki links.
+  Feishu knowledge base navigation.
+  ⚠️ ONLY for Feishu channel contexts. Do NOT use for OpenClaw group workspaces.
+  Activate when user mentions Feishu wiki, knowledge base, or wiki links in a Feishu chat.
 ---
 
 # Feishu Wiki Tool

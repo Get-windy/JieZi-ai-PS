@@ -38,6 +38,9 @@ import { normalizeAgentId, DEFAULT_AGENT_ID } from "../../routing/session-key.js
 import * as taskStorage from "../../tasks/storage.js";
 import type { Task } from "../../tasks/types.js";
 import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
+import { enqueueSystemEvent } from "../../infra/system-events.js";
+import { requestHeartbeatNow } from "../../infra/heartbeat-wake.js";
+import { addAgentToAllowList } from "../../agents/agent-config-manager.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 import { chatHandlers } from "./chat.js";
 import type { GatewayRequestHandlers, RespondFn } from "./types.js";
@@ -2647,6 +2650,33 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         params: chatSendParams,
         respond: innerRespond as RespondFn,
       });
+      
+      // === 步骤 3：动态添加 Agent 到 allowlist（如果需要）===
+      // 如果目标 Agent 不是 main，需要确保它在 allowAgents 列表中
+      if (normalizeAgentId(targetAgentId) !== "main") {
+        try {
+          await addAgentToAllowList(targetAgentId);
+        } catch (allowListErr) {
+          console.warn(
+            `[agent.assign_task] Failed to add ${targetAgentId} to allowAgents:`,
+            allowListErr instanceof Error ? allowListErr.message : String(allowListErr),
+          );
+          // 添加到 allowlist 失败不影响任务分配，继续执行
+        }
+      }
+          
+      // === 步骤 4：自动唤醒 Agent，确保任务被立即处理 ===
+      // 将任务指令作为系统事件放入队列，并立即触发心跳唤醒 Agent
+      // 这样 Agent 就会像被"闹钟"叫醒一样，立即开始处理任务
+      enqueueSystemEvent(taskLines, { sessionKey, contextKey: taskId });
+      requestHeartbeatNow({
+        reason: `Task assignment: ${taskId}`,
+        sessionKey,
+        agentId: targetAgentId,
+      });
+      console.log(
+        `[agent.assign_task] ✓ Agent ${targetAgentId} automatically woken up for task ${taskId}`,
+      );
     } catch (err) {
       if (!responded) {
         respond(

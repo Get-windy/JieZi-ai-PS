@@ -106,25 +106,33 @@ function resolveBrowserSsrFPolicy(cfg: BrowserConfig | undefined): SsrFPolicy | 
   const hostnameAllowlist = normalizeStringList(cfg?.ssrfPolicy?.hostnameAllowlist);
   const hasExplicitPrivateSetting =
     allowPrivateNetwork !== undefined || dangerouslyAllowPrivateNetwork !== undefined;
-  // Browser defaults to trusted-network mode unless explicitly disabled by policy.
+  // Browser 默认信任本地网络环境，除非明确禁用
   const resolvedAllowPrivateNetwork =
     dangerouslyAllowPrivateNetwork === true ||
     allowPrivateNetwork === true ||
     !hasExplicitPrivateSetting;
 
+  // 开发环境默认允许 localhost 访问
+  const devAllowedHostnames = allowedHostnames.length > 0 
+    ? allowedHostnames 
+    : ["localhost", "127.0.0.1", "::1"];
+  const devHostnameAllowlist = hostnameAllowlist.length > 0 
+    ? hostnameAllowlist 
+    : ["localhost", "*.localhost", "127.0.0.1"];
+
   if (
     !resolvedAllowPrivateNetwork &&
     !hasExplicitPrivateSetting &&
-    !allowedHostnames &&
-    !hostnameAllowlist
+    allowedHostnames.length === 0 &&
+    hostnameAllowlist.length === 0
   ) {
     return undefined;
   }
 
   return {
     ...(resolvedAllowPrivateNetwork ? { dangerouslyAllowPrivateNetwork: true } : {}),
-    ...(allowedHostnames ? { allowedHostnames } : {}),
-    ...(hostnameAllowlist ? { hostnameAllowlist } : {}),
+    ...(devAllowedHostnames ? { allowedHostnames: devAllowedHostnames } : {}),
+    ...(devHostnameAllowlist ? { hostnameAllowlist: devHostnameAllowlist } : {}),
   };
 }
 

@@ -105,6 +105,7 @@ import {
   removeGroupMember,
   updateGroupMemberRole,
 } from "./controllers/groups.ts";
+import { loadProjects, upgradeGroupToProject } from "./controllers/projects.ts";
 import { loadLogs } from "./controllers/logs.ts";
 import {
   loadQueueStatus,
@@ -2695,7 +2696,7 @@ export function renderApp(state: AppViewState) {
                   state.collaborationActivePanel = panel;
                   // 切换到群组面板时加载数据
                   if (panel === "groups" && !state.groupsList) {
-                    void loadGroups(state);
+                    void loadGroups(state, state.client!);
                   }
                   // 切换到好友面板时加载数据
                   if (panel === "friends" && state.friendsList.length === 0) {
@@ -2716,7 +2717,7 @@ export function renderApp(state: AppViewState) {
                   creatingGroup: state.creatingGroup,
                   editingGroup: state.editingGroup,
                   agentsList: state.agentsList,
-                  onRefresh: () => loadGroups(state),
+                  onRefresh: () => loadGroups(state, state.client!),
                   onSelectGroup: (groupId) => {
                     state.groupsSelectedId = groupId;
                   },
@@ -2737,29 +2738,30 @@ export function renderApp(state: AppViewState) {
                   onDeleteGroup: async (groupId) => {
                     if (confirm(`确定要删除群组 ${groupId} 吗？`)) {
                       try {
-                        await deleteGroup(state, groupId);
+                        await state.handleDeleteGroup(groupId);
                       } catch (err) {
                         alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
                       }
                     }
                   },
                   onSaveGroup: async () => {
+                    if (!state.editingGroup) {
+                      return;
+                    }
                     try {
-                      const defaultOwnerId = state.agentsList?.defaultId ?? "main";
-                      const group = state.editingGroup || {
-                        id: "",
-                        name: "",
-                        description: "",
-                        isPublic: false,
-                      };
-                      // 确保 ownerId 不为空
-                      const groupWithOwner = {
-                        ...group,
-                        ownerId:
-                          (group as unknown as { ownerId?: string }).ownerId || defaultOwnerId,
-                      };
-                      // oxlint-disable-next-line typescript/no-explicit-any
-                      await createGroup(state, groupWithOwner as any);
+                      // 如果是创建模式（有 creatingGroup 标志），则调用 handleCreateGroup
+                      if (state.creatingGroup) {
+                        const defaultOwnerId = state.agentsList?.defaultId ?? "main";
+                        const groupWithOwner = {
+                          ...state.editingGroup,
+                          ownerId: state.editingGroup.ownerId || defaultOwnerId,
+                        };
+                        await state.handleCreateGroup(groupWithOwner);
+                      } else {
+                        // 否则调用 updateGroup 更新现有群组
+                        const { updateGroup } = await import("./controllers/groups.js");
+                        await updateGroup(state, state.client!, state.editingGroup.id, state.editingGroup);
+                      }
                       state.creatingGroup = false;
                       state.editingGroup = null;
                     } catch (err) {
@@ -2789,21 +2791,21 @@ export function renderApp(state: AppViewState) {
                   },
                   onAddMember: async (groupId, agentId, role) => {
                     try {
-                      await addGroupMember(state, groupId, agentId, role);
+                      await addGroupMember(state, state.client!, groupId, agentId, role);
                     } catch (err) {
                       alert(`添加成员失败：${err instanceof Error ? err.message : String(err)}`);
                     }
                   },
                   onRemoveMember: async (groupId, agentId) => {
                     try {
-                      await removeGroupMember(state, groupId, agentId);
+                      await removeGroupMember(state, state.client!, groupId, agentId);
                     } catch (err) {
                       alert(`移除成员失败：${err instanceof Error ? err.message : String(err)}`);
                     }
                   },
                   onUpdateMemberRole: async (groupId, agentId, role) => {
                     try {
-                      await updateGroupMemberRole(state, groupId, agentId, role);
+                      await updateGroupMemberRole(state, state.client!, groupId, agentId, role);
                     } catch (err) {
                       alert(`更新角色失败：${err instanceof Error ? err.message : String(err)}`);
                     }
@@ -2873,6 +2875,66 @@ export function renderApp(state: AppViewState) {
                         alert(`迁移失败，请检查错误信息。`);
                       }
                     });
+                  },
+                  // 项目管理 Props
+                  projectsList: state.projectsList,
+                  projectsLoading: state.projectsLoading,
+                  projectsError: state.projectsError,
+                  selectedProjectId: state.selectedProjectId,
+                  activeProjectPanel: state.activeProjectPanel,
+                  creatingProject: state.creatingProject,
+                  editingProject: state.editingProject,
+                  onProjectsRefresh: () => {
+                    void loadProjects(state, state.client!);
+                  },
+                  onSelectProject: (projectId) => {
+                    state.selectedProjectId = projectId;
+                  },
+                  onSelectProjectPanel: (panel) => {
+                    state.activeProjectPanel = panel;
+                  },
+                  onCreateProject: () => {
+                    state.creatingProject = true;
+                    state.editingProject = null;
+                  },
+                  onEditProject: (project) => {
+                    state.editingProject = project;
+                    state.creatingProject = false;
+                  },
+                  onSaveProject: async () => {
+                    if (!state.editingProject) {
+                      return;
+                    }
+                    // TODO: 实现更新项目配置
+                    console.log("Save project:", state.editingProject);
+                    state.editingProject = null;
+                  },
+                  onCancelProjectEdit: () => {
+                    state.creatingProject = false;
+                    state.editingProject = null;
+                  },
+                  onProjectFormChange: (field, value) => {
+                    if (state.editingProject) {
+                      state.editingProject = { ...state.editingProject, [field]: value };
+                    } else if (state.creatingProject) {
+                      state.editingProject = {
+                        projectId: "",
+                        name: "",
+                        workspacePath: "",
+                        codeDir: "",
+                        [field]: value,
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                      } as any;
+                    }
+                  },
+                  // 群组升级
+                  upgradingGroupToProject: state.upgradingGroupToProject,
+                  onUpgradeGroupToProject: async (groupId, projectId) => {
+                    try {
+                      await upgradeGroupToProject(state, state.client!, groupId, projectId);
+                    } catch (err) {
+                      alert(`升级失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
                   },
                 },
                 friendsProps: {
@@ -3406,7 +3468,7 @@ export function renderApp(state: AppViewState) {
                   void Promise.all([
                     loadAgents(state),
                     loadChannels(state, false),
-                    loadGroups(state),
+                    loadGroups(state, state.client!),
                   ]).then(() => loadChatHistory(state));
                 },
                 onNavSelectContext: (context) => {

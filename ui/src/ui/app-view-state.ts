@@ -258,6 +258,15 @@ export type AppViewState = {
   groupsError: string | null;
   groupsSelectedId: string | null;
   groupsActivePanel: "list" | "members" | "settings" | "files";
+  // 项目管理状态
+  projectsLoading: boolean;
+  projectsList: import("./views/groups.ts").ProjectsListResult | null;
+  projectsError: string | null;
+  selectedProjectId: string | null;
+  activeProjectPanel: "list" | "config";
+  creatingProject: boolean;
+  editingProject: import("./views/groups.ts").ProjectInfo | null;
+  upgradingGroupToProject: boolean;
   // 群组文件管理状态
   groupFilesLoading: boolean;
   groupFileContentLoading: boolean;
@@ -749,4 +758,31 @@ export type AppViewState = {
   handleOpenSidebar: (content: string) => void;
   handleCloseSidebar: () => void;
   handleSplitRatioChange: (ratio: number) => void;
+
+  // 项目管理 methods
+  handleProjectsRefresh: () => Promise<void>;
+  handleCreateProject: (projectData: {
+    projectId: string;
+    name: string;
+    description?: string;
+    workspaceRoot?: string;
+    codeDir?: string;
+    createGroup?: boolean;
+  }) => Promise<void>;
+  handleUpgradeGroupToProject: (groupId: string, projectId: string) => Promise<void>;
+  handleSaveProject: () => Promise<void>;
+  
+  // 群组管理 methods
+  handleGroupsRefresh: () => Promise<void>;
+  handleCreateGroup: (groupData: {
+    id: string;
+    name: string;
+    ownerId: string;
+    description?: string;
+    isPublic?: boolean;
+    maxMembers?: number;
+    projectId?: string;
+    workspacePath?: string;
+  }) => Promise<void>;
+  handleDeleteGroup: (groupId: string) => Promise<void>;
 };

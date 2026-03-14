@@ -86,16 +86,20 @@ export function createGroupListTool(opts?: {
 const GroupCreateToolSchema = Type.Object({
   /** 群组名称（必填） */
   name: Type.String({ minLength: 1, maxLength: 128 }),
-  /** 群主ID（必填） */
+  /** 群主 ID（必填） */
   ownerId: Type.String({ minLength: 1, maxLength: 64 }),
   /** 群组描述（可选） */
   description: Type.Optional(Type.String()),
-  /** 初始成员ID列表（可选） */
+  /** 初始成员 ID 列表（可选） */
   memberIds: Type.Optional(Type.Array(Type.String())),
-  /** 是否公开（可选，默认false） */
+  /** 是否公开（可选，默认 false） */
   isPublic: Type.Optional(Type.Boolean()),
   /** 最大成员数（可选） */
   maxMembers: Type.Optional(Type.Number({ minimum: 2, maximum: 1000 })),
+  /** 项目 ID（可选）- 如果是项目群组，指定所属项目 */
+  projectId: Type.Optional(Type.String()),
+  /** 工作空间路径（可选）- 指定项目工作空间路径，默认在 H:\\OpenClaw_Workspace\\groups\\{groupId} */
+  workspacePath: Type.Optional(Type.String()),
 });
 
 /**
@@ -136,8 +140,18 @@ const GroupUpdateMemberRoleToolSchema = Type.Object({
  * group_delete 工具参数 schema
  */
 const GroupDeleteToolSchema = Type.Object({
-  /** 群组ID（必填） */
+  /** 群组 ID（必填） */
   groupId: Type.String({ minLength: 1, maxLength: 128 }),
+});
+
+/**
+ * group_upgrade_to_project 工具参数 schema
+ */
+const GroupUpgradeToProjectToolSchema = Type.Object({
+  /** 群组 ID（必填） */
+  groupId: Type.String({ minLength: 1, maxLength: 128 }),
+  /** 项目 ID（必填） */
+  projectId: Type.String({ minLength: 1, maxLength: 128 }),
 });
 
 /**
@@ -151,7 +165,7 @@ export function createGroupCreateTool(_opts?: {
     label: "Group Create",
     name: "group_create",
     description:
-      "Create a new group for collaboration. Specify group name, owner ID, and optional initial members. Returns the created group ID. The owner automatically becomes an admin.",
+      "Create a new group for collaboration. Specify group name, owner ID, and optional initial members. Returns the created group ID. The owner automatically becomes an admin. For project groups, specify projectId and workspacePath.",
     parameters: GroupCreateToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -162,6 +176,8 @@ export function createGroupCreateTool(_opts?: {
       const isPublic = typeof params.isPublic === "boolean" ? params.isPublic : false;
       const maxMembers = readNumberParam(params, "maxMembers", { integer: true });
       const gatewayOpts = readGatewayCallOptions(params);
+      const projectId = readStringParam(params, "projectId"); // 新增：项目 ID
+      const workspacePath = readStringParam(params, "workspacePath"); // 新增：工作空间路径
 
       try {
         // 构建成员列表（群主自动成为owner角色）
@@ -190,6 +206,8 @@ export function createGroupCreateTool(_opts?: {
           initialMembers: initialMemberIds, // 使用服务端期望的字段名
           isPublic,
           maxMembers,
+          projectId: projectId || undefined,
+          workspacePath: workspacePath || undefined,
         });
 
         const group = response;
@@ -204,6 +222,8 @@ export function createGroupCreateTool(_opts?: {
             memberCount: Array.isArray(group.members) ? group.members.length : members.length,
             isPublic: group.isPublic,
             createdAt: group.createdAt || Date.now(),
+            projectId: group.projectId, // 返回项目 ID
+            workspacePath: group.workspacePath, // 返回工作空间路径
           },
         });
       } catch (error) {
@@ -485,6 +505,48 @@ export function createGroupSendTool(opts?: {
         return jsonResult({
           success: false,
           error: `Failed to send group message: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * 创建群组升级到项目群工具
+ */
+export function createGroupUpgradeToProjectTool(): AnyAgentTool {
+  return {
+    label: "Group Upgrade To Project",
+    name: "group_upgrade_to_project",
+    description:
+      "Upgrade a normal group to a project group by binding it to a project. This will migrate the group workspace to the project workspace and enable project management features. CAUTION: This operation is irreversible!",
+    parameters: GroupUpgradeToProjectToolSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const groupId = readStringParam(params, "groupId", { required: true });
+      const projectId = readStringParam(params, "projectId", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        // 调用后端升级 RPC
+        const response = await callGatewayTool("groups.upgradeToProject", gatewayOpts, {
+          groupId,
+          projectId,
+        });
+
+        const result = response as { success: boolean; group?: unknown; workspacePath?: string };
+        
+        return jsonResult({
+          success: true,
+          message: `Group "${groupId}" has been upgraded to project group for project "${projectId}"`,
+          group: result.group,
+          workspacePath: result.workspacePath,
+          warning: "⚠️ This operation is irreversible! The group cannot be downgraded back to a normal group.",
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to upgrade group to project: ${error instanceof Error ? error.message : String(error)}`,
         });
       }
     },
