@@ -7,9 +7,9 @@
  * 使消息可投递并自动激活该 agent 的主会话。
  */
 
+import { listAgentIds } from "../agents/agent-scope.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { loadSessionStore, updateSessionStore } from "../config/sessions.js";
-import { listAgentIds } from "../agents/agent-scope.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { parseSessionLabel } from "../sessions/session-label.js";
 import {
@@ -138,6 +138,23 @@ export async function resolveSessionKeyFromResolveParams(params: {
       limit: 2,
     },
   });
+
+  if (list.sessions.length === 0) {
+    // Fallback：如果 label 匹配已知 agentId，自动构造默认 session key（agent:{agentId}:main）
+    // 即使该 agent 没有活跃会话，消息也能被投递并自动激活其主会话
+    const normalizedLabel = normalizeAgentId(parsedLabel.label);
+    const knownAgentIds = listAgentIds(cfg);
+    if (knownAgentIds.includes(normalizedLabel)) {
+      return { ok: true, key: `agent:${normalizedLabel}:main` };
+    }
+    return {
+      ok: false,
+      error: errorShape(
+        ErrorCodes.INVALID_REQUEST,
+        `No session found with label: ${parsedLabel.label}`,
+      ),
+    };
+  }
 
   if (list.sessions.length === 0) {
     // Fallback：如果 label 匹配已知 agentId，自动构造默认 session key（agent:{agentId}:main）
