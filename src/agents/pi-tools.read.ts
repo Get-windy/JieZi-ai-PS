@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
@@ -5,7 +6,14 @@ import { createEditTool, createReadTool, createWriteTool } from "@mariozechner/p
 import { redactSensitiveContent } from "../infra/sensitive-content-redact.js";
 import { detectMime } from "../media/mime.js";
 import { sniffMimeFromBase64 } from "../media/sniff-mime-from-base64.js";
+import {
+  appendFileWithinRoot,
+  readFileWithinRoot,
+  writeFileWithinRoot,
+} from "../infra/fs-safe.js";
 import type { ImageSanitizationLimits } from "./image-sanitization.js";
+import { toRelativeWorkspacePath } from "./path-policy.js";
+import { wrapHostEditToolWithPostWriteRecovery } from "./pi-tools.host-edit.js";
 import type { AnyAgentTool } from "./pi-tools.types.js";
 import { assertSandboxPath } from "./sandbox-paths.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
@@ -760,4 +768,291 @@ function createFsAccessError(code: string, filePath: string): NodeJS.ErrnoExcept
   const error = new Error(`Sandbox FS error (${code}): ${filePath}`) as NodeJS.ErrnoException;
   error.code = code;
   return error;
+}
+
+// ---- Host workspace tool factories (ported from upstream) ----
+
+async function writeHostFile(absolutePath: string, content: string) {
+  const resolved = path.resolve(absolutePath);
+  await fs.mkdir(path.dirname(resolved), { recursive: true });
+  await fs.writeFile(resolved, content, "utf-8");
+}
+
+function createHostWriteOperations(root: string, options?: { workspaceOnly?: boolean }) {
+  const workspaceOnly = options?.workspaceOnly ?? false;
+  if (!workspaceOnly) {
+    return {
+      mkdir: async (dir: string) => {
+        const resolved = path.resolve(dir);
+        await fs.mkdir(resolved, { recursive: true });
+      },
+      writeFile: writeHostFile,
+    } as const;
+  }
+  return {
+    mkdir: async (dir: string) => {
+      const relative = toRelativeWorkspacePath(root, dir, { allowRoot: true });
+      const resolved = relative ? path.resolve(root, relative) : path.resolve(root);
+      await assertSandboxPath({ filePath: resolved, cwd: root, root });
+      await fs.mkdir(resolved, { recursive: true });
+    },
+    writeFile: async (absolutePath: string, content: string) => {
+      const relative = toRelativeWorkspacePath(root, absolutePath);
+      await writeFileWithinRoot({
+        rootDir: root,
+        relativePath: relative,
+        data: content,
+        mkdir: true,
+      });
+    },
+  } as const;
+}
+
+function createHostEditOperations(root: string, options?: { workspaceOnly?: boolean }) {
+  const workspaceOnly = options?.workspaceOnly ?? false;
+  if (!workspaceOnly) {
+    return {
+      readFile: async (absolutePath: string) => {
+        const resolved = path.resolve(absolutePath);
+        return await fs.readFile(resolved);
+      },
+      writeFile: writeHostFile,
+      access: async (absolutePath: string) => {
+        const resolved = path.resolve(absolutePath);
+        await fs.access(resolved);
+      },
+    } as const;
+  }
+  return {
+    readFile: async (absolutePath: string) => {
+      const relative = toRelativeWorkspacePath(root, absolutePath);
+      const safeRead = await readFileWithinRoot({
+        rootDir: root,
+        relativePath: relative,
+      });
+      return safeRead.buffer;
+    },
+    writeFile: async (absolutePath: string, content: string) => {
+      const relative = toRelativeWorkspacePath(root, absolutePath);
+      await writeFileWithinRoot({
+        rootDir: root,
+        relativePath: relative,
+        data: content,
+        mkdir: true,
+      });
+    },
+    access: async (absolutePath: string) => {
+      let relative: string;
+      try {
+        relative = toRelativeWorkspacePath(root, absolutePath);
+      } catch {
+        return;
+      }
+      try {
+        const opened = await readFileWithinRoot({ rootDir: root, relativePath: relative });
+        void opened;
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException | undefined;
+        if (err?.message?.includes("not-found") || err?.code === "ENOENT") {
+          throw createFsAccessError("ENOENT", absolutePath);
+        }
+        throw error;
+      }
+    },
+  } as const;
+}
+
+export function createHostWorkspaceWriteTool(root: string, options?: { workspaceOnly?: boolean }) {
+  const base = createWriteTool(root, {
+    operations: createHostWriteOperations(root, options),
+  }) as unknown as AnyAgentTool;
+  return wrapToolParamNormalization(base, CLAUDE_PARAM_GROUPS.write);
+}
+
+export function createHostWorkspaceEditTool(root: string, options?: { workspaceOnly?: boolean }) {
+  const base = createEditTool(root, {
+    operations: createHostEditOperations(root, options),
+  }) as unknown as AnyAgentTool;
+  const withRecovery = wrapHostEditToolWithPostWriteRecovery(base, root);
+  return wrapToolParamNormalization(withRecovery, CLAUDE_PARAM_GROUPS.edit);
+}
+
+// ---- resolveToolPathAgainstWorkspaceRoot (used by wrapToolMemoryFlushAppendOnlyWrite) ----
+
+function resolveToolPathAgainstWorkspaceRoot(params: {
+  filePath: string;
+  root: string;
+  containerWorkdir?: string;
+}): string {
+  const containerWorkdir = params.containerWorkdir?.trim();
+  let candidate = params.filePath;
+  if (containerWorkdir) {
+    const normalizedWorkdir = containerWorkdir.replace(/\\/g, "/").replace(/\/+$/, "");
+    if (normalizedWorkdir.startsWith("/")) {
+      if (/^file:\/\//i.test(candidate)) {
+        try {
+          candidate = fileURLToPath(candidate);
+        } catch {
+          // ignore
+        }
+      }
+      const normalizedCandidate = candidate.replace(/\\/g, "/");
+      if (normalizedCandidate === normalizedWorkdir) {
+        candidate = path.resolve(params.root);
+      } else {
+        const prefix = `${normalizedWorkdir}/`;
+        if (normalizedCandidate.startsWith(prefix)) {
+          const relative = normalizedCandidate.slice(prefix.length);
+          candidate = relative
+            ? path.resolve(params.root, ...relative.split("/").filter(Boolean))
+            : path.resolve(params.root);
+        }
+      }
+    }
+  }
+  return path.isAbsolute(candidate)
+    ? path.resolve(candidate)
+    : path.resolve(params.root, candidate || ".");
+}
+
+// ---- wrapToolMemoryFlushAppendOnlyWrite ----
+
+type MemoryFlushAppendOnlyWriteOptions = {
+  root: string;
+  relativePath: string;
+  containerWorkdir?: string;
+  sandbox?: {
+    root: string;
+    bridge: SandboxFsBridge;
+  };
+};
+
+async function readOptionalUtf8File(params: {
+  absolutePath: string;
+  relativePath: string;
+  sandbox?: MemoryFlushAppendOnlyWriteOptions["sandbox"];
+  signal?: AbortSignal;
+}): Promise<string> {
+  try {
+    if (params.sandbox) {
+      const stat = await params.sandbox.bridge.stat({
+        filePath: params.relativePath,
+        cwd: params.sandbox.root,
+        signal: params.signal,
+      });
+      if (!stat) {
+        return "";
+      }
+      const buffer = await params.sandbox.bridge.readFile({
+        filePath: params.relativePath,
+        cwd: params.sandbox.root,
+        signal: params.signal,
+      });
+      return buffer.toString("utf-8");
+    }
+    return await fs.readFile(params.absolutePath, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
+      return "";
+    }
+    throw error;
+  }
+}
+
+async function appendMemoryFlushContent(params: {
+  absolutePath: string;
+  root: string;
+  relativePath: string;
+  content: string;
+  sandbox?: MemoryFlushAppendOnlyWriteOptions["sandbox"];
+  signal?: AbortSignal;
+}) {
+  if (!params.sandbox) {
+    await appendFileWithinRoot({
+      rootDir: params.root,
+      relativePath: params.relativePath,
+      data: params.content,
+      mkdir: true,
+      prependNewlineIfNeeded: true,
+    });
+    return;
+  }
+  const existing = await readOptionalUtf8File({
+    absolutePath: params.absolutePath,
+    relativePath: params.relativePath,
+    sandbox: params.sandbox,
+    signal: params.signal,
+  });
+  const separator =
+    existing.length > 0 && !existing.endsWith("\n") && !params.content.startsWith("\n") ? "\n" : "";
+  const next = `${existing}${separator}${params.content}`;
+  if (params.sandbox) {
+    const parent = path.posix.dirname(params.relativePath);
+    if (parent && parent !== ".") {
+      await params.sandbox.bridge.mkdirp({
+        filePath: parent,
+        cwd: params.sandbox.root,
+        signal: params.signal,
+      });
+    }
+    await params.sandbox.bridge.writeFile({
+      filePath: params.relativePath,
+      cwd: params.sandbox.root,
+      data: next,
+      mkdir: true,
+      signal: params.signal,
+    });
+    return;
+  }
+  await fs.mkdir(path.dirname(params.absolutePath), { recursive: true });
+  await fs.writeFile(params.absolutePath, next, "utf-8");
+}
+
+export function wrapToolMemoryFlushAppendOnlyWrite(
+  tool: AnyAgentTool,
+  options: MemoryFlushAppendOnlyWriteOptions,
+): AnyAgentTool {
+  const allowedAbsolutePath = path.resolve(options.root, options.relativePath);
+  return {
+    ...tool,
+    description: `${tool.description} During memory flush, this tool may only append to ${options.relativePath}.`,
+    execute: async (toolCallId, args, signal, onUpdate) => {
+      const normalized = normalizeToolParams(args);
+      const record =
+        normalized ??
+        (args && typeof args === "object" ? (args as Record<string, unknown>) : undefined);
+      assertRequiredParams(record, CLAUDE_PARAM_GROUPS.write, tool.name);
+      const filePath =
+        typeof record?.path === "string" && record.path.trim() ? record.path : undefined;
+      const content = typeof record?.content === "string" ? record.content : undefined;
+      if (!filePath || content === undefined) {
+        return tool.execute(toolCallId, normalized ?? args, signal, onUpdate);
+      }
+      const resolvedPath = resolveToolPathAgainstWorkspaceRoot({
+        filePath,
+        root: options.root,
+        containerWorkdir: options.containerWorkdir,
+      });
+      if (resolvedPath !== allowedAbsolutePath) {
+        throw new Error(
+          `Memory flush writes are restricted to ${options.relativePath}; use that path only.`,
+        );
+      }
+      await appendMemoryFlushContent({
+        absolutePath: allowedAbsolutePath,
+        root: options.root,
+        relativePath: options.relativePath,
+        content,
+        sandbox: options.sandbox,
+        signal,
+      });
+      return {
+        content: [{ type: "text", text: `Appended content to ${options.relativePath}.` }],
+        details: {
+          path: options.relativePath,
+          appendOnly: true,
+        },
+      };
+    },
+  };
 }
