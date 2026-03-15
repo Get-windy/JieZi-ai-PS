@@ -8,7 +8,9 @@ import { defineConfig } from "tsdown";
 //   - 当 upstream/src/ 代码导入文件时，优先检查 src/ 是否有本地覆盖版本
 const ROOT_DIR = path.resolve(import.meta.dirname);
 const SRC_DIR = path.join(ROOT_DIR, "src");
+const EXT_DIR = path.join(ROOT_DIR, "extensions");
 const UP_SRC_DIR = path.join(ROOT_DIR, "upstream", "src");
+const UP_EXT_DIR = path.join(ROOT_DIR, "upstream", "extensions");
 const SEP = path.sep;
 const TS_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".json"];
 
@@ -85,16 +87,31 @@ function upstreamOverlayPlugin() {
       absTarget = path.normalize(absTarget);
 
       // Case 1: 目标在 src/ 下 → 本地优先，不存在则回退到 upstream/src/
+      // 例外：如果路径落入 src/extensions/，则回退到并列的 upstream/extensions/（而非 upstream/src/extensions/）
       if (absTarget.startsWith(SRC_DIR + SEP) || absTarget === SRC_DIR) {
         if (tryResolveFile(absTarget)) {
-          return null;
-        } // 本地存在，让默认解析处理
+          return null; // 本地存在，让默认解析处理
+        }
         const rel = path.relative(SRC_DIR, absTarget);
-        const upPath = path.join(UP_SRC_DIR, rel);
-        return tryResolveFile(upPath);
+        // 如果落入 src/extensions/ 子路径，回退到 upstream/extensions/ 而非 upstream/src/extensions/
+        if (rel.startsWith("extensions" + SEP) || rel === "extensions") {
+          const extRel = rel.slice("extensions".length + SEP.length);
+          return tryResolveFile(path.join(UP_EXT_DIR, extRel));
+        }
+        return tryResolveFile(path.join(UP_SRC_DIR, rel));
       }
 
-      // Case 2: 目标在 upstream/src/ 下 → 检查 src/ 是否有本地覆盖
+      // Case 2: 目标在 extensions/ 下 → 本地优先，不存在则回退到 upstream/extensions/
+      if (absTarget.startsWith(EXT_DIR + SEP) || absTarget === EXT_DIR) {
+        if (tryResolveFile(absTarget)) {
+          return null; // 本地存在，让默认解析处理
+        }
+        const rel = path.relative(EXT_DIR, absTarget);
+        const upExtPath = path.join(UP_EXT_DIR, rel);
+        return tryResolveFile(upExtPath);
+      }
+
+      // Case 3: 目标在 upstream/src/ 下 → 检查 src/ 是否有本地覆盖
       if (absTarget.startsWith(UP_SRC_DIR + SEP) || absTarget === UP_SRC_DIR) {
         const rel = path.relative(UP_SRC_DIR, absTarget);
         const localPath = path.join(SRC_DIR, rel);
@@ -108,6 +125,17 @@ function upstreamOverlayPlugin() {
           return localResult; // 本地有覆盖版本，使用它
         }
         // 无本地覆盖，让默认解析处理 upstream 文件
+      }
+
+      // Case 4: 目标在 upstream/extensions/ 下 → 检查 extensions/ 是否有本地覆盖
+      if (absTarget.startsWith(UP_EXT_DIR + SEP) || absTarget === UP_EXT_DIR) {
+        const rel = path.relative(UP_EXT_DIR, absTarget);
+        const localExtPath = path.join(EXT_DIR, rel);
+        const localResult = tryResolveFile(localExtPath);
+        if (localResult) {
+          return localResult; // 本地有覆盖版本，使用它
+        }
+        return tryResolveFile(absTarget); // 无本地覆盖，直接返回 upstream/extensions/ 路径
       }
 
       return null;

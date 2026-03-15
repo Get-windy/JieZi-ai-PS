@@ -65,12 +65,12 @@ export type {
   ThreadBindingManager,
   ThreadBindingRecord,
   ThreadBindingTargetKind,
-} from "../discord/monitor/thread-bindings.js";
+} from "../../upstream/extensions/discord/src/monitor/thread-bindings.js";
 export {
   autoBindSpawnedDiscordSubagent,
   listThreadBindingsBySessionKey,
   unbindThreadBindingsBySessionKey,
-} from "../discord/monitor/thread-bindings.js";
+} from "../../upstream/extensions/discord/src/monitor/thread-bindings.js";
 export type {
   AnyAgentTool,
   OpenClawPluginApi,
@@ -373,7 +373,7 @@ export {
   resolveDiscordAccount,
   type ResolvedDiscordAccount,
 } from "../discord/accounts.js";
-export { collectDiscordAuditChannelIds } from "../discord/audit.js";
+export { collectDiscordAuditChannelIds } from "../../upstream/extensions/discord/src/audit.js";
 export { discordOnboardingAdapter } from "../channels/plugins/onboarding/discord.js";
 export {
   looksLikeDiscordTargetId,
@@ -399,7 +399,7 @@ export {
   parseChatTargetPrefixesOrThrow,
   resolveServicePrefixedAllowTarget,
   resolveServicePrefixedTarget,
-} from "../imessage/target-parsing-helpers.js";
+} from "../../upstream/extensions/imessage/src/target-parsing-helpers.js";
 
 // Channel: Slack
 export {
@@ -410,13 +410,16 @@ export {
   resolveSlackReplyToMode,
   type ResolvedSlackAccount,
 } from "../slack/accounts.js";
-export { extractSlackToolSend, listSlackMessageActions } from "../slack/message-actions.js";
+export {
+  extractSlackToolSend,
+  listSlackMessageActions,
+} from "../../upstream/extensions/slack/src/message-actions.js";
 export { slackOnboardingAdapter } from "../channels/plugins/onboarding/slack.js";
 export {
   looksLikeSlackTargetId,
   normalizeSlackMessagingTarget,
 } from "../channels/plugins/normalize/slack.js";
-export { buildSlackThreadingToolContext } from "../slack/threading-tool-context.js";
+export { buildSlackThreadingToolContext } from "../../upstream/extensions/slack/src/threading-tool-context.js";
 
 // Channel: Telegram
 export {
@@ -434,8 +437,8 @@ export { collectTelegramStatusIssues } from "../channels/plugins/status-issues/t
 export {
   parseTelegramReplyToMessageId,
   parseTelegramThreadId,
-} from "../telegram/outbound-params.js";
-export { type TelegramProbe } from "../telegram/probe.js";
+} from "../../upstream/extensions/telegram/src/outbound-params.js";
+export { type TelegramProbe } from "../../extensions/telegram/src/probe.js";
 
 // Channel: Signal
 export {
@@ -501,7 +504,7 @@ export {
 export type { ProcessedLineMessage } from "../line/markdown-to-line.js";
 
 // Media utilities
-export { loadWebMedia, type WebMediaResult } from "../web/media.js";
+export { loadWebMedia, type WebMediaResult } from "../../upstream/extensions/whatsapp/src/media.js";
 
 // Security utilities
 export { redactSensitiveText } from "../logging/redact.js";

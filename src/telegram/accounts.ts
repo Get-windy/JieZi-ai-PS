@@ -1,4 +1,5 @@
 import util from "node:util";
+import { resolveTelegramToken } from "../../upstream/extensions/telegram/src/token.js";
 import { createAccountActionGate } from "../channels/plugins/account-action-gate.js";
 import type { OpenClawConfig } from "../config/config.js";
 import type { TelegramAccountConfig, TelegramActionConfig } from "../config/types.js";
@@ -6,7 +7,6 @@ import { isTruthyEnvValue } from "../infra/env.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { listBoundAccountIds, resolveDefaultAgentBoundAccountId } from "../routing/bindings.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
-import { resolveTelegramToken } from "./token.js";
 
 const log = createSubsystemLogger("telegram/accounts");
 

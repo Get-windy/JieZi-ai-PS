@@ -260,12 +260,12 @@ export type AppViewState = {
   groupsActivePanel: "list" | "members" | "settings" | "files";
   // 项目管理状态
   projectsLoading: boolean;
-  projectsList: import("./views/groups.ts").ProjectsListResult | null;
+  projectsList: import("./views/projects.ts").ProjectsListResult | null;
   projectsError: string | null;
   selectedProjectId: string | null;
-  activeProjectPanel: "list" | "config";
+  activeProjectPanel: "list" | "config" | "members" | "progress";
   creatingProject: boolean;
-  editingProject: import("./views/groups.ts").ProjectInfo | null;
+  editingProject: import("./views/projects.ts").ProjectInfo | null;
   upgradingGroupToProject: boolean;
   // 群组文件管理状态
   groupFilesLoading: boolean;
@@ -771,7 +771,7 @@ export type AppViewState = {
   }) => Promise<void>;
   handleUpgradeGroupToProject: (groupId: string, projectId: string) => Promise<void>;
   handleSaveProject: () => Promise<void>;
-  
+
   // 群组管理 methods
   handleGroupsRefresh: () => Promise<void>;
   handleCreateGroup: (groupData: {

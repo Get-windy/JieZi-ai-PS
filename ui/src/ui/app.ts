@@ -340,7 +340,8 @@ export class OpenClawApp extends LitElement {
     | "friends"
     | "monitor"
     | "scenarios"
-    | "team-monitor" = "groups";
+    | "team-monitor"
+    | "projects" = "groups";
   // 群组管理状态
   @state() groupsLoading = false;
   @state() groupsList: import("./views/groups.ts").GroupsListResult | null = null;
@@ -362,12 +363,12 @@ export class OpenClawApp extends LitElement {
   @state() editingGroup: import("./views/groups.ts").GroupInfo | null = null;
   // 项目管理状态
   @state() projectsLoading = false;
-  @state() projectsList: import("./views/groups.ts").ProjectsListResult | null = null;
+  @state() projectsList: import("./views/projects.ts").ProjectsListResult | null = null;
   @state() projectsError: string | null = null;
   @state() selectedProjectId: string | null = null;
-  @state() activeProjectPanel: "list" | "config" = "list";
+  @state() activeProjectPanel: "list" | "config" | "members" | "progress" = "list";
   @state() creatingProject = false;
-  @state() editingProject: import("./views/groups.ts").ProjectInfo | null = null;
+  @state() editingProject: import("./views/projects.ts").ProjectInfo | null = null;
   @state() upgradingGroupToProject = false;
   // Friends 好友关系状态
   @state() friendsLoading = false;
@@ -1231,11 +1232,11 @@ export class OpenClawApp extends LitElement {
     this.selectedProjectId = projectId;
   }
 
-  handleSelectProjectPanel(panel: "list" | "config") {
+  handleSelectProjectPanel(panel: "list" | "config" | "members" | "progress") {
     this.activeProjectPanel = panel;
   }
 
-  handleEditProject(project: import("./views/groups.ts").ProjectInfo) {
+  handleEditProject(project: import("./views/projects.ts").ProjectInfo) {
     this.editingProject = project;
   }
 
@@ -1260,9 +1261,31 @@ export class OpenClawApp extends LitElement {
 
     // TODO: 实现更新项目配置的逻辑，需要调用 projects.update RPC 或直接修改 PROJECT_CONFIG.json
     console.log("[App] Save project:", this.editingProject);
-    
+
     // 暂时只是关闭编辑模式，后续需要补充实际保存逻辑
     this.editingProject = null;
+  }
+
+  handleProjectAddMember(projectId: string, agentId: string, role: string) {
+    console.log(`[App] Add member to project: ${projectId}, agent: ${agentId}, role: ${role}`);
+    // TODO: 实现添加成员的逻辑
+  }
+
+  handleProjectRemoveMember(projectId: string, agentId: string) {
+    console.log(`[App] Remove member from project: ${projectId}, agent: ${agentId}`);
+    // TODO: 实现移除成员的逻辑
+  }
+
+  handleProjectUpdateMemberRole(projectId: string, agentId: string, role: string) {
+    console.log(`[App] Update member role: ${projectId}, agent: ${agentId}, role: ${role}`);
+    // TODO: 实现更新成员角色的逻辑
+  }
+
+  handleProjectUpdateProgress(projectId: string, progress: number, notes: string) {
+    console.log(
+      `[App] Update project progress: ${projectId}, progress: ${progress}%, notes: ${notes}`,
+    );
+    // TODO: 实现更新进度的逻辑
   }
 
   // ========== 群组管理 Handlers ==========
@@ -1324,7 +1347,7 @@ export class OpenClawApp extends LitElement {
 
     const { updateGroup } = await import("./controllers/groups.js");
     await updateGroup(this, this.client, this.editingGroup.id, this.editingGroup);
-    
+
     this.editingGroup = null;
   }
 

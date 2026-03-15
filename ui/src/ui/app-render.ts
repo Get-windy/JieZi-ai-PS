@@ -99,13 +99,10 @@ import {
 } from "./controllers/group-files.ts";
 import {
   loadGroups,
-  createGroup,
-  deleteGroup,
   addGroupMember,
   removeGroupMember,
   updateGroupMemberRole,
 } from "./controllers/groups.ts";
-import { loadProjects, upgradeGroupToProject } from "./controllers/projects.ts";
 import { loadLogs } from "./controllers/logs.ts";
 import {
   loadQueueStatus,
@@ -143,6 +140,7 @@ import {
 } from "./controllers/monitor.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
+import { loadProjects, upgradeGroupToProject } from "./controllers/projects.ts";
 import {
   loadScenarios,
   createScenario,
@@ -2707,6 +2705,10 @@ export function renderApp(state: AppViewState) {
                   if (panel === "team-monitor") {
                     void loadTeamMonitor(state);
                   }
+                  // 切换到项目管理面板时加载数据
+                  if (panel === "projects" && !state.projectsList) {
+                    void loadProjects(state, state.client!);
+                  }
                 },
                 groupsProps: {
                   loading: state.groupsLoading,
@@ -2760,7 +2762,12 @@ export function renderApp(state: AppViewState) {
                       } else {
                         // 否则调用 updateGroup 更新现有群组
                         const { updateGroup } = await import("./controllers/groups.js");
-                        await updateGroup(state, state.client!, state.editingGroup.id, state.editingGroup);
+                        await updateGroup(
+                          state,
+                          state.client!,
+                          state.editingGroup.id,
+                          state.editingGroup,
+                        );
                       }
                       state.creatingGroup = false;
                       state.editingGroup = null;
@@ -2926,6 +2933,20 @@ export function renderApp(state: AppViewState) {
                         // oxlint-disable-next-line typescript/no-explicit-any
                       } as any;
                     }
+                  },
+                  // 项目成员管理
+                  onProjectAddMember: (projectId, agentId, role) => {
+                    state.handleProjectAddMember(projectId, agentId, role);
+                  },
+                  onProjectRemoveMember: (projectId, agentId) => {
+                    state.handleProjectRemoveMember(projectId, agentId);
+                  },
+                  onProjectUpdateMemberRole: (projectId, agentId, role) => {
+                    state.handleProjectUpdateMemberRole(projectId, agentId, role);
+                  },
+                  // 进度管理
+                  onUpdateProgress: (projectId, progress, notes) => {
+                    state.handleProjectUpdateProgress(projectId, progress, notes);
                   },
                   // 群组升级
                   upgradingGroupToProject: state.upgradingGroupToProject,
