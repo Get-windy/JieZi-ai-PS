@@ -123,13 +123,13 @@ async function promptConfigureSection(
 ): Promise<ConfigureSectionChoice> {
   return guardCancel(
     await select<ConfigureSectionChoice>({
-      message: "选择要配置的部分",
+      message: "Select sections to configure",
       options: [
         ...CONFIGURE_SECTION_OPTIONS,
         {
           value: "__continue",
-          label: "继续",
-          hint: hasSelection ? "完成" : "暂时跳过",
+          label: "Continue",
+          hint: hasSelection ? "Done" : "Skip for now",
         },
       ],
       initialValue: CONFIGURE_SECTION_OPTIONS[0]?.value,
@@ -141,17 +141,17 @@ async function promptConfigureSection(
 async function promptChannelMode(runtime: RuntimeEnv): Promise<ChannelsWizardMode> {
   return guardCancel(
     await select({
-      message: "通道",
+      message: "Channels",
       options: [
         {
           value: "configure",
-          label: "配置/链接",
-          hint: "添加/更新通道；禁用未选择的账号",
+          label: "Configure/link",
+          hint: "Add/update channels; disable unselected accounts",
         },
         {
           value: "remove",
-          label: "删除通道配置",
-          hint: "从 openclaw.json 中删除通道令牌/设置",
+          label: "Remove channel config",
+          hint: "Delete channel tokens/settings from openclaw.json",
         },
       ],
       initialValue: "configure",
@@ -166,58 +166,120 @@ async function promptWebToolsConfig(
 ): Promise<OpenClawConfig> {
   const existingSearch = nextConfig.tools?.web?.search;
   const existingFetch = nextConfig.tools?.web?.fetch;
-  const hasSearchKey = Boolean(existingSearch?.apiKey);
+  const {
+    SEARCH_PROVIDER_OPTIONS,
+    resolveExistingKey,
+    hasExistingKey,
+    applySearchKey,
+    hasKeyInEnv,
+  } = await import("./onboard-search.js");
+  type SP = (typeof SEARCH_PROVIDER_OPTIONS)[number]["value"];
+
+  const hasKeyForProvider = (provider: string): boolean => {
+    const entry = SEARCH_PROVIDER_OPTIONS.find((e) => e.value === provider);
+    if (!entry) {
+      return false;
+    }
+    return hasExistingKey(nextConfig, provider as SP) || hasKeyInEnv(entry);
+  };
+
+  const existingProvider: string = (() => {
+    const stored = existingSearch?.provider;
+    if (stored && SEARCH_PROVIDER_OPTIONS.some((e) => e.value === stored)) {
+      return stored;
+    }
+    return (
+      SEARCH_PROVIDER_OPTIONS.find((e) => hasKeyForProvider(e.value))?.value ??
+      SEARCH_PROVIDER_OPTIONS[0].value
+    );
+  })();
 
   note(
     [
-      "Web 搜索让你的代理使用 `web_search` 工具在线查找东西。",
-      "它需要 Brave Search API 密钥（你可以将它存储在配置中或在 Gateway 环境中设置 BRAVE_API_KEY）。",
+      "Web search lets your agent look things up online using the `web_search` tool.",
+      "Choose a provider and paste your API key.",
       "Docs: https://docs.openclaw.ai/tools/web",
     ].join("\n"),
-    "Web 搜索",
+    "Web search",
   );
 
   const enableSearch = guardCancel(
     await confirm({
-      message: "启用 web_search (Brave Search)？",
-      initialValue: existingSearch?.enabled ?? hasSearchKey,
+      message: "Enable web_search?",
+      initialValue:
+        existingSearch?.enabled ?? SEARCH_PROVIDER_OPTIONS.some((e) => hasKeyForProvider(e.value)),
     }),
     runtime,
   );
 
-  let nextSearch = {
+  let nextSearch: Record<string, unknown> = {
     ...existingSearch,
     enabled: enableSearch,
   };
 
   if (enableSearch) {
+    const providerOptions = SEARCH_PROVIDER_OPTIONS.map((entry) => {
+      const configured = hasKeyForProvider(entry.value);
+      return {
+        value: entry.value,
+        label: entry.label,
+        hint: configured ? `${entry.hint} · configured` : entry.hint,
+      };
+    });
+
+    const providerChoice = guardCancel(
+      await select({
+        message: "Choose web search provider",
+        options: providerOptions,
+        initialValue: existingProvider,
+      }),
+      runtime,
+    );
+
+    nextSearch = { ...nextSearch, provider: providerChoice };
+
+    const entry = SEARCH_PROVIDER_OPTIONS.find((e) => e.value === providerChoice)!;
+    const existingKey = resolveExistingKey(nextConfig, providerChoice as SP);
+    const keyConfigured = hasExistingKey(nextConfig, providerChoice as SP);
+    const envAvailable = entry.envKeys.some((k) => Boolean(process.env[k]?.trim()));
+    const envVarNames = entry.envKeys.join(" / ");
+
     const keyInput = guardCancel(
       await text({
-        message: hasSearchKey
-          ? "Brave Search API 密钥（留空保持当前或使用 BRAVE_API_KEY）"
-          : "Brave Search API 密钥（将它粘贴在这里；留空使用 BRAVE_API_KEY）",
-        placeholder: hasSearchKey ? "留空保持当前" : "BSA...",
+        message: keyConfigured
+          ? envAvailable
+            ? `${entry.label} API key (leave blank to keep current or use ${envVarNames})`
+            : `${entry.label} API key (leave blank to keep current)`
+          : envAvailable
+            ? `${entry.label} API key (paste it here; leave blank to use ${envVarNames})`
+            : `${entry.label} API key`,
+        placeholder: keyConfigured ? "Leave blank to keep current" : entry.placeholder,
       }),
       runtime,
     );
     const key = String(keyInput ?? "").trim();
-    if (key) {
-      nextSearch = { ...nextSearch, apiKey: key };
-    } else if (!hasSearchKey) {
+
+    if (key || existingKey) {
+      const applied = applySearchKey(nextConfig, providerChoice as SP, (key || existingKey)!);
+      nextSearch = { ...applied.tools?.web?.search };
+    } else if (keyConfigured || envAvailable) {
+      nextSearch = { ...nextSearch };
+    } else {
       note(
         [
-          "尚未存储密钥，因此 web_search 将保持不可用。",
-          "在此处存储密钥或在 Gateway 环境中设置 BRAVE_API_KEY。",
+          "No key stored yet — web_search won't work until a key is available.",
+          `Store a key here or set ${envVarNames} in the Gateway environment.`,
+          `Get your API key at: ${entry.signupUrl}`,
           "Docs: https://docs.openclaw.ai/tools/web",
         ].join("\n"),
-        "Web 搜索",
+        "Web search",
       );
     }
   }
 
   const enableFetch = guardCancel(
     await confirm({
-      message: "启用 web_fetch（无需密钥的 HTTP 获取）？",
+      message: "Enable web_fetch (keyless HTTP fetch)?",
       initialValue: existingFetch?.enabled ?? true,
     }),
     runtime,
@@ -247,14 +309,14 @@ export async function runConfigureWizard(
 ) {
   try {
     printWizardHeader(runtime);
-    intro(opts.command === "update" ? "OpenClaw 更新向导" : "OpenClaw 配置");
+    intro(opts.command === "update" ? "OpenClaw update wizard" : "OpenClaw configure");
     const prompter = createClackPrompter();
 
     const snapshot = await readConfigFileSnapshot();
     const baseConfig: OpenClawConfig = snapshot.valid ? snapshot.config : {};
 
     if (snapshot.exists) {
-      const title = snapshot.valid ? "检测到现有配置" : "无效的配置";
+      const title = snapshot.valid ? "Existing config detected" : "Invalid config";
       note(summarizeExistingConfig(baseConfig), title);
       if (!snapshot.valid && snapshot.issues.length > 0) {
         note(
@@ -263,12 +325,12 @@ export async function runConfigureWizard(
             "",
             "Docs: https://docs.openclaw.ai/gateway/configuration",
           ].join("\n"),
-          "配置问题",
+          "Config issues",
         );
       }
       if (!snapshot.valid) {
         outro(
-          `配置无效。运行 \`${formatCliCommand("openclaw doctor")}\` 修复它，然后重新运行配置。`,
+          `Config invalid. Run \`${formatCliCommand("openclaw doctor")}\` to repair it, then re-run configure.`,
         );
         runtime.exit(1);
         return;
@@ -312,21 +374,23 @@ export async function runConfigureWizard(
 
     const mode = guardCancel(
       await select({
-        message: "Gateway 将在哪里运行？",
+        message: "Where will the Gateway run?",
         options: [
           {
             value: "local",
-            label: "本地（此计算机）",
-            hint: localProbe.ok ? `Gateway 可访问 (${localUrl})` : `未检测到 Gateway (${localUrl})`,
+            label: "Local (this machine)",
+            hint: localProbe.ok
+              ? `Gateway reachable (${localUrl})`
+              : `No gateway detected (${localUrl})`,
           },
           {
             value: "remote",
-            label: "远程（仅信息）",
+            label: "Remote (info-only)",
             hint: !remoteUrl
-              ? "尚未配置远程 URL"
+              ? "No remote URL configured yet"
               : remoteProbe?.ok
-                ? `Gateway 可访问 (${remoteUrl})`
-                : `已配置但无法访问 (${remoteUrl})`,
+                ? `Gateway reachable (${remoteUrl})`
+                : `Configured but unreachable (${remoteUrl})`,
           },
         ],
       }),
@@ -341,7 +405,7 @@ export async function runConfigureWizard(
       });
       await writeConfigFile(remoteConfig);
       logConfigUpdated(runtime);
-      outro("远程 Gateway 已配置。");
+      outro("Remote gateway configured.");
       return;
     }
 
@@ -372,7 +436,7 @@ export async function runConfigureWizard(
       logConfigUpdated(runtime);
     };
 
-    const _configureWorkspace = async () => {
+    const configureWorkspace = async () => {
       const workspaceInput = guardCancel(
         await text({
           message: "Workspace directory",
@@ -400,10 +464,10 @@ export async function runConfigureWizard(
         if (hasExistingContent) {
           note(
             [
-              `检测到现有工作区 ${workspaceDir}`,
-              "现有文件将被保留。缺失的模板可能会被创建，但不会被覆盖。",
+              `Existing workspace detected at ${workspaceDir}`,
+              "Existing files are preserved. Missing templates may be created, never overwritten.",
             ].join("\n"),
-            "现有工作区",
+            "Existing workspace",
           );
         }
       }
@@ -435,7 +499,7 @@ export async function runConfigureWizard(
       }
     };
 
-    const _promptDaemonPort = async () => {
+    const promptDaemonPort = async () => {
       const portInput = guardCancel(
         await text({
           message: "Gateway port for service install",
@@ -450,30 +514,12 @@ export async function runConfigureWizard(
     if (opts.sections) {
       const selected = opts.sections;
       if (!selected || selected.length === 0) {
-        outro("未选择任何更改。");
+        outro("No changes selected.");
         return;
       }
 
       if (selected.includes("workspace")) {
-        const workspaceInput = guardCancel(
-          await text({
-            message: "工作区目录",
-            initialValue: workspaceDir,
-          }),
-          runtime,
-        );
-        workspaceDir = resolveUserPath(String(workspaceInput ?? "").trim() || DEFAULT_WORKSPACE);
-        nextConfig = {
-          ...nextConfig,
-          agents: {
-            ...nextConfig.agents,
-            defaults: {
-              ...nextConfig.agents?.defaults,
-              workspace: workspaceDir,
-            },
-          },
-        };
-        await ensureWorkspaceAndSessions(workspaceDir, runtime);
+        await configureWorkspace();
       }
 
       if (selected.includes("model")) {
@@ -503,52 +549,14 @@ export async function runConfigureWizard(
 
       if (selected.includes("daemon")) {
         if (!selected.includes("gateway")) {
-          const portInput = guardCancel(
-            await text({
-              message: "服务安装的 Gateway 端口",
-              initialValue: String(gatewayPort),
-              validate: (value) => (Number.isFinite(Number(value)) ? undefined : "无效的端口"),
-            }),
-            runtime,
-          );
-          gatewayPort = Number.parseInt(String(portInput), 10);
+          await promptDaemonPort();
         }
 
         await maybeInstallDaemon({ runtime, port: gatewayPort });
       }
 
       if (selected.includes("health")) {
-        const localLinks = resolveControlUiLinks({
-          bind: nextConfig.gateway?.bind ?? "loopback",
-          port: gatewayPort,
-          customBindHost: nextConfig.gateway?.customBindHost,
-          basePath: undefined,
-        });
-        const remoteUrl = nextConfig.gateway?.remote?.url?.trim();
-        const wsUrl =
-          nextConfig.gateway?.mode === "remote" && remoteUrl ? remoteUrl : localLinks.wsUrl;
-        const rawToken = nextConfig.gateway?.auth?.token ?? process.env.OPENCLAW_GATEWAY_TOKEN;
-        const rawPassword =
-          nextConfig.gateway?.auth?.password ?? process.env.OPENCLAW_GATEWAY_PASSWORD;
-        await waitForGatewayReachable({
-          url: wsUrl,
-          token: typeof rawToken === "string" ? rawToken : undefined,
-          password: typeof rawPassword === "string" ? rawPassword : undefined,
-          deadlineMs: 15_000,
-        });
-        try {
-          await healthCommand({ json: false, timeoutMs: 10_000 }, runtime);
-        } catch (err) {
-          runtime.error(formatHealthCheckFailure(err));
-          note(
-            [
-              "Docs:",
-              "https://docs.openclaw.ai/gateway/health",
-              "https://docs.openclaw.ai/gateway/troubleshooting",
-            ].join("\n"),
-            "健康检查帮助",
-          );
-        }
+        await runGatewayHealthCheck({ cfg: nextConfig, runtime, port: gatewayPort });
       }
     } else {
       let ranSection = false;
@@ -562,25 +570,7 @@ export async function runConfigureWizard(
         ranSection = true;
 
         if (choice === "workspace") {
-          const workspaceInput = guardCancel(
-            await text({
-              message: "工作区目录",
-              initialValue: workspaceDir,
-            }),
-            runtime,
-          );
-          workspaceDir = resolveUserPath(String(workspaceInput ?? "").trim() || DEFAULT_WORKSPACE);
-          nextConfig = {
-            ...nextConfig,
-            agents: {
-              ...nextConfig.agents,
-              defaults: {
-                ...nextConfig.agents?.defaults,
-                workspace: workspaceDir,
-              },
-            },
-          };
-          await ensureWorkspaceAndSessions(workspaceDir, runtime);
+          await configureWorkspace();
           await persistConfig();
         }
 
@@ -615,15 +605,7 @@ export async function runConfigureWizard(
 
         if (choice === "daemon") {
           if (!didConfigureGateway) {
-            const portInput = guardCancel(
-              await text({
-                message: "服务安装的 Gateway 端口",
-                initialValue: String(gatewayPort),
-                validate: (value) => (Number.isFinite(Number(value)) ? undefined : "无效的端口"),
-              }),
-              runtime,
-            );
-            gatewayPort = Number.parseInt(String(portInput), 10);
+            await promptDaemonPort();
           }
           await maybeInstallDaemon({
             runtime,
@@ -632,47 +614,17 @@ export async function runConfigureWizard(
         }
 
         if (choice === "health") {
-          const localLinks = resolveControlUiLinks({
-            bind: nextConfig.gateway?.bind ?? "loopback",
-            port: gatewayPort,
-            customBindHost: nextConfig.gateway?.customBindHost,
-            basePath: undefined,
-          });
-          const remoteUrl = nextConfig.gateway?.remote?.url?.trim();
-          const wsUrl =
-            nextConfig.gateway?.mode === "remote" && remoteUrl ? remoteUrl : localLinks.wsUrl;
-          const rawToken2 = nextConfig.gateway?.auth?.token ?? process.env.OPENCLAW_GATEWAY_TOKEN;
-          const rawPassword2 =
-            nextConfig.gateway?.auth?.password ?? process.env.OPENCLAW_GATEWAY_PASSWORD;
-          await waitForGatewayReachable({
-            url: wsUrl,
-            token: typeof rawToken2 === "string" ? rawToken2 : undefined,
-            password: typeof rawPassword2 === "string" ? rawPassword2 : undefined,
-            deadlineMs: 15_000,
-          });
-          try {
-            await healthCommand({ json: false, timeoutMs: 10_000 }, runtime);
-          } catch (err) {
-            runtime.error(formatHealthCheckFailure(err));
-            note(
-              [
-                "Docs:",
-                "https://docs.openclaw.ai/gateway/health",
-                "https://docs.openclaw.ai/gateway/troubleshooting",
-              ].join("\n"),
-              "健康检查帮助",
-            );
-          }
+          await runGatewayHealthCheck({ cfg: nextConfig, runtime, port: gatewayPort });
         }
       }
 
       if (!ranSection) {
         if (didSetGatewayMode) {
           await persistConfig();
-          outro("Gateway 模式已设置为本地。");
+          outro("Gateway mode set to local.");
           return;
         }
-        outro("未选择任何更改。");
+        outro("No changes selected.");
         return;
       }
     }
@@ -690,29 +642,47 @@ export async function runConfigureWizard(
       basePath: nextConfig.gateway?.controlUi?.basePath,
     });
     // Try both new and old passwords since gateway may still have old config.
-    const newPassword = nextConfig.gateway?.auth?.password ?? process.env.OPENCLAW_GATEWAY_PASSWORD;
-    const oldPassword = baseConfig.gateway?.auth?.password ?? process.env.OPENCLAW_GATEWAY_PASSWORD;
-    const rawFinalToken = nextConfig.gateway?.auth?.token ?? process.env.OPENCLAW_GATEWAY_TOKEN;
-    const token = typeof rawFinalToken === "string" ? rawFinalToken : undefined;
-    const newPasswordStr = typeof newPassword === "string" ? newPassword : undefined;
-    const oldPasswordStr = typeof oldPassword === "string" ? oldPassword : undefined;
+    const newPassword =
+      process.env.OPENCLAW_GATEWAY_PASSWORD ??
+      process.env.CLAWDBOT_GATEWAY_PASSWORD ??
+      (await resolveGatewaySecretInputForWizard({
+        cfg: nextConfig,
+        value: nextConfig.gateway?.auth?.password,
+        path: "gateway.auth.password",
+      }));
+    const oldPassword =
+      process.env.OPENCLAW_GATEWAY_PASSWORD ??
+      process.env.CLAWDBOT_GATEWAY_PASSWORD ??
+      (await resolveGatewaySecretInputForWizard({
+        cfg: baseConfig,
+        value: baseConfig.gateway?.auth?.password,
+        path: "gateway.auth.password",
+      }));
+    const token =
+      process.env.OPENCLAW_GATEWAY_TOKEN ??
+      process.env.CLAWDBOT_GATEWAY_TOKEN ??
+      (await resolveGatewaySecretInputForWizard({
+        cfg: nextConfig,
+        value: nextConfig.gateway?.auth?.token,
+        path: "gateway.auth.token",
+      }));
 
     let gatewayProbe = await probeGatewayReachable({
       url: links.wsUrl,
       token,
-      password: newPasswordStr,
+      password: newPassword,
     });
     // If new password failed and it's different from old password, try old too.
-    if (!gatewayProbe.ok && newPasswordStr !== oldPasswordStr && oldPasswordStr) {
+    if (!gatewayProbe.ok && newPassword !== oldPassword && oldPassword) {
       gatewayProbe = await probeGatewayReachable({
         url: links.wsUrl,
         token,
-        password: oldPasswordStr,
+        password: oldPassword,
       });
     }
     const gatewayStatusLine = gatewayProbe.ok
-      ? "Gateway: 可访问"
-      : `Gateway: 未检测到${gatewayProbe.detail ? ` (${gatewayProbe.detail})` : ""}`;
+      ? "Gateway: reachable"
+      : `Gateway: not detected${gatewayProbe.detail ? ` (${gatewayProbe.detail})` : ""}`;
 
     note(
       [
@@ -721,10 +691,10 @@ export async function runConfigureWizard(
         gatewayStatusLine,
         "Docs: https://docs.openclaw.ai/web/control-ui",
       ].join("\n"),
-      "控制面板 UI",
+      "Control UI",
     );
 
-    outro("配置完成。");
+    outro("Configure complete.");
   } catch (err) {
     if (err instanceof WizardCancelledError) {
       runtime.exit(1);

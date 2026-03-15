@@ -34,3 +34,11 @@ describe("resolveRequestedLoginProviderOrThrow", () => {
       makeProvider({ id: "google-gemini-cli" }),
       makeProvider({ id: "qwen-portal" }),
     ];
+
+    expect(() =>
+      resolveRequestedLoginProviderOrThrow(loadedProviders, "google-antigravity"),
+    ).toThrowError(
+      'Unknown provider "google-antigravity". Loaded providers: google-gemini-cli, qwen-portal. Verify plugins via `openclaw plugins list --json`.',
+    );
+  });
+});

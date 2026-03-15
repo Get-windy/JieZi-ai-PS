@@ -1,37 +1,37 @@
 import fs from "node:fs";
+import { parseStrictNonNegativeInteger } from "../infra/parse-finite-number.js";
 
-/**
- * 同步读取文件的 mtime（毫秒时间戳）。
- * 文件不存在或读取失败时返回 undefined。
- */
-export function getFileMtimeMs(filePath: string): number | undefined {
-  try {
-    return fs.statSync(filePath).mtimeMs;
-  } catch {
-    return undefined;
+export function resolveCacheTtlMs(params: {
+  envValue: string | undefined;
+  defaultTtlMs: number;
+}): number {
+  const { envValue, defaultTtlMs } = params;
+  if (envValue) {
+    const parsed = parseStrictNonNegativeInteger(envValue);
+    if (parsed !== undefined) {
+      return parsed;
+    }
   }
+  return defaultTtlMs;
 }
 
-/**
- * 判断缓存是否启用（TTL > 0 表示启用）。
- */
 export function isCacheEnabled(ttlMs: number): boolean {
   return ttlMs > 0;
 }
 
-/**
- * 解析缓存 TTL（毫秒）。
- * 优先读取环境变量，解析失败或未设置时使用默认值。
- */
-export function resolveCacheTtlMs(opts: {
-  envValue: string | undefined;
-  defaultTtlMs: number;
-}): number {
-  if (opts.envValue !== undefined && opts.envValue !== "") {
-    const parsed = parseInt(opts.envValue, 10);
-    if (Number.isFinite(parsed) && parsed >= 0) {
-      return parsed;
-    }
+export type FileStatSnapshot = {
+  mtimeMs: number;
+  sizeBytes: number;
+};
+
+export function getFileStatSnapshot(filePath: string): FileStatSnapshot | undefined {
+  try {
+    const stats = fs.statSync(filePath);
+    return {
+      mtimeMs: stats.mtimeMs,
+      sizeBytes: stats.size,
+    };
+  } catch {
+    return undefined;
   }
-  return opts.defaultTtlMs;
 }

@@ -131,6 +131,3 @@ export {
   ZAI_CN_BASE_URL,
   ZAI_GLOBAL_BASE_URL,
 } from "./onboard-auth.models.js";
-
-// Re-export upstream additions (new auth key setter helpers - moved to credentials.ts in upstream)
-export { setDefaultSecretProviderAlias } from "./onboard-auth.credentials.js";

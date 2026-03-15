@@ -2,7 +2,6 @@ import type { AuthProfileStore } from "../agents/auth-profiles.js";
 import type { OpenClawConfig } from "../config/config.js";
 import type { WizardPrompter } from "../wizard/prompts.js";
 import { buildAuthChoiceGroups } from "./auth-choice-options.js";
-import { t } from "../i18n/index.js";
 import type { AuthChoice } from "./onboard-types.js";
 
 const BACK_VALUE = "__back";
@@ -29,7 +28,7 @@ export async function promptAuthChoiceGrouped(params: {
     ];
 
     const providerSelection = (await params.prompter.select({
-      message: t('wizard.auth.provider'),
+      message: "Model/auth provider",
       options: providerOptions,
     })) as string;
 
@@ -52,14 +51,14 @@ export async function promptAuthChoiceGrouped(params: {
     }
 
     const methodSelection = await params.prompter.select({
-      message: `${group.label} ${t('wizard.auth.method')}`,
-      options: [...group.options, { value: BACK_VALUE, label: t('wizard.auth.back') }],
+      message: `${group.label} auth method`,
+      options: [...group.options, { value: BACK_VALUE, label: "Back" }],
     });
 
     if (methodSelection === BACK_VALUE) {
       continue;
     }
 
-    return methodSelection as AuthChoice;
+    return methodSelection;
   }
 }

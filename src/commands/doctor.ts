@@ -12,7 +12,9 @@ import { formatCliCommand } from "../cli/command-format.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { CONFIG_PATH, readConfigFileSnapshot, writeConfigFile } from "../config/config.js";
 import { logConfigUpdated } from "../config/logging.js";
+import { resolveSecretInputRef } from "../config/types.secrets.js";
 import { resolveGatewayService } from "../daemon/service.js";
+import { hasAmbiguousGatewayAuthModeConfig } from "../gateway/auth-mode-policy.js";
 import { resolveGatewayAuth } from "../gateway/auth.js";
 import { buildGatewayConnectionDetails } from "../gateway/call.js";
 import { resolveOpenClawPackageRoot } from "../infra/openclaw-root.js";
@@ -26,8 +28,10 @@ import {
   maybeRepairAnthropicOAuthProfileId,
   noteAuthProfileHealth,
 } from "./doctor-auth.js";
+import { noteBootstrapFileSize } from "./doctor-bootstrap-size.js";
 import { doctorShellCompletion } from "./doctor-completion.js";
 import { loadAndMaybeMigrateDoctorConfig } from "./doctor-config-flow.js";
+import { maybeRepairLegacyCronStore } from "./doctor-cron.js";
 import { maybeRepairGatewayDaemon } from "./doctor-gateway-daemon-flow.js";
 import { checkGatewayHealth, probeGatewayMemoryStatus } from "./doctor-gateway-health.js";
 import {
@@ -55,6 +59,7 @@ import { maybeRepairUiProtocolFreshness } from "./doctor-ui.js";
 import { maybeOfferUpdateBeforeDoctor } from "./doctor-update.js";
 import { noteWorkspaceStatus } from "./doctor-workspace-status.js";
 import { MEMORY_SYSTEM_PROMPT, shouldSuggestMemorySystem } from "./doctor-workspace.js";
+import { noteOpenAIOAuthTlsPrerequisites } from "./oauth-tls-preflight.js";
 import { applyWizardMetadata, printWizardHeader, randomToken } from "./onboard-helpers.js";
 import { ensureSystemdUserLingerInteractive } from "./systemd-linger.js";
 
@@ -163,36 +168,33 @@ export async function doctorCommand(
           "Gateway auth is off or missing a token. Token auth is now the recommended default (including loopback).",
           "Gateway auth",
         );
-      const shouldSetToken =
-        options.generateGatewayToken === true
-          ? true
-          : options.nonInteractive === true
-            ? false
-            : await prompter.confirmRepair({
-                message: "Generate and configure a gateway token now?",
-                initialValue: true,
-              });
-      if (shouldSetToken) {
-        const nextToken = randomToken();
-        cfg = {
-          ...cfg,
-          gateway: {
-            ...cfg.gateway,
-            auth: {
-              ...cfg.gateway?.auth,
-              mode: "token",
-              token: nextToken,
+        const shouldSetToken =
+          options.generateGatewayToken === true
+            ? true
+            : options.nonInteractive === true
+              ? false
+              : await prompter.confirmRepair({
+                  message: "Generate and configure a gateway token now?",
+                  initialValue: true,
+                });
+        if (shouldSetToken) {
+          const nextToken = randomToken();
+          cfg = {
+            ...cfg,
+            gateway: {
+              ...cfg.gateway,
+              auth: {
+                ...cfg.gateway?.auth,
+                mode: "token",
+                token: nextToken,
+              },
             },
-          },
-        };
-        note("Gateway token configured.", "Gateway auth");
+          };
+          note("Gateway token configured.", "Gateway auth");
         }
       }
     }
   }
-
-  await noteBootstrapFileSize();
-  await maybeRepairLegacyCronStore(cfg, prompter);
 
   const legacyState = await detectLegacyStateMigrations({ cfg });
   if (legacyState.preview.length > 0) {
@@ -219,6 +221,11 @@ export async function doctorCommand(
 
   await noteStateIntegrity(cfg, prompter, configResult.path ?? CONFIG_PATH);
   await noteSessionLockHealth({ shouldRepair: prompter.shouldRepair });
+  await maybeRepairLegacyCronStore({
+    cfg,
+    options,
+    prompter,
+  });
 
   cfg = await maybeRepairSandboxImages(cfg, runtime, prompter);
   noteSandboxScopeWarnings(cfg);
@@ -229,8 +236,10 @@ export async function doctorCommand(
   await noteMacLaunchctlGatewayEnvOverrides(cfg);
 
   await noteSecurityWarnings(cfg);
-  await noteOpenAIOAuthTlsPrerequisites(cfg);
-  await noteOpenAIOAuthTlsPrerequisites(cfg);
+  await noteOpenAIOAuthTlsPrerequisites({
+    cfg,
+    deep: options.deep === true,
+  });
 
   if (cfg.hooks?.gmail?.model?.trim()) {
     const hooksModelRef = resolveHooksGmailModel({
@@ -297,6 +306,7 @@ export async function doctorCommand(
   }
 
   noteWorkspaceStatus(cfg);
+  await noteBootstrapFileSize(cfg);
 
   // Check and fix shell completion
   await doctorShellCompletion(runtime, prompter, {
@@ -334,7 +344,7 @@ export async function doctorCommand(
     if (fs.existsSync(backupPath)) {
       runtime.log(`Backup: ${shortenHomePath(backupPath)}`);
     }
-  } else {
+  } else if (!prompter.shouldRepair) {
     runtime.log(`Run "${formatCliCommand("openclaw doctor --fix")}" to apply changes.`);
   }
 
