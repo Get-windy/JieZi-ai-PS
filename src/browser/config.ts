@@ -100,39 +100,30 @@ function resolveCdpPortRangeStart(
 
 function resolveBrowserSsrFPolicy(cfg: BrowserConfig | undefined): SsrFPolicy | undefined {
   const allowPrivateNetwork = cfg?.ssrfPolicy?.allowPrivateNetwork;
-  const dangerouslyAllowPrivateNetwork = (cfg?.ssrfPolicy as Record<string, unknown>)
-    ?.dangerouslyAllowPrivateNetwork as boolean | undefined;
+  const dangerouslyAllowPrivateNetwork = cfg?.ssrfPolicy?.dangerouslyAllowPrivateNetwork;
   const allowedHostnames = normalizeStringList(cfg?.ssrfPolicy?.allowedHostnames);
   const hostnameAllowlist = normalizeStringList(cfg?.ssrfPolicy?.hostnameAllowlist);
   const hasExplicitPrivateSetting =
     allowPrivateNetwork !== undefined || dangerouslyAllowPrivateNetwork !== undefined;
-  // Browser 默认信任本地网络环境，除非明确禁用
+  // Browser defaults to trusted-network mode unless explicitly disabled by policy.
   const resolvedAllowPrivateNetwork =
     dangerouslyAllowPrivateNetwork === true ||
     allowPrivateNetwork === true ||
     !hasExplicitPrivateSetting;
 
-  // 开发环境默认允许 localhost 访问
-  const devAllowedHostnames = allowedHostnames.length > 0 
-    ? allowedHostnames 
-    : ["localhost", "127.0.0.1", "::1"];
-  const devHostnameAllowlist = hostnameAllowlist.length > 0 
-    ? hostnameAllowlist 
-    : ["localhost", "*.localhost", "127.0.0.1"];
-
   if (
     !resolvedAllowPrivateNetwork &&
     !hasExplicitPrivateSetting &&
-    allowedHostnames.length === 0 &&
-    hostnameAllowlist.length === 0
+    !allowedHostnames &&
+    !hostnameAllowlist
   ) {
     return undefined;
   }
 
   return {
     ...(resolvedAllowPrivateNetwork ? { dangerouslyAllowPrivateNetwork: true } : {}),
-    ...(devAllowedHostnames ? { allowedHostnames: devAllowedHostnames } : {}),
-    ...(devHostnameAllowlist ? { hostnameAllowlist: devHostnameAllowlist } : {}),
+    ...(allowedHostnames ? { allowedHostnames } : {}),
+    ...(hostnameAllowlist ? { hostnameAllowlist } : {}),
   };
 }
 

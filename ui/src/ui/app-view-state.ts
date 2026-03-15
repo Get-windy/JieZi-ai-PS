@@ -237,7 +237,7 @@ export type AppViewState = {
     | "channelPolicies"
     | "permissionsConfig";
   // Collaboration 协作管理状态
-  collaborationActivePanel: "groups" | "friends" | "monitor" | "scenarios" | "team-monitor";
+  collaborationActivePanel: "groups" | "friends" | "monitor" | "scenarios" | "team-monitor" | "projects";
   agentFilesLoading: boolean;
   agentFilesError: string | null;
   agentFilesList: AgentsFilesListResult | null;
@@ -771,6 +771,10 @@ export type AppViewState = {
   }) => Promise<void>;
   handleUpgradeGroupToProject: (groupId: string, projectId: string) => Promise<void>;
   handleSaveProject: () => Promise<void>;
+  handleProjectAddMember: (projectId: string, agentId: string, role: string) => void;
+  handleProjectRemoveMember: (projectId: string, agentId: string) => void;
+  handleProjectUpdateMemberRole: (projectId: string, agentId: string, role: string) => void;
+  handleProjectUpdateProgress: (projectId: string, progress: number, notes: string) => void;
 
   // 群组管理 methods
   handleGroupsRefresh: () => Promise<void>;

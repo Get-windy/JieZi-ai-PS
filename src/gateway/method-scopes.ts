@@ -209,6 +209,8 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "groups.addMember",
     "groups.remove_member",
     "groups.removeMember",
+    // 群组升级为项目群
+    "groups.upgradeToProject",
     // 群组聊天：写操作
     "groups.chat.send",
     // 记忆块：写操作
@@ -294,6 +296,10 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "organization.member.remove",
     "organization.relation.create",
     "organization.relation.delete",
+    // 项目管理：写操作
+    "projects.create",
+    "projects.get",
+    "projects.updateWorkspace",
     // 任务：写操作（补充缺失部分已合并到上方，此处保留 agent 相关）
     // Agent 发现与通信
     "agent.assign_task",

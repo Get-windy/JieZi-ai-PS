@@ -2798,7 +2798,7 @@ export function renderApp(state: AppViewState) {
                   },
                   onAddMember: async (groupId, agentId, role) => {
                     try {
-                      await addGroupMember(state, state.client!, groupId, agentId, role);
+                      await addGroupMember(state, state.client!, groupId, agentId, (role === "owner" ? "admin" : role));
                     } catch (err) {
                       alert(`添加成员失败：${err instanceof Error ? err.message : String(err)}`);
                     }
@@ -2812,7 +2812,7 @@ export function renderApp(state: AppViewState) {
                   },
                   onUpdateMemberRole: async (groupId, agentId, role) => {
                     try {
-                      await updateGroupMemberRole(state, state.client!, groupId, agentId, role);
+                      await updateGroupMemberRole(state, state.client!, groupId, agentId, (role === "owner" ? "admin" : role));
                     } catch (err) {
                       alert(`更新角色失败：${err instanceof Error ? err.message : String(err)}`);
                     }
@@ -2883,12 +2883,12 @@ export function renderApp(state: AppViewState) {
                       }
                     });
                   },
-                  // 项目管理 Props
+                  // 群组内嵌项目管理 Props
                   projectsList: state.projectsList,
                   projectsLoading: state.projectsLoading,
                   projectsError: state.projectsError,
                   selectedProjectId: state.selectedProjectId,
-                  activeProjectPanel: state.activeProjectPanel,
+                  activeProjectPanel: state.activeProjectPanel as "list" | "config",
                   creatingProject: state.creatingProject,
                   editingProject: state.editingProject,
                   onProjectsRefresh: () => {
@@ -2904,9 +2904,75 @@ export function renderApp(state: AppViewState) {
                     state.creatingProject = true;
                     state.editingProject = null;
                   },
-                  onEditProject: (project) => {
-                    state.editingProject = project;
+                  onEditProject: (projectId) => {
+                    const proj = state.projectsList?.projects.find((p) => p.projectId === projectId);
+                    if (proj) {
+                      state.editingProject = proj;
+                      state.creatingProject = false;
+                    }
+                  },
+                  onSaveProject: async () => {
+                    if (!state.editingProject) {return;}
+                    console.log("Save project:", state.editingProject);
+                    state.editingProject = null;
+                  },
+                  onCancelProjectEdit: () => {
                     state.creatingProject = false;
+                    state.editingProject = null;
+                  },
+                  onProjectFormChange: (field, value) => {
+                    if (state.editingProject) {
+                      state.editingProject = { ...state.editingProject, [field]: value };
+                    } else if (state.creatingProject) {
+                      state.editingProject = {
+                        projectId: "",
+                        name: "",
+                        workspacePath: "",
+                        codeDir: "",
+                        [field]: value,
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                      } as any;
+                    }
+                  },
+                  // 群组升级为项目
+                  upgradingGroupToProject: state.upgradingGroupToProject,
+                  onUpgradeGroupToProject: async (groupId, projectId) => {
+                    try {
+                      await upgradeGroupToProject(state, state.client!, groupId, projectId);
+                    } catch (err) {
+                      alert(`升级失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  },
+                },
+                projectsProps: {
+                  // 项目管理 Props
+                  loading: state.projectsLoading,
+                  error: state.projectsError,
+                  projectsList: state.projectsList,
+                  selectedProjectId: state.selectedProjectId,
+                  activePanel: state.activeProjectPanel,
+                  creatingProject: state.creatingProject,
+                  editingProject: state.editingProject,
+                  agentsList: state.agentsList,
+                  onRefresh: () => {
+                    void loadProjects(state, state.client!);
+                  },
+                  onSelectProject: (projectId) => {
+                    state.selectedProjectId = projectId;
+                  },
+                  onSelectPanel: (panel) => {
+                    state.activeProjectPanel = panel;
+                  },
+                  onCreateProject: () => {
+                    state.creatingProject = true;
+                    state.editingProject = null;
+                  },
+                  onEditProject: (projectId) => {
+                    const project = state.projectsList?.projects.find((p) => p.projectId === projectId);
+                    if (project) {
+                      state.editingProject = project;
+                      state.creatingProject = false;
+                    }
                   },
                   onSaveProject: async () => {
                     if (!state.editingProject) {
@@ -2934,28 +3000,19 @@ export function renderApp(state: AppViewState) {
                       } as any;
                     }
                   },
-                  // 项目成员管理
-                  onProjectAddMember: (projectId, agentId, role) => {
+                  // 成员管理
+                  onAddMember: (projectId, agentId, role) => {
                     state.handleProjectAddMember(projectId, agentId, role);
                   },
-                  onProjectRemoveMember: (projectId, agentId) => {
+                  onRemoveMember: (projectId, agentId) => {
                     state.handleProjectRemoveMember(projectId, agentId);
                   },
-                  onProjectUpdateMemberRole: (projectId, agentId, role) => {
+                  onUpdateMemberRole: (projectId, agentId, role) => {
                     state.handleProjectUpdateMemberRole(projectId, agentId, role);
                   },
                   // 进度管理
                   onUpdateProgress: (projectId, progress, notes) => {
                     state.handleProjectUpdateProgress(projectId, progress, notes);
-                  },
-                  // 群组升级
-                  upgradingGroupToProject: state.upgradingGroupToProject,
-                  onUpgradeGroupToProject: async (groupId, projectId) => {
-                    try {
-                      await upgradeGroupToProject(state, state.client!, groupId, projectId);
-                    } catch (err) {
-                      alert(`升级失败：${err instanceof Error ? err.message : String(err)}`);
-                    }
                   },
                 },
                 friendsProps: {
