@@ -21,6 +21,9 @@ const serviceReadRuntime = vi.fn();
 const inspectPortUsage = vi.fn();
 const classifyPortListener = vi.fn();
 const formatPortDiagnostics = vi.fn();
+const pathExists = vi.fn();
+const syncPluginsForUpdateChannel = vi.fn();
+const updateNpmInstalledPlugins = vi.fn();
 
 vi.mock("@clack/prompts", () => ({
   confirm,
@@ -82,6 +85,19 @@ vi.mock("./update-cli/shared.js", async (importOriginal) => {
     resolveGlobalManager,
   };
 });
+
+vi.mock("../utils.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils.js")>();
+  return {
+    ...actual,
+    pathExists: (...args: unknown[]) => pathExists(...args),
+  };
+});
+
+vi.mock("../plugins/update.js", () => ({
+  syncPluginsForUpdateChannel: (...args: unknown[]) => syncPluginsForUpdateChannel(...args),
+  updateNpmInstalledPlugins: (...args: unknown[]) => updateNpmInstalledPlugins(...args),
+}));
 
 vi.mock("../daemon/service.js", () => ({
   resolveGatewayService: vi.fn(() => ({

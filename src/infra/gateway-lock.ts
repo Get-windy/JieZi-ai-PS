@@ -5,6 +5,7 @@ import net from "node:net";
 import path from "node:path";
 import { resolveConfigPath, resolveGatewayLockDir, resolveStateDir } from "../config/paths.js";
 import { isPidAlive } from "../shared/pid-alive.js";
+import { isGatewayArgv, parseProcCmdline } from "./gateway-process-argv.js";
 
 const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_POLL_INTERVAL_MS = 100;
@@ -45,38 +46,6 @@ export class GatewayLockError extends Error {
 }
 
 type LockOwnerStatus = "alive" | "dead" | "unknown";
-
-function normalizeProcArg(arg: string): string {
-  return arg.replaceAll("\\", "/").toLowerCase();
-}
-
-function parseProcCmdline(raw: string): string[] {
-  return raw
-    .split("\0")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
-function isGatewayArgv(args: string[]): boolean {
-  const normalized = args.map(normalizeProcArg);
-  if (!normalized.includes("gateway")) {
-    return false;
-  }
-
-  const entryCandidates = [
-    "dist/index.js",
-    "dist/entry.js",
-    "openclaw.mjs",
-    "scripts/run-node.mjs",
-    "src/index.ts",
-  ];
-  if (normalized.some((arg) => entryCandidates.some((entry) => arg.endsWith(entry)))) {
-    return true;
-  }
-
-  const exe = normalized[0] ?? "";
-  return exe.endsWith("/openclaw") || exe === "openclaw";
-}
 
 function readLinuxCmdline(pid: number): string[] | null {
   try {
@@ -289,5 +258,5 @@ export async function acquireGatewayLock(
   }
 
   const owner = lastPayload?.pid ? ` (pid ${lastPayload.pid})` : "";
-  throw new GatewayLockError(`Gateway 已在运行${owner}；锁等待超时 ${timeoutMs}ms 后失败`);
+  throw new GatewayLockError(`gateway already running${owner}; lock timeout after ${timeoutMs}ms`);
 }

@@ -1,20 +1,21 @@
 export {
   clearConfigCache,
+  ConfigRuntimeRefreshError,
+  clearRuntimeConfigSnapshot,
   createConfigIO,
+  getRuntimeConfigSnapshot,
+  getRuntimeConfigSourceSnapshot,
+  projectConfigOntoRuntimeSourceSnapshot,
   loadConfig,
+  readBestEffortConfig,
   parseConfigJson5,
   readConfigFileSnapshot,
   readConfigFileSnapshotForWrite,
   resolveConfigSnapshotHash,
+  setRuntimeConfigSnapshotRefreshHandler,
+  setRuntimeConfigSnapshot,
   writeConfigFile,
 } from "./io.js";
-// Re-export upstream additions from io
-export {
-  clearRuntimeConfigSnapshot,
-  getRuntimeConfigSnapshot,
-  getRuntimeConfigSourceSnapshot,
-  setRuntimeConfigSnapshot,
-} from "../../upstream/src/config/io.js";
 export { migrateLegacyConfig } from "./legacy-migrate.js";
 export * from "./paths.js";
 export * from "./runtime-overrides.js";
@@ -25,8 +26,3 @@ export {
   validateConfigObjectRawWithPlugins,
   validateConfigObjectWithPlugins,
 } from "./validation.js";
-export { OpenClawSchema } from "./zod-schema.js";
-export { initializePhaseIntegration, initializeAfterConfigLoad } from "./phase-integration.js";
-
-// Convenience alias for local code that expects a saveConfig(cfg) signature
-export { writeConfigFile as saveConfig } from "./io.js";
