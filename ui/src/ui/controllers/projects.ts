@@ -24,25 +24,27 @@ export async function loadProjects(app: App, client: GatewayClient): Promise<voi
   try {
     // 调用 groups.list RPC 获取所有群组 (包括项目群)
     const response = await client.request("groups.list", {});
-    const groups = Array.isArray((response as any)?.groups) ? (response as any).groups : [];
+    // oxlint-disable-next-line typescript/no-explicit-any
+    const groups = Array.isArray((response as unknown as any)?.groups) ? (response as unknown as any).groups as unknown[] : [];
     
     // 过滤出项目群
-    const projectGroups = groups.filter((g: any) => g.projectId);
+    const projectGroups = groups.filter((g) => (g as Record<string, unknown>).projectId);
     
     // 转换为项目列表格式
-    const projects = projectGroups.map((g: any) => ({
-      projectId: g.projectId,
-      name: g.name,
-      description: g.description,
-      workspacePath: g.workspacePath,
-      codeDir: g.workspacePath ? `${g.workspacePath}\\code` : undefined,
-      ownerId: g.ownerId,
-      createdAt: g.createdAt,
-    }));
+    const projects = projectGroups.map((g) => { const gr = g as Record<string, unknown>; return {
+      projectId: gr.projectId,
+      name: gr.name,
+      description: gr.description,
+      workspacePath: gr.workspacePath,
+      // 优先从 metadata.codeDir 读取
+      codeDir: (gr.metadata as Record<string, unknown> | undefined)?.codeDir ?? undefined,
+      ownerId: gr.ownerId,
+      createdAt: gr.createdAt,
+    }; });
     
     // 去重 (多个群可能绑定同一个项目)
     const uniqueProjects = Array.from(
-      new Map(projects.map((p: any) => [p.projectId, p])).values()
+      new Map(projects.map((p) => [(p as Record<string, unknown>).projectId, p])).values()
     );
     
     app.projectsList = {

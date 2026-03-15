@@ -2912,9 +2912,38 @@ export function renderApp(state: AppViewState) {
                     }
                   },
                   onSaveProject: async () => {
-                    if (!state.editingProject) {return;}
-                    console.log("Save project:", state.editingProject);
-                    state.editingProject = null;
+                    if (!state.editingProject) {
+                      return;
+                    }
+                    const proj = state.editingProject;
+                    try {
+                      // 找到该项目绑定的群组列表
+                      const response = await state.client!.request("groups.list", {});
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      const groupsRaw = Array.isArray((response as unknown as any)?.groups) ? (response as unknown as any).groups as unknown[] : [];
+                      const boundGroups = groupsRaw.filter((g) => (g as Record<string, unknown>).projectId === proj.projectId);
+
+                      // 对每个绑定群组更新 metadata.codeDir
+                      for (const g of boundGroups) {
+                        const gr = g as Record<string, unknown>;
+                        const metaUpdate: Record<string, unknown> = { ...(gr.metadata as Record<string, unknown> | undefined), codeDir: proj.codeDir ?? "" };
+                        await state.client!.request("groups.update", {
+                          groupId: gr.id,
+                          metadata: metaUpdate,
+                        });
+                        // 如果 workspacePath 有变，同步到项目群
+                        if (proj.workspacePath && proj.workspacePath !== gr.workspacePath) {
+                          await state.client!.request("projects.updateWorkspace", {
+                            projectId: proj.projectId,
+                            workspacePath: proj.workspacePath,
+                          });
+                        }
+                      }
+                      await loadProjects(state, state.client!);
+                      state.editingProject = null;
+                    } catch (err) {
+                      alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
                   },
                   onCancelProjectEdit: () => {
                     state.creatingProject = false;
@@ -2978,9 +3007,33 @@ export function renderApp(state: AppViewState) {
                     if (!state.editingProject) {
                       return;
                     }
-                    // TODO: 实现更新项目配置
-                    console.log("Save project:", state.editingProject);
-                    state.editingProject = null;
+                    const proj = state.editingProject;
+                    try {
+                      // 找到该项目绑定的群组列表
+                      const response = await state.client!.request("groups.list", {});
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      const groupsRaw = Array.isArray((response as unknown as any)?.groups) ? (response as unknown as any).groups as unknown[] : [];
+                      const boundGroups = groupsRaw.filter((g) => (g as Record<string, unknown>).projectId === proj.projectId);
+
+                      for (const g of boundGroups) {
+                        const gr = g as Record<string, unknown>;
+                        const metaUpdate: Record<string, unknown> = { ...(gr.metadata as Record<string, unknown> | undefined), codeDir: proj.codeDir ?? "" };
+                        await state.client!.request("groups.update", {
+                          groupId: gr.id,
+                          metadata: metaUpdate,
+                        });
+                        if (proj.workspacePath && proj.workspacePath !== gr.workspacePath) {
+                          await state.client!.request("projects.updateWorkspace", {
+                            projectId: proj.projectId,
+                            workspacePath: proj.workspacePath,
+                          });
+                        }
+                      }
+                      await loadProjects(state, state.client!);
+                      state.editingProject = null;
+                    } catch (err) {
+                      alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
                   },
                   onCancelProjectEdit: () => {
                     state.creatingProject = false;
@@ -2999,6 +3052,10 @@ export function renderApp(state: AppViewState) {
                         // oxlint-disable-next-line typescript/no-explicit-any
                       } as any;
                     }
+                  },
+                  onOpenWorkspace: (path) => {
+                    if (!state.client) {return;}
+                    void state.client.request("workspace.openFolder", { path }).catch(() => {});
                   },
                   // 成员管理
                   onAddMember: (projectId, agentId, role) => {

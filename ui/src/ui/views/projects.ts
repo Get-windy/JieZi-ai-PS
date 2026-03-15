@@ -51,7 +51,9 @@ export type ProjectsProps = {
   onEditProject: (projectId: string) => void;
   onSaveProject: () => void;
   onCancelProjectEdit: () => void;
+  // oxlint-disable-next-line typescript/no-explicit-any
   onProjectFormChange: (field: string, value: any) => void;
+  onOpenWorkspace: (path: string) => void;
   onAddMember: (projectId: string, agentId: string, role: string) => void;
   onRemoveMember: (projectId: string, agentId: string) => void;
   onUpdateMemberRole: (projectId: string, agentId: string, role: string) => void;
@@ -261,7 +263,10 @@ function renderProjectOverview(props: ProjectsProps, project: ProjectInfo) {
         <button class="btn" @click=${() => props.onEditProject(project.projectId)}>
           编辑项目
         </button>
-        <button class="btn btn--primary" @click=${() => {}}>
+        <button class="btn btn--primary" 
+          ?disabled=${!project.workspacePath}
+          @click=${() => project.workspacePath && props.onOpenWorkspace(project.workspacePath)}
+        >
           打开工作空间
         </button>
       </div>
@@ -325,7 +330,7 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
       </div>
 
       <div class="form-group">
-        <label>代码目录</label>
+        <label>工作目录</label>
         <input 
           type="text" 
           class="form-control" 
@@ -335,6 +340,7 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
             props.onProjectFormChange("codeDir", target.value);
           }}
         />
+        <small>项目工作目录，可为代码仓库、设计文件夹或任意工作文件夹，可留空</small>
       </div>
 
       <div class="form-group">
@@ -611,12 +617,12 @@ function renderProjectEditModal(props: ProjectsProps) {
           </div>
 
           <div class="form-group">
-            <label>代码目录</label>
+            <label>工作目录</label>
             <input 
               type="text" 
               class="form-control" 
               value="${project.codeDir || ""}"
-              placeholder="例如：I:\\Alpha_Project\\code"
+              placeholder="可为代码仓库、设计文件夹或任意工作文件夹，也可留空"
               @input=${(e: InputEvent) => {
                 const target = e.target as HTMLInputElement;
                 props.onProjectFormChange("codeDir", target.value);

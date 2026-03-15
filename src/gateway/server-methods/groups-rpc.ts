@@ -139,7 +139,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
       const updates: Partial<
         Pick<
           import("../../sessions/group-manager.js").GroupInfo,
-          "name" | "description" | "isPublic" | "maxMembers" | "tags"
+          "name" | "description" | "isPublic" | "maxMembers" | "tags" | "metadata"
         >
       > = {};
       if (params?.name) {
@@ -156,6 +156,9 @@ export const groupsHandlers: GatewayRequestHandlers = {
       }
       if (Array.isArray(params?.tags)) {
         updates.tags = params.tags.map(String);
+      }
+      if (params?.metadata !== null && typeof params?.metadata === "object") {
+        updates.metadata = params.metadata as Record<string, unknown>;
       }
 
       const group = await groupManager.updateGroup(groupId, updates);
@@ -788,7 +791,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
   /**
    * 升级群组为项目群
    */
-  "groups.upgradeToProject": async ({ params, respond, context }) => {
+  "groups.upgradeToProject": async ({ params, respond }) => {
     try {
       const groupId = params?.groupId ? String(params.groupId) : "";
       const projectId = params?.projectId ? String(params.projectId) : "";
@@ -805,7 +808,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
       // 获取群组信息
       const group = groupManager.getGroup(groupId);
       if (!group) {
-        respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `Group "${groupId}" not found`));
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Group "${groupId}" not found`));
         return;
       }
 
@@ -815,7 +818,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
           false,
           undefined,
           errorShape(
-            ErrorCodes.FAILED_PRECONDITION,
+            ErrorCodes.UNAVAILABLE,
             `Group "${groupId}" is already a project group (bound to project "${group.projectId}")`,
           ),
         );
@@ -831,7 +834,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.NOT_FOUND, `Project "${projectId}" not found`),
+          errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`),
         );
         return;
       }

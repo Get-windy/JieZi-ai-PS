@@ -341,7 +341,7 @@ export class GroupManager {
    */
   async updateGroup(
     groupId: string,
-    updates: Partial<Pick<GroupInfo, "name" | "description" | "isPublic" | "maxMembers" | "tags" | "projectId" | "workspacePath">>,
+    updates: Partial<Pick<GroupInfo, "name" | "description" | "isPublic" | "maxMembers" | "tags" | "projectId" | "workspacePath" | "metadata">>,
   ): Promise<GroupInfo> {
     const group = this.groups.get(groupId);
     if (!group) {
