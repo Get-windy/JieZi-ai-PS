@@ -1,8 +1,8 @@
 import {
   markdownToSignalTextChunks,
   type SignalTextStyleRange,
-} from "../../../extensions/signal/src/format.js";
-import { sendMessageSignal } from "../../../extensions/signal/src/send.js";
+} from "../../../upstream/extensions/signal/src/format.js";
+import { sendMessageSignal } from "../../../upstream/extensions/signal/src/send.js";
 import {
   chunkByParagraph,
   chunkMarkdownTextWithMode,

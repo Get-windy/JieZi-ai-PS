@@ -1,5 +1,19 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import SlackBolt from "@slack/bolt";
+import { resolveSlackWebClientOptions } from "../../../extensions/slack/src/client.js";
+import {
+  normalizeSlackWebhookPath,
+  registerSlackHttpHandler,
+} from "../../../extensions/slack/src/http/index.js";
+import { normalizeAllowList } from "../../../extensions/slack/src/monitor/allow-list.js";
+import { resolveSlackSlashCommandConfig } from "../../../extensions/slack/src/monitor/commands.js";
+import { createSlackMonitorContext } from "../../../extensions/slack/src/monitor/context.js";
+import { registerSlackMonitorEvents } from "../../../extensions/slack/src/monitor/events.js";
+import { createSlackMessageHandler } from "../../../extensions/slack/src/monitor/message-handler.js";
+import type { MonitorSlackOpts } from "../../../extensions/slack/src/monitor/types.js";
+import { resolveSlackChannelAllowlist } from "../../../extensions/slack/src/resolve-channels.js";
+import { resolveSlackUserAllowlist } from "../../../extensions/slack/src/resolve-users.js";
+import { resolveSlackAppToken, resolveSlackBotToken } from "../../../extensions/slack/src/token.js";
 import { resolveTextChunkLimit } from "../../auto-reply/chunk.js";
 import { DEFAULT_GROUP_HISTORY_LIMIT } from "../../auto-reply/reply/history.js";
 import {
@@ -21,18 +35,7 @@ import { installRequestBodyLimitGuard } from "../../infra/http-body.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
 import { createNonExitingRuntime, type RuntimeEnv } from "../../runtime.js";
 import { resolveSlackAccount } from "../accounts.js";
-import { resolveSlackWebClientOptions } from "../client.js";
-import { normalizeSlackWebhookPath, registerSlackHttpHandler } from "../http/index.js";
-import { resolveSlackChannelAllowlist } from "../resolve-channels.js";
-import { resolveSlackUserAllowlist } from "../resolve-users.js";
-import { resolveSlackAppToken, resolveSlackBotToken } from "../token.js";
-import { normalizeAllowList } from "./allow-list.js";
-import { resolveSlackSlashCommandConfig } from "./commands.js";
-import { createSlackMonitorContext } from "./context.js";
-import { registerSlackMonitorEvents } from "./events.js";
-import { createSlackMessageHandler } from "./message-handler.js";
 import { registerSlackMonitorSlashCommands } from "./slash.js";
-import type { MonitorSlackOpts } from "./types.js";
 
 const slackBoltModule = SlackBolt as typeof import("@slack/bolt") & {
   default?: typeof import("@slack/bolt");

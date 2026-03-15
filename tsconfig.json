@@ -13,7 +13,7 @@
     "noEmitOnError": true,
     "outDir": "dist",
     "resolveJsonModule": true,
-    "rootDirs": ["./src", "./upstream/src"],
+    "rootDirs": ["./src", "./upstream/src", "./extensions", "./upstream/extensions"],
     "skipLibCheck": true,
     "strict": true,
     "target": "es2023",
@@ -27,6 +27,15 @@
       "openclaw/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"]
     }
   },
-  "include": ["src/**/*", "upstream/src/**/*", "src-local/**/*", "ui/**/*", "ui-local/**/*", "i18n/**/*", "extensions/**/*"],
+  "include": [
+    "src/**/*",
+    "upstream/src/**/*",
+    "src-local/**/*",
+    "ui/**/*",
+    "ui-local/**/*",
+    "i18n/**/*",
+    "extensions/**/*",
+    "upstream/extensions/**/*"
+  ],
   "exclude": ["node_modules", "dist"]
 }

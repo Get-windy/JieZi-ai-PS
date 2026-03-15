@@ -773,6 +773,14 @@ export const AgentEntrySchema = z
     params: z.record(z.string(), z.unknown()).optional(),
     tools: AgentToolsSchema,
     runtime: AgentRuntimeSchema,
+    modelAccounts: z
+      .object({
+        accounts: z.array(z.string()).optional(),
+        routingMode: z.string().optional(),
+        defaultAccountId: z.string().optional(),
+      })
+      .optional(),
+    permissions: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 

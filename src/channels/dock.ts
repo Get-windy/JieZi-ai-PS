@@ -1,3 +1,4 @@
+import { buildSlackThreadingToolContext } from "../../upstream/extensions/slack/src/threading-tool-context.js";
 import {
   resolveChannelGroupRequireMention,
   resolveChannelGroupToolsPolicy,
@@ -8,7 +9,6 @@ import { requireActivePluginRegistry } from "../plugins/runtime.js";
 import { normalizeAccountId } from "../routing/session-key.js";
 import { resolveSignalAccount } from "../signal/accounts.js";
 import { resolveSlackAccount, resolveSlackReplyToMode } from "../slack/accounts.js";
-import { buildSlackThreadingToolContext } from "../slack/threading-tool-context.js";
 import { resolveTelegramAccount } from "../telegram/accounts.js";
 import { escapeRegExp, normalizeE164 } from "../utils.js";
 import { resolveWhatsAppAccount } from "../web/accounts.js";
@@ -573,10 +573,14 @@ const DOCKS: Record<ChatChannelId, ChannelDock> = {
       resolveAllowFrom: ({ cfg, accountId }) => {
         const channelConfig = cfg.channels?.feishu as Record<string, unknown> | undefined;
         const normalized = normalizeAccountId(accountId);
-        const accountConfig = (channelConfig?.accounts as Record<string, unknown> | undefined)?.[normalized] as Record<string, unknown> | undefined;
-        return ((accountConfig?.allowFrom as string[] | undefined) ?? (channelConfig?.allowFrom as string[] | undefined) ?? []).map((entry) =>
-          String(entry),
-        );
+        const accountConfig = (channelConfig?.accounts as Record<string, unknown> | undefined)?.[
+          normalized
+        ] as Record<string, unknown> | undefined;
+        return (
+          (accountConfig?.allowFrom as string[] | undefined) ??
+          (channelConfig?.allowFrom as string[] | undefined) ??
+          []
+        ).map((entry) => String(entry));
       },
       formatAllowFrom: ({ allowFrom }) =>
         allowFrom
@@ -605,10 +609,14 @@ const DOCKS: Record<ChatChannelId, ChannelDock> = {
       resolveAllowFrom: ({ cfg, accountId }) => {
         const channelConfig = cfg.channels?.dingtalk as Record<string, unknown> | undefined;
         const normalized = normalizeAccountId(accountId);
-        const accountConfig = (channelConfig?.accounts as Record<string, unknown> | undefined)?.[normalized] as Record<string, unknown> | undefined;
-        return ((accountConfig?.allowFrom as string[] | undefined) ?? (channelConfig?.allowFrom as string[] | undefined) ?? []).map((entry) =>
-          String(entry),
-        );
+        const accountConfig = (channelConfig?.accounts as Record<string, unknown> | undefined)?.[
+          normalized
+        ] as Record<string, unknown> | undefined;
+        return (
+          (accountConfig?.allowFrom as string[] | undefined) ??
+          (channelConfig?.allowFrom as string[] | undefined) ??
+          []
+        ).map((entry) => String(entry));
       },
       formatAllowFrom: ({ allowFrom }) =>
         allowFrom
@@ -637,10 +645,14 @@ const DOCKS: Record<ChatChannelId, ChannelDock> = {
       resolveAllowFrom: ({ cfg, accountId }) => {
         const channelConfig = cfg.channels?.wecom as Record<string, unknown> | undefined;
         const normalized = normalizeAccountId(accountId);
-        const accountConfig = (channelConfig?.accounts as Record<string, unknown> | undefined)?.[normalized] as Record<string, unknown> | undefined;
-        return ((accountConfig?.allowFrom as string[] | undefined) ?? (channelConfig?.allowFrom as string[] | undefined) ?? []).map((entry) =>
-          String(entry),
-        );
+        const accountConfig = (channelConfig?.accounts as Record<string, unknown> | undefined)?.[
+          normalized
+        ] as Record<string, unknown> | undefined;
+        return (
+          (accountConfig?.allowFrom as string[] | undefined) ??
+          (channelConfig?.allowFrom as string[] | undefined) ??
+          []
+        ).map((entry) => String(entry));
       },
       formatAllowFrom: ({ allowFrom }) =>
         allowFrom

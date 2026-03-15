@@ -1,8 +1,8 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseSlackTarget } from "../../../extensions/slack/src/targets.js";
-import { parseTelegramTarget } from "../../../extensions/telegram/src/targets.js";
-import { loadWebMedia } from "../../../extensions/whatsapp/src/media.js";
+import { parseSlackTarget } from "../../../upstream/extensions/slack/src/targets.js";
+import { parseTelegramTarget } from "../../../upstream/extensions/telegram/src/targets.js";
+import { loadWebMedia } from "../../../upstream/extensions/whatsapp/src/media.js";
 import { assertMediaNotDataUrl, resolveSandboxedMediaSource } from "../../agents/sandbox-paths.js";
 import { readStringParam } from "../../agents/tools/common.js";
 import type {

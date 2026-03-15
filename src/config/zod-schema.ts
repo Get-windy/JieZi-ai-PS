@@ -901,6 +901,7 @@ export const OpenClawSchema = z
       })
       .strict()
       .optional(),
+    groups: z.record(z.string(), z.unknown()).optional(),
   })
   .strict()
   .superRefine((cfg, ctx) => {

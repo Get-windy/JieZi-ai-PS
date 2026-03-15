@@ -3,20 +3,29 @@ import { t } from "../i18n.ts";
 import { renderFriendsView, type FriendsProps } from "./friends.ts";
 import { renderGroups, type GroupsProps } from "./groups.ts";
 import { renderMonitorView, type MonitorProps } from "./monitor.ts";
+import { renderProjects, type ProjectsProps } from "./projects.ts";
 import { renderScenariosView, type ScenariosProps } from "./scenarios.ts";
 import { renderTeamMonitor, type TeamMonitorProps } from "./team-monitor.ts";
 
 /**
  * Collaboration 协作管理页面
  *
- * 包含四个子面板：
+ * 包含五个子面板：
  * - Groups: 群组管理
  * - Friends: 好友关系
  * - Monitor: 协作监控
  * - Scenarios: 协作场景
+ * - TeamMonitor: 团队监控
+ * - Projects: 项目管理
  */
 
-export type CollaborationPanel = "groups" | "friends" | "monitor" | "scenarios" | "team-monitor";
+export type CollaborationPanel =
+  | "groups"
+  | "friends"
+  | "monitor"
+  | "scenarios"
+  | "team-monitor"
+  | "projects";
 
 export type CollaborationProps = {
   activePanel: CollaborationPanel;
@@ -36,6 +45,9 @@ export type CollaborationProps = {
 
   // TeamMonitor 团队监控 Props
   teamMonitorProps: TeamMonitorProps;
+
+  // Projects 项目管理 Props
+  projectsProps: ProjectsProps;
 };
 
 export function renderCollaboration(props: CollaborationProps) {
@@ -60,7 +72,9 @@ export function renderCollaboration(props: CollaborationProps) {
                 ? renderMonitorView(props.monitorProps)
                 : props.activePanel === "team-monitor"
                   ? renderTeamMonitor(props.teamMonitorProps)
-                  : renderScenariosView(props.scenariosProps)
+                  : props.activePanel === "projects"
+                    ? renderProjects(props.projectsProps)
+                    : renderScenariosView(props.scenariosProps)
         }
       </div>
     </section>
@@ -77,6 +91,7 @@ function renderCollaborationTabs(
     { id: "monitor" as const, label: "协作监控", icon: "📊" },
     { id: "scenarios" as const, label: "协作场景", icon: "🎯" },
     { id: "team-monitor" as const, label: "团队监控", icon: "📋" },
+    { id: "projects" as const, label: "项目管理", icon: "📁" },
   ];
 
   return html`
