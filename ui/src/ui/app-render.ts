@@ -2798,7 +2798,7 @@ export function renderApp(state: AppViewState) {
                   },
                   onAddMember: async (groupId, agentId, role) => {
                     try {
-                      await addGroupMember(state, state.client!, groupId, agentId, (role === "owner" ? "admin" : role) as "admin" | "member");
+                      await addGroupMember(state, state.client!, groupId, agentId, (role === "owner" ? "admin" : role));
                     } catch (err) {
                       alert(`添加成员失败：${err instanceof Error ? err.message : String(err)}`);
                     }
@@ -2812,7 +2812,7 @@ export function renderApp(state: AppViewState) {
                   },
                   onUpdateMemberRole: async (groupId, agentId, role) => {
                     try {
-                      await updateGroupMemberRole(state, state.client!, groupId, agentId, (role === "owner" ? "admin" : role) as "admin" | "member");
+                      await updateGroupMemberRole(state, state.client!, groupId, agentId, (role === "owner" ? "admin" : role));
                     } catch (err) {
                       alert(`更新角色失败：${err instanceof Error ? err.message : String(err)}`);
                     }
@@ -2912,7 +2912,7 @@ export function renderApp(state: AppViewState) {
                     }
                   },
                   onSaveProject: async () => {
-                    if (!state.editingProject) return;
+                    if (!state.editingProject) {return;}
                     console.log("Save project:", state.editingProject);
                     state.editingProject = null;
                   },

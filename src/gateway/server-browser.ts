@@ -30,7 +30,7 @@ export async function startBrowserControlServerIfEnabled(): Promise<BrowserContr
     await start();
   } catch (err) {
     const stack = err instanceof Error ? err.stack : String(err);
-    throw new Error(`browser start failed: ${stack}`);
+    throw new Error(`browser start failed: ${stack}`, { cause: err });
   }
   return { stop: stop ?? (async () => {}) };
 }
