@@ -341,7 +341,19 @@ export class GroupManager {
    */
   async updateGroup(
     groupId: string,
-    updates: Partial<Pick<GroupInfo, "name" | "description" | "isPublic" | "maxMembers" | "tags" | "projectId" | "workspacePath" | "metadata">>,
+    updates: Partial<
+      Pick<
+        GroupInfo,
+        | "name"
+        | "description"
+        | "isPublic"
+        | "maxMembers"
+        | "tags"
+        | "projectId"
+        | "workspacePath"
+        | "metadata"
+      >
+    >,
   ): Promise<GroupInfo> {
     const group = this.groups.get(groupId);
     if (!group) {
@@ -470,6 +482,50 @@ export class GroupManager {
     // 发送系统消息
     await this.sendSystemMessage(groupId, `${agentId} 的角色从 ${oldRole} 变更为 ${newRole}`);
     this._saveToDisk();
+  }
+
+  /**
+   * 转让群主（更换负责人）
+   * 原群主降为 admin，新群主升为 owner
+   */
+  async transferOwner(groupId: string, newOwnerId: string): Promise<GroupInfo> {
+    const group = this.groups.get(groupId);
+    if (!group) {
+      throw new Error(`Group "${groupId}" not found`);
+    }
+
+    const oldOwnerId = group.ownerId;
+    if (oldOwnerId === newOwnerId) {
+      throw new Error(`Agent "${newOwnerId}" is already the owner of group "${groupId}"`);
+    }
+
+    // 新群主必须是群成员
+    const newOwnerMember = group.members.find((m) => m.agentId === newOwnerId);
+    if (!newOwnerMember) {
+      throw new Error(`Agent "${newOwnerId}" is not a member of group "${groupId}"`);
+    }
+
+    // 原群主成员记录改为 admin
+    const oldOwnerMember = group.members.find((m) => m.agentId === oldOwnerId);
+    if (oldOwnerMember) {
+      oldOwnerMember.role = "admin";
+    }
+
+    // 新群主成员记录改为 owner
+    newOwnerMember.role = "owner";
+
+    // 更新 ownerId
+    group.ownerId = newOwnerId;
+    this.groups.set(groupId, group);
+    this._saveToDisk();
+
+    // 发送系统消息
+    await this.sendSystemMessage(groupId, `🔄 群主已变更：${oldOwnerId} → ${newOwnerId}`);
+
+    console.log(
+      `[Group Manager] Owner of group ${groupId} transferred: ${oldOwnerId} → ${newOwnerId}`,
+    );
+    return group;
   }
 
   /**

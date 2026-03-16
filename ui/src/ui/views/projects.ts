@@ -103,6 +103,8 @@ export type ProjectsProps = {
   onRemoveTeam: (projectId: string, teamId: string) => void;
   onUpdateTeamStatus: (projectId: string, teamId: string, status: ProjectTeamStatus) => void;
   onLoadTeamRelations: (projectId: string) => void;
+  // 更换项目负责人
+  onTransferProjectOwner: (projectId: string, newOwnerId: string) => void;
 };
 
 export function renderProjects(props: ProjectsProps) {
@@ -472,16 +474,28 @@ function renderProjectMembers(props: ProjectsProps, project: ProjectInfo) {
         <h4>项目管理员设置</h4>
         <div class="form-group">
           <label>项目负责人 (Owner)</label>
-          <input 
-            type="text" 
-            class="form-control" 
-            value="${project.ownerId || ""}"
-            @input=${(e: InputEvent) => {
-              const target = e.target as HTMLInputElement;
-              props.onProjectFormChange("ownerId", target.value);
-            }}
-          />
-          <small>设置或更换项目负责人，负责人拥有最高管理权限</small>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="mono" style="flex: 1; padding: 8px; background: var(--color-bg-secondary, #f5f5f5); border-radius: 4px;">
+              ${project.ownerId || "未设置"}
+            </span>
+            <button
+              class="btn btn--sm btn--primary"
+              @click=${() => {
+                const newOwner =
+                  agents.length > 0
+                    ? prompt(
+                        `请输入新负责人 ID（当前：${project.ownerId || "未设置"}\n可选内容：${agents.map((a) => a.id).join(", ")})`,
+                      )
+                    : prompt(`请输入新负责人 ID（当前：${project.ownerId || "未设置"})`);
+                if (newOwner && newOwner.trim() && newOwner.trim() !== project.ownerId) {
+                  props.onTransferProjectOwner(project.projectId, newOwner.trim());
+                }
+              }}
+            >
+              🔄 更换负责人
+            </button>
+          </div>
+          <small>项目负责人持有所有项目群的群主权限，更换将自动在所有项目群中生效</small>
         </div>
         
         <div class="form-group" style="margin-top: 16px;">

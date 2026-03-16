@@ -315,6 +315,9 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "project.team.remove",
     "project.handoff",
     "project.team.status",
+    // 更换负责人
+    "group.owner.transfer",
+    "project.owner.transfer",
     // 任务：写操作（补充缺失部分已合并到上方，此处保留 agent 相关）
     // Agent 发现与通信
     "agent.assign_task",

@@ -3069,6 +3069,41 @@ export function renderApp(state: AppViewState) {
                       alert(`升级失败：${err instanceof Error ? err.message : String(err)}`);
                     }
                   },
+                  // 更换群主
+                  onTransferGroupOwner: (groupId, newOwnerId) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("group.owner.transfer", { groupId, newOwnerId });
+                        await loadGroups(state, state.client);
+                        alert(`群主已成功更换为 ${newOwnerId}`);
+                      } catch (err) {
+                        alert(`更换群主失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  // 更换项目负责人
+                  onTransferProjectOwner: (projectId, newOwnerId) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("project.owner.transfer", {
+                          projectId,
+                          newOwnerId,
+                        });
+                        await loadProjects(state, state.client);
+                        alert(`项目负责人已成功更换为 ${newOwnerId}`);
+                      } catch (err) {
+                        alert(
+                          `更换负责人失败：${err instanceof Error ? err.message : String(err)}`,
+                        );
+                      }
+                    })();
+                  },
                 },
                 projectsProps: {
                   // 项目管理 Props
@@ -3095,6 +3130,7 @@ export function renderApp(state: AppViewState) {
                         // oxlint-disable-next-line typescript/no-explicit-any
                         const res = (await state.client.request("project.team.relations", {
                           projectId,
+                          // oxlint-disable-next-line typescript/no-explicit-any
                         })) as any;
                         state.projectTeamRelations = res?.relations ?? [];
                       } catch (_e) {
@@ -3216,6 +3252,7 @@ export function renderApp(state: AppViewState) {
                         // oxlint-disable-next-line typescript/no-explicit-any
                         const res = (await state.client.request("project.team.relations", {
                           projectId,
+                          // oxlint-disable-next-line typescript/no-explicit-any
                         })) as any;
                         state.projectTeamRelations = res?.relations ?? [];
                       } catch (_e) {
@@ -3242,6 +3279,7 @@ export function renderApp(state: AppViewState) {
                         // oxlint-disable-next-line typescript/no-explicit-any
                         const res = (await state.client.request("project.team.relations", {
                           projectId,
+                          // oxlint-disable-next-line typescript/no-explicit-any
                         })) as any;
                         state.projectTeamRelations = res?.relations ?? [];
                         // 重置表单中的 toTeamId
@@ -3285,6 +3323,7 @@ export function renderApp(state: AppViewState) {
                         // oxlint-disable-next-line typescript/no-explicit-any
                         const res = (await state.client.request("project.team.relations", {
                           projectId,
+                          // oxlint-disable-next-line typescript/no-explicit-any
                         })) as any;
                         state.projectTeamRelations = res?.relations ?? [];
                         state.handoffForm = {
@@ -3315,6 +3354,7 @@ export function renderApp(state: AppViewState) {
                         // oxlint-disable-next-line typescript/no-explicit-any
                         const res = (await state.client.request("project.team.relations", {
                           projectId,
+                          // oxlint-disable-next-line typescript/no-explicit-any
                         })) as any;
                         state.projectTeamRelations = res?.relations ?? [];
                       } catch (err) {
@@ -3337,10 +3377,31 @@ export function renderApp(state: AppViewState) {
                         // oxlint-disable-next-line typescript/no-explicit-any
                         const res = (await state.client.request("project.team.relations", {
                           projectId,
+                          // oxlint-disable-next-line typescript/no-explicit-any
                         })) as any;
                         state.projectTeamRelations = res?.relations ?? [];
                       } catch (err) {
                         alert(`更新状态失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  // 更换项目负责人
+                  onTransferProjectOwner: (projectId, newOwnerId) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("project.owner.transfer", {
+                          projectId,
+                          newOwnerId,
+                        });
+                        await loadProjects(state, state.client);
+                        alert(`项目负责人已成功更换为 ${newOwnerId}`);
+                      } catch (err) {
+                        alert(
+                          `更换负责人失败：${err instanceof Error ? err.message : String(err)}`,
+                        );
                       }
                     })();
                   },
