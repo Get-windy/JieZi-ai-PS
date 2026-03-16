@@ -9,6 +9,13 @@ import type { OpenClawConfig } from "../../config/config.js";
 import { updateSessionStore, type SessionEntry } from "../../config/sessions.js";
 import { t } from "../../i18n/index.js";
 import { resolveAgentConfig, resolveAgentModelAccounts } from "../agent-scope.js";
+import {
+  lookupBenchmark,
+  normalizeEloScore,
+  getCodingBenchmarkScore,
+  getReasoningBenchmarkScore,
+  getOverallBenchmarkScore,
+} from "../arena-benchmarks.js";
 import { ensureAuthProfileStore } from "../auth-profiles.js";
 import {
   routeToOptimalModelAccount,
@@ -247,9 +254,19 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
       return undefined;
     }
 
-    return {
+    // 从 accountId 或 profile 中提取真实模型名称用于 Arena 匹配
+    // accountId 格式示例："siliconflow/Pro/deepseek-ai/DeepSeek-V3.2"
+    // profile.model 格式示例："deepseek-v3" 或 "gpt-4o"
+    const modelNameForLookup =
+      (profile as { model?: string }).model ?? accountId.split("/").pop() ?? accountId;
+
+    // 尝试从 Arena 数据库查找基准数据
+    const benchmarkEntry = lookupBenchmark(modelNameForLookup);
+
+    // 默认 ModelInfo（用于无法获取真实配置的情况）
+    const baseInfo: ModelInfo = {
       id: accountId,
-      contextWindow: 100000, // 默认值
+      contextWindow: 100000,
       supportsTools: true,
       supportsVision: false,
       reasoningLevel: 2,
@@ -257,6 +274,43 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
       outputPrice: 0.03,
       avgResponseTime: 3,
     };
+
+    if (benchmarkEntry) {
+      const normalizedElo = normalizeEloScore(benchmarkEntry.eloScore);
+      baseInfo.benchmarks = {
+        eloScore: benchmarkEntry.eloScore,
+        arenaRank: benchmarkEntry.arenaRank,
+        mmlu: benchmarkEntry.mmlu,
+        humanEval: benchmarkEntry.humanEval,
+        math: benchmarkEntry.math,
+        mtBench: benchmarkEntry.mtBench,
+        gpqa: benchmarkEntry.gpqa,
+        normalizedElo,
+      };
+      // 基于 Arena 数据修正能力等级
+      if ((benchmarkEntry.math ?? 0) >= 90 || (benchmarkEntry.gpqa ?? 0) >= 70) {
+        baseInfo.reasoningLevel = 3;
+      } else if ((benchmarkEntry.math ?? 0) >= 60 || normalizedElo >= 70) {
+        baseInfo.reasoningLevel = 2;
+      } else {
+        baseInfo.reasoningLevel = 1;
+      }
+      // 更新领域评分
+      const codingScore = getCodingBenchmarkScore(modelNameForLookup);
+      const reasoningScore = getReasoningBenchmarkScore(modelNameForLookup);
+      const overallScore = getOverallBenchmarkScore(modelNameForLookup);
+      if (codingScore !== undefined || reasoningScore !== undefined || overallScore !== undefined) {
+        baseInfo.domainScores = {
+          ...(codingScore !== undefined ? { coding: codingScore } : {}),
+          ...(reasoningScore !== undefined
+            ? { reasoning: reasoningScore, math: reasoningScore }
+            : {}),
+          ...(overallScore !== undefined ? { general: overallScore, analysis: overallScore } : {}),
+        };
+      }
+    }
+
+    return baseInfo;
   };
 
   try {
