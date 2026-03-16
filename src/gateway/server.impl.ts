@@ -78,6 +78,7 @@ import { createGatewayRuntimeState } from "./server-runtime-state.js";
 import { resolveSessionKeyForRun } from "./server-session-key.js";
 import { logGatewayStartup } from "./server-startup-log.js";
 import { startGatewaySidecars } from "./server-startup.js";
+import { startAgentTaskWakeScheduler } from "../cron/agent-task-wake-scheduler.js";
 import { startGatewayTailscaleExposure } from "./server-tailscale.js";
 import { createWizardSessionTracker } from "./server-wizard-sessions.js";
 import { attachGatewayWsHandlers } from "./server-ws-runtime.js";
@@ -699,6 +700,16 @@ export async function startGatewayServer(
       log.info("OAuth refresh daemon started");
     } catch (err) {
       log.warn(`OAuth refresh daemon failed to start: ${String(err)}`);
+    }
+  }
+
+  // 启动 Agent 任务唤醒调度器（定期扫描并唤醒有待办任务的 Agent）
+  if (!minimalTestGateway) {
+    try {
+      startAgentTaskWakeScheduler();
+      log.info("Agent task wake scheduler started");
+    } catch (err) {
+      log.warn(`Agent task wake scheduler failed to start: ${String(err)}`);
     }
   }
 
