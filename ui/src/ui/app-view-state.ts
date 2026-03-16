@@ -269,10 +269,14 @@ export type AppViewState = {
   projectsList: import("./views/projects.ts").ProjectsListResult | null;
   projectsError: string | null;
   selectedProjectId: string | null;
-  activeProjectPanel: "list" | "config" | "members" | "progress";
+  activeProjectPanel: "list" | "config" | "members" | "progress" | "handoff";
   creatingProject: boolean;
   editingProject: import("./views/projects.ts").ProjectInfo | null;
   upgradingGroupToProject: boolean;
+  // 项目跨团队协作 Handoff 状态
+  projectTeamRelations: import("./views/projects.ts").ProjectTeamRelation[];
+  projectTeamRelationsLoading: boolean;
+  handoffForm: import("./views/projects.ts").HandoffFormState;
   // 群组文件管理状态
   groupFilesLoading: boolean;
   groupFileContentLoading: boolean;

@@ -1,19 +1,21 @@
 /**
  * Phase 4: 组织数据持久化存储层
- * 
+ *
  * 使用JSON文件存储组织架构数据
  */
 
 import { join } from "node:path";
+import { STATE_DIR } from "../config/paths.js";
+import { createAsyncLock, readJsonFile, writeJsonAtomic } from "../infra/json-files.js";
 import type {
   Organization,
   CollaborationRelation,
   OrganizationMember,
   AgentRecruitRequest,
   AgentOnboardingInfo,
+  ProjectTeamRelation,
+  HandoffRecord,
 } from "./types.js";
-import { createAsyncLock, readJsonFile, writeJsonAtomic } from "../infra/json-files.js";
-import { STATE_DIR } from "../config/paths.js";
 
 /**
  * 组织存储数据结构
@@ -23,6 +25,8 @@ interface OrganizationStorage {
   relations: Record<string, CollaborationRelation>;
   recruitRequests: Record<string, AgentRecruitRequest>;
   onboardingInfo: Record<string, AgentOnboardingInfo>;
+  /** 项目-团队关系（关系ID → ProjectTeamRelation） */
+  projectTeamRelations: Record<string, ProjectTeamRelation>;
   version: number;
   lastUpdated: number;
 }
@@ -48,6 +52,7 @@ export class OrganizationStorageService {
       relations: {},
       recruitRequests: {},
       onboardingInfo: {},
+      projectTeamRelations: {},
       version: 1,
       lastUpdated: Date.now(),
     };
@@ -65,6 +70,11 @@ export class OrganizationStorageService {
     if (!data) {
       this.cache = this.getDefaultStorage();
       return this.cache;
+    }
+
+    // 兼容旧版本数据（projectTeamRelations 字段不存在时补充默认值）
+    if (!data.projectTeamRelations) {
+      data.projectTeamRelations = {};
     }
 
     this.cache = data;
@@ -211,10 +221,7 @@ export class OrganizationStorageService {
   /**
    * 添加组织成员
    */
-  async addMember(
-    organizationId: string,
-    member: OrganizationMember,
-  ): Promise<Organization> {
+  async addMember(organizationId: string, member: OrganizationMember): Promise<Organization> {
     return this.lock(async () => {
       const data = await this.load();
       const org = data.organizations[organizationId];
@@ -512,7 +519,10 @@ export class OrganizationStorageService {
   /**
    * 获取入职信息
    */
-  async getOnboardingInfo(agentId: string, organizationId: string): Promise<AgentOnboardingInfo | null> {
+  async getOnboardingInfo(
+    agentId: string,
+    organizationId: string,
+  ): Promise<AgentOnboardingInfo | null> {
     const data = await this.load();
     const key = `${agentId}_${organizationId}`;
     return data.onboardingInfo[key] || null;
@@ -577,6 +587,205 @@ export class OrganizationStorageService {
       organizationsByType,
       relationsByType,
     };
+  }
+
+  // ==================== 项目-团队关系 CRUD ====================
+
+  /**
+   * 将团队分配到项目（创建或更新 ProjectTeamRelation）
+   */
+  async assignTeamToProject(
+    relation: Omit<ProjectTeamRelation, "handoffHistory"> & { handoffHistory?: HandoffRecord[] },
+  ): Promise<ProjectTeamRelation> {
+    return this.lock(async () => {
+      const data = await this.load();
+      const full: ProjectTeamRelation = {
+        ...relation,
+        handoffHistory: relation.handoffHistory ?? [],
+      };
+      data.projectTeamRelations[full.id] = full;
+      await this.save(data);
+      return full;
+    });
+  }
+
+  /**
+   * 获取项目的所有团队关系
+   */
+  async getProjectTeamRelations(
+    projectId: string,
+    filter?: {
+      teamId?: string;
+      status?: ProjectTeamRelation["status"];
+      role?: ProjectTeamRelation["role"];
+    },
+  ): Promise<ProjectTeamRelation[]> {
+    const data = await this.load();
+    let relations = Object.values(data.projectTeamRelations).filter(
+      (r) => r.projectId === projectId,
+    );
+    if (filter?.teamId) {
+      relations = relations.filter((r) => r.teamId === filter.teamId);
+    }
+    if (filter?.status) {
+      relations = relations.filter((r) => r.status === filter.status);
+    }
+    if (filter?.role) {
+      relations = relations.filter((r) => r.role === filter.role);
+    }
+    return relations;
+  }
+
+  /**
+   * 获取团队参与的所有项目关系
+   */
+  async getTeamProjectRelations(
+    teamId: string,
+    filter?: { status?: ProjectTeamRelation["status"]; role?: ProjectTeamRelation["role"] },
+  ): Promise<ProjectTeamRelation[]> {
+    const data = await this.load();
+    let relations = Object.values(data.projectTeamRelations).filter((r) => r.teamId === teamId);
+    if (filter?.status) {
+      relations = relations.filter((r) => r.status === filter.status);
+    }
+    if (filter?.role) {
+      relations = relations.filter((r) => r.role === filter.role);
+    }
+    return relations;
+  }
+
+  /**
+   * 执行项目交付：将责任从一个团队移交到另一个团队
+   *
+   * - fromTeam 状态变为 fromTeamNewStatus（默认 support-only）
+   * - toTeam 状态变为 toTeamNewStatus（默认 active）
+   * - 双方都记录 HandoffRecord
+   */
+  async handoffProject(params: {
+    projectId: string;
+    fromTeamId: string;
+    toTeamId: string;
+    toTeamRole: ProjectTeamRelation["role"];
+    fromTeamNewStatus: ProjectTeamRelation["status"];
+    toTeamNewStatus: ProjectTeamRelation["status"];
+    operatorId: string;
+    note?: string;
+    toTeamAssignedBy?: string;
+  }): Promise<{
+    fromRelation: ProjectTeamRelation;
+    toRelation: ProjectTeamRelation;
+    handoffRecord: HandoffRecord;
+  }> {
+    return this.lock(async () => {
+      const data = await this.load();
+      const now = Date.now();
+
+      // 找到 fromTeam 关系
+      const fromRelation = Object.values(data.projectTeamRelations).find(
+        (r) => r.projectId === params.projectId && r.teamId === params.fromTeamId,
+      );
+      if (!fromRelation) {
+        throw new Error(
+          `Team ${params.fromTeamId} is not associated with project ${params.projectId}`,
+        );
+      }
+
+      // 构建交付记录
+      const handoffRecord: HandoffRecord = {
+        id: `handoff_${now}_${Math.random().toString(36).substr(2, 8)}`,
+        fromTeamId: params.fromTeamId,
+        toTeamId: params.toTeamId,
+        note: params.note,
+        operatorId: params.operatorId,
+        handoffAt: now,
+        fromTeamNewStatus: params.fromTeamNewStatus,
+        toTeamNewStatus: params.toTeamNewStatus,
+      };
+
+      // 更新 fromTeam 关系
+      const updatedFrom: ProjectTeamRelation = {
+        ...fromRelation,
+        status: params.fromTeamNewStatus,
+        updatedAt: now,
+        updatedBy: params.operatorId,
+        handoffHistory: [...fromRelation.handoffHistory, handoffRecord],
+      };
+      data.projectTeamRelations[fromRelation.id] = updatedFrom;
+
+      // 查找或创建 toTeam 关系
+      const existingTo = Object.values(data.projectTeamRelations).find(
+        (r) => r.projectId === params.projectId && r.teamId === params.toTeamId,
+      );
+
+      let updatedTo: ProjectTeamRelation;
+      if (existingTo) {
+        updatedTo = {
+          ...existingTo,
+          role: params.toTeamRole,
+          status: params.toTeamNewStatus,
+          updatedAt: now,
+          updatedBy: params.operatorId,
+          handoffHistory: [...existingTo.handoffHistory, handoffRecord],
+        };
+        data.projectTeamRelations[existingTo.id] = updatedTo;
+      } else {
+        const toRelId = `ptr_${now}_${Math.random().toString(36).substr(2, 8)}`;
+        updatedTo = {
+          id: toRelId,
+          projectId: params.projectId,
+          teamId: params.toTeamId,
+          role: params.toTeamRole,
+          status: params.toTeamNewStatus,
+          joinedAt: now,
+          assignedBy: params.toTeamAssignedBy ?? params.operatorId,
+          updatedAt: now,
+          updatedBy: params.operatorId,
+          handoffHistory: [handoffRecord],
+        };
+        data.projectTeamRelations[toRelId] = updatedTo;
+      }
+
+      await this.save(data);
+      return { fromRelation: updatedFrom, toRelation: updatedTo, handoffRecord };
+    });
+  }
+
+  /**
+   * 更新项目-团队关系的状态（直接更新，不记录交付记录）
+   */
+  async updateProjectTeamRelation(
+    relationId: string,
+    updates: Partial<Pick<ProjectTeamRelation, "status" | "role" | "note" | "updatedBy">>,
+  ): Promise<ProjectTeamRelation> {
+    return this.lock(async () => {
+      const data = await this.load();
+      const rel = data.projectTeamRelations[relationId];
+      if (!rel) {
+        throw new Error(`ProjectTeamRelation not found: ${relationId}`);
+      }
+      const updated: ProjectTeamRelation = { ...rel, ...updates, updatedAt: Date.now() };
+      data.projectTeamRelations[relationId] = updated;
+      await this.save(data);
+      return updated;
+    });
+  }
+
+  /**
+   * 删除项目-团队关系
+   */
+  async removeTeamFromProject(projectId: string, teamId: string): Promise<boolean> {
+    return this.lock(async () => {
+      const data = await this.load();
+      const rel = Object.values(data.projectTeamRelations).find(
+        (r) => r.projectId === projectId && r.teamId === teamId,
+      );
+      if (!rel) {
+        return false;
+      }
+      delete data.projectTeamRelations[rel.id];
+      await this.save(data);
+      return true;
+    });
   }
 }
 

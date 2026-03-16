@@ -3010,7 +3010,8 @@ export function renderApp(state: AppViewState) {
                       const response = await state.client!.request("groups.list", {});
                       // oxlint-disable-next-line typescript/no-explicit-any
                       const groupsRaw = Array.isArray((response as any)?.groups)
-                        ? ((response as any).groups as unknown[])
+                        ? // oxlint-disable-next-line typescript/no-explicit-any
+                          ((response as any).groups as unknown[])
                         : [];
                       const boundGroups = groupsRaw.filter(
                         (g) => (g as Record<string, unknown>).projectId === proj.projectId,
@@ -3084,6 +3085,25 @@ export function renderApp(state: AppViewState) {
                   },
                   onSelectProject: (projectId) => {
                     state.selectedProjectId = projectId;
+                    // 切换项目时自动加载团队关系
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      state.projectTeamRelationsLoading = true;
+                      try {
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client.request("project.team.relations", {
+                          projectId,
+                        })) as any;
+                        state.projectTeamRelations = res?.relations ?? [];
+                      } catch (_e) {
+                        // oxlint-disable-line no-unused-vars
+                        state.projectTeamRelations = [];
+                      } finally {
+                        state.projectTeamRelationsLoading = false;
+                      }
+                    })();
                   },
                   onSelectPanel: (panel) => {
                     state.activeProjectPanel = panel;
@@ -3111,7 +3131,8 @@ export function renderApp(state: AppViewState) {
                       const response = await state.client!.request("groups.list", {});
                       // oxlint-disable-next-line typescript/no-explicit-any
                       const groupsRaw = Array.isArray((response as any)?.groups)
-                        ? ((response as any).groups as unknown[])
+                        ? // oxlint-disable-next-line typescript/no-explicit-any
+                          ((response as any).groups as unknown[])
                         : [];
                       const boundGroups = groupsRaw.filter(
                         (g) => (g as Record<string, unknown>).projectId === proj.projectId,
@@ -3177,6 +3198,151 @@ export function renderApp(state: AppViewState) {
                   // 进度管理
                   onUpdateProgress: (projectId, progress, notes) => {
                     state.handleProjectUpdateProgress(projectId, progress, notes);
+                  },
+                  // 跨团队协作 Handoff Props
+                  projectTeamRelations: state.projectTeamRelations,
+                  projectTeamRelationsLoading: state.projectTeamRelationsLoading,
+                  handoffForm: state.handoffForm,
+                  onHandoffFormChange: (field, value) => {
+                    state.handoffForm = { ...state.handoffForm, [field]: value };
+                  },
+                  onLoadTeamRelations: (projectId) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      state.projectTeamRelationsLoading = true;
+                      try {
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client.request("project.team.relations", {
+                          projectId,
+                        })) as any;
+                        state.projectTeamRelations = res?.relations ?? [];
+                      } catch (_e) {
+                        // oxlint-disable-line no-unused-vars
+                        state.projectTeamRelations = [];
+                      } finally {
+                        state.projectTeamRelationsLoading = false;
+                      }
+                    })();
+                  },
+                  onAssignTeam: (projectId, teamId, role) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("project.team.assign", {
+                          projectId,
+                          teamId,
+                          role,
+                          assignedBy: "ui-user",
+                        });
+                        // 刷新团队关系
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client.request("project.team.relations", {
+                          projectId,
+                        })) as any;
+                        state.projectTeamRelations = res?.relations ?? [];
+                        // 重置表单中的 toTeamId
+                        state.handoffForm = { ...state.handoffForm, toTeamId: "" };
+                      } catch (err) {
+                        alert(`关联团队失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  onHandoffProject: (projectId) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      const form = state.handoffForm;
+                      if (!form.toTeamId.trim()) {
+                        alert("请填写接收方团队 ID");
+                        return;
+                      }
+                      // 找到当前 active 团队作为 fromTeam
+                      const activeTeam = state.projectTeamRelations.find(
+                        (r) => r.status === "active",
+                      );
+                      const fromTeamId = activeTeam?.teamId;
+                      if (!fromTeamId) {
+                        alert("暂无进行中团队，请先关联团队并设置为进行中状态");
+                        return;
+                      }
+                      try {
+                        await state.client.request("project.handoff", {
+                          projectId,
+                          fromTeamId,
+                          toTeamId: form.toTeamId.trim(),
+                          toTeamRole: form.toTeamRole,
+                          fromTeamNewStatus: form.fromTeamNewStatus,
+                          toTeamNewStatus: form.toTeamNewStatus,
+                          operatorId: "ui-user",
+                          note: form.note || undefined,
+                        });
+                        // 刷新并重置表单
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client.request("project.team.relations", {
+                          projectId,
+                        })) as any;
+                        state.projectTeamRelations = res?.relations ?? [];
+                        state.handoffForm = {
+                          toTeamId: "",
+                          toTeamRole: "ops",
+                          fromTeamNewStatus: "support-only",
+                          toTeamNewStatus: "active",
+                          note: "",
+                        };
+                        alert(
+                          `交付成功！${fromTeamId} 已转为 ${form.fromTeamNewStatus}，${form.toTeamId} 已接手为 ${form.toTeamNewStatus}。`,
+                        );
+                      } catch (err) {
+                        alert(`交付失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  onRemoveTeam: (projectId, teamId) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      if (!confirm(`确认移除团队 ${teamId} 与项目的关联？`)) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("project.team.remove", { projectId, teamId });
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client.request("project.team.relations", {
+                          projectId,
+                        })) as any;
+                        state.projectTeamRelations = res?.relations ?? [];
+                      } catch (err) {
+                        alert(`移除失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  onUpdateTeamStatus: (projectId, teamId, status) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("project.team.status", {
+                          projectId,
+                          teamId,
+                          status,
+                          updatedBy: "ui-user",
+                        });
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client.request("project.team.relations", {
+                          projectId,
+                        })) as any;
+                        state.projectTeamRelations = res?.relations ?? [];
+                      } catch (err) {
+                        alert(`更新状态失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
                   },
                 },
                 friendsProps: {

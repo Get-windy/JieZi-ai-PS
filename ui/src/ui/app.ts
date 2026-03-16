@@ -366,10 +366,20 @@ export class OpenClawApp extends LitElement {
   @state() projectsList: import("./views/projects.ts").ProjectsListResult | null = null;
   @state() projectsError: string | null = null;
   @state() selectedProjectId: string | null = null;
-  @state() activeProjectPanel: "list" | "config" | "members" | "progress" = "list";
+  @state() activeProjectPanel: "list" | "config" | "members" | "progress" | "handoff" = "list";
   @state() creatingProject = false;
   @state() editingProject: import("./views/projects.ts").ProjectInfo | null = null;
   @state() upgradingGroupToProject = false;
+  // 项目跨团队协作 Handoff 状态
+  @state() projectTeamRelations: import("./views/projects.ts").ProjectTeamRelation[] = [];
+  @state() projectTeamRelationsLoading = false;
+  @state() handoffForm: import("./views/projects.ts").HandoffFormState = {
+    toTeamId: "",
+    toTeamRole: "ops",
+    fromTeamNewStatus: "support-only",
+    toTeamNewStatus: "active",
+    note: "",
+  };
   // Friends 好友关系状态
   @state() friendsLoading = false;
   @state() friendsError: string | null = null;

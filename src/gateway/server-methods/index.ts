@@ -63,6 +63,7 @@ import { phase5RpcHandlers } from "./phase5-rpc.js";
 import { phase6IntegrationHandlers } from "./phase6-integration-rpc.js";
 import { phase7AdminHandlers } from "./phase7-admin-rpc.js";
 import { policyIntegrationHandlers } from "./policy-integration.js";
+import { projectHandoffHandlers } from "./project-handoff-rpc.js";
 import { projectsHandlers } from "./projects-rpc.js";
 import { pushHandlers } from "./push.js";
 import { reportsHandlers } from "./reports-rpc.js";
@@ -193,6 +194,8 @@ const hardcodedHandlers: GatewayRequestHandlers = {
   ...groupsHandlers,
   ...mentorshipHandlers,
   ...projectsHandlers,
+  // 项目跨团队协作与交付
+  ...projectHandoffHandlers,
 
   // 工作流 & 场景 & 报告
   ...scenariosHandlers,

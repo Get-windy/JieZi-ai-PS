@@ -169,7 +169,10 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     // 审批：查询类（由 APPROVALS_SCOPE 覆盖，此处保留为兼容）
     // 好友：查询类
     "friends.list",
-    // 组织：查询类
+    // 项目管理：查询类
+    "project.team.relations",
+    "project.team.my-projects",
+    // 组织：查询类（补充缺失）
     "org.list",
   ],
   [WRITE_SCOPE]: [
@@ -307,6 +310,11 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "projects.create",
     "projects.get",
     "projects.updateWorkspace",
+    // 项目跨团队协作与交付：写操作
+    "project.team.assign",
+    "project.team.remove",
+    "project.handoff",
+    "project.team.status",
     // 任务：写操作（补充缺失部分已合并到上方，此处保留 agent 相关）
     // Agent 发现与通信
     "agent.assign_task",
