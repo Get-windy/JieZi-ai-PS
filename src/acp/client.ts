@@ -15,6 +15,14 @@ import {
 } from "@agentclientprotocol/sdk";
 import { isKnownCoreToolId } from "../agents/tool-catalog.js";
 import { ensureOpenClawCliOnPath } from "../infra/path-env.js";
+import {
+  materializeWindowsSpawnProgram,
+  resolveWindowsSpawnProgram,
+} from "../plugin-sdk/windows-spawn.js";
+import {
+  listKnownProviderAuthEnvVarNames,
+  omitEnvKeysCaseInsensitive,
+} from "../secrets/provider-env-vars.js";
 import { DANGEROUS_ACP_TOOLS } from "../security/dangerous-tools.js";
 
 const SAFE_AUTO_APPROVE_TOOL_IDS = new Set(["read", "search", "web_search", "memory_search"]);
@@ -75,10 +83,17 @@ function parseToolNameFromTitle(title: string | undefined | null): string | unde
     return undefined;
   }
   const head = title.split(":", 1)[0]?.trim();
-  if (!head || !/^[a-zA-Z0-9._-]+$/.test(head)) {
+  if (!head) {
     return undefined;
   }
   return normalizeToolName(head);
+}
+
+function resolveToolKindForPermission(toolName: string | undefined): string | undefined {
+  if (!toolName) {
+    return undefined;
+  }
+  return TOOL_KIND_BY_ID.get(toolName) ?? "other";
 }
 
 function resolveToolNameForPermission(params: RequestPermissionRequest): string | undefined {
@@ -89,7 +104,22 @@ function resolveToolNameForPermission(params: RequestPermissionRequest): string 
   const fromMeta = readFirstStringValue(toolMeta, ["toolName", "tool_name", "name"]);
   const fromRawInput = readFirstStringValue(rawInput, ["tool", "toolName", "tool_name", "name"]);
   const fromTitle = parseToolNameFromTitle(toolCall?.title);
-  return normalizeToolName(fromMeta ?? fromRawInput ?? fromTitle ?? "");
+  const metaName = fromMeta ? normalizeToolName(fromMeta) : undefined;
+  const rawInputName = fromRawInput ? normalizeToolName(fromRawInput) : undefined;
+  const titleName = fromTitle;
+  if ((fromMeta && !metaName) || (fromRawInput && !rawInputName)) {
+    return undefined;
+  }
+  if (metaName && titleName && metaName !== titleName) {
+    return undefined;
+  }
+  if (rawInputName && metaName && rawInputName !== metaName) {
+    return undefined;
+  }
+  if (rawInputName && titleName && rawInputName !== titleName) {
+    return undefined;
+  }
+  return metaName ?? titleName ?? rawInputName;
 }
 
 function extractPathFromToolTitle(
@@ -155,89 +185,6 @@ function resolveAbsoluteScopedPath(value: string, cwd: string): string | undefin
 function isPathWithinRoot(candidatePath: string, root: string): boolean {
   const relative = path.relative(root, candidatePath);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-}
-
-type AcpClientSpawnEnvOptions = {
-  stripKeys?: Iterable<string>;
-};
-
-export function resolveAcpClientSpawnEnv(
-  baseEnv: NodeJS.ProcessEnv = process.env,
-  options: AcpClientSpawnEnvOptions = {},
-): NodeJS.ProcessEnv {
-  const env = omitEnvKeysCaseInsensitive(baseEnv, options.stripKeys ?? []);
-  env.OPENCLAW_SHELL = "acp-client";
-  return env;
-}
-
-export function shouldStripProviderAuthEnvVarsForAcpServer(
-  params: {
-    serverCommand?: string;
-    serverArgs?: string[];
-    defaultServerCommand?: string;
-    defaultServerArgs?: string[];
-  } = {},
-): boolean {
-  const serverCommand = params.serverCommand?.trim();
-  if (!serverCommand) {
-    return true;
-  }
-  const defaultServerCommand = params.defaultServerCommand?.trim();
-  if (!defaultServerCommand || serverCommand !== defaultServerCommand) {
-    return false;
-  }
-  const serverArgs = params.serverArgs ?? [];
-  const defaultServerArgs = params.defaultServerArgs ?? [];
-  return (
-    serverArgs.length === defaultServerArgs.length &&
-    serverArgs.every((arg, index) => arg === defaultServerArgs[index])
-  );
-}
-
-export function buildAcpClientStripKeys(params: {
-  stripProviderAuthEnvVars?: boolean;
-  activeSkillEnvKeys?: Iterable<string>;
-}): Set<string> {
-  const stripKeys = new Set<string>(params.activeSkillEnvKeys ?? []);
-  if (params.stripProviderAuthEnvVars) {
-    for (const key of listKnownProviderAuthEnvVarNames()) {
-      stripKeys.add(key);
-    }
-  }
-  return stripKeys;
-}
-
-type AcpSpawnRuntime = {
-  platform: NodeJS.Platform;
-  env: NodeJS.ProcessEnv;
-  execPath: string;
-};
-
-const DEFAULT_ACP_SPAWN_RUNTIME: AcpSpawnRuntime = {
-  platform: process.platform,
-  env: process.env,
-  execPath: process.execPath,
-};
-
-export function resolveAcpClientSpawnInvocation(
-  params: { serverCommand: string; serverArgs: string[] },
-  runtime: AcpSpawnRuntime = DEFAULT_ACP_SPAWN_RUNTIME,
-): { command: string; args: string[]; shell?: boolean; windowsHide?: boolean } {
-  const program = resolveWindowsSpawnProgram({
-    command: params.serverCommand,
-    platform: runtime.platform,
-    env: runtime.env,
-    execPath: runtime.execPath,
-    packageName: "openclaw",
-    allowShellFallback: true,
-  });
-  const resolved = materializeWindowsSpawnProgram(program, params.serverArgs);
-  return {
-    command: resolved.command,
-    args: resolved.argv,
-    shell: resolved.shell,
-    windowsHide: resolved.windowsHide,
-  };
 }
 
 function isReadToolCallScopedToCwd(
@@ -345,6 +292,7 @@ export async function resolvePermissionRequest(
 ): Promise<RequestPermissionResponse> {
   const log = deps.log ?? ((line: string) => console.error(line));
   const prompt = deps.prompt ?? promptUserPermission;
+  const cwd = deps.cwd ?? process.cwd();
   const options = params.options ?? [];
   const toolTitle = params.toolCall?.title ?? "tool";
   const toolName = resolveToolNameForPermission(params);
@@ -415,6 +363,89 @@ function buildServerArgs(opts: AcpClientOptions): string[] {
     args.push("--verbose");
   }
   return args;
+}
+
+type AcpClientSpawnEnvOptions = {
+  stripKeys?: Iterable<string>;
+};
+
+export function resolveAcpClientSpawnEnv(
+  baseEnv: NodeJS.ProcessEnv = process.env,
+  options: AcpClientSpawnEnvOptions = {},
+): NodeJS.ProcessEnv {
+  const env = omitEnvKeysCaseInsensitive(baseEnv, options.stripKeys ?? []);
+  env.OPENCLAW_SHELL = "acp-client";
+  return env;
+}
+
+export function shouldStripProviderAuthEnvVarsForAcpServer(
+  params: {
+    serverCommand?: string;
+    serverArgs?: string[];
+    defaultServerCommand?: string;
+    defaultServerArgs?: string[];
+  } = {},
+): boolean {
+  const serverCommand = params.serverCommand?.trim();
+  if (!serverCommand) {
+    return true;
+  }
+  const defaultServerCommand = params.defaultServerCommand?.trim();
+  if (!defaultServerCommand || serverCommand !== defaultServerCommand) {
+    return false;
+  }
+  const serverArgs = params.serverArgs ?? [];
+  const defaultServerArgs = params.defaultServerArgs ?? [];
+  return (
+    serverArgs.length === defaultServerArgs.length &&
+    serverArgs.every((arg, index) => arg === defaultServerArgs[index])
+  );
+}
+
+export function buildAcpClientStripKeys(params: {
+  stripProviderAuthEnvVars?: boolean;
+  activeSkillEnvKeys?: Iterable<string>;
+}): Set<string> {
+  const stripKeys = new Set<string>(params.activeSkillEnvKeys ?? []);
+  if (params.stripProviderAuthEnvVars) {
+    for (const key of listKnownProviderAuthEnvVarNames()) {
+      stripKeys.add(key);
+    }
+  }
+  return stripKeys;
+}
+
+type AcpSpawnRuntime = {
+  platform: NodeJS.Platform;
+  env: NodeJS.ProcessEnv;
+  execPath: string;
+};
+
+const DEFAULT_ACP_SPAWN_RUNTIME: AcpSpawnRuntime = {
+  platform: process.platform,
+  env: process.env,
+  execPath: process.execPath,
+};
+
+export function resolveAcpClientSpawnInvocation(
+  params: { serverCommand: string; serverArgs: string[] },
+  runtime: AcpSpawnRuntime = DEFAULT_ACP_SPAWN_RUNTIME,
+): { command: string; args: string[]; shell?: boolean; windowsHide?: boolean } {
+  const program = resolveWindowsSpawnProgram({
+    command: params.serverCommand,
+    platform: runtime.platform,
+    env: runtime.env,
+    execPath: runtime.execPath,
+    packageName: "openclaw",
+    allowShellFallback: true,
+  });
+  const resolved = materializeWindowsSpawnProgram(program, params.serverArgs);
+  return {
+    command: resolved.command,
+    args: resolved.argv,
+    shell: resolved.shell,
+    windowsHide: resolved.windowsHide,
+  };
 }
 
 function resolveSelfEntryPath(): string | null {

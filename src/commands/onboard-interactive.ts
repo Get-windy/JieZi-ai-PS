@@ -2,8 +2,8 @@ import type { RuntimeEnv } from "../runtime.js";
 import { defaultRuntime } from "../runtime.js";
 import { restoreTerminalState } from "../terminal/restore.js";
 import { createClackPrompter } from "../wizard/clack-prompter.js";
-import { runOnboardingWizard } from "../wizard/onboarding.js";
 import { WizardCancelledError } from "../wizard/prompts.js";
+import { runSetupWizard } from "../wizard/setup.js";
 import type { OnboardOptions } from "./onboard-types.js";
 
 export async function runInteractiveOnboarding(
@@ -13,7 +13,7 @@ export async function runInteractiveOnboarding(
   const prompter = createClackPrompter();
   let exitCode: number | null = null;
   try {
-    await runOnboardingWizard(opts, runtime, prompter);
+    await runSetupWizard(opts, runtime, prompter);
   } catch (err) {
     if (err instanceof WizardCancelledError) {
       // Best practice: cancellation is not a successful completion.

@@ -93,10 +93,3 @@ export type AgentsConfig = {
   defaults?: AgentDefaultsConfig;
   list?: AgentConfig[];
 };
-
-/** 智能路由系统的模型账号配置，用于将不同模型请求路由到指定账号 */
-export type AgentModelAccountsConfig = {
-  accounts?: string[];
-  routingMode?: string;
-  defaultAccountId?: string;
-};

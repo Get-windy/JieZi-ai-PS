@@ -1,0 +1,9 @@
+feat: add transfer owner for groups and projects
+
+- GroupManager.transferOwner(): old owner demoted to admin, new owner promoted
+- groups-rpc: group.owner.transfer RPC handler
+- projects-rpc: project.owner.transfer RPC (transfers all bound groups' owners)
+- method-scopes: register group.owner.transfer + project.owner.transfer in WRITE_SCOPE
+- groups.ts: add change-owner button in group overview panel
+- projects.ts: replace owner text input with display + transfer button in members tab
+- app-render.ts: implement onTransferGroupOwner + onTransferProjectOwner handlers

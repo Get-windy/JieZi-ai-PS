@@ -1,9 +1,8 @@
-import { loadConfig } from "../config/config.js";
-import { t } from "../i18n/index.js";
 import { resolveCommitHash } from "../infra/git-commit.js";
 import { visibleWidth } from "../terminal/ansi.js";
 import { isRich, theme } from "../terminal/theme.js";
 import { hasRootVersionAlias } from "./argv.js";
+import { readCliBannerTaglineMode } from "./banner-config-lite.js";
 import { pickTagline, type TaglineMode, type TaglineOptions } from "./tagline.js";
 
 type BannerOptions = TaglineOptions & {
@@ -49,12 +48,7 @@ function resolveTaglineMode(options: BannerOptions): TaglineMode | undefined {
   if (explicit) {
     return explicit;
   }
-  try {
-    return parseTaglineMode(loadConfig().cli?.banner?.taglineMode);
-  } catch {
-    // Fall back to default random behavior when config is missing/invalid.
-    return undefined;
-  }
+  return readCliBannerTaglineMode(options.env);
 }
 
 export function formatCliBannerLine(version: string, options: BannerOptions = {}): string {
@@ -63,7 +57,7 @@ export function formatCliBannerLine(version: string, options: BannerOptions = {}
   const commitLabel = commit ?? "unknown";
   const tagline = pickTagline({ ...options, mode: resolveTaglineMode(options) });
   const rich = options.richTty ?? isRich();
-  const title = t("cli.banner.title");
+  const title = "🦞 OpenClaw";
   const prefix = "🦞 ";
   const columns = options.columns ?? process.stdout.columns ?? 120;
   const plainBaseLine = `${title} ${version} (${commitLabel})`;
@@ -104,7 +98,7 @@ const LOBSTER_ASCII = [
   "██░███░██░▀▀░██░▄▄▄██░█░█░██░█████░████░▀▀░██░█░█░██",
   "██░▀▀▀░██░█████░▀▀▀██░██▄░██░▀▀▄██░▀▀░█░██░██▄▀▄▀▄██",
   "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀",
-  "                  🦞 开放龙虾 🦞                     ",
+  "                  🦞 OPENCLAW 🦞                    ",
   " ",
 ];
 
@@ -128,11 +122,11 @@ export function formatCliBannerArt(options: BannerOptions = {}): string {
   };
 
   const colored = LOBSTER_ASCII.map((line) => {
-    if (line.includes("开放龙虾")) {
+    if (line.includes("OPENCLAW")) {
       return (
         theme.muted("              ") +
         theme.accent("🦞") +
-        theme.info(" 开放龙虾 ") +
+        theme.info(" OPENCLAW ") +
         theme.accent("🦞")
       );
     }
