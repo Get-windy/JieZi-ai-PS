@@ -18,6 +18,7 @@ import {
   writeConfigFile,
 } from "../config/config.js";
 import { applyPluginAutoEnable } from "../config/plugin-auto-enable.js";
+import { startAgentTaskWakeScheduler } from "../cron/agent-task-wake-scheduler.js";
 import { clearAgentRunContext, onAgentEvent } from "../infra/agent-events.js";
 import {
   ensureControlUiAssetsBuilt,
@@ -78,7 +79,6 @@ import { createGatewayRuntimeState } from "./server-runtime-state.js";
 import { resolveSessionKeyForRun } from "./server-session-key.js";
 import { logGatewayStartup } from "./server-startup-log.js";
 import { startGatewaySidecars } from "./server-startup.js";
-import { startAgentTaskWakeScheduler } from "../cron/agent-task-wake-scheduler.js";
 import { startGatewayTailscaleExposure } from "./server-tailscale.js";
 import { createWizardSessionTracker } from "./server-wizard-sessions.js";
 import { attachGatewayWsHandlers } from "./server-ws-runtime.js";
@@ -695,7 +695,8 @@ export async function startGatewayServer(
   // 启动OAuth Token自动刷新守护进程
   if (!minimalTestGateway) {
     try {
-      const { oauthRefreshDaemon } = await import("../agents/auth-profiles/oauth-refresh-daemon.js");
+      const { oauthRefreshDaemon } =
+        await import("../agents/auth-profiles/oauth-refresh-daemon.js");
       oauthRefreshDaemon.start();
       log.info("OAuth refresh daemon started");
     } catch (err) {
@@ -710,6 +711,17 @@ export async function startGatewayServer(
       log.info("Agent task wake scheduler started");
     } catch (err) {
       log.warn(`Agent task wake scheduler failed to start: ${String(err)}`);
+    }
+  }
+
+  // 初始化权限中间件：从各 agent 配置加载权限规则和审批流（fire-and-forget）
+  if (!minimalTestGateway) {
+    try {
+      const { permissionMiddleware } = await import("../permissions/middleware.js");
+      await permissionMiddleware.reload();
+      log.info("Permission middleware initialized");
+    } catch (err) {
+      log.warn(`Permission middleware initialization failed: ${String(err)}`);
     }
   }
 
@@ -786,7 +798,8 @@ export async function startGatewayServer(
     close: async (opts) => {
       // 停止OAuth刷新守护进程
       try {
-        const { oauthRefreshDaemon } = await import("../agents/auth-profiles/oauth-refresh-daemon.js");
+        const { oauthRefreshDaemon } =
+          await import("../agents/auth-profiles/oauth-refresh-daemon.js");
         oauthRefreshDaemon.stop();
         log.info("OAuth refresh daemon stopped");
       } catch (err) {

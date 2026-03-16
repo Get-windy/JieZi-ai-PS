@@ -237,7 +237,13 @@ export type AppViewState = {
     | "channelPolicies"
     | "permissionsConfig";
   // Collaboration 协作管理状态
-  collaborationActivePanel: "groups" | "friends" | "monitor" | "scenarios" | "team-monitor" | "projects";
+  collaborationActivePanel:
+    | "groups"
+    | "friends"
+    | "monitor"
+    | "scenarios"
+    | "team-monitor"
+    | "projects";
   agentFilesLoading: boolean;
   agentFilesError: string | null;
   agentFilesList: AgentsFilesListResult | null;
@@ -537,6 +543,8 @@ export type AppViewState = {
   organizationData: any;
   organizationDataLoading: boolean;
   organizationDataError: string | null;
+  // 待提交的权限变更（暂存，用户点击保存时批量提交）
+  pendingPermissionChanges: Array<{ target: string; permission: string; granted: boolean }>;
   // 组织与权限管理统一状态
   orgPermActiveTab: "organization" | "permissions" | "approvals" | "system";
   // 组织管理状态

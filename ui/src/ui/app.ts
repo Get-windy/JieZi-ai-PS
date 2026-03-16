@@ -523,6 +523,8 @@ export class OpenClawApp extends LitElement {
   @state() organizationData: any = null;
   @state() organizationDataLoading = false;
   @state() organizationDataError: string | null = null;
+  // 待提交的权限变更（暂存，用户点击保存时批量提交）
+  pendingPermissionChanges: Array<{ target: string; permission: string; granted: boolean }> = [];
   // Phase 5: Permissions Management 状态
   @state() permissionsManagementActiveTab: "overview" | "rules" | "audit" = "overview";
   // oxlint-disable-next-line typescript/no-explicit-any

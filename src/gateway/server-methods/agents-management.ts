@@ -21,6 +21,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { addAgentToAllowList } from "../../agents/agent-config-manager.js";
 import {
   listAgentIds,
   resolveAgentModelAccounts,
@@ -33,17 +34,120 @@ import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../confi
 import type { AgentBinding, AgentConfig } from "../../config/types.agents.js";
 import type { AgentChannelBindings } from "../../config/types.channel-bindings.js";
 import type { OpenClawConfig } from "../../config/types.js";
+import { requestHeartbeatNow } from "../../infra/heartbeat-wake.js";
+import { enqueueSystemEvent } from "../../infra/system-events.js";
+import { organizationStorage } from "../../organization/storage.js";
 import { listBindings } from "../../routing/bindings.js";
 import { normalizeAgentId, DEFAULT_AGENT_ID } from "../../routing/session-key.js";
 import * as taskStorage from "../../tasks/storage.js";
 import type { Task } from "../../tasks/types.js";
 import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
-import { enqueueSystemEvent } from "../../infra/system-events.js";
-import { requestHeartbeatNow } from "../../infra/heartbeat-wake.js";
-import { addAgentToAllowList } from "../../agents/agent-config-manager.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 import { chatHandlers } from "./chat.js";
 import type { GatewayRequestHandlers, RespondFn } from "./types.js";
+
+/**
+ * 获取某 agent 可管理/调度的下属 agent ID 集合（normalized）。
+ *
+ * 合并两个来源：
+ * 1. 静态配置：agent config 中的 subagents.allowAgents
+ * 2. 动态关系：organizationStorage 中 type=supervisor 的协作关系（即 set_reporting_line 建立的）
+ *
+ * 规则：
+ * - main agent 或未提供 requesterId → null（无限制）
+ * - allowAgents = ["*"] → null（无限制）
+ * - allowAgents 没有配置→ 仅限动态关系中的下属
+ * - 有 allowAgents 配置 → 静态 + 动态合并
+ * - 返回 null 表示无限制，返回 Set 表示允许范围
+ */
+async function getAgentManagedScopeAsync(
+  requesterId: string | undefined,
+  cfg: OpenClawConfig,
+): Promise<Set<string> | null> {
+  if (!requesterId) {
+    return null;
+  }
+
+  const normalizedRequesterId = normalizeAgentId(requesterId);
+
+  // main agent 不受限
+  if (normalizedRequesterId === normalizeAgentId(DEFAULT_AGENT_ID)) {
+    return null;
+  }
+
+  const agents = listAgentEntries(cfg);
+  const requesterEntry = agents.find((a) => normalizeAgentId(a.id) === normalizedRequesterId);
+
+  // 找不到 requester，不限制
+  if (!requesterEntry) {
+    return null;
+  }
+
+  const allowAgents = requesterEntry.subagents?.allowAgents;
+
+  // "*" 通配：无限制
+  if (Array.isArray(allowAgents) && allowAgents.includes("*")) {
+    return null;
+  }
+
+  // 构建初始集合，包含自身
+  const managed = new Set<string>([normalizedRequesterId]);
+
+  // 加入静态 allowAgents
+  if (Array.isArray(allowAgents)) {
+    for (const id of allowAgents) {
+      managed.add(normalizeAgentId(id));
+    }
+  }
+
+  // 加入动态汇报关系：查找所有过 set_reporting_line 建立的下属
+  try {
+    const supervisorRelations = await organizationStorage.listRelations({
+      type: "supervisor",
+      toAgentId: normalizedRequesterId, // 上级是我
+    });
+    for (const rel of supervisorRelations) {
+      managed.add(normalizeAgentId(rel.fromAgentId)); // 下属
+    }
+  } catch {
+    // 如果存储不可用，仅依赖静态配置
+  }
+
+  // 如果最终集合只有自身且尚未配置 allowAgents，则该 agent 没有任何下属
+  // 返回只包含自身的集合（不能给别人分配任务）
+  return managed;
+}
+
+/**
+ * 同步版本（保留兼容，内部不再使用）
+ * @deprecated 请使用 getAgentManagedScopeAsync
+ * @internal
+ */
+function _getAgentManagedScope(
+  requesterId: string | undefined,
+  cfg: OpenClawConfig,
+): Set<string> | null {
+  if (!requesterId) {
+    return null;
+  }
+  const normalizedRequesterId = normalizeAgentId(requesterId);
+  if (normalizedRequesterId === normalizeAgentId(DEFAULT_AGENT_ID)) {
+    return null;
+  }
+  const agents = listAgentEntries(cfg);
+  const requesterEntry = agents.find((a) => normalizeAgentId(a.id) === normalizedRequesterId);
+  if (!requesterEntry) {
+    return null;
+  }
+  const allowAgents = requesterEntry.subagents?.allowAgents;
+  if (!allowAgents || allowAgents.length === 0) {
+    return new Set<string>([normalizedRequesterId]);
+  }
+  if (allowAgents.includes("*")) {
+    return null;
+  }
+  return new Set<string>([normalizedRequesterId, ...allowAgents.map((id) => normalizeAgentId(id))]);
+}
 
 /**
  * 验证智能助手ID是否存在
@@ -2125,7 +2229,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * agent.discover - 发现/搜索系统中所有智能助手
    * 支持按名称/ID/角色/标签过滤，返回助手基本信息和状态
    */
-  "agent.discover": ({ params, respond }) => {
+  "agent.discover": async ({ params, respond }) => {
     const cfg = loadConfig();
     const agents = listAgentEntries(cfg);
     const p = params as {
@@ -2135,15 +2239,27 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       tags?: string[];
       includePrivate?: boolean;
       limit?: number;
+      requesterId?: string;
     };
     const query = (p.query || "").toLowerCase().trim();
     const statusFilter = p.status || "all";
     const roleFilter = (p.role || "").toLowerCase().trim();
     const tagsFilter = Array.isArray(p.tags) ? p.tags.map((t) => t.toLowerCase()) : [];
     const limit = typeof p.limit === "number" && p.limit > 0 ? Math.min(p.limit, 200) : 50;
+    const requesterId = p.requesterId ? String(p.requesterId).trim() : undefined;
+
+    // === 权限隔离：结合静态 subagents.allowAgents + 持久化汇报关系 ===
+    const managedScope = await getAgentManagedScopeAsync(requesterId, cfg);
 
     const result = agents
       .filter((agent) => {
+        // 权限范围过滤：managedScope 为 null 表示无限制，否则只能发现 scope 内的 agent
+        if (managedScope !== null) {
+          const normalizedId = normalizeAgentId(agent.id);
+          if (!managedScope.has(normalizedId)) {
+            return false;
+          }
+        }
         // 按查询词过滤（匹配 id 或 name）
         if (query) {
           const id = agent.id.toLowerCase();
@@ -2522,6 +2638,27 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    // === 权限校验：确认请求者是否有权限对目标 agent 分配任务（合并静态+持久化关系）===
+    const assignRequesterId = p?.requesterId ? String(p.requesterId).trim() : undefined;
+    if (assignRequesterId) {
+      const managedScope = await getAgentManagedScopeAsync(assignRequesterId, cfg);
+      if (managedScope !== null) {
+        const normalizedTarget = normalizeAgentId(targetAgentId);
+        if (!managedScope.has(normalizedTarget)) {
+          respond(
+            false,
+            undefined,
+            errorShape(
+              ErrorCodes.UNAVAILABLE,
+              `Agent "${assignRequesterId}" does not have permission to assign tasks to "${targetAgentId}". ` +
+                `Configure subagents.allowAgents in the agent config to grant task assignment permissions.`,
+            ),
+          );
+          return;
+        }
+      }
+    }
+
     const sessionKey = `agent:${normalizeAgentId(targetAgentId)}:main`;
     const taskId = p?.taskId ?? `task_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     const requesterId = p?.requesterId ?? "system";
@@ -2650,7 +2787,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         params: chatSendParams,
         respond: innerRespond as RespondFn,
       });
-      
+
       // === 步骤 3：动态添加 Agent 到 allowlist（如果需要）===
       // 如果目标 Agent 不是 main，需要确保它在 allowAgents 列表中
       if (normalizeAgentId(targetAgentId) !== "main") {
@@ -2664,7 +2801,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           // 添加到 allowlist 失败不影响任务分配，继续执行
         }
       }
-          
+
       // === 步骤 4：自动唤醒 Agent，确保任务被立即处理 ===
       // 将任务指令作为系统事件放入队列，并立即触发心跳唤醒 Agent
       // 这样 Agent 就会像被"闹钟"叫醒一样，立即开始处理任务

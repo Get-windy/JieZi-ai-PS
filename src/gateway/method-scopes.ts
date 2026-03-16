@@ -262,6 +262,13 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "org.assign_to_department",
     "org.assign_to_team",
     "org.set_reporting_line",
+    "org.member.remove",
+    // 权限更新
+    "permission.update",
+    "permission.set",
+    "permission.init",
+    "permission.role.assign",
+    "permission.role.remove",
     // 培训：写操作
     "training.create_course",
     "training.update_course",
