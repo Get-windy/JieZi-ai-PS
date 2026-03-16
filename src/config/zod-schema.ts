@@ -696,6 +696,8 @@ export const OpenClawSchema = z
           .strict()
           .optional(),
         channelHealthCheckMinutes: z.number().int().min(0).optional(),
+        channelStaleEventThresholdMinutes: z.number().int().min(1).optional(),
+        channelMaxRestartsPerHour: z.number().int().min(1).optional(),
         tailscale: z
           .object({
             mode: z.union([z.literal("off"), z.literal("serve"), z.literal("funnel")]).optional(),
@@ -726,6 +728,7 @@ export const OpenClawSchema = z
               ])
               .optional(),
             debounceMs: z.number().int().min(0).optional(),
+            deferralTimeoutMs: z.number().int().min(0).optional(),
           })
           .strict()
           .optional(),
@@ -833,6 +836,21 @@ export const OpenClawSchema = z
           .optional(),
       })
       .strict()
+      .superRefine((gateway, ctx) => {
+        const effectiveHealthCheckMinutes = gateway.channelHealthCheckMinutes ?? 5;
+        if (
+          gateway.channelStaleEventThresholdMinutes != null &&
+          effectiveHealthCheckMinutes !== 0 &&
+          gateway.channelStaleEventThresholdMinutes < effectiveHealthCheckMinutes
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["channelStaleEventThresholdMinutes"],
+            message:
+              "channelStaleEventThresholdMinutes should be >= channelHealthCheckMinutes to avoid delayed stale detection",
+          });
+        }
+      })
       .optional(),
     memory: MemorySchema,
     skills: z
@@ -901,7 +919,6 @@ export const OpenClawSchema = z
       })
       .strict()
       .optional(),
-    groups: z.record(z.string(), z.unknown()).optional(),
   })
   .strict()
   .superRefine((cfg, ctx) => {
