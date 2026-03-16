@@ -2,6 +2,41 @@ import { html, nothing } from "lit";
 import { t } from "../i18n.ts";
 import type { AgentsListResult } from "../types.ts";
 
+// ===== 跨团队协作类型 =====
+
+export type ProjectTeamRole = "dev" | "ops" | "support" | "qa" | "observer";
+export type ProjectTeamStatus = "active" | "handed-off" | "archived" | "support-only";
+
+export interface ProjectTeamRelation {
+  id: string;
+  projectId: string;
+  teamId: string;
+  role: ProjectTeamRole;
+  status: ProjectTeamStatus;
+  joinedAt: number;
+  assignedBy: string;
+  updatedAt?: number;
+  note?: string;
+  handoffHistory: Array<{
+    id: string;
+    fromTeamId: string;
+    toTeamId: string;
+    note?: string;
+    operatorId: string;
+    handoffAt: number;
+    fromTeamNewStatus: ProjectTeamStatus;
+    toTeamNewStatus: ProjectTeamStatus;
+  }>;
+}
+
+export interface HandoffFormState {
+  toTeamId: string;
+  toTeamRole: ProjectTeamRole;
+  fromTeamNewStatus: ProjectTeamStatus;
+  toTeamNewStatus: ProjectTeamStatus;
+  note: string;
+}
+
 /**
  * 项目信息
  */
@@ -40,28 +75,44 @@ export type ProjectsProps = {
   error: string | null;
   projectsList: ProjectsListResult | null;
   selectedProjectId: string | null;
-  activePanel: "list" | "config" | "members" | "progress";
+  activePanel: "list" | "config" | "members" | "progress" | "handoff";
   creatingProject: boolean;
   editingProject: ProjectInfo | null;
   agentsList: AgentsListResult | null;
   onRefresh: () => void;
   onSelectProject: (projectId: string) => void;
-  onSelectPanel: (panel: "list" | "config" | "members" | "progress") => void;
+  onSelectPanel: (panel: "list" | "config" | "members" | "progress" | "handoff") => void;
   onCreateProject: () => void;
   onEditProject: (projectId: string) => void;
   onSaveProject: () => void;
   onCancelProjectEdit: () => void;
+  // oxlint-disable-next-line typescript/no-explicit-any
   onProjectFormChange: (field: string, value: any) => void;
+  onOpenWorkspace: (path: string) => void;
   onAddMember: (projectId: string, agentId: string, role: string) => void;
   onRemoveMember: (projectId: string, agentId: string) => void;
   onUpdateMemberRole: (projectId: string, agentId: string, role: string) => void;
   onUpdateProgress: (projectId: string, progress: number, notes: string) => void;
+  // 跨团队协作 Handoff Props
+  projectTeamRelations: ProjectTeamRelation[];
+  projectTeamRelationsLoading: boolean;
+  handoffForm: HandoffFormState;
+  onHandoffFormChange: (field: keyof HandoffFormState, value: string) => void;
+  onAssignTeam: (projectId: string, teamId: string, role: ProjectTeamRole) => void;
+  onHandoffProject: (projectId: string) => void;
+  onRemoveTeam: (projectId: string, teamId: string) => void;
+  onUpdateTeamStatus: (projectId: string, teamId: string, status: ProjectTeamStatus) => void;
+  onLoadTeamRelations: (projectId: string) => void;
+  // 更换项目负责人
+  onTransferProjectOwner: (projectId: string, newOwnerId: string) => void;
 };
 
 export function renderProjects(props: ProjectsProps) {
   const projects = props.projectsList?.projects ?? [];
   const selectedId = props.selectedProjectId ?? projects[0]?.projectId ?? null;
-  const selectedProject = selectedId ? (projects.find((p) => p.projectId === selectedId) ?? null) : null;
+  const selectedProject = selectedId
+    ? (projects.find((p) => p.projectId === selectedId) ?? null)
+    : null;
 
   return html`
     <div class="projects-layout">
@@ -111,7 +162,9 @@ function renderProjectsSidebar(props: ProjectsProps) {
       <div class="project-list" style="margin-top: 12px;">
         ${
           projects.length === 0
-            ? html`<div class="empty">暂无项目</div>`
+            ? html`
+                <div class="empty">暂无项目</div>
+              `
             : projects.map(
                 (project) => html`
                   <div
@@ -151,7 +204,9 @@ function renderProjectContent(props: ProjectsProps, project: ProjectInfo) {
               ? renderProjectConfig(props, project)
               : props.activePanel === "members"
                 ? renderProjectMembers(props, project)
-                : renderProjectProgress(props, project)
+                : props.activePanel === "handoff"
+                  ? renderProjectHandoff(props, project)
+                  : renderProjectProgress(props, project)
         }
       </div>
     </section>
@@ -167,6 +222,7 @@ function renderProjectTabs(
     { id: "config" as const, label: "项目配置", icon: "⚙️" },
     { id: "members" as const, label: "成员管理", icon: "👥" },
     { id: "progress" as const, label: "项目进度", icon: "📈" },
+    { id: "handoff" as const, label: "跨团队协作", icon: "🤝" },
   ];
 
   return html`
@@ -251,17 +307,18 @@ function renderProjectOverview(props: ProjectsProps, project: ProjectInfo) {
             </div>
           `
           : html`
-            <div class="callout info" style="margin-top: 24px;">
-              暂无关联群组
-            </div>
-          `
+              <div class="callout info" style="margin-top: 24px">暂无关联群组</div>
+            `
       }
 
       <div style="margin-top: 24px; display: flex; gap: 8px;">
         <button class="btn" @click=${() => props.onEditProject(project.projectId)}>
           编辑项目
         </button>
-        <button class="btn btn--primary" @click=${() => {}}>
+        <button class="btn btn--primary" 
+          ?disabled=${!project.workspacePath}
+          @click=${() => project.workspacePath && props.onOpenWorkspace(project.workspacePath)}
+        >
           打开工作空间
         </button>
       </div>
@@ -325,7 +382,7 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
       </div>
 
       <div class="form-group">
-        <label>代码目录</label>
+        <label>工作目录</label>
         <input 
           type="text" 
           class="form-control" 
@@ -335,6 +392,7 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
             props.onProjectFormChange("codeDir", target.value);
           }}
         />
+        <small>项目工作目录，可为代码仓库、设计文件夹或任意工作文件夹，可留空</small>
       </div>
 
       <div class="form-group">
@@ -380,7 +438,7 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
 
 function renderProjectMembers(props: ProjectsProps, project: ProjectInfo) {
   const agents = props.agentsList?.agents ?? [];
-  
+
   return html`
     <div class="project-members">
       <h3>成员管理</h3>
@@ -416,23 +474,37 @@ function renderProjectMembers(props: ProjectsProps, project: ProjectInfo) {
         <h4>项目管理员设置</h4>
         <div class="form-group">
           <label>项目负责人 (Owner)</label>
-          <input 
-            type="text" 
-            class="form-control" 
-            value="${project.ownerId || ""}"
-            @input=${(e: InputEvent) => {
-              const target = e.target as HTMLInputElement;
-              props.onProjectFormChange("ownerId", target.value);
-            }}
-          />
-          <small>设置或更换项目负责人，负责人拥有最高管理权限</small>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="mono" style="flex: 1; padding: 8px; background: var(--color-bg-secondary, #f5f5f5); border-radius: 4px;">
+              ${project.ownerId || "未设置"}
+            </span>
+            <button
+              class="btn btn--sm btn--primary"
+              @click=${() => {
+                const newOwner =
+                  agents.length > 0
+                    ? prompt(
+                        `请输入新负责人 ID（当前：${project.ownerId || "未设置"}\n可选内容：${agents.map((a) => a.id).join(", ")})`,
+                      )
+                    : prompt(`请输入新负责人 ID（当前：${project.ownerId || "未设置"})`);
+                if (newOwner && newOwner.trim() && newOwner.trim() !== project.ownerId) {
+                  props.onTransferProjectOwner(project.projectId, newOwner.trim());
+                }
+              }}
+            >
+              🔄 更换负责人
+            </button>
+          </div>
+          <small>项目负责人持有所有项目群的群主权限，更换将自动在所有项目群中生效</small>
         </div>
         
         <div class="form-group" style="margin-top: 16px;">
           <label>授予 Agent 管理员权限</label>
           <div style="margin-top: 8px;">
-            ${agents.filter(a => a.id !== project.ownerId).map(
-              (agent) => html`
+            ${agents
+              .filter((a) => a.id !== project.ownerId)
+              .map(
+                (agent) => html`
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                   <input 
                     type="checkbox" 
@@ -452,7 +524,7 @@ function renderProjectMembers(props: ProjectsProps, project: ProjectInfo) {
                   </label>
                 </div>
               `,
-            )}
+              )}
           </div>
         </div>
       </div>
@@ -514,6 +586,237 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
   `;
 }
 
+function renderProjectHandoff(props: ProjectsProps, project: ProjectInfo) {
+  const relations = props.projectTeamRelations;
+  const loading = props.projectTeamRelationsLoading;
+  const form = props.handoffForm;
+  const selectedId = props.selectedProjectId ?? project.projectId;
+
+  // 状态带颜色映射
+  const statusLabel: Record<ProjectTeamStatus, string> = {
+    active: "🟢 进行中",
+    "handed-off": "🟡 已交付",
+    "support-only": "🔵 技术支撑",
+    archived: "⏹️ 已归档",
+  };
+  const roleLabel: Record<ProjectTeamRole, string> = {
+    dev: "🛠️ 开发团队",
+    ops: "🔧 运营实施",
+    support: "🎟️ 技术支撑",
+    qa: "🔍 测试验收",
+    observer: "👁️ 观察者",
+  };
+
+  return html`
+    <div class="project-handoff">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+        <h3 style="margin: 0;">🤝 跨团队协作与交付</h3>
+        <button
+          class="btn btn--sm"
+          ?disabled=${loading}
+          @click=${() => props.onLoadTeamRelations(selectedId)}
+        >
+          ${loading ? "加载中...🔄" : "刷新"}
+        </button>
+      </div>
+
+      <div class="callout info" style="margin-bottom: 20px; font-size: 13px;">
+        同一项目对不同团队呈现独立的「参与状态」视图。团队完成阶段性工作后可将项目交付给下一帮负责团队，交出团队转为 技术支撑 状态保留技术通道。
+      </div>
+
+      <!-- 团队关系列表 -->
+      <div style="margin-bottom: 24px;">
+        <h4 style="margin-bottom: 12px;">参与团队（${relations.length}）</h4>
+        ${
+          relations.length === 0
+            ? html`
+                <div class="callout">暂无团队关联，可在下方添加团队</div>
+              `
+            : relations.map(
+                (rel) => html`
+                  <div class="list-item" style="margin-bottom: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
+                    <div style="flex: 1;">
+                      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                        <strong>${rel.teamId}</strong>
+                        <span class="chip" style="font-size: 11px;">${roleLabel[rel.role] ?? rel.role}</span>
+                        <span class="chip" style="font-size: 11px;">${statusLabel[rel.status] ?? rel.status}</span>
+                      </div>
+                      ${
+                        rel.note
+                          ? html`<div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">${rel.note}</div>`
+                          : nothing
+                      }
+                      <div style="font-size: 11px; color: var(--muted);">
+                        加入于: ${new Date(rel.joinedAt).toLocaleDateString()}
+                        ${
+                          rel.handoffHistory.length > 0
+                            ? html`&nbsp;&middot;&nbsp;交付记录: ${rel.handoffHistory.length} 条`
+                            : nothing
+                        }
+                      </div>
+                    </div>
+                    <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                      <select
+                        class="form-control"
+                        style="font-size: 12px; padding: 2px 6px; height: auto; min-width: 100px;"
+                        .value=${rel.status}
+                        @change=${(e: Event) => {
+                          const v = (e.target as HTMLSelectElement).value as ProjectTeamStatus;
+                          props.onUpdateTeamStatus(selectedId, rel.teamId, v);
+                        }}
+                      >
+                        <option value="active">进行中</option>
+                        <option value="handed-off">已交付</option>
+                        <option value="support-only">技术支撑</option>
+                        <option value="archived">已归档</option>
+                      </select>
+                      <button
+                        class="btn btn--sm"
+                        style="font-size: 12px; padding: 2px 8px; background: var(--danger-bg, #fee2e2); color: var(--danger, #dc2626);"
+                        @click=${() => props.onRemoveTeam(selectedId, rel.teamId)}
+                      >
+                        移除
+                      </button>
+                    </div>
+                  </div>
+                `,
+              )
+        }
+      </div>
+
+      <!-- 关联新团队 -->
+      <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+        <h4 style="margin: 0 0 12px 0;">将团队关联到项目</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end;">
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 12px;">团队 ID</label>
+            <input
+              type="text"
+              class="form-control"
+              placeholder="输入团队 ID"
+              .value=${form.toTeamId}
+              @input=${(e: InputEvent) => {
+                props.onHandoffFormChange("toTeamId", (e.target as HTMLInputElement).value);
+              }}
+            />
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 12px;">角色</label>
+            <select
+              class="form-control"
+              .value=${form.toTeamRole}
+              @change=${(e: Event) => {
+                props.onHandoffFormChange("toTeamRole", (e.target as HTMLSelectElement).value);
+              }}
+            >
+              <option value="dev">🛠️ 开发团队</option>
+              <option value="ops">🔧 运营实施</option>
+              <option value="support">🎟️ 技术支撑</option>
+              <option value="qa">🔍 测试验收</option>
+              <option value="observer">👁️ 观察者</option>
+            </select>
+          </div>
+          <button
+            class="btn btn--primary"
+            ?disabled=${!form.toTeamId.trim()}
+            @click=${() => props.onAssignTeam(selectedId, form.toTeamId.trim(), form.toTeamRole)}
+          >
+            关联团队
+          </button>
+        </div>
+      </div>
+
+      <!-- 负责交付 -->
+      <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: var(--card-bg-alt, rgba(251,191,36,0.05));">
+        <h4 style="margin: 0 0 4px 0;">📦 负责交付（Handoff）</h4>
+        <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px 0;">
+          将项目责任从当前团队转交给另一团队。执行后交出团队自动变为「技术支撑」，接收团队变为「进行中」。
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 12px;">接收方团队 ID <span style="color: red">*</span></label>
+            <input
+              type="text"
+              class="form-control"
+              placeholder="交付目标团队 ID"
+              .value=${form.toTeamId}
+              @input=${(e: InputEvent) => {
+                props.onHandoffFormChange("toTeamId", (e.target as HTMLInputElement).value);
+              }}
+            />
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 12px;">接收方角色</label>
+            <select
+              class="form-control"
+              .value=${form.toTeamRole}
+              @change=${(e: Event) => {
+                props.onHandoffFormChange("toTeamRole", (e.target as HTMLSelectElement).value);
+              }}
+            >
+              <option value="ops">🔧 运营实施</option>
+              <option value="dev">🛠️ 开发团队</option>
+              <option value="support">🎟️ 技术支撑</option>
+              <option value="qa">🔍 测试验收</option>
+              <option value="observer">👁️ 观察者</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 12px;">交出方新状态</label>
+            <select
+              class="form-control"
+              .value=${form.fromTeamNewStatus}
+              @change=${(e: Event) => {
+                props.onHandoffFormChange(
+                  "fromTeamNewStatus",
+                  (e.target as HTMLSelectElement).value,
+                );
+              }}
+            >
+              <option value="support-only">🔵 技术支撑</option>
+              <option value="handed-off">🟡 已交付</option>
+              <option value="archived">⏹️ 归档</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin: 0;">
+            <label style="font-size: 12px;">接收方新状态</label>
+            <select
+              class="form-control"
+              .value=${form.toTeamNewStatus}
+              @change=${(e: Event) => {
+                props.onHandoffFormChange("toTeamNewStatus", (e.target as HTMLSelectElement).value);
+              }}
+            >
+              <option value="active">🟢 进行中</option>
+              <option value="support-only">🔵 技术支撑</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" style="margin: 0 0 12px 0;">
+          <label style="font-size: 12px;">交付说明（可选）</label>
+          <input
+            type="text"
+            class="form-control"
+            placeholder="例如：一期开发完成，移交运营小组接手"
+            .value=${form.note}
+            @input=${(e: InputEvent) => {
+              props.onHandoffFormChange("note", (e.target as HTMLInputElement).value);
+            }}
+          />
+        </div>
+        <button
+          class="btn btn--primary"
+          style="width: 100%;"
+          ?disabled=${!form.toTeamId.trim()}
+          @click=${() => props.onHandoffProject(selectedId)}
+        >
+          📦 执行交付
+        </button>
+      </div>
+    </div>
+  `;
+}
+
 function renderEmptyState(props: ProjectsProps) {
   return html`
     <section class="card">
@@ -534,9 +837,9 @@ function renderEmptyState(props: ProjectsProps) {
 }
 
 function renderProjectEditModal(props: ProjectsProps) {
-  const project = props.editingProject || { 
-    projectId: "", 
-    name: "", 
+  const project = props.editingProject || {
+    projectId: "",
+    name: "",
     description: "",
     workspacePath: "",
     codeDir: "",
@@ -611,12 +914,12 @@ function renderProjectEditModal(props: ProjectsProps) {
           </div>
 
           <div class="form-group">
-            <label>代码目录</label>
+            <label>工作目录</label>
             <input 
               type="text" 
               class="form-control" 
               value="${project.codeDir || ""}"
-              placeholder="例如：I:\\Alpha_Project\\code"
+              placeholder="可为代码仓库、设计文件夹或任意工作文件夹，也可留空"
               @input=${(e: InputEvent) => {
                 const target = e.target as HTMLInputElement;
                 props.onProjectFormChange("codeDir", target.value);

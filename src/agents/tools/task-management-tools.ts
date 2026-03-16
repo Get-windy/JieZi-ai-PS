@@ -184,7 +184,7 @@ export function createTaskCreateTool(opts?: {
 /**
  * 创建任务列表查询工具
  */
-export function createTaskListTool(opts?: {
+export function createTaskListTool(_opts?: {
   /** 当前操作者的智能助手ID */
   currentAgentId?: string;
 }): AnyAgentTool {
@@ -207,10 +207,12 @@ export function createTaskListTool(opts?: {
 
       try {
         // 调用 task.list RPC
+        // 注意：不将 currentAgentId 作为默认 assignee 过滤条件
+        // 否则 coordinator 调用时只能看到分配给自己的任务，无法查看团队整体任务
         const response = await callGatewayTool("task.list", gatewayOpts, {
           status,
           priority,
-          assignee: assignee || opts?.currentAgentId,
+          assignee: assignee || undefined,
           tag,
           dueToday,
           limit,

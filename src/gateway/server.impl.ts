@@ -18,6 +18,7 @@ import {
   writeConfigFile,
 } from "../config/config.js";
 import { applyPluginAutoEnable } from "../config/plugin-auto-enable.js";
+import { startAgentTaskWakeScheduler } from "../cron/agent-task-wake-scheduler.js";
 import { clearAgentRunContext, onAgentEvent } from "../infra/agent-events.js";
 import {
   ensureControlUiAssetsBuilt,
@@ -694,11 +695,33 @@ export async function startGatewayServer(
   // 启动OAuth Token自动刷新守护进程
   if (!minimalTestGateway) {
     try {
-      const { oauthRefreshDaemon } = await import("../agents/auth-profiles/oauth-refresh-daemon.js");
+      const { oauthRefreshDaemon } =
+        await import("../agents/auth-profiles/oauth-refresh-daemon.js");
       oauthRefreshDaemon.start();
       log.info("OAuth refresh daemon started");
     } catch (err) {
       log.warn(`OAuth refresh daemon failed to start: ${String(err)}`);
+    }
+  }
+
+  // 启动 Agent 任务唤醒调度器（定期扫描并唤醒有待办任务的 Agent）
+  if (!minimalTestGateway) {
+    try {
+      startAgentTaskWakeScheduler();
+      log.info("Agent task wake scheduler started");
+    } catch (err) {
+      log.warn(`Agent task wake scheduler failed to start: ${String(err)}`);
+    }
+  }
+
+  // 初始化权限中间件：从各 agent 配置加载权限规则和审批流（fire-and-forget）
+  if (!minimalTestGateway) {
+    try {
+      const { permissionMiddleware } = await import("../permissions/middleware.js");
+      await permissionMiddleware.reload();
+      log.info("Permission middleware initialized");
+    } catch (err) {
+      log.warn(`Permission middleware initialization failed: ${String(err)}`);
     }
   }
 
@@ -775,7 +798,8 @@ export async function startGatewayServer(
     close: async (opts) => {
       // 停止OAuth刷新守护进程
       try {
-        const { oauthRefreshDaemon } = await import("../agents/auth-profiles/oauth-refresh-daemon.js");
+        const { oauthRefreshDaemon } =
+          await import("../agents/auth-profiles/oauth-refresh-daemon.js");
         oauthRefreshDaemon.stop();
         log.info("OAuth refresh daemon stopped");
       } catch (err) {

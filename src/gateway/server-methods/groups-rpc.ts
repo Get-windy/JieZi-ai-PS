@@ -139,7 +139,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
       const updates: Partial<
         Pick<
           import("../../sessions/group-manager.js").GroupInfo,
-          "name" | "description" | "isPublic" | "maxMembers" | "tags"
+          "name" | "description" | "isPublic" | "maxMembers" | "tags" | "metadata"
         >
       > = {};
       if (params?.name) {
@@ -156,6 +156,9 @@ export const groupsHandlers: GatewayRequestHandlers = {
       }
       if (Array.isArray(params?.tags)) {
         updates.tags = params.tags.map(String);
+      }
+      if (params?.metadata !== null && typeof params?.metadata === "object") {
+        updates.metadata = params.metadata as Record<string, unknown>;
       }
 
       const group = await groupManager.updateGroup(groupId, updates);
@@ -786,9 +789,37 @@ export const groupsHandlers: GatewayRequestHandlers = {
   },
 
   /**
+   * 更换群主（转让群主权限）
+   */
+  "group.owner.transfer": async ({ params, respond }) => {
+    try {
+      const groupId = params?.groupId ? String(params.groupId) : "";
+      const newOwnerId = params?.newOwnerId ? String(params.newOwnerId) : "";
+
+      if (!groupId || !newOwnerId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "groupId and newOwnerId are required"),
+        );
+        return;
+      }
+
+      const group = await groupManager.transferOwner(groupId, newOwnerId);
+      respond(true, { success: true, group }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to transfer group owner: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
    * 升级群组为项目群
    */
-  "groups.upgradeToProject": async ({ params, respond, context }) => {
+  "groups.upgradeToProject": async ({ params, respond }) => {
     try {
       const groupId = params?.groupId ? String(params.groupId) : "";
       const projectId = params?.projectId ? String(params.projectId) : "";
@@ -805,7 +836,11 @@ export const groupsHandlers: GatewayRequestHandlers = {
       // 获取群组信息
       const group = groupManager.getGroup(groupId);
       if (!group) {
-        respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `Group "${groupId}" not found`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Group "${groupId}" not found`),
+        );
         return;
       }
 
@@ -815,7 +850,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
           false,
           undefined,
           errorShape(
-            ErrorCodes.FAILED_PRECONDITION,
+            ErrorCodes.UNAVAILABLE,
             `Group "${groupId}" is already a project group (bound to project "${group.projectId}")`,
           ),
         );
@@ -826,12 +861,12 @@ export const groupsHandlers: GatewayRequestHandlers = {
       const projectWorkspaceExists = await import("../../utils/project-context.js").then(
         (m) => m.projectWorkspaceExists,
       );
-      
+
       if (!projectWorkspaceExists(projectId)) {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.NOT_FOUND, `Project "${projectId}" not found`),
+          errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`),
         );
         return;
       }
@@ -850,10 +885,10 @@ export const groupsHandlers: GatewayRequestHandlers = {
       });
 
       // 迁移群组工作空间到项目工作空间
-      const groupWorkspaceManager = await import("../../workspace/group-workspace.js").then(
-        (m) => m.GroupWorkspaceManager.getInstance(),
+      const groupWorkspaceManager = await import("../../workspace/group-workspace.js").then((m) =>
+        m.GroupWorkspaceManager.getInstance(),
       );
-      
+
       // 更新群组工作空间目录映射
       groupWorkspaceManager.updateGroupWorkspaceDir(groupId, projectWorkspacePath);
 
@@ -861,7 +896,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
       const fs = await import("fs");
       const path = await import("path");
       const projectConfigPath = path.join(projectWorkspacePath, "PROJECT_CONFIG.json");
-      
+
       if (fs.existsSync(projectConfigPath)) {
         // 项目配置已存在，无需额外操作
         console.log(
@@ -886,7 +921,11 @@ export const groupsHandlers: GatewayRequestHandlers = {
 💡 提示：项目工作空间和项目群工作空间已完全绑定，任意一方更新都会同步到另一方。`,
       );
 
-      respond(true, { success: true, group: updatedGroup, workspacePath: projectWorkspacePath }, undefined);
+      respond(
+        true,
+        { success: true, group: updatedGroup, workspacePath: projectWorkspacePath },
+        undefined,
+      );
     } catch (error) {
       respond(
         false,

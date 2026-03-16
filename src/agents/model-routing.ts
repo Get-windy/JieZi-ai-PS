@@ -10,6 +10,7 @@
  */
 
 import type { AgentModelAccountsConfig } from "../config/types.agents.js";
+import { normalizeEloScore } from "./arena-benchmarks.js";
 
 // ==================== 类型定义 ====================
 
@@ -71,6 +72,28 @@ export type SessionContext = {
 };
 
 /**
+ * 外部评测基准分数
+ */
+export type ModelBenchmarkScores = {
+  /** LMSYS Chatbot Arena Elo 分（原始值，约 800-1400） */
+  eloScore?: number;
+  /** Arena 排名（越小越好） */
+  arenaRank?: number;
+  /** MMLU 分数（0-100%） */
+  mmlu?: number;
+  /** HumanEval 代码生成分数（0-100%） */
+  humanEval?: number;
+  /** MATH 数学推理分数（0-100%） */
+  math?: number;
+  /** MT-Bench 多轮对话分（1-10） */
+  mtBench?: number;
+  /** GPQA 博士级科学推理分数（0-100%） */
+  gpqa?: number;
+  /** 归一化 Elo（0-100，用于路由计算） */
+  normalizedElo?: number;
+};
+
+/**
  * 模型信息
  */
 export type ModelInfo = {
@@ -96,6 +119,8 @@ export type ModelInfo = {
   supportedModalities?: DataModality[];
   /** 领域能力评分 (0-100，按领域分类) */
   domainScores?: Partial<Record<TaskDomain, number>>;
+  /** 外部评测基准数据（LMSYS Arena Elo 等） */
+  benchmarks?: ModelBenchmarkScores;
 };
 
 /**
@@ -118,6 +143,8 @@ export type AccountScore = {
   specializationScore: number;
   /** 模态匹配分 */
   modalityScore: number;
+  /** 外部评测 Elo 归一化分（0-100） */
+  eloScore: number;
   /** 模型信息 */
   modelInfo?: ModelInfo;
   /** 是否可用 */
@@ -612,9 +639,10 @@ export async function scoreAllAccounts(
   const capabilityWeight = config.smartRouting?.capabilityWeight ?? 20;
   const costWeight = config.smartRouting?.costWeight ?? 15;
   const speedWeight = config.smartRouting?.speedWeight ?? 10;
-  // 新增权重：专业领域和模态匹配
-  const specializationWeight = 15; // 专业领域匹配权重
-  const modalityWeight = 10; // 模态匹配权重
+  // 新增权重：专业领域、模态匹配、外部评测 Elo
+  const specializationWeight = 12; // 专业领域匹配权重
+  const modalityWeight = 8; // 模态匹配权重
+  const eloWeight = 5; // LMSYS Arena Elo 权重（搏低以确保未配置数据时不过分影响其他维度）
 
   // 4. 为每个账号打分
   const scores: AccountScore[] = await Promise.all(
@@ -632,6 +660,7 @@ export async function scoreAllAccounts(
           speedScore: 0,
           specializationScore: 0,
           modalityScore: 0,
+          eloScore: 0,
           available: false,
         };
       }
@@ -653,6 +682,7 @@ export async function scoreAllAccounts(
           speedScore: 0,
           specializationScore: 0,
           modalityScore: 0,
+          eloScore: 0,
           modelInfo,
           available: false,
         };
@@ -669,17 +699,25 @@ export async function scoreAllAccounts(
       // 响应速度分数
       const speedScore = assessSpeed(modelInfo);
 
-      // 复杂度匹配分数（复杂度越低越好）
+      // 外部评测 Elo 分（优先使用 benchmarks 字段，如果没有则默认 50 分中立）
+      const eloScore =
+        modelInfo.benchmarks?.normalizedElo ??
+        (modelInfo.benchmarks?.eloScore !== undefined
+          ? normalizeEloScore(modelInfo.benchmarks.eloScore)
+          : 50); // 未知模型给中立分
+
+      // 复杂度匹配分数（复杂度越高，越需要负荷能力强的模型）
       const complexityScore = 100 - complexity * 10;
 
-      // 综合打分（加入专业领域和模态权重）
+      // 综合打分（加入专业领域、模态和 Elo 权重）
       const totalScore =
         capabilityScore * (capabilityWeight / 100) +
         costScore * (costWeight / 100) +
         speedScore * (speedWeight / 100) +
         complexityScore * (complexityWeight / 100) +
         specializationScore * (specializationWeight / 100) +
-        modalityScore * (modalityWeight / 100);
+        modalityScore * (modalityWeight / 100) +
+        eloScore * (eloWeight / 100);
 
       return {
         accountId,
@@ -690,6 +728,7 @@ export async function scoreAllAccounts(
         speedScore,
         specializationScore,
         modalityScore,
+        eloScore,
         modelInfo,
         available: true,
       };
@@ -754,6 +793,7 @@ export async function routeToOptimalModelAccount(
   // 0. 先过滤仅保留已绑定且已启用的模型账号（核心检查）
   const boundAndEnabledAccounts = config.accounts.filter((accountId: string) => {
     // 查找账号配置
+    // oxlint-disable-next-line typescript/no-explicit-any
     const accountConfig = config.accountConfigs?.find((cfg: any) => cfg.accountId === accountId);
 
     // 【修复】如果没有找到 accountConfig，说明这个账号没有被单独配置过
@@ -819,7 +859,14 @@ export async function routeToOptimalModelAccount(
   const selectedScore = scores.find((s) => s.accountId === selectedAccountId);
   let reason = `智能路由：选择账号 ${selectedAccountId}`;
   if (selectedScore) {
-    reason += ` (总分: ${selectedScore.totalScore}, 能力: ${selectedScore.capabilityScore}, 成本: ${selectedScore.costScore})`;
+    reason += ` (总分: ${selectedScore.totalScore}, 能力: ${selectedScore.capabilityScore}, 成本: ${selectedScore.costScore}`;
+    if (selectedScore.eloScore > 0 && selectedScore.eloScore !== 50) {
+      reason += `, Elo: ${selectedScore.eloScore}`;
+      if (selectedScore.modelInfo?.benchmarks?.eloScore) {
+        reason += `[${selectedScore.modelInfo.benchmarks.eloScore}]`;
+      }
+    }
+    reason += ")";
   }
 
   return {
@@ -842,6 +889,7 @@ export async function routeToOptimalModelAccount(
 export function handleFailover(
   failedAccountId: string,
   scores: AccountScore[],
+  // oxlint-disable-next-line no-unused-vars
   reason: string,
 ): string | undefined {
   // 找到失败账号的索引

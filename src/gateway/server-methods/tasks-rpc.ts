@@ -118,7 +118,23 @@ export const tasksRpc: GatewayRequestHandlers = {
         creatorId,
         creatorType,
         assignees,
-        status: "todo",
+        // 兼容工具层传入的状态别名（pending→todo、in_progress→in-progress 等）
+        // 注意：没有传 status 时默认为 todo
+        status: (() => {
+          const rawStatus = params?.status ? String(params.status) : "todo";
+          const STATUS_ALIASES: Record<string, string> = {
+            pending: "todo",
+            in_progress: "in-progress",
+            inprogress: "in-progress",
+            completed: "done",
+            complete: "done",
+            open: "todo",
+            new: "todo",
+            todo: "todo",
+          };
+          return (STATUS_ALIASES[rawStatus.toLowerCase()] ??
+            rawStatus) as import("../../tasks/types.js").TaskStatus;
+        })(),
         priority: normalizedPriority,
         type,
         organizationId,
