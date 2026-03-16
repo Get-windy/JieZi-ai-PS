@@ -1,7 +1,119 @@
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import pluginSdkEntryList from "./upstream/scripts/lib/plugin-sdk-entrypoints.json" with { type: "json" };
+
+// ========== Overlay resolve plugin (mirrors tsdown.config.ts logic) ==========
+// Vitest resolves modules directly from the filesystem and does not go through
+// the rolldown build pipeline, so the upstream-overlay rolldown plugin has no
+// effect during test runs.  We register an equivalent Vite/Vitest plugin here
+// so that any `src/` import that is missing from the overlay layer automatically
+// falls back to `upstream/src/`, matching the build-time behaviour.
+const ROOT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const SRC_DIR = path.join(ROOT_DIR, "src");
+const EXT_DIR = path.join(ROOT_DIR, "extensions");
+const UP_SRC_DIR = path.join(ROOT_DIR, "upstream", "src");
+const UP_EXT_DIR = path.join(ROOT_DIR, "upstream", "extensions");
+const SEP = path.sep;
+const JS_TO_TS: Record<string, string[]> = {
+  ".js": [".ts", ".tsx"],
+  ".jsx": [".tsx"],
+  ".mjs": [".mts"],
+  ".cjs": [".cts"],
+};
+
+function tryResolveFile(basePath: string): string | null {
+  if (existsSync(basePath)) {
+    return basePath;
+  }
+  const TS_EXTS = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".json"];
+  for (const ext of TS_EXTS) {
+    const p = basePath + ext;
+    if (existsSync(p)) {
+      return p;
+    }
+  }
+  for (const ext of TS_EXTS) {
+    const p = path.join(basePath, "index" + ext);
+    if (existsSync(p)) {
+      return p;
+    }
+  }
+  const currentExt = path.extname(basePath);
+  const tsExts = JS_TO_TS[currentExt];
+  if (tsExts) {
+    const base = basePath.slice(0, -currentExt.length);
+    for (const tsExt of tsExts) {
+      const p = base + tsExt;
+      if (existsSync(p)) {
+        return p;
+      }
+    }
+  }
+  return null;
+}
+
+function vitestOverlayPlugin() {
+  return {
+    name: "vitest-upstream-overlay",
+    enforce: "pre" as const,
+    resolveId(source: string, importer: string | undefined) {
+      if (!source || source.startsWith("\0") || source.includes("node_modules")) {
+        return null;
+      }
+      let absTarget: string | null = null;
+      if (source.startsWith("src/") || source.startsWith("src\\")) {
+        absTarget = path.resolve(ROOT_DIR, source);
+      } else if ((source.startsWith("./") || source.startsWith("../")) && importer) {
+        absTarget = path.resolve(path.dirname(importer), source);
+      } else if (path.isAbsolute(source)) {
+        absTarget = source;
+      } else {
+        return null;
+      }
+      absTarget = path.normalize(absTarget);
+      // Case 1: target under src/ → local first, fallback to upstream/src/
+      if (absTarget.startsWith(SRC_DIR + SEP) || absTarget === SRC_DIR) {
+        if (tryResolveFile(absTarget)) {
+          return null;
+        }
+        const rel = path.relative(SRC_DIR, absTarget);
+        if (rel.startsWith("extensions" + SEP) || rel === "extensions") {
+          return tryResolveFile(path.join(UP_EXT_DIR, rel.slice("extensions".length + SEP.length)));
+        }
+        return tryResolveFile(path.join(UP_SRC_DIR, rel));
+      }
+      // Case 2: target under extensions/ → local first, fallback to upstream/extensions/
+      if (absTarget.startsWith(EXT_DIR + SEP) || absTarget === EXT_DIR) {
+        if (tryResolveFile(absTarget)) {
+          return null;
+        }
+        return tryResolveFile(path.join(UP_EXT_DIR, path.relative(EXT_DIR, absTarget)));
+      }
+      // Case 3: target under upstream/src/ → prefer local src/ override
+      if (absTarget.startsWith(UP_SRC_DIR + SEP) || absTarget === UP_SRC_DIR) {
+        const rel = path.relative(UP_SRC_DIR, absTarget);
+        const localResult = tryResolveFile(path.join(SRC_DIR, rel));
+        if (localResult && importer && path.normalize(localResult) !== path.normalize(importer)) {
+          return localResult;
+        }
+      }
+      // Case 4: target under upstream/extensions/ → prefer local extensions/ override
+      if (absTarget.startsWith(UP_EXT_DIR + SEP) || absTarget === UP_EXT_DIR) {
+        const localResult = tryResolveFile(
+          path.join(EXT_DIR, path.relative(UP_EXT_DIR, absTarget)),
+        );
+        if (localResult) {
+          return localResult;
+        }
+        return tryResolveFile(absTarget);
+      }
+      return null;
+    },
+  };
+}
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 const isCI = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
@@ -10,9 +122,20 @@ const localWorkers = Math.max(4, Math.min(16, os.cpus().length));
 const ciWorkers = isWindows ? 2 : 3;
 
 export default defineConfig({
+  plugins: [vitestOverlayPlugin()],
   resolve: {
     // Keep this ordered: the base `openclaw/plugin-sdk` alias is a prefix match.
     alias: [
+      // Subpath aliases: openclaw/plugin-sdk/<name> → src/plugin-sdk/<name>.ts
+      // (overlay plugin falls back to upstream/src/plugin-sdk/<name>.ts if not in src/)
+      ...pluginSdkEntryList
+        .filter((e) => e !== "index" && e !== "account-id")
+        .map((subpath) => ({
+          find: `openclaw/plugin-sdk/${subpath}`,
+          replacement: existsSync(path.join(repoRoot, "src", "plugin-sdk", `${subpath}.ts`))
+            ? path.join(repoRoot, "src", "plugin-sdk", `${subpath}.ts`)
+            : path.join(repoRoot, "upstream", "src", "plugin-sdk", `${subpath}.ts`),
+        })),
       {
         find: "openclaw/plugin-sdk/account-id",
         replacement: path.join(repoRoot, "src", "plugin-sdk", "account-id.ts"),
