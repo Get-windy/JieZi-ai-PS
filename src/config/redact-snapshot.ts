@@ -11,6 +11,38 @@ import type { ConfigFileSnapshot } from "./types.openclaw.js";
 const log = createSubsystemLogger("config/redaction");
 const ENV_VAR_PLACEHOLDER_PATTERN = /^\$\{[^}]*\}$/;
 
+/**
+ * Removes embedded credentials from URLs.
+ * Example: "https://alice:secret@example.test/v1" -> "https://example.test/v1"
+ */
+function redactUrlCredentials(value: string): string {
+  try {
+    const url = new URL(value);
+    // URL constructor does NOT remove credentials from href; we must strip them manually
+    // URL protocol includes // so we can reconstruct without user:pass
+    const hostname = url.hostname;
+    const port = url.port ? `:${url.port}` : "";
+    const pathname = url.pathname + url.search + url.hash;
+    const stripped = `${url.protocol}//${hostname}${port}${pathname}`;
+    return stripped !== value ? stripped : value;
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * Checks if a string value is a URL with embedded credentials
+ */
+function isUrlWithCredentials(value: string): boolean {
+  try {
+    const url = new URL(value);
+    // URL class removes credentials from href when accessed
+    return url.username !== "" || url.password !== "";
+  } catch {
+    return false;
+  }
+}
+
 function isSensitivePath(path: string): boolean {
   if (path.endsWith("[]")) {
     return isSensitiveConfigPath(path.slice(0, -2));
@@ -283,6 +315,19 @@ function redactObjectGuessing(
       ) {
         result[key] = REDACTED_SENTINEL;
         values.push(value);
+      } else if (
+        typeof value === "string" &&
+        !isExplicitlyNonSensitivePath(hints, [dotPath, wildcardPath]) &&
+        isUrlWithCredentials(value)
+      ) {
+        // Special handling: URLs with embedded credentials should be redacted even if path is not sensitive
+        const redactedUrl = redactUrlCredentials(value);
+        if (redactedUrl !== value) {
+          result[key] = REDACTED_SENTINEL;
+          values.push(value);
+        } else {
+          result[key] = value;
+        }
       } else if (
         !isExplicitlyNonSensitivePath(hints, [dotPath, wildcardPath]) &&
         isSensitivePath(dotPath) &&

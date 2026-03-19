@@ -9,6 +9,28 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
+import { resolveStateDir } from "../../upstream/src/config/paths.js";
+
+/**
+ * 群组消息类型
+ * - text: 普通聊天消息
+ * - system: 系统提示（入群、退群等）
+ * - command: 命令消息（与 agent 之前的旧消息类型）
+ * - file: 文件分享
+ * - image: 图片
+ * - work: 工作信息（agent 在工作中主动发送的进度/结果）
+ * - task_report: 任务完成汇报（子任务完成向群组进行报告）
+ * - task_assign: 任务下达（监督向群组广播新任务）
+ */
+export type GroupMessageType =
+  | "text"
+  | "system"
+  | "command"
+  | "file"
+  | "image"
+  | "work"
+  | "task_report"
+  | "task_assign";
 
 /**
  * 群组消息结构
@@ -20,7 +42,7 @@ export interface GroupMessage {
   /** 群组ID */
   groupId: string;
 
-  /** 发送者智能助手ID */
+  /** 发送者智能助手 ID */
   senderId: string;
 
   /** 发送者名称 */
@@ -30,12 +52,19 @@ export interface GroupMessage {
   content: string;
 
   /** 消息类型 */
-  type: "text" | "system" | "command" | "file" | "image";
+  type: GroupMessageType;
+
+  /**
+   * 消息分类："chat"（日常聊天） | "work"（工作信息）
+   * - chat: 与工作无关的工前聊天、闲聊、社交信息——不触发 agent 工作响应
+   * - work: 任务指令、进度汇报、工作结果、@点名工作请求——路由到 agent 主 session 处理
+   */
+  category?: "chat" | "work";
 
   /** 时间戳 */
   timestamp: number;
 
-  /** 回复的消息ID */
+  /** 回复的消息 ID */
   replyToId?: string;
 
   /** 附件信息 */
@@ -46,11 +75,11 @@ export interface GroupMessage {
     size?: number;
   }>;
 
-  /** 提及的智能助手ID列表 */
+  /** 提及的智能助手 ID 列表 */
   mentions?: string[];
 
   /** 额外元数据 */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -88,9 +117,8 @@ export class GroupMessageStorage {
   private metadataCache: Map<string, GroupSessionMetadata> = new Map();
 
   constructor(storageDir?: string) {
-    const homedir = require("os").homedir();
-    this.storageDir = storageDir || path.join(homedir, ".openclaw", "group-messages");
-    this.ensureStorageDir();
+    this.storageDir = storageDir || path.join(resolveStateDir(process.env), "group-messages");
+    void this.ensureStorageDir();
   }
 
   /**
@@ -153,7 +181,9 @@ export class GroupMessageStorage {
    * 批量保存消息
    */
   async saveMessages(messages: GroupMessage[]): Promise<void> {
-    if (messages.length === 0) return;
+    if (messages.length === 0) {
+      return;
+    }
 
     // 按群组ID分组
     const messagesByGroup = new Map<string, GroupMessage[]>();
@@ -223,7 +253,7 @@ export class GroupMessageStorage {
           try {
             const message = JSON.parse(line);
             messages.push(message);
-          } catch (error) {
+          } catch {
             console.warn("[Group Message Storage] Failed to parse message line:", line);
           }
         }
@@ -233,8 +263,8 @@ export class GroupMessageStorage {
       this.messageCache.set(groupId, messages);
 
       return this.filterMessages(messages, options);
-    } catch (error: any) {
-      if (error.code === "ENOENT") {
+    } catch (error: unknown) {
+      if (error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT") {
         // 文件不存在，返回空数组
         return [];
       }
@@ -292,8 +322,8 @@ export class GroupMessageStorage {
       const metadata = JSON.parse(content);
       this.metadataCache.set(groupId, metadata);
       return metadata;
-    } catch (error: any) {
-      if (error.code === "ENOENT") {
+    } catch (error: unknown) {
+      if (error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT") {
         return null;
       }
       console.error("[Group Message Storage] Failed to load metadata:", error);

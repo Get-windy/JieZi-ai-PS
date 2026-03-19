@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { listAgentIds } from "../../agents/agent-scope.js";
 import { BARE_SESSION_RESET_PROMPT } from "../../../upstream/src/auto-reply/reply/session-reset-prompt.js";
 import { agentCommand } from "../../../upstream/src/commands/agent.js";
 import { loadConfig } from "../../../upstream/src/config/config.js";
@@ -10,15 +9,40 @@ import {
   type SessionEntry,
   updateSessionStore,
 } from "../../../upstream/src/config/sessions.js";
+import { parseMessageWithAttachments } from "../../../upstream/src/gateway/chat-attachments.js";
+import { resolveAssistantAvatarUrl } from "../../../upstream/src/gateway/control-ui-shared.js";
+import {
+  GATEWAY_CLIENT_CAPS,
+  hasGatewayClientCap,
+} from "../../../upstream/src/gateway/protocol/client-info.js";
+import {
+  ErrorCodes,
+  errorShape,
+  formatValidationErrors,
+  validateAgentIdentityParams,
+  validateAgentWaitParams,
+} from "../../../upstream/src/gateway/protocol/index.js";
+import { waitForAgentJob } from "../../../upstream/src/gateway/server-methods/agent-job.js";
+import {
+  injectTimestamp,
+  timestampOptsFromConfig,
+} from "../../../upstream/src/gateway/server-methods/agent-timestamp.js";
+import { normalizeRpcAttachmentsToChatAttachments } from "../../../upstream/src/gateway/server-methods/attachment-normalize.js";
+import type {
+  GatewayRequestHandlerOptions,
+  GatewayRequestHandlers,
+} from "../../../upstream/src/gateway/server-methods/types.js";
+import { formatForLog } from "../../../upstream/src/gateway/ws-log.js";
 import { registerAgentRunContext } from "../../../upstream/src/infra/agent-events.js";
 import {
   resolveAgentDeliveryPlan,
   resolveAgentOutboundTarget,
 } from "../../../upstream/src/infra/outbound/agent-delivery.js";
-import { resolveMessageChannelSelection } from "../../infra/outbound/channel-selection.js";
-import { classifySessionKeyShape, normalizeAgentId } from "../../routing/session-key.js";
 import { defaultRuntime } from "../../../upstream/src/runtime.js";
-import { normalizeInputProvenance, type InputProvenance } from "../../../upstream/src/sessions/input-provenance.js";
+import {
+  normalizeInputProvenance,
+  type InputProvenance,
+} from "../../../upstream/src/sessions/input-provenance.js";
 import { resolveSendPolicy } from "../../../upstream/src/sessions/send-policy.js";
 import { normalizeSessionDeliveryFields } from "../../../upstream/src/utils/delivery-context.js";
 import {
@@ -27,17 +51,14 @@ import {
   isGatewayMessageChannel,
   normalizeMessageChannel,
 } from "../../../upstream/src/utils/message-channel.js";
-import { resolveAssistantIdentity } from "../assistant-identity.js";
-import { parseMessageWithAttachments } from "../../../upstream/src/gateway/chat-attachments.js";
-import { resolveAssistantAvatarUrl } from "../../../upstream/src/gateway/control-ui-shared.js";
-import { GATEWAY_CLIENT_CAPS, hasGatewayClientCap } from "../../../upstream/src/gateway/protocol/client-info.js";
 import {
-  ErrorCodes,
-  errorShape,
-  formatValidationErrors,
-  validateAgentIdentityParams,
-  validateAgentWaitParams,
-} from "../../../upstream/src/gateway/protocol/index.js";
+  listAgentIds,
+  resolveDefaultAgentId,
+  resolveAgentIdFromSessionKey as resolveAgentIdFromKey,
+} from "../../agents/agent-scope.js";
+import { resolveMessageChannelSelection } from "../../infra/outbound/channel-selection.js";
+import { classifySessionKeyShape, normalizeAgentId } from "../../routing/session-key.js";
+import { resolveAssistantIdentity } from "../assistant-identity.js";
 import { validateAgentParams } from "../protocol/schema/agent.js";
 import {
   canonicalizeSpawnedByForAgent,
@@ -45,12 +66,7 @@ import {
   pruneLegacyStoreKeys,
   resolveGatewaySessionStoreTarget,
 } from "../session-utils.js";
-import { formatForLog } from "../../../upstream/src/gateway/ws-log.js";
-import { waitForAgentJob } from "../../../upstream/src/gateway/server-methods/agent-job.js";
-import { injectTimestamp, timestampOptsFromConfig } from "../../../upstream/src/gateway/server-methods/agent-timestamp.js";
-import { normalizeRpcAttachmentsToChatAttachments } from "../../../upstream/src/gateway/server-methods/attachment-normalize.js";
 import { sessionsHandlers } from "./sessions.js";
-import type { GatewayRequestHandlerOptions, GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 const RESET_COMMAND_RE = /^\/(new|reset)(?:\s+([\s\S]*))?$/i;
 
@@ -156,15 +172,10 @@ export const agentHandlers: GatewayRequestHandlers = {
     const p = params;
     if (!validateAgentParams(p)) {
       const errMsg = `invalid agent params: ${formatValidationErrors(validateAgentParams.errors)}`;
-      context.logGateway(`[DEBUG-AGENT-SCHEMA] validation FAILED: ${errMsg} params_keys=${Object.keys(p as object ?? {}).join(",")}`);
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          errMsg,
-        ),
+      context.logGateway.debug(
+        `[DEBUG-AGENT-SCHEMA] validation FAILED: ${errMsg} params_keys=${Object.keys((p as object) ?? {}).join(",")}`,
       );
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, errMsg));
       return;
     }
     const request = p as {
@@ -363,11 +374,7 @@ export const agentHandlers: GatewayRequestHandlers = {
       const sessionId = entry?.sessionId ?? randomUUID();
       const labelValue = request.label?.trim() || entry?.label;
       const sessionAgent = resolveAgentIdFromSessionKey(canonicalKey);
-      spawnedByValue = canonicalizeSpawnedByForAgent(
-        cfg,
-        sessionAgent,
-        entry?.spawnedBy,
-      );
+      spawnedByValue = canonicalizeSpawnedByForAgent(cfg, sessionAgent, entry?.spawnedBy);
       let inheritedGroup:
         | { groupId?: string; groupChannel?: string; groupSpace?: string }
         | undefined;
@@ -461,6 +468,53 @@ export const agentHandlers: GatewayRequestHandlers = {
 
     const runId = idem;
     const connId = typeof client?.connId === "string" ? client.connId : undefined;
+
+    // ── 前置校验：非主控 agent 必须有自身绑定的模型，不允许静默回退到主控模型 ──
+    {
+      // 推断本次请求实际对应的 agentId
+      const effectiveSessionKey = resolvedSessionKey ?? requestedSessionKey;
+      const sessionAgentId = effectiveSessionKey
+        ? resolveAgentIdFromKey(effectiveSessionKey)
+        : (agentId ?? resolveDefaultAgentId(cfg));
+      const defaultAgentId = resolveDefaultAgentId(cfg);
+      if (sessionAgentId !== defaultAgentId) {
+        // 非主控 agent：检查是否有显式配置的自身模型
+        // 1. model.primary 显式配置
+        // 2. modelAccounts.defaultAccountId 绑定配置
+        const agentEntries: Array<{
+          id?: string;
+          model?: unknown;
+          modelAccounts?: { defaultAccountId?: string };
+        }> =
+          (cfg.agents?.list as Array<{
+            id?: string;
+            model?: unknown;
+            modelAccounts?: { defaultAccountId?: string };
+          }>) ?? [];
+        const agentEntry = agentEntries.find(
+          (e) => e.id && e.id.trim().toLowerCase() === sessionAgentId,
+        );
+        const hasExplicitModel = Boolean(
+          (typeof agentEntry?.model === "string" && agentEntry.model.trim()) ||
+          (agentEntry?.model &&
+            typeof agentEntry.model === "object" &&
+            (agentEntry.model as { primary?: string }).primary?.trim()) ||
+          agentEntry?.modelAccounts?.defaultAccountId?.trim(),
+        );
+        if (!hasExplicitModel) {
+          respond(
+            false,
+            undefined,
+            errorShape(
+              ErrorCodes.UNAVAILABLE,
+              `Agent "${sessionAgentId}" 未配置模型账号。请在管理界面为该 agent 绑定模型后再试。`,
+            ),
+          );
+          return;
+        }
+      }
+    }
+    // ── 前置校验结束 ──
     const wantsToolEvents = hasGatewayClientCap(
       client?.connect?.caps,
       GATEWAY_CLIENT_CAPS.TOOL_EVENTS,

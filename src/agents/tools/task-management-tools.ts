@@ -8,7 +8,10 @@
 import { Type } from "@sinclair/typebox";
 import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
 import { jsonResult, readStringParam } from "../../../upstream/src/agents/tools/common.js";
-import { callGatewayTool, readGatewayCallOptions } from "../../../upstream/src/agents/tools/gateway.js";
+import {
+  callGatewayTool,
+  readGatewayCallOptions,
+} from "../../../upstream/src/agents/tools/gateway.js";
 
 /**
  * 任务优先级枚举
@@ -22,12 +25,19 @@ const TaskPriority = Type.Union([
 
 /**
  * 任务状态枚举
+ * 工具层别名（pending/in_progress/completed/cancelled）在 RPC 层会自动映射到存储层（todo/in-progress/done/cancelled）
+ * 也可直接传入存储层的原始状态名如 todo/in-progress/done/review/blocked
  */
 const TaskStatus = Type.Union([
-  Type.Literal("pending"),
-  Type.Literal("in_progress"),
-  Type.Literal("completed"),
-  Type.Literal("cancelled"),
+  Type.Literal("pending"), // 待处理（存储层为 todo）
+  Type.Literal("in_progress"), // 进行中（存储层为 in-progress）
+  Type.Literal("completed"), // 已完成（存储层为 done）
+  Type.Literal("cancelled"), // 已取消
+  Type.Literal("todo"), // 存储层原始状态
+  Type.Literal("in-progress"), // 存储层原始状态
+  Type.Literal("done"), // 存储层原始状态
+  Type.Literal("review"), // 审查中
+  Type.Literal("blocked"), // 被阻塞
 ]);
 
 /**
@@ -48,6 +58,21 @@ const TaskCreateToolSchema = Type.Object({
   tags: Type.Optional(Type.Array(Type.String({ maxLength: 32 }))),
   /** 所属项目ID（可选，用于多项目隔离，如 "wo-shi-renlei"） */
   project: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 所属团队ID（可选） */
+  teamId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 所属组织ID（可选） */
+  organizationId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 任务类型（可选） */
+  type: Type.Optional(
+    Type.Union([
+      Type.Literal("feature"),
+      Type.Literal("bugfix"),
+      Type.Literal("research"),
+      Type.Literal("documentation"),
+      Type.Literal("meeting"),
+      Type.Literal("other"),
+    ]),
+  ),
 });
 
 /**
@@ -92,6 +117,12 @@ const TaskUpdateToolSchema = Type.Object({
   addTags: Type.Optional(Type.Array(Type.String({ maxLength: 32 }))),
   /** 移除标签（可选） */
   removeTags: Type.Optional(Type.Array(Type.String({ maxLength: 32 }))),
+  /** 更新所属项目ID（可选） */
+  projectId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 更新所属团队ID（可选） */
+  teamId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 更新所属组织ID（可选） */
+  organizationId: Type.Optional(Type.String({ maxLength: 128 })),
 });
 
 /**
@@ -134,6 +165,9 @@ export function createTaskCreateTool(opts?: {
       const assignee = readStringParam(params, "assignee") || opts?.currentAgentId;
       const tags = Array.isArray(params.tags) ? params.tags.map(String) : [];
       const project = readStringParam(params, "project");
+      const teamId = readStringParam(params, "teamId");
+      const organizationId = readStringParam(params, "organizationId");
+      const type = readStringParam(params, "type");
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
@@ -149,10 +183,13 @@ export function createTaskCreateTool(opts?: {
           dueDate,
           assignee,
           tags,
+          type: type || undefined,
           status: "pending",
           createdAt: Date.now(),
           // 工具层以 pending 表示待处理，后端映射为存储层的 todo
           projectId: project || undefined,
+          teamId: teamId || undefined,
+          organizationId: organizationId || undefined,
         });
 
         return jsonResult({
@@ -167,7 +204,10 @@ export function createTaskCreateTool(opts?: {
             dueDate,
             assignee,
             tags,
+            type: type || undefined,
             project: project || undefined,
+            teamId: teamId || undefined,
+            organizationId: organizationId || undefined,
             createdAt: Date.now(),
           },
         });
@@ -192,7 +232,7 @@ export function createTaskListTool(_opts?: {
     label: "Task List",
     name: "task_list",
     description:
-      "List tasks with optional filters: status (pending/in_progress/completed/cancelled), priority, assignee, tag, dueToday, project (project ID for multi-project isolation). Returns a list of tasks matching the criteria.",
+      "List tasks with optional filters: status (todo/in-progress/done/review/blocked/cancelled), priority, assignee, tag, dueToday, project (project ID for multi-project isolation). Returns a list of tasks matching the criteria.",
     parameters: TaskListToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -261,7 +301,7 @@ export function createTaskUpdateTool(_opts?: {
     label: "Task Update",
     name: "task_update",
     description:
-      "Update an existing task's title, description, status, priority, due date, assignee or tags. At least one field must be provided.",
+      "Update an existing task's title, description, status (todo/in-progress/done/review/blocked/cancelled), priority, due date, assignee, tags or project/team/organization assignment. At least one field must be provided.",
     parameters: TaskUpdateToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -276,6 +316,9 @@ export function createTaskUpdateTool(_opts?: {
       const removeTags = Array.isArray(params.removeTags)
         ? params.removeTags.map(String)
         : undefined;
+      const projectId = readStringParam(params, "projectId");
+      const teamId = readStringParam(params, "teamId");
+      const organizationId = readStringParam(params, "organizationId");
       const gatewayOpts = readGatewayCallOptions(params);
 
       // 检查是否至少提供了一个更新字段
@@ -287,7 +330,10 @@ export function createTaskUpdateTool(_opts?: {
         !dueDate &&
         !assignee &&
         !addTags &&
-        !removeTags
+        !removeTags &&
+        !projectId &&
+        !teamId &&
+        !organizationId
       ) {
         return jsonResult({
           success: false,
@@ -307,6 +353,9 @@ export function createTaskUpdateTool(_opts?: {
           assignee,
           addTags,
           removeTags,
+          projectId: projectId || undefined,
+          teamId: teamId || undefined,
+          organizationId: organizationId || undefined,
           updatedAt: Date.now(),
         });
 

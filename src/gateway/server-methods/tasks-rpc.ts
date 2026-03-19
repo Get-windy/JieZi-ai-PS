@@ -24,6 +24,8 @@
  * - task.block - 标记任务被阻塞
  */
 
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import type { MemberType } from "../../organization/types.js";
 import {
   checkTaskAccess,
@@ -42,8 +44,6 @@ import type {
   AgentWorkLog,
   TaskDependency,
 } from "../../tasks/types.js";
-import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
-import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 /**
  * 任务 RPC 方法注册
@@ -187,6 +187,9 @@ export const tasksRpc: GatewayRequestHandlers = {
       const priority = params?.priority ? (String(params.priority) as TaskPriority) : undefined;
       const dueDate = params?.dueDate ? Number(params.dueDate) : undefined;
       const tags = params?.tags ? (params.tags as string[]) : undefined;
+      const projectId = params?.projectId ? String(params.projectId) : undefined;
+      const teamId = params?.teamId ? String(params.teamId) : undefined;
+      const organizationId = params?.organizationId ? String(params.organizationId) : undefined;
 
       if (!taskId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务ID不能为空"));
@@ -297,6 +300,9 @@ export const tasksRpc: GatewayRequestHandlers = {
         dueDate,
         tags: updatedTags,
         assignees: assignee ? updatedAssignees : undefined,
+        projectId,
+        teamId,
+        organizationId,
       });
 
       respond(true, updatedTask, undefined);
@@ -509,6 +515,13 @@ export const tasksRpc: GatewayRequestHandlers = {
       const teamId = params?.teamId ? String(params.teamId) : undefined;
       const projectId = params?.projectId ? String(params.projectId) : undefined;
       const keyword = params?.keyword ? String(params.keyword) : undefined;
+      // dueToday: 转换为 dueDateBefore/dueDateAfter 筛选
+      const dueToday = params?.dueToday === true || params?.dueToday === "true";
+      const now = Date.now();
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(now);
+      todayEnd.setHours(23, 59, 59, 999);
 
       // 构建筛选条件
       const filter: Record<string, unknown> = {
@@ -520,6 +533,9 @@ export const tasksRpc: GatewayRequestHandlers = {
         teamId,
         projectId,
         keyword,
+        ...(dueToday
+          ? { dueDateAfter: todayStart.getTime(), dueDateBefore: todayEnd.getTime() }
+          : {}),
       };
 
       // 从数据库查询任务列表

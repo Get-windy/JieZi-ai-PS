@@ -52,6 +52,8 @@ export interface ProjectInfo {
   testsDir?: string;
   ownerId?: string;
   createdAt?: number;
+  /** 创建项目时是否同时创建项目群 */
+  createGroup?: boolean;
   groups?: Array<{
     groupId: string;
     name: string;

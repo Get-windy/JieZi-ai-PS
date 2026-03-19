@@ -320,8 +320,7 @@ export async function listTasks(filter?: TaskFilter): Promise<Task[]> {
     );
   }
 
-  // 按优先级（urgent > high > medium > low）+ 创建时间（早的在前）排序
-  // 参考 Jira/Linear 等主流任务管理系统的标准排序逻辑
+  // 排序规则：优先级（urgent > high > medium > low）→ 权重（越大越高）→ 加入任务时间（早的在前）
   const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
   results.sort((a, b) => {
     const pa = PRIORITY_ORDER[a.priority] ?? 2;
@@ -329,6 +328,13 @@ export async function listTasks(filter?: TaskFilter): Promise<Task[]> {
     if (pa !== pb) {
       return pa - pb;
     }
+    // 同优先级：权重大的先执行（默认 0）
+    const wa = a.weight ?? 0;
+    const wb = b.weight ?? 0;
+    if (wa !== wb) {
+      return wb - wa;
+    }
+    // 同优先级同权重：按加入时间升序（先入先出）
     return a.createdAt - b.createdAt;
   });
 

@@ -1055,6 +1055,8 @@ export const FIELD_HELP: Record<string, string> = {
     "User-prompt template used for the pre-compaction memory flush turn when generating memory candidates. Use this only when you need custom extraction instructions beyond the default memory flush behavior.",
   "agents.defaults.compaction.memoryFlush.systemPrompt":
     "System-prompt override for the pre-compaction memory flush turn to control extraction style and safety constraints. Use carefully so custom instructions do not reduce memory quality or leak sensitive context.",
+  "agents.defaults.compaction.timeoutSeconds":
+    "Maximum time in seconds allowed for compaction operations before termination. Use longer timeouts for complex sessions with large history that require more processing time, or shorter timeouts to prevent long stalls under heavy load.",
   "agents.defaults.embeddedPi":
     "Embedded Pi runner hardening controls for how workspace-local Pi settings are trusted and applied in OpenClaw sessions.",
   "agents.defaults.embeddedPi.projectSettingsPolicy":

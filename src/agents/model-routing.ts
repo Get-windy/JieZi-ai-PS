@@ -296,8 +296,8 @@ export function assessModalityMatch(context: SessionContext, modelInfo: ModelInf
     requiredModalities.push("text");
   }
 
-  // 如果没有指定支持的模态，假设支持 text
-  const supportedModalities = modelInfo.supportedModalities || ["text"];
+  // 如果没有指定支持的模态，假设支持 text 和 code（绝大多数 LLM 都支持）
+  const supportedModalities = modelInfo.supportedModalities || ["text", "code"];
 
   // 计算匹配度
   if (requiredModalities.length === 0) {

@@ -29,11 +29,7 @@ import {
   type ModelAliasIndex,
 } from "../../../upstream/src/agents/model-selection.js";
 import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
-import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
 import { resolveAgentEffectiveModelPrimary } from "../../agents/agent-scope.js";
-import { resolveAgentModelAccounts } from "../../agents/agent-scope.js";
-
-const _dbgLog = createSubsystemLogger("model-resolve");
 
 export function resolveDefaultModel(params: {
   cfg: OpenClawConfig;
@@ -54,19 +50,6 @@ export function resolveDefaultModel(params: {
       })
     : undefined;
 
-  // ── 调试：打印模型解析链路 ──────────────────────────────────────
-  const _dbgAccounts = params.agentId
-    ? resolveAgentModelAccounts(params.cfg, params.agentId)
-    : undefined;
-  _dbgLog.info(
-    `[DEBUG-MODEL] resolveDefaultModel agentId=${params.agentId ?? "(none)"} ` +
-      `effectivePrimary=${agentModelOverride ?? "(none)"} ` +
-      `modelAccounts.defaultAccountId=${_dbgAccounts?.defaultAccountId ?? "(none)"} ` +
-      `modelAccounts.accounts=${JSON.stringify(_dbgAccounts?.accounts ?? [])} ` +
-      `agents.defaults.model.primary=${(params.cfg.agents?.defaults?.model as { primary?: string } | undefined)?.primary ?? "(none)"}`,
-  );
-  // ─────────────────────────────────────────────────────────────────
-
   if (agentModelOverride) {
     // Step 2: 先构建 aliasIndex
     const aliasIndex = buildModelAliasIndex({
@@ -80,9 +63,6 @@ export function resolveDefaultModel(params: {
       aliasIndex,
     });
     if (resolved) {
-      _dbgLog.info(
-        `[DEBUG-MODEL] resolved agentId=${params.agentId} → ${resolved.ref.provider}/${resolved.ref.model}`,
-      );
       return {
         defaultProvider: resolved.ref.provider,
         defaultModel: resolved.ref.model,
@@ -96,18 +76,12 @@ export function resolveDefaultModel(params: {
     if (slashIdx > 0) {
       const directProvider = agentModelOverride.substring(0, slashIdx);
       const directModel = agentModelOverride.substring(slashIdx + 1);
-      _dbgLog.info(
-        `[DEBUG-MODEL] resolveModelRefFromString FAILED, using direct split: ${directProvider}/${directModel}`,
-      );
       return {
         defaultProvider: directProvider,
         defaultModel: directModel,
         aliasIndex,
       };
     }
-    _dbgLog.info(
-      `[DEBUG-MODEL] resolveModelRefFromString FAILED for raw="${agentModelOverride}", and no slash found, falling back to global default`,
-    );
   }
 
   // 非系统任务且 agent 未配置模型：返回 noModelConfigured=true，让上层提示用户
@@ -117,9 +91,6 @@ export function resolveDefaultModel(params: {
   if (agentHasNoModel) {
     // 返回一个占位结构（防止类型错误），同时带上 noModelConfigured 标志
     const aliasIndex = buildModelAliasIndex({ cfg: params.cfg, defaultProvider: DEFAULT_PROVIDER });
-    _dbgLog.warn(
-      `[DEBUG-MODEL] agentId=${params.agentId} has no model configured (isSystemTask=false)`,
-    );
     return {
       defaultProvider: DEFAULT_PROVIDER,
       defaultModel: "(none)",
@@ -134,9 +105,6 @@ export function resolveDefaultModel(params: {
   });
   const defaultProvider = mainModel.provider;
   const defaultModel = mainModel.model;
-  _dbgLog.info(
-    `[DEBUG-MODEL] fallback agentId=${params.agentId ?? "(none)"} → ${defaultProvider}/${defaultModel}`,
-  );
   const aliasIndex = buildModelAliasIndex({
     cfg: params.cfg,
     defaultProvider,

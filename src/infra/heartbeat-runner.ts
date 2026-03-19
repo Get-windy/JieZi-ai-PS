@@ -603,20 +603,61 @@ function resolveHeartbeatRunPrompt(params: {
   const pendingEvents = params.preflight.shouldInspectPendingEvents
     ? pendingEventEntries.map((event) => event.text)
     : [];
+
+  // 任务驱动事件： contextKey 以 cron:task-wake: 或 cron:task-next: 开头
+  const taskDrivenEntries = pendingEventEntries.filter(
+    (event) =>
+      event.contextKey?.startsWith("cron:task-wake:") ||
+      event.contextKey?.startsWith("cron:task-next:"),
+  );
+  const hasTaskDrivenEvents = taskDrivenEntries.length > 0;
+
+  // 一般 cron 事件（排除任务驱动）
   const cronEvents = pendingEventEntries
     .filter(
       (event) =>
+        !event.contextKey?.startsWith("cron:task-wake:") &&
+        !event.contextKey?.startsWith("cron:task-next:") &&
         (params.preflight.isCronEventReason || event.contextKey?.startsWith("cron:")) &&
         isCronSystemEvent(event.text),
     )
     .map((event) => event.text);
   const hasExecCompletion = pendingEvents.some(isExecCompletionEvent);
   const hasCronEvents = cronEvents.length > 0;
-  const basePrompt = hasExecCompletion
-    ? buildExecEventPrompt({ deliverToUser: params.canRelayToUser })
-    : hasCronEvents
-      ? buildCronEventPrompt(cronEvents, { deliverToUser: params.canRelayToUser })
-      : resolveHeartbeatPrompt(params.cfg, params.heartbeat);
+
+  let basePrompt: string;
+
+  if (hasTaskDrivenEvents) {
+    // 任务驱动路径：使用专用的执行导向 prompt，而不是通用 reminder 框架
+    const taskEventText = taskDrivenEntries
+      .map((e) => e.text)
+      .join("\n\n")
+      .trim();
+    basePrompt =
+      "You have been woken up to execute tasks. The task details are:\n\n" +
+      taskEventText +
+      "\n\nPlease execute these tasks now using your available tools. " +
+      "Call the relevant tools to complete the work described above. " +
+      "When all tasks are done, call task_report_to_supervisor to report completion. " +
+      "Do NOT just acknowledge the tasks — actually execute them.";
+  } else if (hasExecCompletion) {
+    basePrompt = buildExecEventPrompt({ deliverToUser: params.canRelayToUser });
+  } else if (hasCronEvents) {
+    basePrompt = buildCronEventPrompt(cronEvents, { deliverToUser: params.canRelayToUser });
+  } else {
+    basePrompt = resolveHeartbeatPrompt(params.cfg, params.heartbeat);
+  }
+
+  // 当没有投递目标（canRelayToUser=false）且走默认 prompt 路径（非 exec/cron/task event）时，
+  // 明确告知 LLM 不需要生成面向用户的汇报文字，避免无效 token 消耗。
+  if (!params.canRelayToUser && !hasExecCompletion && !hasCronEvents && !hasTaskDrivenEvents) {
+    basePrompt =
+      basePrompt +
+      "\n\nIMPORTANT: There is no active user channel to deliver a response to right now. " +
+      "Execute any necessary tool calls to complete your tasks, but do NOT generate a status report or summary message. " +
+      "When your tool work is done (or if nothing needs to be done), reply only with HEARTBEAT_OK.";
+  }
+
   const prompt = appendHeartbeatWorkspacePathHint(basePrompt, params.workspaceDir);
 
   return { prompt, hasExecCompletion, hasCronEvents };
@@ -642,11 +683,9 @@ export async function runHeartbeatOnce(opts: {
     return { status: "skipped", reason: "disabled" };
   }
   if (!isHeartbeatEnabledForAgent(cfg, agentId)) {
-    log.info(`[DEBUG-HB] agent "${agentId}" heartbeat NOT enabled`, { agentId });
     return { status: "skipped", reason: "disabled" };
   }
   if (!resolveHeartbeatIntervalMs(cfg, undefined, heartbeat)) {
-    log.info(`[DEBUG-HB] agent "${agentId}" no heartbeat intervalMs`, { agentId });
     return { status: "skipped", reason: "disabled" };
   }
 
@@ -663,17 +702,6 @@ export async function runHeartbeatOnce(opts: {
     const hasModelConfig =
       (agentModelAccounts?.accounts && agentModelAccounts.accounts.length > 0) ||
       !!resolveAgentExplicitModelPrimary(cfg, agentId);
-    // ── 调试：所有 agent 的模型配置状态 ───────────────────────────────
-    log.info(
-      `[DEBUG-HB-CFG] agentId=${agentId} ` +
-        `hasModelConfig=${hasModelConfig} ` +
-        `modelAccounts.defaultAccountId=${agentModelAccounts?.defaultAccountId ?? "(none)"} ` +
-        `modelAccounts.accounts=${JSON.stringify(agentModelAccounts?.accounts ?? [])} ` +
-        `modelAccounts.routingMode=${agentModelAccounts?.routingMode ?? "(none)"} ` +
-        `model.primary=${resolveAgentExplicitModelPrimary(cfg, agentId) ?? "(none)"} ` +
-        `reason=${opts.reason ?? "(none)"}`,
-    );
-    // ─────────────────────────────────────────────────────────────────
     if (!hasModelConfig) {
       const reason = opts.reason ?? "";
       const isTaskDriven =
@@ -695,19 +723,6 @@ export async function runHeartbeatOnce(opts: {
         { agentId, defaultAgentId, reason },
       );
     }
-  } else {
-    // ── 调试：主控 agent 的模型配置状态 ──────────────────────────────
-    const defaultModelAccounts = resolveAgentModelAccounts(cfg, agentId);
-    log.info(
-      `[DEBUG-HB-CFG] agentId=${agentId} (defaultAgent) ` +
-        `modelAccounts.defaultAccountId=${defaultModelAccounts?.defaultAccountId ?? "(none)"} ` +
-        `modelAccounts.accounts=${JSON.stringify(defaultModelAccounts?.accounts ?? [])} ` +
-        `modelAccounts.routingMode=${defaultModelAccounts?.routingMode ?? "(none)"} ` +
-        `model.primary=${resolveAgentExplicitModelPrimary(cfg, agentId) ?? "(none)"} ` +
-        `agents.defaults.model.primary=${(cfg.agents?.defaults?.model as { primary?: string } | undefined)?.primary ?? "(none)"} ` +
-        `reason=${opts.reason ?? "(none)"}`,
-    );
-    // ────────────────────────────────────────────────────────────────
   }
   // ============ 本地增强结束 ============
 
@@ -730,17 +745,13 @@ export async function runHeartbeatOnce(opts: {
       // Lane has been in-flight for too long — likely a stale taskId after a failed run.
       // Reset all lanes so queued work can drain.
       log.warn(
-        `[DEBUG-HB] agent "${agentId}" session lane "${agentSessionLane}" has been in-flight for ${Math.round((now - since) / 1000)}s — resetting stale lanes`,
+        `heartbeat: agent "${agentId}" session lane stale (${Math.round((now - since) / 1000)}s) — resetting`,
         { agentId },
       );
       laneInFlightSince.delete(agentSessionLane);
       resetAllLanes();
       // After reset the lane is now idle — fall through to run heartbeat.
     } else {
-      log.info(
-        `[DEBUG-HB] agent "${agentId}" skipped: session lane "${agentSessionLane}" has ${queueSize} task(s) in-flight`,
-        { agentId },
-      );
       return { status: "skipped", reason: "requests-in-flight" };
     }
   } else {
@@ -909,11 +920,6 @@ export async function runHeartbeatOnce(opts: {
           bootstrapContextMode,
         }
       : { isHeartbeat: true, suppressToolErrorWarnings, bootstrapContextMode };
-    // ── 调试：打印心跳实际调用前的模型参数 ───────────────────────────
-    log.info(
-      `[DEBUG-HB-MODEL] runOnce agentId=${agentId} heartbeatModelOverride=${heartbeatModelOverride ?? "(none)"} sessionKey=${runSessionKey}`,
-    );
-    // ────────────────────────────────────────────────────────────────
     const replyResult = await getReplyFromConfig(ctx, replyOpts, cfg);
 
     // ── 心跳结束后压缩 HEARTBEAT.md（滚动摘要，控制文件大小）────────
@@ -926,18 +932,6 @@ export async function runHeartbeatOnce(opts: {
     const reasoningPayloads = includeReasoning
       ? resolveHeartbeatReasoningPayloads(replyResult).filter((payload) => payload !== replyPayload)
       : [];
-    // ── 调试：LLM 返回后的 payload 内容 ─────────────────────────────
-    log.info(
-      `[DEBUG-HB-REPLY] agentId=${agentId} ` +
-        `hasPayload=${Boolean(replyPayload)} ` +
-        `text=${JSON.stringify(replyPayload?.text?.slice(0, 100) ?? "(none)")} ` +
-        `hasMedia=${Boolean(replyPayload?.mediaUrl || replyPayload?.mediaUrls?.length)} ` +
-        `delivery.channel=${delivery.channel} ` +
-        `delivery.to=${delivery.to ?? "(none)"} ` +
-        `delivery.reason=${delivery.reason ?? "(none)"}`,
-    );
-    // ─────────────────────────────────────────────────────────────────
-
     if (
       !replyPayload ||
       (!replyPayload.text && !replyPayload.mediaUrl && !replyPayload.mediaUrls?.length)
@@ -977,15 +971,6 @@ export async function runHeartbeatOnce(opts: {
       normalized.shouldSkip = false;
     }
     const shouldSkipMain = normalized.shouldSkip && !normalized.hasMedia && !hasExecCompletion;
-    // ── 调试：normalized 结果 ────────────────────────────────────────
-    log.info(
-      `[DEBUG-HB-NORM] agentId=${agentId} ` +
-        `normalizedText=${JSON.stringify(normalized.text.slice(0, 100))} ` +
-        `shouldSkip=${normalized.shouldSkip} ` +
-        `shouldSkipMain=${shouldSkipMain} ` +
-        `hasExecCompletion=${hasExecCompletion}`,
-    );
-    // ─────────────────────────────────────────────────────────────────
     if (shouldSkipMain && reasoningPayloads.length === 0) {
       await restoreHeartbeatUpdatedAt({
         storePath,
@@ -1053,14 +1038,6 @@ export async function runHeartbeatOnce(opts: {
       : normalized.text;
 
     if (delivery.channel === "none" || !delivery.to) {
-      // ── 调试：no-target 分支 ─────────────────────────────────────────
-      log.info(
-        `[DEBUG-HB-SKIP] agentId=${agentId} reason=no-target ` +
-          `delivery.channel=${delivery.channel} delivery.to=${delivery.to ?? "(none)"} ` +
-          `delivery.reason=${delivery.reason ?? "(none)"} ` +
-          `preview=${JSON.stringify(previewText?.slice(0, 80) ?? "(none)")}`,
-      );
-      // ─────────────────────────────────────────────────────────────────
       emitHeartbeatEvent({
         status: "skipped",
         reason: delivery.reason ?? "no-target",
@@ -1272,9 +1249,6 @@ export function startHeartbeatRunner(opts: {
     state.cfg = cfg;
     state.agents = nextAgents;
     const nextEnabled = nextAgents.size > 0;
-    log.info(
-      `[DEBUG-HB] updateConfig: state.agents=${JSON.stringify([...nextAgents.keys()])} size=${nextAgents.size}`,
-    );
     if (!initialized) {
       if (!nextEnabled) {
         log.info("heartbeat: disabled", { enabled: false });
@@ -1323,9 +1297,6 @@ export function startHeartbeatRunner(opts: {
 
     if (requestedSessionKey || requestedAgentId) {
       const targetAgentId = requestedAgentId ?? resolveAgentIdFromSessionKey(requestedSessionKey);
-      log.info(
-        `[DEBUG-HB] run: targeted wake agentId="${targetAgentId}" state.agents=[${[...state.agents.keys()].join(",")}]`,
-      );
       let targetAgent = state.agents.get(targetAgentId);
       if (!targetAgent) {
         // agent 未在 state.agents 中（可能是 fallback 模式下首次唤醒），

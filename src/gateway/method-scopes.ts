@@ -322,8 +322,10 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     // Agent 发现与通信
     "agent.assign_task",
     "agent.communicate",
-    // Agent 任务汇报（写操作：更新任务状态、发送通知）
+    // Agent 当前任务汇报（写操作：更新任务状态、发送通知）
     "agent.task.report",
+    // 主控对任务进行干预：取消、重置或延时
+    "agent.task.manage",
   ],
   [ADMIN_SCOPE]: [
     "channels.logout",

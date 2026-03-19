@@ -4,13 +4,14 @@
  *
  * 项目管理相关的 RPC 方法：
  * - projects.create: 创建项目
+ * - projects.list: 列出所有项目（通过扫描工作空间目录）
  * - projects.updateWorkspace: 更新项目工作空间 (同步到项目群)
  * - project.owner.transfer: 更换项目负责人
  */
 
-import { groupManager } from "../../sessions/group-manager.js";
 import { errorShape, ErrorCodes } from "../../../upstream/src/gateway/protocol/index.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import { groupManager } from "../../sessions/group-manager.js";
 
 export const projectsHandlers: GatewayRequestHandlers = {
   /**
@@ -35,9 +36,13 @@ export const projectsHandlers: GatewayRequestHandlers = {
       }
 
       // 计算工作空间路径
+      const path = await import("path");
       const actualWorkspaceRoot =
         workspaceRoot || process.env.OPENCLAW_GROUPS_ROOT || "H:\\OpenClaw_Workspace\\groups";
-      const workspacePath = `${actualWorkspaceRoot}\\${projectId}`;
+      const workspacePath = path.join(actualWorkspaceRoot, projectId);
+
+      // codeDir 默认为工作空间内的 src 子目录，而非硬编码到 I:\
+      const defaultCodeDir = path.join(workspacePath, "src");
 
       // 这里主要是返回配置信息，实际的目录创建由 Agent 完成
       respond(
@@ -47,7 +52,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
           name,
           description,
           workspacePath,
-          codeDir: codeDir || `I:\\${name}`,
+          codeDir: codeDir || defaultCodeDir,
           ownerId,
         },
         undefined,
@@ -61,6 +66,58 @@ export const projectsHandlers: GatewayRequestHandlers = {
     }
   },
 
+  /**
+   * 列出所有项目
+   *
+   * 通过扫描工作空间目录列出所有项目，
+   * 并将内存中已绑定的群组信息合并进来。
+   */
+  "projects.list": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+
+      const { listAvailableProjects, buildProjectContext } =
+        await import("../../utils/project-context.js");
+
+      const projectIds = listAvailableProjects(workspaceRoot);
+      const allGroups = groupManager.getAllGroups();
+
+      const projects = projectIds.map((projectId) => {
+        const projectCtx = buildProjectContext(projectId, workspaceRoot);
+        const projectGroups = allGroups.filter((g) => g.projectId === projectId);
+        // 项目负责人：取第一个绑定群的 ownerId
+        const ownerId = projectGroups[0]?.ownerId || undefined;
+
+        return {
+          projectId,
+          // 项目名称：优先读 PROJECT_CONFIG.json 中的 name 字段，如果没有则用 projectId
+          name: projectCtx.config?.name || projectId,
+          description: projectCtx.config?.description,
+          workspacePath: projectCtx.workspacePath,
+          codeDir: projectCtx.codeDir,
+          docsDir: projectCtx.docsDir,
+          requirementsDir: projectCtx.config?.requirementsDir,
+          ownerId,
+          groups: projectGroups.map((g) => ({
+            groupId: g.id,
+            name: g.name,
+            description: g.description,
+            ownerId: g.ownerId,
+            createdAt: g.createdAt,
+            memberCount: g.members?.length || 0,
+          })),
+        };
+      });
+
+      respond(true, { projects, total: projects.length }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to list projects: ${String(error)}`),
+      );
+    }
+  },
   /**
    * 更新项目工作空间路径
    *
@@ -169,7 +226,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
   /**
    * 更换项目负责人
    *
-   * 项目的负责人存储在项目群的 ownerId 上，更换负责人实质是转让群主
+   * 项目的负责人存储在项目群的 ownerId 上，更换负责人实质是转让群主。
+   * 注意：一个项目可能绑定多个群（主群和子群），此操作将同时更换所有绑定群的群主。
    */
   "project.owner.transfer": async ({ params, respond }) => {
     try {
@@ -255,7 +313,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.NOT_FOUND, `Project "${projectId}" not found`),
+          errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`),
         );
         return;
       }
@@ -274,13 +332,13 @@ export const projectsHandlers: GatewayRequestHandlers = {
         true,
         {
           projectId,
-          name: projectCtx.name || projectId,
+          name: (projectCtx.config as unknown as { name?: string } | null)?.name || projectId,
+          description: (projectCtx.config as unknown as { description?: string } | null)
+            ?.description,
           workspacePath: projectCtx.workspacePath,
           codeDir: projectCtx.codeDir,
           docsDir: projectCtx.docsDir,
-          requirementsDir: projectCtx.requirementsDir,
-          qaDir: projectCtx.qaDir,
-          testsDir: projectCtx.testsDir,
+          requirementsDir: projectCtx.config?.requirementsDir,
           groups: projectGroups.map((g) => ({
             groupId: g.id,
             name: g.name,

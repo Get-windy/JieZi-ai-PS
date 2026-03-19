@@ -8,7 +8,10 @@
 import { Type } from "@sinclair/typebox";
 import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
 import { jsonResult, readStringParam } from "../../../upstream/src/agents/tools/common.js";
-import { callGatewayTool, readGatewayCallOptions } from "../../../upstream/src/agents/tools/gateway.js";
+import {
+  callGatewayTool,
+  readGatewayCallOptions,
+} from "../../../upstream/src/agents/tools/gateway.js";
 
 /**
  * agent_discover 工具参数 schema
@@ -102,14 +105,20 @@ const AgentAssignTaskToolSchema = Type.Object({
   context: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
   /** 所属项目 ID（可选） */
   projectId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 所属团队 ID（可选） */
+  teamId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 所属组织 ID（可选） */
+  organizationId: Type.Optional(Type.String({ maxLength: 128 })),
 });
 
 /**
  * agent_communicate 工具参数 schema
  */
 const AgentCommunicateToolSchema = Type.Object({
-  /** 目标智能体ID（必填） */
-  targetAgentId: Type.String({ minLength: 1, maxLength: 64 }),
+  /** 目标智能体ID（必填，与 groupSessionKey 二选一） */
+  targetAgentId: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+  /** 项目群 sessionKey（可选，直接发群消息，格式 group:{groupId}） */
+  groupSessionKey: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
   /** 消息内容（必填） */
   message: Type.String({ minLength: 1, maxLength: 4000 }),
   /** 消息类型（可选） */
@@ -377,6 +386,8 @@ export function createAgentAssignTaskTool(opts?: {
       const deadline = readStringParam(params, "deadline");
       const context = typeof params.context === "object" ? params.context : undefined;
       const projectId = readStringParam(params, "projectId");
+      const teamId = readStringParam(params, "teamId");
+      const organizationId = readStringParam(params, "organizationId");
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
@@ -394,6 +405,8 @@ export function createAgentAssignTaskTool(opts?: {
           deadline,
           context,
           projectId,
+          teamId: teamId || undefined,
+          organizationId: organizationId || undefined,
           assignedAt: Date.now(),
         });
 
@@ -407,6 +420,8 @@ export function createAgentAssignTaskTool(opts?: {
             priority,
             deadline,
             projectId,
+            teamId: teamId || undefined,
+            organizationId: organizationId || undefined,
             status: "in-progress",
             trackedInTaskSystem: response?.trackedInTaskSystem ?? false,
             assignedBy: opts?.currentAgentId,
@@ -434,45 +449,68 @@ export function createAgentCommunicateTool(opts?: {
     label: "Agent Communicate",
     name: "agent_communicate",
     description:
-      "Send a message to another agent. Supports request, notification, query, and command types. Can optionally wait for reply with timeout. Requires communication permission.",
+      "Send a message to another agent or a project group channel. Use targetAgentId to message an agent directly, or groupSessionKey (format: group:{groupId}) to post to a project group channel. Supports request, notification, query, and command types.",
     parameters: AgentCommunicateToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
-      const targetAgentId = readStringParam(params, "targetAgentId", { required: true });
+      const targetAgentId = readStringParam(params, "targetAgentId");
+      const groupSessionKey = readStringParam(params, "groupSessionKey");
       const message = readStringParam(params, "message", { required: true });
       const messageType = readStringParam(params, "messageType") || "notification";
       const waitForReply = typeof params.waitForReply === "boolean" ? params.waitForReply : false;
       const timeout = typeof params.timeout === "number" ? params.timeout : 30000;
       const gatewayOpts = readGatewayCallOptions(params);
 
+      // 必须提供 targetAgentId 或 groupSessionKey 之一
+      if (!targetAgentId && !groupSessionKey) {
+        return jsonResult({
+          success: false,
+          error: "Either targetAgentId or groupSessionKey must be provided",
+        });
+      }
+
       try {
         // 生成消息ID
         const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-        // 调用 agent.communicate RPC
-        const response = await callGatewayTool("agent.communicate", gatewayOpts, {
-          messageId,
-          senderId: opts?.currentAgentId,
-          targetAgentId,
-          message,
-          messageType,
-          waitForReply,
-          timeout,
-          sentAt: Date.now(),
-        });
+        let response: unknown;
+        if (groupSessionKey) {
+          // 向项目群发送消息
+          response = await callGatewayTool("agent.communicate.group", gatewayOpts, {
+            messageId,
+            senderId: opts?.currentAgentId,
+            groupSessionKey,
+            message,
+            messageType,
+            sentAt: Date.now(),
+          });
+        } else {
+          // 向特定 agent 发送消息
+          response = await callGatewayTool("agent.communicate", gatewayOpts, {
+            messageId,
+            senderId: opts?.currentAgentId,
+            targetAgentId,
+            message,
+            messageType,
+            waitForReply,
+            timeout,
+            sentAt: Date.now(),
+          });
+        }
 
+        const resp = response as Record<string, unknown>;
         return jsonResult({
           success: true,
           message: waitForReply ? "Message sent and reply received" : "Message sent successfully",
           communication: {
             id: messageId,
             from: opts?.currentAgentId,
-            to: targetAgentId,
+            to: groupSessionKey ?? targetAgentId,
             type: messageType,
             content: message,
             sentAt: Date.now(),
-            ...(waitForReply && response.reply ? { reply: response.reply } : {}),
-            ...(response.delivered !== undefined ? { delivered: response.delivered } : {}),
+            ...(waitForReply && resp.reply ? { reply: resp.reply } : {}),
+            ...(resp.delivered !== undefined ? { delivered: resp.delivered } : {}),
           },
         });
       } catch (error) {

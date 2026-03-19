@@ -3,6 +3,10 @@ import type { GroupFilesListResult } from "../controllers/group-files.ts";
 // oxlint-disable-next-line no-unused-vars
 import { t } from "../i18n.ts";
 import type { AgentsListResult } from "../types.ts";
+import type { ProjectInfo, ProjectsListResult } from "./projects.ts";
+
+// 重新导出 ProjectInfo 、ProjectsListResult 供外部使用
+export type { ProjectInfo, ProjectsListResult } from "./projects.ts";
 
 // 重新导出 GroupFileEntry 供外部使用
 export type { GroupFilesListResult } from "../controllers/group-files.ts";
@@ -48,32 +52,6 @@ export interface GroupInfo {
  */
 export interface GroupsListResult {
   groups: GroupInfo[];
-  total: number;
-}
-
-/**
- * 项目信息
- */
-export interface ProjectInfo {
-  projectId: string;
-  name: string;
-  description?: string;
-  workspacePath: string;
-  codeDir: string;
-  docsDir?: string;
-  requirementsDir?: string;
-  qaDir?: string;
-  testsDir?: string;
-  ownerId?: string;
-  createdAt?: number;
-  createGroup?: boolean; // 创建项目时是否同时创建项目群
-}
-
-/**
- * 项目列表结果
- */
-export interface ProjectsListResult {
-  projects: ProjectInfo[];
   total: number;
 }
 
@@ -156,7 +134,7 @@ export function renderGroups(props: GroupsProps) {
 
     ${props.creatingGroup || props.editingGroup ? renderGroupEditModal(props) : nothing}
     ${props.creatingProject || props.editingProject ? renderProjectEditModal(props) : nothing}
-    ${props.upgradingGroupToProject ? renderUpgradeGroupModal(props) : nothing}
+    ${/* 群升级项目功能待实现 */ nothing}
   `;
 }
 
@@ -288,7 +266,7 @@ function renderGroupContent(props: GroupsProps, selectedGroup: GroupInfo) {
 
       ${
         props.activePanel === "list"
-          ? renderGroupOverview(selectedGroup)
+          ? renderGroupOverview(selectedGroup, props)
           : props.activePanel === "members"
             ? renderGroupMembers(selectedGroup, props)
             : props.activePanel === "files"
@@ -456,7 +434,7 @@ function renderProjectTabs(
   `;
 }
 
-function renderGroupOverview(group: GroupInfo) {
+function renderGroupOverview(group: GroupInfo, props: GroupsProps) {
   const isProjectGroup = !!group.projectId;
 
   return html`

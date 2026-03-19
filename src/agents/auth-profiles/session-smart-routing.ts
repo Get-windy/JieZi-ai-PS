@@ -5,6 +5,7 @@
  * 使用智能路由引擎选择最优模型账号，而非简单的轮询策略。
  */
 
+import { ensureAuthProfileStore } from "../../../upstream/src/agents/auth-profiles.js";
 import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import { updateSessionStore, type SessionEntry } from "../../../upstream/src/config/sessions.js";
 import { t } from "../../i18n/index.js";
@@ -17,7 +18,6 @@ import {
   getOverallBenchmarkScore,
   refreshBenchmarkDataIfNeeded,
 } from "../arena-benchmarks.js";
-import { ensureAuthProfileStore } from "../../../upstream/src/agents/auth-profiles.js";
 import {
   routeToOptimalModelAccount,
   type SessionContext,
@@ -215,7 +215,7 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
   if (
     sessionPinningEnabled &&
     sessionEntry?.authProfileOverride &&
-    sessionEntry?.authProfileOverrideSource === "smart-routing" &&
+    sessionEntry?.authProfileOverrideSource === "auto" &&
     !isNewSession
   ) {
     // 检查固定的账号是否仍在可用列表中
@@ -255,15 +255,14 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
         const resolved = resolveModelAccountToAuthProfile({ modelId: accountId, store });
         return resolved ? store.profiles[resolved] : undefined;
       })();
-    if (!profile) {
-      return undefined;
-    }
 
     // 从 accountId 或 profile 中提取真实模型名称用于 Arena 匹配
     // accountId 格式示例："siliconflow/Pro/deepseek-ai/DeepSeek-V3.2"
     // profile.model 格式示例："deepseek-v3" 或 "gpt-4o"
+    // 注意：即使 profile 找不到（如快照时序问题），也用 accountId 中的模型名继续路由评分
+    // 不能因找不到 profile 就返回 undefined，否则所有账号都被标记为不可用，触发故障兜底
     const modelNameForLookup =
-      (profile as { model?: string }).model ?? accountId.split("/").pop() ?? accountId;
+      (profile as { model?: string } | undefined)?.model ?? accountId.split("/").pop() ?? accountId;
 
     // 尝试从 Arena 数据库查找基准数据
     const benchmarkEntry = lookupBenchmark(modelNameForLookup);
@@ -351,10 +350,10 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
     // 8. 持久化到 session（如果需要）
     const isAccountChanged =
       sessionEntry?.authProfileOverride !== resolvedProfileId ||
-      sessionEntry?.authProfileOverrideSource !== "smart-routing";
+      sessionEntry?.authProfileOverrideSource !== "auto";
     if (sessionEntry && sessionStore && sessionKey && isAccountChanged) {
       sessionEntry.authProfileOverride = resolvedProfileId;
-      sessionEntry.authProfileOverrideSource = "smart-routing";
+      sessionEntry.authProfileOverrideSource = "auto"; // 智能路由自动选择，语义等同于 auto
       sessionEntry.updatedAt = Date.now();
       sessionStore[sessionKey] = sessionEntry;
 

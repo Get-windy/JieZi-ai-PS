@@ -6,7 +6,7 @@
  */
 
 import { spawn } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, statSync } from "fs";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { t } from "../i18n/index.js";
@@ -284,9 +284,8 @@ async function detectFileSystemActivity(
 
     for (const filePath of files) {
       if (existsSync(filePath)) {
-        const stats = await readFile(filePath, "utf-8").then(() =>
-          require("fs").statSync(filePath),
-        );
+        await readFile(filePath, "utf-8"); // 确认文件可读
+        const stats = statSync(filePath);
 
         evidence.push({
           type: "file-modified",
@@ -421,7 +420,7 @@ async function detectLogActivity(
     const logFilePath = join(workspaceRoot, "logs", `${agentId}.log`);
 
     if (existsSync(logFilePath)) {
-      const stats = require("fs").statSync(logFilePath);
+      const stats = statSync(logFilePath);
       const lastModified = stats.mtimeMs;
 
       evidence.push({

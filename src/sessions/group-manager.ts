@@ -550,6 +550,11 @@ export class GroupManager {
 
   /**
    * 检查成员是否有权限发言
+   *
+   * 发言权限规则（优先级从高到低）：
+   * 1. 成员个人被禁言（member.muted = true）→ 不能发言，任何角色均适用
+   * 2. 群组全员禁言（config.allowSpeak = false）→ 只有 owner/admin 可以发言，普通 member 不行
+   * 3. 默认：可以发言
    */
   canSpeak(groupId: string, agentId: string): boolean {
     const group = this.groups.get(groupId);
@@ -562,7 +567,17 @@ export class GroupManager {
       return false;
     }
 
-    return !member.muted;
+    // 规则1：个人禁言优先，任何角色都不能说话
+    if (member.muted) {
+      return false;
+    }
+
+    // 规则2：全员禁言（allowSpeak = false）时，只有 owner/admin 可以发言
+    if (group.config?.allowSpeak === false) {
+      return member.role === "owner" || member.role === "admin";
+    }
+
+    return true;
   }
 
   /**

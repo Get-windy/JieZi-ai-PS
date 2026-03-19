@@ -125,6 +125,7 @@ export interface Task {
   // 任务属性
   status: TaskStatus;
   priority: TaskPriority;
+  weight?: number; // 任务权重，默认 0，越大越优先（同优先级内细分排序）
   type?: TaskType;
 
   // 组织归属

@@ -735,5 +735,5 @@ export function registerFeishuBitableTools(api: OpenClawPluginApi) {
     { name: "feishu_bitable_create_field" },
   );
 
-  api.logger.info?.("feishu_bitable: Registered bitable tools");
+  api.logger.debug?.("feishu_bitable: Registered bitable tools");
 }

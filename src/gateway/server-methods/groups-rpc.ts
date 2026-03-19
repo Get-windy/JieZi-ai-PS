@@ -4,11 +4,11 @@
  * 群组管理的 RPC 方法处理器
  */
 
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import type { GroupMemberRole } from "../../sessions/group-manager.js";
 import { groupManager } from "../../sessions/group-manager.js";
 import { groupMessageStorage } from "../../sessions/group-message-storage.js";
-import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
-import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 /**
  * 群组管理 RPC 方法处理器
@@ -665,10 +665,25 @@ export const groupsHandlers: GatewayRequestHandlers = {
         return;
       }
       const limit = typeof params?.limit === "number" ? params.limit : 200;
+      // 可选按 category 过滤：only_chat | only_work | all
+      const categoryFilter = params?.category ? String(params.category) : "all";
       const messages = await groupMessageStorage.loadMessages(groupId, { limit });
 
+      // 按分类过滤
+      const filtered =
+        categoryFilter === "all"
+          ? messages
+          : messages.filter((msg) => {
+              const cat =
+                msg.category ??
+                ((["work", "task_report", "task_assign"] as string[]).includes(msg.type)
+                  ? "work"
+                  : "chat");
+              return cat === categoryFilter;
+            });
+
       // 将 GroupMessage 转换为前端 chat.history 兼容的格式
-      const formatted = messages.map((msg) => ({
+      const formatted = filtered.map((msg) => ({
         role: msg.senderId === "user" ? "user" : "assistant",
         content: [{ type: "text", text: msg.content }],
         timestamp: msg.timestamp,
@@ -676,7 +691,9 @@ export const groupsHandlers: GatewayRequestHandlers = {
         __group_sender_id: msg.senderId,
         __group_sender_name: msg.senderName ?? msg.senderId,
         __group_msg_type: msg.type,
+        __group_msg_category: msg.category ?? "chat",
         __group_msg_id: msg.id,
+        __group_mentions: msg.mentions,
       }));
 
       respond(true, { messages: formatted, groupId }, undefined);
@@ -690,7 +707,20 @@ export const groupsHandlers: GatewayRequestHandlers = {
   },
 
   /**
-   * 人类用户在群聊窗口发送消息（写入 GroupMessageStorage，并通知所有成员 agent）
+   * 人类用户或 agent 在群聊窗口发送消息（写入 GroupMessageStorage，并根据消息分类路由到相应 session）
+   *
+   * 业界最佳实践路由逐辑（参考 Slack/Discord 不同频道功能 + AI agent 群聊研究）：
+   *
+   * 1. 聊天消息 (category=chat)——工前闲聊、社交、闲谈
+   *    路由到： agent:id:group:groupId 群聊 session
+   *    agent 感知到了群聊消息，但不一定会响应（由 agent 自己根据 system prompt 决定是否介入）
+   *    这对应了“思考 vs 说话”模式——AI 看到聊天不强制响应
+   *
+   * 2. 工作消息 (category=work)——任务指令、工作请求、进度汇报
+   *    路由到： agent:id:main 主 session（触发 agent 正式工作响应）
+   *    另外也将消息投递到 agent:id:group:groupId 供历史记录可见
+   *
+   * 3. @点名触发——消息内含 @agentId 时，无论 category，被点名的 agent 都路由到主 session
    */
   "groups.chat.send": async ({ params, respond, context }) => {
     try {
@@ -718,6 +748,47 @@ export const groupsHandlers: GatewayRequestHandlers = {
         return;
       }
 
+      // 检查发送者发言权限（跳过系统/外部用户消息）
+      if (senderId !== "system" && senderId !== "user") {
+        if (!groupManager.canSpeak(groupId, senderId)) {
+          const memberInfo = group.members.find((m) => m.agentId === senderId);
+          const isMuted = memberInfo?.muted;
+          const reason = isMuted ? `您已被禁言` : `当前群组已开启「仅管理员可发言」模式`;
+          respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `无权发言：${reason}`));
+          return;
+        }
+      }
+
+      // 解析消息分类：调用方可显式传入 messageCategory，也可从消息类型推断
+      const rawCategory = params?.messageCategory ? String(params.messageCategory) : undefined;
+      // work 类型的消息类型在工作分类下
+      const workMessageTypes = new Set(["work", "task_report", "task_assign", "command"]);
+      const msgTypeStr = params?.messageType ? String(params.messageType) : "text";
+      const category: "chat" | "work" =
+        rawCategory === "work" || rawCategory === "chat"
+          ? rawCategory
+          : workMessageTypes.has(msgTypeStr)
+            ? "work"
+            : "chat";
+
+      // 解析 @提及：从 content 中识别 @agentId（格式：@agentId 或 @{agentId}）
+      const mentionRegex = /@\{?([a-zA-Z0-9_-]+)\}?/g;
+      const parsedMentions: string[] = [];
+      let mentionMatch: RegExpExecArray | null;
+      while ((mentionMatch = mentionRegex.exec(content)) !== null) {
+        const mentionedId = mentionMatch[1];
+        // 只记录确实是群组成员的
+        if (group.members.some((m) => m.agentId === mentionedId)) {
+          parsedMentions.push(mentionedId);
+        }
+      }
+      const mentions = Array.isArray(params?.mentions)
+        ? params.mentions.map(String)
+        : parsedMentions;
+
+      // 任何被 @点名的消息按 work 路由
+      const effectiveCategory: "chat" | "work" = mentions.length > 0 ? "work" : category;
+
       // 保存消息到群组存储
       const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const message = {
@@ -726,16 +797,27 @@ export const groupsHandlers: GatewayRequestHandlers = {
         senderId,
         senderName,
         content,
-        type: "text" as const,
+        type: (msgTypeStr ??
+          "text") as import("../../sessions/group-message-storage.js").GroupMessageType,
+        category: effectiveCategory,
+        mentions: mentions.length > 0 ? mentions : undefined,
         timestamp: Date.now(),
       };
       await groupMessageStorage.saveMessage(message);
 
-      // 向每个 Agent 成员的群聊 session 推送 chat 事件，使 Agent 感知到新消息
-      // sessionKey 格式: agent:{agentId}:group:{groupId}
-      const chatNotifyPayload = {
+      // ============================================================
+      // 消息路由逻辑（业界最佳实践）
+      // ============================================================
+      //
+      // chat 消息：全员投递到 agent:id:group:groupId session（群聊历史展示）
+      //   → agent 看到群聊但不一定响应（由 agent system prompt 决定）
+      //
+      // work 消息 / @点名：
+      //   → 被点名的 agent: 投递到 agent:id:main（触发正式工作响应）
+      //   → 未被点名的其它成员: 投递到 agent:id:group:groupId（可见历史）
+
+      const chatNotifyBase = {
         runId: `group-msg-${messageId}`,
-        sessionKey: "", // 每个成员单独设置
         seq: 1,
         state: "final" as const,
         message: {
@@ -745,18 +827,58 @@ export const groupsHandlers: GatewayRequestHandlers = {
           __group_sender_id: senderId,
           __group_sender_name: senderName,
           __group_msg_id: messageId,
-          __group_msg_type: "text",
+          __group_msg_type: msgTypeStr,
+          __group_msg_category: effectiveCategory,
+          __group_mentions: mentions.length > 0 ? mentions : undefined,
         },
       };
+
+      let deliveredToMain = 0;
+      let deliveredToGroup = 0;
+
       for (const member of group.members) {
-        const memberSessionKey = `agent:${member.agentId}:group:${groupId}`;
-        context.nodeSendToSession(memberSessionKey, "chat", {
-          ...chatNotifyPayload,
-          sessionKey: memberSessionKey,
-        });
+        const isMentioned = mentions.includes(member.agentId);
+        const _isWorkTarget = effectiveCategory === "work" && !isMentioned && mentions.length === 0;
+        // 聊天消息或未被 @的工作消息: 投递到群聊 session
+        const groupSessionKey = `agent:${member.agentId}:group:${groupId}`;
+        // 被 @点名 / 所有人工作消息: 投递到主 session
+        const mainSessionKey = `agent:${member.agentId}:main`;
+
+        if (isMentioned) {
+          // 被 @点名：投递到主 session（触发工作）
+          context.nodeSendToSession(mainSessionKey, "chat", {
+            ...chatNotifyBase,
+            sessionKey: mainSessionKey,
+          });
+          // 同时投递到群聊 session（展示历史）
+          context.nodeSendToSession(groupSessionKey, "chat", {
+            ...chatNotifyBase,
+            sessionKey: groupSessionKey,
+          });
+          deliveredToMain++;
+        } else if (effectiveCategory === "work" && mentions.length === 0) {
+          // work 消息但无 @：所有成员主 session都接收
+          context.nodeSendToSession(mainSessionKey, "chat", {
+            ...chatNotifyBase,
+            sessionKey: mainSessionKey,
+          });
+          context.nodeSendToSession(groupSessionKey, "chat", {
+            ...chatNotifyBase,
+            sessionKey: groupSessionKey,
+          });
+          deliveredToMain++;
+        } else {
+          // chat 消息或已有具体 @对象时未被点名的成员: 仅投递到群聊 session
+          context.nodeSendToSession(groupSessionKey, "chat", {
+            ...chatNotifyBase,
+            sessionKey: groupSessionKey,
+          });
+          deliveredToGroup++;
+        }
       }
+
       console.log(
-        `[Group Chat] Message ${messageId} delivered to ${group.members.length} member sessions in group ${groupId}`,
+        `[Group Chat] Message ${messageId} (category=${effectiveCategory}, mentions=${mentions.length}) → main:${deliveredToMain} group:${deliveredToGroup} in group ${groupId}`,
       );
 
       // 向前端广播群聊新消息事件，使会话窗口实时更新
@@ -770,7 +892,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
             senderId,
             senderName,
             content,
-            type: "text",
+            type: msgTypeStr as import("../../sessions/group-message-storage.js").GroupMessageType,
             timestamp: message.timestamp,
           },
           members: group.members.map((m) => m.agentId),
@@ -852,6 +974,22 @@ export const groupsHandlers: GatewayRequestHandlers = {
           errorShape(
             ErrorCodes.UNAVAILABLE,
             `Group "${groupId}" is already a project group (bound to project "${group.projectId}")`,
+          ),
+        );
+        return;
+      }
+
+      // 检查该 projectId 是否已被其他群绑定（防止重复绑定）
+      const existingProjectGroup = groupManager
+        .getAllGroups()
+        .find((g) => g.id !== groupId && g.projectId === projectId);
+      if (existingProjectGroup) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.UNAVAILABLE,
+            `Project "${projectId}" is already bound to group "${existingProjectGroup.id}" ("${existingProjectGroup.name}"). A project can be bound to multiple groups, but please confirm this is intentional.`,
           ),
         );
         return;

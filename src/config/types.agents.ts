@@ -1,9 +1,15 @@
 import type { ChatType } from "../../upstream/src/channels/chat-type.js";
 import type { AgentDefaultsConfig } from "../../upstream/src/config/types.agent-defaults.js";
-import type { AgentModelConfig, AgentSandboxConfig } from "../../upstream/src/config/types.agents-shared.js";
+import type {
+  AgentModelConfig,
+  AgentSandboxConfig,
+} from "../../upstream/src/config/types.agents-shared.js";
 import type { HumanDelayConfig, IdentityConfig } from "../../upstream/src/config/types.base.js";
 import type { GroupChatConfig } from "../../upstream/src/config/types.messages.js";
-import type { AgentToolsConfig, MemorySearchConfig } from "../../upstream/src/config/types.tools.js";
+import type {
+  AgentToolsConfig,
+  MemorySearchConfig,
+} from "../../upstream/src/config/types.tools.js";
 
 export type AgentRuntimeAcpConfig = {
   /** ACP harness adapter id (for example codex, claude). */
@@ -101,6 +107,8 @@ export type AgentModelSmartRoutingConfig = {
   costWeight?: number;
   speedWeight?: number;
   eloWeight?: number;
+  /** Whether to enable cost-based optimization scoring. */
+  enableCostOptimization?: boolean;
 };
 
 /** Per-agent model accounts routing config (local overlay feature). */
@@ -113,4 +121,8 @@ export type AgentModelAccountsConfig = {
   defaultAccountId?: string;
   /** Weight tuning for 'smart' routing mode. */
   smartRouting?: AgentModelSmartRoutingConfig;
+  /** Per-account configuration (e.g., enabled flag). */
+  accountConfigs?: Array<{ accountId: string; enabled?: boolean; [key: string]: unknown }>;
+  /** Enable session pinning: once an account is selected for a session, prefer it on subsequent turns (default: true). */
+  enableSessionPinning?: boolean;
 };

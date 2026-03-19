@@ -27,7 +27,7 @@ export interface SendMessageOptions {
   }>;
 
   /** 额外元数据 */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -71,7 +71,9 @@ export class GroupSessionCoordinator {
 
     // 检查发送者是否有权限发言
     if (!groupManager.canSpeak(groupId, senderId)) {
-      throw new Error(`Agent "${senderId}" is muted in group "${groupId}"`);
+      const member = group.members.find((m) => m.agentId === senderId);
+      const reason = member?.muted ? `已被禁言` : `群组已开启「仅管理员可发言」模式`;
+      throw new Error(`Agent "${senderId}" 无权在群组 "${groupId}" 发言：${reason}`);
     }
 
     // 获取发送者信息
@@ -343,7 +345,7 @@ export class GroupSessionCoordinator {
     }
 
     // 生成私聊群组ID（保证A-B和B-A是同一个群组）
-    const [sortedA, sortedB] = [fromAgent, toAgent].sort();
+    const [sortedA, sortedB] = [fromAgent, toAgent].toSorted();
     const dmGroupId = `dm-${sortedA}-${sortedB}`;
 
     // 确保私聊群组存在
@@ -375,7 +377,7 @@ export class GroupSessionCoordinator {
       after?: number;
     },
   ): Promise<GroupMessage[]> {
-    const [sortedA, sortedB] = [agentA, agentB].sort();
+    const [sortedA, sortedB] = [agentA, agentB].toSorted();
     const dmGroupId = `dm-${sortedA}-${sortedB}`;
 
     return await this.getMessages(dmGroupId, options);

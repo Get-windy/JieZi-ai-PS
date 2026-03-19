@@ -6,8 +6,16 @@
 
 import { Type } from "@sinclair/typebox";
 import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
-import { jsonResult, readStringParam, readStringArrayParam, readNumberParam } from "../../../upstream/src/agents/tools/common.js";
-import { callGatewayTool, readGatewayCallOptions } from "../../../upstream/src/agents/tools/gateway.js";
+import {
+  jsonResult,
+  readStringParam,
+  readStringArrayParam,
+  readNumberParam,
+} from "../../../upstream/src/agents/tools/common.js";
+import {
+  callGatewayTool,
+  readGatewayCallOptions,
+} from "../../../upstream/src/agents/tools/gateway.js";
 
 /**
  * group_list 工具参数 schema
@@ -15,6 +23,8 @@ import { callGatewayTool, readGatewayCallOptions } from "../../../upstream/src/a
 const GroupListToolSchema = Type.Object({
   /** 可选：按 agentId 过滤，只返回指定 agent 所在群组 */
   agentId: Type.Optional(Type.String()),
+  /** 可选：按 projectId 过滤，只返回指定项目的群组 */
+  projectId: Type.Optional(Type.String()),
 });
 
 /**
@@ -38,14 +48,19 @@ export function createGroupListTool(opts?: {
       const params = args as Record<string, unknown>;
       // 如果未传 agentId，默认用当前 agent 自己查询
       const agentId = readStringParam(params, "agentId") || opts?.currentAgentId;
+      const projectId = readStringParam(params, "projectId");
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
-        const response = await callGatewayTool(
-          "groups.list",
-          gatewayOpts,
-          agentId ? { agentId } : {},
-        );
+        const queryParams: Record<string, unknown> = {};
+        if (agentId) {
+          queryParams.agentId = agentId;
+        }
+        if (projectId) {
+          queryParams.projectId = projectId;
+        }
+
+        const response = await callGatewayTool("groups.list", gatewayOpts, queryParams);
 
         const result = response as { groups?: unknown[]; total?: number };
         const groups = Array.isArray(result?.groups) ? result.groups : [];
@@ -263,7 +278,7 @@ export function createGroupAddMemberTool(_opts?: {
           try {
             await callGatewayTool("groups.addMember", gatewayOpts, {
               groupId,
-              agentId,  // 后端读取字段名为 agentId
+              agentId, // 后端读取字段名为 agentId
               role: role || "member",
             });
             addedMembers.push(agentId);
@@ -327,7 +342,7 @@ export function createGroupRemoveMemberTool(_opts?: {
           try {
             await callGatewayTool("groups.removeMember", gatewayOpts, {
               groupId,
-              agentId,  // 后端读取字段名为 agentId
+              agentId, // 后端读取字段名为 agentId
             });
             removedMembers.push(agentId);
           } catch (error) {
@@ -535,13 +550,14 @@ export function createGroupUpgradeToProjectTool(): AnyAgentTool {
         });
 
         const result = response as { success: boolean; group?: unknown; workspacePath?: string };
-        
+
         return jsonResult({
           success: true,
           message: `Group "${groupId}" has been upgraded to project group for project "${projectId}"`,
           group: result.group,
           workspacePath: result.workspacePath,
-          warning: "⚠️ This operation is irreversible! The group cannot be downgraded back to a normal group.",
+          warning:
+            "⚠️ This operation is irreversible! The group cannot be downgraded back to a normal group.",
         });
       } catch (error) {
         return jsonResult({

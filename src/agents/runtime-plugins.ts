@@ -17,10 +17,13 @@
  */
 
 import type { OpenClawConfig } from "../../upstream/src/config/config.js";
-import { applyTestPluginDefaults, normalizePluginsConfig } from "../../upstream/src/plugins/config-state.js";
+import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
+import {
+  applyTestPluginDefaults,
+  normalizePluginsConfig,
+} from "../../upstream/src/plugins/config-state.js";
 import { loadOpenClawPlugins } from "../../upstream/src/plugins/loader.js";
 import { createPluginLoaderLogger } from "../../upstream/src/plugins/logger.js";
-import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
 import type { PluginRegistry } from "../../upstream/src/plugins/registry.js";
 
 const log = createSubsystemLogger("plugins");
@@ -66,11 +69,6 @@ function buildStableCacheKey(config: OpenClawConfig | undefined, env: NodeJS.Pro
   return JSON.stringify(stable);
 }
 
-// ── 调试：记录 key 变化次数（防止所有条目都打印导致执行缓慢）
-// 每次 key 不同时才完整输出
-let _lastSeenKey: string | undefined;
-let _keyChangedCount = 0;
-
 export function ensureRuntimePluginsLoaded(params: {
   config?: OpenClawConfig;
   workspaceDir?: string | null;
@@ -86,34 +84,11 @@ export function ensureRuntimePluginsLoaded(params: {
 
   const cacheKey = buildStableCacheKey(effectiveConfig, env);
 
-  // ── 调试：判断 key 是否发生变化 ────────────────────────────────
-  if (_lastSeenKey !== undefined && _lastSeenKey !== cacheKey) {
-    _keyChangedCount += 1;
-    // 首次以及每 10 次打印完整 key 对比
-    if (_keyChangedCount <= 3 || _keyChangedCount % 10 === 0) {
-      log.info(
-        `[DEBUG-PLUGINS] stable key CHANGED (#${_keyChangedCount})!\n` +
-        `  OLD=${_lastSeenKey}\n` +
-        `  NEW=${cacheKey}`
-      );
-    }
-  }
-  _lastSeenKey = cacheKey;
-  // ────────────────────────────────────────────────────────────────
-
   // 快速路径：进程级单例命中
   const singleton = getGlobalSingleton();
   const singletonKey = getGlobalSingletonKey();
   if (singleton && singletonKey === cacheKey) {
     return;
-  }
-  if (singleton && singletonKey !== cacheKey) {
-    log.info(
-      `[DEBUG-PLUGINS] singleton key mismatch (#${_keyChangedCount})!\n` +
-      `  singleton=${singletonKey}\n` +
-      `  current  =${cacheKey}\n` +
-      `  caller   =${new Error().stack?.split('\n').slice(1, 5).join(' | ') ?? '?'}`
-    );
   }
 
   // Map 缓存命中
@@ -125,11 +100,6 @@ export function ensureRuntimePluginsLoaded(params: {
   }
 
   // 缓存 MISS：真正加载一次（不传 workspaceDir，所有 agent 共享同一 registry）
-  log.info(
-    `[DEBUG-PLUGINS] cache MISS ensureRuntimePluginsLoaded\n` +
-    `  key=${cacheKey}\n` +
-    `  caller=${new Error().stack?.split('\n').slice(1, 5).join(' | ') ?? '?'}`
-  );
   const registry = loadOpenClawPlugins({
     config: effectiveConfig,
     // workspaceDir 意图省略：避免每个 agent 因 workspaceDir 不同而导致缓存 miss

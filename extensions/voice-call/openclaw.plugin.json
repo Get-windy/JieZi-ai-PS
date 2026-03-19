@@ -278,6 +278,27 @@
           },
           "path": {
             "type": "string"
+          },
+          "webhookSecurity": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "allowedHosts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "trustForwardingHeaders": {
+                "type": "boolean"
+              },
+              "trustedProxyIPs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -341,6 +362,22 @@
           },
           "streamPath": {
             "type": "string"
+          },
+          "preStartTimeoutMs": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "maxPendingConnections": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "maxPendingConnectionsPerIp": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "maxConnections": {
+            "type": "integer",
+            "minimum": 1
           }
         }
       },
@@ -485,6 +522,17 @@
                 "type": "string"
               },
               "voice": {
+                "type": "string"
+              },
+              "baseUrl": {
+                "type": "string"
+              },
+              "speed": {
+                "type": "number",
+                "minimum": 0.25,
+                "maximum": 4.0
+              },
+              "instructions": {
                 "type": "string"
               }
             }

@@ -279,8 +279,11 @@ export function resolveProviderScopedAuthProfile(params: {
   provider: string;
   primaryProvider: string;
   authProfileId?: string;
-  authProfileIdSource?: "auto" | "user";
-}): { authProfileId?: string; authProfileIdSource?: "auto" | "user" } {
+  authProfileIdSource?: "auto" | "user" | "smart-routing" | "default-account";
+}): {
+  authProfileId?: string;
+  authProfileIdSource?: "auto" | "user" | "smart-routing" | "default-account";
+} {
   const authProfileId =
     params.provider === params.primaryProvider ? params.authProfileId : undefined;
   return {

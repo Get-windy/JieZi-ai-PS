@@ -57,7 +57,6 @@ import {
   createGroupSendTool,
   createGroupUpgradeToProjectTool,
 } from "./tools/group-management-tools.js";
-import { createProjectCreateTool } from "./tools/project-management-tools.js";
 import {
   createDeactivateAgentTool,
   createActivateAgentTool,
@@ -94,11 +93,20 @@ import {
   createPerm_ListTool,
   createPerm_AuditTool,
 } from "./tools/permission-management-tools-impl.js";
+import { createProjectCreateTool } from "./tools/project-management-tools.js";
+// 导入使用自动注册机制的工具文件，加载时注册自动生效
+import "./tools/skill-transfer-tool.js";
 import {
   createRecruitAgentTool,
   createApproveRecruitTool,
   createRecruitListTool,
 } from "./tools/recruit-management-tools.js";
+import { buildRegisteredTools } from "./tools/registry.js";
+import {
+  createAgentReflectTool,
+  createAgentSkillSaveTool,
+  createAgentSkillListTool,
+} from "./tools/self-evolve-tool.js";
 import { createSessionStatusTool } from "./tools/session-status-tool.js";
 import { createSessionsHistoryTool } from "./tools/sessions-history-tool.js";
 import { createSessionsListTool } from "./tools/sessions-list-tool.js";
@@ -112,6 +120,7 @@ import {
   createTaskCompleteTool,
   createTaskDeleteTool,
 } from "./tools/task-management-tools.js";
+import { createTeamOrchestrateTool } from "./tools/team-orchestrate-tool.js";
 import {
   createTrainAgentTool,
   createTrainingStartTool,
@@ -708,6 +717,32 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
     }),
+    // 自我进化工具
+    createAgentReflectTool({
+      agentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentSkillSaveTool({
+      agentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createAgentSkillListTool({
+      agentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    // 团队编排工具
+    createTeamOrchestrateTool({
+      agentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
     // 组织架构工具
     createOrgDepartmentTool({
       currentAgentId: resolveSessionAgentId({
@@ -766,5 +801,16 @@ export function createOpenClawTools(options?: {
     toolAllowlist: options?.pluginToolAllowlist,
   });
 
-  return [...tools, ...pluginTools];
+  // 从自动注册表补充未注册的工具（去重）
+  const agentId = resolveSessionAgentId({
+    sessionKey: options?.agentSessionKey,
+    config: options?.config,
+  });
+  const existingNames = new Set(tools.map((t) => t.name));
+  const registeredTools = buildRegisteredTools(
+    { agentId, workspaceDir, agentSessionKey: options?.agentSessionKey },
+    existingNames,
+  );
+
+  return [...tools, ...registeredTools, ...pluginTools];
 }
