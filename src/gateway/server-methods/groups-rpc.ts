@@ -7,8 +7,8 @@
 import type { GroupMemberRole } from "../../sessions/group-manager.js";
 import { groupManager } from "../../sessions/group-manager.js";
 import { groupMessageStorage } from "../../sessions/group-message-storage.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 /**
  * 群组管理 RPC 方法处理器

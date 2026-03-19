@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import type { MessageCliHelpers } from "./helpers.js";
+import type { MessageCliHelpers } from "../../../../upstream/src/cli/program/message/helpers.js";
 
 export function registerMessageSendCommand(message: Command, helpers: MessageCliHelpers) {
   helpers

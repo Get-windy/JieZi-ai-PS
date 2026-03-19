@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isContextOverflowError } from "./pi-embedded-helpers.js";
+import { isContextOverflowError } from "../../upstream/src/agents/pi-embedded-helpers.js";
 
 describe("isContextOverflowError", () => {
   it("matches known overflow hints", () => {

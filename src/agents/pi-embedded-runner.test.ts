@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import "./test-helpers/fast-coding-tools.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 
 function createMockUsage(input: number, output: number) {
   return {

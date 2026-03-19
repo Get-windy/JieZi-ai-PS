@@ -7,12 +7,12 @@ import type {
   BrowserStatus,
   BrowserTab,
   ProfileStatus,
-} from "../browser/client.js";
-import { danger, info } from "../globals.js";
-import { defaultRuntime } from "../runtime.js";
-import { shortenHomePath } from "../utils.js";
-import { callBrowserRequest, type BrowserParentOpts } from "./browser-cli-shared.js";
-import { runCommandWithRuntime } from "./cli-utils.js";
+} from "../../upstream/src/browser/client.js";
+import { danger, info } from "../../upstream/src/globals.js";
+import { defaultRuntime } from "../../upstream/src/runtime.js";
+import { shortenHomePath } from "../../upstream/src/utils.js";
+import { callBrowserRequest, type BrowserParentOpts } from "../../upstream/src/cli/browser-cli-shared.js";
+import { runCommandWithRuntime } from "../../upstream/src/cli/cli-utils.js";
 
 const BROWSER_MANAGE_REQUEST_TIMEOUT_MS = 45_000;
 

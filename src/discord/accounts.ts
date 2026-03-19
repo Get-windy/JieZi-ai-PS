@@ -1,8 +1,8 @@
 import { resolveDiscordToken } from "../../upstream/extensions/discord/src/token.js";
-import { createAccountActionGate } from "../channels/plugins/account-action-gate.js";
-import { createAccountListHelpers } from "../channels/plugins/account-helpers.js";
-import type { OpenClawConfig } from "../config/config.js";
-import type { DiscordAccountConfig, DiscordActionConfig } from "../config/types.js";
+import { createAccountActionGate } from "../../upstream/src/channels/plugins/account-action-gate.js";
+import { createAccountListHelpers } from "../../upstream/src/channels/plugins/account-helpers.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import type { DiscordAccountConfig, DiscordActionConfig } from "../../upstream/src/config/types.js";
 import { normalizeAccountId } from "../routing/session-key.js";
 
 export type ResolvedDiscordAccount = {

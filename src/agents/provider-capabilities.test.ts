@@ -8,7 +8,7 @@ import {
   shouldDropThinkingBlocksForModel,
   shouldSanitizeGeminiThoughtSignaturesForModel,
   supportsOpenAiCompatTurnValidation,
-} from "./provider-capabilities.js";
+} from "../../upstream/src/agents/provider-capabilities.js";
 
 describe("resolveProviderCapabilities", () => {
   it("returns native anthropic defaults for ordinary providers", () => {

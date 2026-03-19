@@ -1,29 +1,29 @@
 import { ChannelType, MessageType, type User } from "@buape/carbon";
-import { hasControlCommand } from "../../auto-reply/command-detection.js";
-import { shouldHandleTextCommands } from "../../auto-reply/commands-registry.js";
+import { hasControlCommand } from "../../../upstream/src/auto-reply/command-detection.js";
+import { shouldHandleTextCommands } from "../../../upstream/src/auto-reply/commands-registry.js";
 import {
   recordPendingHistoryEntryIfEnabled,
   type HistoryEntry,
-} from "../../auto-reply/reply/history.js";
+} from "../../../upstream/src/auto-reply/reply/history.js";
 import {
   buildMentionRegexes,
   matchesMentionWithExplicit,
 } from "../../auto-reply/reply/mentions.js";
-import { formatAllowlistMatchMeta } from "../../channels/allowlist-match.js";
-import { resolveControlCommandGate } from "../../channels/command-gating.js";
-import { logInboundDrop } from "../../channels/logging.js";
-import { resolveMentionGatingWithBypass } from "../../channels/mention-gating.js";
-import { loadConfig } from "../../config/config.js";
-import { logVerbose, shouldLogVerbose } from "../../globals.js";
-import { recordChannelActivity } from "../../infra/channel-activity.js";
-import { enqueueSystemEvent } from "../../infra/system-events.js";
-import { logDebug } from "../../logger.js";
-import { getChildLogger } from "../../logging.js";
-import { buildPairingReply } from "../../pairing/pairing-messages.js";
+import { formatAllowlistMatchMeta } from "../../../upstream/src/channels/allowlist-match.js";
+import { resolveControlCommandGate } from "../../../upstream/src/channels/command-gating.js";
+import { logInboundDrop } from "../../../upstream/src/channels/logging.js";
+import { resolveMentionGatingWithBypass } from "../../../upstream/src/channels/mention-gating.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
+import { logVerbose, shouldLogVerbose } from "../../../upstream/src/globals.js";
+import { recordChannelActivity } from "../../../upstream/src/infra/channel-activity.js";
+import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
+import { logDebug } from "../../../upstream/src/logger.js";
+import { getChildLogger } from "../../../upstream/src/logging.js";
+import { buildPairingReply } from "../../../upstream/src/pairing/pairing-messages.js";
 import {
   readChannelAllowFromStore,
   upsertChannelPairingRequest,
-} from "../../pairing/pairing-store.js";
+} from "../../../upstream/src/pairing/pairing-store.js";
 import { resolveAgentRoute } from "../../routing/resolve-route.js";
 import { resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
 import { fetchPluralKitMessageInfo } from "../pluralkit.js";

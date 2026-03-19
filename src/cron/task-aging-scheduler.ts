@@ -6,7 +6,7 @@
  * 新增功能：防敷衍汇报机制（Outcome-Based Accountability）
  */
 
-import { loadConfig } from "../config/config.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
 import { t } from "../i18n/index.js";
 import { startAgingTaskScheduler } from "../tasks/task-aging.js";
 

@@ -1,11 +1,11 @@
-import { ensureAuthProfileStore } from "../agents/auth-profiles.js";
-import { resolveDefaultAgentWorkspaceDir } from "../agents/workspace.js";
-import type { OpenClawConfig, GatewayAuthConfig } from "../config/config.js";
-import { isSecretRef, type SecretInput } from "../config/types.secrets.js";
-import type { RuntimeEnv } from "../runtime.js";
-import type { WizardPrompter } from "../wizard/prompts.js";
-import { promptAuthChoiceGrouped } from "./auth-choice-prompt.js";
-import { applyAuthChoice, resolvePreferredProviderForAuthChoice } from "./auth-choice.js";
+import { ensureAuthProfileStore } from "../../upstream/src/agents/auth-profiles.js";
+import { resolveDefaultAgentWorkspaceDir } from "../../upstream/src/agents/workspace.js";
+import type { OpenClawConfig, GatewayAuthConfig } from "../../upstream/src/config/config.js";
+import { isSecretRef, type SecretInput } from "../../upstream/src/config/types.secrets.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
+import type { WizardPrompter } from "../../upstream/src/wizard/prompts.js";
+import { promptAuthChoiceGrouped } from "../../upstream/src/commands/auth-choice-prompt.js";
+import { applyAuthChoice, resolvePreferredProviderForAuthChoice } from "../../upstream/src/commands/auth-choice.js";
 import {
   applyModelAllowlist,
   applyModelFallbacksFromSelection,
@@ -13,8 +13,8 @@ import {
   promptDefaultModel,
   promptModelAllowlist,
 } from "./model-picker.js";
-import { promptCustomApiConfig } from "./onboard-custom.js";
-import { randomToken } from "./onboard-helpers.js";
+import { promptCustomApiConfig } from "../../upstream/src/commands/onboard-custom.js";
+import { randomToken } from "../../upstream/src/commands/onboard-helpers.js";
 
 type GatewayAuthChoice = "token" | "password" | "trusted-proxy";
 

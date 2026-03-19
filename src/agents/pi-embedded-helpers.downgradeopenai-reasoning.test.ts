@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { downgradeOpenAIReasoningBlocks } from "./pi-embedded-helpers.js";
+import { downgradeOpenAIReasoningBlocks } from "../../upstream/src/agents/pi-embedded-helpers.js";
 
 describe("downgradeOpenAIReasoningBlocks", () => {
   it("keeps reasoning signatures when followed by content", () => {

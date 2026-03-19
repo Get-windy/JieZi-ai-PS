@@ -2,14 +2,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { captureEnv } from "../../test-utils/env.js";
-import { resolveApiKeyForProfile } from "./oauth.js";
+import { captureEnv } from "../../../upstream/src/test-utils/env.js";
+import { resolveApiKeyForProfile } from "../../../upstream/src/agents/auth-profiles/oauth.js";
 import {
   clearRuntimeAuthProfileStoreSnapshots,
   ensureAuthProfileStore,
   saveAuthProfileStore,
-} from "./store.js";
-import type { AuthProfileStore } from "./types.js";
+} from "../../../upstream/src/agents/auth-profiles/store.js";
+import type { AuthProfileStore } from "../../../upstream/src/agents/auth-profiles/types.js";
 
 const { getOAuthApiKeyMock } = vi.hoisted(() => ({
   getOAuthApiKeyMock: vi.fn(async () => {

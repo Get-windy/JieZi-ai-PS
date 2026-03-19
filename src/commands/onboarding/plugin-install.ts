@@ -1,22 +1,22 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../../agents/agent-scope.js";
-import type { ChannelPluginCatalogEntry } from "../../channels/plugins/catalog.js";
-import { resolveBundledInstallPlanForCatalogEntry } from "../../cli/plugin-install-plan.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { createSubsystemLogger } from "../../logging/subsystem.js";
+import type { ChannelPluginCatalogEntry } from "../../../upstream/src/channels/plugins/catalog.js";
+import { resolveBundledInstallPlanForCatalogEntry } from "../../../upstream/src/cli/plugin-install-plan.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
 import {
   findBundledPluginSourceInMap,
   resolveBundledPluginSources,
-} from "../../plugins/bundled-sources.js";
-import { clearPluginDiscoveryCache } from "../../plugins/discovery.js";
-import { enablePluginInConfig } from "../../plugins/enable.js";
-import { installPluginFromNpmSpec } from "../../plugins/install.js";
-import { buildNpmResolutionInstallFields, recordPluginInstall } from "../../plugins/installs.js";
-import { loadOpenClawPlugins } from "../../plugins/loader.js";
-import { createPluginLoaderLogger } from "../../plugins/logger.js";
-import type { RuntimeEnv } from "../../runtime.js";
-import type { WizardPrompter } from "../../wizard/prompts.js";
+} from "../../../upstream/src/plugins/bundled-sources.js";
+import { clearPluginDiscoveryCache } from "../../../upstream/src/plugins/discovery.js";
+import { enablePluginInConfig } from "../../../upstream/src/plugins/enable.js";
+import { installPluginFromNpmSpec } from "../../../upstream/src/plugins/install.js";
+import { buildNpmResolutionInstallFields, recordPluginInstall } from "../../../upstream/src/plugins/installs.js";
+import { loadOpenClawPlugins } from "../../../upstream/src/plugins/loader.js";
+import { createPluginLoaderLogger } from "../../../upstream/src/plugins/logger.js";
+import type { RuntimeEnv } from "../../../upstream/src/runtime.js";
+import type { WizardPrompter } from "../../../upstream/src/wizard/prompts.js";
 
 type InstallChoice = "npm" | "local" | "skip";
 

@@ -1,6 +1,6 @@
 import os from "node:os";
-import type { OpenClawConfig } from "../config/types.js";
-import { isCarrierGradeNatIpv4Address, isRfc1918Ipv4Address } from "../shared/net/ip.js";
+import type { OpenClawConfig } from "../../upstream/src/config/types.js";
+import { isCarrierGradeNatIpv4Address, isRfc1918Ipv4Address } from "../../upstream/src/shared/net/ip.js";
 
 const DEFAULT_GATEWAY_PORT = 18789;
 

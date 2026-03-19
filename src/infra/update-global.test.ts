@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { captureEnv } from "../test-utils/env.js";
+import { captureEnv } from "../../upstream/src/test-utils/env.js";
 import {
   cleanupGlobalRenameDirs,
   detectGlobalInstallManagerByPresence,

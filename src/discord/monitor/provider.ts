@@ -11,27 +11,27 @@ import { GatewayCloseCodes, type GatewayPlugin } from "@buape/carbon/gateway";
 import { VoicePlugin } from "@buape/carbon/voice";
 import { Routes } from "discord-api-types/v10";
 import { resolveTextChunkLimit } from "../../auto-reply/chunk.js";
-import { listNativeCommandSpecsForConfig } from "../../auto-reply/commands-registry.js";
-import type { HistoryEntry } from "../../auto-reply/reply/history.js";
-import { listSkillCommandsForAgents } from "../../auto-reply/skill-commands.js";
+import { listNativeCommandSpecsForConfig } from "../../../upstream/src/auto-reply/commands-registry.js";
+import type { HistoryEntry } from "../../../upstream/src/auto-reply/reply/history.js";
+import { listSkillCommandsForAgents } from "../../../upstream/src/auto-reply/skill-commands.js";
 import {
   isNativeCommandsExplicitlyDisabled,
   resolveNativeCommandsEnabled,
   resolveNativeSkillsEnabled,
 } from "../../config/commands.js";
-import type { OpenClawConfig, ReplyToMode } from "../../config/config.js";
-import { loadConfig } from "../../config/config.js";
+import type { OpenClawConfig, ReplyToMode } from "../../../upstream/src/config/config.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import {
   GROUP_POLICY_BLOCKED_LABEL,
   resolveOpenProviderRuntimeGroupPolicy,
   resolveDefaultGroupPolicy,
   warnMissingProviderGroupPolicyFallbackOnce,
-} from "../../config/runtime-group-policy.js";
-import { danger, logVerbose, shouldLogVerbose, warn } from "../../globals.js";
-import { formatErrorMessage } from "../../infra/errors.js";
-import { createDiscordRetryRunner } from "../../infra/retry-policy.js";
-import { createSubsystemLogger } from "../../logging/subsystem.js";
-import { createNonExitingRuntime, type RuntimeEnv } from "../../runtime.js";
+} from "../../../upstream/src/config/runtime-group-policy.js";
+import { danger, logVerbose, shouldLogVerbose, warn } from "../../../upstream/src/globals.js";
+import { formatErrorMessage } from "../../../upstream/src/infra/errors.js";
+import { createDiscordRetryRunner } from "../../../upstream/src/infra/retry-policy.js";
+import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
+import { createNonExitingRuntime, type RuntimeEnv } from "../../../upstream/src/runtime.js";
 import { resolveDiscordAccount } from "../accounts.js";
 import { fetchDiscordApplicationId } from "../probe.js";
 import { normalizeDiscordToken } from "../token.js";

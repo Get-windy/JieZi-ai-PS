@@ -8,7 +8,7 @@ import {
   type Tool,
 } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
-import { inferParamBFromIdOrName } from "../shared/model-param-b.js";
+import { inferParamBFromIdOrName } from "../../upstream/src/shared/model-param-b.js";
 
 const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 const DEFAULT_TIMEOUT_MS = 12_000;

@@ -5,32 +5,32 @@ import os from "node:os";
 import path from "node:path";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import { describe, it } from "vitest";
-import { resolveOpenClawAgentDir } from "../agents/agent-paths.js";
+import { resolveOpenClawAgentDir } from "../../upstream/src/agents/agent-paths.js";
 import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import {
   type AuthProfileStore,
   ensureAuthProfileStore,
   saveAuthProfileStore,
-} from "../agents/auth-profiles.js";
+} from "../../upstream/src/agents/auth-profiles.js";
 import {
   collectAnthropicApiKeys,
   isAnthropicBillingError,
   isAnthropicRateLimitError,
-} from "../agents/live-auth-keys.js";
-import { isModernModelRef } from "../agents/live-model-filter.js";
-import { getApiKeyForModel } from "../agents/model-auth.js";
+} from "../../upstream/src/agents/live-auth-keys.js";
+import { isModernModelRef } from "../../upstream/src/agents/live-model-filter.js";
+import { getApiKeyForModel } from "../../upstream/src/agents/model-auth.js";
 import { ensureOpenClawModelsJson } from "../agents/models-config.js";
-import { discoverAuthStorage, discoverModels } from "../agents/pi-model-discovery.js";
-import { loadConfig } from "../config/config.js";
-import type { ModelsConfig, OpenClawConfig, ModelProviderConfig } from "../config/types.js";
-import { isTruthyEnvValue } from "../infra/env.js";
+import { discoverAuthStorage, discoverModels } from "../../upstream/src/agents/pi-model-discovery.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
+import type { ModelsConfig, OpenClawConfig, ModelProviderConfig } from "../../upstream/src/config/types.js";
+import { isTruthyEnvValue } from "../../upstream/src/infra/env.js";
 import { DEFAULT_AGENT_ID } from "../routing/session-key.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../upstream/src/utils/message-channel.js";
 import { GatewayClient } from "./client.js";
-import { renderCatNoncePngBase64 } from "./live-image-probe.js";
-import { hasExpectedToolNonce, shouldRetryToolReadProbe } from "./live-tool-probe-utils.js";
-import { startGatewayServer } from "./server.js";
-import { extractPayloadText } from "./test-helpers.agent-results.js";
+import { renderCatNoncePngBase64 } from "../../upstream/src/gateway/live-image-probe.js";
+import { hasExpectedToolNonce, shouldRetryToolReadProbe } from "../../upstream/src/gateway/live-tool-probe-utils.js";
+import { startGatewayServer } from "../../upstream/src/gateway/server.js";
+import { extractPayloadText } from "../../upstream/src/gateway/test-helpers.agent-results.js";
 
 const LIVE = isTruthyEnvValue(process.env.LIVE) || isTruthyEnvValue(process.env.OPENCLAW_LIVE_TEST);
 const GATEWAY_LIVE = isTruthyEnvValue(process.env.OPENCLAW_LIVE_GATEWAY);

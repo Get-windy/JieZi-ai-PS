@@ -6,24 +6,24 @@ import { Bot, webhookCallback } from "grammy";
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { resolveTextChunkLimit } from "../auto-reply/chunk.js";
 import { isAbortRequestText } from "../auto-reply/reply/abort.js";
-import { DEFAULT_GROUP_HISTORY_LIMIT, type HistoryEntry } from "../auto-reply/reply/history.js";
+import { DEFAULT_GROUP_HISTORY_LIMIT, type HistoryEntry } from "../../upstream/src/auto-reply/reply/history.js";
 import {
   isNativeCommandsExplicitlyDisabled,
   resolveNativeCommandsEnabled,
   resolveNativeSkillsEnabled,
 } from "../config/commands.js";
-import type { OpenClawConfig, ReplyToMode } from "../config/config.js";
-import { loadConfig } from "../config/config.js";
+import type { OpenClawConfig, ReplyToMode } from "../../upstream/src/config/config.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
 import {
   resolveChannelGroupPolicy,
   resolveChannelGroupRequireMention,
-} from "../config/group-policy.js";
-import { loadSessionStore, resolveStorePath } from "../config/sessions.js";
-import { danger, logVerbose, shouldLogVerbose } from "../globals.js";
-import { formatUncaughtError } from "../infra/errors.js";
-import { getChildLogger } from "../logging.js";
-import { createSubsystemLogger } from "../logging/subsystem.js";
-import { createNonExitingRuntime, type RuntimeEnv } from "../runtime.js";
+} from "../../upstream/src/config/group-policy.js";
+import { loadSessionStore, resolveStorePath } from "../../upstream/src/config/sessions.js";
+import { danger, logVerbose, shouldLogVerbose } from "../../upstream/src/globals.js";
+import { formatUncaughtError } from "../../upstream/src/infra/errors.js";
+import { getChildLogger } from "../../upstream/src/logging.js";
+import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
+import { createNonExitingRuntime, type RuntimeEnv } from "../../upstream/src/runtime.js";
 import { resolveTelegramAccount } from "./accounts.js";
 import { registerTelegramHandlers } from "./bot-handlers.js";
 import { createTelegramMessageProcessor } from "./bot-message.js";

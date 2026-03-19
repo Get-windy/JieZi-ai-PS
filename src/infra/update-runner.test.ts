@@ -2,10 +2,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { withEnvAsync } from "../test-utils/env.js";
-import { pathExists } from "../utils.js";
-import { resolveStableNodePath } from "./stable-node-path.js";
-import { runGatewayUpdate } from "./update-runner.js";
+import { withEnvAsync } from "../../upstream/src/test-utils/env.js";
+import { pathExists } from "../../upstream/src/utils.js";
+import { resolveStableNodePath } from "../../upstream/src/infra/stable-node-path.js";
+import { runGatewayUpdate } from "../../upstream/src/infra/update-runner.js";
 
 type CommandResponse = { stdout?: string; stderr?: string; code?: number | null };
 type CommandResult = { stdout: string; stderr: string; code: number | null };

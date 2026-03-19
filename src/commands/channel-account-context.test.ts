@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ChannelPlugin } from "../channels/plugins/types.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { ChannelPlugin } from "../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import { resolveDefaultChannelAccountContext } from "./channel-account-context.js";
 
 describe("resolveDefaultChannelAccountContext", () => {

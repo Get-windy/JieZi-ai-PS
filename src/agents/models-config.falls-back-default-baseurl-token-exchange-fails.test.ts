@@ -2,13 +2,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_COPILOT_API_BASE_URL } from "../providers/github-copilot-token.js";
-import { withEnvAsync } from "../test-utils/env.js";
+import { withEnvAsync } from "../../upstream/src/test-utils/env.js";
 import {
   installModelsConfigTestHooks,
   mockCopilotTokenExchangeSuccess,
   withUnsetCopilotTokenEnv,
   withModelsTempHome as withTempHome,
-} from "./models-config.e2e-harness.js";
+} from "../../upstream/src/agents/models-config.e2e-harness.js";
 import { ensureOpenClawModelsJson } from "./models-config.js";
 
 installModelsConfigTestHooks({ restoreFetch: true });

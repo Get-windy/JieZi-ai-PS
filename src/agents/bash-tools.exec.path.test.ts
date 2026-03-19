@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ExecApprovalsResolved } from "../infra/exec-approvals.js";
-import { captureEnv } from "../test-utils/env.js";
+import type { ExecApprovalsResolved } from "../../upstream/src/infra/exec-approvals.js";
+import { captureEnv } from "../../upstream/src/test-utils/env.js";
 import { sanitizeBinaryOutput } from "./shell-utils.js";
 
 const isWin = process.platform === "win32";
@@ -14,8 +14,8 @@ vi.mock("../infra/shell-env.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../infra/exec-approvals.js", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("../infra/exec-approvals.js")>();
+vi.mock("../../upstream/src/infra/exec-approvals.js", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../../upstream/src/infra/exec-approvals.js")>();
   const approvals: ExecApprovalsResolved = {
     path: "/tmp/exec-approvals.json",
     socketPath: "/tmp/exec-approvals.sock",

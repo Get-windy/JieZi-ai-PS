@@ -1,10 +1,10 @@
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import {
   approveChannelPairingCode,
   type PairingChannel,
-} from "../../pairing/pairing-store.js";
-import { notifyPairingApproved } from "../../channels/plugins/pairing.js";
-import { loadConfig, writeConfigFile, readConfigFileSnapshot } from "../../config/config.js";
+} from "../../../upstream/src/pairing/pairing-store.js";
+import { notifyPairingApproved } from "../../../upstream/src/channels/plugins/pairing.js";
+import { loadConfig, writeConfigFile, readConfigFileSnapshot } from "../../../upstream/src/config/config.js";
 import { DEFAULT_ACCOUNT_ID } from "../../routing/session-key.js";
 
 type ApprovePairingParams = {

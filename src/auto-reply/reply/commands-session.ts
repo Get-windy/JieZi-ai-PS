@@ -12,21 +12,21 @@ import {
   setTelegramThreadBindingIdleTimeoutBySessionKey,
   setTelegramThreadBindingMaxAgeBySessionKey,
 } from "../../../upstream/extensions/telegram/src/thread-bindings.js";
-import { resolveFastModeState } from "../../agents/fast-mode.js";
-import { parseDurationMs } from "../../cli/parse-duration.js";
+import { resolveFastModeState } from "../../../upstream/src/agents/fast-mode.js";
+import { parseDurationMs } from "../../../upstream/src/cli/parse-duration.js";
 import { isRestartEnabled } from "../../config/commands.js";
-import { logVerbose } from "../../globals.js";
-import { getSessionBindingService } from "../../infra/outbound/session-binding-service.js";
-import type { SessionBindingRecord } from "../../infra/outbound/session-binding-service.js";
+import { logVerbose } from "../../../upstream/src/globals.js";
+import { getSessionBindingService } from "../../../upstream/src/infra/outbound/session-binding-service.js";
+import type { SessionBindingRecord } from "../../../upstream/src/infra/outbound/session-binding-service.js";
 import { scheduleGatewaySigusr1Restart, triggerOpenClawRestart } from "../../infra/restart.js";
-import { loadCostUsageSummary, loadSessionCostSummary } from "../../infra/session-cost-usage.js";
-import { formatTokenCount, formatUsd } from "../../utils/usage-format.js";
-import { parseActivationCommand } from "../group-activation.js";
-import { parseSendPolicyCommand } from "../send-policy.js";
+import { loadCostUsageSummary, loadSessionCostSummary } from "../../../upstream/src/infra/session-cost-usage.js";
+import { formatTokenCount, formatUsd } from "../../../upstream/src/utils/usage-format.js";
+import { parseActivationCommand } from "../../../upstream/src/auto-reply/group-activation.js";
+import { parseSendPolicyCommand } from "../../../upstream/src/auto-reply/send-policy.js";
 import { normalizeFastMode, normalizeUsageDisplay, resolveResponseUsageMode } from "../thinking.js";
-import { isDiscordSurface, isTelegramSurface, resolveChannelAccountId } from "./channel-context.js";
-import { handleAbortTrigger, handleStopCommand } from "./commands-session-abort.js";
-import { persistSessionEntry } from "./commands-session-store.js";
+import { isDiscordSurface, isTelegramSurface, resolveChannelAccountId } from "../../../upstream/src/auto-reply/reply/channel-context.js";
+import { handleAbortTrigger, handleStopCommand } from "../../../upstream/src/auto-reply/reply/commands-session-abort.js";
+import { persistSessionEntry } from "../../../upstream/src/auto-reply/reply/commands-session-store.js";
 import type { CommandHandler } from "./commands-types.js";
 import { resolveTelegramConversationId } from "./telegram-context.js";
 

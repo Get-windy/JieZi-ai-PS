@@ -1,11 +1,11 @@
 import type { Command } from "commander";
 import { onboardCommand } from "../../commands/onboard.js";
-import { setupCommand } from "../../commands/setup.js";
-import { defaultRuntime } from "../../runtime.js";
-import { formatDocsLink } from "../../terminal/links.js";
-import { theme } from "../../terminal/theme.js";
-import { runCommandWithRuntime } from "../cli-utils.js";
-import { hasExplicitOptions } from "../command-options.js";
+import { setupCommand } from "../../../upstream/src/commands/setup.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
+import { formatDocsLink } from "../../../upstream/src/terminal/links.js";
+import { theme } from "../../../upstream/src/terminal/theme.js";
+import { runCommandWithRuntime } from "../../../upstream/src/cli/cli-utils.js";
+import { hasExplicitOptions } from "../../../upstream/src/cli/command-options.js";
 
 export function registerSetupCommand(program: Command) {
   program

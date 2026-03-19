@@ -4,8 +4,8 @@ import {
   parseConfigPath,
   setConfigValueAtPath,
   unsetConfigValueAtPath,
-} from "./config-paths.js";
-import { readConfigFileSnapshot, validateConfigObject } from "./config.js";
+} from "../../upstream/src/config/config-paths.js";
+import { readConfigFileSnapshot, validateConfigObject } from "../../upstream/src/config/config.js";
 import { buildWebSearchProviderConfig, withTempHome, writeOpenClawConfig } from "./test-helpers.js";
 import { OpenClawSchema } from "./zod-schema.js";
 

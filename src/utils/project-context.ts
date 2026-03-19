@@ -47,6 +47,18 @@ export interface ProjectConfig {
   docsDir?: string;
   /** 需求目录路径 (可选，默认在 workspace/requirements) */
   requirementsDir?: string;
+  /**
+   * 项目级工具策略（可选）。
+   * 在 Agent 级策略之后生效，可用于按项目类型限制工具访问。
+   * 例如纯写作项目可禁用 exec/write/edit 等代码构建工具。
+   *
+   * 语义与 .openclaw.json 中的 tools.allow/deny 一致：
+   *   deny 优先于 allow；deny 命中即拒绝，无论 allow 怎么配。
+   */
+  tools?: {
+    allow?: string[];
+    deny?: string[];
+  };
 }
 
 /**

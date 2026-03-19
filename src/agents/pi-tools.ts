@@ -1,31 +1,31 @@
 import { codingTools, createReadTool, readTool } from "@mariozechner/pi-coding-agent";
-import type { OpenClawConfig } from "../config/config.js";
-import type { ToolLoopDetectionConfig } from "../config/types.tools.js";
-import { resolveMergedSafeBinProfileFixtures } from "../infra/exec-safe-bin-runtime-policy.js";
-import { logWarn } from "../logger.js";
-import { getPluginToolMeta } from "../plugins/tools.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import type { ToolLoopDetectionConfig } from "../../upstream/src/config/types.tools.js";
+import { resolveMergedSafeBinProfileFixtures } from "../../upstream/src/infra/exec-safe-bin-runtime-policy.js";
+import { logWarn } from "../../upstream/src/logger.js";
+import { getPluginToolMeta } from "../../upstream/src/plugins/tools.js";
 import { isSubagentSessionKey } from "../routing/session-key.js";
-import { resolveGatewayMessageChannel } from "../utils/message-channel.js";
+import { resolveGatewayMessageChannel } from "../../upstream/src/utils/message-channel.js";
 import { resolveAgentConfig } from "./agent-scope.js";
-import { createApplyPatchTool } from "./apply-patch.js";
+import { createApplyPatchTool } from "../../upstream/src/agents/apply-patch.js";
 import {
   createExecTool,
   createProcessTool,
   type ExecToolDefaults,
   type ProcessToolDefaults,
-} from "./bash-tools.js";
-import { listChannelAgentTools } from "./channel-tools.js";
-import { resolveImageSanitizationLimits } from "./image-sanitization.js";
-import type { ModelAuthMode } from "./model-auth.js";
+} from "../../upstream/src/agents/bash-tools.js";
+import { listChannelAgentTools } from "../../upstream/src/agents/channel-tools.js";
+import { resolveImageSanitizationLimits } from "../../upstream/src/agents/image-sanitization.js";
+import type { ModelAuthMode } from "../../upstream/src/agents/model-auth.js";
 import { createOpenClawTools } from "./openclaw-tools.js";
-import { wrapToolWithAbortSignal } from "./pi-tools.abort.js";
-import { wrapToolWithBeforeToolCallHook } from "./pi-tools.before-tool-call.js";
+import { wrapToolWithAbortSignal } from "../../upstream/src/agents/pi-tools.abort.js";
+import { wrapToolWithBeforeToolCallHook } from "../../upstream/src/agents/pi-tools.before-tool-call.js";
 import {
   isToolAllowedByPolicies,
   resolveEffectiveToolPolicy,
   resolveGroupToolPolicy,
   resolveSubagentToolPolicyForSession,
-} from "./pi-tools.policy.js";
+} from "../../upstream/src/agents/pi-tools.policy.js";
 import {
   assertRequiredParams,
   createHostWorkspaceEditTool,
@@ -41,22 +41,23 @@ import {
   wrapToolWorkspaceRootGuardWithOptions,
   wrapToolParamNormalization,
 } from "./pi-tools.read.js";
-import { cleanToolSchemaForGemini, normalizeToolParameters } from "./pi-tools.schema.js";
-import type { AnyAgentTool } from "./pi-tools.types.js";
-import type { SandboxContext } from "./sandbox.js";
-import { isXaiProvider } from "./schema/clean-for-xai.js";
-import { createToolFsPolicy, resolveToolFsConfig } from "./tool-fs-policy.js";
+import { cleanToolSchemaForGemini, normalizeToolParameters } from "../../upstream/src/agents/pi-tools.schema.js";
+import type { AnyAgentTool } from "../../upstream/src/agents/pi-tools.types.js";
+import type { SandboxContext } from "../../upstream/src/agents/sandbox.js";
+import { isXaiProvider } from "../../upstream/src/agents/schema/clean-for-xai.js";
+import { createToolFsPolicy, resolveToolFsConfig } from "../../upstream/src/agents/tool-fs-policy.js";
 import {
   applyToolPolicyPipeline,
   buildDefaultToolPolicyPipelineSteps,
-} from "./tool-policy-pipeline.js";
+} from "../../upstream/src/agents/tool-policy-pipeline.js";
 import {
   applyOwnerOnlyToolPolicy,
   collectExplicitAllowlist,
   mergeAlsoAllowPolicy,
   resolveToolProfilePolicy,
-} from "./tool-policy.js";
-import { resolveWorkspaceRoot } from "./workspace-dir.js";
+} from "../../upstream/src/agents/tool-policy.js";
+import { resolveWorkspaceRoot } from "../../upstream/src/agents/workspace-dir.js";
+import { readProjectConfig } from "../utils/project-context.js";
 
 function isOpenAIProvider(provider?: string) {
   const normalized = provider?.trim().toLowerCase();
@@ -308,6 +309,22 @@ export function createOpenClawCodingTools(options?: {
     senderUsername: options?.senderUsername,
     senderE164: options?.senderE164,
   });
+  // 项目级工具策略：从项目工作目录的 PROJECT_CONFIG.json 读取 tools.allow/deny，
+  // 在 Agent 级策略之后、sandbox/subagent 之前生效。
+  // 例如写作类项目可禁用 exec/write/edit 等代码构建工具，即使 Agent 本身有权限。
+  const projectPolicy = (() => {
+    const wsRoot = resolveWorkspaceRoot(options?.workspaceDir);
+    if (!wsRoot) return undefined;
+    try {
+      const projCfg = readProjectConfig(wsRoot);
+      if (!projCfg?.tools) return undefined;
+      const { allow, deny } = projCfg.tools;
+      if ((!allow || allow.length === 0) && (!deny || deny.length === 0)) return undefined;
+      return { allow: allow ?? [], deny: deny ?? [] };
+    } catch {
+      return undefined;
+    }
+  })();
   const profilePolicy = resolveToolProfilePolicy(profile);
   const providerProfilePolicy = resolveToolProfilePolicy(providerProfile);
 
@@ -332,6 +349,7 @@ export function createOpenClawCodingTools(options?: {
     agentPolicy,
     agentProviderPolicy,
     groupPolicy,
+    projectPolicy,
     sandbox?.tools,
     subagentPolicy,
   ]);
@@ -517,6 +535,7 @@ export function createOpenClawCodingTools(options?: {
         agentPolicy,
         agentProviderPolicy,
         groupPolicy,
+        projectPolicy,
         sandbox?.tools,
         subagentPolicy,
       ]),
@@ -585,6 +604,7 @@ export function createOpenClawCodingTools(options?: {
         groupPolicy,
         agentId,
       }),
+      { policy: projectPolicy, label: "project tools.deny" },
       { policy: sandbox?.tools, label: "sandbox tools.allow" },
       { policy: subagentPolicy, label: "subagent tools.allow" },
     ],

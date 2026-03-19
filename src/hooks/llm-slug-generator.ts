@@ -10,9 +10,9 @@ import {
   resolveAgentWorkspaceDir,
   resolveAgentDir,
 } from "../agents/agent-scope.js";
-import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { createSubsystemLogger } from "../logging/subsystem.js";
+import { runEmbeddedPiAgent } from "../../upstream/src/agents/pi-embedded.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
 
 const log = createSubsystemLogger("llm-slug-generator");
 

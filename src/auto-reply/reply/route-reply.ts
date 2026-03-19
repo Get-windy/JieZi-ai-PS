@@ -10,13 +10,13 @@
 import { parseSlackBlocksInput } from "../../../extensions/slack/src/blocks-input.js";
 import { isSlackInteractiveRepliesEnabled } from "../../../extensions/slack/src/interactive-replies.js";
 import { resolveSessionAgentId } from "../../agents/agent-scope.js";
-import { resolveEffectiveMessagesConfig } from "../../agents/identity.js";
-import { getChannelPlugin, normalizeChannelId } from "../../channels/plugins/index.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { buildOutboundSessionContext } from "../../infra/outbound/session-context.js";
-import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../../utils/message-channel.js";
+import { resolveEffectiveMessagesConfig } from "../../../upstream/src/agents/identity.js";
+import { getChannelPlugin, normalizeChannelId } from "../../../upstream/src/channels/plugins/index.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { buildOutboundSessionContext } from "../../../upstream/src/infra/outbound/session-context.js";
+import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../../../upstream/src/utils/message-channel.js";
 import type { OriginatingChannelType } from "../templating.js";
-import type { ReplyPayload } from "../types.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import { normalizeReplyPayload } from "./normalize-reply.js";
 import {
   formatBtwTextForExternalDelivery,

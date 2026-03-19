@@ -17,7 +17,7 @@ vi.mock("../../config/config.js", async (importOriginal) => {
   };
 });
 
-import { createSessionsSendTool } from "./sessions-send-tool.js";
+import { createSessionsSendTool } from "../../../upstream/src/agents/tools/sessions-send-tool.js";
 
 describe("sessions_send gating", () => {
   beforeEach(() => {

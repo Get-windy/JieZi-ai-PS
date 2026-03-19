@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isTransientHttpError } from "./pi-embedded-helpers.js";
+import { isTransientHttpError } from "../../upstream/src/agents/pi-embedded-helpers.js";
 
 describe("isTransientHttpError", () => {
   it("returns true for retryable 5xx status codes", () => {

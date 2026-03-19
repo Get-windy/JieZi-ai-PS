@@ -1,6 +1,6 @@
-import type { ConnectParams } from "../../protocol/index.js";
-import type { GatewayRole } from "../../role-policy.js";
-import { roleCanSkipDeviceIdentity } from "../../role-policy.js";
+import type { ConnectParams } from "../../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRole } from "../../../../upstream/src/gateway/role-policy.js";
+import { roleCanSkipDeviceIdentity } from "../../../../upstream/src/gateway/role-policy.js";
 
 export type ControlUiAuthPolicy = {
   allowInsecureAuthConfigured: boolean;

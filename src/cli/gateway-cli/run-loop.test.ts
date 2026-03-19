@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { GatewayBonjourBeacon } from "../../infra/bonjour-discovery.js";
-import { pickBeaconHost, pickGatewayPort } from "./discover.js";
+import type { GatewayBonjourBeacon } from "../../../upstream/src/infra/bonjour-discovery.js";
+import { pickBeaconHost, pickGatewayPort } from "../../../upstream/src/cli/gateway-cli/discover.js";
 
 const acquireGatewayLock = vi.fn(async (_opts?: { port?: number }) => ({
   release: vi.fn(async () => {}),

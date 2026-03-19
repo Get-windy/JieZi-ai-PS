@@ -4,10 +4,10 @@
  * 提供组织层级分析、统计、成员管理等功能
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { organizationHierarchy } from "../../organization/organization-hierarchy.js";
 import { organizationSystem } from "../../organization/organization-system.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 export const organizationHierarchyHandlers: GatewayRequestHandlers = {
   /**

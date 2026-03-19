@@ -2,10 +2,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import type { ChannelPlugin } from "../channels/plugins/types.js";
-import { createChannelTestPluginBase } from "../test-utils/channel-plugins.js";
-import { setRegistry } from "./server.agent.gateway-server-agent.mocks.js";
-import { createRegistry } from "./server.e2e-registry-helpers.js";
+import type { ChannelPlugin } from "../../upstream/src/channels/plugins/types.js";
+import { createChannelTestPluginBase } from "../../upstream/src/test-utils/channel-plugins.js";
+import { setRegistry } from "../../upstream/src/gateway/server.agent.gateway-server-agent.mocks.js";
+import { createRegistry } from "../../upstream/src/gateway/server.e2e-registry-helpers.js";
 import {
   agentCommand,
   connectOk,
@@ -14,7 +14,7 @@ import {
   startServerWithClient,
   testState,
   writeSessionStore,
-} from "./test-helpers.js";
+} from "../../upstream/src/gateway/test-helpers.js";
 
 installGatewayTestHooks({ scope: "suite" });
 

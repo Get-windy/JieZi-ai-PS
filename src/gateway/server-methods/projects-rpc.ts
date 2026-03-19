@@ -9,8 +9,8 @@
  */
 
 import { groupManager } from "../../sessions/group-manager.js";
-import { errorShape, ErrorCodes } from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import { errorShape, ErrorCodes } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 export const projectsHandlers: GatewayRequestHandlers = {
   /**

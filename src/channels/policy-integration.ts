@@ -4,7 +4,7 @@
  * 将通道策略引擎集成到 OpenClaw 配置系统中
  */
 
-import type { OpenClawConfig } from "../config/config.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import type { AgentChannelPolicies, ChannelPolicy } from "../config/types.channel-policies.js";
 import { ChannelPolicyEngine, createPolicyEngine } from "../channels/policy-engine.js";
 

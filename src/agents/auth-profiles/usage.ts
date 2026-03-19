@@ -1,7 +1,7 @@
-import type { OpenClawConfig } from "../../config/config.js";
-import { normalizeProviderId } from "../model-selection.js";
-import { saveAuthProfileStore, updateAuthProfileStoreWithLock } from "./store.js";
-import type { AuthProfileFailureReason, AuthProfileStore, ProfileUsageStats } from "./types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { normalizeProviderId } from "../../../upstream/src/agents/model-selection.js";
+import { saveAuthProfileStore, updateAuthProfileStoreWithLock } from "../../../upstream/src/agents/auth-profiles/store.js";
+import type { AuthProfileFailureReason, AuthProfileStore, ProfileUsageStats } from "../../../upstream/src/agents/auth-profiles/types.js";
 
 const FAILURE_REASON_PRIORITY: AuthProfileFailureReason[] = [
   "auth",

@@ -1,9 +1,9 @@
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type } from "@sinclair/typebox";
 import { formatDurationCompact } from "../infra/format-time/format-duration.ts";
-import { getDiagnosticSessionState } from "../logging/diagnostic-session-state.js";
-import { killProcessTree } from "../process/kill-tree.js";
-import { getProcessSupervisor } from "../process/supervisor/index.js";
+import { getDiagnosticSessionState } from "../../upstream/src/logging/diagnostic-session-state.js";
+import { killProcessTree } from "../../upstream/src/process/kill-tree.js";
+import { getProcessSupervisor } from "../../upstream/src/process/supervisor/index.js";
 import {
   type ProcessSession,
   deleteSession,
@@ -14,10 +14,10 @@ import {
   listRunningSessions,
   markExited,
   setJobTtlMs,
-} from "./bash-process-registry.js";
-import { deriveSessionName, pad, sliceLogLines, truncateMiddle } from "./bash-tools.shared.js";
-import { recordCommandPoll, resetCommandPollCount } from "./command-poll-backoff.js";
-import { encodeKeySequence, encodePaste } from "./pty-keys.js";
+} from "../../upstream/src/agents/bash-process-registry.js";
+import { deriveSessionName, pad, sliceLogLines, truncateMiddle } from "../../upstream/src/agents/bash-tools.shared.js";
+import { recordCommandPoll, resetCommandPollCount } from "../../upstream/src/agents/command-poll-backoff.js";
+import { encodeKeySequence, encodePaste } from "../../upstream/src/agents/pty-keys.js";
 
 export type ProcessToolDefaults = {
   cleanupMs?: number;

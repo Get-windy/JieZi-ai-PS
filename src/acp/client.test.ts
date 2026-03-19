@@ -2,15 +2,15 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createTrackedTempDirs } from "../test-utils/tracked-temp-dirs.js";
+import { createTrackedTempDirs } from "../../upstream/src/test-utils/tracked-temp-dirs.js";
 import {
   buildAcpClientStripKeys,
   resolveAcpClientSpawnEnv,
   resolveAcpClientSpawnInvocation,
   resolvePermissionRequest,
   shouldStripProviderAuthEnvVarsForAcpServer,
-} from "./client.js";
-import { extractAttachmentsFromPrompt, extractTextFromPrompt } from "./event-mapper.js";
+} from "../../upstream/src/acp/client.js";
+import { extractAttachmentsFromPrompt, extractTextFromPrompt } from "../../upstream/src/acp/event-mapper.js";
 
 const envVar = (...parts: string[]) => parts.join("_");
 

@@ -21,7 +21,7 @@ vi.mock("../config/config.js", async (importOriginal) => {
   };
 });
 
-import { emitAgentEvent } from "../infra/agent-events.js";
+import { emitAgentEvent } from "../../upstream/src/infra/agent-events.js";
 import "./test-helpers/fast-core-tools.js";
 import { createOpenClawTools } from "./openclaw-tools.js";
 import { resetSubagentRegistryForTests } from "./subagent-registry.js";

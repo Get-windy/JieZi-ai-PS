@@ -1,7 +1,7 @@
 // 本地覆盖：在上游 thread-bindings.messages.ts 基础上补充 formatThreadBindingTtlLabel
 // 上游尚未添加此函数，本地 provider.ts 需要用到
 
-import { prefixSystemMessage } from "../../infra/system-message.js";
+import { prefixSystemMessage } from "../../../upstream/src/infra/system-message.js";
 
 function normalizeThreadBindingDurationMs(raw: unknown): number {
   if (typeof raw !== "number" || !Number.isFinite(raw)) {

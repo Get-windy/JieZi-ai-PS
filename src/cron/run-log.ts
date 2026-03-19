@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { CronDeliveryStatus, CronRunStatus, CronRunTelemetry } from "./types.js";
+import type { CronDeliveryStatus, CronRunStatus, CronRunTelemetry } from "../../upstream/src/cron/types.js";
 
 export type CronRunLogEntry = {
   ts: number;

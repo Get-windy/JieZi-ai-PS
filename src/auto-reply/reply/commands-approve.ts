@@ -2,10 +2,10 @@ import {
   isTelegramExecApprovalApprover,
   isTelegramExecApprovalClientEnabled,
 } from "../../../upstream/extensions/telegram/src/exec-approvals.js";
-import { callGateway } from "../../gateway/call.js";
-import { logVerbose } from "../../globals.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../utils/message-channel.js";
-import { requireGatewayClientScopeForInternalChannel } from "./command-gates.js";
+import { callGateway } from "../../../upstream/src/gateway/call.js";
+import { logVerbose } from "../../../upstream/src/globals.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../../upstream/src/utils/message-channel.js";
+import { requireGatewayClientScopeForInternalChannel } from "../../../upstream/src/auto-reply/reply/command-gates.js";
 import type { CommandHandler } from "./commands-types.js";
 
 const COMMAND_REGEX = /^\/approve(?:\s|$)/i;

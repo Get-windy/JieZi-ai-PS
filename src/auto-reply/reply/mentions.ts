@@ -1,8 +1,8 @@
 import { resolveAgentConfig } from "../../agents/agent-scope.js";
-import { getChannelDock } from "../../channels/dock.js";
-import { normalizeChannelId } from "../../channels/plugins/index.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { escapeRegExp } from "../../utils.js";
+import { getChannelDock } from "../../../upstream/src/channels/dock.js";
+import { normalizeChannelId } from "../../../upstream/src/channels/plugins/index.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { escapeRegExp } from "../../../upstream/src/utils.js";
 import type { MsgContext } from "../templating.js";
 
 function deriveMentionPatterns(identity?: { name?: string; emoji?: string }) {

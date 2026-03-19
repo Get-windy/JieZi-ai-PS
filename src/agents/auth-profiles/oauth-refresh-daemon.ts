@@ -3,14 +3,14 @@
  * 定期检查OAuth认证状态，在Token即将过期时自动刷新
  */
 
-import { createSubsystemLogger } from "../../logging/subsystem.js";
-import { refreshQwenPortalCredentials } from "../../providers/qwen-portal-oauth.js";
+import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
+import { refreshQwenPortalCredentials } from "../../../upstream/src/providers/qwen-portal-oauth.js";
 import {
   ensureAuthProfileStore,
   saveAuthProfileStore,
   type AuthProfileStore,
-} from "../auth-profiles.js";
-import type { OAuthCredentials } from "./oauth.js";
+} from "../../../upstream/src/agents/auth-profiles.js";
+import type { OAuthCredentials } from "../../../upstream/src/agents/auth-profiles/oauth.js";
 
 const log = createSubsystemLogger("oauth-refresh");
 

@@ -1,11 +1,11 @@
-import { isTruthyEnvValue } from "../infra/env.js";
-import { defaultRuntime } from "../runtime.js";
-import { VERSION } from "../version.js";
-import { getCommandPathWithRootOptions, hasFlag, hasHelpOrVersion } from "./argv.js";
-import { emitCliBanner } from "./banner.js";
+import { isTruthyEnvValue } from "../../upstream/src/infra/env.js";
+import { defaultRuntime } from "../../upstream/src/runtime.js";
+import { VERSION } from "../../upstream/src/version.js";
+import { getCommandPathWithRootOptions, hasFlag, hasHelpOrVersion } from "../../upstream/src/cli/argv.js";
+import { emitCliBanner } from "../../upstream/src/cli/banner.js";
 import { ensurePluginRegistryLoaded } from "./plugin-registry.js";
-import { ensureConfigReady } from "./program/config-guard.js";
-import { findRoutedCommand } from "./program/routes.js";
+import { ensureConfigReady } from "../../upstream/src/cli/program/config-guard.js";
+import { findRoutedCommand } from "../../upstream/src/cli/program/routes.js";
 
 async function prepareRoutedCommand(params: {
   argv: string[];

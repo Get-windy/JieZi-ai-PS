@@ -5,8 +5,8 @@
  */
 
 import { join } from "node:path";
-import { STATE_DIR } from "../config/paths.js";
-import { createAsyncLock, readJsonFile, writeJsonAtomic } from "../infra/json-files.js";
+import { STATE_DIR } from "../../upstream/src/config/paths.js";
+import { createAsyncLock, readJsonFile, writeJsonAtomic } from "../../upstream/src/infra/json-files.js";
 import type {
   Organization,
   CollaborationRelation,

@@ -1,25 +1,25 @@
 import { resolveTelegramAccount } from "../../../extensions/telegram/src/accounts.js";
 import { deleteTelegramUpdateOffset } from "../../../extensions/telegram/src/update-offset-store.js";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../../agents/agent-scope.js";
-import { listChannelPluginCatalogEntries } from "../../channels/plugins/catalog.js";
-import { parseOptionalDelimitedEntries } from "../../channels/plugins/helpers.js";
-import { getChannelPlugin, normalizeChannelId } from "../../channels/plugins/index.js";
-import { moveSingleAccountChannelSectionToDefaultAccount } from "../../channels/plugins/setup-helpers.js";
-import type { ChannelId, ChannelSetupInput } from "../../channels/plugins/types.js";
-import { writeConfigFile, type OpenClawConfig } from "../../config/config.js";
+import { listChannelPluginCatalogEntries } from "../../../upstream/src/channels/plugins/catalog.js";
+import { parseOptionalDelimitedEntries } from "../../../upstream/src/channels/plugins/helpers.js";
+import { getChannelPlugin, normalizeChannelId } from "../../../upstream/src/channels/plugins/index.js";
+import { moveSingleAccountChannelSectionToDefaultAccount } from "../../../upstream/src/channels/plugins/setup-helpers.js";
+import type { ChannelId, ChannelSetupInput } from "../../../upstream/src/channels/plugins/types.js";
+import { writeConfigFile, type OpenClawConfig } from "../../../upstream/src/config/config.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../../routing/session-key.js";
-import { defaultRuntime, type RuntimeEnv } from "../../runtime.js";
-import { createClackPrompter } from "../../wizard/clack-prompter.js";
-import { applyAgentBindings, describeBinding } from "../agents.bindings.js";
-import { buildAgentSummaries } from "../agents.config.js";
-import { setupChannels } from "../onboard-channels.js";
-import type { ChannelChoice } from "../onboard-types.js";
+import { defaultRuntime, type RuntimeEnv } from "../../../upstream/src/runtime.js";
+import { createClackPrompter } from "../../../upstream/src/wizard/clack-prompter.js";
+import { applyAgentBindings, describeBinding } from "../../../upstream/src/commands/agents.bindings.js";
+import { buildAgentSummaries } from "../../../upstream/src/commands/agents.config.js";
+import { setupChannels } from "../../../upstream/src/commands/onboard-channels.js";
+import type { ChannelChoice } from "../../../upstream/src/commands/onboard-types.js";
 import {
   ensureOnboardingPluginInstalled,
   reloadOnboardingPluginRegistry,
 } from "../onboarding/plugin-install.js";
 import { applyAccountName, applyChannelAccountConfig } from "./add-mutators.js";
-import { channelLabel, requireValidConfig, shouldUseWizard } from "./shared.js";
+import { channelLabel, requireValidConfig, shouldUseWizard } from "../../../upstream/src/commands/channels/shared.js";
 
 export type ChannelsAddOptions = {
   channel?: string;

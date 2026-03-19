@@ -1,6 +1,6 @@
 import { isSubagentSessionKey } from "../../../routing/session-key.js";
-import { resolveHookConfig } from "../../config.js";
-import { isAgentBootstrapEvent, type HookHandler } from "../../hooks.js";
+import { resolveHookConfig } from "../../../../upstream/src/hooks/config.js";
+import { isAgentBootstrapEvent, type HookHandler } from "../../../../upstream/src/hooks/hooks.js";
 import { applySoulEvilOverride, resolveSoulEvilConfigFromHook } from "../../soul-evil.js";
 
 const HOOK_KEY = "soul-evil";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveAgentTimeoutMs } from "./timeout.js";
+import { resolveAgentTimeoutMs } from "../../upstream/src/agents/timeout.js";
 
 describe("resolveAgentTimeoutMs", () => {
   it("uses a timer-safe sentinel for no-timeout overrides", () => {

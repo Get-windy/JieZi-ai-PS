@@ -1,12 +1,12 @@
-import { withProgress } from "../cli/progress.js";
-import { readBestEffortConfig, resolveGatewayPort } from "../config/config.js";
-import { probeGateway } from "../gateway/probe.js";
-import { discoverGatewayBeacons } from "../infra/bonjour-discovery.js";
-import { resolveSshConfig } from "../infra/ssh-config.js";
-import { parseSshTarget, startSshPortForward } from "../infra/ssh-tunnel.js";
-import { resolveWideAreaDiscoveryDomain } from "../infra/widearea-dns.js";
-import type { RuntimeEnv } from "../runtime.js";
-import { colorize, isRich, theme } from "../terminal/theme.js";
+import { withProgress } from "../../upstream/src/cli/progress.js";
+import { readBestEffortConfig, resolveGatewayPort } from "../../upstream/src/config/config.js";
+import { probeGateway } from "../../upstream/src/gateway/probe.js";
+import { discoverGatewayBeacons } from "../../upstream/src/infra/bonjour-discovery.js";
+import { resolveSshConfig } from "../../upstream/src/infra/ssh-config.js";
+import { parseSshTarget, startSshPortForward } from "../../upstream/src/infra/ssh-tunnel.js";
+import { resolveWideAreaDiscoveryDomain } from "../../upstream/src/infra/widearea-dns.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
+import { colorize, isRich, theme } from "../../upstream/src/terminal/theme.js";
 import {
   buildNetworkHints,
   extractConfigSummary,
@@ -21,7 +21,7 @@ import {
   resolveProbeBudgetMs,
   resolveTargets,
   sanitizeSshTarget,
-} from "./gateway-status/helpers.js";
+} from "../../upstream/src/commands/gateway-status/helpers.js";
 
 export async function gatewayStatusCommand(
   opts: {

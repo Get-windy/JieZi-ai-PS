@@ -4,22 +4,22 @@ import {
   findModelInCatalog,
   loadModelCatalog,
   modelSupportsVision,
-} from "../agents/model-catalog.js";
-import { resolveDefaultModelForAgent } from "../agents/model-selection.js";
+} from "../../upstream/src/agents/model-catalog.js";
+import { resolveDefaultModelForAgent } from "../../upstream/src/agents/model-selection.js";
 import { resolveChunkMode } from "../auto-reply/chunk.js";
-import { clearHistoryEntriesIfEnabled } from "../auto-reply/reply/history.js";
-import { dispatchReplyWithBufferedBlockDispatcher } from "../auto-reply/reply/provider-dispatcher.js";
-import type { ReplyPayload } from "../auto-reply/types.js";
-import { removeAckReactionAfterReply } from "../channels/ack-reactions.js";
-import { logAckFailure, logTypingFailure } from "../channels/logging.js";
-import { createReplyPrefixOptions } from "../channels/reply-prefix.js";
+import { clearHistoryEntriesIfEnabled } from "../../upstream/src/auto-reply/reply/history.js";
+import { dispatchReplyWithBufferedBlockDispatcher } from "../../upstream/src/auto-reply/reply/provider-dispatcher.js";
+import type { ReplyPayload } from "../../upstream/src/auto-reply/types.js";
+import { removeAckReactionAfterReply } from "../../upstream/src/channels/ack-reactions.js";
+import { logAckFailure, logTypingFailure } from "../../upstream/src/channels/logging.js";
+import { createReplyPrefixOptions } from "../../upstream/src/channels/reply-prefix.js";
 import { createTypingCallbacks } from "../channels/typing.js";
-import { resolveMarkdownTableMode } from "../config/markdown-tables.js";
-import { loadSessionStore, resolveStorePath } from "../config/sessions.js";
-import type { OpenClawConfig, ReplyToMode, TelegramAccountConfig } from "../config/types.js";
-import { danger, logVerbose } from "../globals.js";
+import { resolveMarkdownTableMode } from "../../upstream/src/config/markdown-tables.js";
+import { loadSessionStore, resolveStorePath } from "../../upstream/src/config/sessions.js";
+import type { OpenClawConfig, ReplyToMode, TelegramAccountConfig } from "../../upstream/src/config/types.js";
+import { danger, logVerbose } from "../../upstream/src/globals.js";
 import { getAgentScopedMediaLocalRoots } from "../media/local-roots.js";
-import type { RuntimeEnv } from "../runtime.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
 import type { TelegramMessageContext } from "./bot-message-context.js";
 import type { TelegramBotOptions } from "./bot.js";
 import { deliverReplies } from "./bot/delivery.js";

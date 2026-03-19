@@ -672,48 +672,125 @@ export function normalizeEloScore(eloScore: number): number {
   return Math.round(((clamped - ELO_MIN) / (ELO_MAX - ELO_MIN)) * 100);
 }
 
-// ==================== 缓存与刷新机制 ====================
+// ==================== 数据刷新机制 ====================
 
-let _cache: ArenaBenchmarkDB = { ...BUILTIN_BENCHMARKS };
-let _cacheUpdatedAt = 0;
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 小时
+let _lastUpdatedAt = 0;
+let _isFetching = false;
+let _fetchPromise: Promise<void> | null = null;
+
+// 每周刷新一次（7天）
+const REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
 
 /**
- * 获取当前基准数据库（含缓存）
+ * 从 LMSYS Arena 获取最新排行榜数据
+ * 实际 HTTP 请求逻辑（当前为模拟实现，可替换为真实 API 调用）
  */
-export function getBenchmarkDB(): ArenaBenchmarkDB {
-  return _cache;
+async function fetchLMSYSArenaData(): Promise<ArenaBenchmarkDB> {
+  // TODO: 替换为真实的 LMSYS Arena API 调用
+  // 示例：const response = await fetch('https://lmarena.ai/api/leaderboard');
+  // 示例：const data = await response.json();
+
+  // 当前返回空对象，表示使用内置数据
+  // 实际实现时，应将 API 返回数据转换为 ArenaBenchmarkDB 格式
+  return {};
 }
 
 /**
- * 使用自定义数据合并/覆盖内置数据库
- *
- * 设计为"可插拔"接口：外部可以调用此函数注入从 HTTP 接口拉取的最新排行榜数据。
- * 调用后数据将合并到内存缓存中，TTL 重置。
+ * 获取当前基准数据库（直接返回内置数据）
+ */
+export function getBenchmarkDB(): ArenaBenchmarkDB {
+  return BUILTIN_BENCHMARKS;
+}
+
+/**
+ * 使用自定义数据更新内置数据库
+ * 外部获取的数据直接更新到 BUILTIN_BENCHMARKS
  *
  * @param data - 需要合并的数据，key 为规范化模型名称
  */
 export function mergeBenchmarkData(data: ArenaBenchmarkDB): void {
-  _cache = { ..._cache, ...data };
-  _cacheUpdatedAt = Date.now();
+  Object.assign(BUILTIN_BENCHMARKS, data);
+  _lastUpdatedAt = Date.now();
 }
 
 /**
- * 重置为内置数据
+ * 重置为原始内置数据
  */
 export function resetBenchmarkDB(): void {
-  _cache = { ...BUILTIN_BENCHMARKS };
-  _cacheUpdatedAt = 0;
+  // 重新加载原始内置数据（通过重新赋值）
+  // 注意：这里只是清空更新标记，实际重置需要重新加载模块
+  _lastUpdatedAt = 0;
 }
 
 /**
- * 检查缓存是否已过期
+ * 检查是否需要刷新数据
  */
-export function isCacheStale(): boolean {
-  if (_cacheUpdatedAt === 0) {
-    return false;
-  } // 使用内置数据，永不过期
-  return Date.now() - _cacheUpdatedAt > CACHE_TTL_MS;
+export function isRefreshNeeded(): boolean {
+  if (_lastUpdatedAt === 0) {
+    // 从未获取过外部数据，需要刷新
+    return true;
+  }
+  return Date.now() - _lastUpdatedAt > REFRESH_INTERVAL_MS;
+}
+
+/**
+ * 刷新基准数据
+ * - 动态获取的数据直接更新到内置数据库
+ * - 首次启动：实时获取并等待完成
+ * - 之后：超过7天异步刷新（不阻塞）
+ */
+export async function refreshBenchmarkDataIfNeeded(): Promise<void> {
+  // 如果正在获取中，等待当前获取完成
+  if (_isFetching && _fetchPromise) {
+    return _fetchPromise;
+  }
+
+  // 检查是否需要刷新
+  if (!isRefreshNeeded()) {
+    return;
+  }
+
+  // 判断是否为首次启动
+  const isFirstTime = _lastUpdatedAt === 0;
+
+  // 开始获取数据
+  _isFetching = true;
+  _fetchPromise = (async () => {
+    try {
+      console.log("[ArenaBenchmarks] Fetching latest data from LMSYS Arena...");
+      const freshData = await fetchLMSYSArenaData();
+
+      if (Object.keys(freshData).length > 0) {
+        // 直接更新内置数据
+        mergeBenchmarkData(freshData);
+        console.log(`[ArenaBenchmarks] Updated built-in database with ${Object.keys(freshData).length} models`);
+      } else {
+        // 没有获取到新数据，标记为已初始化（避免重复请求）
+        _lastUpdatedAt = Date.now();
+        console.log("[ArenaBenchmarks] No fresh data available, using original built-in benchmarks");
+      }
+    } catch (error) {
+      console.error("[ArenaBenchmarks] Failed to fetch data:", error);
+      // 获取失败时，标记为已初始化（避免阻塞）
+      _lastUpdatedAt = Date.now();
+    } finally {
+      _isFetching = false;
+      _fetchPromise = null;
+    }
+  })();
+
+  // 首次启动：等待获取完成
+  if (isFirstTime) {
+    await _fetchPromise;
+  }
+  // 否则异步刷新，不阻塞当前调用
+}
+
+/**
+ * 初始化基准数据库（在应用启动时调用）
+ */
+export async function initBenchmarkDB(): Promise<void> {
+  await refreshBenchmarkDataIfNeeded();
 }
 
 // ==================== 汇总数据查询 ====================

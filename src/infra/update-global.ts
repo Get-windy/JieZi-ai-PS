@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { pathExists } from "../utils.js";
-import { applyPathPrepend } from "./path-prepend.js";
+import { pathExists } from "../../upstream/src/utils.js";
+import { applyPathPrepend } from "../../upstream/src/infra/path-prepend.js";
 
 export type GlobalInstallManager = "npm" | "pnpm" | "bun";
 

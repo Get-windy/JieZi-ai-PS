@@ -1,18 +1,18 @@
-import { formatCliCommand } from "../cli/command-format.js";
-import { readConfigFileSnapshot } from "../config/config.js";
-import { assertSupportedRuntime } from "../infra/runtime-guard.js";
-import type { RuntimeEnv } from "../runtime.js";
-import { defaultRuntime } from "../runtime.js";
-import { resolveUserPath } from "../utils.js";
-import { isDeprecatedAuthChoice, normalizeLegacyOnboardAuthChoice } from "./auth-choice-legacy.js";
-import { DEFAULT_WORKSPACE, handleReset } from "./onboard-helpers.js";
+import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
+import { readConfigFileSnapshot } from "../../upstream/src/config/config.js";
+import { assertSupportedRuntime } from "../../upstream/src/infra/runtime-guard.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
+import { defaultRuntime } from "../../upstream/src/runtime.js";
+import { resolveUserPath } from "../../upstream/src/utils.js";
+import { isDeprecatedAuthChoice, normalizeLegacyOnboardAuthChoice } from "../../upstream/src/commands/auth-choice-legacy.js";
+import { DEFAULT_WORKSPACE, handleReset } from "../../upstream/src/commands/onboard-helpers.js";
 import { runInteractiveOnboarding } from "./onboard-interactive.js";
 import { runNonInteractiveOnboarding } from "./onboard-non-interactive.js";
-import type { OnboardOptions, ResetScope } from "./onboard-types.js";
+import type { OnboardOptions, ResetScope } from "../../upstream/src/commands/onboard-types.js";
 
 const VALID_RESET_SCOPES = new Set<ResetScope>(["config", "config+creds+sessions", "full"]);
 
-export async function onboardCommand(opts: OnboardOptions, runtime: RuntimeEnv = defaultRuntime) {
+export async function setupWizardCommand(opts: OnboardOptions, runtime: RuntimeEnv = defaultRuntime) {
   assertSupportedRuntime(runtime);
   const originalAuthChoice = opts.authChoice;
   const normalizedAuthChoice = normalizeLegacyOnboardAuthChoice(originalAuthChoice);
@@ -93,4 +93,6 @@ export async function onboardCommand(opts: OnboardOptions, runtime: RuntimeEnv =
   await runInteractiveOnboarding(normalizedOpts, runtime);
 }
 
-export type { OnboardOptions } from "./onboard-types.js";
+export const onboardCommand = setupWizardCommand;
+
+export type { OnboardOptions } from "../../upstream/src/commands/onboard-types.js";

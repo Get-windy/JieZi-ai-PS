@@ -1,45 +1,45 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { runCliAgent } from "../../agents/cli-runner.js";
-import { getCliSessionId } from "../../agents/cli-session.js";
-import { runWithModelFallback } from "../../agents/model-fallback.js";
-import { isCliProvider } from "../../agents/model-selection.js";
+import { runCliAgent } from "../../../upstream/src/agents/cli-runner.js";
+import { getCliSessionId } from "../../../upstream/src/agents/cli-session.js";
+import { runWithModelFallback } from "../../../upstream/src/agents/model-fallback.js";
+import { isCliProvider } from "../../../upstream/src/agents/model-selection.js";
 import {
   isCompactionFailureError,
   isContextOverflowError,
   isLikelyContextOverflowError,
   isTransientHttpError,
   sanitizeUserFacingText,
-} from "../../agents/pi-embedded-helpers.js";
-import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
+} from "../../../upstream/src/agents/pi-embedded-helpers.js";
+import { runEmbeddedPiAgent } from "../../../upstream/src/agents/pi-embedded.js";
 import {
   resolveGroupSessionKey,
   resolveSessionTranscriptPath,
   type SessionEntry,
   updateSessionStore,
-} from "../../config/sessions.js";
+} from "../../../upstream/src/config/sessions.js";
 import { checkModelAvailability } from "../../gateway/server-methods/models.js";
-import { logVerbose } from "../../globals.js";
-import { emitAgentEvent, registerAgentRunContext } from "../../infra/agent-events.js";
-import { defaultRuntime } from "../../runtime.js";
+import { logVerbose } from "../../../upstream/src/globals.js";
+import { emitAgentEvent, registerAgentRunContext } from "../../../upstream/src/infra/agent-events.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
 import {
   isMarkdownCapableMessageChannel,
   resolveMessageChannel,
-} from "../../utils/message-channel.js";
-import { stripHeartbeatToken } from "../heartbeat.js";
+} from "../../../upstream/src/utils/message-channel.js";
+import { stripHeartbeatToken } from "../../../upstream/src/auto-reply/heartbeat.js";
 import type { TemplateContext } from "../templating.js";
 import type { VerboseLevel } from "../thinking.js";
-import { isSilentReplyPrefixText, isSilentReplyText, SILENT_REPLY_TOKEN } from "../tokens.js";
-import type { GetReplyOptions, ReplyPayload } from "../types.js";
+import { isSilentReplyPrefixText, isSilentReplyText, SILENT_REPLY_TOKEN } from "../../../upstream/src/auto-reply/tokens.js";
+import type { GetReplyOptions, ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import {
   buildEmbeddedRunBaseParams,
   buildEmbeddedRunContexts,
   resolveModelFallbackOptions,
 } from "./agent-runner-utils.js";
-import { type BlockReplyPipeline } from "./block-reply-pipeline.js";
-import type { FollowupRun } from "./queue.js";
-import { createBlockReplyDeliveryHandler } from "./reply-delivery.js";
-import type { TypingSignaler } from "./typing-mode.js";
+import { type BlockReplyPipeline } from "../../../upstream/src/auto-reply/reply/block-reply-pipeline.js";
+import type { FollowupRun } from "../../../upstream/src/auto-reply/reply/queue.js";
+import { createBlockReplyDeliveryHandler } from "../../../upstream/src/auto-reply/reply/reply-delivery.js";
+import type { TypingSignaler } from "../../../upstream/src/auto-reply/reply/typing-mode.js";
 
 export type RuntimeFallbackAttempt = {
   provider: string;
@@ -302,6 +302,11 @@ export async function runAgentTurnWithFallback(params: {
             runId,
             authProfile,
           });
+          // 每个 agent 使用独立的 global lane（而非共享 CommandLane.Main），
+          // 避免所有 agent 排队等待同一个 lane 造成软死锁。
+          const agentRunLane = params.followupRun.run.agentId
+            ? `agent-run:${params.followupRun.run.agentId}`
+            : undefined;
           return runEmbeddedPiAgent({
             ...embeddedContext,
             groupId: resolveGroupSessionKey(params.sessionCtx)?.id,
@@ -310,6 +315,7 @@ export async function runAgentTurnWithFallback(params: {
             groupSpace: params.sessionCtx.GroupSpace?.trim() ?? undefined,
             ...senderContext,
             ...runBaseParams,
+            lane: agentRunLane,
             prompt: params.commandBody,
             extraSystemPrompt: params.followupRun.run.extraSystemPrompt,
             toolResultFormat: (() => {

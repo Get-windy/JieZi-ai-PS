@@ -2,8 +2,8 @@ import { EventEmitter } from "node:events";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
-import { createRestrictedAgentSandboxConfig } from "./test-helpers/sandbox-agent-config-fixtures.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { createRestrictedAgentSandboxConfig } from "../../upstream/src/agents/test-helpers/sandbox-agent-config-fixtures.js";
 
 type SpawnCall = {
   command: string;

@@ -1,17 +1,17 @@
-import { sanitizeUserFacingText } from "../../agents/pi-embedded-helpers.js";
-import { stripHeartbeatToken } from "../heartbeat.js";
+import { sanitizeUserFacingText } from "../../../upstream/src/agents/pi-embedded-helpers.js";
+import { stripHeartbeatToken } from "../../../upstream/src/auto-reply/heartbeat.js";
 import {
   HEARTBEAT_TOKEN,
   isSilentReplyText,
   SILENT_REPLY_TOKEN,
   stripSilentToken,
-} from "../tokens.js";
-import type { ReplyPayload } from "../types.js";
-import { hasLineDirectives, parseLineDirectives } from "./line-directives.js";
+} from "../../../upstream/src/auto-reply/tokens.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
+import { hasLineDirectives, parseLineDirectives } from "../../../upstream/src/auto-reply/reply/line-directives.js";
 import {
   resolveResponsePrefixTemplate,
   type ResponsePrefixContext,
-} from "./response-prefix-template.js";
+} from "../../../upstream/src/auto-reply/reply/response-prefix-template.js";
 import { hasSlackDirectives, parseSlackDirectives } from "./slack-directives.js";
 
 export type NormalizeReplySkipReason = "empty" | "silent" | "heartbeat";

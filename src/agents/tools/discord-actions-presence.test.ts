@@ -4,9 +4,9 @@ import {
   clearGateways,
   registerGateway,
 } from "../../../upstream/extensions/discord/src/monitor/gateway-registry.js";
-import type { DiscordActionConfig } from "../../config/config.js";
-import type { ActionGate } from "./common.js";
-import { handleDiscordPresenceAction } from "./discord-actions-presence.js";
+import type { DiscordActionConfig } from "../../../upstream/src/config/config.js";
+import type { ActionGate } from "../../../upstream/src/agents/tools/common.js";
+import { handleDiscordPresenceAction } from "../../../upstream/src/agents/tools/discord-actions-presence.js";
 
 const mockUpdatePresence = vi.fn();
 

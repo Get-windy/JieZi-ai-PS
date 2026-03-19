@@ -1,42 +1,43 @@
-import { resolveHumanDelayConfig } from "../../agents/identity.js";
-import { hasControlCommand } from "../../auto-reply/command-detection.js";
-import { dispatchInboundMessage } from "../../auto-reply/dispatch.js";
+import { resolveHumanDelayConfig } from "../../../upstream/src/agents/identity.js";
+import { hasControlCommand } from "../../../upstream/src/auto-reply/command-detection.js";
+import { dispatchInboundMessage } from "../../../upstream/src/auto-reply/dispatch.js";
+import { getReplyFromConfig } from "../../auto-reply/reply/get-reply.js";
 import {
   formatInboundEnvelope,
   formatInboundFromLabel,
   resolveEnvelopeFormatOptions,
-} from "../../auto-reply/envelope.js";
+} from "../../../upstream/src/auto-reply/envelope.js";
 import {
   createInboundDebouncer,
   resolveInboundDebounceMs,
-} from "../../auto-reply/inbound-debounce.js";
+} from "../../../upstream/src/auto-reply/inbound-debounce.js";
 import {
   buildPendingHistoryContextFromMap,
   clearHistoryEntriesIfEnabled,
   recordPendingHistoryEntryIfEnabled,
-} from "../../auto-reply/reply/history.js";
-import { finalizeInboundContext } from "../../auto-reply/reply/inbound-context.js";
+} from "../../../upstream/src/auto-reply/reply/history.js";
+import { finalizeInboundContext } from "../../../upstream/src/auto-reply/reply/inbound-context.js";
 import { buildMentionRegexes, matchesMentionPatterns } from "../../auto-reply/reply/mentions.js";
 import { createReplyDispatcherWithTyping } from "../../auto-reply/reply/reply-dispatcher.js";
-import { resolveControlCommandGate } from "../../channels/command-gating.js";
-import { logInboundDrop, logTypingFailure } from "../../channels/logging.js";
-import { resolveMentionGatingWithBypass } from "../../channels/mention-gating.js";
-import { normalizeSignalMessagingTarget } from "../../channels/plugins/normalize/signal.js";
-import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
-import { recordInboundSession } from "../../channels/session.js";
+import { resolveControlCommandGate } from "../../../upstream/src/channels/command-gating.js";
+import { logInboundDrop, logTypingFailure } from "../../../upstream/src/channels/logging.js";
+import { resolveMentionGatingWithBypass } from "../../../upstream/src/channels/mention-gating.js";
+import { normalizeSignalMessagingTarget } from "../../../upstream/src/channels/plugins/normalize/signal.js";
+import { createReplyPrefixOptions } from "../../../upstream/src/channels/reply-prefix.js";
+import { recordInboundSession } from "../../../upstream/src/channels/session.js";
 import { createTypingCallbacks } from "../../channels/typing.js";
-import { resolveChannelGroupRequireMention } from "../../config/group-policy.js";
-import { readSessionUpdatedAt, resolveStorePath } from "../../config/sessions.js";
-import { danger, logVerbose, shouldLogVerbose } from "../../globals.js";
-import { enqueueSystemEvent } from "../../infra/system-events.js";
-import { mediaKindFromMime } from "../../media/constants.js";
-import { buildPairingReply } from "../../pairing/pairing-messages.js";
+import { resolveChannelGroupRequireMention } from "../../../upstream/src/config/group-policy.js";
+import { readSessionUpdatedAt, resolveStorePath } from "../../../upstream/src/config/sessions.js";
+import { danger, logVerbose, shouldLogVerbose } from "../../../upstream/src/globals.js";
+import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
+import { mediaKindFromMime } from "../../../upstream/src/media/constants.js";
+import { buildPairingReply } from "../../../upstream/src/pairing/pairing-messages.js";
 import {
   readChannelAllowFromStore,
   upsertChannelPairingRequest,
-} from "../../pairing/pairing-store.js";
+} from "../../../upstream/src/pairing/pairing-store.js";
 import { resolveAgentRoute } from "../../routing/resolve-route.js";
-import { normalizeE164 } from "../../utils.js";
+import { normalizeE164 } from "../../../upstream/src/utils.js";
 import {
   formatSignalPairingIdLine,
   formatSignalSenderDisplay,
@@ -244,6 +245,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       ctx: ctxPayload,
       cfg: deps.cfg,
       dispatcher,
+      replyResolver: getReplyFromConfig,
       replyOptions: {
         ...replyOptions,
         disableBlockStreaming:

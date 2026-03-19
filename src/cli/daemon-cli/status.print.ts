@@ -1,21 +1,21 @@
-import { resolveControlUiLinks } from "../../commands/onboard-helpers.js";
-import { formatConfigIssueLine } from "../../config/issue-format.js";
+import { resolveControlUiLinks } from "../../../upstream/src/commands/onboard-helpers.js";
+import { formatConfigIssueLine } from "../../../upstream/src/config/issue-format.js";
 import {
   resolveGatewayLaunchAgentLabel,
   resolveGatewaySystemdServiceName,
-} from "../../daemon/constants.js";
-import { renderGatewayServiceCleanupHints } from "../../daemon/inspect.js";
-import { resolveGatewayLogPaths } from "../../daemon/launchd.js";
+} from "../../../upstream/src/daemon/constants.js";
+import { renderGatewayServiceCleanupHints } from "../../../upstream/src/daemon/inspect.js";
+import { resolveGatewayLogPaths } from "../../../upstream/src/daemon/launchd.js";
 import {
   isSystemdUnavailableDetail,
   renderSystemdUnavailableHints,
-} from "../../daemon/systemd-hints.js";
-import { isWSLEnv } from "../../infra/wsl.js";
-import { getResolvedLoggerSettings } from "../../logging.js";
-import { defaultRuntime } from "../../runtime.js";
-import { colorize } from "../../terminal/theme.js";
-import { shortenHomePath } from "../../utils.js";
-import { formatCliCommand } from "../command-format.js";
+} from "../../../upstream/src/daemon/systemd-hints.js";
+import { isWSLEnv } from "../../../upstream/src/infra/wsl.js";
+import { getResolvedLoggerSettings } from "../../../upstream/src/logging.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
+import { colorize } from "../../../upstream/src/terminal/theme.js";
+import { shortenHomePath } from "../../../upstream/src/utils.js";
+import { formatCliCommand } from "../../../upstream/src/cli/command-format.js";
 import {
   createCliStatusTextStyles,
   filterDaemonEnv,
@@ -23,7 +23,7 @@ import {
   resolveRuntimeStatusColor,
   renderRuntimeHints,
   safeDaemonEnv,
-} from "./shared.js";
+} from "../../../upstream/src/cli/daemon-cli/shared.js";
 import {
   type DaemonStatus,
   renderPortDiagnosticsForCli,

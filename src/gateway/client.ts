@@ -4,25 +4,25 @@ import {
   clearDeviceAuthToken,
   loadDeviceAuthToken,
   storeDeviceAuthToken,
-} from "../infra/device-auth-store.js";
-import type { DeviceIdentity } from "../infra/device-identity.js";
+} from "../../upstream/src/infra/device-auth-store.js";
+import type { DeviceIdentity } from "../../upstream/src/infra/device-identity.js";
 import {
   loadOrCreateDeviceIdentity,
   publicKeyRawBase64UrlFromPem,
   signDevicePayload,
-} from "../infra/device-identity.js";
+} from "../../upstream/src/infra/device-identity.js";
 import { clearDevicePairing } from "../infra/device-pairing.js";
-import { normalizeFingerprint } from "../infra/tls/fingerprint.js";
-import { rawDataToString } from "../infra/ws.js";
-import { logDebug, logError } from "../logger.js";
+import { normalizeFingerprint } from "../../upstream/src/infra/tls/fingerprint.js";
+import { rawDataToString } from "../../upstream/src/infra/ws.js";
+import { logDebug, logError } from "../../upstream/src/logger.js";
 import {
   GATEWAY_CLIENT_MODES,
   GATEWAY_CLIENT_NAMES,
   type GatewayClientMode,
   type GatewayClientName,
-} from "../utils/message-channel.js";
-import { buildDeviceAuthPayload } from "./device-auth.js";
-import { isSecureWebSocketUrl } from "./net.js";
+} from "../../upstream/src/utils/message-channel.js";
+import { buildDeviceAuthPayload } from "../../upstream/src/gateway/device-auth.js";
+import { isSecureWebSocketUrl } from "../../upstream/src/gateway/net.js";
 import {
   type ConnectParams,
   type EventFrame,
@@ -32,7 +32,7 @@ import {
   validateEventFrame,
   validateRequestFrame,
   validateResponseFrame,
-} from "./protocol/index.js";
+} from "../../upstream/src/gateway/protocol/index.js";
 
 type Pending = {
   resolve: (value: unknown) => void;

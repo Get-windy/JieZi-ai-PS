@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { captureEnv } from "../../test-utils/env.js";
-import type { GatewayRestartSnapshot } from "./restart-health.js";
+import { captureEnv } from "../../../upstream/src/test-utils/env.js";
+import type { GatewayRestartSnapshot } from "../../../upstream/src/cli/daemon-cli/restart-health.js";
 
 const callGatewayStatusProbe = vi.fn(async (_opts?: unknown) => ({ ok: true as const }));
 const loadGatewayTlsRuntime = vi.fn(async (_cfg?: unknown) => ({
@@ -126,7 +126,7 @@ vi.mock("./probe.js", () => ({
   probeGatewayStatus: (opts: unknown) => callGatewayStatusProbe(opts),
 }));
 
-vi.mock("./restart-health.js", () => ({
+vi.mock("../../../upstream/src/cli/daemon-cli/restart-health.js", () => ({
   inspectGatewayRestart: (opts: unknown) => inspectGatewayRestart(opts),
 }));
 

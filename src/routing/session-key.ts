@@ -1,5 +1,5 @@
-import type { ChatType } from "../channels/chat-type.js";
-import { parseAgentSessionKey, type ParsedAgentSessionKey } from "../sessions/session-key-utils.js";
+import type { ChatType } from "../../upstream/src/channels/chat-type.js";
+import { parseAgentSessionKey, type ParsedAgentSessionKey } from "../../upstream/src/sessions/session-key-utils.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "./account-id.js";
 
 export {
@@ -9,7 +9,7 @@ export {
   isSubagentSessionKey,
   parseAgentSessionKey,
   type ParsedAgentSessionKey,
-} from "../sessions/session-key-utils.js";
+} from "../../upstream/src/sessions/session-key-utils.js";
 export {
   DEFAULT_ACCOUNT_ID,
   normalizeAccountId,

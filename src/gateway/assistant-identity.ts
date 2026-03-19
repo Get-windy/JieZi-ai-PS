@@ -1,13 +1,13 @@
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
-import { resolveAgentIdentity } from "../agents/identity.js";
-import { loadAgentIdentity } from "../commands/agents.config.js";
-import type { OpenClawConfig } from "../config/config.js";
+import { resolveAgentIdentity } from "../../upstream/src/agents/identity.js";
+import { loadAgentIdentity } from "../../upstream/src/commands/agents.config.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import {
   isAvatarHttpUrl,
   isAvatarImageDataUrl,
   looksLikeAvatarPath,
-} from "../shared/avatar-policy.js";
+} from "../../upstream/src/shared/avatar-policy.js";
 
 const MAX_ASSISTANT_NAME = 50;
 const MAX_ASSISTANT_AVATAR = 200;

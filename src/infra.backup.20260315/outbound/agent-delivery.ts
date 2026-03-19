@@ -1,14 +1,14 @@
-import type { ChannelOutboundTargetMode } from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { SessionEntry } from "../../config/sessions.js";
-import { normalizeAccountId } from "../../utils/account-id.js";
+import type { ChannelOutboundTargetMode } from "../../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import type { SessionEntry } from "../../../upstream/src/config/sessions.js";
+import { normalizeAccountId } from "../../../upstream/src/utils/account-id.js";
 import {
   INTERNAL_MESSAGE_CHANNEL,
   isDeliverableMessageChannel,
   isGatewayMessageChannel,
   normalizeMessageChannel,
   type GatewayMessageChannel,
-} from "../../utils/message-channel.js";
+} from "../../../upstream/src/utils/message-channel.js";
 import type { OutboundTargetResolution } from "./targets.js";
 import {
   resolveOutboundTarget,

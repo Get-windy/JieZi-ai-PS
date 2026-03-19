@@ -2,24 +2,24 @@ import {
   abortEmbeddedPiRun,
   getActiveEmbeddedRunCount,
   waitForActiveEmbeddedRuns,
-} from "../../agents/pi-embedded-runner/runs.js";
-import type { startGatewayServer } from "../../gateway/server.js";
-import { acquireGatewayLock } from "../../infra/gateway-lock.js";
-import { restartGatewayProcessWithFreshPid } from "../../infra/process-respawn.js";
+} from "../../../upstream/src/agents/pi-embedded-runner/runs.js";
+import type { startGatewayServer } from "../../../upstream/src/gateway/server.js";
+import { acquireGatewayLock } from "../../../upstream/src/infra/gateway-lock.js";
+import { restartGatewayProcessWithFreshPid } from "../../../upstream/src/infra/process-respawn.js";
 import {
   consumeGatewaySigusr1RestartAuthorization,
   isGatewaySigusr1RestartExternallyAllowed,
   markGatewaySigusr1RestartHandled,
 } from "../../infra/restart.js";
-import { createSubsystemLogger } from "../../logging/subsystem.js";
+import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
 import {
   getActiveTaskCount,
   markGatewayDraining,
   resetAllLanes,
   waitForActiveTasks,
-} from "../../process/command-queue.js";
-import { createRestartIterationHook } from "../../process/restart-recovery.js";
-import type { defaultRuntime } from "../../runtime.js";
+} from "../../../upstream/src/process/command-queue.js";
+import { createRestartIterationHook } from "../../../upstream/src/process/restart-recovery.js";
+import type { defaultRuntime } from "../../../upstream/src/runtime.js";
 
 const gatewayLog = createSubsystemLogger("gateway");
 

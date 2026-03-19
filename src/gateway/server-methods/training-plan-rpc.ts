@@ -4,9 +4,9 @@
  * 提供培训计划管理的RPC方法
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { trainingSystem } from "../../lifecycle/training-system.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 export const trainingPlanHandlers: GatewayRequestHandlers = {
   /**

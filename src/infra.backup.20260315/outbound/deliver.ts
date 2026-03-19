@@ -4,32 +4,32 @@ import {
   resolveChunkMode,
   resolveTextChunkLimit,
 } from "../../auto-reply/chunk.js";
-import type { ReplyPayload } from "../../auto-reply/types.js";
-import { resolveChannelMediaMaxBytes } from "../../channels/plugins/media-limits.js";
-import { loadChannelOutboundAdapter } from "../../channels/plugins/outbound/load.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
+import { resolveChannelMediaMaxBytes } from "../../../upstream/src/channels/plugins/media-limits.js";
+import { loadChannelOutboundAdapter } from "../../../upstream/src/channels/plugins/outbound/load.js";
 import type {
   ChannelOutboundAdapter,
   ChannelOutboundContext,
-} from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { resolveMarkdownTableMode } from "../../config/markdown-tables.js";
+} from "../../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { resolveMarkdownTableMode } from "../../../upstream/src/config/markdown-tables.js";
 import {
   appendAssistantMessageToSessionTranscript,
   resolveMirroredTranscriptText,
-} from "../../config/sessions.js";
+} from "../../../upstream/src/config/sessions.js";
 import type { sendMessageDiscord } from "../../discord/send.js";
-import { fireAndForgetHook } from "../../hooks/fire-and-forget.js";
-import { createInternalHookEvent, triggerInternalHook } from "../../hooks/internal-hooks.js";
+import { fireAndForgetHook } from "../../../upstream/src/hooks/fire-and-forget.js";
+import { createInternalHookEvent, triggerInternalHook } from "../../../upstream/src/hooks/internal-hooks.js";
 import {
   buildCanonicalSentMessageHookContext,
   toInternalMessageSentContext,
   toPluginMessageContext,
   toPluginMessageSentEvent,
-} from "../../hooks/message-hook-mappers.js";
+} from "../../../upstream/src/hooks/message-hook-mappers.js";
 import type { sendMessageIMessage } from "../../imessage/send.js";
-import { createSubsystemLogger } from "../../logging/subsystem.js";
+import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
 import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
-import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
+import { getGlobalHookRunner } from "../../../upstream/src/plugins/hook-runner-global.js";
 import { markdownToSignalTextChunks, type SignalTextStyleRange } from "../../signal/format.js";
 import { sendMessageSignal } from "../../signal/send.js";
 import type { sendMessageSlack } from "../../slack/send.js";

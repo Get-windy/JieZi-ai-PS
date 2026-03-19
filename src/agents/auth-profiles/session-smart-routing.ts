@@ -5,8 +5,8 @@
  * 使用智能路由引擎选择最优模型账号，而非简单的轮询策略。
  */
 
-import type { OpenClawConfig } from "../../config/config.js";
-import { updateSessionStore, type SessionEntry } from "../../config/sessions.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { updateSessionStore, type SessionEntry } from "../../../upstream/src/config/sessions.js";
 import { t } from "../../i18n/index.js";
 import { resolveAgentConfig, resolveAgentModelAccounts } from "../agent-scope.js";
 import {
@@ -15,8 +15,9 @@ import {
   getCodingBenchmarkScore,
   getReasoningBenchmarkScore,
   getOverallBenchmarkScore,
+  refreshBenchmarkDataIfNeeded,
 } from "../arena-benchmarks.js";
-import { ensureAuthProfileStore } from "../auth-profiles.js";
+import { ensureAuthProfileStore } from "../../../upstream/src/agents/auth-profiles.js";
 import {
   routeToOptimalModelAccount,
   type SessionContext,
@@ -184,9 +185,13 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
   // 1. 检查是否配置了智能路由
   const modelAccountsConfig = resolveAgentModelAccounts(cfg, agentId);
   if (!modelAccountsConfig || modelAccountsConfig.routingMode !== "smart") {
-    // 未配置智能路由，返回 undefined 让调用方回退到默认逻辑
+    // 未配置智能路由或配置了轮询模式，返回 undefined 让调用方回退到默认逻辑
+    // routingMode === 'roundRobin' 时也会回退到 session-override.ts 的轮询逻辑
     return undefined;
   }
+
+  // 1.5 智能路由模式下，确保基准数据已刷新（首次实时获取，之后每周异步刷新）
+  await refreshBenchmarkDataIfNeeded();
 
   // 2. 如果不是新会话且已有用户手动指定的账号，则保持不变
   if (

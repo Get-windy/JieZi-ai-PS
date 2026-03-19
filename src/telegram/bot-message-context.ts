@@ -1,40 +1,40 @@
 import type { Bot } from "grammy";
-import { resolveAckReaction } from "../agents/identity.js";
+import { resolveAckReaction } from "../../upstream/src/agents/identity.js";
 import {
   findModelInCatalog,
   loadModelCatalog,
   modelSupportsVision,
-} from "../agents/model-catalog.js";
-import { resolveDefaultModelForAgent } from "../agents/model-selection.js";
-import { hasControlCommand } from "../auto-reply/command-detection.js";
-import { normalizeCommandBody } from "../auto-reply/commands-registry.js";
-import { formatInboundEnvelope, resolveEnvelopeFormatOptions } from "../auto-reply/envelope.js";
+} from "../../upstream/src/agents/model-catalog.js";
+import { resolveDefaultModelForAgent } from "../../upstream/src/agents/model-selection.js";
+import { hasControlCommand } from "../../upstream/src/auto-reply/command-detection.js";
+import { normalizeCommandBody } from "../../upstream/src/auto-reply/commands-registry.js";
+import { formatInboundEnvelope, resolveEnvelopeFormatOptions } from "../../upstream/src/auto-reply/envelope.js";
 import {
   buildPendingHistoryContextFromMap,
   recordPendingHistoryEntryIfEnabled,
   type HistoryEntry,
-} from "../auto-reply/reply/history.js";
-import { finalizeInboundContext } from "../auto-reply/reply/inbound-context.js";
+} from "../../upstream/src/auto-reply/reply/history.js";
+import { finalizeInboundContext } from "../../upstream/src/auto-reply/reply/inbound-context.js";
 import { buildMentionRegexes, matchesMentionWithExplicit } from "../auto-reply/reply/mentions.js";
 import type { MsgContext } from "../auto-reply/templating.js";
-import { shouldAckReaction as shouldAckReactionGate } from "../channels/ack-reactions.js";
-import { resolveControlCommandGate } from "../channels/command-gating.js";
-import { formatLocationText, toLocationContext } from "../channels/location.js";
-import { logInboundDrop } from "../channels/logging.js";
-import { resolveMentionGatingWithBypass } from "../channels/mention-gating.js";
-import { recordInboundSession } from "../channels/session.js";
+import { shouldAckReaction as shouldAckReactionGate } from "../../upstream/src/channels/ack-reactions.js";
+import { resolveControlCommandGate } from "../../upstream/src/channels/command-gating.js";
+import { formatLocationText, toLocationContext } from "../../upstream/src/channels/location.js";
+import { logInboundDrop } from "../../upstream/src/channels/logging.js";
+import { resolveMentionGatingWithBypass } from "../../upstream/src/channels/mention-gating.js";
+import { recordInboundSession } from "../../upstream/src/channels/session.js";
 import {
   createStatusReactionController,
   type StatusReactionController,
-} from "../channels/status-reactions.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { loadConfig } from "../config/config.js";
-import { readSessionUpdatedAt, resolveStorePath } from "../config/sessions.js";
-import type { DmPolicy, TelegramGroupConfig, TelegramTopicConfig } from "../config/types.js";
-import { logVerbose, shouldLogVerbose } from "../globals.js";
-import { recordChannelActivity } from "../infra/channel-activity.js";
-import { buildPairingReply } from "../pairing/pairing-messages.js";
-import { upsertChannelPairingRequest } from "../pairing/pairing-store.js";
+} from "../../upstream/src/channels/status-reactions.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
+import { readSessionUpdatedAt, resolveStorePath } from "../../upstream/src/config/sessions.js";
+import type { DmPolicy, TelegramGroupConfig, TelegramTopicConfig } from "../../upstream/src/config/types.js";
+import { logVerbose, shouldLogVerbose } from "../../upstream/src/globals.js";
+import { recordChannelActivity } from "../../upstream/src/infra/channel-activity.js";
+import { buildPairingReply } from "../../upstream/src/pairing/pairing-messages.js";
+import { upsertChannelPairingRequest } from "../../upstream/src/pairing/pairing-store.js";
 import { resolveAgentRoute } from "../routing/resolve-route.js";
 import { resolveThreadSessionKeys } from "../routing/session-key.js";
 import { withTelegramApiErrorLogging } from "./api-logging.js";

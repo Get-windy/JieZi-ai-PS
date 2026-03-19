@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { isPathInside } from "./path-guards.js";
+import { isPathInside } from "../../upstream/src/infra/path-guards.js";
 
 export function unscopedPackageName(name: string): string {
   const trimmed = name.trim();

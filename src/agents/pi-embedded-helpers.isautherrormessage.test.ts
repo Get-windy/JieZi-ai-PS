@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isAuthErrorMessage } from "./pi-embedded-helpers.js";
-import { DEFAULT_AGENTS_FILENAME } from "./workspace.js";
+import { isAuthErrorMessage } from "../../upstream/src/agents/pi-embedded-helpers.js";
+import { DEFAULT_AGENTS_FILENAME } from "../../upstream/src/agents/workspace.js";
 
 const _makeFile = (overrides: Partial<WorkspaceBootstrapFile>): WorkspaceBootstrapFile => ({
   name: DEFAULT_AGENTS_FILENAME,

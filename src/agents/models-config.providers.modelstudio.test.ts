@@ -2,9 +2,9 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { withEnvAsync } from "../test-utils/env.js";
-import { resolveImplicitProvidersForTest } from "./models-config.e2e-harness.js";
-import { buildModelStudioProvider } from "./models-config.providers.js";
+import { withEnvAsync } from "../../upstream/src/test-utils/env.js";
+import { resolveImplicitProvidersForTest } from "../../upstream/src/agents/models-config.e2e-harness.js";
+import { buildModelStudioProvider } from "../../upstream/src/agents/models-config.providers.js";
 
 const modelStudioApiKeyEnv = ["MODELSTUDIO_API", "KEY"].join("_");
 

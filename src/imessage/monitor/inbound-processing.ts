@@ -1,26 +1,26 @@
-import { hasControlCommand } from "../../auto-reply/command-detection.js";
+import { hasControlCommand } from "../../../upstream/src/auto-reply/command-detection.js";
 import {
   formatInboundEnvelope,
   formatInboundFromLabel,
   resolveEnvelopeFormatOptions,
   type EnvelopeFormatOptions,
-} from "../../auto-reply/envelope.js";
+} from "../../../upstream/src/auto-reply/envelope.js";
 import {
   buildPendingHistoryContextFromMap,
   recordPendingHistoryEntryIfEnabled,
   type HistoryEntry,
-} from "../../auto-reply/reply/history.js";
-import { finalizeInboundContext } from "../../auto-reply/reply/inbound-context.js";
+} from "../../../upstream/src/auto-reply/reply/history.js";
+import { finalizeInboundContext } from "../../../upstream/src/auto-reply/reply/inbound-context.js";
 import { buildMentionRegexes, matchesMentionPatterns } from "../../auto-reply/reply/mentions.js";
-import { resolveControlCommandGate } from "../../channels/command-gating.js";
-import { logInboundDrop } from "../../channels/logging.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import { resolveControlCommandGate } from "../../../upstream/src/channels/command-gating.js";
+import { logInboundDrop } from "../../../upstream/src/channels/logging.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import {
   resolveChannelGroupPolicy,
   resolveChannelGroupRequireMention,
-} from "../../config/group-policy.js";
+} from "../../../upstream/src/config/group-policy.js";
 import { resolveAgentRoute } from "../../routing/resolve-route.js";
-import { truncateUtf16Safe } from "../../utils.js";
+import { truncateUtf16Safe } from "../../../upstream/src/utils.js";
 import {
   formatIMessageChatTarget,
   isAllowedIMessageSender,

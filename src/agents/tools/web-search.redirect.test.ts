@@ -8,7 +8,7 @@ vi.mock("../../infra/net/fetch-guard.js", () => ({
   fetchWithSsrFGuard: fetchWithSsrFGuardMock,
 }));
 
-import { __testing } from "./web-search.js";
+import { __testing } from "../../../upstream/src/agents/tools/web-search.js";
 
 describe("web_search redirect resolution hardening", () => {
   const { resolveRedirectUrl } = __testing;

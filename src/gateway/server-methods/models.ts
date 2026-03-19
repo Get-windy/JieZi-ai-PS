@@ -1,21 +1,21 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { resolveOpenClawAgentDir } from "../../agents/agent-paths.js";
+import { resolveOpenClawAgentDir } from "../../../upstream/src/agents/agent-paths.js";
 import { resolveDefaultAgentId, resolveAgentDir } from "../../agents/agent-scope.js";
-import { resetModelCatalogCacheForTest } from "../../agents/model-catalog.js";
-import { resolveDefaultModelForAgent } from "../../agents/model-selection.js";
-import { loadConfig } from "../../config/config.js";
-import { STATE_DIR } from "../../config/paths.js";
+import { resetModelCatalogCacheForTest } from "../../../upstream/src/agents/model-catalog.js";
+import { resolveDefaultModelForAgent } from "../../../upstream/src/agents/model-selection.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
+import { STATE_DIR } from "../../../upstream/src/config/paths.js";
 // DEFAULT_PROVIDER and buildAllowedModelSet are reserved for future use
-// import { DEFAULT_PROVIDER } from "../../agents/defaults.js";
-// import { buildAllowedModelSet } from "../../agents/model-selection.js";
+// import { DEFAULT_PROVIDER } from "../../../upstream/src/agents/defaults.js";
+// import { buildAllowedModelSet } from "../../../upstream/src/agents/model-selection.js";
 import {
   ErrorCodes,
   errorShape,
   formatValidationErrors,
   validateModelsListParams,
-} from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
+} from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 // 模型管理配置文件路径 - UI 管理系统的主存储
 const MODEL_MANAGEMENT_FILE = path.join(STATE_DIR, "model-management.json");

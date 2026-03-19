@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import { DEFAULT_ACCOUNT_ID } from "../../routing/session-key.js";
-import { handleWhatsAppAction } from "./whatsapp-actions.js";
+import { handleWhatsAppAction } from "../../../upstream/src/agents/tools/whatsapp-actions.js";
 
 const { sendReactionWhatsApp, sendPollWhatsApp } = vi.hoisted(() => ({
   sendReactionWhatsApp: vi.fn(async () => undefined),

@@ -1,4 +1,4 @@
-import { readChannelAllowFromStore } from "../../pairing/pairing-store.js";
+import { readChannelAllowFromStore } from "../../../upstream/src/pairing/pairing-store.js";
 import {
   allowListMatches,
   normalizeAllowList,

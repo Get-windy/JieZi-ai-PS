@@ -11,7 +11,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveStateDir } from "../config/paths.js";
+import { resolveStateDir } from "../../upstream/src/config/paths.js";
 import { groupWorkspaceManager } from "../workspace/group-workspace.js";
 import type { GroupMessage, GroupSessionMetadata } from "./group-message-storage.js";
 import { groupMessageStorage } from "./group-message-storage.js";

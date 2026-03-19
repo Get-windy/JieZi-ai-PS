@@ -4,35 +4,35 @@ import {
   resolveEffectiveToolPolicy,
   resolveGroupToolPolicy,
   resolveSubagentToolPolicy,
-} from "../agents/pi-tools.policy.js";
+} from "../../upstream/src/agents/pi-tools.policy.js";
 import {
   applyToolPolicyPipeline,
   buildDefaultToolPolicyPipelineSteps,
-} from "../agents/tool-policy-pipeline.js";
+} from "../../upstream/src/agents/tool-policy-pipeline.js";
 import {
   collectExplicitAllowlist,
   mergeAlsoAllowPolicy,
   resolveToolProfilePolicy,
-} from "../agents/tool-policy.js";
-import { ToolInputError } from "../agents/tools/common.js";
-import { loadConfig } from "../config/config.js";
-import { resolveMainSessionKey } from "../config/sessions.js";
-import { logWarn } from "../logger.js";
-import { isTestDefaultMemorySlotDisabled } from "../plugins/config-state.js";
-import { getPluginToolMeta } from "../plugins/tools.js";
+} from "../../upstream/src/agents/tool-policy.js";
+import { ToolInputError } from "../../upstream/src/agents/tools/common.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
+import { resolveMainSessionKey } from "../../upstream/src/config/sessions.js";
+import { logWarn } from "../../upstream/src/logger.js";
+import { isTestDefaultMemorySlotDisabled } from "../../upstream/src/plugins/config-state.js";
+import { getPluginToolMeta } from "../../upstream/src/plugins/tools.js";
 import { isSubagentSessionKey } from "../routing/session-key.js";
 import { DEFAULT_GATEWAY_HTTP_TOOL_DENY } from "../security/dangerous-tools.js";
-import { normalizeMessageChannel } from "../utils/message-channel.js";
-import type { AuthRateLimiter } from "./auth-rate-limit.js";
-import { authorizeHttpGatewayConnect, type ResolvedGatewayAuth } from "./auth.js";
+import { normalizeMessageChannel } from "../../upstream/src/utils/message-channel.js";
+import type { AuthRateLimiter } from "../../upstream/src/gateway/auth-rate-limit.js";
+import { authorizeHttpGatewayConnect, type ResolvedGatewayAuth } from "../../upstream/src/gateway/auth.js";
 import {
   readJsonBodyOrError,
   sendGatewayAuthFailure,
   sendInvalidRequest,
   sendJson,
   sendMethodNotAllowed,
-} from "./http-common.js";
-import { getBearerToken, getHeader } from "./http-utils.js";
+} from "../../upstream/src/gateway/http-common.js";
+import { getBearerToken, getHeader } from "../../upstream/src/gateway/http-utils.js";
 
 const DEFAULT_BODY_BYTES = 2 * 1024 * 1024;
 const MEMORY_TOOL_NAMES = new Set(["memory_search", "memory_get"]);

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import type { GuardedFetchOptions } from "../infra/net/fetch-guard.js";
+import type { GuardedFetchOptions } from "../../upstream/src/infra/net/fetch-guard.js";
 import {
   connectOk,
   cronIsolatedRun,
@@ -11,7 +11,7 @@ import {
   startServerWithClient,
   testState,
   waitForSystemEvent,
-} from "./test-helpers.js";
+} from "../../upstream/src/gateway/test-helpers.js";
 
 const fetchWithSsrFGuardMock = vi.hoisted(() =>
   vi.fn(async (params: GuardedFetchOptions) => ({
@@ -21,7 +21,7 @@ const fetchWithSsrFGuardMock = vi.hoisted(() =>
   })),
 );
 
-vi.mock("../infra/net/fetch-guard.js", () => ({
+vi.mock("../../upstream/src/infra/net/fetch-guard.js", () => ({
   fetchWithSsrFGuard: (...args: unknown[]) =>
     (
       fetchWithSsrFGuardMock as unknown as (...innerArgs: unknown[]) => Promise<{

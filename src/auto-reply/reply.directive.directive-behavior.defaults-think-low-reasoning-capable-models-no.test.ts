@@ -1,6 +1,6 @@
 import "./reply.directive.directive-behavior.e2e-mocks.js";
 import { describe, expect, it, vi } from "vitest";
-import { loadSessionStore } from "../config/sessions.js";
+import { loadSessionStore } from "../../upstream/src/config/sessions.js";
 import {
   assertModelSelection,
   installDirectiveBehaviorE2EHooks,
@@ -13,9 +13,9 @@ import {
   runEmbeddedPiAgent,
   sessionStorePath,
   withTempHome,
-} from "./reply.directive.directive-behavior.e2e-harness.js";
-import { runModelDirectiveText } from "./reply.directive.directive-behavior.model-directive-test-utils.js";
-import { getReplyFromConfig } from "./reply.js";
+} from "../../upstream/src/auto-reply/reply.directive.directive-behavior.e2e-harness.js";
+import { runModelDirectiveText } from "../../upstream/src/auto-reply/reply.directive.directive-behavior.model-directive-test-utils.js";
+import { getReplyFromConfig } from "../../upstream/src/auto-reply/reply.js";
 
 function makeDefaultModelConfig(home: string) {
   return makeWhatsAppDirectiveConfig(home, {

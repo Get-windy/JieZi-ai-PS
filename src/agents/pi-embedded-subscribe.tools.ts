@@ -1,10 +1,10 @@
-import { getChannelPlugin, normalizeChannelId } from "../channels/plugins/index.js";
-import { normalizeTargetForProvider } from "../infra/outbound/target-normalization.js";
-import { splitMediaFromOutput } from "../media/parse.js";
-import { truncateUtf16Safe } from "../utils.js";
-import { collectTextContentBlocks } from "./content-blocks.js";
-import { type MessagingToolSend } from "./pi-embedded-messaging.js";
-import { normalizeToolName } from "./tool-policy.js";
+import { getChannelPlugin, normalizeChannelId } from "../../upstream/src/channels/plugins/index.js";
+import { normalizeTargetForProvider } from "../../upstream/src/infra/outbound/target-normalization.js";
+import { splitMediaFromOutput } from "../../upstream/src/media/parse.js";
+import { truncateUtf16Safe } from "../../upstream/src/utils.js";
+import { collectTextContentBlocks } from "../../upstream/src/agents/content-blocks.js";
+import { type MessagingToolSend } from "../../upstream/src/agents/pi-embedded-messaging.js";
+import { normalizeToolName } from "../../upstream/src/agents/tool-policy.js";
 
 const TOOL_RESULT_MAX_CHARS = 8000;
 const TOOL_ERROR_MAX_CHARS = 400;

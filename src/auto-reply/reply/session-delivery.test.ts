@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveLastChannelRaw, resolveLastToRaw } from "./session-delivery.js";
+import { resolveLastChannelRaw, resolveLastToRaw } from "../../../upstream/src/auto-reply/reply/session-delivery.js";
 
 describe("session delivery direct-session routing overrides", () => {
   it.each([

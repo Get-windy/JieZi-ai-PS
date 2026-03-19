@@ -1,5 +1,5 @@
-import type { SsrFPolicy } from "../infra/net/ssrf.js";
-import { type AriaSnapshotNode, formatAriaSnapshot, type RawAXNode } from "./cdp.js";
+import type { SsrFPolicy } from "../../upstream/src/infra/net/ssrf.js";
+import { type AriaSnapshotNode, formatAriaSnapshot, type RawAXNode } from "../../upstream/src/browser/cdp.js";
 import { assertBrowserNavigationAllowed, withBrowserNavigationPolicy } from "./navigation-guard.js";
 import {
   buildRoleSnapshotFromAiSnapshot,
@@ -7,7 +7,7 @@ import {
   getRoleSnapshotStats,
   type RoleSnapshotOptions,
   type RoleRefMap,
-} from "./pw-role-snapshot.js";
+} from "../../upstream/src/browser/pw-role-snapshot.js";
 import {
   ensurePageState,
   getPageForTargetId,

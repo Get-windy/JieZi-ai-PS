@@ -1,25 +1,27 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { OpenClawConfig } from "../config/config.js";
-import { resolveAgentModelFallbackValues } from "../config/model-input.js";
-import { resolveStateDir } from "../config/paths.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { resolveAgentModelFallbackValues } from "../../upstream/src/config/model-input.js";
+import { resolveStateDir } from "../../upstream/src/config/paths.js";
 import type { AgentModelAccountsConfig } from "../config/types.agents.js";
-import { createSubsystemLogger } from "../logging/subsystem.js";
+import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
 import {
   DEFAULT_AGENT_ID,
   normalizeAgentId,
   parseAgentSessionKey,
+  resolveAgentIdFromSessionKey,
 } from "../routing/session-key.js";
-import { resolveUserPath } from "../utils.js";
-import { normalizeSkillFilter } from "./skills/filter.js";
-import { resolveDefaultAgentWorkspaceDir } from "./workspace.js";
+import { resolveUserPath } from "../../upstream/src/utils.js";
+import { normalizeSkillFilter } from "../../upstream/src/agents/skills/filter.js";
+import { resolveDefaultAgentWorkspaceDir } from "../../upstream/src/agents/workspace.js";
 const log = createSubsystemLogger("agent-scope");
 
-export { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
+export { resolveAgentIdFromSessionKey };
 
+/** Strip null bytes from paths to prevent ENOTDIR errors. */
 function stripNullBytes(s: string): string {
   // eslint-disable-next-line no-control-regex
-  return s.replace(/\x00/g, "");
+  return s.replace(/\0/g, "");
 }
 
 type AgentEntry = NonNullable<NonNullable<OpenClawConfig["agents"]>["list"]>[number];
@@ -174,14 +176,52 @@ export function resolveAgentExplicitModelPrimary(
   return resolveModelPrimary(raw);
 }
 
+/**
+ * 解析 agent 有效的主模型：
+ *   1. agent 自身 modelAccounts.defaultAccountId（智能路由账号，优先级最高）
+ *   2. agent 自身配置的 model.primary（仅在没有 modelAccounts 时生效，作为兜底）
+ *   3. 主控 agent（default=true）的 modelAccounts.defaultAccountId
+ *   4. 主控 agent 的 model.primary（若已配置）
+ *   5. agents.defaults.model.primary（全局兜底）
+ *
+ * modelAccounts 优先于 model.primary，避免 model.primary 遗留失效旧值干扰智能路由。
+ */
 export function resolveAgentEffectiveModelPrimary(
   cfg: OpenClawConfig,
   agentId: string,
 ): string | undefined {
-  return (
-    resolveAgentExplicitModelPrimary(cfg, agentId) ??
-    resolveModelPrimary(cfg.agents?.defaults?.model)
-  );
+  // 1. 优先使用 agent 自身 modelAccounts.defaultAccountId
+  const ownAccounts = resolveAgentModelAccounts(cfg, agentId);
+  const ownDefault = ownAccounts?.defaultAccountId?.trim();
+  if (ownDefault) {
+    return ownDefault;
+  }
+
+  // 2. agent 自身 model.primary（仅在没有 modelAccounts 时生效）
+  const explicit = resolveAgentExplicitModelPrimary(cfg, agentId);
+  if (explicit) {
+    return explicit;
+  }
+
+  // 3 & 4. 如果当前 agent 不是主控 agent，尝试从主控 agent 的配置推导兜底模型
+  const defaultAgentId = resolveDefaultAgentId(cfg);
+  if (normalizeAgentId(agentId) !== defaultAgentId) {
+    // 3. 主控 agent 的 modelAccounts.defaultAccountId
+    const defaultAgentAccounts = resolveAgentModelAccounts(cfg, defaultAgentId);
+    const defaultAgentAccountId = defaultAgentAccounts?.defaultAccountId?.trim();
+    if (defaultAgentAccountId) {
+      return defaultAgentAccountId;
+    }
+
+    // 4. 主控 agent 的 model.primary
+    const defaultAgentModelPrimary = resolveAgentExplicitModelPrimary(cfg, defaultAgentId);
+    if (defaultAgentModelPrimary) {
+      return defaultAgentModelPrimary;
+    }
+  }
+
+  // 5. 最终兜底：agents.defaults.model.primary
+  return resolveModelPrimary(cfg.agents?.defaults?.model);
 }
 
 // Backward-compatible alias. Prefer explicit/effective helpers at new call sites.
@@ -202,6 +242,41 @@ export function resolveAgentModelFallbacksOverride(
     return undefined;
   }
   return Array.isArray(raw.fallbacks) ? raw.fallbacks : undefined;
+}
+
+export function resolveFallbackAgentId(params: {
+  agentId?: string | null;
+  sessionKey?: string | null;
+}): string {
+  const explicitAgentId = typeof params.agentId === "string" ? params.agentId.trim() : "";
+  if (explicitAgentId) {
+    return normalizeAgentId(explicitAgentId);
+  }
+  return resolveAgentIdFromSessionKey(params.sessionKey);
+}
+
+export function resolveRunModelFallbacksOverride(params: {
+  cfg: OpenClawConfig | undefined;
+  agentId?: string | null;
+  sessionKey?: string | null;
+}): string[] | undefined {
+  if (!params.cfg) {
+    return undefined;
+  }
+  return resolveAgentModelFallbacksOverride(
+    params.cfg,
+    resolveFallbackAgentId({ agentId: params.agentId, sessionKey: params.sessionKey }),
+  );
+}
+
+export function hasConfiguredModelFallbacks(params: {
+  cfg: OpenClawConfig | undefined;
+  agentId?: string | null;
+  sessionKey?: string | null;
+}): boolean {
+  const fallbacksOverride = resolveRunModelFallbacksOverride(params);
+  const defaultFallbacks = resolveAgentModelFallbackValues(params.cfg?.agents?.defaults?.model);
+  return (fallbacksOverride ?? defaultFallbacks).length > 0;
 }
 
 export function resolveEffectiveModelFallbacks(params: {

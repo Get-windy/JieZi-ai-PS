@@ -1,15 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
-import { lookupContextTokens } from "../agents/context.js";
-import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
+import { lookupContextTokens } from "../../upstream/src/agents/context.js";
+import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../../upstream/src/agents/defaults.js";
 import {
   parseModelRef,
   resolveConfiguredModelRef,
   resolveDefaultModelForAgent,
-} from "../agents/model-selection.js";
-import { type OpenClawConfig, loadConfig } from "../config/config.js";
-import { resolveStateDir } from "../config/paths.js";
+} from "../../upstream/src/agents/model-selection.js";
+import { type OpenClawConfig, loadConfig } from "../../upstream/src/config/config.js";
+import { resolveStateDir } from "../../upstream/src/config/paths.js";
 import {
   buildGroupDisplayName,
   canonicalizeMainSessionAlias,
@@ -18,15 +18,15 @@ import {
   resolveStorePath,
   type SessionEntry,
   type SessionScope,
-} from "../config/sessions.js";
-import { openVerifiedFileSync } from "../infra/safe-open-sync.js";
+} from "../../upstream/src/config/sessions.js";
+import { openVerifiedFileSync } from "../../upstream/src/infra/safe-open-sync.js";
 import {
   normalizeAgentId,
   normalizeMainKey,
   parseAgentSessionKey,
   DEFAULT_AGENT_ID,
 } from "../routing/session-key.js";
-import { isCronRunSessionKey } from "../sessions/session-key-utils.js";
+import { isCronRunSessionKey } from "../../upstream/src/sessions/session-key-utils.js";
 import {
   AVATAR_MAX_BYTES,
   isAvatarDataUrl,
@@ -34,8 +34,8 @@ import {
   isPathWithinRoot,
   isWorkspaceRelativeAvatarPath,
   resolveAvatarMime,
-} from "../shared/avatar-policy.js";
-import { normalizeSessionDeliveryFields } from "../utils/delivery-context.js";
+} from "../../upstream/src/shared/avatar-policy.js";
+import { normalizeSessionDeliveryFields } from "../../upstream/src/utils/delivery-context.js";
 import { readSessionTitleFieldsFromTranscript } from "./session-utils.fs.js";
 import type {
   GatewayAgentRow,
@@ -486,7 +486,7 @@ function resolveSessionStoreAgentId(cfg: OpenClawConfig, canonicalKey: string): 
 }
 
 export function canonicalizeSpawnedByForAgent(
-  _cfg: OpenClawConfig,
+  cfg: OpenClawConfig,
   agentId: string,
   spawnedBy?: string,
 ): string | undefined {
@@ -494,13 +494,20 @@ export function canonicalizeSpawnedByForAgent(
   if (!raw) {
     return undefined;
   }
-  if (raw === "global" || raw === "unknown") {
-    return raw;
+  const lower = raw.toLowerCase();
+  if (lower === "global" || lower === "unknown") {
+    return lower;
   }
-  if (raw.startsWith("agent:")) {
-    return raw;
+  let result: string;
+  if (raw.toLowerCase().startsWith("agent:")) {
+    result = raw.toLowerCase();
+  } else {
+    result = `agent:${normalizeAgentId(agentId)}:${lower}`;
   }
-  return `agent:${normalizeAgentId(agentId)}:${raw}`;
+  // Resolve main-alias references (e.g. agent:ops:main → configured main key).
+  const parsed = parseAgentSessionKey(result);
+  const resolvedAgent = parsed?.agentId ? normalizeAgentId(parsed.agentId) : agentId;
+  return canonicalizeMainSessionAlias({ cfg, agentId: resolvedAgent, sessionKey: result });
 }
 
 export function resolveGatewaySessionStoreTarget(params: { cfg: OpenClawConfig; key: string }): {
@@ -534,6 +541,30 @@ export function resolveGatewaySessionStoreTarget(params: { cfg: OpenClawConfig; 
     canonicalKey,
     storeKeys: Array.from(storeKeys),
   };
+}
+
+export function migrateAndPruneGatewaySessionStoreKey(params: {
+  cfg: OpenClawConfig;
+  key: string;
+  store: Record<string, SessionEntry>;
+}) {
+  const target = resolveGatewaySessionStoreTarget({
+    cfg: params.cfg,
+    key: params.key,
+  });
+  const primaryKey = target.canonicalKey;
+  if (!params.store[primaryKey]) {
+    const existingKey = target.storeKeys.find((candidate) => Boolean(params.store[candidate]));
+    if (existingKey) {
+      params.store[primaryKey] = params.store[existingKey];
+    }
+  }
+  pruneLegacyStoreKeys({
+    store: params.store,
+    canonicalKey: primaryKey,
+    candidates: target.storeKeys,
+  });
+  return { target, primaryKey, entry: params.store[primaryKey] };
 }
 
 // Merge with existing entry based on latest timestamp to ensure data consistency and avoid overwriting with less complete data.

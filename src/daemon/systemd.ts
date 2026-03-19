@@ -4,12 +4,12 @@ import {
   LEGACY_GATEWAY_SYSTEMD_SERVICE_NAMES,
   resolveGatewayServiceDescription,
   resolveGatewaySystemdServiceName,
-} from "./constants.js";
-import { execFileUtf8 } from "./exec-file.js";
-import { formatLine, toPosixPath, writeFormattedLines } from "./output.js";
-import { resolveHomeDir } from "./paths.js";
-import { parseKeyValueOutput } from "./runtime-parse.js";
-import type { GatewayServiceRuntime } from "./service-runtime.js";
+} from "../../upstream/src/daemon/constants.js";
+import { execFileUtf8 } from "../../upstream/src/daemon/exec-file.js";
+import { formatLine, toPosixPath, writeFormattedLines } from "../../upstream/src/daemon/output.js";
+import { resolveHomeDir } from "../../upstream/src/daemon/paths.js";
+import { parseKeyValueOutput } from "../../upstream/src/daemon/runtime-parse.js";
+import type { GatewayServiceRuntime } from "../../upstream/src/daemon/service-runtime.js";
 import type {
   GatewayServiceCommandConfig,
   GatewayServiceControlArgs,
@@ -17,17 +17,17 @@ import type {
   GatewayServiceEnvArgs,
   GatewayServiceInstallArgs,
   GatewayServiceManageArgs,
-} from "./service-types.js";
+} from "../../upstream/src/daemon/service-types.js";
 import {
   enableSystemdUserLinger,
   readSystemdUserLingerStatus,
   type SystemdUserLingerStatus,
-} from "./systemd-linger.js";
+} from "../../upstream/src/daemon/systemd-linger.js";
 import {
   buildSystemdUnit,
   parseSystemdEnvAssignment,
   parseSystemdExecStart,
-} from "./systemd-unit.js";
+} from "../../upstream/src/daemon/systemd-unit.js";
 
 function resolveSystemdUnitPathForName(env: GatewayServiceEnv, name: string): string {
   const home = toPosixPath(resolveHomeDir(env));

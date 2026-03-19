@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ExecHostResponse } from "../infra/exec-host.js";
+import type { ExecHostResponse } from "../../upstream/src/infra/exec-host.js";
 import { handleSystemRunInvoke, formatSystemRunAllowlistMissMessage } from "./invoke-system-run.js";
 
 describe("formatSystemRunAllowlistMissMessage", () => {

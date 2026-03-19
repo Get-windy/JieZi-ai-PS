@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerBrowserManageCommands } from "./browser-cli-manage.js";
-import { createBrowserProgram } from "./browser-cli-test-helpers.js";
+import { createBrowserProgram } from "../../upstream/src/cli/browser-cli-test-helpers.js";
 
 const mocks = vi.hoisted(() => {
   const runtimeLog = vi.fn();

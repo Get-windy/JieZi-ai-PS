@@ -5,11 +5,11 @@ import {
   deriveDeviceIdFromPublicKey,
   publicKeyRawBase64UrlFromPem,
   signDevicePayload,
-} from "../infra/device-identity.js";
-import { sleep } from "../utils.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
+} from "../../upstream/src/infra/device-identity.js";
+import { sleep } from "../../upstream/src/utils.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../upstream/src/utils/message-channel.js";
 import { GatewayClient } from "./client.js";
-import { buildDeviceAuthPayload } from "./device-auth.js";
+import { buildDeviceAuthPayload } from "../../upstream/src/gateway/device-auth.js";
 import {
   connectReq,
   installGatewayTestHooks,
@@ -17,7 +17,7 @@ import {
   rpcReq,
   startServerWithClient,
   trackConnectChallengeNonce,
-} from "./test-helpers.js";
+} from "../../upstream/src/gateway/test-helpers.js";
 
 installGatewayTestHooks({ scope: "suite" });
 const NODE_CONNECT_TIMEOUT_MS = 3_000;

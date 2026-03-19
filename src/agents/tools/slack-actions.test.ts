@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
-import { handleSlackAction } from "./slack-actions.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { handleSlackAction } from "../../../upstream/src/agents/tools/slack-actions.js";
 
 const deleteSlackMessage = vi.fn(async (..._args: unknown[]) => ({}));
 const downloadSlackFile = vi.fn(async (..._args: unknown[]) => null);

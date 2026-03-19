@@ -4,11 +4,11 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { WebSocket } from "ws";
 import { whatsappPlugin } from "../../extensions/whatsapp/src/channel.js";
-import { BARE_SESSION_RESET_PROMPT } from "../auto-reply/reply/session-reset-prompt.js";
-import type { ChannelPlugin } from "../channels/plugins/types.js";
-import { emitAgentEvent, registerAgentRunContext } from "../infra/agent-events.js";
-import { setRegistry } from "./server.agent.gateway-server-agent.mocks.js";
-import { createRegistry } from "./server.e2e-registry-helpers.js";
+import { BARE_SESSION_RESET_PROMPT } from "../../upstream/src/auto-reply/reply/session-reset-prompt.js";
+import type { ChannelPlugin } from "../../upstream/src/channels/plugins/types.js";
+import { emitAgentEvent, registerAgentRunContext } from "../../upstream/src/infra/agent-events.js";
+import { setRegistry } from "../../upstream/src/gateway/server.agent.gateway-server-agent.mocks.js";
+import { createRegistry } from "../../upstream/src/gateway/server.e2e-registry-helpers.js";
 import {
   agentCommand,
   connectOk,
@@ -22,7 +22,7 @@ import {
   trackConnectChallengeNonce,
   withGatewayServer,
   writeSessionStore,
-} from "./test-helpers.js";
+} from "../../upstream/src/gateway/test-helpers.js";
 
 installGatewayTestHooks({ scope: "suite" });
 

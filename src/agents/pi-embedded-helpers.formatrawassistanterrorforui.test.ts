@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRawAssistantErrorForUi } from "./pi-embedded-helpers.js";
+import { formatRawAssistantErrorForUi } from "../../upstream/src/agents/pi-embedded-helpers.js";
 
 describe("formatRawAssistantErrorForUi", () => {
   it("renders HTTP code + type + message from Anthropic payloads", () => {

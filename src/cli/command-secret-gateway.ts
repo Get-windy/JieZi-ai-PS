@@ -1,23 +1,23 @@
-import type { OpenClawConfig } from "../config/config.js";
-import { resolveSecretInputRef } from "../config/types.secrets.js";
-import { callGateway } from "../gateway/call.js";
-import { validateSecretsResolveResult } from "../gateway/protocol/index.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { resolveSecretInputRef } from "../../upstream/src/config/types.secrets.js";
+import { callGateway } from "../../upstream/src/gateway/call.js";
+import { validateSecretsResolveResult } from "../../upstream/src/gateway/protocol/index.js";
 import {
   analyzeCommandSecretAssignmentsFromSnapshot,
   type UnresolvedCommandSecretAssignment,
-} from "../secrets/command-config.js";
-import { getPath, setPathExistingStrict } from "../secrets/path-utils.js";
-import { resolveSecretRefValue } from "../secrets/resolve.js";
-import { collectConfigAssignments } from "../secrets/runtime-config-collectors.js";
-import { createResolverContext } from "../secrets/runtime-shared.js";
-import { resolveRuntimeWebTools } from "../secrets/runtime-web-tools.js";
-import { assertExpectedResolvedSecretValue } from "../secrets/secret-value.js";
-import { describeUnknownError } from "../secrets/shared.js";
+} from "../../upstream/src/secrets/command-config.js";
+import { getPath, setPathExistingStrict } from "../../upstream/src/secrets/path-utils.js";
+import { resolveSecretRefValue } from "../../upstream/src/secrets/resolve.js";
+import { collectConfigAssignments } from "../../upstream/src/secrets/runtime-config-collectors.js";
+import { createResolverContext } from "../../upstream/src/secrets/runtime-shared.js";
+import { resolveRuntimeWebTools } from "../../upstream/src/secrets/runtime-web-tools.js";
+import { assertExpectedResolvedSecretValue } from "../../upstream/src/secrets/secret-value.js";
+import { describeUnknownError } from "../../upstream/src/secrets/shared.js";
 import {
   discoverConfigSecretTargetsByIds,
   type DiscoveredConfigSecretTarget,
-} from "../secrets/target-registry.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
+} from "../../upstream/src/secrets/target-registry.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../upstream/src/utils/message-channel.js";
 
 type ResolveCommandSecretsResult = {
   resolvedConfig: OpenClawConfig;

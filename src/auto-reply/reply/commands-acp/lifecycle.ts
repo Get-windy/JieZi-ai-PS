@@ -1,39 +1,39 @@
 import { randomUUID } from "node:crypto";
-import { getAcpSessionManager } from "../../../acp/control-plane/manager.js";
-import { resolveAcpSessionResolutionError } from "../../../acp/control-plane/manager.utils.js";
+import { getAcpSessionManager } from "../../../../upstream/src/acp/control-plane/manager.js";
+import { resolveAcpSessionResolutionError } from "../../../../upstream/src/acp/control-plane/manager.utils.js";
 import {
   cleanupFailedAcpSpawn,
   type AcpSpawnRuntimeCloseHandle,
-} from "../../../acp/control-plane/spawn.js";
+} from "../../../../upstream/src/acp/control-plane/spawn.js";
 import {
   isAcpEnabledByPolicy,
   resolveAcpAgentPolicyError,
   resolveAcpDispatchPolicyError,
   resolveAcpDispatchPolicyMessage,
-} from "../../../acp/policy.js";
+} from "../../../../upstream/src/acp/policy.js";
 import {
   resolveAcpSessionCwd,
   resolveAcpThreadSessionDetailLines,
-} from "../../../acp/runtime/session-identifiers.js";
-import { resolveAcpSpawnRuntimePolicyError } from "../../../agents/acp-spawn.js";
+} from "../../../../upstream/src/acp/runtime/session-identifiers.js";
+import { resolveAcpSpawnRuntimePolicyError } from "../../../../upstream/src/agents/acp-spawn.js";
 import {
   resolveThreadBindingIntroText,
   resolveThreadBindingThreadName,
-} from "../../../channels/thread-bindings-messages.js";
+} from "../../../../upstream/src/channels/thread-bindings-messages.js";
 import {
   formatThreadBindingDisabledError,
   formatThreadBindingSpawnDisabledError,
   resolveThreadBindingIdleTimeoutMsForChannel,
   resolveThreadBindingMaxAgeMsForChannel,
   resolveThreadBindingSpawnPolicy,
-} from "../../../channels/thread-bindings-policy.js";
-import type { OpenClawConfig } from "../../../config/config.js";
-import type { SessionAcpMeta } from "../../../config/sessions/types.js";
-import { callGateway } from "../../../gateway/call.js";
+} from "../../../../upstream/src/channels/thread-bindings-policy.js";
+import type { OpenClawConfig } from "../../../../upstream/src/config/config.js";
+import type { SessionAcpMeta } from "../../../../upstream/src/config/sessions/types.js";
+import { callGateway } from "../../../../upstream/src/gateway/call.js";
 import {
   getSessionBindingService,
   type SessionBindingRecord,
-} from "../../../infra/outbound/session-binding-service.js";
+} from "../../../../upstream/src/infra/outbound/session-binding-service.js";
 import type { CommandHandlerResult, HandleCommandsParams } from "../commands-types.js";
 import {
   resolveAcpCommandAccountId,
@@ -49,8 +49,8 @@ import {
   stopWithText,
   type AcpSpawnThreadMode,
   withAcpCommandErrorBoundary,
-} from "./shared.js";
-import { resolveAcpTargetSessionKey } from "./targets.js";
+} from "../../../../upstream/src/auto-reply/reply/commands-acp/shared.js";
+import { resolveAcpTargetSessionKey } from "../../../../upstream/src/auto-reply/reply/commands-acp/targets.js";
 
 async function bindSpawnedAcpSessionToThread(params: {
   commandParams: HandleCommandsParams;

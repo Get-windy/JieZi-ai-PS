@@ -8,12 +8,12 @@
 import { randomUUID } from "node:crypto";
 import { listAgentIds } from "../../agents/agent-scope.js";
 import { createDefaultDeps } from "../../cli/deps.js";
-import { agentCommandFromIngress } from "../../commands/agent.js";
-import { loadConfig } from "../../config/config.js";
-import { resolveAgentMainSessionKey } from "../../config/sessions.js";
-import { defaultRuntime } from "../../runtime.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import { agentCommandFromIngress } from "../../../upstream/src/commands/agent.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
+import { resolveAgentMainSessionKey } from "../../../upstream/src/config/sessions.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 /**
  * 协作场景定义

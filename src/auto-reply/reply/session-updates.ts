@@ -1,17 +1,17 @@
 import crypto from "node:crypto";
-import { resolveUserTimezone } from "../../agents/date-time.js";
-import { buildWorkspaceSkillSnapshot } from "../../agents/skills.js";
-import { ensureSkillsWatcher, getSkillsSnapshotVersion } from "../../agents/skills/refresh.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { type SessionEntry, updateSessionStore } from "../../config/sessions.js";
+import { resolveUserTimezone } from "../../../upstream/src/agents/date-time.js";
+import { buildWorkspaceSkillSnapshot } from "../../../upstream/src/agents/skills.js";
+import { ensureSkillsWatcher, getSkillsSnapshotVersion } from "../../../upstream/src/agents/skills/refresh.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { type SessionEntry, updateSessionStore } from "../../../upstream/src/config/sessions.js";
 import { buildChannelSummary } from "../../infra/channel-summary.js";
 import {
   resolveTimezone,
   formatUtcTimestamp,
   formatZonedTimestamp,
 } from "../../infra/format-time/format-datetime.ts";
-import { getRemoteSkillEligibility } from "../../infra/skills-remote.js";
-import { drainSystemEventEntries } from "../../infra/system-events.js";
+import { getRemoteSkillEligibility } from "../../../upstream/src/infra/skills-remote.js";
+import { drainSystemEventEntries } from "../../../upstream/src/infra/system-events.js";
 
 export async function buildQueuedSystemPrompt(params: {
   cfg: OpenClawConfig;

@@ -5,10 +5,10 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import type { AnyAgentTool } from "./common.js";
-import { loadConfig } from "../../config/config.js";
+import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import { TrainingSystem } from "../../lifecycle/training-system.js";
-import { jsonResult, readStringParam } from "./common.js";
+import { jsonResult, readStringParam } from "../../../upstream/src/agents/tools/common.js";
 
 /**
  * training_start 工具参数 schema

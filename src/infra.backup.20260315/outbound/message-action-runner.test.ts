@@ -5,12 +5,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { slackPlugin } from "../../../upstream/extensions/slack/src/channel.js";
 import { telegramPlugin } from "../../../upstream/extensions/telegram/src/channel.js";
 import { whatsappPlugin } from "../../../upstream/extensions/whatsapp/src/channel.js";
-import { jsonResult } from "../../agents/tools/common.js";
-import type { ChannelPlugin } from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { setActivePluginRegistry } from "../../plugins/runtime.js";
-import { createOutboundTestPlugin, createTestRegistry } from "../../test-utils/channel-plugins.js";
-import { createIMessageTestPlugin } from "../../test-utils/imessage-test-plugin.js";
+import { jsonResult } from "../../../upstream/src/agents/tools/common.js";
+import type { ChannelPlugin } from "../../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { setActivePluginRegistry } from "../../../upstream/src/plugins/runtime.js";
+import { createOutboundTestPlugin, createTestRegistry } from "../../../upstream/src/test-utils/channel-plugins.js";
+import { createIMessageTestPlugin } from "../../../upstream/src/test-utils/imessage-test-plugin.js";
 import { loadWebMedia } from "../../web/media.js";
 import { runMessageAction } from "./message-action-runner.js";
 

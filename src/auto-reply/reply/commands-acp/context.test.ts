@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../../../config/config.js";
-import { buildCommandTestParams } from "../commands-spawn.test-harness.js";
+import type { OpenClawConfig } from "../../../../upstream/src/config/config.js";
+import { buildCommandTestParams } from "../../../../upstream/src/auto-reply/reply/commands-spawn.test-harness.js";
 import {
   isAcpCommandDiscordChannel,
   resolveAcpCommandBindingContext,

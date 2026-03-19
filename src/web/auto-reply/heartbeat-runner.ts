@@ -1,23 +1,23 @@
-import { appendCronStyleCurrentTimeLine } from "../../agents/current-time.js";
-import { resolveHeartbeatReplyPayload } from "../../auto-reply/heartbeat-reply-payload.js";
+import { appendCronStyleCurrentTimeLine } from "../../../upstream/src/agents/current-time.js";
+import { resolveHeartbeatReplyPayload } from "../../../upstream/src/auto-reply/heartbeat-reply-payload.js";
 import {
   DEFAULT_HEARTBEAT_ACK_MAX_CHARS,
   resolveHeartbeatPrompt,
   stripHeartbeatToken,
-} from "../../auto-reply/heartbeat.js";
-import { getReplyFromConfig } from "../../auto-reply/reply.js";
-import { HEARTBEAT_TOKEN } from "../../auto-reply/tokens.js";
-import { resolveWhatsAppHeartbeatRecipients } from "../../channels/plugins/whatsapp-heartbeat.js";
-import { loadConfig } from "../../config/config.js";
+} from "../../../upstream/src/auto-reply/heartbeat.js";
+import { getReplyFromConfig } from "../../../upstream/src/auto-reply/reply.js";
+import { HEARTBEAT_TOKEN } from "../../../upstream/src/auto-reply/tokens.js";
+import { resolveWhatsAppHeartbeatRecipients } from "../../../upstream/src/channels/plugins/whatsapp-heartbeat.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import {
   loadSessionStore,
   resolveSessionKey,
   resolveStorePath,
   updateSessionStore,
-} from "../../config/sessions.js";
-import { emitHeartbeatEvent, resolveIndicatorType } from "../../infra/heartbeat-events.js";
-import { resolveHeartbeatVisibility } from "../../infra/heartbeat-visibility.js";
-import { getChildLogger } from "../../logging.js";
+} from "../../../upstream/src/config/sessions.js";
+import { emitHeartbeatEvent, resolveIndicatorType } from "../../../upstream/src/infra/heartbeat-events.js";
+import { resolveHeartbeatVisibility } from "../../../upstream/src/infra/heartbeat-visibility.js";
+import { getChildLogger } from "../../../upstream/src/logging.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
 import { sendMessageWhatsApp } from "../outbound.js";
 import { newConnectionId } from "../reconnect.js";

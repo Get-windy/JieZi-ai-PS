@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { FollowupRun } from "./queue.js";
+import type { FollowupRun } from "../../../upstream/src/auto-reply/reply/queue.js";
 
 const hoisted = vi.hoisted(() => {
   const resolveAgentModelFallbacksOverrideMock = vi.fn();

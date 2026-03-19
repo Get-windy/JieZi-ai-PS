@@ -2,20 +2,20 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import * as bootstrapCache from "../../agents/bootstrap-cache.js";
-import { buildModelAliasIndex } from "../../agents/model-selection.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { SessionEntry } from "../../config/sessions.js";
+import * as bootstrapCache from "../../../upstream/src/agents/bootstrap-cache.js";
+import { buildModelAliasIndex } from "../../../upstream/src/agents/model-selection.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import type { SessionEntry } from "../../../upstream/src/config/sessions.js";
 import { formatZonedTimestamp } from "../../infra/format-time/format-datetime.ts";
 import {
   __testing as sessionBindingTesting,
   registerSessionBindingAdapter,
-} from "../../infra/outbound/session-binding-service.js";
-import { enqueueSystemEvent, resetSystemEventsForTest } from "../../infra/system-events.js";
-import { applyResetModelOverride } from "./session-reset-model.js";
+} from "../../../upstream/src/infra/outbound/session-binding-service.js";
+import { enqueueSystemEvent, resetSystemEventsForTest } from "../../../upstream/src/infra/system-events.js";
+import { applyResetModelOverride } from "../../../upstream/src/auto-reply/reply/session-reset-model.js";
 import { drainFormattedSystemEvents } from "./session-updates.js";
-import { persistSessionUsageUpdate } from "./session-usage.js";
-import { initSessionState } from "./session.js";
+import { persistSessionUsageUpdate } from "../../../upstream/src/auto-reply/reply/session-usage.js";
+import { initSessionState } from "../../../upstream/src/auto-reply/reply/session.js";
 
 // Perf: session-store locks are exercised elsewhere; most session tests don't need FS lock files.
 vi.mock("../../agents/session-write-lock.js", () => ({

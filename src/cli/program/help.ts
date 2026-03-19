@@ -1,14 +1,14 @@
 import type { Command } from "commander";
-import { resolveCommitHash } from "../../infra/git-commit.js";
-import { formatDocsLink } from "../../terminal/links.js";
-import { isRich, theme } from "../../terminal/theme.js";
-import { escapeRegExp } from "../../utils.js";
-import { hasFlag, hasRootVersionAlias } from "../argv.js";
-import { formatCliBannerLine, hasEmittedCliBanner } from "../banner.js";
-import { replaceCliName, resolveCliName } from "../cli-name.js";
-import { CLI_LOG_LEVEL_VALUES, parseCliLogLevelOption } from "../log-level-option.js";
+import { resolveCommitHash } from "../../../upstream/src/infra/git-commit.js";
+import { formatDocsLink } from "../../../upstream/src/terminal/links.js";
+import { isRich, theme } from "../../../upstream/src/terminal/theme.js";
+import { escapeRegExp } from "../../../upstream/src/utils.js";
+import { hasFlag, hasRootVersionAlias } from "../../../upstream/src/cli/argv.js";
+import { formatCliBannerLine, hasEmittedCliBanner } from "../../../upstream/src/cli/banner.js";
+import { replaceCliName, resolveCliName } from "../../../upstream/src/cli/cli-name.js";
+import { CLI_LOG_LEVEL_VALUES, parseCliLogLevelOption } from "../../../upstream/src/cli/log-level-option.js";
 import { getCoreCliCommandsWithSubcommands } from "./command-registry.js";
-import type { ProgramContext } from "./context.js";
+import type { ProgramContext } from "../../../upstream/src/cli/program/context.js";
 import { getSubCliCommandsWithSubcommands } from "./register.subclis.js";
 
 const CLI_NAME = resolveCliName();

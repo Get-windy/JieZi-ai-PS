@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractAssistantText, sanitizeTextContent } from "./sessions-helpers.js";
+import { extractAssistantText, sanitizeTextContent } from "../../../upstream/src/agents/tools/sessions-helpers.js";
 
 describe("sanitizeTextContent", () => {
   it("strips minimax tool call XML and downgraded markers", () => {

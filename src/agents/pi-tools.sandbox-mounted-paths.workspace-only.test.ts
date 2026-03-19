@@ -2,17 +2,17 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import { createOpenClawCodingTools } from "./pi-tools.js";
-import type { SandboxContext } from "./sandbox.js";
+import type { SandboxContext } from "../../upstream/src/agents/sandbox.js";
 import type { SandboxFsBridge, SandboxResolvedPath } from "./sandbox/fs-bridge.js";
-import { createSandboxFsBridgeFromResolver } from "./test-helpers/host-sandbox-fs-bridge.js";
+import { createSandboxFsBridgeFromResolver } from "../../upstream/src/agents/test-helpers/host-sandbox-fs-bridge.js";
 import {
   expectReadWriteEditTools,
   expectReadWriteTools,
   getTextContent,
-} from "./test-helpers/pi-tools-fs-helpers.js";
-import { createPiToolsSandboxContext } from "./test-helpers/pi-tools-sandbox-context.js";
+} from "../../upstream/src/agents/test-helpers/pi-tools-fs-helpers.js";
+import { createPiToolsSandboxContext } from "../../upstream/src/agents/test-helpers/pi-tools-sandbox-context.js";
 
 vi.mock("../infra/shell-env.js", async (importOriginal) => {
   const mod = await importOriginal<typeof import("../infra/shell-env.js")>();

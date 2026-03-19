@@ -1,12 +1,12 @@
-import { formatControlPlaneActor, resolveControlPlaneActor } from "./control-plane-audit.js";
-import { consumeControlPlaneWriteBudget } from "./control-plane-rate-limit.js";
+import { formatControlPlaneActor, resolveControlPlaneActor } from "../../upstream/src/gateway/control-plane-audit.js";
+import { consumeControlPlaneWriteBudget } from "../../upstream/src/gateway/control-plane-rate-limit.js";
 import { ADMIN_SCOPE, authorizeOperatorScopesForMethod } from "./method-scopes.js";
-import { ErrorCodes, errorShape } from "./protocol/index.js";
-import { isRoleAuthorizedForMethod, parseGatewayRole } from "./role-policy.js";
+import { ErrorCodes, errorShape } from "../../upstream/src/gateway/protocol/index.js";
+import { isRoleAuthorizedForMethod, parseGatewayRole } from "../../upstream/src/gateway/role-policy.js";
 import { coreGatewayHandlers } from "./server-methods/index.js";
 export { coreGatewayHandlers } from "./server-methods/index.js";
 import { withPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
-import type { GatewayRequestHandlers, GatewayRequestOptions } from "./server-methods/types.js";
+import type { GatewayRequestHandlers, GatewayRequestOptions } from "../../upstream/src/gateway/server-methods/types.js";
 
 const CONTROL_PLANE_WRITE_METHODS = new Set(["config.apply", "config.patch", "update.run"]);
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {

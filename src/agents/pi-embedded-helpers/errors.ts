@@ -1,8 +1,8 @@
 import type { AssistantMessage } from "@mariozechner/pi-ai";
-import type { OpenClawConfig } from "../../config/config.js";
-import { createSubsystemLogger } from "../../logging/subsystem.js";
-import { formatSandboxToolPolicyBlockedMessage } from "../sandbox.js";
-import { stableStringify } from "../stable-stringify.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
+import { formatSandboxToolPolicyBlockedMessage } from "../../../upstream/src/agents/sandbox.js";
+import { stableStringify } from "../../../upstream/src/agents/stable-stringify.js";
 import {
   isAuthErrorMessage,
   isAuthPermanentErrorMessage,
@@ -11,7 +11,7 @@ import {
   isRateLimitErrorMessage,
   isTimeoutErrorMessage,
 } from "./failover-matches.js";
-import type { FailoverReason } from "./types.js";
+import type { FailoverReason } from "../../../upstream/src/agents/pi-embedded-helpers/types.js";
 
 export {
   isAuthErrorMessage,

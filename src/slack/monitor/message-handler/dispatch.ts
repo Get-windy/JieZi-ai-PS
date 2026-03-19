@@ -1,14 +1,14 @@
-import { resolveHumanDelayConfig } from "../../../agents/identity.js";
-import { dispatchInboundMessage } from "../../../auto-reply/dispatch.js";
-import { clearHistoryEntriesIfEnabled } from "../../../auto-reply/reply/history.js";
+import { resolveHumanDelayConfig } from "../../../../upstream/src/agents/identity.js";
+import { dispatchInboundMessage } from "../../../../upstream/src/auto-reply/dispatch.js";
+import { clearHistoryEntriesIfEnabled } from "../../../../upstream/src/auto-reply/reply/history.js";
 import { createReplyDispatcherWithTyping } from "../../../auto-reply/reply/reply-dispatcher.js";
-import type { ReplyPayload } from "../../../auto-reply/types.js";
-import { removeAckReactionAfterReply } from "../../../channels/ack-reactions.js";
-import { logAckFailure, logTypingFailure } from "../../../channels/logging.js";
-import { createReplyPrefixOptions } from "../../../channels/reply-prefix.js";
+import type { ReplyPayload } from "../../../../upstream/src/auto-reply/types.js";
+import { removeAckReactionAfterReply } from "../../../../upstream/src/channels/ack-reactions.js";
+import { logAckFailure, logTypingFailure } from "../../../../upstream/src/channels/logging.js";
+import { createReplyPrefixOptions } from "../../../../upstream/src/channels/reply-prefix.js";
 import { createTypingCallbacks } from "../../../channels/typing.js";
-import { resolveStorePath, updateLastRoute } from "../../../config/sessions.js";
-import { danger, logVerbose, shouldLogVerbose } from "../../../globals.js";
+import { resolveStorePath, updateLastRoute } from "../../../../upstream/src/config/sessions.js";
+import { danger, logVerbose, shouldLogVerbose } from "../../../../upstream/src/globals.js";
 import { removeSlackReaction } from "../../actions.js";
 import { createSlackDraftStream } from "../../draft-stream.js";
 import {

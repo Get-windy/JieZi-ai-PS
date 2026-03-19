@@ -2,24 +2,24 @@ import fs from "node:fs";
 import {
   hasConfiguredUnavailableCredentialStatus,
   hasResolvedCredentialValue,
-} from "../../channels/account-snapshot-fields.js";
+} from "../../../upstream/src/channels/account-snapshot-fields.js";
 import {
   buildChannelAccountSnapshot,
   formatChannelAllowFrom,
   resolveChannelAccountConfigured,
   resolveChannelAccountEnabled,
-} from "../../channels/account-summary.js";
-import { resolveChannelDefaultAccountId } from "../../channels/plugins/helpers.js";
-import { listChannelPlugins } from "../../channels/plugins/index.js";
+} from "../../../upstream/src/channels/account-summary.js";
+import { resolveChannelDefaultAccountId } from "../../../upstream/src/channels/plugins/helpers.js";
+import { listChannelPlugins } from "../../../upstream/src/channels/plugins/index.js";
 import type {
   ChannelAccountSnapshot,
   ChannelId,
   ChannelPlugin,
-} from "../../channels/plugins/types.js";
-import { inspectReadOnlyChannelAccount } from "../../channels/read-only-account-inspect.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { sha256HexPrefix } from "../../logging/redact-identifier.js";
-import { formatTimeAgo } from "./format.js";
+} from "../../../upstream/src/channels/plugins/types.js";
+import { inspectReadOnlyChannelAccount } from "../../../upstream/src/channels/read-only-account-inspect.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { sha256HexPrefix } from "../../../upstream/src/logging/redact-identifier.js";
+import { formatTimeAgo } from "../../../upstream/src/commands/status-all/format.js";
 
 export type ChannelRow = {
   id: ChannelId;

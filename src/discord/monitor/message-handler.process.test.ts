@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_EMOJIS } from "../../channels/status-reactions.js";
+import { DEFAULT_EMOJIS } from "../../../upstream/src/channels/status-reactions.js";
 import { createBaseDiscordMessageContext } from "./message-handler.test-harness.js";
 import {
   __testing as threadBindingTesting,

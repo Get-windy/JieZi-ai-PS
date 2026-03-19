@@ -2,18 +2,18 @@ import "./isolated-agent.mocks.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { loadModelCatalog } from "../agents/model-catalog.js";
-import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
+import { loadModelCatalog } from "../../upstream/src/agents/model-catalog.js";
+import { runEmbeddedPiAgent } from "../../upstream/src/agents/pi-embedded.js";
 import type { CliDeps } from "../cli/deps.js";
-import { runCronIsolatedAgentTurn } from "./isolated-agent.js";
+import { runCronIsolatedAgentTurn } from "../../upstream/src/cron/isolated-agent.js";
 import {
   makeCfg,
   makeJob,
   withTempCronHome,
   writeSessionStore,
   writeSessionStoreEntries,
-} from "./isolated-agent.test-harness.js";
-import type { CronJob } from "./types.js";
+} from "../../upstream/src/cron/isolated-agent.test-harness.js";
+import type { CronJob } from "../../upstream/src/cron/types.js";
 const withTempHome = withTempCronHome;
 
 function makeDeps(): CliDeps {

@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { logVerbose } from "../../globals.js";
-import { sleep } from "../../utils.js";
+import { logVerbose } from "../../../upstream/src/globals.js";
+import { sleep } from "../../../upstream/src/utils.js";
 import { loadWebMedia } from "../media.js";
 import { deliverWebReply } from "./deliver-reply.js";
 import type { WebInboundMsg } from "./types.js";
 
-vi.mock("../../globals.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../globals.js")>();
+vi.mock("../../../upstream/src/globals.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../upstream/src/globals.js")>();
   return {
     ...actual,
     shouldLogVerbose: vi.fn(() => true),
@@ -18,8 +18,8 @@ vi.mock("../media.js", () => ({
   loadWebMedia: vi.fn(),
 }));
 
-vi.mock("../../utils.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../utils.js")>();
+vi.mock("../../../upstream/src/utils.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../upstream/src/utils.js")>();
   return {
     ...actual,
     sleep: vi.fn(async () => {}),

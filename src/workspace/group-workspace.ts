@@ -10,7 +10,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { resolveStateDir } from "../config/paths.js";
+import { resolveStateDir } from "../../upstream/src/config/paths.js";
 import {
   GroupWorkspace,
   GroupBootstrapFile,

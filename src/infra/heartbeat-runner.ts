@@ -1,29 +1,33 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  listAgentIds,
   resolveAgentConfig,
+  resolveAgentExplicitModelPrimary,
+  resolveAgentModelAccounts,
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
-import { appendCronStyleCurrentTimeLine } from "../agents/current-time.js";
-import { resolveEffectiveMessagesConfig } from "../agents/identity.js";
-import { DEFAULT_HEARTBEAT_FILENAME } from "../agents/workspace.js";
-import { resolveHeartbeatReplyPayload } from "../auto-reply/heartbeat-reply-payload.js";
+import { appendCronStyleCurrentTimeLine } from "../../upstream/src/agents/current-time.js";
+import { resolveEffectiveMessagesConfig } from "../../upstream/src/agents/identity.js";
+import { DEFAULT_HEARTBEAT_FILENAME } from "../../upstream/src/agents/workspace.js";
+import { resolveHeartbeatReplyPayload } from "../../upstream/src/auto-reply/heartbeat-reply-payload.js";
 import {
   DEFAULT_HEARTBEAT_ACK_MAX_CHARS,
   DEFAULT_HEARTBEAT_EVERY,
   isHeartbeatContentEffectivelyEmpty,
   resolveHeartbeatPrompt as resolveHeartbeatPromptText,
   stripHeartbeatToken,
-} from "../auto-reply/heartbeat.js";
-import { getReplyFromConfig } from "../auto-reply/reply.js";
-import { HEARTBEAT_TOKEN } from "../auto-reply/tokens.js";
-import type { ReplyPayload } from "../auto-reply/types.js";
-import { getChannelPlugin } from "../channels/plugins/index.js";
-import type { ChannelHeartbeatDeps } from "../channels/plugins/types.js";
-import { parseDurationMs } from "../cli/parse-duration.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { loadConfig } from "../config/config.js";
+} from "../../upstream/src/auto-reply/heartbeat.js";
+import { getReplyFromConfig } from "../auto-reply/reply/get-reply.js";
+import { HEARTBEAT_TOKEN } from "../../upstream/src/auto-reply/tokens.js";
+import type { ReplyPayload } from "../../upstream/src/auto-reply/types.js";
+import { getChannelPlugin } from "../../upstream/src/channels/plugins/index.js";
+import type { ChannelHeartbeatDeps } from "../../upstream/src/channels/plugins/types.js";
+import { resolveEmbeddedSessionLane } from "../../upstream/src/agents/pi-embedded.js";
+import { parseDurationMs } from "../../upstream/src/cli/parse-duration.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
 import {
   canonicalizeMainSessionAlias,
   loadSessionStore,
@@ -33,30 +37,29 @@ import {
   resolveStorePath,
   saveSessionStore,
   updateSessionStore,
-} from "../config/sessions.js";
-import type { AgentDefaultsConfig } from "../config/types.agent-defaults.js";
-import { resolveCronSession } from "../cron/isolated-agent/session.js";
-import { createSubsystemLogger } from "../logging/subsystem.js";
-import { getQueueSize } from "../process/command-queue.js";
-import { CommandLane } from "../process/lanes.js";
+} from "../../upstream/src/config/sessions.js";
+import type { AgentDefaultsConfig } from "../../upstream/src/config/types.agent-defaults.js";
+import { resolveCronSession } from "../../upstream/src/cron/isolated-agent/session.js";
+import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
+import { getQueueSize, resetAllLanes } from "../../upstream/src/process/command-queue.js";
 import {
   normalizeAgentId,
   parseAgentSessionKey,
   toAgentStoreSessionKey,
 } from "../routing/session-key.js";
-import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
-import { escapeRegExp } from "../utils.js";
-import { formatErrorMessage, hasErrnoCode } from "./errors.js";
-import { isWithinActiveHours } from "./heartbeat-active-hours.js";
+import { defaultRuntime, type RuntimeEnv } from "../../upstream/src/runtime.js";
+import { escapeRegExp } from "../../upstream/src/utils.js";
+import { formatErrorMessage, hasErrnoCode } from "../../upstream/src/infra/errors.js";
+import { isWithinActiveHours } from "../../upstream/src/infra/heartbeat-active-hours.js";
 import {
   buildExecEventPrompt,
   buildCronEventPrompt,
   isCronSystemEvent,
   isExecCompletionEvent,
-} from "./heartbeat-events-filter.js";
-import { emitHeartbeatEvent, resolveIndicatorType } from "./heartbeat-events.js";
-import { resolveHeartbeatReasonKind } from "./heartbeat-reason.js";
-import { resolveHeartbeatVisibility } from "./heartbeat-visibility.js";
+} from "../../upstream/src/infra/heartbeat-events-filter.js";
+import { emitHeartbeatEvent, resolveIndicatorType } from "../../upstream/src/infra/heartbeat-events.js";
+import { resolveHeartbeatReasonKind } from "../../upstream/src/infra/heartbeat-reason.js";
+import { resolveHeartbeatVisibility } from "../../upstream/src/infra/heartbeat-visibility.js";
 import {
   areHeartbeatsEnabled,
   type HeartbeatRunResult,
@@ -64,15 +67,15 @@ import {
   requestHeartbeatNow,
   setHeartbeatsEnabled,
   setHeartbeatWakeHandler,
-} from "./heartbeat-wake.js";
+} from "../../upstream/src/infra/heartbeat-wake.js";
 import type { OutboundSendDeps } from "./outbound/deliver.js";
 import { deliverOutboundPayloads } from "./outbound/deliver.js";
-import { buildOutboundSessionContext } from "./outbound/session-context.js";
+import { buildOutboundSessionContext } from "../../upstream/src/infra/outbound/session-context.js";
 import {
   resolveHeartbeatDeliveryTarget,
   resolveHeartbeatSenderContext,
 } from "./outbound/targets.js";
-import { peekSystemEventEntries } from "./system-events.js";
+import { peekSystemEventEntries } from "../../upstream/src/infra/system-events.js";
 
 export type HeartbeatDeps = OutboundSendDeps &
   ChannelHeartbeatDeps & {
@@ -84,6 +87,12 @@ export type HeartbeatDeps = OutboundSendDeps &
 const log = createSubsystemLogger("gateway/heartbeat");
 
 export { areHeartbeatsEnabled, setHeartbeatsEnabled };
+
+// Track when each session lane first entered in-flight state.
+// Used to auto-reset stale lanes that have been in-flight too long.
+const laneInFlightSince = new Map<string, number>();
+// Auto-reset stale in-flight lanes after 5 minutes of continuous blocking.
+const STALE_LANE_RESET_THRESHOLD_MS = 5 * 60 * 1000;
 
 type HeartbeatConfig = AgentDefaultsConfig["heartbeat"];
 type HeartbeatAgent = {
@@ -131,7 +140,9 @@ export function isHeartbeatEnabledForAgent(cfg: OpenClawConfig, agentId?: string
       (entry) => Boolean(entry?.heartbeat) && normalizeAgentId(entry?.id) === resolvedAgentId,
     );
   }
-  return resolvedAgentId === resolveDefaultAgentId(cfg);
+  // fallback 模式：所有已注册的 agent 都视为 enabled（继承 defaults.heartbeat）
+  const allAgentIds = listAgentIds(cfg);
+  return allAgentIds.includes(resolvedAgentId);
 }
 
 function resolveHeartbeatConfig(
@@ -208,8 +219,9 @@ function resolveHeartbeatAgents(cfg: OpenClawConfig): HeartbeatAgent[] {
       })
       .filter((entry) => entry.agentId);
   }
-  const fallbackId = resolveDefaultAgentId(cfg);
-  return [{ agentId: fallbackId, heartbeat: resolveHeartbeatConfig(cfg, fallbackId) }];
+  // fallback 模式：将所有 agent 加入调度，继承 defaults.heartbeat 配置
+  const allIds = listAgentIds(cfg);
+  return allIds.map((id) => ({ agentId: id, heartbeat: resolveHeartbeatConfig(cfg, id) }));
 }
 
 export function resolveHeartbeatIntervalMs(
@@ -626,20 +638,107 @@ export async function runHeartbeatOnce(opts: {
     return { status: "skipped", reason: "disabled" };
   }
   if (!isHeartbeatEnabledForAgent(cfg, agentId)) {
+    log.info(`[DEBUG-HB] agent "${agentId}" heartbeat NOT enabled`, { agentId });
     return { status: "skipped", reason: "disabled" };
   }
   if (!resolveHeartbeatIntervalMs(cfg, undefined, heartbeat)) {
+    log.info(`[DEBUG-HB] agent "${agentId}" no heartbeat intervalMs`, { agentId });
     return { status: "skipped", reason: "disabled" };
   }
+
+  // ============ 本地增强：模型账号检查 ============
+  // 每个 agent 的心跳使用自己配置的模型账号。
+  // 如果该 agent 没有配置 modelAccounts，则：
+  //   - 系统任务驱动（pending-tasks / cron-event）：回退到主控 agent 的模型配置，继续运行
+  //   - 普通定时心跳：直接跳过，不触发模型调用
+  const defaultAgentId = resolveDefaultAgentId(cfg);
+  const isDefaultAgent = agentId === defaultAgentId;
+  if (!isDefaultAgent) {
+    const agentModelAccounts = resolveAgentModelAccounts(cfg, agentId);
+    // 兼容两种配置方式：新的 modelAccounts.accounts 或旧的 model.primary
+    const hasModelConfig =
+      (agentModelAccounts?.accounts && agentModelAccounts.accounts.length > 0) ||
+      !!resolveAgentExplicitModelPrimary(cfg, agentId);
+    // ── 调试：所有 agent 的模型配置状态 ───────────────────────────────
+    log.info(
+      `[DEBUG-HB-CFG] agentId=${agentId} ` +
+      `hasModelConfig=${hasModelConfig} ` +
+      `modelAccounts.defaultAccountId=${agentModelAccounts?.defaultAccountId ?? "(none)"} ` +
+      `modelAccounts.accounts=${JSON.stringify(agentModelAccounts?.accounts ?? [])} ` +
+      `modelAccounts.routingMode=${agentModelAccounts?.routingMode ?? "(none)"} ` +
+      `model.primary=${resolveAgentExplicitModelPrimary(cfg, agentId) ?? "(none)"} ` +
+      `reason=${opts.reason ?? "(none)"}`
+    );
+    // ─────────────────────────────────────────────────────────────────
+    if (!hasModelConfig) {
+      const reason = opts.reason ?? "";
+      const isTaskDriven =
+        reason.startsWith("pending-tasks") ||
+        reason === "cron-event" ||
+        reason === "exec-event" ||
+        reason.startsWith("cron:"); // cron: 前缀包括任务分配唤醒（cron:task-assign:xxx）
+      if (!isTaskDriven) {
+        // 普通心跳：该 agent 未配置模型，跳过
+        log.info(`heartbeat: skipped for agent "${agentId}" — no model accounts configured`, {
+          agentId,
+          reason: "no-model-config",
+        });
+        return { status: "skipped", reason: "disabled" };
+      }
+      // 系统任务驱动：回退到主控 agent 的模型配置（修改 cfg 上下文，让后续路由使用主控模型）
+      log.info(
+        `heartbeat: agent "${agentId}" has no model config, using default agent "${defaultAgentId}" model for task-driven run`,
+        { agentId, defaultAgentId, reason },
+      );
+    }
+  } else {
+    // ── 调试：主控 agent 的模型配置状态 ──────────────────────────────
+    const defaultModelAccounts = resolveAgentModelAccounts(cfg, agentId);
+    log.info(
+      `[DEBUG-HB-CFG] agentId=${agentId} (defaultAgent) ` +
+      `modelAccounts.defaultAccountId=${defaultModelAccounts?.defaultAccountId ?? "(none)"} ` +
+      `modelAccounts.accounts=${JSON.stringify(defaultModelAccounts?.accounts ?? [])} ` +
+      `modelAccounts.routingMode=${defaultModelAccounts?.routingMode ?? "(none)"} ` +
+      `model.primary=${resolveAgentExplicitModelPrimary(cfg, agentId) ?? "(none)"} ` +
+      `agents.defaults.model.primary=${(cfg.agents?.defaults?.model as { primary?: string } | undefined)?.primary ?? "(none)"} ` +
+      `reason=${opts.reason ?? "(none)"}`
+    );
+    // ────────────────────────────────────────────────────────────────
+  }
+  // ============ 本地增强结束 ============
 
   const startedAt = opts.deps?.nowMs?.() ?? Date.now();
   if (!isWithinActiveHours(cfg, heartbeat, startedAt)) {
     return { status: "skipped", reason: "quiet-hours" };
   }
 
-  const queueSize = (opts.deps?.getQueueSize ?? getQueueSize)(CommandLane.Main);
+  // 检查该 agent 自身 session lane 是否有请求在跑（而不是全局 main lane）
+  // main lane 只用于用户直接发来的消息，不代表该 agent 是否空闲
+  const agentMainSessionKey = resolveAgentMainSessionKey({ cfg, agentId: agentId });
+  const agentSessionLane = resolveEmbeddedSessionLane(agentMainSessionKey);
+  const queueSize = (opts.deps?.getQueueSize ?? getQueueSize)(agentSessionLane);
   if (queueSize > 0) {
-    return { status: "skipped", reason: "requests-in-flight" };
+    const now = opts.deps?.nowMs?.() ?? Date.now();
+    const since = laneInFlightSince.get(agentSessionLane);
+    if (since === undefined) {
+      laneInFlightSince.set(agentSessionLane, now);
+    } else if (now - since >= STALE_LANE_RESET_THRESHOLD_MS) {
+      // Lane has been in-flight for too long — likely a stale taskId after a failed run.
+      // Reset all lanes so queued work can drain.
+      log.warn(
+        `[DEBUG-HB] agent "${agentId}" session lane "${agentSessionLane}" has been in-flight for ${Math.round((now - since) / 1000)}s — resetting stale lanes`,
+        { agentId },
+      );
+      laneInFlightSince.delete(agentSessionLane);
+      resetAllLanes();
+      // After reset the lane is now idle — fall through to run heartbeat.
+    } else {
+      log.info(`[DEBUG-HB] agent "${agentId}" skipped: session lane "${agentSessionLane}" has ${queueSize} task(s) in-flight`, { agentId });
+      return { status: "skipped", reason: "requests-in-flight" };
+    }
+  } else {
+    // Lane is idle — clear any stale tracking entry.
+    laneInFlightSince.delete(agentSessionLane);
   }
 
   // Preflight centralizes trigger classification, event inspection, and HEARTBEAT.md gating.
@@ -803,12 +902,26 @@ export async function runHeartbeatOnce(opts: {
           bootstrapContextMode,
         }
       : { isHeartbeat: true, suppressToolErrorWarnings, bootstrapContextMode };
+    // ── 调试：打印心跳实际调用前的模型参数 ───────────────────────────
+    log.info(`[DEBUG-HB-MODEL] runOnce agentId=${agentId} heartbeatModelOverride=${heartbeatModelOverride ?? "(none)"} sessionKey=${runSessionKey}`);
+    // ────────────────────────────────────────────────────────────────
     const replyResult = await getReplyFromConfig(ctx, replyOpts, cfg);
     const replyPayload = resolveHeartbeatReplyPayload(replyResult);
     const includeReasoning = heartbeat?.includeReasoning === true;
     const reasoningPayloads = includeReasoning
       ? resolveHeartbeatReasoningPayloads(replyResult).filter((payload) => payload !== replyPayload)
       : [];
+    // ── 调试：LLM 返回后的 payload 内容 ─────────────────────────────
+    log.info(
+      `[DEBUG-HB-REPLY] agentId=${agentId} ` +
+      `hasPayload=${Boolean(replyPayload)} ` +
+      `text=${JSON.stringify(replyPayload?.text?.slice(0, 100) ?? "(none)")} ` +
+      `hasMedia=${Boolean(replyPayload?.mediaUrl || replyPayload?.mediaUrls?.length)} ` +
+      `delivery.channel=${delivery.channel} ` +
+      `delivery.to=${delivery.to ?? "(none)"} ` +
+      `delivery.reason=${delivery.reason ?? "(none)"}`
+    );
+    // ─────────────────────────────────────────────────────────────────
 
     if (
       !replyPayload ||
@@ -849,6 +962,15 @@ export async function runHeartbeatOnce(opts: {
       normalized.shouldSkip = false;
     }
     const shouldSkipMain = normalized.shouldSkip && !normalized.hasMedia && !hasExecCompletion;
+    // ── 调试：normalized 结果 ────────────────────────────────────────
+    log.info(
+      `[DEBUG-HB-NORM] agentId=${agentId} ` +
+      `normalizedText=${JSON.stringify(normalized.text.slice(0, 100))} ` +
+      `shouldSkip=${normalized.shouldSkip} ` +
+      `shouldSkipMain=${shouldSkipMain} ` +
+      `hasExecCompletion=${hasExecCompletion}`
+    );
+    // ─────────────────────────────────────────────────────────────────
     if (shouldSkipMain && reasoningPayloads.length === 0) {
       await restoreHeartbeatUpdatedAt({
         storePath,
@@ -916,6 +1038,14 @@ export async function runHeartbeatOnce(opts: {
       : normalized.text;
 
     if (delivery.channel === "none" || !delivery.to) {
+      // ── 调试：no-target 分支 ─────────────────────────────────────────
+      log.info(
+        `[DEBUG-HB-SKIP] agentId=${agentId} reason=no-target ` +
+        `delivery.channel=${delivery.channel} delivery.to=${delivery.to ?? "(none)"} ` +
+        `delivery.reason=${delivery.reason ?? "(none)"} ` +
+        `preview=${JSON.stringify(previewText?.slice(0, 80) ?? "(none)")}`
+      );
+      // ─────────────────────────────────────────────────────────────────
       emitHeartbeatEvent({
         status: "skipped",
         reason: delivery.reason ?? "no-target",
@@ -1020,6 +1150,10 @@ export async function runHeartbeatOnce(opts: {
     return { status: "ran", durationMs: Date.now() - startedAt };
   } catch (err) {
     const reason = formatErrorMessage(err);
+    // DEBUG: print full stack to locate undefined.config
+    if (err instanceof Error && err.stack) {
+      log.error(`heartbeat failed stack: ${err.stack}`, { error: reason });
+    }
     emitHeartbeatEvent({
       status: "failed",
       reason,
@@ -1123,6 +1257,7 @@ export function startHeartbeatRunner(opts: {
     state.cfg = cfg;
     state.agents = nextAgents;
     const nextEnabled = nextAgents.size > 0;
+    log.info(`[DEBUG-HB] updateConfig: state.agents=${JSON.stringify([...nextAgents.keys()])} size=${nextAgents.size}`);
     if (!initialized) {
       if (!nextEnabled) {
         log.info("heartbeat: disabled", { enabled: false });
@@ -1171,10 +1306,27 @@ export function startHeartbeatRunner(opts: {
 
     if (requestedSessionKey || requestedAgentId) {
       const targetAgentId = requestedAgentId ?? resolveAgentIdFromSessionKey(requestedSessionKey);
-      const targetAgent = state.agents.get(targetAgentId);
+      log.info(`[DEBUG-HB] run: targeted wake agentId="${targetAgentId}" state.agents=[${[...state.agents.keys()].join(',')}]`);
+      let targetAgent = state.agents.get(targetAgentId);
       if (!targetAgent) {
-        scheduleNext();
-        return { status: "skipped", reason: "disabled" };
+        // agent 未在 state.agents 中（可能是 fallback 模式下首次唤醒），
+        // 动态构建 fallback 配置来运行，不直接 skip
+        const fallbackHeartbeat = resolveHeartbeatConfig(state.cfg, targetAgentId);
+        const intervalMs = resolveHeartbeatIntervalMs(state.cfg, undefined, fallbackHeartbeat);
+        if (!intervalMs) {
+          log.warn(`[Heartbeat] agent "${targetAgentId}" has no heartbeat interval, skipping wake`, { agentId: targetAgentId });
+          scheduleNext();
+          return { status: "skipped", reason: "disabled" };
+        }
+        // 动态注册该 agent 到 state.agents
+        targetAgent = {
+          agentId: targetAgentId,
+          heartbeat: fallbackHeartbeat,
+          intervalMs,
+          nextDueMs: now + intervalMs,
+        };
+        state.agents.set(targetAgentId, targetAgent);
+        log.info(`[Heartbeat] dynamically registered agent "${targetAgentId}" for wake`, { agentId: targetAgentId, intervalMs });
       }
       try {
         const res = await runOnce({
@@ -1201,42 +1353,65 @@ export function startHeartbeatRunner(opts: {
       }
     }
 
+    // ============ 本地增强：并发执行多 agent 心跳 ============
+    // 1. 收集本轮需要运行的 agents（过滤未到时间的）
+    const agentsToRun: HeartbeatAgentState[] = [];
     for (const agent of state.agents.values()) {
       if (isInterval && now < agent.nextDueMs) {
         continue;
       }
-
-      let res: HeartbeatRunResult;
-      try {
-        res = await runOnce({
-          cfg: state.cfg,
-          agentId: agent.agentId,
-          heartbeat: agent.heartbeat,
-          reason,
-          deps: { runtime: state.runtime },
-        });
-      } catch (err) {
-        // If runOnce throws (e.g. during session compaction), we must still
-        // advance the timer and call scheduleNext so heartbeats keep firing.
-        const errMsg = formatErrorMessage(err);
-        log.error(`heartbeat runner: runOnce threw unexpectedly: ${errMsg}`, { error: errMsg });
-        advanceAgentSchedule(agent, now);
-        continue;
-      }
-      if (res.status === "skipped" && res.reason === "requests-in-flight") {
-        // Do not advance the schedule — the main lane is busy and the wake
-        // layer will retry shortly (DEFAULT_RETRY_MS = 1 s).  Calling
-        // scheduleNext() here would register a 0 ms timer that races with
-        // the wake layer's 1 s retry and wins, bypassing the cooldown.
-        return res;
-      }
-      if (res.status !== "skipped" || res.reason !== "disabled") {
-        advanceAgentSchedule(agent, now);
-      }
-      if (res.status === "ran") {
-        ran = true;
-      }
+      agentsToRun.push(agent);
     }
+
+    // 2. 并发执行所有 agent 的心跳，互不阻塞
+    //    使用 Promise.allSettled 保证所有 agent 都有机会执行，
+    //    即使某个 agent 的 runOnce 抛出或返回 requests-in-flight，其他 agent 不受影响。
+    let anyInFlight = false;
+    const results = await Promise.allSettled(
+      agentsToRun.map(async (agent) => {
+        let res: HeartbeatRunResult;
+        try {
+          res = await runOnce({
+            cfg: state.cfg,
+            agentId: agent.agentId,
+            heartbeat: agent.heartbeat,
+            reason,
+            deps: { runtime: state.runtime },
+          });
+        } catch (err) {
+          const errMsg = formatErrorMessage(err);
+          log.error(`heartbeat runner: runOnce threw unexpectedly: ${errMsg}`, { error: errMsg });
+          advanceAgentSchedule(agent, now);
+          return { agentId: agent.agentId, res: { status: "failed" as const, reason: errMsg } };
+        }
+        if (res.status === "skipped" && res.reason === "requests-in-flight") {
+          // 该 agent 正忙，不推进调度时间（让唤醒层在 1s 后重试），
+          // 但不阻止其他 agent 的心跳执行。
+          anyInFlight = true;
+        } else {
+          if (res.status !== "skipped" || res.reason !== "disabled") {
+            advanceAgentSchedule(agent, now);
+          }
+          if (res.status === "ran") {
+            ran = true;
+          }
+        }
+        return { agentId: agent.agentId, res };
+      }),
+    );
+
+    // 3. 若有 agent 仍 in-flight，唤醒层会在 1s 后重试，此处只需 scheduleNext
+    //    不需要像之前一样 early return，避免影响整体调度节奏。
+    if (anyInFlight && !ran) {
+      // 还有 agent 在跑，1s 后唤醒层会重新触发；仅对已完成的 agent 安排下次定时
+      scheduleNext();
+      // 上报 requests-in-flight，让唤醒层维持 1s 重试节奏
+      return { status: "skipped", reason: "requests-in-flight" };
+    }
+    // ============ 本地增强结束 ============
+
+    // 抑制 results 未使用的 lint 警告
+    void results;
 
     scheduleNext();
     if (ran) {

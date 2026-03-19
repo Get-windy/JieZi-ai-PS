@@ -3,9 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import { describe, expect, it } from "vitest";
-import { withEnvAsync } from "../test-utils/env.js";
-import { ensureAuthProfileStore } from "./auth-profiles.js";
-import { getApiKeyForModel, resolveApiKeyForProvider, resolveEnvApiKey } from "./model-auth.js";
+import { withEnvAsync } from "../../upstream/src/test-utils/env.js";
+import { ensureAuthProfileStore } from "../../upstream/src/agents/auth-profiles.js";
+import { getApiKeyForModel, resolveApiKeyForProvider, resolveEnvApiKey } from "../../upstream/src/agents/model-auth.js";
 
 const envVar = (...parts: string[]) => parts.join("_");
 

@@ -1,25 +1,25 @@
-import { ensureAuthProfileStore, listProfilesForProvider } from "../agents/auth-profiles.js";
-import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
-import { hasUsableCustomProviderApiKey, resolveEnvApiKey } from "../agents/model-auth.js";
-import { loadModelCatalog } from "../agents/model-catalog.js";
+import { ensureAuthProfileStore, listProfilesForProvider } from "../../upstream/src/agents/auth-profiles.js";
+import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../../upstream/src/agents/defaults.js";
+import { hasUsableCustomProviderApiKey, resolveEnvApiKey } from "../../upstream/src/agents/model-auth.js";
+import { loadModelCatalog } from "../../upstream/src/agents/model-catalog.js";
 import {
   buildAllowedModelSet,
   buildModelAliasIndex,
   modelKey,
   normalizeProviderId,
   resolveConfiguredModelRef,
-} from "../agents/model-selection.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { resolveAgentModelPrimaryValue } from "../config/model-input.js";
+} from "../../upstream/src/agents/model-selection.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { resolveAgentModelPrimaryValue } from "../../upstream/src/config/model-input.js";
 import {
   resolveProviderPluginChoice,
   resolveProviderModelPickerEntries,
   runProviderModelSelectedHook,
-} from "../plugins/provider-wizard.js";
-import { resolvePluginProviders } from "../plugins/providers.js";
-import type { WizardPrompter, WizardSelectOption } from "../wizard/prompts.js";
+} from "../../upstream/src/plugins/provider-wizard.js";
+import { resolvePluginProviders } from "../../upstream/src/plugins/providers.js";
+import type { WizardPrompter, WizardSelectOption } from "../../upstream/src/wizard/prompts.js";
 import { runProviderPluginAuthMethod } from "./auth-choice.apply.plugin-provider.js";
-import { formatTokenK } from "./models/shared.js";
+import { formatTokenK } from "../../upstream/src/commands/models/shared.js";
 import { OPENAI_CODEX_DEFAULT_MODEL } from "./openai-codex-model-default.js";
 
 const KEEP_VALUE = "__keep__";

@@ -2,11 +2,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { ModelDefinitionConfig } from "../../config/types.models.js";
-import { withFetchPreconnect } from "../../test-utils/fetch-mock.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import type { ModelDefinitionConfig } from "../../../upstream/src/config/types.models.js";
+import { withFetchPreconnect } from "../../../upstream/src/test-utils/fetch-mock.js";
 import { createOpenClawCodingTools } from "../pi-tools.js";
-import { createHostSandboxFsBridge } from "../test-helpers/host-sandbox-fs-bridge.js";
+import { createHostSandboxFsBridge } from "../../../upstream/src/agents/test-helpers/host-sandbox-fs-bridge.js";
 import { __testing, createImageTool, resolveImageModelConfigForTool } from "./image-tool.js";
 
 async function writeAuthProfiles(agentDir: string, profiles: unknown) {

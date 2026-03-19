@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createProviderUsageFetch, makeResponse } from "../test-utils/provider-usage-fetch.js";
+import { createProviderUsageFetch, makeResponse } from "../../upstream/src/test-utils/provider-usage-fetch.js";
 import { fetchCopilotUsage } from "./provider-usage.fetch.copilot.js";
 
 describe("fetchCopilotUsage", () => {

@@ -6,8 +6,8 @@
  */
 
 import { join } from "node:path";
-import { STATE_DIR } from "../config/paths.js";
-import { readJsonFile, writeJsonAtomic, createAsyncLock } from "../infra/json-files.js";
+import { STATE_DIR } from "../../upstream/src/config/paths.js";
+import { readJsonFile, writeJsonAtomic, createAsyncLock } from "../../upstream/src/infra/json-files.js";
 import type {
   Task,
   TaskFilter,

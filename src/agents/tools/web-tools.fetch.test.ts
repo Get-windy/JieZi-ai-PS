@@ -1,10 +1,10 @@
 import { EnvHttpProxyAgent } from "undici";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import * as ssrf from "../../infra/net/ssrf.js";
-import { resolveRequestUrl } from "../../plugin-sdk/request-url.js";
-import { withFetchPreconnect } from "../../test-utils/fetch-mock.js";
-import { makeFetchHeaders } from "./web-fetch.test-harness.js";
-import { createWebFetchTool } from "./web-tools.js";
+import * as ssrf from "../../../upstream/src/infra/net/ssrf.js";
+import { resolveRequestUrl } from "../../../upstream/src/plugin-sdk/request-url.js";
+import { withFetchPreconnect } from "../../../upstream/src/test-utils/fetch-mock.js";
+import { makeFetchHeaders } from "../../../upstream/src/agents/tools/web-fetch.test-harness.js";
+import { createWebFetchTool } from "../../../upstream/src/agents/tools/web-tools.js";
 
 type MockResponse = {
   ok: boolean;

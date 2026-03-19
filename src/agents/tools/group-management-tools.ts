@@ -5,9 +5,9 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import type { AnyAgentTool } from "./common.js";
-import { jsonResult, readStringParam, readStringArrayParam, readNumberParam } from "./common.js";
-import { callGatewayTool, readGatewayCallOptions } from "./gateway.js";
+import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
+import { jsonResult, readStringParam, readStringArrayParam, readNumberParam } from "../../../upstream/src/agents/tools/common.js";
+import { callGatewayTool, readGatewayCallOptions } from "../../../upstream/src/agents/tools/gateway.js";
 
 /**
  * group_list 工具参数 schema

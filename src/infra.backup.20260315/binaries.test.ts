@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { runExec } from "../process/exec.js";
-import type { RuntimeEnv } from "../runtime.js";
+import type { runExec } from "../../upstream/src/process/exec.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
 import { ensureBinary } from "./binaries.js";
 
 describe("ensureBinary", () => {

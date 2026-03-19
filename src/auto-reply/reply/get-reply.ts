@@ -4,26 +4,26 @@ import {
   resolveSessionAgentId,
   resolveAgentSkillsFilter,
 } from "../../agents/agent-scope.js";
-import { resolveModelRefFromString } from "../../agents/model-selection.js";
-import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
-import { DEFAULT_AGENT_WORKSPACE_DIR, ensureAgentWorkspace } from "../../agents/workspace.js";
-import { resolveChannelModelOverride } from "../../channels/model-overrides.js";
-import { type OpenClawConfig, loadConfig } from "../../config/config.js";
-import { applyLinkUnderstanding } from "../../link-understanding/apply.js";
-import { applyMediaUnderstanding } from "../../media-understanding/apply.js";
-import { defaultRuntime } from "../../runtime.js";
+import { resolveModelRefFromString } from "../../../upstream/src/agents/model-selection.js";
+import { resolveAgentTimeoutMs } from "../../../upstream/src/agents/timeout.js";
+import { DEFAULT_AGENT_WORKSPACE_DIR, ensureAgentWorkspace } from "../../../upstream/src/agents/workspace.js";
+import { resolveChannelModelOverride } from "../../../upstream/src/channels/model-overrides.js";
+import { type OpenClawConfig, loadConfig } from "../../../upstream/src/config/config.js";
+import { applyLinkUnderstanding } from "../../../upstream/src/link-understanding/apply.js";
+import { applyMediaUnderstanding } from "../../../upstream/src/media-understanding/apply.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
 import { resolveCommandAuthorization } from "../command-auth.js";
 import type { MsgContext } from "../templating.js";
-import { SILENT_REPLY_TOKEN } from "../tokens.js";
-import type { GetReplyOptions, ReplyPayload } from "../types.js";
+import { SILENT_REPLY_TOKEN } from "../../../upstream/src/auto-reply/tokens.js";
+import type { GetReplyOptions, ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import { resolveDefaultModel } from "./directive-handling.js";
-import { resolveReplyDirectives } from "./get-reply-directives.js";
-import { handleInlineActions } from "./get-reply-inline-actions.js";
+import { resolveReplyDirectives } from "../../../upstream/src/auto-reply/reply/get-reply-directives.js";
+import { handleInlineActions } from "../../../upstream/src/auto-reply/reply/get-reply-inline-actions.js";
 import { runPreparedReply } from "./get-reply-run.js";
-import { finalizeInboundContext } from "./inbound-context.js";
-import { applyResetModelOverride } from "./session-reset-model.js";
-import { initSessionState } from "./session.js";
-import { stageSandboxMedia } from "./stage-sandbox-media.js";
+import { finalizeInboundContext } from "../../../upstream/src/auto-reply/reply/inbound-context.js";
+import { applyResetModelOverride } from "../../../upstream/src/auto-reply/reply/session-reset-model.js";
+import { initSessionState } from "../../../upstream/src/auto-reply/reply/session.js";
+import { stageSandboxMedia } from "../../../upstream/src/auto-reply/reply/stage-sandbox-media.js";
 import { createTypingController } from "./typing.js";
 
 function mergeSkillFilters(channelFilter?: string[], agentFilter?: string[]): string[] | undefined {

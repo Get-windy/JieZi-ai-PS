@@ -1,9 +1,9 @@
 import type { Model } from "@mariozechner/pi-ai";
 import { getModel, streamSimple } from "@mariozechner/pi-ai";
 import { describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
-import { isTruthyEnvValue } from "../infra/env.js";
-import { applyExtraParamsToAgent } from "./pi-embedded-runner.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { isTruthyEnvValue } from "../../upstream/src/infra/env.js";
+import { applyExtraParamsToAgent } from "../../upstream/src/agents/pi-embedded-runner.js";
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY ?? "";
 const LIVE = isTruthyEnvValue(process.env.OPENAI_LIVE_TEST) || isTruthyEnvValue(process.env.LIVE);

@@ -1,30 +1,30 @@
 import { buildBrowseProvidersButton } from "../../../upstream/extensions/telegram/src/model-buttons.js";
-import { resolveAuthStorePathForDisplay } from "../../agents/auth-profiles.js";
+import { resolveAuthStorePathForDisplay } from "../../../upstream/src/agents/auth-profiles.js";
 import {
   type ModelAliasIndex,
   modelKey,
   normalizeProviderId,
   resolveConfiguredModelRef,
   resolveModelRefFromString,
-} from "../../agents/model-selection.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { SessionEntry } from "../../config/sessions.js";
-import { shortenHomePath } from "../../utils.js";
-import { resolveSelectedAndActiveModel } from "../model-runtime.js";
-import type { ReplyPayload } from "../types.js";
+} from "../../../upstream/src/agents/model-selection.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import type { SessionEntry } from "../../../upstream/src/config/sessions.js";
+import { shortenHomePath } from "../../../upstream/src/utils.js";
+import { resolveSelectedAndActiveModel } from "../../../upstream/src/auto-reply/model-runtime.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import { resolveModelsCommandReply } from "./commands-models.js";
 import {
   formatAuthLabel,
   type ModelAuthDetailMode,
   resolveAuthLabel,
   resolveProfileOverride,
-} from "./directive-handling.auth.js";
+} from "../../../upstream/src/auto-reply/reply/directive-handling.auth.js";
 import {
   type ModelPickerCatalogEntry,
   resolveProviderEndpointLabel,
-} from "./directive-handling.model-picker.js";
-import type { InlineDirectives } from "./directive-handling.parse.js";
-import { type ModelDirectiveSelection, resolveModelDirectiveSelection } from "./model-selection.js";
+} from "../../../upstream/src/auto-reply/reply/directive-handling.model-picker.js";
+import type { InlineDirectives } from "../../../upstream/src/auto-reply/reply/directive-handling.parse.js";
+import { type ModelDirectiveSelection, resolveModelDirectiveSelection } from "../../../upstream/src/auto-reply/reply/model-selection.js";
 
 function pushUniqueCatalogEntry(params: {
   keys: Set<string>;

@@ -4,10 +4,10 @@
  * 在所有工具执行前进行权限检查和审批流程处理
  */
 
-import type { OpenClawConfig } from "../../config/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/types.js";
 import type { AgentPermissionsConfig, PermissionSubject } from "../../config/types.permissions.js";
-import { listAgentEntries } from "../../commands/agents.config.js";
-import { loadConfig } from "../../config/config.js";
+import { listAgentEntries } from "../../../upstream/src/commands/agents.config.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import { ApprovalWorkflow } from "../../permissions/approval.js";
 import { PermissionChecker, type PermissionCheckContext } from "../../permissions/checker.js";
 import { normalizeAgentId } from "../../routing/session-key.js";

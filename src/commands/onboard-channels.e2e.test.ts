@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
-import { createEmptyPluginRegistry } from "../plugins/registry.js";
-import { setActivePluginRegistry } from "../plugins/runtime.js";
-import type { WizardPrompter } from "../wizard/prompts.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { createEmptyPluginRegistry } from "../../upstream/src/plugins/registry.js";
+import { setActivePluginRegistry } from "../../upstream/src/plugins/runtime.js";
+import type { WizardPrompter } from "../../upstream/src/wizard/prompts.js";
 import {
   patchChannelOnboardingAdapter,
   setDefaultChannelPluginRegistryForTests,
 } from "./channel-test-helpers.js";
-import { setupChannels } from "./onboard-channels.js";
-import { createExitThrowingRuntime, createWizardPrompter } from "./test-wizard-helpers.js";
+import { setupChannels } from "../../upstream/src/commands/onboard-channels.js";
+import { createExitThrowingRuntime, createWizardPrompter } from "../../upstream/src/commands/test-wizard-helpers.js";
 
 function createPrompter(overrides: Partial<WizardPrompter>): WizardPrompter {
   return createWizardPrompter(

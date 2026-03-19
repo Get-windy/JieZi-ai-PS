@@ -42,8 +42,8 @@ import type {
   AgentWorkLog,
   TaskDependency,
 } from "../../tasks/types.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 /**
  * 任务 RPC 方法注册

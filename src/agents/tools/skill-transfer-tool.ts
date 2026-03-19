@@ -7,11 +7,11 @@
 import { Type } from "@sinclair/typebox";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { AnyAgentTool } from "./common.js";
-import { loadConfig } from "../../config/config.js";
+import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import { LifecycleManager } from "../../lifecycle/lifecycle-manager.js";
 import { TrainingSystem } from "../../lifecycle/training-system.js";
-import { jsonResult, readStringParam } from "./common.js";
+import { jsonResult, readStringParam } from "../../../upstream/src/agents/tools/common.js";
 
 /**
  * skill_transfer 工具参数 schema

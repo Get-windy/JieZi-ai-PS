@@ -1,10 +1,10 @@
-import type { SkillCommandSpec } from "../../agents/skills.js";
-import type { ChannelId } from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { SessionEntry, SessionScope } from "../../config/sessions.js";
+import type { SkillCommandSpec } from "../../../upstream/src/agents/skills.js";
+import type { ChannelId } from "../../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import type { SessionEntry, SessionScope } from "../../../upstream/src/config/sessions.js";
 import type { MsgContext } from "../templating.js";
 import type { ElevatedLevel, ReasoningLevel, ThinkLevel, VerboseLevel } from "../thinking.js";
-import type { ReplyPayload } from "../types.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import type { InlineDirectives } from "./directive-handling.js";
 
 export type CommandContext = {

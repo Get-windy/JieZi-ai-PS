@@ -13,14 +13,14 @@ import type {
   NotificationChannelConfig,
   EmergencyAccessSeverity,
 } from "../../admin/types.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import {
   phase7Integration,
   superAdminManager,
   advancedApprovalSystem,
   notificationManager,
 } from "../../admin/index.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 export const phase7AdminHandlers: GatewayRequestHandlers = {
   /**

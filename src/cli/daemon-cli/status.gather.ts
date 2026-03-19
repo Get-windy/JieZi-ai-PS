@@ -3,35 +3,35 @@ import {
   resolveConfigPath,
   resolveGatewayPort,
   resolveStateDir,
-} from "../../config/config.js";
+} from "../../../upstream/src/config/config.js";
 import type {
   OpenClawConfig,
   GatewayBindMode,
   GatewayControlUiConfig,
-} from "../../config/types.js";
-import { readLastGatewayErrorLine } from "../../daemon/diagnostics.js";
-import type { FindExtraGatewayServicesOptions } from "../../daemon/inspect.js";
-import { findExtraGatewayServices } from "../../daemon/inspect.js";
-import type { ServiceConfigAudit } from "../../daemon/service-audit.js";
-import { auditGatewayServiceConfig } from "../../daemon/service-audit.js";
-import type { GatewayServiceRuntime } from "../../daemon/service-runtime.js";
-import { resolveGatewayService } from "../../daemon/service.js";
-import { trimToUndefined } from "../../gateway/credentials.js";
-import { resolveGatewayBindHost } from "../../gateway/net.js";
-import { resolveGatewayProbeAuthWithSecretInputs } from "../../gateway/probe-auth.js";
-import { parseStrictPositiveInteger } from "../../infra/parse-finite-number.js";
+} from "../../../upstream/src/config/types.js";
+import { readLastGatewayErrorLine } from "../../../upstream/src/daemon/diagnostics.js";
+import type { FindExtraGatewayServicesOptions } from "../../../upstream/src/daemon/inspect.js";
+import { findExtraGatewayServices } from "../../../upstream/src/daemon/inspect.js";
+import type { ServiceConfigAudit } from "../../../upstream/src/daemon/service-audit.js";
+import { auditGatewayServiceConfig } from "../../../upstream/src/daemon/service-audit.js";
+import type { GatewayServiceRuntime } from "../../../upstream/src/daemon/service-runtime.js";
+import { resolveGatewayService } from "../../../upstream/src/daemon/service.js";
+import { trimToUndefined } from "../../../upstream/src/gateway/credentials.js";
+import { resolveGatewayBindHost } from "../../../upstream/src/gateway/net.js";
+import { resolveGatewayProbeAuthWithSecretInputs } from "../../../upstream/src/gateway/probe-auth.js";
+import { parseStrictPositiveInteger } from "../../../upstream/src/infra/parse-finite-number.js";
 import {
   formatPortDiagnostics,
   inspectPortUsage,
   type PortListener,
   type PortUsageStatus,
-} from "../../infra/ports.js";
-import { pickPrimaryTailnetIPv4 } from "../../infra/tailnet.js";
-import { loadGatewayTlsRuntime } from "../../infra/tls/gateway.js";
-import { probeGatewayStatus } from "./probe.js";
-import { inspectGatewayRestart } from "./restart-health.js";
-import { normalizeListenerAddress, parsePortFromArgs, pickProbeHostForBind } from "./shared.js";
-import type { GatewayRpcOpts } from "./types.js";
+} from "../../../upstream/src/infra/ports.js";
+import { pickPrimaryTailnetIPv4 } from "../../../upstream/src/infra/tailnet.js";
+import { loadGatewayTlsRuntime } from "../../../upstream/src/infra/tls/gateway.js";
+import { probeGatewayStatus } from "../../../upstream/src/cli/daemon-cli/probe.js";
+import { inspectGatewayRestart } from "../../../upstream/src/cli/daemon-cli/restart-health.js";
+import { normalizeListenerAddress, parsePortFromArgs, pickProbeHostForBind } from "../../../upstream/src/cli/daemon-cli/shared.js";
+import type { GatewayRpcOpts } from "../../../upstream/src/cli/daemon-cli/types.js";
 
 type ConfigSummary = {
   path: string;

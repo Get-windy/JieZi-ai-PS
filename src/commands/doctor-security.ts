@@ -1,13 +1,13 @@
-import { listChannelPlugins } from "../channels/plugins/index.js";
-import type { ChannelId } from "../channels/plugins/types.js";
-import { formatCliCommand } from "../cli/command-format.js";
-import type { OpenClawConfig, GatewayBindMode } from "../config/config.js";
+import { listChannelPlugins } from "../../upstream/src/channels/plugins/index.js";
+import type { ChannelId } from "../../upstream/src/channels/plugins/types.js";
+import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
+import type { OpenClawConfig, GatewayBindMode } from "../../upstream/src/config/config.js";
 import type { AgentConfig } from "../config/types.agents.js";
-import { hasConfiguredSecretInput } from "../config/types.secrets.js";
-import { resolveGatewayAuth } from "../gateway/auth.js";
-import { isLoopbackHost, resolveGatewayBindHost } from "../gateway/net.js";
-import { resolveDmAllowState } from "../security/dm-policy-shared.js";
-import { note } from "../terminal/note.js";
+import { hasConfiguredSecretInput } from "../../upstream/src/config/types.secrets.js";
+import { resolveGatewayAuth } from "../../upstream/src/gateway/auth.js";
+import { isLoopbackHost, resolveGatewayBindHost } from "../../upstream/src/gateway/net.js";
+import { resolveDmAllowState } from "../../upstream/src/security/dm-policy-shared.js";
+import { note } from "../../upstream/src/terminal/note.js";
 import { resolveDefaultChannelAccountContext } from "./channel-account-context.js";
 
 function collectImplicitHeartbeatDirectPolicyWarnings(cfg: OpenClawConfig): string[] {

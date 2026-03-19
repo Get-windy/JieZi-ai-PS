@@ -8,7 +8,7 @@ import {
   collectKnownLongFlags,
   renderSafeBinDeniedFlagsDocBullets,
   validateSafeBinArgv,
-} from "./exec-safe-bin-policy.js";
+} from "../../upstream/src/infra/exec-safe-bin-policy.js";
 
 const SAFE_BIN_DOC_DENIED_FLAGS_START = "<!-- SAFE_BIN_DENIED_FLAGS:START -->";
 const SAFE_BIN_DOC_DENIED_FLAGS_END = "<!-- SAFE_BIN_DENIED_FLAGS:END -->";

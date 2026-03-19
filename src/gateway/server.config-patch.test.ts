@@ -9,7 +9,7 @@ import {
   startServerWithClient,
   testState,
   writeSessionStore,
-} from "./test-helpers.js";
+} from "../../upstream/src/gateway/test-helpers.js";
 
 installGatewayTestHooks({ scope: "suite" });
 

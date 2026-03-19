@@ -7,16 +7,16 @@ import {
   channelsRemoveCommand,
   channelsResolveCommand,
   channelsStatusCommand,
-} from "../commands/channels.js";
-import { danger } from "../globals.js";
-import { defaultRuntime } from "../runtime.js";
-import { formatDocsLink } from "../terminal/links.js";
-import { theme } from "../terminal/theme.js";
-import { runChannelLogin, runChannelLogout } from "./channel-auth.js";
-import { formatCliChannelOptions } from "./channel-options.js";
-import { runCommandWithRuntime } from "./cli-utils.js";
-import { hasExplicitOptions } from "./command-options.js";
-import { formatHelpExamples } from "./help-format.js";
+} from "../../upstream/src/commands/channels.js";
+import { danger } from "../../upstream/src/globals.js";
+import { defaultRuntime } from "../../upstream/src/runtime.js";
+import { formatDocsLink } from "../../upstream/src/terminal/links.js";
+import { theme } from "../../upstream/src/terminal/theme.js";
+import { runChannelLogin, runChannelLogout } from "../../upstream/src/cli/channel-auth.js";
+import { formatCliChannelOptions } from "../../upstream/src/cli/channel-options.js";
+import { runCommandWithRuntime } from "../../upstream/src/cli/cli-utils.js";
+import { hasExplicitOptions } from "../../upstream/src/cli/command-options.js";
+import { formatHelpExamples } from "../../upstream/src/cli/help-format.js";
 
 const optionNamesAdd = [
   "channel",

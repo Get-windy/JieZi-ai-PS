@@ -2,35 +2,35 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { abortEmbeddedPiRun, compactEmbeddedPiSession } from "../../agents/pi-embedded.js";
+import { abortEmbeddedPiRun, compactEmbeddedPiSession } from "../../../upstream/src/agents/pi-embedded.js";
 import {
   addSubagentRunForTests,
   listSubagentRunsForRequester,
   resetSubagentRegistryForTests,
 } from "../../agents/subagent-registry.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { updateSessionStore, type SessionEntry } from "../../config/sessions.js";
-import * as internalHooks from "../../hooks/internal-hooks.js";
-import { clearPluginCommands, registerPluginCommand } from "../../plugins/commands.js";
-import { typedCases } from "../../test-utils/typed-cases.js";
-import { INTERNAL_MESSAGE_CHANNEL } from "../../utils/message-channel.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { updateSessionStore, type SessionEntry } from "../../../upstream/src/config/sessions.js";
+import * as internalHooks from "../../../upstream/src/hooks/internal-hooks.js";
+import { clearPluginCommands, registerPluginCommand } from "../../../upstream/src/plugins/commands.js";
+import { typedCases } from "../../../upstream/src/test-utils/typed-cases.js";
+import { INTERNAL_MESSAGE_CHANNEL } from "../../../upstream/src/utils/message-channel.js";
 import type { MsgContext } from "../templating.js";
 import { resetBashChatCommandForTests } from "./bash-command.js";
-import { handleCompactCommand } from "./commands-compact.js";
-import { buildCommandsPaginationKeyboard } from "./commands-info.js";
-import { extractMessageText } from "./commands-subagents.js";
-import { buildCommandTestParams } from "./commands.test-harness.js";
-import { parseConfigCommand } from "./config-commands.js";
-import { parseDebugCommand } from "./debug-commands.js";
+import { handleCompactCommand } from "../../../upstream/src/auto-reply/reply/commands-compact.js";
+import { buildCommandsPaginationKeyboard } from "../../../upstream/src/auto-reply/reply/commands-info.js";
+import { extractMessageText } from "../../../upstream/src/auto-reply/reply/commands-subagents.js";
+import { buildCommandTestParams } from "../../../upstream/src/auto-reply/reply/commands.test-harness.js";
+import { parseConfigCommand } from "../../../upstream/src/auto-reply/reply/config-commands.js";
+import { parseDebugCommand } from "../../../upstream/src/auto-reply/reply/debug-commands.js";
 import { parseInlineDirectives } from "./directive-handling.js";
 
 const readConfigFileSnapshotMock = vi.hoisted(() => vi.fn());
 const validateConfigObjectWithPluginsMock = vi.hoisted(() => vi.fn());
 const writeConfigFileMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../../config/config.js", async () => {
+vi.mock("../../../upstream/src/config/config.js", async () => {
   const actual =
-    await vi.importActual<typeof import("../../config/config.js")>("../../config/config.js");
+    await vi.importActual<typeof import("../../../upstream/src/config/config.js")>("../../../upstream/src/config/config.js");
   return {
     ...actual,
     readConfigFileSnapshot: readConfigFileSnapshotMock,
@@ -75,7 +75,7 @@ vi.mock("../../agents/model-catalog.js", () => ({
   ]),
 }));
 
-vi.mock("../../agents/pi-embedded.js", () => {
+vi.mock("../../../upstream/src/agents/pi-embedded.js", () => {
   const resolveEmbeddedSessionLane = (key: string) => {
     const cleaned = key.trim() || "main";
     return cleaned.startsWith("session:") ? cleaned : `session:${cleaned}`;
@@ -106,7 +106,7 @@ vi.mock("../../gateway/call.js", () => ({
 }));
 
 import type { HandleCommandsParams } from "./commands-types.js";
-import { buildCommandContext, handleCommands } from "./commands.js";
+import { buildCommandContext, handleCommands } from "../../../upstream/src/auto-reply/reply/commands.js";
 
 // Avoid expensive workspace scans during /context tests.
 vi.mock("./commands-context-report.js", () => ({

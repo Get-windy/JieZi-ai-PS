@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ChannelMessageActionName, ChannelPlugin } from "../../channels/plugins/types.js";
+import type { ChannelMessageActionName, ChannelPlugin } from "../../../upstream/src/channels/plugins/types.js";
 import type { MessageActionRunResult } from "../../infra/outbound/message-action-runner.js";
-import { setActivePluginRegistry } from "../../plugins/runtime.js";
-import { createTestRegistry } from "../../test-utils/channel-plugins.js";
-import { createMessageTool } from "./message-tool.js";
+import { setActivePluginRegistry } from "../../../upstream/src/plugins/runtime.js";
+import { createTestRegistry } from "../../../upstream/src/test-utils/channel-plugins.js";
+import { createMessageTool } from "../../../upstream/src/agents/tools/message-tool.js";
 
 const mocks = vi.hoisted(() => ({
   runMessageAction: vi.fn(),

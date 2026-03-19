@@ -3,7 +3,7 @@
  * 策略集成的 Gateway 处理器
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { policyMiddleware } from "../../channels/policy-middleware.js";
 import { policyScheduler } from "../../channels/policies/scheduler.js";
 import type {

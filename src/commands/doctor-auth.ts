@@ -2,7 +2,7 @@ import {
   buildAuthHealthSummary,
   DEFAULT_OAUTH_WARN_MS,
   formatRemainingShort,
-} from "../agents/auth-health.js";
+} from "../../upstream/src/agents/auth-health.js";
 import {
   type AuthCredentialReasonCode,
   CLAUDE_CLI_PROFILE_ID,
@@ -11,12 +11,12 @@ import {
   repairOAuthProfileIdMismatch,
   resolveApiKeyForProfile,
   resolveProfileUnusableUntilForDisplay,
-} from "../agents/auth-profiles.js";
-import { updateAuthProfileStoreWithLock } from "../agents/auth-profiles/store.js";
-import { formatCliCommand } from "../cli/command-format.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { note } from "../terminal/note.js";
-import type { DoctorPrompter } from "./doctor-prompter.js";
+} from "../../upstream/src/agents/auth-profiles.js";
+import { updateAuthProfileStoreWithLock } from "../../upstream/src/agents/auth-profiles/store.js";
+import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { note } from "../../upstream/src/terminal/note.js";
+import type { DoctorPrompter } from "../../upstream/src/commands/doctor-prompter.js";
 
 export async function maybeRepairAnthropicOAuthProfileId(
   cfg: OpenClawConfig,

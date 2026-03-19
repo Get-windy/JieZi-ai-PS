@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, URL } from "node:url";
-import { isNotFoundPathError, isPathInside } from "../infra/path-guards.js";
+import { isNotFoundPathError, isPathInside } from "../../upstream/src/infra/path-guards.js";
 
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
 const HTTP_URL_RE = /^https?:\/\//i;

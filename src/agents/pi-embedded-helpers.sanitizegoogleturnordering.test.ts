@@ -1,7 +1,7 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { describe, expect, it } from "vitest";
-import { sanitizeGoogleTurnOrdering } from "./pi-embedded-helpers.js";
-import { DEFAULT_AGENTS_FILENAME } from "./workspace.js";
+import { sanitizeGoogleTurnOrdering } from "../../upstream/src/agents/pi-embedded-helpers.js";
+import { DEFAULT_AGENTS_FILENAME } from "../../upstream/src/agents/workspace.js";
 
 const _makeFile = (overrides: Partial<WorkspaceBootstrapFile>): WorkspaceBootstrapFile => ({
   name: DEFAULT_AGENTS_FILENAME,

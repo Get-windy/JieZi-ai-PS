@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveTranscriptPolicy } from "./transcript-policy.js";
+import { resolveTranscriptPolicy } from "../../upstream/src/agents/transcript-policy.js";
 
 describe("resolveTranscriptPolicy", () => {
   it("enables sanitizeToolCallIds for Anthropic provider", () => {

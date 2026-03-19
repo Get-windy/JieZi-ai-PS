@@ -1,17 +1,17 @@
 import type { Command } from "commander";
-import { defaultRuntime } from "../runtime.js";
-import { formatDocsLink } from "../terminal/links.js";
-import { theme } from "../terminal/theme.js";
-import { inheritOptionFromParent } from "./command-options.js";
-import { formatHelpExamples } from "./help-format.js";
+import { defaultRuntime } from "../../upstream/src/runtime.js";
+import { formatDocsLink } from "../../upstream/src/terminal/links.js";
+import { theme } from "../../upstream/src/terminal/theme.js";
+import { inheritOptionFromParent } from "../../upstream/src/cli/command-options.js";
+import { formatHelpExamples } from "../../upstream/src/cli/help-format.js";
 import {
   type UpdateCommandOptions,
   type UpdateStatusOptions,
   type UpdateWizardOptions,
 } from "./update-cli/shared.js";
-import { updateStatusCommand } from "./update-cli/status.js";
-import { updateCommand } from "./update-cli/update-command.js";
-import { updateWizardCommand } from "./update-cli/wizard.js";
+import { updateStatusCommand } from "../../upstream/src/cli/update-cli/status.js";
+import { updateCommand } from "../../upstream/src/cli/update-cli/update-command.js";
+import { updateWizardCommand } from "../../upstream/src/cli/update-cli/wizard.js";
 
 export { updateCommand, updateStatusCommand, updateWizardCommand };
 export type { UpdateCommandOptions, UpdateStatusOptions, UpdateWizardOptions };

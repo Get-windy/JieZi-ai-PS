@@ -6,7 +6,7 @@
 import type { OrganizationConfig } from "../organization/organization-integration.js";
 import type { AgentModelAccountsConfig } from "./types.agents.js";
 import type { AgentChannelBindings } from "./types.channel-bindings.js";
-import type { OpenClawConfig } from "./types.js";
+import type { OpenClawConfig } from "../../upstream/src/config/types.js";
 import type { AgentPermissionsConfig } from "./types.permissions.js";
 import { agentContextManager } from "../agents/agent-context.js";
 import { modelRoutingIntegrator } from "../agents/model-routing-integration.js";
@@ -54,9 +54,9 @@ function validateModelAccounts(config: AgentModelAccountsConfig): {
   }
 
   // 验证 routingMode
-  if (config.routingMode && !["manual", "smart"].includes(config.routingMode)) {
+  if (config.routingMode && !["manual", "smart", "roundRobin"].includes(config.routingMode)) {
     errors.push(
-      `modelAccounts: 'routingMode' must be 'manual' or 'smart', got '${config.routingMode}'`,
+      `modelAccounts: 'routingMode' must be 'manual', 'smart' or 'roundRobin', got '${config.routingMode}'`,
     );
   }
 

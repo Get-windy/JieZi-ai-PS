@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAllowedParsedChatSender } from "./allow-from.js";
+import { isAllowedParsedChatSender } from "../../upstream/src/plugin-sdk/allow-from.js";
 
 function parseAllowTarget(
   entry: string,

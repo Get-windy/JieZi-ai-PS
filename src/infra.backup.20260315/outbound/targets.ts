@@ -1,25 +1,25 @@
-import { normalizeChatType, type ChatType } from "../../channels/chat-type.js";
-import type { ChannelOutboundTargetMode } from "../../channels/plugins/types.js";
-import { formatCliCommand } from "../../cli/command-format.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { SessionEntry } from "../../config/sessions.js";
-import type { AgentDefaultsConfig } from "../../config/types.agent-defaults.js";
+import { normalizeChatType, type ChatType } from "../../../upstream/src/channels/chat-type.js";
+import type { ChannelOutboundTargetMode } from "../../../upstream/src/channels/plugins/types.js";
+import { formatCliCommand } from "../../../upstream/src/cli/command-format.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import type { SessionEntry } from "../../../upstream/src/config/sessions.js";
+import type { AgentDefaultsConfig } from "../../../upstream/src/config/types.agent-defaults.js";
 import { parseDiscordTarget } from "../../discord/targets.js";
-import { mapAllowFromEntries } from "../../plugin-sdk/channel-config-helpers.js";
+import { mapAllowFromEntries } from "../../../upstream/src/plugin-sdk/channel-config-helpers.js";
 import { normalizeAccountId } from "../../routing/session-key.js";
 import { parseSlackTarget } from "../../slack/targets.js";
 import { parseTelegramTarget, resolveTelegramTargetChatType } from "../../telegram/targets.js";
-import { deliveryContextFromSession } from "../../utils/delivery-context.js";
+import { deliveryContextFromSession } from "../../../upstream/src/utils/delivery-context.js";
 import type {
   DeliverableMessageChannel,
   GatewayMessageChannel,
-} from "../../utils/message-channel.js";
+} from "../../../upstream/src/utils/message-channel.js";
 import {
   INTERNAL_MESSAGE_CHANNEL,
   isDeliverableMessageChannel,
   normalizeMessageChannel,
-} from "../../utils/message-channel.js";
-import { isWhatsAppGroupJid, normalizeWhatsAppTarget } from "../../whatsapp/normalize.js";
+} from "../../../upstream/src/utils/message-channel.js";
+import { isWhatsAppGroupJid, normalizeWhatsAppTarget } from "../../../upstream/src/whatsapp/normalize.js";
 import {
   normalizeDeliverableOutboundChannel,
   resolveOutboundChannelPlugin,

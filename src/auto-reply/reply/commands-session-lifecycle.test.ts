@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { SessionBindingRecord } from "../../infra/outbound/session-binding-service.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import type { SessionBindingRecord } from "../../../upstream/src/infra/outbound/session-binding-service.js";
 
 const hoisted = vi.hoisted(() => {
   const getThreadBindingManagerMock = vi.fn();
@@ -44,9 +44,9 @@ vi.mock("../../../upstream/extensions/telegram/src/thread-bindings.js", async (i
   };
 });
 
-vi.mock("../../infra/outbound/session-binding-service.js", async (importOriginal) => {
+vi.mock("../../../upstream/src/infra/outbound/session-binding-service.js", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("../../infra/outbound/session-binding-service.js")>();
+    await importOriginal<typeof import("../../../upstream/src/infra/outbound/session-binding-service.js")>();
   return {
     ...actual,
     getSessionBindingService: () => ({

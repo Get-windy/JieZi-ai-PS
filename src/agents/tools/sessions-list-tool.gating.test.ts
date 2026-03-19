@@ -17,7 +17,7 @@ vi.mock("../../config/config.js", async (importOriginal) => {
   };
 });
 
-import { createSessionsListTool } from "./sessions-list-tool.js";
+import { createSessionsListTool } from "../../../upstream/src/agents/tools/sessions-list-tool.js";
 
 describe("sessions_list gating", () => {
   beforeEach(() => {

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { pathExists } from "../utils.js";
+import { pathExists } from "../../upstream/src/utils.js";
 
 export type GlobalInstallManager = "npm" | "pnpm" | "bun";
 

@@ -1,9 +1,9 @@
 import type { ChannelDock } from "../channels/dock.js";
 import { getChannelDock, listChannelDocks } from "../channels/dock.js";
-import type { ChannelId } from "../channels/plugins/types.js";
+import type { ChannelId } from "../../upstream/src/channels/plugins/types.js";
 import { normalizeAnyChannelId } from "../channels/registry.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../utils/message-channel.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../../upstream/src/utils/message-channel.js";
 import type { MsgContext } from "./templating.js";
 
 export type CommandAuthorization = {
@@ -48,6 +48,7 @@ function resolveProviderFromContext(ctx: MsgContext, cfg: OpenClawConfig): Chann
     }
   }
   const configured = listChannelDocks()
+    .filter((dock): dock is NonNullable<typeof dock> => dock != null)
     .map((dock) => {
       if (!dock.config?.resolveAllowFrom) {
         return null;

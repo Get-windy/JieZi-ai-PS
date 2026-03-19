@@ -1,17 +1,17 @@
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { loadDotEnv } from "../infra/dotenv.js";
-import { normalizeEnv } from "../infra/env.js";
-import { formatUncaughtError } from "../infra/errors.js";
-import { isMainModule } from "../infra/is-main.js";
-import { ensureOpenClawCliOnPath } from "../infra/path-env.js";
-import { assertSupportedRuntime } from "../infra/runtime-guard.js";
-import { installUnhandledRejectionHandler } from "../infra/unhandled-rejections.js";
-import { enableConsoleCapture } from "../logging.js";
-import { getCommandPathWithRootOptions, getPrimaryCommand, hasHelpOrVersion } from "./argv.js";
-import { applyCliProfileEnv, parseCliProfileArgs } from "./profile.js";
+import { loadDotEnv } from "../../upstream/src/infra/dotenv.js";
+import { normalizeEnv } from "../../upstream/src/infra/env.js";
+import { formatUncaughtError } from "../../upstream/src/infra/errors.js";
+import { isMainModule } from "../../upstream/src/infra/is-main.js";
+import { ensureOpenClawCliOnPath } from "../../upstream/src/infra/path-env.js";
+import { assertSupportedRuntime } from "../../upstream/src/infra/runtime-guard.js";
+import { installUnhandledRejectionHandler } from "../../upstream/src/infra/unhandled-rejections.js";
+import { enableConsoleCapture } from "../../upstream/src/logging.js";
+import { getCommandPathWithRootOptions, getPrimaryCommand, hasHelpOrVersion } from "../../upstream/src/cli/argv.js";
+import { applyCliProfileEnv, parseCliProfileArgs } from "../../upstream/src/cli/profile.js";
 import { tryRouteCli } from "./route.js";
-import { normalizeWindowsArgv } from "./windows-argv.js";
+import { normalizeWindowsArgv } from "../../upstream/src/cli/windows-argv.js";
 
 async function closeCliMemoryManagers(): Promise<void> {
   try {

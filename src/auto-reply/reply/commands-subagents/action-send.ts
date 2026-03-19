@@ -1,9 +1,9 @@
 import {
   sendControlledSubagentMessage,
   steerControlledSubagentRun,
-} from "../../../agents/subagent-control.js";
+} from "../../../../upstream/src/agents/subagent-control.js";
 import type { CommandHandlerResult } from "../commands-types.js";
-import { formatRunLabel } from "../subagents-utils.js";
+import { formatRunLabel } from "../../../../upstream/src/auto-reply/reply/subagents-utils.js";
 import {
   type SubagentsCommandContext,
   COMMAND,

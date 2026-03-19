@@ -3,10 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { WebSocket } from "ws";
-import { DEFAULT_PROVIDER } from "../agents/defaults.js";
-import { GATEWAY_CLIENT_IDS, GATEWAY_CLIENT_MODES } from "./protocol/client-info.js";
-import { startGatewayServerHarness, type GatewayServerHarness } from "./server.e2e-ws-harness.js";
-import { createToolSummaryPreviewTranscriptLines } from "./session-preview.test-helpers.js";
+import { DEFAULT_PROVIDER } from "../../upstream/src/agents/defaults.js";
+import { GATEWAY_CLIENT_IDS, GATEWAY_CLIENT_MODES } from "../../upstream/src/gateway/protocol/client-info.js";
+import { startGatewayServerHarness, type GatewayServerHarness } from "../../upstream/src/gateway/server.e2e-ws-harness.js";
+import { createToolSummaryPreviewTranscriptLines } from "../../upstream/src/gateway/session-preview.test-helpers.js";
 import {
   connectOk,
   embeddedRunMock,
@@ -16,7 +16,7 @@ import {
   testState,
   trackConnectChallengeNonce,
   writeSessionStore,
-} from "./test-helpers.js";
+} from "../../upstream/src/gateway/test-helpers.js";
 
 const sessionCleanupMocks = vi.hoisted(() => ({
   clearSessionQueues: vi.fn(() => ({ followupCleared: 0, laneCleared: 0, keys: [] })),

@@ -8,13 +8,13 @@ import {
   routeLogsToStderr,
   setConsoleTimestampPrefix,
   setLoggerOverride,
-} from "../logging.js";
-import { loggingState } from "./state.js";
+} from "../../upstream/src/logging.js";
+import { loggingState } from "../../upstream/src/logging/state.js";
 import {
   captureConsoleSnapshot,
   type ConsoleSnapshot,
   restoreConsoleSnapshot,
-} from "./test-helpers/console-snapshot.js";
+} from "../../upstream/src/logging/test-helpers/console-snapshot.js";
 
 let snapshot: ConsoleSnapshot;
 

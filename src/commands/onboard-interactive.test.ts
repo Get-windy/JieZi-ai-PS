@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RuntimeEnv } from "../runtime.js";
-import { WizardCancelledError } from "../wizard/prompts.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
+import { WizardCancelledError } from "../../upstream/src/wizard/prompts.js";
 import { runInteractiveOnboarding } from "./onboard-interactive.js";
 
 const mocks = vi.hoisted(() => ({

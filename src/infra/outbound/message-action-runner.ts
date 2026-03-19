@@ -4,28 +4,28 @@ import {
   readNumberParam,
   readStringArrayParam,
   readStringParam,
-} from "../../agents/tools/common.js";
-import { parseReplyDirectives } from "../../auto-reply/reply/reply-directives.js";
-import { dispatchChannelMessageAction } from "../../channels/plugins/message-actions.js";
+} from "../../../upstream/src/agents/tools/common.js";
+import { parseReplyDirectives } from "../../../upstream/src/auto-reply/reply/reply-directives.js";
+import { dispatchChannelMessageAction } from "../../../upstream/src/channels/plugins/message-actions.js";
 import type {
   ChannelId,
   ChannelMessageActionName,
   ChannelThreadingToolContext,
-} from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
+} from "../../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
-import { hasPollCreationParams, resolveTelegramPollVisibility } from "../../poll-params.js";
-import { resolvePollMaxSelections } from "../../polls.js";
+import { hasPollCreationParams, resolveTelegramPollVisibility } from "../../../upstream/src/poll-params.js";
+import { resolvePollMaxSelections } from "../../../upstream/src/polls.js";
 import { buildChannelAccountBindings } from "../../routing/bindings.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
-import { type GatewayClientMode, type GatewayClientName } from "../../utils/message-channel.js";
-import { throwIfAborted } from "./abort.js";
+import { type GatewayClientMode, type GatewayClientName } from "../../../upstream/src/utils/message-channel.js";
+import { throwIfAborted } from "../../../upstream/src/infra/outbound/abort.js";
 import {
   listConfiguredMessageChannels,
   resolveMessageChannelSelection,
 } from "./channel-selection.js";
 import type { OutboundSendDeps } from "./deliver.js";
-import { normalizeMessageActionInput } from "./message-action-normalization.js";
+import { normalizeMessageActionInput } from "../../../upstream/src/infra/outbound/message-action-normalization.js";
 import {
   hydrateAttachmentParamsForAction,
   normalizeSandboxMediaList,
@@ -38,18 +38,18 @@ import {
   resolveSlackAutoThreadId,
   resolveTelegramAutoThreadId,
 } from "./message-action-params.js";
-import type { MessagePollResult, MessageSendResult } from "./message.js";
+import type { MessagePollResult, MessageSendResult } from "../../../upstream/src/infra/outbound/message.js";
 import {
   applyCrossContextDecoration,
   buildCrossContextDecoration,
   type CrossContextDecoration,
   enforceCrossContextPolicy,
   shouldApplyCrossContextMarker,
-} from "./outbound-policy.js";
-import { executePollAction, executeSendAction } from "./outbound-send-service.js";
+} from "../../../upstream/src/infra/outbound/outbound-policy.js";
+import { executePollAction, executeSendAction } from "../../../upstream/src/infra/outbound/outbound-send-service.js";
 import { ensureOutboundSessionEntry, resolveOutboundSessionRoute } from "./outbound-session.js";
-import { resolveChannelTarget, type ResolvedMessagingTarget } from "./target-resolver.js";
-import { extractToolPayload } from "./tool-payload.js";
+import { resolveChannelTarget, type ResolvedMessagingTarget } from "../../../upstream/src/infra/outbound/target-resolver.js";
+import { extractToolPayload } from "../../../upstream/src/infra/outbound/tool-payload.js";
 
 export type MessageActionRunnerGateway = {
   url?: string;

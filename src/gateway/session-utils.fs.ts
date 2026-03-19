@@ -5,12 +5,12 @@ import {
   resolveSessionFilePath,
   resolveSessionTranscriptPath,
   resolveSessionTranscriptPathInDir,
-} from "../config/sessions.js";
-import { resolveRequiredHomeDir } from "../infra/home-dir.js";
-import { hasInterSessionUserProvenance } from "../sessions/input-provenance.js";
-import { stripInlineDirectiveTagsForDisplay } from "../utils/directive-tags.js";
-import { extractToolCallNames, hasToolCall } from "../utils/transcript-tools.js";
-import { stripEnvelope } from "./chat-sanitize.js";
+} from "../../upstream/src/config/sessions.js";
+import { resolveRequiredHomeDir } from "../../upstream/src/infra/home-dir.js";
+import { hasInterSessionUserProvenance } from "../../upstream/src/sessions/input-provenance.js";
+import { stripInlineDirectiveTagsForDisplay } from "../../upstream/src/utils/directive-tags.js";
+import { extractToolCallNames, hasToolCall } from "../../upstream/src/utils/transcript-tools.js";
+import { stripEnvelope } from "../../upstream/src/gateway/chat-sanitize.js";
 import type { SessionPreviewItem } from "./session-utils.types.js";
 
 type SessionTitleFields = {

@@ -1,41 +1,63 @@
 import { randomUUID } from "node:crypto";
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
-import type { ModelCatalogEntry } from "../agents/model-catalog.js";
+import type { ModelCatalogEntry } from "../../upstream/src/agents/model-catalog.js";
 import {
   resolveAllowedModelRef,
   resolveDefaultModelForAgent,
   resolveSubagentConfiguredModelSelection,
-} from "../agents/model-selection.js";
-import { normalizeGroupActivation } from "../auto-reply/group-activation.js";
+} from "../../upstream/src/agents/model-selection.js";
+import { normalizeGroupActivation } from "../../upstream/src/auto-reply/group-activation.js";
 import {
   formatThinkingLevels,
   formatXHighModelHint,
   normalizeElevatedLevel,
+  normalizeFastMode,
   normalizeReasoningLevel,
   normalizeThinkLevel,
   normalizeUsageDisplay,
   supportsXHighThinking,
 } from "../auto-reply/thinking.js";
-import type { OpenClawConfig } from "../config/config.js";
-import type { SessionEntry } from "../config/sessions.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import type { SessionEntry } from "../../upstream/src/config/sessions.js";
 import {
+  isAcpSessionKey,
   isSubagentSessionKey,
   normalizeAgentId,
   parseAgentSessionKey,
 } from "../routing/session-key.js";
-import { applyVerboseOverride, parseVerboseOverride } from "../sessions/level-overrides.js";
-import { applyModelOverrideToSessionEntry } from "../sessions/model-overrides.js";
-import { normalizeSendPolicy } from "../sessions/send-policy.js";
-import { parseSessionLabel } from "../sessions/session-label.js";
+import { applyVerboseOverride, parseVerboseOverride } from "../../upstream/src/sessions/level-overrides.js";
+import { applyModelOverrideToSessionEntry } from "../../upstream/src/sessions/model-overrides.js";
+import { normalizeSendPolicy } from "../../upstream/src/sessions/send-policy.js";
+import { parseSessionLabel } from "../../upstream/src/sessions/session-label.js";
 import {
   ErrorCodes,
   type ErrorShape,
   errorShape,
   type SessionsPatchParams,
-} from "./protocol/index.js";
+} from "../../upstream/src/gateway/protocol/index.js";
 
 function invalid(message: string): { ok: false; error: ErrorShape } {
   return { ok: false, error: errorShape(ErrorCodes.INVALID_REQUEST, message) };
+}
+
+function supportsSpawnLineage(storeKey: string): boolean {
+  return isSubagentSessionKey(storeKey) || isAcpSessionKey(storeKey);
+}
+
+function normalizeSubagentRole(raw: string): "orchestrator" | "leaf" | undefined {
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "orchestrator" || normalized === "leaf") {
+    return normalized;
+  }
+  return undefined;
+}
+
+function normalizeSubagentControlScope(raw: string): "children" | "none" | undefined {
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "children" || normalized === "none") {
+    return normalized;
+  }
+  return undefined;
 }
 
 function normalizeExecHost(raw: string): "sandbox" | "gateway" | "node" | undefined {
@@ -97,13 +119,35 @@ export async function applySessionsPatchToStore(params: {
       if (!trimmed) {
         return invalid("invalid spawnedBy: empty");
       }
-      if (!isSubagentSessionKey(storeKey)) {
-        return invalid("spawnedBy is only supported for subagent:* sessions");
+      if (!supportsSpawnLineage(storeKey)) {
+        return invalid("spawnedBy is only supported for subagent:* or acp:* sessions");
       }
       if (existing?.spawnedBy && existing.spawnedBy !== trimmed) {
         return invalid("spawnedBy cannot be changed once set");
       }
       next.spawnedBy = trimmed;
+    }
+  }
+
+  if ("spawnedWorkspaceDir" in patch) {
+    const raw = (patch as Record<string, unknown>).spawnedWorkspaceDir;
+    if (raw === null) {
+      if ((existing as Record<string, unknown> | undefined)?.spawnedWorkspaceDir) {
+        return invalid("spawnedWorkspaceDir cannot be cleared once set");
+      }
+    } else if (raw !== undefined) {
+      if (!supportsSpawnLineage(storeKey)) {
+        return invalid("spawnedWorkspaceDir is only supported for subagent:* or acp:* sessions");
+      }
+      const trimmed = String(raw).trim();
+      if (!trimmed) {
+        return invalid("invalid spawnedWorkspaceDir: empty");
+      }
+      const existingWs = (existing as Record<string, unknown> | undefined)?.spawnedWorkspaceDir as string | undefined;
+      if (existingWs && existingWs !== trimmed) {
+        return invalid("spawnedWorkspaceDir cannot be changed once set");
+      }
+      (next as Record<string, unknown>).spawnedWorkspaceDir = trimmed;
     }
   }
 
@@ -114,8 +158,8 @@ export async function applySessionsPatchToStore(params: {
         return invalid("spawnDepth cannot be cleared once set");
       }
     } else if (raw !== undefined) {
-      if (!isSubagentSessionKey(storeKey)) {
-        return invalid("spawnDepth is only supported for subagent:* sessions");
+      if (!supportsSpawnLineage(storeKey)) {
+        return invalid("spawnDepth is only supported for subagent:* or acp:* sessions");
       }
       const numeric = Number(raw);
       if (!Number.isInteger(numeric) || numeric < 0) {
@@ -126,6 +170,50 @@ export async function applySessionsPatchToStore(params: {
         return invalid("spawnDepth cannot be changed once set");
       }
       next.spawnDepth = normalized;
+    }
+  }
+
+  if ("subagentRole" in patch) {
+    const raw = (patch as Record<string, unknown>).subagentRole;
+    if (raw === null) {
+      if ((existing as Record<string, unknown> | undefined)?.subagentRole) {
+        return invalid("subagentRole cannot be cleared once set");
+      }
+    } else if (raw !== undefined) {
+      if (!supportsSpawnLineage(storeKey)) {
+        return invalid("subagentRole is only supported for subagent:* or acp:* sessions");
+      }
+      const normalized = normalizeSubagentRole(String(raw));
+      if (!normalized) {
+        return invalid('invalid subagentRole (use "orchestrator" or "leaf")');
+      }
+      const existingRole = (existing as Record<string, unknown> | undefined)?.subagentRole as string | undefined;
+      if (existingRole && existingRole !== normalized) {
+        return invalid("subagentRole cannot be changed once set");
+      }
+      (next as Record<string, unknown>).subagentRole = normalized;
+    }
+  }
+
+  if ("subagentControlScope" in patch) {
+    const raw = (patch as Record<string, unknown>).subagentControlScope;
+    if (raw === null) {
+      if ((existing as Record<string, unknown> | undefined)?.subagentControlScope) {
+        return invalid("subagentControlScope cannot be cleared once set");
+      }
+    } else if (raw !== undefined) {
+      if (!supportsSpawnLineage(storeKey)) {
+        return invalid("subagentControlScope is only supported for subagent:* or acp:* sessions");
+      }
+      const normalized = normalizeSubagentControlScope(String(raw));
+      if (!normalized) {
+        return invalid('invalid subagentControlScope (use "children" or "none")');
+      }
+      const existingScope = (existing as Record<string, unknown> | undefined)?.subagentControlScope as string | undefined;
+      if (existingScope && existingScope !== normalized) {
+        return invalid("subagentControlScope cannot be changed once set");
+      }
+      (next as Record<string, unknown>).subagentControlScope = normalized;
     }
   }
 
@@ -147,6 +235,19 @@ export async function applySessionsPatchToStore(params: {
         }
       }
       next.label = parsed.label;
+    }
+  }
+
+  if ("fastMode" in patch) {
+    const raw = patch.fastMode;
+    if (raw === null) {
+      delete (next as Record<string, unknown>).fastMode;
+    } else if (raw !== undefined) {
+      const normalized = normalizeFastMode(raw);
+      if (normalized === undefined) {
+        return invalid("invalid fastMode (use true or false)");
+      }
+      (next as Record<string, unknown>).fastMode = normalized;
     }
   }
 

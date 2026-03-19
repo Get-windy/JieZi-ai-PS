@@ -1,9 +1,9 @@
 import type { Command } from "commander";
-import type { OpenClawConfig } from "../../config/config.js";
-import { isTruthyEnvValue } from "../../infra/env.js";
-import { getPrimaryCommand, hasHelpOrVersion } from "../argv.js";
-import { reparseProgramFromActionArgs } from "./action-reparse.js";
-import { removeCommand, removeCommandByName } from "./command-tree.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { isTruthyEnvValue } from "../../../upstream/src/infra/env.js";
+import { getPrimaryCommand, hasHelpOrVersion } from "../../../upstream/src/cli/argv.js";
+import { reparseProgramFromActionArgs } from "../../../upstream/src/cli/program/action-reparse.js";
+import { removeCommand, removeCommandByName } from "../../../upstream/src/cli/program/command-tree.js";
 
 type SubCliRegistrar = (program: Command) => Promise<void> | void;
 
@@ -30,7 +30,7 @@ const shouldEagerRegisterSubcommands = (_argv: string[]) => {
 
 export const loadValidatedConfigForPluginRegistration =
   async (): Promise<OpenClawConfig | null> => {
-    const mod = await import("../../config/config.js");
+    const mod = await import("../../../upstream/src/config/config.js");
     const snapshot = await mod.readConfigFileSnapshot();
     if (!snapshot.valid) {
       return null;

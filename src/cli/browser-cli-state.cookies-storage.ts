@@ -1,8 +1,8 @@
 import type { Command } from "commander";
-import { danger } from "../globals.js";
-import { defaultRuntime } from "../runtime.js";
-import { callBrowserRequest, type BrowserParentOpts } from "./browser-cli-shared.js";
-import { inheritOptionFromParent } from "./command-options.js";
+import { danger } from "../../upstream/src/globals.js";
+import { defaultRuntime } from "../../upstream/src/runtime.js";
+import { callBrowserRequest, type BrowserParentOpts } from "../../upstream/src/cli/browser-cli-shared.js";
+import { inheritOptionFromParent } from "../../upstream/src/cli/command-options.js";
 
 function resolveUrl(opts: { url?: string }, command: Command): string | undefined {
   if (typeof opts.url === "string" && opts.url.trim()) {

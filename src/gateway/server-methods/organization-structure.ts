@@ -6,13 +6,13 @@
  * 数据通过 OrganizationStorageService 持久化到 organization-data.json
  */
 
-import { listAgentEntries } from "../../commands/agents.config.js";
-import { loadConfig } from "../../config/config.js";
+import { listAgentEntries } from "../../../upstream/src/commands/agents.config.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import { organizationStorage } from "../../organization/storage.js";
 import type { Organization, OrganizationMember } from "../../organization/types.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;

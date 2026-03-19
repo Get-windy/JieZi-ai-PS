@@ -19,7 +19,7 @@ import {
   getCodingBenchmarkScore,
   getReasoningBenchmarkScore,
 } from "./arena-benchmarks.js";
-import type { ModelCatalogEntry } from "./model-catalog.js";
+import type { ModelCatalogEntry } from "../../upstream/src/agents/model-catalog.js";
 import type { ModelInfo, ModelSpecialization, DataModality } from "./model-routing.js";
 
 /**

@@ -1,4 +1,4 @@
-import { isLoopbackHost, normalizeHostHeader, resolveHostName } from "./net.js";
+import { isLoopbackHost, normalizeHostHeader, resolveHostName } from "../../upstream/src/gateway/net.js";
 
 type OriginCheckResult = { ok: true } | { ok: false; reason: string };
 

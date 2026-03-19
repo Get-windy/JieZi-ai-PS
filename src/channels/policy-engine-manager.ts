@@ -7,7 +7,7 @@
  * - 提供统一的策略执行接口
  */
 
-import type { OpenClawConfig } from "../config/config.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import type { AgentChannelPolicies } from "../config/types.channel-policies.js";
 import { ChannelPolicyEngine, type PolicyContext } from "./policy-engine.js";
 

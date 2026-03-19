@@ -1,16 +1,16 @@
 import type { SlackActionMiddlewareArgs, SlackCommandMiddlewareArgs } from "@slack/bolt";
-import type { ChatCommandDefinition, CommandArgs } from "../../auto-reply/commands-registry.js";
-import type { ReplyPayload } from "../../auto-reply/types.js";
-import { formatAllowlistMatchMeta } from "../../channels/allowlist-match.js";
-import { resolveCommandAuthorizedFromAuthorizers } from "../../channels/command-gating.js";
+import type { ChatCommandDefinition, CommandArgs } from "../../../upstream/src/auto-reply/commands-registry.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
+import { formatAllowlistMatchMeta } from "../../../upstream/src/channels/allowlist-match.js";
+import { resolveCommandAuthorizedFromAuthorizers } from "../../../upstream/src/channels/command-gating.js";
 import { resolveNativeCommandsEnabled, resolveNativeSkillsEnabled } from "../../config/commands.js";
-import { danger, logVerbose } from "../../globals.js";
-import { buildPairingReply } from "../../pairing/pairing-messages.js";
+import { danger, logVerbose } from "../../../upstream/src/globals.js";
+import { buildPairingReply } from "../../../upstream/src/pairing/pairing-messages.js";
 import {
   readChannelAllowFromStore,
   upsertChannelPairingRequest,
-} from "../../pairing/pairing-store.js";
-import { chunkItems } from "../../utils/chunk-items.js";
+} from "../../../upstream/src/pairing/pairing-store.js";
+import { chunkItems } from "../../../upstream/src/utils/chunk-items.js";
 import type { ResolvedSlackAccount } from "../accounts.js";
 import {
   normalizeAllowList,
@@ -84,11 +84,11 @@ function readSlackExternalArgMenuToken(raw: unknown): string | undefined {
   return slackExternalArgMenuStore.readToken(raw);
 }
 
-type CommandsRegistry = typeof import("../../auto-reply/commands-registry.js");
+type CommandsRegistry = typeof import("../../../upstream/src/auto-reply/commands-registry.js");
 let commandsRegistry: CommandsRegistry | undefined;
 async function getCommandsRegistry(): Promise<CommandsRegistry> {
   if (!commandsRegistry) {
-    commandsRegistry = await import("../../auto-reply/commands-registry.js");
+    commandsRegistry = await import("../../../upstream/src/auto-reply/commands-registry.js");
   }
   return commandsRegistry;
 }

@@ -1,18 +1,18 @@
-import { normalizeApiKeyInput, validateApiKeyInput } from "./auth-choice.api-key.js";
+import { normalizeApiKeyInput, validateApiKeyInput } from "../../upstream/src/commands/auth-choice.api-key.js";
 import {
   createAuthChoiceAgentModelNoter,
   ensureApiKeyFromOptionEnvOrPrompt,
   normalizeSecretInputModeInput,
 } from "./auth-choice.apply-helpers.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
-import { applyDefaultModelChoice } from "./auth-choice.default-model.js";
+import { applyDefaultModelChoice } from "../../upstream/src/commands/auth-choice.default-model.js";
 import {
   applyAuthProfileConfig,
   applyXaiConfig,
   applyXaiProviderConfig,
   setXaiApiKey,
   XAI_DEFAULT_MODEL_REF,
-} from "./onboard-auth.js";
+} from "../../upstream/src/commands/onboard-auth.js";
 
 export async function applyAuthChoiceXAI(
   params: ApplyAuthChoiceParams,

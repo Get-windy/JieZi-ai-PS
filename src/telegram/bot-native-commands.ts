@@ -1,6 +1,6 @@
 import type { Bot, Context } from "grammy";
 import { resolveChunkMode } from "../auto-reply/chunk.js";
-import type { CommandArgs } from "../auto-reply/commands-registry.js";
+import type { CommandArgs } from "../../upstream/src/auto-reply/commands-registry.js";
 import {
   buildCommandTextFromArgs,
   findCommandByNativeName,
@@ -8,38 +8,38 @@ import {
   listNativeCommandSpecsForConfig,
   parseCommandArgs,
   resolveCommandArgMenu,
-} from "../auto-reply/commands-registry.js";
-import { finalizeInboundContext } from "../auto-reply/reply/inbound-context.js";
-import { dispatchReplyWithBufferedBlockDispatcher } from "../auto-reply/reply/provider-dispatcher.js";
-import { listSkillCommandsForAgents } from "../auto-reply/skill-commands.js";
-import { resolveCommandAuthorizedFromAuthorizers } from "../channels/command-gating.js";
-import { createReplyPrefixOptions } from "../channels/reply-prefix.js";
-import type { OpenClawConfig } from "../config/config.js";
-import type { ChannelGroupPolicy } from "../config/group-policy.js";
-import { resolveMarkdownTableMode } from "../config/markdown-tables.js";
-import { recordSessionMetaFromInbound, resolveStorePath } from "../config/sessions.js";
+} from "../../upstream/src/auto-reply/commands-registry.js";
+import { finalizeInboundContext } from "../../upstream/src/auto-reply/reply/inbound-context.js";
+import { dispatchReplyWithBufferedBlockDispatcher } from "../../upstream/src/auto-reply/reply/provider-dispatcher.js";
+import { listSkillCommandsForAgents } from "../../upstream/src/auto-reply/skill-commands.js";
+import { resolveCommandAuthorizedFromAuthorizers } from "../../upstream/src/channels/command-gating.js";
+import { createReplyPrefixOptions } from "../../upstream/src/channels/reply-prefix.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import type { ChannelGroupPolicy } from "../../upstream/src/config/group-policy.js";
+import { resolveMarkdownTableMode } from "../../upstream/src/config/markdown-tables.js";
+import { recordSessionMetaFromInbound, resolveStorePath } from "../../upstream/src/config/sessions.js";
 import {
   normalizeTelegramCommandName,
   resolveTelegramCustomCommands,
   TELEGRAM_COMMAND_NAME_PATTERN,
-} from "../config/telegram-custom-commands.js";
+} from "../../upstream/src/config/telegram-custom-commands.js";
 import type {
   ReplyToMode,
   TelegramAccountConfig,
   TelegramGroupConfig,
   TelegramTopicConfig,
-} from "../config/types.js";
-import { danger, logVerbose } from "../globals.js";
-import { getChildLogger } from "../logging.js";
+} from "../../upstream/src/config/types.js";
+import { danger, logVerbose } from "../../upstream/src/globals.js";
+import { getChildLogger } from "../../upstream/src/logging.js";
 import { getAgentScopedMediaLocalRoots } from "../media/local-roots.js";
 import {
   executePluginCommand,
   getPluginCommandSpecs,
   matchPluginCommand,
-} from "../plugins/commands.js";
+} from "../../upstream/src/plugins/commands.js";
 import { resolveAgentRoute } from "../routing/resolve-route.js";
 import { resolveThreadSessionKeys } from "../routing/session-key.js";
-import type { RuntimeEnv } from "../runtime.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
 import { withTelegramApiErrorLogging } from "./api-logging.js";
 import { isSenderAllowed, normalizeAllowFromWithStore } from "./bot-access.js";
 import {

@@ -7,9 +7,9 @@
  * - agent.channelPolicies.get/update - 通道策略配置管理
  */
 
-import type { ConfigAgent } from "../../config/types.js";
-import type { GatewayServer } from "../server.js";
-import { loadConfig, saveConfig } from "../../config/config.js";
+import type { ConfigAgent } from "../../../upstream/src/config/types.js";
+import type { GatewayServer } from "../../../upstream/src/gateway/server.js";
+import { loadConfig, saveConfig } from "../../../upstream/src/config/config.js";
 
 /**
  * 注册智能助手配置相关的RPC方法
@@ -206,8 +206,8 @@ function validateModelAccountsConfig(config: any): void {
     throw new Error("400 Bad Request: accounts must be an array");
   }
 
-  if (!["manual", "smart"].includes(config.routingMode)) {
-    throw new Error("400 Bad Request: routingMode must be 'manual' or 'smart'");
+  if (!["manual", "smart", "roundRobin"].includes(config.routingMode)) {
+    throw new Error("400 Bad Request: routingMode must be 'manual', 'smart' or 'roundRobin'");
   }
 
   // 更详细的验证逻辑：验证账号配置格式

@@ -27,7 +27,7 @@ vi.mock("../../memory/index.js", () => {
   };
 });
 
-import { createMemoryGetTool, createMemorySearchTool } from "./memory-tool.js";
+import { createMemoryGetTool, createMemorySearchTool } from "../../../upstream/src/agents/tools/memory-tool.js";
 
 describe("memory tools", () => {
   it("does not throw when memory_search fails (e.g. embeddings 429)", async () => {

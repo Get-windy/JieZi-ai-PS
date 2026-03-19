@@ -5,9 +5,9 @@ import { describe, expect, it } from "vitest";
 import {
   MOONSHOT_BASE_URL as MOONSHOT_AI_BASE_URL,
   MOONSHOT_CN_BASE_URL,
-} from "../commands/onboard-auth.models.js";
-import { captureEnv } from "../test-utils/env.js";
-import { resolveImplicitProviders } from "./models-config.providers.js";
+} from "../../upstream/src/commands/onboard-auth.models.js";
+import { captureEnv } from "../../upstream/src/test-utils/env.js";
+import { resolveImplicitProviders } from "../../upstream/src/agents/models-config.providers.js";
 
 describe("moonshot implicit provider (#33637)", () => {
   it("uses explicit CN baseUrl when provided", async () => {

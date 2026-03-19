@@ -2,7 +2,7 @@ import "./reply.directive.directive-behavior.e2e-mocks.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { loadSessionStore, resolveSessionKey, saveSessionStore } from "../config/sessions.js";
+import { loadSessionStore, resolveSessionKey, saveSessionStore } from "../../upstream/src/config/sessions.js";
 import {
   installDirectiveBehaviorE2EHooks,
   makeEmbeddedTextResult,
@@ -12,8 +12,8 @@ import {
   runEmbeddedPiAgent,
   sessionStorePath,
   withTempHome,
-} from "./reply.directive.directive-behavior.e2e-harness.js";
-import { getReplyFromConfig } from "./reply.js";
+} from "../../upstream/src/auto-reply/reply.directive.directive-behavior.e2e-harness.js";
+import { getReplyFromConfig } from "../../upstream/src/auto-reply/reply.js";
 
 async function writeSkill(params: { workspaceDir: string; name: string; description: string }) {
   const { workspaceDir, name, description } = params;

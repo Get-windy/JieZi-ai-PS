@@ -15,25 +15,25 @@ import { resolveSlackChannelAllowlist } from "../../../extensions/slack/src/reso
 import { resolveSlackUserAllowlist } from "../../../extensions/slack/src/resolve-users.js";
 import { resolveSlackAppToken, resolveSlackBotToken } from "../../../extensions/slack/src/token.js";
 import { resolveTextChunkLimit } from "../../auto-reply/chunk.js";
-import { DEFAULT_GROUP_HISTORY_LIMIT } from "../../auto-reply/reply/history.js";
+import { DEFAULT_GROUP_HISTORY_LIMIT } from "../../../upstream/src/auto-reply/reply/history.js";
 import {
   addAllowlistUserEntriesFromConfigEntry,
   buildAllowlistResolutionSummary,
   mergeAllowlist,
   patchAllowlistUsersInConfigEntries,
   summarizeMapping,
-} from "../../channels/allowlists/resolve-utils.js";
-import { loadConfig } from "../../config/config.js";
+} from "../../../upstream/src/channels/allowlists/resolve-utils.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import {
   resolveOpenProviderRuntimeGroupPolicy,
   resolveDefaultGroupPolicy,
   warnMissingProviderGroupPolicyFallbackOnce,
-} from "../../config/runtime-group-policy.js";
-import type { SessionScope } from "../../config/sessions.js";
-import { warn } from "../../globals.js";
-import { installRequestBodyLimitGuard } from "../../infra/http-body.js";
+} from "../../../upstream/src/config/runtime-group-policy.js";
+import type { SessionScope } from "../../../upstream/src/config/sessions.js";
+import { warn } from "../../../upstream/src/globals.js";
+import { installRequestBodyLimitGuard } from "../../../upstream/src/infra/http-body.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
-import { createNonExitingRuntime, type RuntimeEnv } from "../../runtime.js";
+import { createNonExitingRuntime, type RuntimeEnv } from "../../../upstream/src/runtime.js";
 import { resolveSlackAccount } from "../accounts.js";
 import { registerSlackMonitorSlashCommands } from "./slash.js";
 

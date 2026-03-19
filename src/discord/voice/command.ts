@@ -10,9 +10,9 @@ import {
   ChannelType as DiscordChannelType,
   type APIApplicationCommandChannelOption,
 } from "discord-api-types/v10";
-import { resolveCommandAuthorizedFromAuthorizers } from "../../channels/command-gating.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { DiscordAccountConfig } from "../../config/types.js";
+import { resolveCommandAuthorizedFromAuthorizers } from "../../../upstream/src/channels/command-gating.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import type { DiscordAccountConfig } from "../../../upstream/src/config/types.js";
 import {
   allowListMatches,
   isDiscordGroupAllowedByPolicy,

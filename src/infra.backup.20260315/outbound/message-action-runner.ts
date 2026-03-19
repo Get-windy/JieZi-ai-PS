@@ -4,21 +4,21 @@ import {
   readNumberParam,
   readStringArrayParam,
   readStringParam,
-} from "../../agents/tools/common.js";
-import { parseReplyDirectives } from "../../auto-reply/reply/reply-directives.js";
-import { dispatchChannelMessageAction } from "../../channels/plugins/message-actions.js";
+} from "../../../upstream/src/agents/tools/common.js";
+import { parseReplyDirectives } from "../../../upstream/src/auto-reply/reply/reply-directives.js";
+import { dispatchChannelMessageAction } from "../../../upstream/src/channels/plugins/message-actions.js";
 import type {
   ChannelId,
   ChannelMessageActionName,
   ChannelThreadingToolContext,
-} from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
+} from "../../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
-import { hasPollCreationParams, resolveTelegramPollVisibility } from "../../poll-params.js";
-import { resolvePollMaxSelections } from "../../polls.js";
+import { hasPollCreationParams, resolveTelegramPollVisibility } from "../../../upstream/src/poll-params.js";
+import { resolvePollMaxSelections } from "../../../upstream/src/polls.js";
 import { buildChannelAccountBindings } from "../../routing/bindings.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
-import { type GatewayClientMode, type GatewayClientName } from "../../utils/message-channel.js";
+import { type GatewayClientMode, type GatewayClientName } from "../../../upstream/src/utils/message-channel.js";
 import { throwIfAborted } from "./abort.js";
 import {
   listConfiguredMessageChannels,

@@ -18,15 +18,15 @@
 
 import { advancedApprovalSystem } from "../../admin/advanced-approval.js";
 import { listAgentIds } from "../../agents/agent-scope.js";
-import { listAgentEntries, findAgentEntryIndex } from "../../commands/agents.config.js";
-import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../config/config.js";
-import type { OpenClawConfig } from "../../config/types.js";
+import { listAgentEntries, findAgentEntryIndex } from "../../../upstream/src/commands/agents.config.js";
+import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../../upstream/src/config/config.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/types.js";
 import type { AgentPermissionsConfig, PermissionSubject } from "../../config/types.permissions.js";
 import type { ApprovalAction } from "../../permissions/approval.js";
 import { ApprovalWorkflow } from "../../permissions/approval.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
-import type { GatewayRequestHandlers, RespondFn } from "./types.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers, RespondFn } from "../../../upstream/src/gateway/server-methods/types.js";
 
 /**
  * 全局审批工作流实例（按智能助手ID索引）

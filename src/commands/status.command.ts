@@ -1,40 +1,40 @@
-import { formatCliCommand } from "../cli/command-format.js";
-import { withProgress } from "../cli/progress.js";
-import { resolveGatewayPort } from "../config/config.js";
-import { buildGatewayConnectionDetails, callGateway } from "../gateway/call.js";
-import { info } from "../globals.js";
+import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
+import { withProgress } from "../../upstream/src/cli/progress.js";
+import { resolveGatewayPort } from "../../upstream/src/config/config.js";
+import { buildGatewayConnectionDetails, callGateway } from "../../upstream/src/gateway/call.js";
+import { info } from "../../upstream/src/globals.js";
 import { formatTimeAgo } from "../infra/format-time/format-relative.ts";
-import type { HeartbeatEventPayload } from "../infra/heartbeat-events.js";
-import { normalizeUpdateChannel, resolveUpdateChannelDisplay } from "../infra/update-channels.js";
-import { formatGitInstallLabel } from "../infra/update-check.js";
+import type { HeartbeatEventPayload } from "../../upstream/src/infra/heartbeat-events.js";
+import { normalizeUpdateChannel, resolveUpdateChannelDisplay } from "../../upstream/src/infra/update-channels.js";
+import { formatGitInstallLabel } from "../../upstream/src/infra/update-check.js";
 import {
   resolveMemoryCacheSummary,
   resolveMemoryFtsState,
   resolveMemoryVectorState,
   type Tone,
-} from "../memory/status-format.js";
-import type { RuntimeEnv } from "../runtime.js";
+} from "../../upstream/src/memory/status-format.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
 import { runSecurityAudit } from "../security/audit.js";
-import { getTerminalTableWidth, renderTable } from "../terminal/table.js";
-import { theme } from "../terminal/theme.js";
+import { getTerminalTableWidth, renderTable } from "../../upstream/src/terminal/table.js";
+import { theme } from "../../upstream/src/terminal/theme.js";
 import { formatHealthChannelLines, type HealthSummary } from "./health.js";
-import { resolveControlUiLinks } from "./onboard-helpers.js";
+import { resolveControlUiLinks } from "../../upstream/src/commands/onboard-helpers.js";
 import { statusAllCommand } from "./status-all.js";
-import { groupChannelIssuesByChannel } from "./status-all/channel-issues.js";
-import { formatGatewayAuthUsed } from "./status-all/format.js";
-import { getDaemonStatusSummary, getNodeDaemonStatusSummary } from "./status.daemon.js";
+import { groupChannelIssuesByChannel } from "../../upstream/src/commands/status-all/channel-issues.js";
+import { formatGatewayAuthUsed } from "../../upstream/src/commands/status-all/format.js";
+import { getDaemonStatusSummary, getNodeDaemonStatusSummary } from "../../upstream/src/commands/status.daemon.js";
 import {
   formatDuration,
   formatKTokens,
   formatTokensCompact,
   shortenText,
-} from "./status.format.js";
+} from "../../upstream/src/commands/status.format.js";
 import { scanStatus } from "./status.scan.js";
 import {
   formatUpdateAvailableHint,
   formatUpdateOneLiner,
   resolveUpdateAvailability,
-} from "./status.update.js";
+} from "../../upstream/src/commands/status.update.js";
 
 let providerUsagePromise: Promise<typeof import("../infra/provider-usage.js")> | undefined;
 

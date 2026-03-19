@@ -1,56 +1,56 @@
 import { randomUUID } from "node:crypto";
 import { listAgentIds } from "../../agents/agent-scope.js";
-import { BARE_SESSION_RESET_PROMPT } from "../../auto-reply/reply/session-reset-prompt.js";
-import { agentCommand } from "../../commands/agent.js";
-import { loadConfig } from "../../config/config.js";
+import { BARE_SESSION_RESET_PROMPT } from "../../../upstream/src/auto-reply/reply/session-reset-prompt.js";
+import { agentCommand } from "../../../upstream/src/commands/agent.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import {
   resolveAgentIdFromSessionKey,
   resolveExplicitAgentSessionKey,
   resolveAgentMainSessionKey,
   type SessionEntry,
   updateSessionStore,
-} from "../../config/sessions.js";
-import { registerAgentRunContext } from "../../infra/agent-events.js";
+} from "../../../upstream/src/config/sessions.js";
+import { registerAgentRunContext } from "../../../upstream/src/infra/agent-events.js";
 import {
   resolveAgentDeliveryPlan,
   resolveAgentOutboundTarget,
-} from "../../infra/outbound/agent-delivery.js";
+} from "../../../upstream/src/infra/outbound/agent-delivery.js";
 import { resolveMessageChannelSelection } from "../../infra/outbound/channel-selection.js";
 import { classifySessionKeyShape, normalizeAgentId } from "../../routing/session-key.js";
-import { defaultRuntime } from "../../runtime.js";
-import { normalizeInputProvenance, type InputProvenance } from "../../sessions/input-provenance.js";
-import { resolveSendPolicy } from "../../sessions/send-policy.js";
-import { normalizeSessionDeliveryFields } from "../../utils/delivery-context.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
+import { normalizeInputProvenance, type InputProvenance } from "../../../upstream/src/sessions/input-provenance.js";
+import { resolveSendPolicy } from "../../../upstream/src/sessions/send-policy.js";
+import { normalizeSessionDeliveryFields } from "../../../upstream/src/utils/delivery-context.js";
 import {
   INTERNAL_MESSAGE_CHANNEL,
   isDeliverableMessageChannel,
   isGatewayMessageChannel,
   normalizeMessageChannel,
-} from "../../utils/message-channel.js";
+} from "../../../upstream/src/utils/message-channel.js";
 import { resolveAssistantIdentity } from "../assistant-identity.js";
-import { parseMessageWithAttachments } from "../chat-attachments.js";
-import { resolveAssistantAvatarUrl } from "../control-ui-shared.js";
-import { GATEWAY_CLIENT_CAPS, hasGatewayClientCap } from "../protocol/client-info.js";
+import { parseMessageWithAttachments } from "../../../upstream/src/gateway/chat-attachments.js";
+import { resolveAssistantAvatarUrl } from "../../../upstream/src/gateway/control-ui-shared.js";
+import { GATEWAY_CLIENT_CAPS, hasGatewayClientCap } from "../../../upstream/src/gateway/protocol/client-info.js";
 import {
   ErrorCodes,
   errorShape,
   formatValidationErrors,
   validateAgentIdentityParams,
-  validateAgentParams,
   validateAgentWaitParams,
-} from "../protocol/index.js";
+} from "../../../upstream/src/gateway/protocol/index.js";
+import { validateAgentParams } from "../protocol/schema/agent.js";
 import {
   canonicalizeSpawnedByForAgent,
   loadSessionEntry,
   pruneLegacyStoreKeys,
   resolveGatewaySessionStoreTarget,
 } from "../session-utils.js";
-import { formatForLog } from "../ws-log.js";
-import { waitForAgentJob } from "./agent-job.js";
-import { injectTimestamp, timestampOptsFromConfig } from "./agent-timestamp.js";
-import { normalizeRpcAttachmentsToChatAttachments } from "./attachment-normalize.js";
+import { formatForLog } from "../../../upstream/src/gateway/ws-log.js";
+import { waitForAgentJob } from "../../../upstream/src/gateway/server-methods/agent-job.js";
+import { injectTimestamp, timestampOptsFromConfig } from "../../../upstream/src/gateway/server-methods/agent-timestamp.js";
+import { normalizeRpcAttachmentsToChatAttachments } from "../../../upstream/src/gateway/server-methods/attachment-normalize.js";
 import { sessionsHandlers } from "./sessions.js";
-import type { GatewayRequestHandlerOptions, GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlerOptions, GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 const RESET_COMMAND_RE = /^\/(new|reset)(?:\s+([\s\S]*))?$/i;
 
@@ -155,12 +155,14 @@ export const agentHandlers: GatewayRequestHandlers = {
   agent: async ({ params, respond, context, client, isWebchatConnect }) => {
     const p = params;
     if (!validateAgentParams(p)) {
+      const errMsg = `invalid agent params: ${formatValidationErrors(validateAgentParams.errors)}`;
+      context.logGateway(`[DEBUG-AGENT-SCHEMA] validation FAILED: ${errMsg} params_keys=${Object.keys(p as object ?? {}).join(",")}`);
       respond(
         false,
         undefined,
         errorShape(
           ErrorCodes.INVALID_REQUEST,
-          `invalid agent params: ${formatValidationErrors(validateAgentParams.errors)}`,
+          errMsg,
         ),
       );
       return;
@@ -364,7 +366,7 @@ export const agentHandlers: GatewayRequestHandlers = {
       spawnedByValue = canonicalizeSpawnedByForAgent(
         cfg,
         sessionAgent,
-        spawnedByValue || entry?.spawnedBy,
+        entry?.spawnedBy,
       );
       let inheritedGroup:
         | { groupId?: string; groupChannel?: string; groupSpace?: string }
@@ -436,7 +438,6 @@ export const agentHandlers: GatewayRequestHandlers = {
           const target = resolveGatewaySessionStoreTarget({
             cfg,
             key: requestedSessionKey,
-            store,
           });
           pruneLegacyStoreKeys({
             store,

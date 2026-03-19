@@ -2,9 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReplyPayload } from "../../auto-reply/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { typedCases } from "../../test-utils/typed-cases.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { typedCases } from "../../../upstream/src/test-utils/typed-cases.js";
 import {
   ackDelivery,
   computeBackoffMs,

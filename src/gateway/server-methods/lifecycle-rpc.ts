@@ -2,9 +2,9 @@
  * 生命周期管理 Gateway RPC 方法
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { LifecycleManager } from "../../lifecycle/lifecycle-manager.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 const lifecycleManager = LifecycleManager.getInstance();
 

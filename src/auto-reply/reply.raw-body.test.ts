@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
-import { runEmbeddedPiAgentMock } from "./reply.directive.directive-behavior.e2e-mocks.js";
-import { createTempHomeHarness, makeReplyConfig } from "./reply.test-harness.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { runEmbeddedPiAgentMock } from "../../upstream/src/auto-reply/reply.directive.directive-behavior.e2e-mocks.js";
+import { createTempHomeHarness, makeReplyConfig } from "../../upstream/src/auto-reply/reply.test-harness.js";
 
 const agentMocks = vi.hoisted(() => ({
   loadModelCatalog: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock("../../upstream/extensions/whatsapp/src/session.js", () => ({
   readWebSelfId: agentMocks.readWebSelfId,
 }));
 
-import { getReplyFromConfig } from "./reply.js";
+import { getReplyFromConfig } from "../../upstream/src/auto-reply/reply.js";
 
 const { withTempHome } = createTempHomeHarness({ prefix: "openclaw-rawbody-" });
 

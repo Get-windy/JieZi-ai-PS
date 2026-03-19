@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSandboxBridgeReadFile } from "./sandbox-media-paths.js";
+import { createSandboxBridgeReadFile } from "../../upstream/src/agents/sandbox-media-paths.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 
 describe("createSandboxBridgeReadFile", () => {

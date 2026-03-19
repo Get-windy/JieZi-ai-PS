@@ -1,29 +1,29 @@
 import {
   hasConfiguredUnavailableCredentialStatus,
   hasResolvedCredentialValue,
-} from "../../channels/account-snapshot-fields.js";
-import { listChannelPlugins } from "../../channels/plugins/index.js";
+} from "../../../upstream/src/channels/account-snapshot-fields.js";
+import { listChannelPlugins } from "../../../upstream/src/channels/plugins/index.js";
 import {
   buildChannelAccountSnapshot,
   buildReadOnlySourceChannelAccountSnapshot,
-} from "../../channels/plugins/status.js";
-import type { ChannelAccountSnapshot } from "../../channels/plugins/types.js";
-import { formatCliCommand } from "../../cli/command-format.js";
+} from "../../../upstream/src/channels/plugins/status.js";
+import type { ChannelAccountSnapshot } from "../../../upstream/src/channels/plugins/types.js";
+import { formatCliCommand } from "../../../upstream/src/cli/command-format.js";
 import { resolveCommandSecretRefsViaGateway } from "../../cli/command-secret-gateway.js";
 import { getChannelsCommandSecretTargetIds } from "../../cli/command-secret-targets.js";
-import { withProgress } from "../../cli/progress.js";
-import { type OpenClawConfig, readConfigFileSnapshot } from "../../config/config.js";
-import { callGateway } from "../../gateway/call.js";
-import { collectChannelStatusIssues } from "../../infra/channels-status-issues.js";
+import { withProgress } from "../../../upstream/src/cli/progress.js";
+import { type OpenClawConfig, readConfigFileSnapshot } from "../../../upstream/src/config/config.js";
+import { callGateway } from "../../../upstream/src/gateway/call.js";
+import { collectChannelStatusIssues } from "../../../upstream/src/infra/channels-status-issues.js";
 import { formatTimeAgo } from "../../infra/format-time/format-relative.ts";
-import { defaultRuntime, type RuntimeEnv } from "../../runtime.js";
-import { formatDocsLink } from "../../terminal/links.js";
-import { theme } from "../../terminal/theme.js";
+import { defaultRuntime, type RuntimeEnv } from "../../../upstream/src/runtime.js";
+import { formatDocsLink } from "../../../upstream/src/terminal/links.js";
+import { theme } from "../../../upstream/src/terminal/theme.js";
 import {
   type ChatChannel,
   formatChannelAccountLabel,
   requireValidConfigSnapshot,
-} from "./shared.js";
+} from "../../../upstream/src/commands/channels/shared.js";
 
 export type ChannelsStatusOptions = {
   json?: boolean;

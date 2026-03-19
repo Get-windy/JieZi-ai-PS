@@ -8,36 +8,36 @@ import { createServer as createHttpsServer } from "node:https";
 import type { TlsOptions } from "node:tls";
 import type { WebSocketServer } from "ws";
 import { handleSlackHttpRequest } from "../../extensions/slack/src/http/index.js";
-import { resolveAgentAvatar } from "../agents/identity-avatar.js";
+import { resolveAgentAvatar } from "../../upstream/src/agents/identity-avatar.js";
 import {
   A2UI_PATH,
   CANVAS_HOST_PATH,
   CANVAS_WS_PATH,
   handleA2uiHttpRequest,
-} from "../canvas-host/a2ui.js";
-import type { CanvasHostHandler } from "../canvas-host/server.js";
-import { loadConfig } from "../config/config.js";
-import type { createSubsystemLogger } from "../logging/subsystem.js";
-import { safeEqualSecret } from "../security/secret-equal.js";
+} from "../../upstream/src/canvas-host/a2ui.js";
+import type { CanvasHostHandler } from "../../upstream/src/canvas-host/server.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
+import type { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
+import { safeEqualSecret } from "../../upstream/src/security/secret-equal.js";
 import {
   AUTH_RATE_LIMIT_SCOPE_HOOK_AUTH,
   createAuthRateLimiter,
   normalizeRateLimitClientIp,
   type AuthRateLimiter,
-} from "./auth-rate-limit.js";
+} from "../../upstream/src/gateway/auth-rate-limit.js";
 import {
   authorizeHttpGatewayConnect,
   isLocalDirectRequest,
   type GatewayAuthResult,
   type ResolvedGatewayAuth,
-} from "./auth.js";
-import { CANVAS_CAPABILITY_TTL_MS, normalizeCanvasScopedUrl } from "./canvas-capability.js";
+} from "../../upstream/src/gateway/auth.js";
+import { CANVAS_CAPABILITY_TTL_MS, normalizeCanvasScopedUrl } from "../../upstream/src/gateway/canvas-capability.js";
 import {
   handleControlUiAvatarRequest,
   handleControlUiHttpRequest,
   type ControlUiRootState,
 } from "./control-ui.js";
-import { applyHookMappings } from "./hooks-mapping.js";
+import { applyHookMappings } from "../../upstream/src/gateway/hooks-mapping.js";
 import {
   extractHookToken,
   getHookAgentPolicyError,
@@ -53,13 +53,13 @@ import {
   resolveHookTargetAgentId,
   resolveHookChannel,
   resolveHookDeliver,
-} from "./hooks.js";
-import { sendGatewayAuthFailure, setDefaultSecurityHeaders } from "./http-common.js";
-import { getBearerToken } from "./http-utils.js";
-import { handleOpenAiHttpRequest } from "./openai-http.js";
-import { handleOpenResponsesHttpRequest } from "./openresponses-http.js";
-import { GATEWAY_CLIENT_MODES, normalizeGatewayClientMode } from "./protocol/client-info.js";
-import type { GatewayWsClient } from "./server/ws-types.js";
+} from "../../upstream/src/gateway/hooks.js";
+import { sendGatewayAuthFailure, setDefaultSecurityHeaders } from "../../upstream/src/gateway/http-common.js";
+import { getBearerToken } from "../../upstream/src/gateway/http-utils.js";
+import { handleOpenAiHttpRequest } from "../../upstream/src/gateway/openai-http.js";
+import { handleOpenResponsesHttpRequest } from "../../upstream/src/gateway/openresponses-http.js";
+import { GATEWAY_CLIENT_MODES, normalizeGatewayClientMode } from "../../upstream/src/gateway/protocol/client-info.js";
+import type { GatewayWsClient } from "../../upstream/src/gateway/server/ws-types.js";
 import { handleToolsInvokeHttpRequest } from "./tools-invoke-http.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;

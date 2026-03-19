@@ -4,10 +4,10 @@
  * 提供权限配置的查询和修改功能
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import type { AgentPermissionsConfig } from "../../config/types.permissions.js";
-import { loadConfig, saveConfig } from "../../config/config.js";
-import { listAgentEntries } from "../../commands/agents.config.js";
+import { loadConfig, saveConfig } from "../../../upstream/src/config/config.js";
+import { listAgentEntries } from "../../../upstream/src/commands/agents.config.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
 import {
   createPermissionTemplate,
@@ -19,7 +19,7 @@ import {
   TOOL_CATEGORIES,
 } from "../../agents/tools/permission-templates.js";
 import { clearPermissionCache } from "../../agents/tools/permission-middleware.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 export const permissionHandlers: GatewayRequestHandlers = {
   /**

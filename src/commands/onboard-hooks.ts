@@ -1,9 +1,9 @@
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
-import { formatCliCommand } from "../cli/command-format.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { buildWorkspaceHookStatus } from "../hooks/hooks-status.js";
-import type { RuntimeEnv } from "../runtime.js";
-import type { WizardPrompter } from "../wizard/prompts.js";
+import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { buildWorkspaceHookStatus } from "../../upstream/src/hooks/hooks-status.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
+import type { WizardPrompter } from "../../upstream/src/wizard/prompts.js";
 
 export async function setupInternalHooks(
   cfg: OpenClawConfig,

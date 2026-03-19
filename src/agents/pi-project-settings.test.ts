@@ -3,7 +3,7 @@ import {
   buildEmbeddedPiSettingsSnapshot,
   DEFAULT_EMBEDDED_PI_PROJECT_SETTINGS_POLICY,
   resolveEmbeddedPiProjectSettingsPolicy,
-} from "./pi-project-settings.js";
+} from "../../upstream/src/agents/pi-project-settings.js";
 
 describe("resolveEmbeddedPiProjectSettingsPolicy", () => {
   it("defaults to sanitize", () => {

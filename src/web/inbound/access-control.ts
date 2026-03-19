@@ -1,16 +1,16 @@
-import { loadConfig } from "../../config/config.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import {
   resolveOpenProviderRuntimeGroupPolicy,
   resolveDefaultGroupPolicy,
   warnMissingProviderGroupPolicyFallbackOnce,
-} from "../../config/runtime-group-policy.js";
-import { logVerbose } from "../../globals.js";
-import { buildPairingReply } from "../../pairing/pairing-messages.js";
+} from "../../../upstream/src/config/runtime-group-policy.js";
+import { logVerbose } from "../../../upstream/src/globals.js";
+import { buildPairingReply } from "../../../upstream/src/pairing/pairing-messages.js";
 import {
   readChannelAllowFromStore,
   upsertChannelPairingRequest,
-} from "../../pairing/pairing-store.js";
-import { isSelfChatMode, normalizeE164 } from "../../utils.js";
+} from "../../../upstream/src/pairing/pairing-store.js";
+import { isSelfChatMode, normalizeE164 } from "../../../upstream/src/utils.js";
 import { resolveWhatsAppAccount } from "../accounts.js";
 
 export type InboundAccessControlResult = {

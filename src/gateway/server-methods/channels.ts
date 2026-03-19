@@ -1,34 +1,34 @@
 // 添加配对请求加载函数
 import { loadAllChannelPairingRequests } from "../../channels/pairing-requests.js";
-import { buildChannelUiCatalog } from "../../channels/plugins/catalog.js";
-import { resolveChannelDefaultAccountId } from "../../channels/plugins/helpers.js";
+import { buildChannelUiCatalog } from "../../../upstream/src/channels/plugins/catalog.js";
+import { resolveChannelDefaultAccountId } from "../../../upstream/src/channels/plugins/helpers.js";
 import {
   type ChannelId,
   getChannelPlugin,
   listChannelPlugins,
   normalizeChannelId,
-} from "../../channels/plugins/index.js";
-import { buildChannelAccountSnapshot } from "../../channels/plugins/status.js";
-import type { ChannelAccountSnapshot, ChannelPlugin } from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
+} from "../../../upstream/src/channels/plugins/index.js";
+import { buildChannelAccountSnapshot } from "../../../upstream/src/channels/plugins/status.js";
+import type { ChannelAccountSnapshot, ChannelPlugin } from "../../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import {
   loadConfig,
   readConfigFileSnapshot,
   readConfigFileSnapshotForWrite,
   writeConfigFile,
-} from "../../config/config.js";
-import { getChannelActivity } from "../../infra/channel-activity.js";
+} from "../../../upstream/src/config/config.js";
+import { getChannelActivity } from "../../../upstream/src/infra/channel-activity.js";
 import { DEFAULT_ACCOUNT_ID } from "../../routing/session-key.js";
-import { defaultRuntime } from "../../runtime.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
 import {
   ErrorCodes,
   errorShape,
   formatValidationErrors,
   validateChannelsLogoutParams,
   validateChannelsStatusParams,
-} from "../protocol/index.js";
-import { formatForLog } from "../ws-log.js";
-import type { GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
+} from "../../../upstream/src/gateway/protocol/index.js";
+import { formatForLog } from "../../../upstream/src/gateway/ws-log.js";
+import type { GatewayRequestContext, GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 type ChannelLogoutPayload = {
   channel: ChannelId;

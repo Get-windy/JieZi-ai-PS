@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
-import { captureEnv } from "../../test-utils/env.js";
-import { handleTelegramAction, readTelegramButtons } from "./telegram-actions.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { captureEnv } from "../../../upstream/src/test-utils/env.js";
+import { handleTelegramAction, readTelegramButtons } from "../../../upstream/src/agents/tools/telegram-actions.js";
 
 const reactMessageTelegram = vi.fn(async () => ({ ok: true }));
 const sendMessageTelegram = vi.fn(async () => ({

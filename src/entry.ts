@@ -3,15 +3,15 @@ import { spawn } from "node:child_process";
 import { enableCompileCache } from "node:module";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { isRootHelpInvocation, isRootVersionInvocation } from "./cli/argv.js";
-import { applyCliProfileEnv, parseCliProfileArgs } from "./cli/profile.js";
-import { shouldSkipRespawnForArgv } from "./cli/respawn-policy.js";
-import { normalizeWindowsArgv } from "./cli/windows-argv.js";
-import { isTruthyEnvValue, normalizeEnv } from "./infra/env.js";
-import { isMainModule } from "./infra/is-main.js";
-import { ensureOpenClawExecMarkerOnProcess } from "./infra/openclaw-exec-env.js";
-import { installProcessWarningFilter } from "./infra/warning-filter.js";
-import { attachChildProcessBridge } from "./process/child-process-bridge.js";
+import { isRootHelpInvocation, isRootVersionInvocation } from "../upstream/src/cli/argv.js";
+import { applyCliProfileEnv, parseCliProfileArgs } from "../upstream/src/cli/profile.js";
+import { shouldSkipRespawnForArgv } from "../upstream/src/cli/respawn-policy.js";
+import { normalizeWindowsArgv } from "../upstream/src/cli/windows-argv.js";
+import { isTruthyEnvValue, normalizeEnv } from "../upstream/src/infra/env.js";
+import { isMainModule } from "../upstream/src/infra/is-main.js";
+import { ensureOpenClawExecMarkerOnProcess } from "../upstream/src/infra/openclaw-exec-env.js";
+import { installProcessWarningFilter } from "../upstream/src/infra/warning-filter.js";
+import { attachChildProcessBridge } from "../upstream/src/process/child-process-bridge.js";
 
 const ENTRY_WRAPPER_PAIRS = [
   { wrapperBasename: "openclaw.mjs", entryBasename: "entry.js" },

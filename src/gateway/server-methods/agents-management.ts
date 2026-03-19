@@ -27,24 +27,24 @@ import {
   resolveAgentModelAccounts,
   resolveAgentWorkspaceDir,
 } from "../../agents/agent-scope.js";
-import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
-import { getChannelPlugin, listChannelPlugins } from "../../channels/plugins/index.js";
-import { listAgentEntries, findAgentEntryIndex } from "../../commands/agents.config.js";
-import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../config/config.js";
+import { resolveDefaultAgentWorkspaceDir } from "../../../upstream/src/agents/workspace.js";
+import { getChannelPlugin, listChannelPlugins } from "../../../upstream/src/channels/plugins/index.js";
+import { listAgentEntries, findAgentEntryIndex } from "../../../upstream/src/commands/agents.config.js";
+import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../../upstream/src/config/config.js";
 import type { AgentBinding, AgentConfig } from "../../config/types.agents.js";
 import type { AgentChannelBindings } from "../../config/types.channel-bindings.js";
-import type { OpenClawConfig } from "../../config/types.js";
-import { requestHeartbeatNow } from "../../infra/heartbeat-wake.js";
-import { enqueueSystemEvent } from "../../infra/system-events.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/types.js";
+import { requestHeartbeatNow } from "../../../upstream/src/infra/heartbeat-wake.js";
+import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
 import { organizationStorage } from "../../organization/storage.js";
 import { listBindings } from "../../routing/bindings.js";
 import { normalizeAgentId, DEFAULT_AGENT_ID } from "../../routing/session-key.js";
 import * as taskStorage from "../../tasks/storage.js";
 import type { Task } from "../../tasks/types.js";
 import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
-import { chatHandlers } from "./chat.js";
-import type { GatewayRequestHandlers, RespondFn } from "./types.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import { chatHandlers } from "../../../upstream/src/gateway/server-methods/chat.js";
+import type { GatewayRequestHandlers, RespondFn } from "../../../upstream/src/gateway/server-methods/types.js";
 
 /**
  * 获取某 agent 可管理/调度的下属 agent ID 集合（normalized）。
@@ -2805,14 +2805,19 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       // === 步骤 4：自动唤醒 Agent，确保任务被立即处理 ===
       // 将任务指令作为系统事件放入队列，并立即触发心跳唤醒 Agent
       // 这样 Agent 就会像被"闹钟"叫醒一样，立即开始处理任务
-      enqueueSystemEvent(taskLines, { sessionKey, contextKey: taskId });
+      // 使用 cron: 前缀，使 resolveHeartbeatReasonKind 返回 "cron"，从而：
+      // 1. isCronEventReason=true → shouldBypassFileGates=true（绕过 HEARTBEAT.md 文件检查）
+      // 2. shouldInspectPendingEvents=true → 系统事件队列中的任务指令会被读取
+      // 3. isTaskDriven=true → 成员 Agent 即使无独立模型配置也能激活（回退到主控模型）
+      const wakeReason = `cron:task-assign:${taskId}`;
+      enqueueSystemEvent(taskLines, { sessionKey, contextKey: `cron:task-assign:${taskId}` });
       requestHeartbeatNow({
-        reason: `Task assignment: ${taskId}`,
+        reason: wakeReason,
         sessionKey,
         agentId: targetAgentId,
       });
       console.log(
-        `[agent.assign_task] ✓ Agent ${targetAgentId} automatically woken up for task ${taskId}`,
+        `[agent.assign_task] ✓ Agent ${targetAgentId} automatically woken up for task ${taskId} (reason=${wakeReason})`,
       );
     } catch (err) {
       if (!responded) {

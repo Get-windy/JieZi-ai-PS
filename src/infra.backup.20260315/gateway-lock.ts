@@ -3,8 +3,8 @@ import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
-import { resolveConfigPath, resolveGatewayLockDir, resolveStateDir } from "../config/paths.js";
-import { isPidAlive } from "../shared/pid-alive.js";
+import { resolveConfigPath, resolveGatewayLockDir, resolveStateDir } from "../../upstream/src/config/paths.js";
+import { isPidAlive } from "../../upstream/src/shared/pid-alive.js";
 
 const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_POLL_INTERVAL_MS = 100;

@@ -4,7 +4,7 @@
  */
 
 import type { AppViewState } from "../app-view-state.js";
-import type { ModelAccountsConfig, ChannelPoliciesConfig } from "../views/agents-management.js";
+import type { ModelAccountsConfig, ChannelPoliciesConfig } from "../views/agents.js";
 
 /**
  * 加载智能助手的模型账号配置
@@ -38,6 +38,7 @@ export async function loadModelAccountsConfig(state: AppViewState, agentId: stri
 export async function updateModelAccountsConfig(
   state: AppViewState,
   agentId: string,
+  // oxlint-disable-next-line typescript/no-explicit-any
   config: Record<string, any>,
 ): Promise<void> {
   if (!state.client) {
@@ -92,6 +93,7 @@ export async function loadChannelPoliciesConfig(
 export async function updateChannelPoliciesConfig(
   state: AppViewState,
   agentId: string,
+  // oxlint-disable-next-line typescript/no-explicit-any
   config: Record<string, any>,
 ): Promise<void> {
   if (!state.client) {
@@ -252,10 +254,10 @@ export async function loadPermissionsHistory(state: AppViewState): Promise<void>
 
   try {
     const history = await state.client.request("permissions.history", {});
-    state.permissionsChangeHistory = Array.isArray(history) ? history : [];
+    state.permissionChangeHistory = Array.isArray(history) ? history : [];
   } catch (error) {
     console.error("[Phase5] Failed to load permissions history:", error);
-    state.permissionsChangeHistory = [];
+    state.permissionChangeHistory = [];
   } finally {
     state.permissionsHistoryLoading = false;
   }
@@ -274,5 +276,5 @@ export function clearPhase5Cache(state: AppViewState): void {
   state.permissionsConfig = null;
   state.permissionsConfigError = null;
   state.approvalRequests = [];
-  state.permissionsChangeHistory = [];
+  state.permissionChangeHistory = [];
 }

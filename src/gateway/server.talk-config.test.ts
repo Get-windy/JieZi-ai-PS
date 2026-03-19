@@ -4,8 +4,8 @@ import {
   installGatewayTestHooks,
   readConnectChallengeNonce,
   rpcReq,
-} from "./test-helpers.js";
-import { withServer } from "./test-with-server.js";
+} from "../../upstream/src/gateway/test-helpers.js";
+import { withServer } from "../../upstream/src/gateway/test-with-server.js";
 
 installGatewayTestHooks({ scope: "suite" });
 

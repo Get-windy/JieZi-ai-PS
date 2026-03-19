@@ -1,14 +1,14 @@
 import { parseTelegramTarget } from "../../../extensions/telegram/src/targets.js";
-import { isMessagingToolDuplicate } from "../../agents/pi-embedded-helpers.js";
-import type { MessagingToolSend } from "../../agents/pi-embedded-runner.js";
-import { normalizeChannelId } from "../../channels/plugins/index.js";
-import type { ReplyToMode } from "../../config/types.js";
-import { normalizeTargetForProvider } from "../../infra/outbound/target-normalization.js";
+import { isMessagingToolDuplicate } from "../../../upstream/src/agents/pi-embedded-helpers.js";
+import type { MessagingToolSend } from "../../../upstream/src/agents/pi-embedded-runner.js";
+import { normalizeChannelId } from "../../../upstream/src/channels/plugins/index.js";
+import type { ReplyToMode } from "../../../upstream/src/config/types.js";
+import { normalizeTargetForProvider } from "../../../upstream/src/infra/outbound/target-normalization.js";
 import { normalizeOptionalAccountId } from "../../routing/account-id.js";
 import type { OriginatingChannelType } from "../templating.js";
-import type { ReplyPayload } from "../types.js";
-import { extractReplyToTag } from "./reply-tags.js";
-import { createReplyToModeFilterForChannel } from "./reply-threading.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
+import { extractReplyToTag } from "../../../upstream/src/auto-reply/reply/reply-tags.js";
+import { createReplyToModeFilterForChannel } from "../../../upstream/src/auto-reply/reply/reply-threading.js";
 
 export function formatBtwTextForExternalDelivery(payload: ReplyPayload): string | undefined {
   const text = payload.text?.trim();

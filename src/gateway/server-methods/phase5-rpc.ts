@@ -3,14 +3,14 @@
  * 智能助手管理、组织架构和权限管理的 RPC 方法处理器
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { listAgentIds } from "../../agents/agent-scope.js";
-import { loadConfig, writeConfigFile } from "../../config/config.js";
+import { loadConfig, writeConfigFile } from "../../../upstream/src/config/config.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { approvalSystem } from "../../permissions/approval-system.js";
 import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 /**
  * 辅助函数：查找智能助手

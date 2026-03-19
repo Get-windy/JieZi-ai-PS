@@ -2,11 +2,11 @@ import {
   buildTelegramTopicConversationId,
   normalizeConversationText,
   parseTelegramChatIdFromTarget,
-} from "../../../acp/conversation-id.js";
-import { DISCORD_THREAD_BINDING_CHANNEL } from "../../../channels/thread-bindings-policy.js";
-import { resolveConversationIdFromTargets } from "../../../infra/outbound/conversation-id.js";
+} from "../../../../upstream/src/acp/conversation-id.js";
+import { DISCORD_THREAD_BINDING_CHANNEL } from "../../../../upstream/src/channels/thread-bindings-policy.js";
+import { resolveConversationIdFromTargets } from "../../../../upstream/src/infra/outbound/conversation-id.js";
 import type { HandleCommandsParams } from "../commands-types.js";
-import { parseDiscordParentChannelFromSessionKey } from "../discord-parent-channel.js";
+import { parseDiscordParentChannelFromSessionKey } from "../../../../upstream/src/auto-reply/reply/discord-parent-channel.js";
 import { resolveTelegramConversationId } from "../telegram-context.js";
 
 export function resolveAcpCommandChannel(params: HandleCommandsParams): string {

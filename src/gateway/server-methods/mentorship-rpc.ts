@@ -2,9 +2,9 @@
  * 师徒关系管理 Gateway RPC 方法
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { mentorshipManager, type SkillLevel } from "../../organization/mentorship-manager.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 export const mentorshipHandlers: GatewayRequestHandlers = {
   /**

@@ -7,7 +7,7 @@
  * - 支持按项目/团队维度隔离聊天历史、任务、记忆
  */
 
-import type { GatewayRequestHandlerOptions } from "../gateway/server-methods/types.js";
+import type { GatewayRequestHandlerOptions } from "../../upstream/src/gateway/server-methods/types.js";
 
 // ============================================================================
 // 类型定义

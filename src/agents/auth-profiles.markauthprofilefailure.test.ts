@@ -6,7 +6,7 @@ import {
   calculateAuthProfileCooldownMs,
   ensureAuthProfileStore,
   markAuthProfileFailure,
-} from "./auth-profiles.js";
+} from "../../upstream/src/agents/auth-profiles.js";
 
 type AuthProfileStore = ReturnType<typeof ensureAuthProfileStore>;
 

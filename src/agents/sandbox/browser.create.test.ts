@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { BROWSER_BRIDGES } from "./browser-bridges.js";
+import { BROWSER_BRIDGES } from "../../../upstream/src/agents/sandbox/browser-bridges.js";
 import { ensureSandboxBrowser } from "./browser.js";
-import { resetNoVncObserverTokensForTests } from "./novnc-auth.js";
-import { collectDockerFlagValues, findDockerArgsCall } from "./test-args.js";
-import type { SandboxConfig } from "./types.js";
+import { resetNoVncObserverTokensForTests } from "../../../upstream/src/agents/sandbox/novnc-auth.js";
+import { collectDockerFlagValues, findDockerArgsCall } from "../../../upstream/src/agents/sandbox/test-args.js";
+import type { SandboxConfig } from "../../../upstream/src/agents/sandbox/types.js";
 
 const dockerMocks = vi.hoisted(() => ({
   dockerContainerState: vi.fn(),

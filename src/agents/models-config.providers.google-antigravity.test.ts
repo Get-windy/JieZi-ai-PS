@@ -7,7 +7,7 @@ import {
   normalizeGoogleModelId,
   normalizeProviders,
   type ProviderConfig,
-} from "./models-config.providers.js";
+} from "../../upstream/src/agents/models-config.providers.js";
 
 function buildModel(id: string): NonNullable<ProviderConfig["models"]>[number] {
   return {

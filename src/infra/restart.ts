@@ -4,10 +4,10 @@ import path from "node:path";
 import {
   resolveGatewayLaunchAgentLabel,
   resolveGatewaySystemdServiceName,
-} from "../daemon/constants.js";
-import { createSubsystemLogger } from "../logging/subsystem.js";
-import { cleanStaleGatewayProcessesSync, findGatewayPidsOnPortSync } from "./restart-stale-pids.js";
-import { relaunchGatewayScheduledTask } from "./windows-task-restart.js";
+} from "../../upstream/src/daemon/constants.js";
+import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
+import { cleanStaleGatewayProcessesSync, findGatewayPidsOnPortSync } from "../../upstream/src/infra/restart-stale-pids.js";
+import { relaunchGatewayScheduledTask } from "../../upstream/src/infra/windows-task-restart.js";
 
 export type RestartAttempt = {
   ok: boolean;

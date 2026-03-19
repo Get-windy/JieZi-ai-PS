@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { describe, expect, it, vi } from "vitest";
-import type { ProgramContext } from "./context.js";
+import type { ProgramContext } from "../../../upstream/src/cli/program/context.js";
 
 // Perf: `registerCoreCliByName(...)` dynamically imports registrar modules.
 // Mock the heavy registrars so this suite stays focused on command-registry wiring.

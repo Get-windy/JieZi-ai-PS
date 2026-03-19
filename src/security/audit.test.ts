@@ -2,13 +2,13 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChannelPlugin } from "../channels/plugins/types.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { captureEnv, withEnvAsync } from "../test-utils/env.js";
+import type { ChannelPlugin } from "../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { captureEnv, withEnvAsync } from "../../upstream/src/test-utils/env.js";
 import { collectPluginsCodeSafetyFindings } from "./audit-extra.js";
 import type { SecurityAuditOptions, SecurityAuditReport } from "./audit.js";
 import { runSecurityAudit } from "./audit.js";
-import * as skillScanner from "./skill-scanner.js";
+import * as skillScanner from "../../upstream/src/security/skill-scanner.js";
 
 const isWindows = process.platform === "win32";
 

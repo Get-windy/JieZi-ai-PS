@@ -1,22 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { loadConfig } from "../config/config.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
 import {
   buildGatewayConnectionDetails,
   ensureExplicitGatewayAuth,
   resolveExplicitGatewayAuth,
-} from "../gateway/call.js";
+} from "../../upstream/src/gateway/call.js";
 import { GatewayClient } from "../gateway/client.js";
-import { GATEWAY_CLIENT_CAPS } from "../gateway/protocol/client-info.js";
+import { GATEWAY_CLIENT_CAPS } from "../../upstream/src/gateway/protocol/client-info.js";
 import {
   type HelloOk,
   PROTOCOL_VERSION,
   type SessionsListParams,
   type SessionsPatchResult,
   type SessionsPatchParams,
-} from "../gateway/protocol/index.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
-import { VERSION } from "../version.js";
-import type { ResponseUsageMode, SessionInfo, SessionScope } from "./tui-types.js";
+} from "../../upstream/src/gateway/protocol/index.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../upstream/src/utils/message-channel.js";
+import { VERSION } from "../../upstream/src/version.js";
+import type { ResponseUsageMode, SessionInfo, SessionScope } from "../../upstream/src/tui/tui-types.js";
 
 export type GatewayConnectionOptions = {
   url?: string;

@@ -3,12 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { resolveStateDir } from "../config/paths.js";
+import { resolveStateDir } from "../../upstream/src/config/paths.js";
 import { sendVoiceMessageDiscord } from "../discord/send.js";
-import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
-import { optimizeImageToPng } from "../media/image-ops.js";
-import { mockPinnedHostnameResolution } from "../test-helpers/ssrf.js";
-import { captureEnv } from "../test-utils/env.js";
+import { resolvePreferredOpenClawTmpDir } from "../../upstream/src/infra/tmp-openclaw-dir.js";
+import { optimizeImageToPng } from "../../upstream/src/media/image-ops.js";
+import { mockPinnedHostnameResolution } from "../../upstream/src/test-helpers/ssrf.js";
+import { captureEnv } from "../../upstream/src/test-utils/env.js";
 import {
   LocalMediaAccessError,
   loadWebMedia,

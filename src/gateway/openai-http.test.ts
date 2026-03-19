@@ -1,15 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { HISTORY_CONTEXT_MARKER } from "../auto-reply/reply/history.js";
+import { HISTORY_CONTEXT_MARKER } from "../../upstream/src/auto-reply/reply/history.js";
 import { CURRENT_MESSAGE_MARKER } from "../auto-reply/reply/mentions.js";
-import { emitAgentEvent } from "../infra/agent-events.js";
-import { buildAssistantDeltaResult } from "./test-helpers.agent-results.js";
+import { emitAgentEvent } from "../../upstream/src/infra/agent-events.js";
+import { buildAssistantDeltaResult } from "../../upstream/src/gateway/test-helpers.agent-results.js";
 import {
   agentCommand,
   getFreePort,
   installGatewayTestHooks,
   testState,
   withGatewayServer,
-} from "./test-helpers.js";
+} from "../../upstream/src/gateway/test-helpers.js";
 
 installGatewayTestHooks({ scope: "suite" });
 

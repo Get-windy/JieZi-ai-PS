@@ -4,10 +4,10 @@
  * 提供字段级权限、行级权限的管理接口
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
-import { loadConfig, writeConfigFile } from "../../config/config.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import { loadConfig, writeConfigFile } from "../../../upstream/src/config/config.js";
 import { dataScopeChecker, type DataScopeRule } from "../../permissions/data-scope-checker.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 export const dataScopeHandlers: GatewayRequestHandlers = {
   /**

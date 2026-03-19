@@ -2,23 +2,23 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
-import type { GroupKeyResolution } from "../config/sessions.js";
-import { createInboundDebouncer } from "./inbound-debounce.js";
-import { resolveGroupRequireMention } from "./reply/groups.js";
-import { finalizeInboundContext } from "./reply/inbound-context.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import type { GroupKeyResolution } from "../../upstream/src/config/sessions.js";
+import { createInboundDebouncer } from "../../upstream/src/auto-reply/inbound-debounce.js";
+import { resolveGroupRequireMention } from "../../upstream/src/auto-reply/reply/groups.js";
+import { finalizeInboundContext } from "../../upstream/src/auto-reply/reply/inbound-context.js";
 import {
   buildInboundDedupeKey,
   resetInboundDedupe,
   shouldSkipDuplicateInbound,
-} from "./reply/inbound-dedupe.js";
-import { normalizeInboundTextNewlines, sanitizeInboundSystemTags } from "./reply/inbound-text.js";
+} from "../../upstream/src/auto-reply/reply/inbound-dedupe.js";
+import { normalizeInboundTextNewlines, sanitizeInboundSystemTags } from "../../upstream/src/auto-reply/reply/inbound-text.js";
 import {
   buildMentionRegexes,
   matchesMentionPatterns,
   normalizeMentionText,
 } from "./reply/mentions.js";
-import { initSessionState } from "./reply/session.js";
+import { initSessionState } from "../../upstream/src/auto-reply/reply/session.js";
 import { applyTemplate, type MsgContext, type TemplateContext } from "./templating.js";
 
 describe("applyTemplate", () => {

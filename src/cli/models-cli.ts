@@ -24,11 +24,11 @@ import {
   modelsSetCommand,
   modelsSetImageCommand,
   modelsStatusCommand,
-} from "../commands/models.js";
-import { defaultRuntime } from "../runtime.js";
-import { formatDocsLink } from "../terminal/links.js";
-import { theme } from "../terminal/theme.js";
-import { resolveOptionFromCommand, runCommandWithRuntime } from "./cli-utils.js";
+} from "../../upstream/src/commands/models.js";
+import { defaultRuntime } from "../../upstream/src/runtime.js";
+import { formatDocsLink } from "../../upstream/src/terminal/links.js";
+import { theme } from "../../upstream/src/terminal/theme.js";
+import { resolveOptionFromCommand, runCommandWithRuntime } from "../../upstream/src/cli/cli-utils.js";
 
 function runModelsCommand(action: () => Promise<void>) {
   return runCommandWithRuntime(defaultRuntime, action);

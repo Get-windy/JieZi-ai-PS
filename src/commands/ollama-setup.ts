@@ -1,4 +1,4 @@
-import { upsertAuthProfileWithLock } from "../agents/auth-profiles.js";
+import { upsertAuthProfileWithLock } from "../../upstream/src/agents/auth-profiles.js";
 import {
   OLLAMA_DEFAULT_BASE_URL,
   buildOllamaModelDefinition,
@@ -6,16 +6,16 @@ import {
   fetchOllamaModels,
   resolveOllamaApiBase,
   type OllamaModelWithContext,
-} from "../agents/ollama-models.js";
-import type { OpenClawConfig } from "../config/config.js";
-import type { RuntimeEnv } from "../runtime.js";
-import { WizardCancelledError, type WizardPrompter } from "../wizard/prompts.js";
-import { isRemoteEnvironment } from "./oauth-env.js";
-import { applyAgentDefaultModelPrimary } from "./onboard-auth.config-shared.js";
-import { openUrl } from "./onboard-helpers.js";
-import type { OnboardMode, OnboardOptions } from "./onboard-types.js";
+} from "../../upstream/src/agents/ollama-models.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
+import { WizardCancelledError, type WizardPrompter } from "../../upstream/src/wizard/prompts.js";
+import { isRemoteEnvironment } from "../../upstream/src/commands/oauth-env.js";
+import { applyAgentDefaultModelPrimary } from "../../upstream/src/commands/onboard-auth.config-shared.js";
+import { openUrl } from "../../upstream/src/commands/onboard-helpers.js";
+import type { OnboardMode, OnboardOptions } from "../../upstream/src/commands/onboard-types.js";
 
-export { OLLAMA_DEFAULT_BASE_URL } from "../agents/ollama-models.js";
+export { OLLAMA_DEFAULT_BASE_URL } from "../../upstream/src/agents/ollama-models.js";
 export const OLLAMA_DEFAULT_MODEL = "glm-4.7-flash";
 
 const OLLAMA_SUGGESTED_MODELS_LOCAL = ["glm-4.7-flash"];

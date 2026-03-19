@@ -43,7 +43,7 @@ export type AgentsPanel =
  */
 export type ModelAccountsConfig = {
   accounts: string[];
-  routingMode: "manual" | "smart";
+  routingMode: "manual" | "smart" | "roundRobin";
   smartRouting?: {
     enableCostOptimization?: boolean;
     complexityWeight?: number;
@@ -1030,6 +1030,24 @@ function renderAgentModelAccounts(params: {
                     />
                     <span>智能路由</span>
                   </label>
+                  <label style="display: flex; align-items: center; gap: 6px;">
+                    <input
+                      type="radio"
+                      name="routingMode-${params.agentId}"
+                      value="roundRobin"
+                      ?checked=${config.routingMode === "roundRobin"}
+                      ?disabled=${!params.onChange}
+                      @change=${() => {
+                        if (params.onChange) {
+                          params.onChange(params.agentId, {
+                            ...config,
+                            routingMode: "roundRobin",
+                          });
+                        }
+                      }}
+                    />
+                    <span>轮询</span>
+                  </label>
                 </div>
               </div>
 
@@ -1065,7 +1083,7 @@ function renderAgentModelAccounts(params: {
             ? html`
                 <div style="margin-top: 24px; padding: 12px; border-radius: 6px; background: var(--bg-1)">
                   <div class="muted" style="font-size: 0.875rem">
-                    💡 提示：绑定多个模型账号后，可以配置智能路由策略，让系统自动选择最佳模型。
+                    💡 提示：绑定多个模型账号后，可以配置手动选择、智能路由或轮询策略。
                   </div>
                 </div>
               `
@@ -2146,8 +2164,68 @@ function renderAgentOverview(params: {
         <div class="label">${t("agents.overview.model_selection")}</div>
         <div class="row" style="gap: 12px; flex-wrap: wrap;">
           <label class="field" style="min-width: 260px; flex: 1;">
-<<<<<<< HEAD
             <span>${t("agents.overview.primary_model_label")}</span>
+            <select
+              .value=${effectivePrimary ?? ""}
+              ?disabled=${!configForm || configLoading || configSaving}
+              @change=${(e: Event) =>
+                onModelChange(agent.id, (e.target as HTMLSelectElement).value || null)}
+            >
+              <option value="">
+                ${defaultPrimary ? t("agents.overview.inherit_default_with").replace("{model}", defaultPrimary) : t("agents.overview.inherit_default")}
+              </option>
+              ${buildModelOptions(configForm, effectivePrimary ?? undefined)}
+            </select>
+          </label>
+          <label class="field" style="min-width: 260px; flex: 1;">
+            <span>${t("agents.overview.fallbacks_label")}</span>
+            <input
+              .value=${fallbackText}
+              ?disabled=${!configForm || configLoading || configSaving}
+              placeholder=${t("agents.overview.fallbacks_placeholder")}
+            <span>Primary model${isDefault ? " (default)" : ""}</span>
+>>>>>>> upstream/main
+            <select
+              .value=${effectivePrimary ?? ""}
+              ?disabled=${!configForm || configLoading || configSaving}
+              @change=${(e: Event) =>
+                onModelChange(agent.id, (e.target as HTMLSelectElement).value || null)}
+            >
+              ${
+                isDefault
+                  ? nothing
+                  : html`
+                      <option value="">
+                        ${
+                          defaultPrimary ? `Inherit default (${defaultPrimary})` : "Inherit default"
+                        }
+                      </option>
+                    `
+              }
+>>>>>>> upstream/main
+              <option value="">
+                ${defaultPrimary ? t("agents.overview.inherit_default_with").replace("{model}", defaultPrimary) : t("agents.overview.inherit_default")}
+              </option>
+              ${
+                isDefault
+                  ? nothing
+                  : html`
+                      <option value="">
+                        ${
+                          defaultPrimary ? `Inherit default (${defaultPrimary})` : "Inherit default"
+                        }
+                      </option>
+                    `
+              }
+
+              @input=${(e: Event) =>
+                onModelFallbacksChange(
+                  agent.id,
+                  parseFallbackList((e.target as HTMLInputElement).value),
+                )}
+            />
+          </label>
+        </div>
 =======
             <span>Primary model${isDefault ? " (default)" : ""}</span>
 >>>>>>> upstream/main
@@ -2157,7 +2235,18 @@ function renderAgentOverview(params: {
               @change=${(e: Event) =>
                 onModelChange(agent.id, (e.target as HTMLSelectElement).value || null)}
             >
-<<<<<<< HEAD
+              ${
+                isDefault
+                  ? nothing
+                  : html`
+                      <option value="">
+                        ${
+                          defaultPrimary ? `Inherit default (${defaultPrimary})` : "Inherit default"
+                        }
+                      </option>
+                    `
+              }
+>>>>>>> upstream/main
               <option value="">
                 ${defaultPrimary ? t("agents.overview.inherit_default_with").replace("{model}", defaultPrimary) : t("agents.overview.inherit_default")}
               </option>
@@ -2173,24 +2262,6 @@ function renderAgentOverview(params: {
                       </option>
                     `
               }
->>>>>>> upstream/main
-              ${buildModelOptions(configForm, effectivePrimary ?? undefined)}
-            </select>
-          </label>
-          <label class="field" style="min-width: 260px; flex: 1;">
-            <span>${t("agents.overview.fallbacks_label")}</span>
-            <input
-              .value=${fallbackText}
-              ?disabled=${!configForm || configLoading || configSaving}
-              placeholder=${t("agents.overview.fallbacks_placeholder")}
-              @input=${(e: Event) =>
-                onModelFallbacksChange(
-                  agent.id,
-                  parseFallbackList((e.target as HTMLInputElement).value),
-                )}
-            />
-          </label>
-        </div>
         <div class="row" style="justify-content: flex-end; gap: 8px;">
           <button
             class="btn btn--sm"

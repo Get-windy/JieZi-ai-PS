@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { getBlockedNetworkModeReason } from "../agents/sandbox/network-mode.js";
-import { parseDurationMs } from "../cli/parse-duration.js";
-import { AgentModelSchema } from "./zod-schema.agent-model.js";
+import { getBlockedNetworkModeReason } from "../../upstream/src/agents/sandbox/network-mode.js";
+import { parseDurationMs } from "../../upstream/src/cli/parse-duration.js";
+import { AgentModelSchema } from "../../upstream/src/config/zod-schema.agent-model.js";
 import {
   GroupChatSchema,
   HumanDelaySchema,
@@ -9,8 +9,8 @@ import {
   SecretInputSchema,
   ToolsLinksSchema,
   ToolsMediaSchema,
-} from "./zod-schema.core.js";
-import { sensitive } from "./zod-schema.sensitive.js";
+} from "../../upstream/src/config/zod-schema.core.js";
+import { sensitive } from "../../upstream/src/config/zod-schema.sensitive.js";
 
 export const HeartbeatSchema = z
   .object({
@@ -800,6 +800,27 @@ export const AgentEntrySchema = z
     params: z.record(z.string(), z.unknown()).optional(),
     tools: AgentToolsSchema,
     runtime: AgentRuntimeSchema,
+    // Local overlay: per-agent model accounts routing config (not in upstream).
+    modelAccounts: z
+      .object({
+        accounts: z.array(z.string()),
+        routingMode: z.union([z.literal("manual"), z.literal("smart"), z.literal("roundRobin")]).optional(),
+        defaultAccountId: z.string().optional(),
+        smartRouting: z
+          .object({
+            complexityWeight: z.number().optional(),
+            capabilityWeight: z.number().optional(),
+            costWeight: z.number().optional(),
+            speedWeight: z.number().optional(),
+            eloWeight: z.number().optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
+    // Local overlay: per-agent permissions config (not in upstream).
+    permissions: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 

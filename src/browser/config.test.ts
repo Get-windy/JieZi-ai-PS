@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withEnv } from "../test-utils/env.js";
+import { withEnv } from "../../upstream/src/test-utils/env.js";
 import { resolveBrowserConfig, resolveProfile, shouldStartLocalBrowserServer } from "./config.js";
 
 describe("browser config", () => {

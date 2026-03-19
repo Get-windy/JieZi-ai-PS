@@ -10,7 +10,7 @@ import {
   isPrivateOrLoopbackIpAddress,
   parseCanonicalIpAddress,
   parseLooseIpAddress,
-} from "../../shared/net/ip.js";
+} from "../../../upstream/src/shared/net/ip.js";
 import { normalizeHostname } from "./hostname.js";
 
 type LookupCallback = (

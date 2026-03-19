@@ -4,7 +4,7 @@
  * 检测失联、停滞、假死的 Agent
  */
 
-import { loadConfig } from "../config/config.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
 import { t } from "../i18n/index.js";
 import {
   generateAgentAlert,

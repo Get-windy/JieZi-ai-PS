@@ -2,29 +2,29 @@ import crypto from "node:crypto";
 import { resolveAgentConfig } from "../../agents/agent-scope.js";
 import { resolveSessionAuthProfileOverride } from "../../agents/auth-profiles/session-override.js";
 import { resolveSessionAuthProfileWithSmartRouting } from "../../agents/auth-profiles/session-smart-routing.js";
-import type { ExecToolDefaults } from "../../agents/bash-tools.js";
+import type { ExecToolDefaults } from "../../../upstream/src/agents/bash-tools.js";
 import {
   abortEmbeddedPiRun,
   isEmbeddedPiRunActive,
   isEmbeddedPiRunStreaming,
   resolveEmbeddedSessionLane,
-} from "../../agents/pi-embedded.js";
-import type { OpenClawConfig } from "../../config/config.js";
+} from "../../../upstream/src/agents/pi-embedded.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import {
   resolveGroupSessionKey,
   resolveSessionFilePath,
   resolveSessionFilePathOptions,
   updateSessionStore,
-} from "../../config/sessions.js";
+} from "../../../upstream/src/config/sessions.js";
 // 使用本地扩展的 SessionEntry 类型
-import type { SessionEntry } from "../../config/sessions/types.js";
-import { logVerbose } from "../../globals.js";
+import type { SessionEntry } from "../../../upstream/src/config/sessions/types.js";
+import { logVerbose } from "../../../upstream/src/globals.js";
 import { t } from "../../i18n/index.js";
-import { clearCommandLane, getQueueSize } from "../../process/command-queue.js";
+import { clearCommandLane, getQueueSize } from "../../../upstream/src/process/command-queue.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
-import { isReasoningTagProvider } from "../../utils/provider-utils.js";
-import { hasControlCommand } from "../command-detection.js";
-import { buildInboundMediaNote } from "../media-note.js";
+import { isReasoningTagProvider } from "../../../upstream/src/utils/provider-utils.js";
+import { hasControlCommand } from "../../../upstream/src/auto-reply/command-detection.js";
+import { buildInboundMediaNote } from "../../../upstream/src/auto-reply/media-note.js";
 import type { MsgContext, TemplateContext } from "../templating.js";
 import {
   type ElevatedLevel,
@@ -35,22 +35,22 @@ import {
   type ThinkLevel,
   type VerboseLevel,
 } from "../thinking.js";
-import { SILENT_REPLY_TOKEN } from "../tokens.js";
-import type { GetReplyOptions, ReplyPayload } from "../types.js";
+import { SILENT_REPLY_TOKEN } from "../../../upstream/src/auto-reply/tokens.js";
+import type { GetReplyOptions, ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import { runReplyAgent } from "./agent-runner.js";
-import { applySessionHints } from "./body.js";
-import type { buildCommandContext } from "./commands.js";
+import { applySessionHints } from "../../../upstream/src/auto-reply/reply/body.js";
+import type { buildCommandContext } from "../../../upstream/src/auto-reply/reply/commands.js";
 import type { InlineDirectives } from "./directive-handling.js";
-import { buildGroupChatContext, buildGroupIntro } from "./groups.js";
-import { buildInboundMetaSystemPrompt, buildInboundUserContextPrefix } from "./inbound-meta.js";
-import type { createModelSelectionState } from "./model-selection.js";
-import { resolveQueueSettings } from "./queue.js";
+import { buildGroupChatContext, buildGroupIntro } from "../../../upstream/src/auto-reply/reply/groups.js";
+import { buildInboundMetaSystemPrompt, buildInboundUserContextPrefix } from "../../../upstream/src/auto-reply/reply/inbound-meta.js";
+import type { createModelSelectionState } from "../../../upstream/src/auto-reply/reply/model-selection.js";
+import { resolveQueueSettings } from "../../../upstream/src/auto-reply/reply/queue.js";
 import { routeReply } from "./route-reply.js";
-import { BARE_SESSION_RESET_PROMPT } from "./session-reset-prompt.js";
+import { BARE_SESSION_RESET_PROMPT } from "../../../upstream/src/auto-reply/reply/session-reset-prompt.js";
 import { ensureSkillSnapshot, prependSystemEvents } from "./session-updates.js";
-import { resolveTypingMode } from "./typing-mode.js";
+import { resolveTypingMode } from "../../../upstream/src/auto-reply/reply/typing-mode.js";
 import type { TypingController } from "./typing.js";
-import { appendUntrustedContext } from "./untrusted-context.js";
+import { appendUntrustedContext } from "../../../upstream/src/auto-reply/reply/untrusted-context.js";
 
 type AgentDefaults = NonNullable<OpenClawConfig["agents"]>["defaults"];
 type ExecOverrides = Pick<ExecToolDefaults, "host" | "security" | "ask" | "node">;
@@ -489,6 +489,7 @@ export async function runPreparedReply(
     // 如果智能路由未配置或失败，回退到默认逻辑
     authProfileId = await resolveSessionAuthProfileOverride({
       cfg,
+      agentId, // 传入 agentId，确保只在 agent 绑定的模型账号中轮询，避免使用过期的全局 profiles
       provider,
       agentDir,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

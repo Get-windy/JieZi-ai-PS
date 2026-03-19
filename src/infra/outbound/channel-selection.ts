@@ -1,12 +1,12 @@
-import { listChannelPlugins } from "../../channels/plugins/index.js";
-import type { ChannelPlugin } from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import { listChannelPlugins } from "../../../upstream/src/channels/plugins/index.js";
+import type { ChannelPlugin } from "../../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import {
   listDeliverableMessageChannels,
   type DeliverableMessageChannel,
   isDeliverableMessageChannel,
   normalizeMessageChannel,
-} from "../../utils/message-channel.js";
+} from "../../../upstream/src/utils/message-channel.js";
 
 export type MessageChannelId = DeliverableMessageChannel;
 export type MessageChannelSelectionSource =

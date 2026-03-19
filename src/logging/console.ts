@@ -1,14 +1,14 @@
 import util from "node:util";
-import type { OpenClawConfig } from "../config/types.js";
-import { isVerbose } from "../globals.js";
-import { stripAnsi } from "../terminal/ansi.js";
-import { readLoggingConfig } from "./config.js";
-import { resolveEnvLogLevelOverride } from "./env-log-level.js";
-import { type LogLevel, normalizeLogLevel } from "./levels.js";
-import { getLogger, type LoggerSettings } from "./logger.js";
-import { resolveNodeRequireFromMeta } from "./node-require.js";
-import { loggingState } from "./state.js";
-import { formatLocalIsoWithOffset } from "./timestamps.js";
+import type { OpenClawConfig } from "../../upstream/src/config/types.js";
+import { isVerbose } from "../../upstream/src/globals.js";
+import { stripAnsi } from "../../upstream/src/terminal/ansi.js";
+import { readLoggingConfig } from "../../upstream/src/logging/config.js";
+import { resolveEnvLogLevelOverride } from "../../upstream/src/logging/env-log-level.js";
+import { type LogLevel, normalizeLogLevel } from "../../upstream/src/logging/levels.js";
+import { getLogger, type LoggerSettings } from "../../upstream/src/logging/logger.js";
+import { resolveNodeRequireFromMeta } from "../../upstream/src/logging/node-require.js";
+import { loggingState } from "../../upstream/src/logging/state.js";
+import { formatLocalIsoWithOffset } from "../../upstream/src/logging/timestamps.js";
 
 export type ConsoleStyle = "pretty" | "compact" | "json";
 type ConsoleSettings = {

@@ -6,13 +6,13 @@
  * 已对接 collaborationSystem + mentorSystem 真实业务逻辑
  */
 
-import { listAgentEntries } from "../../commands/agents.config.js";
-import { loadConfig } from "../../config/config.js";
+import { listAgentEntries } from "../../../upstream/src/commands/agents.config.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import { collaborationSystem } from "../../organization/collaboration-system.js";
 import { mentorSystem } from "../../organization/mentor-system.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 export const hrManagementHandlers: GatewayRequestHandlers = {
   /**

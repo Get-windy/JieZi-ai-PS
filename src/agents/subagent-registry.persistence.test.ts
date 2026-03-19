@@ -3,13 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "./subagent-registry.mocks.shared.js";
-import { captureEnv } from "../test-utils/env.js";
+import { captureEnv } from "../../upstream/src/test-utils/env.js";
 import {
   initSubagentRegistry,
   registerSubagentRun,
   resetSubagentRegistryForTests,
 } from "./subagent-registry.js";
-import { loadSubagentRegistryFromDisk } from "./subagent-registry.store.js";
+import { loadSubagentRegistryFromDisk } from "../../upstream/src/agents/subagent-registry.store.js";
 
 const { announceSpy } = vi.hoisted(() => ({
   announceSpy: vi.fn(async () => true),
@@ -271,7 +271,7 @@ describe("subagent registry persistence", () => {
   it("uses isolated temp state when OPENCLAW_STATE_DIR is unset in tests", async () => {
     delete process.env.OPENCLAW_STATE_DIR;
     vi.resetModules();
-    const { resolveSubagentRegistryPath } = await import("./subagent-registry.store.js");
+    const { resolveSubagentRegistryPath } = await import("../../upstream/src/agents/subagent-registry.store.js");
     const registryPath = resolveSubagentRegistryPath();
     expect(registryPath).toContain(path.join(os.tmpdir(), "openclaw-test-state"));
   });

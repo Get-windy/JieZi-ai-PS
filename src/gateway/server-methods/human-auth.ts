@@ -2,9 +2,9 @@
  * 人类身份鉴权 Gateway RPC 方法
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { HumanAuthenticationManager } from "../../auth/human-authentication.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 const authManager = HumanAuthenticationManager.getInstance();
 

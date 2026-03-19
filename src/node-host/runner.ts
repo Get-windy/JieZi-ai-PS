@@ -1,18 +1,18 @@
 import { resolveBrowserConfig } from "../browser/config.js";
-import { loadConfig } from "../config/config.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
 import { GatewayClient } from "../gateway/client.js";
-import { loadOrCreateDeviceIdentity } from "../infra/device-identity.js";
-import { getMachineDisplayName } from "../infra/machine-name.js";
-import { ensureOpenClawCliOnPath } from "../infra/path-env.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
-import { VERSION } from "../version.js";
-import { ensureNodeHostConfig, saveNodeHostConfig, type NodeHostGatewayConfig } from "./config.js";
+import { loadOrCreateDeviceIdentity } from "../../upstream/src/infra/device-identity.js";
+import { getMachineDisplayName } from "../../upstream/src/infra/machine-name.js";
+import { ensureOpenClawCliOnPath } from "../../upstream/src/infra/path-env.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../upstream/src/utils/message-channel.js";
+import { VERSION } from "../../upstream/src/version.js";
+import { ensureNodeHostConfig, saveNodeHostConfig, type NodeHostGatewayConfig } from "../../upstream/src/node-host/config.js";
 import {
   coerceNodeInvokePayload,
   handleInvoke,
   type SkillBinsProvider,
   buildNodeInvokeResultParams,
-} from "./invoke.js";
+} from "../../upstream/src/node-host/invoke.js";
 
 export { buildNodeInvokeResultParams };
 

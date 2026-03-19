@@ -1,9 +1,9 @@
-import type { ChatType } from "../channels/chat-type.js";
-import type { AgentDefaultsConfig } from "./types.agent-defaults.js";
-import type { AgentModelConfig, AgentSandboxConfig } from "./types.agents-shared.js";
-import type { HumanDelayConfig, IdentityConfig } from "./types.base.js";
-import type { GroupChatConfig } from "./types.messages.js";
-import type { AgentToolsConfig, MemorySearchConfig } from "./types.tools.js";
+import type { ChatType } from "../../upstream/src/channels/chat-type.js";
+import type { AgentDefaultsConfig } from "../../upstream/src/config/types.agent-defaults.js";
+import type { AgentModelConfig, AgentSandboxConfig } from "../../upstream/src/config/types.agents-shared.js";
+import type { HumanDelayConfig, IdentityConfig } from "../../upstream/src/config/types.base.js";
+import type { GroupChatConfig } from "../../upstream/src/config/types.messages.js";
+import type { AgentToolsConfig, MemorySearchConfig } from "../../upstream/src/config/types.tools.js";
 
 export type AgentRuntimeAcpConfig = {
   /** ACP harness adapter id (for example codex, claude). */
@@ -92,4 +92,25 @@ export type AgentConfig = {
 export type AgentsConfig = {
   defaults?: AgentDefaultsConfig;
   list?: AgentConfig[];
+};
+
+/** Smart routing weight config for modelAccounts. */
+export type AgentModelSmartRoutingConfig = {
+  complexityWeight?: number;
+  capabilityWeight?: number;
+  costWeight?: number;
+  speedWeight?: number;
+  eloWeight?: number;
+};
+
+/** Per-agent model accounts routing config (local overlay feature). */
+export type AgentModelAccountsConfig = {
+  /** List of account IDs available for routing. */
+  accounts: string[];
+  /** Routing strategy: 'manual' (fixed default), 'smart' (auto-scored), or 'roundRobin' (rotate through accounts). */
+  routingMode?: "manual" | "smart" | "roundRobin";
+  /** Default account ID used in 'manual' mode. */
+  defaultAccountId?: string;
+  /** Weight tuning for 'smart' routing mode. */
+  smartRouting?: AgentModelSmartRoutingConfig;
 };

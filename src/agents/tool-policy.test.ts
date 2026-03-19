@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
-import { isToolAllowed, resolveSandboxToolPolicyForAgent } from "./sandbox/tool-policy.js";
-import type { SandboxToolPolicy } from "./sandbox/types.js";
-import { TOOL_POLICY_CONFORMANCE } from "./tool-policy.conformance.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { isToolAllowed, resolveSandboxToolPolicyForAgent } from "../../upstream/src/agents/sandbox/tool-policy.js";
+import type { SandboxToolPolicy } from "../../upstream/src/agents/sandbox/types.js";
+import { TOOL_POLICY_CONFORMANCE } from "../../upstream/src/agents/tool-policy.conformance.js";
 import {
   applyOwnerOnlyToolPolicy,
   expandToolGroups,
@@ -10,8 +10,8 @@ import {
   normalizeToolName,
   resolveToolProfilePolicy,
   TOOL_GROUPS,
-} from "./tool-policy.js";
-import type { AnyAgentTool } from "./tools/common.js";
+} from "../../upstream/src/agents/tool-policy.js";
+import type { AnyAgentTool } from "../../upstream/src/agents/tools/common.js";
 
 function createOwnerPolicyTools() {
   return [

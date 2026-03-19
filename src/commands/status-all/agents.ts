@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveAgentWorkspaceDir } from "../../agents/agent-scope.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { loadSessionStore, resolveStorePath } from "../../config/sessions.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { loadSessionStore, resolveStorePath } from "../../../upstream/src/config/sessions.js";
 import { listAgentsForGateway } from "../../gateway/session-utils.js";
 
 async function fileExists(p: string): Promise<boolean> {

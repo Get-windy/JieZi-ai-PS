@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createHostSandboxFsBridge } from "../../test-helpers/host-sandbox-fs-bridge.js";
+import { createHostSandboxFsBridge } from "../../../../upstream/src/agents/test-helpers/host-sandbox-fs-bridge.js";
 import {
   detectAndLoadPromptImages,
   detectImageReferences,

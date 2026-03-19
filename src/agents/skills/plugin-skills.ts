@@ -1,13 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { OpenClawConfig } from "../../config/config.js";
-import { createSubsystemLogger } from "../../logging/subsystem.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
 import {
   normalizePluginsConfig,
   resolveEffectiveEnableState,
   resolveMemorySlotDecision,
-} from "../../plugins/config-state.js";
-import { loadPluginManifestRegistry } from "../../plugins/manifest-registry.js";
+} from "../../../upstream/src/plugins/config-state.js";
+import { loadPluginManifestRegistry } from "../../../upstream/src/plugins/manifest-registry.js";
 
 const log = createSubsystemLogger("skills");
 

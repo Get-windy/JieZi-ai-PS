@@ -5,15 +5,15 @@ import {
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../../agents/agent-scope.js";
-import { resolveApiKeyForProfile, ensureAuthProfileStore } from "../../agents/auth-profiles.js";
+import { resolveApiKeyForProfile, ensureAuthProfileStore } from "../../../upstream/src/agents/auth-profiles.js";
 import { resolveSessionAuthProfileOverride } from "../../agents/auth-profiles/session-override.js";
-import { runCliAgent } from "../../agents/cli-runner.js";
-import { getCliSessionId, setCliSessionId } from "../../agents/cli-session.js";
-import { lookupContextTokens } from "../../agents/context.js";
-import { resolveCronStyleNow } from "../../agents/current-time.js";
-import { DEFAULT_CONTEXT_TOKENS, DEFAULT_PROVIDER } from "../../agents/defaults.js";
-import { loadModelCatalog } from "../../agents/model-catalog.js";
-import { runWithModelFallback } from "../../agents/model-fallback.js";
+import { runCliAgent } from "../../../upstream/src/agents/cli-runner.js";
+import { getCliSessionId, setCliSessionId } from "../../../upstream/src/agents/cli-session.js";
+import { lookupContextTokens } from "../../../upstream/src/agents/context.js";
+import { resolveCronStyleNow } from "../../../upstream/src/agents/current-time.js";
+import { DEFAULT_CONTEXT_TOKENS, DEFAULT_PROVIDER } from "../../../upstream/src/agents/defaults.js";
+import { loadModelCatalog } from "../../../upstream/src/agents/model-catalog.js";
+import { runWithModelFallback } from "../../../upstream/src/agents/model-fallback.js";
 import {
   getModelRefStatus,
   isCliProvider,
@@ -21,22 +21,22 @@ import {
   resolveDefaultModelForAgent,
   resolveHooksGmailModel,
   resolveThinkingDefault,
-} from "../../agents/model-selection.js";
-import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
-import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
-import { deriveSessionTotalTokens, hasNonzeroUsage } from "../../agents/usage.js";
-import { ensureAgentWorkspace } from "../../agents/workspace.js";
+} from "../../../upstream/src/agents/model-selection.js";
+import { runEmbeddedPiAgent } from "../../../upstream/src/agents/pi-embedded.js";
+import { resolveAgentTimeoutMs } from "../../../upstream/src/agents/timeout.js";
+import { deriveSessionTotalTokens, hasNonzeroUsage } from "../../../upstream/src/agents/usage.js";
+import { ensureAgentWorkspace } from "../../../upstream/src/agents/workspace.js";
 import {
   normalizeThinkLevel,
   normalizeVerboseLevel,
   supportsXHighThinking,
 } from "../../auto-reply/thinking.js";
-import type { CliDeps } from "../../cli/outbound-send-deps.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { resolveSessionTranscriptPath, updateSessionStore } from "../../config/sessions.js";
-import type { AgentDefaultsConfig } from "../../config/types.js";
-import { registerAgentRunContext } from "../../infra/agent-events.js";
-import { logWarn } from "../../logger.js";
+import type { CliDeps } from "../../../upstream/src/cli/outbound-send-deps.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { resolveSessionTranscriptPath, updateSessionStore } from "../../../upstream/src/config/sessions.js";
+import type { AgentDefaultsConfig } from "../../../upstream/src/config/types.js";
+import { registerAgentRunContext } from "../../../upstream/src/infra/agent-events.js";
+import { logWarn } from "../../../upstream/src/logger.js";
 import { buildAgentMainSessionKey, normalizeAgentId } from "../../routing/session-key.js";
 import {
   buildSafeExternalPrompt,
@@ -44,14 +44,14 @@ import {
   getHookType,
   isExternalHookSession,
 } from "../../security/external-content.js";
-import { resolveCronDeliveryPlan } from "../delivery.js";
-import type { CronJob, CronRunOutcome, CronRunTelemetry } from "../types.js";
+import { resolveCronDeliveryPlan } from "../../../upstream/src/cron/delivery.js";
+import type { CronJob, CronRunOutcome, CronRunTelemetry } from "../../../upstream/src/cron/types.js";
 import {
   dispatchCronDelivery,
   matchesMessagingToolDeliveryTarget,
   resolveCronDeliveryBestEffort,
-} from "./delivery-dispatch.js";
-import { resolveDeliveryTarget } from "./delivery-target.js";
+} from "../../../upstream/src/cron/isolated-agent/delivery-dispatch.js";
+import { resolveDeliveryTarget } from "../../../upstream/src/cron/isolated-agent/delivery-target.js";
 import {
   isHeartbeatOnlyResponse,
   pickLastDeliverablePayload,
@@ -59,9 +59,9 @@ import {
   pickSummaryFromOutput,
   pickSummaryFromPayloads,
   resolveHeartbeatAckMaxChars,
-} from "./helpers.js";
-import { resolveCronSession } from "./session.js";
-import { resolveCronSkillsSnapshot } from "./skills-snapshot.js";
+} from "../../../upstream/src/cron/isolated-agent/helpers.js";
+import { resolveCronSession } from "../../../upstream/src/cron/isolated-agent/session.js";
+import { resolveCronSkillsSnapshot } from "../../../upstream/src/cron/isolated-agent/skills-snapshot.js";
 
 export type RunCronAgentTurnResult = {
   /** Last non-empty agent text output (not truncated). */

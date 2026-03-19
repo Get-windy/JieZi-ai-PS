@@ -7,18 +7,18 @@ import type {
   Response,
 } from "playwright-core";
 import { chromium } from "playwright-core";
-import { formatErrorMessage } from "../infra/errors.js";
-import type { SsrFPolicy } from "../infra/net/ssrf.js";
-import { withNoProxyForCdpUrl } from "./cdp-proxy-bypass.js";
+import { formatErrorMessage } from "../../upstream/src/infra/errors.js";
+import type { SsrFPolicy } from "../../upstream/src/infra/net/ssrf.js";
+import { withNoProxyForCdpUrl } from "../../upstream/src/browser/cdp-proxy-bypass.js";
 import {
   appendCdpPath,
   fetchJson,
   getHeadersWithAuth,
   normalizeCdpHttpBaseForJsonEndpoints,
   withCdpSocket,
-} from "./cdp.helpers.js";
-import { normalizeCdpWsUrl } from "./cdp.js";
-import { getChromeWebSocketUrl } from "./chrome.js";
+} from "../../upstream/src/browser/cdp.helpers.js";
+import { normalizeCdpWsUrl } from "../../upstream/src/browser/cdp.js";
+import { getChromeWebSocketUrl } from "../../upstream/src/browser/chrome.js";
 import {
   assertBrowserNavigationAllowed,
   assertBrowserNavigationResultAllowed,

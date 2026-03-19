@@ -1,10 +1,10 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { describe, expect, it } from "vitest";
-import { castAgentMessages } from "./test-helpers/agent-message-fixtures.js";
+import { castAgentMessages } from "../../upstream/src/agents/test-helpers/agent-message-fixtures.js";
 import {
   isValidCloudCodeAssistToolId,
   sanitizeToolCallIdsForCloudCodeAssist,
-} from "./tool-call-id.js";
+} from "../../upstream/src/agents/tool-call-id.js";
 
 const buildDuplicateIdCollisionInput = () =>
   castAgentMessages([

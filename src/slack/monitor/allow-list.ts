@@ -1,9 +1,9 @@
-import type { AllowlistMatch } from "../../channels/allowlist-match.js";
+import type { AllowlistMatch } from "../../../upstream/src/channels/allowlist-match.js";
 import {
   normalizeHyphenSlug,
   normalizeStringEntries,
   normalizeStringEntriesLower,
-} from "../../shared/string-normalization.js";
+} from "../../../upstream/src/shared/string-normalization.js";
 
 export function normalizeSlackSlug(raw?: string) {
   return normalizeHyphenSlug(raw);

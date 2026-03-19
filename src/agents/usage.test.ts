@@ -4,7 +4,7 @@ import {
   hasNonzeroUsage,
   derivePromptTokens,
   deriveSessionTotalTokens,
-} from "./usage.js";
+} from "../../upstream/src/agents/usage.js";
 
 describe("normalizeUsage", () => {
   it("normalizes cache fields from provider response", () => {

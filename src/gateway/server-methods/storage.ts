@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { GatewayRequestHandlers } from "./types.js";
-import { loadConfig, writeConfigFile } from "../../config/config.js";
-import { resolveStateDir } from "../../config/paths.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
-import { formatError } from "../server-utils.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import { loadConfig, writeConfigFile } from "../../../upstream/src/config/config.js";
+import { resolveStateDir } from "../../../upstream/src/config/paths.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import { formatError } from "../../../upstream/src/gateway/server-utils.js";
 
 /**
  * 列出系统可用驱动器（Windows）或根目录（Linux/Mac）

@@ -1,4 +1,4 @@
-import { listSecretTargetRegistryEntries } from "../secrets/target-registry.js";
+import { listSecretTargetRegistryEntries } from "../../upstream/src/secrets/target-registry.js";
 
 function idsByPrefix(prefixes: readonly string[]): string[] {
   return listSecretTargetRegistryEntries()

@@ -1,9 +1,9 @@
-import { ensureAuthProfileStore, resolveAuthProfileOrder } from "../agents/auth-profiles.js";
-import type { SecretInput } from "../config/types.secrets.js";
-import { normalizeApiKeyInput, validateApiKeyInput } from "./auth-choice.api-key.js";
+import { ensureAuthProfileStore, resolveAuthProfileOrder } from "../../upstream/src/agents/auth-profiles.js";
+import type { SecretInput } from "../../upstream/src/config/types.secrets.js";
+import { normalizeApiKeyInput, validateApiKeyInput } from "../../upstream/src/commands/auth-choice.api-key.js";
 import { ensureApiKeyFromOptionEnvOrPrompt } from "./auth-choice.apply-helpers.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
-import type { ApiKeyStorageOptions } from "./onboard-auth.credentials.js";
+import type { ApiKeyStorageOptions } from "../../upstream/src/commands/onboard-auth.credentials.js";
 import {
   applyAuthProfileConfig,
   applyKilocodeConfig,
@@ -64,10 +64,10 @@ import {
   VENICE_DEFAULT_MODEL_REF,
   VERCEL_AI_GATEWAY_DEFAULT_MODEL_REF,
   XIAOMI_DEFAULT_MODEL_REF,
-} from "./onboard-auth.js";
-import type { AuthChoice, SecretInputMode } from "./onboard-types.js";
-import { OPENCODE_GO_DEFAULT_MODEL_REF } from "./opencode-go-model-default.js";
-import { OPENCODE_ZEN_DEFAULT_MODEL } from "./opencode-zen-model-default.js";
+} from "../../upstream/src/commands/onboard-auth.js";
+import type { AuthChoice, SecretInputMode } from "../../upstream/src/commands/onboard-types.js";
+import { OPENCODE_GO_DEFAULT_MODEL_REF } from "../../upstream/src/commands/opencode-go-model-default.js";
+import { OPENCODE_ZEN_DEFAULT_MODEL } from "../../upstream/src/commands/opencode-zen-model-default.js";
 
 type ApiKeyProviderConfigApplier = (
   config: ApplyAuthChoiceParams["config"],

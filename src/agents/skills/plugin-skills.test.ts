@@ -1,15 +1,15 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { PluginManifestRegistry } from "../../plugins/manifest-registry.js";
-import { createTrackedTempDirs } from "../../test-utils/tracked-temp-dirs.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import type { PluginManifestRegistry } from "../../../upstream/src/plugins/manifest-registry.js";
+import { createTrackedTempDirs } from "../../../upstream/src/test-utils/tracked-temp-dirs.js";
 
 const hoisted = vi.hoisted(() => ({
   loadPluginManifestRegistry: vi.fn(),
 }));
 
-vi.mock("../../plugins/manifest-registry.js", () => ({
+vi.mock("../../../upstream/src/plugins/manifest-registry.js", () => ({
   loadPluginManifestRegistry: (...args: unknown[]) => hoisted.loadPluginManifestRegistry(...args),
 }));
 

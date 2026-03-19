@@ -1,5 +1,5 @@
-import type { OutboundSendDeps } from "../infra/outbound/send-deps.js";
-import { createOutboundSendDepsFromCliSource } from "./outbound-send-mapping.js";
+import type { OutboundSendDeps } from "../../upstream/src/infra/outbound/send-deps.js";
+import { createOutboundSendDepsFromCliSource } from "../../upstream/src/cli/outbound-send-mapping.js";
 
 /**
  * Lazy-loaded per-channel send functions, keyed by channel ID.

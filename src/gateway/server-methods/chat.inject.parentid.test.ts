@@ -3,11 +3,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { GatewayRequestContext } from "./types.js";
+import type { GatewayRequestContext } from "../../../upstream/src/gateway/server-methods/types.js";
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { appendInjectedAssistantMessageToTranscript } from "./chat-transcript-inject.js";
-import { createTranscriptFixtureSync } from "./chat.test-helpers.js";
+import { appendInjectedAssistantMessageToTranscript } from "../../../upstream/src/gateway/server-methods/chat-transcript-inject.js";
+import { createTranscriptFixtureSync } from "../../../upstream/src/gateway/server-methods/chat.test-helpers.js";
 
 // Guardrail: Ensure gateway "injected" assistant transcript messages are appended via SessionManager,
 // so they are attached to the current leaf with a `parentId` and do not sever compaction history.

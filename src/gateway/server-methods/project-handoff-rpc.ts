@@ -19,8 +19,8 @@
 
 import { organizationStorage } from "../../organization/storage.js";
 import type { ProjectTeamRole, ProjectTeamStatus } from "../../organization/types.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 const VALID_ROLES: ProjectTeamRole[] = ["dev", "ops", "support", "qa", "observer"];
 const VALID_STATUSES: ProjectTeamStatus[] = ["active", "handed-off", "archived", "support-only"];

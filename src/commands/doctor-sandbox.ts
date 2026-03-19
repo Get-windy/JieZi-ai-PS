@@ -5,12 +5,12 @@ import {
   DEFAULT_SANDBOX_COMMON_IMAGE,
   DEFAULT_SANDBOX_IMAGE,
   resolveSandboxScope,
-} from "../agents/sandbox.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { runCommandWithTimeout, runExec } from "../process/exec.js";
-import type { RuntimeEnv } from "../runtime.js";
-import { note } from "../terminal/note.js";
-import type { DoctorPrompter } from "./doctor-prompter.js";
+} from "../../upstream/src/agents/sandbox.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { runCommandWithTimeout, runExec } from "../../upstream/src/process/exec.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
+import { note } from "../../upstream/src/terminal/note.js";
+import type { DoctorPrompter } from "../../upstream/src/commands/doctor-prompter.js";
 
 type SandboxScriptInfo = {
   scriptPath: string;

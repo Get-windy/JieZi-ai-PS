@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { captureEnv } from "../test-utils/env.js";
-import { createCliRuntimeCapture } from "./test-runtime-capture.js";
+import { captureEnv } from "../../upstream/src/test-utils/env.js";
+import { createCliRuntimeCapture } from "../../upstream/src/cli/test-runtime-capture.js";
 
 const callGateway = vi.fn(async (..._args: unknown[]) => ({ ok: true }));
 const resolveGatewayProgramArguments = vi.fn(async (_opts?: unknown) => ({

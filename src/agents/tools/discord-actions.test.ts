@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { DiscordActionConfig, OpenClawConfig } from "../../config/config.js";
-import { handleDiscordGuildAction } from "./discord-actions-guild.js";
-import { handleDiscordMessagingAction } from "./discord-actions-messaging.js";
-import { handleDiscordModerationAction } from "./discord-actions-moderation.js";
-import { handleDiscordAction } from "./discord-actions.js";
+import type { DiscordActionConfig, OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { handleDiscordGuildAction } from "../../../upstream/src/agents/tools/discord-actions-guild.js";
+import { handleDiscordMessagingAction } from "../../../upstream/src/agents/tools/discord-actions-messaging.js";
+import { handleDiscordModerationAction } from "../../../upstream/src/agents/tools/discord-actions-moderation.js";
+import { handleDiscordAction } from "../../../upstream/src/agents/tools/discord-actions.js";
 
 const discordSendMocks = vi.hoisted(() => ({
   banMemberDiscord: vi.fn(async () => ({})),

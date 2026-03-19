@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { RuntimeEnv } from "../runtime.js";
-import type { WizardPrompter } from "../wizard/prompts.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
+import type { WizardPrompter } from "../../upstream/src/wizard/prompts.js";
 
 const mocks = vi.hoisted(() => ({
   promptAuthChoiceGrouped: vi.fn(),

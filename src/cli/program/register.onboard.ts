@@ -1,8 +1,8 @@
 import type { Command } from "commander";
-import { formatCliCommand } from "../../cli/command-format.js";
-import { formatStaticAuthChoiceChoicesForCli } from "../../commands/auth-choice-options.static.js";
-import type { GatewayDaemonRuntime } from "../../commands/daemon-runtime.js";
-import { ONBOARD_PROVIDER_AUTH_FLAGS } from "../../commands/onboard-provider-auth-flags.js";
+import { formatCliCommand } from "../../../upstream/src/cli/command-format.js";
+import { formatStaticAuthChoiceChoicesForCli } from "../../../upstream/src/commands/auth-choice-options.static.js";
+import type { GatewayDaemonRuntime } from "../../../upstream/src/commands/daemon-runtime.js";
+import { ONBOARD_PROVIDER_AUTH_FLAGS } from "../../../upstream/src/commands/onboard-provider-auth-flags.js";
 import type {
   AuthChoice,
   GatewayAuthChoice,
@@ -11,12 +11,12 @@ import type {
   ResetScope,
   SecretInputMode,
   TailscaleMode,
-} from "../../commands/onboard-types.js";
+} from "../../../upstream/src/commands/onboard-types.js";
 import { setupWizardCommand } from "../../commands/onboard.js";
-import { defaultRuntime } from "../../runtime.js";
-import { formatDocsLink } from "../../terminal/links.js";
-import { theme } from "../../terminal/theme.js";
-import { runCommandWithRuntime } from "../cli-utils.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
+import { formatDocsLink } from "../../../upstream/src/terminal/links.js";
+import { theme } from "../../../upstream/src/terminal/theme.js";
+import { runCommandWithRuntime } from "../../../upstream/src/cli/cli-utils.js";
 
 function resolveInstallDaemonFlag(
   command: unknown,

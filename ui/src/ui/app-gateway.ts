@@ -160,8 +160,11 @@ export function connectGateway(host: GatewayHost) {
         return;
       }
       host.connected = false;
-      // Code 1012 = Service Restart (expected during config saves, don't show as error)
-      if (code !== 1012) {
+      // Code 1000 = Normal Closure（正常关闭/gateway 重启）
+      // Code 1001 = Going Away（页面关闭/服务端重启）
+      // Code 1012 = Service Restart（配置保存期间的预期重启）
+      // 以上都是正常断开，不显示为错误
+      if (code !== 1000 && code !== 1001 && code !== 1012) {
         host.lastError = `disconnected (${code}): ${reason || "no reason"}`;
       }
     },

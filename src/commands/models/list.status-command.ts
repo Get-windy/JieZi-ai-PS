@@ -1,5 +1,5 @@
 import path from "node:path";
-import { resolveOpenClawAgentDir } from "../../agents/agent-paths.js";
+import { resolveOpenClawAgentDir } from "../../../upstream/src/agents/agent-paths.js";
 import {
   resolveAgentDir,
   resolveAgentExplicitModelPrimary,
@@ -9,54 +9,54 @@ import {
   buildAuthHealthSummary,
   DEFAULT_OAUTH_WARN_MS,
   formatRemainingShort,
-} from "../../agents/auth-health.js";
+} from "../../../upstream/src/agents/auth-health.js";
 import {
   ensureAuthProfileStore,
   resolveAuthStorePathForDisplay,
   resolveProfileUnusableUntilForDisplay,
-} from "../../agents/auth-profiles.js";
-import { resolveEnvApiKey } from "../../agents/model-auth.js";
+} from "../../../upstream/src/agents/auth-profiles.js";
+import { resolveEnvApiKey } from "../../../upstream/src/agents/model-auth.js";
 import {
   buildModelAliasIndex,
   parseModelRef,
   resolveConfiguredModelRef,
   resolveDefaultModelForAgent,
   resolveModelRefFromString,
-} from "../../agents/model-selection.js";
-import { formatCliCommand } from "../../cli/command-format.js";
-import { withProgressTotals } from "../../cli/progress.js";
-import { createConfigIO } from "../../config/config.js";
+} from "../../../upstream/src/agents/model-selection.js";
+import { formatCliCommand } from "../../../upstream/src/cli/command-format.js";
+import { withProgressTotals } from "../../../upstream/src/cli/progress.js";
+import { createConfigIO } from "../../../upstream/src/config/config.js";
 import {
   resolveAgentModelFallbackValues,
   resolveAgentModelPrimaryValue,
-} from "../../config/model-input.js";
+} from "../../../upstream/src/config/model-input.js";
 import {
   formatUsageWindowSummary,
   loadProviderUsageSummary,
   resolveUsageProviderId,
   type UsageProviderId,
-} from "../../infra/provider-usage.js";
-import { getShellEnvAppliedKeys, shouldEnableShellEnvFallback } from "../../infra/shell-env.js";
-import type { RuntimeEnv } from "../../runtime.js";
-import { getTerminalTableWidth, renderTable } from "../../terminal/table.js";
-import { colorize, theme } from "../../terminal/theme.js";
-import { shortenHomePath } from "../../utils.js";
-import { resolveProviderAuthOverview } from "./list.auth-overview.js";
-import { isRich } from "./list.format.js";
+} from "../../../upstream/src/infra/provider-usage.js";
+import { getShellEnvAppliedKeys, shouldEnableShellEnvFallback } from "../../../upstream/src/infra/shell-env.js";
+import type { RuntimeEnv } from "../../../upstream/src/runtime.js";
+import { getTerminalTableWidth, renderTable } from "../../../upstream/src/terminal/table.js";
+import { colorize, theme } from "../../../upstream/src/terminal/theme.js";
+import { shortenHomePath } from "../../../upstream/src/utils.js";
+import { resolveProviderAuthOverview } from "../../../upstream/src/commands/models/list.auth-overview.js";
+import { isRich } from "../../../upstream/src/commands/models/list.format.js";
 import {
   describeProbeSummary,
   formatProbeLatency,
   runAuthProbes,
   sortProbeResults,
   type AuthProbeSummary,
-} from "./list.probe.js";
-import { loadModelsConfig } from "./load-config.js";
+} from "../../../upstream/src/commands/models/list.probe.js";
+import { loadModelsConfig } from "../../../upstream/src/commands/models/load-config.js";
 import {
   DEFAULT_MODEL,
   DEFAULT_PROVIDER,
   ensureFlagCompatibility,
   resolveKnownAgentId,
-} from "./shared.js";
+} from "../../../upstream/src/commands/models/shared.js";
 
 export async function modelsStatusCommand(
   opts: {

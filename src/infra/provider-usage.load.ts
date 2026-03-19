@@ -1,4 +1,4 @@
-import { resolveFetch } from "./fetch.js";
+import { resolveFetch } from "../../upstream/src/infra/fetch.js";
 import { type ProviderAuth, resolveProviderAuths } from "./provider-usage.auth.js";
 import {
   fetchClaudeUsage,
@@ -14,12 +14,12 @@ import {
   PROVIDER_LABELS,
   usageProviders,
   withTimeout,
-} from "./provider-usage.shared.js";
+} from "../../upstream/src/infra/provider-usage.shared.js";
 import type {
   ProviderUsageSnapshot,
   UsageProviderId,
   UsageSummary,
-} from "./provider-usage.types.js";
+} from "../../upstream/src/infra/provider-usage.types.js";
 
 type UsageSummaryOptions = {
   now?: number;

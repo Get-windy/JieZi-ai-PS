@@ -1,41 +1,41 @@
-import { buildWorkspaceSkillStatus } from "../agents/skills-status.js";
-import { formatCliCommand } from "../cli/command-format.js";
+import { buildWorkspaceSkillStatus } from "../../upstream/src/agents/skills-status.js";
+import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
 import { resolveCommandSecretRefsViaGateway } from "../cli/command-secret-gateway.js";
 import { getStatusCommandSecretTargetIds } from "../cli/command-secret-targets.js";
-import { withProgress } from "../cli/progress.js";
+import { withProgress } from "../../upstream/src/cli/progress.js";
 import {
   readBestEffortConfig,
   readConfigFileSnapshot,
   resolveGatewayPort,
-} from "../config/config.js";
-import { readLastGatewayErrorLine } from "../daemon/diagnostics.js";
-import { resolveNodeService } from "../daemon/node-service.js";
-import type { GatewayService } from "../daemon/service.js";
-import { resolveGatewayService } from "../daemon/service.js";
-import { buildGatewayConnectionDetails, callGateway } from "../gateway/call.js";
-import { normalizeControlUiBasePath } from "../gateway/control-ui-shared.js";
-import { resolveGatewayProbeAuthSafe } from "../gateway/probe-auth.js";
-import { probeGateway } from "../gateway/probe.js";
-import { collectChannelStatusIssues } from "../infra/channels-status-issues.js";
-import { resolveOpenClawPackageRoot } from "../infra/openclaw-root.js";
-import { resolveOsSummary } from "../infra/os-summary.js";
-import { inspectPortUsage } from "../infra/ports.js";
-import { readRestartSentinel } from "../infra/restart-sentinel.js";
-import { getRemoteSkillEligibility } from "../infra/skills-remote.js";
-import { readTailscaleStatusJson } from "../infra/tailscale.js";
-import { normalizeUpdateChannel, resolveUpdateChannelDisplay } from "../infra/update-channels.js";
-import { checkUpdateStatus, formatGitInstallLabel } from "../infra/update-check.js";
-import { runExec } from "../process/exec.js";
-import type { RuntimeEnv } from "../runtime.js";
-import { VERSION } from "../version.js";
-import { resolveControlUiLinks } from "./onboard-helpers.js";
+} from "../../upstream/src/config/config.js";
+import { readLastGatewayErrorLine } from "../../upstream/src/daemon/diagnostics.js";
+import { resolveNodeService } from "../../upstream/src/daemon/node-service.js";
+import type { GatewayService } from "../../upstream/src/daemon/service.js";
+import { resolveGatewayService } from "../../upstream/src/daemon/service.js";
+import { buildGatewayConnectionDetails, callGateway } from "../../upstream/src/gateway/call.js";
+import { normalizeControlUiBasePath } from "../../upstream/src/gateway/control-ui-shared.js";
+import { resolveGatewayProbeAuthSafe } from "../../upstream/src/gateway/probe-auth.js";
+import { probeGateway } from "../../upstream/src/gateway/probe.js";
+import { collectChannelStatusIssues } from "../../upstream/src/infra/channels-status-issues.js";
+import { resolveOpenClawPackageRoot } from "../../upstream/src/infra/openclaw-root.js";
+import { resolveOsSummary } from "../../upstream/src/infra/os-summary.js";
+import { inspectPortUsage } from "../../upstream/src/infra/ports.js";
+import { readRestartSentinel } from "../../upstream/src/infra/restart-sentinel.js";
+import { getRemoteSkillEligibility } from "../../upstream/src/infra/skills-remote.js";
+import { readTailscaleStatusJson } from "../../upstream/src/infra/tailscale.js";
+import { normalizeUpdateChannel, resolveUpdateChannelDisplay } from "../../upstream/src/infra/update-channels.js";
+import { checkUpdateStatus, formatGitInstallLabel } from "../../upstream/src/infra/update-check.js";
+import { runExec } from "../../upstream/src/process/exec.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
+import { VERSION } from "../../upstream/src/version.js";
+import { resolveControlUiLinks } from "../../upstream/src/commands/onboard-helpers.js";
 import { getAgentLocalStatuses } from "./status-all/agents.js";
 import { buildChannelsTable } from "./status-all/channels.js";
-import { formatDurationPrecise, formatGatewayAuthUsed } from "./status-all/format.js";
-import { pickGatewaySelfPresence } from "./status-all/gateway.js";
-import { buildStatusAllReportLines } from "./status-all/report-lines.js";
-import { readServiceStatusSummary } from "./status.service-summary.js";
-import { formatUpdateOneLiner } from "./status.update.js";
+import { formatDurationPrecise, formatGatewayAuthUsed } from "../../upstream/src/commands/status-all/format.js";
+import { pickGatewaySelfPresence } from "../../upstream/src/commands/status-all/gateway.js";
+import { buildStatusAllReportLines } from "../../upstream/src/commands/status-all/report-lines.js";
+import { readServiceStatusSummary } from "../../upstream/src/commands/status.service-summary.js";
+import { formatUpdateOneLiner } from "../../upstream/src/commands/status.update.js";
 
 export async function statusAllCommand(
   runtime: RuntimeEnv,

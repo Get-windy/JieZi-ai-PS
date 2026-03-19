@@ -1,6 +1,6 @@
-import { resolveChannelDefaultAccountId } from "../channels/plugins/helpers.js";
-import type { ChannelPlugin } from "../channels/plugins/types.js";
-import type { OpenClawConfig } from "../config/config.js";
+import { resolveChannelDefaultAccountId } from "../../upstream/src/channels/plugins/helpers.js";
+import type { ChannelPlugin } from "../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 
 export type ChannelDefaultAccountContext = {
   accountIds: string[];

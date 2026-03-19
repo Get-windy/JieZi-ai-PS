@@ -1,24 +1,24 @@
-import { resolveEnvApiKey } from "../agents/model-auth.js";
-import type { OpenClawConfig } from "../config/types.js";
+import { resolveEnvApiKey } from "../../upstream/src/agents/model-auth.js";
+import type { OpenClawConfig } from "../../upstream/src/config/types.js";
 import {
   isValidEnvSecretRefId,
   type SecretInput,
   type SecretRef,
-} from "../config/types.secrets.js";
-import { encodeJsonPointerToken } from "../secrets/json-pointer.js";
-import { PROVIDER_ENV_VARS } from "../secrets/provider-env-vars.js";
+} from "../../upstream/src/config/types.secrets.js";
+import { encodeJsonPointerToken } from "../../upstream/src/secrets/json-pointer.js";
+import { PROVIDER_ENV_VARS } from "../../upstream/src/secrets/provider-env-vars.js";
 import {
   formatExecSecretRefIdValidationMessage,
   isValidExecSecretRefId,
   isValidFileSecretRefId,
   resolveDefaultSecretProviderAlias,
-} from "../secrets/ref-contract.js";
-import { resolveSecretRefString } from "../secrets/resolve.js";
-import type { WizardPrompter } from "../wizard/prompts.js";
-import { formatApiKeyPreview } from "./auth-choice.api-key.js";
+} from "../../upstream/src/secrets/ref-contract.js";
+import { resolveSecretRefString } from "../../upstream/src/secrets/resolve.js";
+import type { WizardPrompter } from "../../upstream/src/wizard/prompts.js";
+import { formatApiKeyPreview } from "../../upstream/src/commands/auth-choice.api-key.js";
 import type { ApplyAuthChoiceParams } from "./auth-choice.apply.js";
-import { applyDefaultModelChoice } from "./auth-choice.default-model.js";
-import type { SecretInputMode } from "./onboard-types.js";
+import { applyDefaultModelChoice } from "../../upstream/src/commands/auth-choice.default-model.js";
+import type { SecretInputMode } from "../../upstream/src/commands/onboard-types.js";
 
 const ENV_SOURCE_LABEL_RE = /(?:^|:\s)([A-Z][A-Z0-9_]*)$/;
 

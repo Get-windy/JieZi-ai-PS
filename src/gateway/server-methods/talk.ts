@@ -1,13 +1,13 @@
-import { readConfigFileSnapshot } from "../../config/config.js";
-import { redactConfigObject } from "../../config/redact-snapshot.js";
+import { readConfigFileSnapshot } from "../../../upstream/src/config/config.js";
+import { redactConfigObject } from "../../../upstream/src/config/redact-snapshot.js";
 import {
   ErrorCodes,
   errorShape,
   formatValidationErrors,
   validateTalkConfigParams,
   validateTalkModeParams,
-} from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
+} from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 const ADMIN_SCOPE = "operator.admin";
 const TALK_SECRETS_SCOPE = "operator.talk.secrets";

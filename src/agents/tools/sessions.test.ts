@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { createTestRegistry } from "../../test-utils/channel-plugins.js";
-import { extractAssistantText, sanitizeTextContent } from "./sessions-helpers.js";
+import { createTestRegistry } from "../../../upstream/src/test-utils/channel-plugins.js";
+import { extractAssistantText, sanitizeTextContent } from "../../../upstream/src/agents/tools/sessions-helpers.js";
 
 const callGatewayMock = vi.fn();
 vi.mock("../../gateway/call.js", () => ({
@@ -19,8 +19,8 @@ vi.mock("../../config/config.js", async (importOriginal) => {
   };
 });
 
-import { createSessionsListTool } from "./sessions-list-tool.js";
-import { createSessionsSendTool } from "./sessions-send-tool.js";
+import { createSessionsListTool } from "../../../upstream/src/agents/tools/sessions-list-tool.js";
+import { createSessionsSendTool } from "../../../upstream/src/agents/tools/sessions-send-tool.js";
 
 let resolveAnnounceTarget: (typeof import("./sessions-announce-target.js"))["resolveAnnounceTarget"];
 let setActivePluginRegistry: (typeof import("../../plugins/runtime.js"))["setActivePluginRegistry"];

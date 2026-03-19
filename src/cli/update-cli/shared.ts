@@ -2,24 +2,24 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { resolveStateDir } from "../../config/paths.js";
-import { resolveOpenClawPackageRoot } from "../../infra/openclaw-root.js";
-import { readPackageName, readPackageVersion } from "../../infra/package-json.js";
-import { normalizePackageTagInput } from "../../infra/package-tag.js";
-import { trimLogTail } from "../../infra/restart-sentinel.js";
-import { parseSemver } from "../../infra/runtime-guard.js";
-import { fetchNpmTagVersion } from "../../infra/update-check.js";
+import { resolveStateDir } from "../../../upstream/src/config/paths.js";
+import { resolveOpenClawPackageRoot } from "../../../upstream/src/infra/openclaw-root.js";
+import { readPackageName, readPackageVersion } from "../../../upstream/src/infra/package-json.js";
+import { normalizePackageTagInput } from "../../../upstream/src/infra/package-tag.js";
+import { trimLogTail } from "../../../upstream/src/infra/restart-sentinel.js";
+import { parseSemver } from "../../../upstream/src/infra/runtime-guard.js";
+import { fetchNpmTagVersion } from "../../../upstream/src/infra/update-check.js";
 import {
   detectGlobalInstallManagerByPresence,
   detectGlobalInstallManagerForRoot,
   type CommandRunner,
   type GlobalInstallManager,
 } from "../../infra/update-global.js";
-import type { UpdateStepProgress, UpdateStepResult } from "../../infra/update-runner.js";
-import { runCommandWithTimeout } from "../../process/exec.js";
-import { defaultRuntime } from "../../runtime.js";
-import { theme } from "../../terminal/theme.js";
-import { pathExists } from "../../utils.js";
+import type { UpdateStepProgress, UpdateStepResult } from "../../../upstream/src/infra/update-runner.js";
+import { runCommandWithTimeout } from "../../../upstream/src/process/exec.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
+import { theme } from "../../../upstream/src/terminal/theme.js";
+import { pathExists } from "../../../upstream/src/utils.js";
 
 export type UpdateCommandOptions = {
   json?: boolean;

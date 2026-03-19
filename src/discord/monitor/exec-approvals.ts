@@ -10,25 +10,25 @@ import {
   type TopLevelComponents,
 } from "@buape/carbon";
 import { ButtonStyle, Routes } from "discord-api-types/v10";
-import type { OpenClawConfig } from "../../config/config.js";
-import { loadSessionStore, resolveStorePath } from "../../config/sessions.js";
-import type { DiscordExecApprovalConfig } from "../../config/types.discord.js";
-import { buildGatewayConnectionDetails } from "../../gateway/call.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { loadSessionStore, resolveStorePath } from "../../../upstream/src/config/sessions.js";
+import type { DiscordExecApprovalConfig } from "../../../upstream/src/config/types.discord.js";
+import { buildGatewayConnectionDetails } from "../../../upstream/src/gateway/call.js";
 import { GatewayClient } from "../../gateway/client.js";
-import type { EventFrame } from "../../gateway/protocol/index.js";
+import type { EventFrame } from "../../../upstream/src/gateway/protocol/index.js";
 import type {
   ExecApprovalDecision,
   ExecApprovalRequest,
   ExecApprovalResolved,
-} from "../../infra/exec-approvals.js";
-import { logDebug, logError } from "../../logger.js";
+} from "../../../upstream/src/infra/exec-approvals.js";
+import { logDebug, logError } from "../../../upstream/src/logger.js";
 import { normalizeAccountId, resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
-import type { RuntimeEnv } from "../../runtime.js";
+import type { RuntimeEnv } from "../../../upstream/src/runtime.js";
 import {
   GATEWAY_CLIENT_MODES,
   GATEWAY_CLIENT_NAMES,
   normalizeMessageChannel,
-} from "../../utils/message-channel.js";
+} from "../../../upstream/src/utils/message-channel.js";
 import { createDiscordClient, stripUndefinedFields } from "../send.shared.js";
 import { DiscordUiContainer } from "../ui.js";
 

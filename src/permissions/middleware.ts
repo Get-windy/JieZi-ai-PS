@@ -11,7 +11,7 @@
 import { existsSync } from "node:fs";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { OpenClawConfig } from "../config/types.js";
+import type { OpenClawConfig } from "../../upstream/src/config/types.js";
 import type {
   AgentPermissionsConfig,
   PermissionSubject,
@@ -19,9 +19,9 @@ import type {
 } from "../config/types.permissions.js";
 import type { ApprovalRequest } from "./approval.js";
 import type { PermissionCheckContext, PermissionCheckResult } from "./checker.js";
-import { listAgentEntries, findAgentEntryIndex } from "../commands/agents.config.js";
-import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../config/config.js";
-import { STATE_DIR } from "../config/paths.js";
+import { listAgentEntries, findAgentEntryIndex } from "../../upstream/src/commands/agents.config.js";
+import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../upstream/src/config/config.js";
+import { STATE_DIR } from "../../upstream/src/config/paths.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { ApprovalWorkflow } from "./approval.js";
 import { PermissionChecker } from "./checker.js";

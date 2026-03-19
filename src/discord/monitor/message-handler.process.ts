@@ -1,35 +1,36 @@
 import { ChannelType } from "@buape/carbon";
-import { resolveAckReaction, resolveHumanDelayConfig } from "../../agents/identity.js";
-import { EmbeddedBlockChunker } from "../../agents/pi-embedded-block-chunker.js";
+import { resolveAckReaction, resolveHumanDelayConfig } from "../../../upstream/src/agents/identity.js";
+import { EmbeddedBlockChunker } from "../../../upstream/src/agents/pi-embedded-block-chunker.js";
 import { resolveChunkMode } from "../../auto-reply/chunk.js";
-import { dispatchInboundMessage } from "../../auto-reply/dispatch.js";
-import { formatInboundEnvelope, resolveEnvelopeFormatOptions } from "../../auto-reply/envelope.js";
+import { dispatchInboundMessage } from "../../../upstream/src/auto-reply/dispatch.js";
+import { getReplyFromConfig } from "../../auto-reply/reply/get-reply.js";
+import { formatInboundEnvelope, resolveEnvelopeFormatOptions } from "../../../upstream/src/auto-reply/envelope.js";
 import {
   buildPendingHistoryContextFromMap,
   clearHistoryEntriesIfEnabled,
-} from "../../auto-reply/reply/history.js";
-import { finalizeInboundContext } from "../../auto-reply/reply/inbound-context.js";
+} from "../../../upstream/src/auto-reply/reply/history.js";
+import { finalizeInboundContext } from "../../../upstream/src/auto-reply/reply/inbound-context.js";
 import { createReplyDispatcherWithTyping } from "../../auto-reply/reply/reply-dispatcher.js";
-import type { ReplyPayload } from "../../auto-reply/types.js";
-import { shouldAckReaction as shouldAckReactionGate } from "../../channels/ack-reactions.js";
-import { logTypingFailure, logAckFailure } from "../../channels/logging.js";
-import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
-import { recordInboundSession } from "../../channels/session.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
+import { shouldAckReaction as shouldAckReactionGate } from "../../../upstream/src/channels/ack-reactions.js";
+import { logTypingFailure, logAckFailure } from "../../../upstream/src/channels/logging.js";
+import { createReplyPrefixOptions } from "../../../upstream/src/channels/reply-prefix.js";
+import { recordInboundSession } from "../../../upstream/src/channels/session.js";
 import {
   createStatusReactionController,
   DEFAULT_TIMING,
   type StatusReactionAdapter,
-} from "../../channels/status-reactions.js";
+} from "../../../upstream/src/channels/status-reactions.js";
 import { createTypingCallbacks } from "../../channels/typing.js";
-import { resolveDiscordPreviewStreamMode } from "../../config/discord-preview-streaming.js";
-import { resolveMarkdownTableMode } from "../../config/markdown-tables.js";
-import { readSessionUpdatedAt, resolveStorePath } from "../../config/sessions.js";
-import { danger, logVerbose, shouldLogVerbose } from "../../globals.js";
-import { convertMarkdownTables } from "../../markdown/tables.js";
+import { resolveDiscordPreviewStreamMode } from "../../../upstream/src/config/discord-preview-streaming.js";
+import { resolveMarkdownTableMode } from "../../../upstream/src/config/markdown-tables.js";
+import { readSessionUpdatedAt, resolveStorePath } from "../../../upstream/src/config/sessions.js";
+import { danger, logVerbose, shouldLogVerbose } from "../../../upstream/src/globals.js";
+import { convertMarkdownTables } from "../../../upstream/src/markdown/tables.js";
 import { buildAgentSessionKey } from "../../routing/resolve-route.js";
 import { resolveThreadSessionKeys } from "../../routing/session-key.js";
-import { buildUntrustedChannelMetadata } from "../../security/channel-metadata.js";
-import { truncateUtf16Safe } from "../../utils.js";
+import { buildUntrustedChannelMetadata } from "../../../upstream/src/security/channel-metadata.js";
+import { truncateUtf16Safe } from "../../../upstream/src/utils.js";
 import { chunkDiscordTextWithMode } from "../chunk.js";
 import { resolveDiscordDraftStreamingChunking } from "../draft-chunking.js";
 import { createDiscordDraftStream } from "../draft-stream.js";
@@ -658,6 +659,7 @@ export async function processDiscordMessage(ctx: DiscordMessagePreflightContext)
       ctx: ctxPayload,
       cfg,
       dispatcher,
+      replyResolver: getReplyFromConfig,
       replyOptions: {
         ...replyOptions,
         skillFilter: channelConfig?.skills,
