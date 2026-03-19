@@ -7,7 +7,11 @@
 
 import { join } from "node:path";
 import { STATE_DIR } from "../../upstream/src/config/paths.js";
-import { readJsonFile, writeJsonAtomic, createAsyncLock } from "../../upstream/src/infra/json-files.js";
+import {
+  readJsonFile,
+  writeJsonAtomic,
+  createAsyncLock,
+} from "../../upstream/src/infra/json-files.js";
 import type {
   Task,
   TaskFilter,
@@ -315,6 +319,18 @@ export async function listTasks(filter?: TaskFilter): Promise<Task[]> {
         (task.description ?? "").toLowerCase().includes(keyword),
     );
   }
+
+  // 按优先级（urgent > high > medium > low）+ 创建时间（早的在前）排序
+  // 参考 Jira/Linear 等主流任务管理系统的标准排序逻辑
+  const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+  results.sort((a, b) => {
+    const pa = PRIORITY_ORDER[a.priority] ?? 2;
+    const pb = PRIORITY_ORDER[b.priority] ?? 2;
+    if (pa !== pb) {
+      return pa - pb;
+    }
+    return a.createdAt - b.createdAt;
+  });
 
   return results;
 }

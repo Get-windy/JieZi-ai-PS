@@ -1,29 +1,32 @@
+import { resolveModelRefFromString } from "../../../upstream/src/agents/model-selection.js";
+import { resolveAgentTimeoutMs } from "../../../upstream/src/agents/timeout.js";
+import {
+  DEFAULT_AGENT_WORKSPACE_DIR,
+  ensureAgentWorkspace,
+} from "../../../upstream/src/agents/workspace.js";
+import { resolveReplyDirectives } from "../../../upstream/src/auto-reply/reply/get-reply-directives.js";
+import { handleInlineActions } from "../../../upstream/src/auto-reply/reply/get-reply-inline-actions.js";
+import { finalizeInboundContext } from "../../../upstream/src/auto-reply/reply/inbound-context.js";
+import { applyResetModelOverride } from "../../../upstream/src/auto-reply/reply/session-reset-model.js";
+import { initSessionState } from "../../../upstream/src/auto-reply/reply/session.js";
+import { stageSandboxMedia } from "../../../upstream/src/auto-reply/reply/stage-sandbox-media.js";
+import { SILENT_REPLY_TOKEN } from "../../../upstream/src/auto-reply/tokens.js";
+import type { GetReplyOptions, ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
+import { resolveChannelModelOverride } from "../../../upstream/src/channels/model-overrides.js";
+import { type OpenClawConfig, loadConfig } from "../../../upstream/src/config/config.js";
+import { applyLinkUnderstanding } from "../../../upstream/src/link-understanding/apply.js";
+import { applyMediaUnderstanding } from "../../../upstream/src/media-understanding/apply.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
 import {
   resolveAgentDir,
   resolveAgentWorkspaceDir,
   resolveSessionAgentId,
   resolveAgentSkillsFilter,
 } from "../../agents/agent-scope.js";
-import { resolveModelRefFromString } from "../../../upstream/src/agents/model-selection.js";
-import { resolveAgentTimeoutMs } from "../../../upstream/src/agents/timeout.js";
-import { DEFAULT_AGENT_WORKSPACE_DIR, ensureAgentWorkspace } from "../../../upstream/src/agents/workspace.js";
-import { resolveChannelModelOverride } from "../../../upstream/src/channels/model-overrides.js";
-import { type OpenClawConfig, loadConfig } from "../../../upstream/src/config/config.js";
-import { applyLinkUnderstanding } from "../../../upstream/src/link-understanding/apply.js";
-import { applyMediaUnderstanding } from "../../../upstream/src/media-understanding/apply.js";
-import { defaultRuntime } from "../../../upstream/src/runtime.js";
 import { resolveCommandAuthorization } from "../command-auth.js";
 import type { MsgContext } from "../templating.js";
-import { SILENT_REPLY_TOKEN } from "../../../upstream/src/auto-reply/tokens.js";
-import type { GetReplyOptions, ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import { resolveDefaultModel } from "./directive-handling.js";
-import { resolveReplyDirectives } from "../../../upstream/src/auto-reply/reply/get-reply-directives.js";
-import { handleInlineActions } from "../../../upstream/src/auto-reply/reply/get-reply-inline-actions.js";
 import { runPreparedReply } from "./get-reply-run.js";
-import { finalizeInboundContext } from "../../../upstream/src/auto-reply/reply/inbound-context.js";
-import { applyResetModelOverride } from "../../../upstream/src/auto-reply/reply/session-reset-model.js";
-import { initSessionState } from "../../../upstream/src/auto-reply/reply/session.js";
-import { stageSandboxMedia } from "../../../upstream/src/auto-reply/reply/stage-sandbox-media.js";
 import { createTypingController } from "./typing.js";
 
 function mergeSkillFilters(channelFilter?: string[], agentFilter?: string[]): string[] | undefined {
@@ -73,10 +76,30 @@ export async function getReplyFromConfig(
     mergedSkillFilter !== undefined ? { ...opts, skillFilter: mergedSkillFilter } : opts;
   const agentCfg = cfg.agents?.defaults;
   const sessionCfg = cfg.session;
-  const { defaultProvider, defaultModel, aliasIndex } = resolveDefaultModel({
+  const { defaultProvider, defaultModel, aliasIndex, noModelConfigured } = resolveDefaultModel({
     cfg,
     agentId,
+    isSystemTask: opts?.isHeartbeat === true,
   });
+  // 如果该 agent 未配置模型，且不是心跳系统任务，直接提示用户配置模型
+  if (noModelConfigured && !opts?.isHeartbeat) {
+    const configExample =
+      "```yaml\n" +
+      "agents:\n" +
+      "  list:\n" +
+      `    - id: ${agentId}\n` +
+      "      model:\n" +
+      "        primary: anthropic/claude-opus-4-5\n" +
+      "```";
+    return {
+      text:
+        `您好！我是 **${agentId}**，但我还没有配置模型账号。\n\n` +
+        `请在配置文件中为我配置模型，例如：\n\n` +
+        configExample +
+        `\n\n或者通过管理界面为我指定模型账号。`,
+      rawText: `未为 agent ${agentId} 配置模型。`,
+    } as ReplyPayload;
+  }
   let provider = defaultProvider;
   let model = defaultModel;
   let hasResolvedHeartbeatModelOverride = false;

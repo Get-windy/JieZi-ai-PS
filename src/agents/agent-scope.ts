@@ -1,19 +1,26 @@
 import fs from "node:fs";
 import path from "node:path";
+import { DEFAULT_PROVIDER } from "../../upstream/src/agents/defaults.js";
+import {
+  resolveModelRefFromString,
+  buildModelAliasIndex,
+} from "../../upstream/src/agents/model-selection.js";
+import { normalizeSkillFilter } from "../../upstream/src/agents/skills/filter.js";
+import { resolveDefaultAgentWorkspaceDir } from "../../upstream/src/agents/workspace.js";
 import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import { resolveAgentModelFallbackValues } from "../../upstream/src/config/model-input.js";
 import { resolveStateDir } from "../../upstream/src/config/paths.js";
-import type { AgentModelAccountsConfig } from "../config/types.agents.js";
 import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
+import { resolveUserPath } from "../../upstream/src/utils.js";
+import type { AgentModelAccountsConfig } from "../config/types.agents.js";
+import { isModelIdUsableSync } from "../gateway/server-methods/models.js";
 import {
   DEFAULT_AGENT_ID,
   normalizeAgentId,
   parseAgentSessionKey,
   resolveAgentIdFromSessionKey,
 } from "../routing/session-key.js";
-import { resolveUserPath } from "../../upstream/src/utils.js";
-import { normalizeSkillFilter } from "../../upstream/src/agents/skills/filter.js";
-import { resolveDefaultAgentWorkspaceDir } from "../../upstream/src/agents/workspace.js";
+import { hasUsableCustomProviderApiKey } from "./model-auth.js";
 const log = createSubsystemLogger("agent-scope");
 
 export { resolveAgentIdFromSessionKey };
@@ -177,50 +184,133 @@ export function resolveAgentExplicitModelPrimary(
 }
 
 /**
- * 解析 agent 有效的主模型：
- *   1. agent 自身 modelAccounts.defaultAccountId（智能路由账号，优先级最高）
- *   2. agent 自身配置的 model.primary（仅在没有 modelAccounts 时生效，作为兜底）
- *   3. 主控 agent（default=true）的 modelAccounts.defaultAccountId
- *   4. 主控 agent 的 model.primary（若已配置）
- *   5. agents.defaults.model.primary（全局兜底）
+ * 判断一个模型 ID（格式：providerId/modelName）对应的模型和认证是否可用。
  *
- * modelAccounts 优先于 model.primary，避免 model.primary 遗留失效旧值干扰智能路由。
+ * 优先走新的 ModelManagementStorage 数据链：
+ *   modelId → ModelConfig.enabled && !deprecated → ProviderAuth.enabled
+ *
+ * 若新系统缓存未就绪，或模型不在新系统中，则 fallback 到旧的
+ * models.providers 配置检测（指 model.primary 格式的模型字符串）。
+ */
+function isModelStringProviderUsable(cfg: OpenClawConfig, modelStr: string): boolean {
+  // 优先：走新的 ModelManagementStorage 数据链
+  const newChainResult = isModelIdUsableSync(modelStr);
+  if (newChainResult !== undefined) {
+    // 新系统配置了此模型，使用其结果
+    return newChainResult;
+  }
+  // 新系统缓存未就绪或模型不在新系统，fallback 到旧逻辑
+  const aliasIndex = buildModelAliasIndex({ cfg, defaultProvider: DEFAULT_PROVIDER });
+  const resolved = resolveModelRefFromString({
+    raw: modelStr,
+    defaultProvider: DEFAULT_PROVIDER,
+    aliasIndex,
+  });
+  if (!resolved) {
+    // 无法解析的模型字符串，且不在新系统，视为不可用
+    return false;
+  }
+  const provider = resolved.ref.provider;
+  const providers = (cfg?.models?.providers ?? {}) as Record<
+    string,
+    { auth?: string; apiKey?: unknown }
+  >;
+  const providerEntry = Object.entries(providers).find(
+    ([key]) => key.toLowerCase() === provider.toLowerCase(),
+  )?.[1];
+  if (!providerEntry) {
+    // 内置 provider（不在 providers 里），视为可用
+    return true;
+  }
+  const authMode = providerEntry.auth;
+  if (authMode === "oauth" || authMode === "token" || authMode === "aws-sdk") {
+    return true;
+  }
+  return hasUsableCustomProviderApiKey(cfg, provider);
+}
+
+/**
+ * 解析 agent 有效的主模型（含 provider 可用性检测）：
+ *
+ * allowFallbackToDefault=false（默认，普通会话模式）：
+ *   1. agent 自身 modelAccounts.defaultAccountId → provider 可用时采用
+ *   2. agent 自身 model.primary → provider 可用时采用
+ *   返回 undefined 表示「未配置模型」，上层应提示用户配置
+ *
+ * allowFallbackToDefault=true（系统任务模式，如心跳任务驱动）：
+ *   在上述两步均失败后继续：
+ *   3. 主控 agent 的 modelAccounts.defaultAccountId → provider 可用时采用
+ *   4. 主控 agent 的 model.primary → provider 可用时采用
+ *   5. 主控 agent 的 modelAccounts.accounts[0]（provider 不可用时的最终兜底）
+ *   6. agents.defaults.model.primary（全局兜底，无可用性检测）
+ *
+ * 注意：modelAccounts 优先于 model.primary，避免遗留失效旧值干扰路由。
  */
 export function resolveAgentEffectiveModelPrimary(
   cfg: OpenClawConfig,
   agentId: string,
+  options?: { allowFallbackToDefault?: boolean },
 ): string | undefined {
-  // 1. 优先使用 agent 自身 modelAccounts.defaultAccountId
+  const allowFallback = options?.allowFallbackToDefault ?? false;
+
+  // 1. agent 自身 modelAccounts.defaultAccountId
   const ownAccounts = resolveAgentModelAccounts(cfg, agentId);
   const ownDefault = ownAccounts?.defaultAccountId?.trim();
-  if (ownDefault) {
+  if (ownDefault && isModelStringProviderUsable(cfg, ownDefault)) {
     return ownDefault;
   }
 
-  // 2. agent 自身 model.primary（仅在没有 modelAccounts 时生效）
+  // 2. agent 自身 model.primary
   const explicit = resolveAgentExplicitModelPrimary(cfg, agentId);
-  if (explicit) {
+  if (explicit && isModelStringProviderUsable(cfg, explicit)) {
     return explicit;
   }
 
-  // 3 & 4. 如果当前 agent 不是主控 agent，尝试从主控 agent 的配置推导兜底模型
+  // 自身无模型配置，且不允许跨 agent fallback → 返回 undefined，让上层提示用户
+  if (!allowFallback) {
+    return undefined;
+  }
+
+  // --- 以下仅在 allowFallbackToDefault=true 时执行（系统任务驱动） ---
+
   const defaultAgentId = resolveDefaultAgentId(cfg);
   if (normalizeAgentId(agentId) !== defaultAgentId) {
-    // 3. 主控 agent 的 modelAccounts.defaultAccountId
     const defaultAgentAccounts = resolveAgentModelAccounts(cfg, defaultAgentId);
+
+    // 3. 主控 agent 的 modelAccounts.defaultAccountId
     const defaultAgentAccountId = defaultAgentAccounts?.defaultAccountId?.trim();
-    if (defaultAgentAccountId) {
+    if (defaultAgentAccountId && isModelStringProviderUsable(cfg, defaultAgentAccountId)) {
       return defaultAgentAccountId;
     }
 
     // 4. 主控 agent 的 model.primary
     const defaultAgentModelPrimary = resolveAgentExplicitModelPrimary(cfg, defaultAgentId);
-    if (defaultAgentModelPrimary) {
+    if (defaultAgentModelPrimary && isModelStringProviderUsable(cfg, defaultAgentModelPrimary)) {
       return defaultAgentModelPrimary;
+    }
+
+    // 5. 主控 agent 的 modelAccounts.accounts[0]
+    const firstAccount = defaultAgentAccounts?.accounts?.[0]?.trim();
+    if (firstAccount) {
+      log.info(
+        `[model-fallback] agentId=${agentId}: primary provider unavailable, ` +
+          `falling back to defaultAgent "${defaultAgentId}" accounts[0]="${firstAccount}"`,
+      );
+      return firstAccount;
+    }
+  } else {
+    // 当前就是主控 agent：fallback 到自身 accounts[0]
+    const ownFirstAccount = ownAccounts?.accounts?.[0]?.trim();
+    if (ownFirstAccount && ownDefault !== ownFirstAccount) {
+      log.info(
+        `[model-fallback] defaultAgent "${agentId}": primary provider unavailable, ` +
+          `falling back to accounts[0]="${ownFirstAccount}"`,
+      );
+      return ownFirstAccount;
     }
   }
 
-  // 5. 最终兜底：agents.defaults.model.primary
+  // 6. 最终兜底：agents.defaults.model.primary（不做 provider 检测，交运行时处理）
   return resolveModelPrimary(cfg.agents?.defaults?.model);
 }
 

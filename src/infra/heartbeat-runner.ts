@@ -1,15 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import {
-  listAgentIds,
-  resolveAgentConfig,
-  resolveAgentExplicitModelPrimary,
-  resolveAgentModelAccounts,
-  resolveAgentWorkspaceDir,
-  resolveDefaultAgentId,
-} from "../agents/agent-scope.js";
 import { appendCronStyleCurrentTimeLine } from "../../upstream/src/agents/current-time.js";
 import { resolveEffectiveMessagesConfig } from "../../upstream/src/agents/identity.js";
+import { resolveEmbeddedSessionLane } from "../../upstream/src/agents/pi-embedded.js";
 import { DEFAULT_HEARTBEAT_FILENAME } from "../../upstream/src/agents/workspace.js";
 import { resolveHeartbeatReplyPayload } from "../../upstream/src/auto-reply/heartbeat-reply-payload.js";
 import {
@@ -19,12 +12,10 @@ import {
   resolveHeartbeatPrompt as resolveHeartbeatPromptText,
   stripHeartbeatToken,
 } from "../../upstream/src/auto-reply/heartbeat.js";
-import { getReplyFromConfig } from "../auto-reply/reply/get-reply.js";
 import { HEARTBEAT_TOKEN } from "../../upstream/src/auto-reply/tokens.js";
 import type { ReplyPayload } from "../../upstream/src/auto-reply/types.js";
 import { getChannelPlugin } from "../../upstream/src/channels/plugins/index.js";
 import type { ChannelHeartbeatDeps } from "../../upstream/src/channels/plugins/types.js";
-import { resolveEmbeddedSessionLane } from "../../upstream/src/agents/pi-embedded.js";
 import { parseDurationMs } from "../../upstream/src/cli/parse-duration.js";
 import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import { loadConfig } from "../../upstream/src/config/config.js";
@@ -40,15 +31,6 @@ import {
 } from "../../upstream/src/config/sessions.js";
 import type { AgentDefaultsConfig } from "../../upstream/src/config/types.agent-defaults.js";
 import { resolveCronSession } from "../../upstream/src/cron/isolated-agent/session.js";
-import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
-import { getQueueSize, resetAllLanes } from "../../upstream/src/process/command-queue.js";
-import {
-  normalizeAgentId,
-  parseAgentSessionKey,
-  toAgentStoreSessionKey,
-} from "../routing/session-key.js";
-import { defaultRuntime, type RuntimeEnv } from "../../upstream/src/runtime.js";
-import { escapeRegExp } from "../../upstream/src/utils.js";
 import { formatErrorMessage, hasErrnoCode } from "../../upstream/src/infra/errors.js";
 import { isWithinActiveHours } from "../../upstream/src/infra/heartbeat-active-hours.js";
 import {
@@ -57,7 +39,10 @@ import {
   isCronSystemEvent,
   isExecCompletionEvent,
 } from "../../upstream/src/infra/heartbeat-events-filter.js";
-import { emitHeartbeatEvent, resolveIndicatorType } from "../../upstream/src/infra/heartbeat-events.js";
+import {
+  emitHeartbeatEvent,
+  resolveIndicatorType,
+} from "../../upstream/src/infra/heartbeat-events.js";
 import { resolveHeartbeatReasonKind } from "../../upstream/src/infra/heartbeat-reason.js";
 import { resolveHeartbeatVisibility } from "../../upstream/src/infra/heartbeat-visibility.js";
 import {
@@ -68,14 +53,33 @@ import {
   setHeartbeatsEnabled,
   setHeartbeatWakeHandler,
 } from "../../upstream/src/infra/heartbeat-wake.js";
+import { buildOutboundSessionContext } from "../../upstream/src/infra/outbound/session-context.js";
+import { peekSystemEventEntries } from "../../upstream/src/infra/system-events.js";
+import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
+import { getQueueSize, resetAllLanes } from "../../upstream/src/process/command-queue.js";
+import { defaultRuntime, type RuntimeEnv } from "../../upstream/src/runtime.js";
+import { escapeRegExp } from "../../upstream/src/utils.js";
+import {
+  listAgentIds,
+  resolveAgentConfig,
+  resolveAgentExplicitModelPrimary,
+  resolveAgentModelAccounts,
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId,
+} from "../agents/agent-scope.js";
+import { getReplyFromConfig } from "../auto-reply/reply/get-reply.js";
+import {
+  normalizeAgentId,
+  parseAgentSessionKey,
+  toAgentStoreSessionKey,
+} from "../routing/session-key.js";
+import { compactHeartbeatFileIfNeeded } from "./heartbeat-bootstrap-compact.js";
 import type { OutboundSendDeps } from "./outbound/deliver.js";
 import { deliverOutboundPayloads } from "./outbound/deliver.js";
-import { buildOutboundSessionContext } from "../../upstream/src/infra/outbound/session-context.js";
 import {
   resolveHeartbeatDeliveryTarget,
   resolveHeartbeatSenderContext,
 } from "./outbound/targets.js";
-import { peekSystemEventEntries } from "../../upstream/src/infra/system-events.js";
 
 export type HeartbeatDeps = OutboundSendDeps &
   ChannelHeartbeatDeps & {
@@ -662,12 +666,12 @@ export async function runHeartbeatOnce(opts: {
     // ── 调试：所有 agent 的模型配置状态 ───────────────────────────────
     log.info(
       `[DEBUG-HB-CFG] agentId=${agentId} ` +
-      `hasModelConfig=${hasModelConfig} ` +
-      `modelAccounts.defaultAccountId=${agentModelAccounts?.defaultAccountId ?? "(none)"} ` +
-      `modelAccounts.accounts=${JSON.stringify(agentModelAccounts?.accounts ?? [])} ` +
-      `modelAccounts.routingMode=${agentModelAccounts?.routingMode ?? "(none)"} ` +
-      `model.primary=${resolveAgentExplicitModelPrimary(cfg, agentId) ?? "(none)"} ` +
-      `reason=${opts.reason ?? "(none)"}`
+        `hasModelConfig=${hasModelConfig} ` +
+        `modelAccounts.defaultAccountId=${agentModelAccounts?.defaultAccountId ?? "(none)"} ` +
+        `modelAccounts.accounts=${JSON.stringify(agentModelAccounts?.accounts ?? [])} ` +
+        `modelAccounts.routingMode=${agentModelAccounts?.routingMode ?? "(none)"} ` +
+        `model.primary=${resolveAgentExplicitModelPrimary(cfg, agentId) ?? "(none)"} ` +
+        `reason=${opts.reason ?? "(none)"}`,
     );
     // ─────────────────────────────────────────────────────────────────
     if (!hasModelConfig) {
@@ -696,12 +700,12 @@ export async function runHeartbeatOnce(opts: {
     const defaultModelAccounts = resolveAgentModelAccounts(cfg, agentId);
     log.info(
       `[DEBUG-HB-CFG] agentId=${agentId} (defaultAgent) ` +
-      `modelAccounts.defaultAccountId=${defaultModelAccounts?.defaultAccountId ?? "(none)"} ` +
-      `modelAccounts.accounts=${JSON.stringify(defaultModelAccounts?.accounts ?? [])} ` +
-      `modelAccounts.routingMode=${defaultModelAccounts?.routingMode ?? "(none)"} ` +
-      `model.primary=${resolveAgentExplicitModelPrimary(cfg, agentId) ?? "(none)"} ` +
-      `agents.defaults.model.primary=${(cfg.agents?.defaults?.model as { primary?: string } | undefined)?.primary ?? "(none)"} ` +
-      `reason=${opts.reason ?? "(none)"}`
+        `modelAccounts.defaultAccountId=${defaultModelAccounts?.defaultAccountId ?? "(none)"} ` +
+        `modelAccounts.accounts=${JSON.stringify(defaultModelAccounts?.accounts ?? [])} ` +
+        `modelAccounts.routingMode=${defaultModelAccounts?.routingMode ?? "(none)"} ` +
+        `model.primary=${resolveAgentExplicitModelPrimary(cfg, agentId) ?? "(none)"} ` +
+        `agents.defaults.model.primary=${(cfg.agents?.defaults?.model as { primary?: string } | undefined)?.primary ?? "(none)"} ` +
+        `reason=${opts.reason ?? "(none)"}`,
     );
     // ────────────────────────────────────────────────────────────────
   }
@@ -733,7 +737,10 @@ export async function runHeartbeatOnce(opts: {
       resetAllLanes();
       // After reset the lane is now idle — fall through to run heartbeat.
     } else {
-      log.info(`[DEBUG-HB] agent "${agentId}" skipped: session lane "${agentSessionLane}" has ${queueSize} task(s) in-flight`, { agentId });
+      log.info(
+        `[DEBUG-HB] agent "${agentId}" skipped: session lane "${agentSessionLane}" has ${queueSize} task(s) in-flight`,
+        { agentId },
+      );
       return { status: "skipped", reason: "requests-in-flight" };
     }
   } else {
@@ -903,9 +910,17 @@ export async function runHeartbeatOnce(opts: {
         }
       : { isHeartbeat: true, suppressToolErrorWarnings, bootstrapContextMode };
     // ── 调试：打印心跳实际调用前的模型参数 ───────────────────────────
-    log.info(`[DEBUG-HB-MODEL] runOnce agentId=${agentId} heartbeatModelOverride=${heartbeatModelOverride ?? "(none)"} sessionKey=${runSessionKey}`);
+    log.info(
+      `[DEBUG-HB-MODEL] runOnce agentId=${agentId} heartbeatModelOverride=${heartbeatModelOverride ?? "(none)"} sessionKey=${runSessionKey}`,
+    );
     // ────────────────────────────────────────────────────────────────
     const replyResult = await getReplyFromConfig(ctx, replyOpts, cfg);
+
+    // ── 心跳结束后压缩 HEARTBEAT.md（滚动摘要，控制文件大小）────────
+    // 在 LLM 已读取并处理完 HEARTBEAT.md 内容之后执行压缩，不影响本次回复。
+    void compactHeartbeatFileIfNeeded(workspaceDir);
+    // ─────────────────────────────────────────────────────────────────
+
     const replyPayload = resolveHeartbeatReplyPayload(replyResult);
     const includeReasoning = heartbeat?.includeReasoning === true;
     const reasoningPayloads = includeReasoning
@@ -914,12 +929,12 @@ export async function runHeartbeatOnce(opts: {
     // ── 调试：LLM 返回后的 payload 内容 ─────────────────────────────
     log.info(
       `[DEBUG-HB-REPLY] agentId=${agentId} ` +
-      `hasPayload=${Boolean(replyPayload)} ` +
-      `text=${JSON.stringify(replyPayload?.text?.slice(0, 100) ?? "(none)")} ` +
-      `hasMedia=${Boolean(replyPayload?.mediaUrl || replyPayload?.mediaUrls?.length)} ` +
-      `delivery.channel=${delivery.channel} ` +
-      `delivery.to=${delivery.to ?? "(none)"} ` +
-      `delivery.reason=${delivery.reason ?? "(none)"}`
+        `hasPayload=${Boolean(replyPayload)} ` +
+        `text=${JSON.stringify(replyPayload?.text?.slice(0, 100) ?? "(none)")} ` +
+        `hasMedia=${Boolean(replyPayload?.mediaUrl || replyPayload?.mediaUrls?.length)} ` +
+        `delivery.channel=${delivery.channel} ` +
+        `delivery.to=${delivery.to ?? "(none)"} ` +
+        `delivery.reason=${delivery.reason ?? "(none)"}`,
     );
     // ─────────────────────────────────────────────────────────────────
 
@@ -965,10 +980,10 @@ export async function runHeartbeatOnce(opts: {
     // ── 调试：normalized 结果 ────────────────────────────────────────
     log.info(
       `[DEBUG-HB-NORM] agentId=${agentId} ` +
-      `normalizedText=${JSON.stringify(normalized.text.slice(0, 100))} ` +
-      `shouldSkip=${normalized.shouldSkip} ` +
-      `shouldSkipMain=${shouldSkipMain} ` +
-      `hasExecCompletion=${hasExecCompletion}`
+        `normalizedText=${JSON.stringify(normalized.text.slice(0, 100))} ` +
+        `shouldSkip=${normalized.shouldSkip} ` +
+        `shouldSkipMain=${shouldSkipMain} ` +
+        `hasExecCompletion=${hasExecCompletion}`,
     );
     // ─────────────────────────────────────────────────────────────────
     if (shouldSkipMain && reasoningPayloads.length === 0) {
@@ -1041,9 +1056,9 @@ export async function runHeartbeatOnce(opts: {
       // ── 调试：no-target 分支 ─────────────────────────────────────────
       log.info(
         `[DEBUG-HB-SKIP] agentId=${agentId} reason=no-target ` +
-        `delivery.channel=${delivery.channel} delivery.to=${delivery.to ?? "(none)"} ` +
-        `delivery.reason=${delivery.reason ?? "(none)"} ` +
-        `preview=${JSON.stringify(previewText?.slice(0, 80) ?? "(none)")}`
+          `delivery.channel=${delivery.channel} delivery.to=${delivery.to ?? "(none)"} ` +
+          `delivery.reason=${delivery.reason ?? "(none)"} ` +
+          `preview=${JSON.stringify(previewText?.slice(0, 80) ?? "(none)")}`,
       );
       // ─────────────────────────────────────────────────────────────────
       emitHeartbeatEvent({
@@ -1257,7 +1272,9 @@ export function startHeartbeatRunner(opts: {
     state.cfg = cfg;
     state.agents = nextAgents;
     const nextEnabled = nextAgents.size > 0;
-    log.info(`[DEBUG-HB] updateConfig: state.agents=${JSON.stringify([...nextAgents.keys()])} size=${nextAgents.size}`);
+    log.info(
+      `[DEBUG-HB] updateConfig: state.agents=${JSON.stringify([...nextAgents.keys()])} size=${nextAgents.size}`,
+    );
     if (!initialized) {
       if (!nextEnabled) {
         log.info("heartbeat: disabled", { enabled: false });
@@ -1306,7 +1323,9 @@ export function startHeartbeatRunner(opts: {
 
     if (requestedSessionKey || requestedAgentId) {
       const targetAgentId = requestedAgentId ?? resolveAgentIdFromSessionKey(requestedSessionKey);
-      log.info(`[DEBUG-HB] run: targeted wake agentId="${targetAgentId}" state.agents=[${[...state.agents.keys()].join(',')}]`);
+      log.info(
+        `[DEBUG-HB] run: targeted wake agentId="${targetAgentId}" state.agents=[${[...state.agents.keys()].join(",")}]`,
+      );
       let targetAgent = state.agents.get(targetAgentId);
       if (!targetAgent) {
         // agent 未在 state.agents 中（可能是 fallback 模式下首次唤醒），
@@ -1314,7 +1333,10 @@ export function startHeartbeatRunner(opts: {
         const fallbackHeartbeat = resolveHeartbeatConfig(state.cfg, targetAgentId);
         const intervalMs = resolveHeartbeatIntervalMs(state.cfg, undefined, fallbackHeartbeat);
         if (!intervalMs) {
-          log.warn(`[Heartbeat] agent "${targetAgentId}" has no heartbeat interval, skipping wake`, { agentId: targetAgentId });
+          log.warn(
+            `[Heartbeat] agent "${targetAgentId}" has no heartbeat interval, skipping wake`,
+            { agentId: targetAgentId },
+          );
           scheduleNext();
           return { status: "skipped", reason: "disabled" };
         }
@@ -1326,7 +1348,10 @@ export function startHeartbeatRunner(opts: {
           nextDueMs: now + intervalMs,
         };
         state.agents.set(targetAgentId, targetAgent);
-        log.info(`[Heartbeat] dynamically registered agent "${targetAgentId}" for wake`, { agentId: targetAgentId, intervalMs });
+        log.info(`[Heartbeat] dynamically registered agent "${targetAgentId}" for wake`, {
+          agentId: targetAgentId,
+          intervalMs,
+        });
       }
       try {
         const res = await runOnce({

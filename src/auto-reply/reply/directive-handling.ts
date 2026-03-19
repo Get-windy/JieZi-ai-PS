@@ -9,10 +9,14 @@
 export { applyInlineDirectivesFastLane } from "../../../upstream/src/auto-reply/reply/directive-handling.fast-lane.js";
 export * from "../../../upstream/src/auto-reply/reply/directive-handling.impl.js";
 export type { InlineDirectives } from "../../../upstream/src/auto-reply/reply/directive-handling.parse.js";
-export { isDirectiveOnly, parseInlineDirectives } from "../../../upstream/src/auto-reply/reply/directive-handling.parse.js";
+export {
+  isDirectiveOnly,
+  parseInlineDirectives,
+} from "../../../upstream/src/auto-reply/reply/directive-handling.parse.js";
 export { persistInlineDirectives } from "../../../upstream/src/auto-reply/reply/directive-handling.persist.js";
 export { formatDirectiveAck } from "../../../upstream/src/auto-reply/reply/directive-handling.shared.js";
 
+import { DEFAULT_PROVIDER } from "../../../upstream/src/agents/defaults.js";
 // ============ 本地覆盖：使用本地增强的 resolveAgentEffectiveModelPrimary ============
 // 上游的 resolveDefaultModelForAgent 内部依赖上游 agent-scope.ts 的
 // resolveAgentEffectiveModelPrimary，不感知 modelAccounts.defaultAccountId。
@@ -24,37 +28,47 @@ import {
   resolveModelRefFromString,
   type ModelAliasIndex,
 } from "../../../upstream/src/agents/model-selection.js";
-import { DEFAULT_PROVIDER } from "../../../upstream/src/agents/defaults.js";
-import { resolveAgentEffectiveModelPrimary } from "../../agents/agent-scope.js";
-import { resolveAgentModelAccounts } from "../../agents/agent-scope.js";
 import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
+import { resolveAgentEffectiveModelPrimary } from "../../agents/agent-scope.js";
+import { resolveAgentModelAccounts } from "../../agents/agent-scope.js";
 
 const _dbgLog = createSubsystemLogger("model-resolve");
 
-export function resolveDefaultModel(params: { cfg: OpenClawConfig; agentId?: string }): {
+export function resolveDefaultModel(params: {
+  cfg: OpenClawConfig;
+  agentId?: string;
+  isSystemTask?: boolean;
+}): {
   defaultProvider: string;
   defaultModel: string;
   aliasIndex: ModelAliasIndex;
+  noModelConfigured?: boolean;
 } {
-  // Step 1: 用本地增强版取出有效模型字符串（含 modelAccounts.defaultAccountId 逻辑）
+  // Step 1: 用本地增强版取出有效模型字符串
+  // isSystemTask=true 时允许跨 agent fallback（心跳任务驱动）
+  // isSystemTask=false/undefined 时只用自身配置
   const agentModelOverride = params.agentId
-    ? resolveAgentEffectiveModelPrimary(params.cfg, params.agentId)
+    ? resolveAgentEffectiveModelPrimary(params.cfg, params.agentId, {
+        allowFallbackToDefault: params.isSystemTask === true,
+      })
     : undefined;
 
   // ── 调试：打印模型解析链路 ──────────────────────────────────────
-  const _dbgAccounts = params.agentId ? resolveAgentModelAccounts(params.cfg, params.agentId) : undefined;
+  const _dbgAccounts = params.agentId
+    ? resolveAgentModelAccounts(params.cfg, params.agentId)
+    : undefined;
   _dbgLog.info(
     `[DEBUG-MODEL] resolveDefaultModel agentId=${params.agentId ?? "(none)"} ` +
-    `effectivePrimary=${agentModelOverride ?? "(none)"} ` +
-    `modelAccounts.defaultAccountId=${_dbgAccounts?.defaultAccountId ?? "(none)"} ` +
-    `modelAccounts.accounts=${JSON.stringify(_dbgAccounts?.accounts ?? [])} ` +
-    `agents.defaults.model.primary=${(params.cfg.agents?.defaults?.model as { primary?: string } | undefined)?.primary ?? "(none)"}`
+      `effectivePrimary=${agentModelOverride ?? "(none)"} ` +
+      `modelAccounts.defaultAccountId=${_dbgAccounts?.defaultAccountId ?? "(none)"} ` +
+      `modelAccounts.accounts=${JSON.stringify(_dbgAccounts?.accounts ?? [])} ` +
+      `agents.defaults.model.primary=${(params.cfg.agents?.defaults?.model as { primary?: string } | undefined)?.primary ?? "(none)"}`,
   );
   // ─────────────────────────────────────────────────────────────────
 
   if (agentModelOverride) {
-    // Step 2: 先构建 aliasIndex（以全局默认 provider 为基准）
+    // Step 2: 先构建 aliasIndex
     const aliasIndex = buildModelAliasIndex({
       cfg: params.cfg,
       defaultProvider: DEFAULT_PROVIDER,
@@ -67,7 +81,7 @@ export function resolveDefaultModel(params: { cfg: OpenClawConfig; agentId?: str
     });
     if (resolved) {
       _dbgLog.info(
-        `[DEBUG-MODEL] resolved agentId=${params.agentId} → ${resolved.ref.provider}/${resolved.ref.model}`
+        `[DEBUG-MODEL] resolved agentId=${params.agentId} → ${resolved.ref.provider}/${resolved.ref.model}`,
       );
       return {
         defaultProvider: resolved.ref.provider,
@@ -75,9 +89,43 @@ export function resolveDefaultModel(params: { cfg: OpenClawConfig; agentId?: str
         aliasIndex,
       };
     }
+    // resolveModelRefFromString 无法解析时，尝试从 modelId 格式直接拆分
+    // 新系统的模型 ID 格式是 providerId/modelName，不在 models.providers 里
+    // 所以 resolveModelRefFromString 不能解析，但我们可以直接用
+    const slashIdx = agentModelOverride.indexOf("/");
+    if (slashIdx > 0) {
+      const directProvider = agentModelOverride.substring(0, slashIdx);
+      const directModel = agentModelOverride.substring(slashIdx + 1);
+      _dbgLog.info(
+        `[DEBUG-MODEL] resolveModelRefFromString FAILED, using direct split: ${directProvider}/${directModel}`,
+      );
+      return {
+        defaultProvider: directProvider,
+        defaultModel: directModel,
+        aliasIndex,
+      };
+    }
     _dbgLog.info(
-      `[DEBUG-MODEL] resolveModelRefFromString FAILED for raw="${agentModelOverride}", falling back to global default`
+      `[DEBUG-MODEL] resolveModelRefFromString FAILED for raw="${agentModelOverride}", and no slash found, falling back to global default`,
     );
+  }
+
+  // 非系统任务且 agent 未配置模型：返回 noModelConfigured=true，让上层提示用户
+  const agentHasNoModel =
+    params.agentId !== undefined && agentModelOverride === undefined && !params.isSystemTask;
+
+  if (agentHasNoModel) {
+    // 返回一个占位结构（防止类型错误），同时带上 noModelConfigured 标志
+    const aliasIndex = buildModelAliasIndex({ cfg: params.cfg, defaultProvider: DEFAULT_PROVIDER });
+    _dbgLog.warn(
+      `[DEBUG-MODEL] agentId=${params.agentId} has no model configured (isSystemTask=false)`,
+    );
+    return {
+      defaultProvider: DEFAULT_PROVIDER,
+      defaultModel: "(none)",
+      aliasIndex,
+      noModelConfigured: true,
+    };
   }
 
   // Fallback：无 agent 覆盖时使用上游全局默认（不传 agentId 避免上游走错误路径）
@@ -87,7 +135,7 @@ export function resolveDefaultModel(params: { cfg: OpenClawConfig; agentId?: str
   const defaultProvider = mainModel.provider;
   const defaultModel = mainModel.model;
   _dbgLog.info(
-    `[DEBUG-MODEL] fallback agentId=${params.agentId ?? "(none)"} → ${defaultProvider}/${defaultModel}`
+    `[DEBUG-MODEL] fallback agentId=${params.agentId ?? "(none)"} → ${defaultProvider}/${defaultModel}`,
   );
   const aliasIndex = buildModelAliasIndex({
     cfg: params.cfg,

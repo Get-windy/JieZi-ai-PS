@@ -1,7 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { resolveOpenClawAgentDir } from "../../../upstream/src/agents/agent-paths.js";
-import { resolveDefaultAgentId, resolveAgentDir } from "../../agents/agent-scope.js";
 import { resetModelCatalogCacheForTest } from "../../../upstream/src/agents/model-catalog.js";
 import { resolveDefaultModelForAgent } from "../../../upstream/src/agents/model-selection.js";
 import { loadConfig } from "../../../upstream/src/config/config.js";
@@ -16,6 +15,7 @@ import {
   validateModelsListParams,
 } from "../../../upstream/src/gateway/protocol/index.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import { resolveDefaultAgentId, resolveAgentDir } from "../../agents/agent-scope.js";
 
 // 模型管理配置文件路径 - UI 管理系统的主存储
 const MODEL_MANAGEMENT_FILE = path.join(STATE_DIR, "model-management.json");
@@ -524,6 +524,51 @@ const CACHE_TTL_MS = 60 * 60 * 1000; // 缓存有效期 1 小时
 export function invalidateModelManagementCache(): void {
   cachedStorage = null;
   cacheTimestamp = 0;
+}
+
+/**
+ * 同步获取当前缓存的 ModelManagementStorage（可为 null）。
+ * 不触发文件读取，只返回内存缓存，用于同步上下文中检测模型可用性。
+ */
+export function getModelManagementCacheSync(): ModelManagementStorage | null {
+  return cachedStorage;
+}
+
+/**
+ * 同步检测 modelId（格式：providerId/modelName）在新数据链中是否可用：
+ *   - 对应的 ModelConfig.enabled === true && !deprecated
+ *   - 关联的 ProviderAuth.enabled === true
+ * 若缓存未就绪则返回 undefined（调用方应 fallback 到旧逻辑）。
+ */
+export function isModelIdUsableSync(modelId: string): boolean | undefined {
+  const storage = cachedStorage;
+  if (!storage) {
+    return undefined; // 缓存未就绪，调用方自行决策
+  }
+  const slashIdx = modelId.indexOf("/");
+  if (slashIdx < 0) {
+    return undefined; // 格式不对，交旧逻辑处理
+  }
+  const providerId = modelId.substring(0, slashIdx);
+  const modelName = modelId.substring(slashIdx + 1);
+  const modelList = storage.models[providerId];
+  if (!modelList) {
+    return undefined; // 该 provider 在新系统里没有注册
+  }
+  const modelConfig = modelList.find((m) => m.modelName === modelName);
+  if (!modelConfig) {
+    return undefined; // 模型不在新系统里
+  }
+  if (!modelConfig.enabled || modelConfig.deprecated) {
+    return false; // 模型已禁用或已废弃
+  }
+  // 检查关联认证是否启用
+  const authList = storage.auths[providerId];
+  if (!authList) {
+    return false;
+  }
+  const auth = authList.find((a) => a.authId === modelConfig.authId);
+  return auth?.enabled === true;
 }
 
 // 加载模型管理配置（导出供其他模块使用）

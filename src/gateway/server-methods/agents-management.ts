@@ -21,30 +21,43 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { resolveDefaultAgentWorkspaceDir } from "../../../upstream/src/agents/workspace.js";
+import {
+  getChannelPlugin,
+  listChannelPlugins,
+} from "../../../upstream/src/channels/plugins/index.js";
+import {
+  listAgentEntries,
+  findAgentEntryIndex,
+} from "../../../upstream/src/commands/agents.config.js";
+import {
+  loadConfig,
+  readConfigFileSnapshot,
+  writeConfigFile,
+} from "../../../upstream/src/config/config.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/types.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import { chatHandlers } from "../../../upstream/src/gateway/server-methods/chat.js";
+import type {
+  GatewayRequestHandlers,
+  RespondFn,
+} from "../../../upstream/src/gateway/server-methods/types.js";
+import { requestHeartbeatNow } from "../../../upstream/src/infra/heartbeat-wake.js";
+import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
 import { addAgentToAllowList } from "../../agents/agent-config-manager.js";
 import {
   listAgentIds,
   resolveAgentModelAccounts,
   resolveAgentWorkspaceDir,
 } from "../../agents/agent-scope.js";
-import { resolveDefaultAgentWorkspaceDir } from "../../../upstream/src/agents/workspace.js";
-import { getChannelPlugin, listChannelPlugins } from "../../../upstream/src/channels/plugins/index.js";
-import { listAgentEntries, findAgentEntryIndex } from "../../../upstream/src/commands/agents.config.js";
-import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../../upstream/src/config/config.js";
 import type { AgentBinding, AgentConfig } from "../../config/types.agents.js";
 import type { AgentChannelBindings } from "../../config/types.channel-bindings.js";
-import type { OpenClawConfig } from "../../../upstream/src/config/types.js";
-import { requestHeartbeatNow } from "../../../upstream/src/infra/heartbeat-wake.js";
-import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
 import { organizationStorage } from "../../organization/storage.js";
 import { listBindings } from "../../routing/bindings.js";
 import { normalizeAgentId, DEFAULT_AGENT_ID } from "../../routing/session-key.js";
 import * as taskStorage from "../../tasks/storage.js";
 import type { Task } from "../../tasks/types.js";
 import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
-import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
-import { chatHandlers } from "../../../upstream/src/gateway/server-methods/chat.js";
-import type { GatewayRequestHandlers, RespondFn } from "../../../upstream/src/gateway/server-methods/types.js";
 
 /**
  * 获取某 agent 可管理/调度的下属 agent ID 集合（normalized）。
@@ -2007,7 +2020,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const updatedConfig: OpenClawConfig = {
+    const groupsRoot = path.join(workspace, "groups");
+    // groups 是本地特有配置项，不在 OpenClawConfig 类型中；先构建标准配置，再通过 Object.assign 混入 groups
+    const baseConfig: OpenClawConfig = {
       ...cfg,
       agents: {
         ...cfg.agents,
@@ -2016,20 +2031,23 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           workspace,
         },
       },
-      // 同步写入 groups.workspace.root：群组工作空间放在系统根目录的 groups/ 子目录下
+    };
+    const updatedConfig = Object.assign(baseConfig, {
       groups: {
-        ...cfg.groups,
+        ...((cfg as unknown as Record<string, unknown>)["groups"] as object | undefined),
         workspace: {
-          ...cfg.groups?.workspace,
-          root: path.join(workspace, "groups"),
+          ...((cfg as unknown as Record<string, Record<string, unknown>>)["groups"]?.[
+            "workspace"
+          ] as object | undefined),
+          root: groupsRoot,
         },
       },
-    };
+    }) as OpenClawConfig;
 
     try {
       await writeConfigFile(updatedConfig);
       // 同步更新内存中群组工作空间管理器
-      groupWorkspaceManager.setRootDir(path.join(workspace, "groups"));
+      groupWorkspaceManager.setRootDir(groupsRoot);
       respond(true, { success: true, workspace }, undefined);
     } catch (err) {
       respond(
@@ -2184,22 +2202,26 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         return agent;
       });
 
-      // 更新配置
-      const updatedConfig: OpenClawConfig = {
+      // 更新配置（groups 是本地特有配置项，不在 OpenClawConfig 类型中）
+      const baseConfig: OpenClawConfig = {
         ...cfg,
         agents: {
           ...cfg.agents,
           defaults: { ...cfg.agents?.defaults, workspace: newRoot },
           list: updatedAgents,
         },
+      };
+      const updatedConfig = Object.assign(baseConfig, {
         groups: {
-          ...cfg.groups,
+          ...((cfg as unknown as Record<string, unknown>)["groups"] as object | undefined),
           workspace: {
-            ...cfg.groups?.workspace,
+            ...((cfg as unknown as Record<string, Record<string, unknown>>)["groups"]?.[
+              "workspace"
+            ] as object | undefined),
             root: path.join(newRootResolved, "groups"),
           },
         },
-      };
+      }) as OpenClawConfig;
 
       await writeConfigFile(updatedConfig);
       // 同步内存中群组工作空间路径
@@ -2682,7 +2704,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             assignedBy: requesterId,
           },
         ],
-        status: "in-progress",
+        status: "todo",
         priority,
         organizationId: p?.organizationId ? String(p.organizationId) : undefined,
         teamId: p?.teamId ? String(p.teamId) : undefined,
@@ -2690,7 +2712,6 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         dueDate: p?.deadline ? new Date(p.deadline).getTime() || undefined : undefined,
         timeTracking: {
           timeSpent: 0,
-          startedAt: Date.now(),
           lastActivityAt: Date.now(),
         },
         metadata: {
@@ -2710,9 +2731,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     }
 
     // === 步骤 2：格式化任务消息并投递到目标 Agent ===
-    // 增强任务消息格式，使其更像"命令"而非"通知"
     const taskLines = [
-      `[TASK ASSIGNMENT - EXECUTE NOW]`,
+      `[NEW TASK QUEUED]`,
       `Task ID: ${taskId}`,
       `From: ${requesterId}`,
       `Priority: ${priority}`,
@@ -2723,7 +2743,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       p?.context ? `\nContext: ${JSON.stringify(p.context, null, 2)}` : null,
       ``,
       `Instructions:`,
-      `- This is a DIRECT COMMAND from your supervisor. You MUST execute this task immediately.`,
+      `- This task has been added to your queue with status "todo".`,
+      `- When you are ready to start this task, call task_update to set status to "in-progress" and record startedAt.`,
+      `- Execute tasks in order: urgent > high > medium > low, then by creation time (oldest first).`,
       `- When you complete this task, use the task_report_to_supervisor tool to report results back. Task ID: ${taskId}`,
       `- If you encounter any issues, report them immediately using agent_communicate or task_report_to_supervisor with status "blocked".`,
     ]
@@ -3270,6 +3292,102 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       },
       undefined,
     );
+
+    // === 步骤 3：任务完成后自动驱动队列中下一个可执行的 todo 任务 ===
+    // 真正的任务驱动工作系统：
+    //   1. 从 todo 队列里找到第一个「没有未完成阻塞依赖」的任务
+    //   2. 系统直接将该任务状态改为 in-progress（无需 agent 手动操作）
+    //   3. 唤醒 agent 并告知任务已就绪，直接执行
+    if (finalStatus === "done" || finalStatus === "cancelled") {
+      try {
+        const todoTasks = await taskStorage.listTasks({
+          assigneeId: reporterId,
+          status: ["todo"],
+        });
+        // listTasks 已按优先级+创建时间排序
+        // 从队列头部找第一个「所有阻塞任务均已完成/取消」的任务
+        let nextTask: Task | undefined;
+        for (const candidate of todoTasks) {
+          if (!candidate.blockedBy || candidate.blockedBy.length === 0) {
+            nextTask = candidate;
+            break;
+          }
+          // 检查阻塞依赖是否全部解除
+          let allBlockersCleared = true;
+          for (const blockerId of candidate.blockedBy) {
+            try {
+              const blocker = await taskStorage.getTask(blockerId);
+              if (blocker && blocker.status !== "done" && blocker.status !== "cancelled") {
+                allBlockersCleared = false;
+                break;
+              }
+            } catch {
+              // 获取阻塞任务失败，视为已解除
+            }
+          }
+          if (allBlockersCleared) {
+            nextTask = candidate;
+            break;
+          }
+        }
+
+        if (nextTask) {
+          // 系统自动将任务状态从 todo → in-progress，真正的任务驱动
+          const startedAt = Date.now();
+          await taskStorage.updateTask(nextTask.id, {
+            status: "in-progress",
+            timeTracking: {
+              ...nextTask.timeTracking,
+              startedAt,
+              lastActivityAt: startedAt,
+            },
+          });
+          await taskStorage.addWorklog({
+            id: `wl_${startedAt}_${Math.random().toString(36).slice(2, 9)}`,
+            taskId: nextTask.id,
+            agentId: reporterId,
+            action: "started",
+            details: `Auto-started by task-driven system after completing task ${taskId}`,
+            result: "success",
+            createdAt: startedAt,
+          });
+
+          const nextSessionKey = `agent:${normalizeAgentId(reporterId)}:main`;
+          const wakeReason = `cron:task-next:${nextTask.id}`;
+          const nextTaskPrompt = [
+            `[TASK STARTED - EXECUTE NOW]`,
+            `Task ID: ${nextTask.id}`,
+            `Priority: ${nextTask.priority}`,
+            `Title: ${nextTask.title}`,
+            nextTask.description ? `Description: ${nextTask.description}` : null,
+            ``,
+            `Status has been set to in-progress automatically.`,
+            `Previous task ${taskId} is now complete.`,
+            `Execute this task immediately. When done, call task_report_to_supervisor with Task ID: ${nextTask.id}`,
+          ]
+            .filter(Boolean)
+            .join("\n");
+          enqueueSystemEvent(nextTaskPrompt, {
+            sessionKey: nextSessionKey,
+            contextKey: wakeReason,
+          });
+          requestHeartbeatNow({
+            reason: wakeReason,
+            sessionKey: nextSessionKey,
+            agentId: reporterId,
+          });
+          console.log(
+            `[agent.task.report] ✓ Auto-started next task ${nextTask.id} (priority=${nextTask.priority}) for agent ${reporterId}`,
+          );
+        } else if (todoTasks.length > 0) {
+          console.log(
+            `[agent.task.report] Agent ${reporterId} has ${todoTasks.length} todo task(s) but all are blocked by unfinished dependencies.`,
+          );
+        }
+      } catch (nextErr) {
+        console.warn(`[agent.task.report] Failed to schedule next task: ${String(nextErr)}`);
+      }
+    }
   },
 
   /**

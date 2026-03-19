@@ -9,15 +9,15 @@
  * 3. 保持与上游代码的兼容性，方便未来合并
  */
 
-import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
-import { updateSessionStore, type SessionEntry } from "../../../upstream/src/config/sessions.js";
-import { resolveAgentModelAccounts, resolveDefaultAgentId } from "../agent-scope.js";
 import {
   ensureAuthProfileStore,
   isProfileInCooldown,
   resolveAuthProfileOrder,
 } from "../../../upstream/src/agents/auth-profiles.js";
 import { normalizeProviderId } from "../../../upstream/src/agents/model-selection.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { updateSessionStore, type SessionEntry } from "../../../upstream/src/config/sessions.js";
+import { resolveAgentModelAccounts } from "../agent-scope.js";
 
 function isProfileForProvider(params: {
   provider: string;
@@ -116,27 +116,15 @@ export async function resolveSessionAuthProfileOverride(params: {
   let current = sessionEntry.authProfileOverride?.trim();
 
   // ============ 本地增强：过滤 order 只保留 agent 绑定的模型账号 ============
-  // 优先级：
-  //   1. agent 自身配置了 modelAccounts.accounts → 只在这些账号中轮询
-  //   2. agent 未配置，但不是主控 agent → 回退到主控 agent 的 accounts（任务驱动场景）
-  //   3. 主控 agent 也未配置，或当前就是主控 agent → 使用全局 order
+  // agent 只能用自己绑定的模型，不允许跨 agent 使用其他 agent 的认证。
+  // 若 agent 未配置 modelAccounts.accounts，则使用全局 order（默认功能不受限）。
   let allowedProfiles: string[] | undefined;
-  const resolveAccountsForAgent = (targetAgentId: string): string[] | undefined => {
-    const mc = resolveAgentModelAccounts(cfg, targetAgentId);
-    if (!mc?.accounts || mc.accounts.length === 0) return undefined;
-    return mc.accounts
-      .map((modelId) => resolveModelAccountToAuthProfile({ modelId, store }))
-      .filter((profileId): profileId is string => profileId !== undefined);
-  };
   if (agentId) {
-    // 先尝试当前 agent 自己的配置
-    allowedProfiles = resolveAccountsForAgent(agentId);
-    // 若当前 agent 没有配置，且不是主控 agent，则回退到主控 agent 的配置
-    if (!allowedProfiles) {
-      const defaultAgentId = resolveDefaultAgentId(cfg);
-      if (agentId !== defaultAgentId) {
-        allowedProfiles = resolveAccountsForAgent(defaultAgentId);
-      }
+    const mc = resolveAgentModelAccounts(cfg, agentId);
+    if (mc?.accounts && mc.accounts.length > 0) {
+      allowedProfiles = mc.accounts
+        .map((modelId) => resolveModelAccountToAuthProfile({ modelId, store }))
+        .filter((profileId): profileId is string => profileId !== undefined);
     }
   }
   // 过滤 order 只保留允许的 profiles（如果有配置且非空）
@@ -147,7 +135,7 @@ export async function resolveSessionAuthProfileOverride(params: {
   // 避免 filteredOrder.length === 0 导致 authProfileId 返回 undefined。
   const _filteredByAccounts =
     allowedProfiles && allowedProfiles.length > 0
-      ? order.filter((profileId) => allowedProfiles!.includes(profileId))
+      ? order.filter((profileId) => allowedProfiles.includes(profileId))
       : order;
   const filteredOrder = _filteredByAccounts.length > 0 ? _filteredByAccounts : order;
   // ============ 本地增强结束 ============
