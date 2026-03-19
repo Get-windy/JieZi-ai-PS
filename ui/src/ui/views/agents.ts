@@ -2162,6 +2162,44 @@ function renderAgentOverview(params: {
 
       <div class="agent-model-select" style="margin-top: 20px;">
         <div class="label">${t("agents.overview.model_selection")}</div>
+            <span>Primary model${isDefault ? " (default)" : ""}</span>
+>>>>>>> upstream/main
+            <select
+              .value=${effectivePrimary ?? ""}
+              ?disabled=${!configForm || configLoading || configSaving}
+              @change=${(e: Event) =>
+                onModelChange(agent.id, (e.target as HTMLSelectElement).value || null)}
+            >
+              ${
+                isDefault
+                  ? nothing
+                  : html`
+                      <option value="">
+                        ${
+                          defaultPrimary ? `Inherit default (${defaultPrimary})` : "Inherit default"
+                        }
+                      </option>
+                    `
+              }
+>>>>>>> upstream/main
+              <option value="">
+                ${defaultPrimary ? t("agents.overview.inherit_default_with").replace("{model}", defaultPrimary) : t("agents.overview.inherit_default")}
+              </option>
+              ${
+                isDefault
+                  ? nothing
+                  : html`
+                      <option value="">
+                        ${
+                          defaultPrimary ? `Inherit default (${defaultPrimary})` : "Inherit default"
+                        }
+                      </option>
+                    `
+              }
+>>>>>>> upstream/main
+              ${buildModelOptions(configForm, effectivePrimary ?? undefined)}
+            </select>
+          </label>
         <div class="row" style="gap: 12px; flex-wrap: wrap;">
           <label class="field" style="min-width: 260px; flex: 1;">
             <span>${t("agents.overview.primary_model_label")}</span>
@@ -2177,12 +2215,7 @@ function renderAgentOverview(params: {
               ${buildModelOptions(configForm, effectivePrimary ?? undefined)}
             </select>
           </label>
-          <label class="field" style="min-width: 260px; flex: 1;">
-            <span>${t("agents.overview.fallbacks_label")}</span>
-            <input
-              .value=${fallbackText}
-              ?disabled=${!configForm || configLoading || configSaving}
-              placeholder=${t("agents.overview.fallbacks_placeholder")}
+=======
             <span>Primary model${isDefault ? " (default)" : ""}</span>
 >>>>>>> upstream/main
             <select
@@ -2206,6 +2239,7 @@ function renderAgentOverview(params: {
               <option value="">
                 ${defaultPrimary ? t("agents.overview.inherit_default_with").replace("{model}", defaultPrimary) : t("agents.overview.inherit_default")}
               </option>
+=======
               ${
                 isDefault
                   ? nothing
@@ -2217,7 +2251,16 @@ function renderAgentOverview(params: {
                       </option>
                     `
               }
-
+>>>>>>> upstream/main
+              ${buildModelOptions(configForm, effectivePrimary ?? undefined)}
+            </select>
+          </label>
+          <label class="field" style="min-width: 260px; flex: 1;">
+            <span>${t("agents.overview.fallbacks_label")}</span>
+            <input
+              .value=${fallbackText}
+              ?disabled=${!configForm || configLoading || configSaving}
+              placeholder=${t("agents.overview.fallbacks_placeholder")}
               @input=${(e: Event) =>
                 onModelFallbacksChange(
                   agent.id,
@@ -2226,42 +2269,6 @@ function renderAgentOverview(params: {
             />
           </label>
         </div>
-=======
-            <span>Primary model${isDefault ? " (default)" : ""}</span>
->>>>>>> upstream/main
-            <select
-              .value=${effectivePrimary ?? ""}
-              ?disabled=${!configForm || configLoading || configSaving}
-              @change=${(e: Event) =>
-                onModelChange(agent.id, (e.target as HTMLSelectElement).value || null)}
-            >
-              ${
-                isDefault
-                  ? nothing
-                  : html`
-                      <option value="">
-                        ${
-                          defaultPrimary ? `Inherit default (${defaultPrimary})` : "Inherit default"
-                        }
-                      </option>
-                    `
-              }
->>>>>>> upstream/main
-              <option value="">
-                ${defaultPrimary ? t("agents.overview.inherit_default_with").replace("{model}", defaultPrimary) : t("agents.overview.inherit_default")}
-              </option>
-=======
-              ${
-                isDefault
-                  ? nothing
-                  : html`
-                      <option value="">
-                        ${
-                          defaultPrimary ? `Inherit default (${defaultPrimary})` : "Inherit default"
-                        }
-                      </option>
-                    `
-              }
         <div class="row" style="justify-content: flex-end; gap: 8px;">
           <button
             class="btn btn--sm"
