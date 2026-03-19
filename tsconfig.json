@@ -23,7 +23,7 @@
       "@local/*": ["./src/*"],
       "@i18n/*": ["./i18n/*"],
       "openclaw/plugin-sdk": ["./src/plugin-sdk/index.ts"],
-      "openclaw/plugin-sdk/*": ["./src/plugin-sdk/*.ts"],
+      "openclaw/plugin-sdk/*": ["./src/plugin-sdk/*.ts", "./upstream/src/plugin-sdk/*.ts"],
       "openclaw/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"]
     }
   },

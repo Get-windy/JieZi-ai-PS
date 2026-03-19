@@ -125,10 +125,26 @@ export type WorkspaceBootstrapFile = {
   missing: boolean;
 };
 
-type WorkspaceOnboardingState = {
+type WorkspaceSetupState = {
   version: typeof WORKSPACE_STATE_VERSION;
   bootstrapSeededAt?: string;
+  setupCompletedAt?: string;
   onboardingCompletedAt?: string;
+};
+
+// Legacy name kept for internal use
+type WorkspaceOnboardingState = WorkspaceSetupState;
+
+export type ExtraBootstrapLoadDiagnosticCode =
+  | "invalid-bootstrap-filename"
+  | "missing"
+  | "security"
+  | "io";
+
+export type ExtraBootstrapLoadDiagnostic = {
+  path: string;
+  reason: ExtraBootstrapLoadDiagnosticCode;
+  detail: string;
 };
 
 /** Set of recognized bootstrap filenames for runtime validation */
@@ -173,26 +189,32 @@ function resolveWorkspaceStatePath(dir: string): string {
   return path.join(dir, WORKSPACE_STATE_DIRNAME, WORKSPACE_STATE_FILENAME);
 }
 
-function parseWorkspaceOnboardingState(raw: string): WorkspaceOnboardingState | null {
+function parseWorkspaceSetupState(raw: string): WorkspaceSetupState | null {
   try {
     const parsed = JSON.parse(raw) as {
       bootstrapSeededAt?: unknown;
       onboardingCompletedAt?: unknown;
+      setupCompletedAt?: unknown;
     };
     if (!parsed || typeof parsed !== "object") {
       return null;
     }
+    const legacyCompletedAt =
+      typeof parsed.onboardingCompletedAt === "string" ? parsed.onboardingCompletedAt : undefined;
     return {
       version: WORKSPACE_STATE_VERSION,
       bootstrapSeededAt:
         typeof parsed.bootstrapSeededAt === "string" ? parsed.bootstrapSeededAt : undefined,
-      onboardingCompletedAt:
-        typeof parsed.onboardingCompletedAt === "string" ? parsed.onboardingCompletedAt : undefined,
+      setupCompletedAt:
+        typeof parsed.setupCompletedAt === "string" ? parsed.setupCompletedAt : legacyCompletedAt,
+      onboardingCompletedAt: legacyCompletedAt,
     };
   } catch {
     return null;
   }
 }
+
+const parseWorkspaceOnboardingState = parseWorkspaceSetupState;
 
 async function readWorkspaceOnboardingState(statePath: string): Promise<WorkspaceOnboardingState> {
   try {
@@ -218,11 +240,14 @@ async function readWorkspaceOnboardingStateForDir(dir: string): Promise<Workspac
   return await readWorkspaceOnboardingState(statePath);
 }
 
-export async function isWorkspaceOnboardingCompleted(dir: string): Promise<boolean> {
+export async function isWorkspaceSetupCompleted(dir: string): Promise<boolean> {
   const state = await readWorkspaceOnboardingStateForDir(dir);
-  return (
-    typeof state.onboardingCompletedAt === "string" && state.onboardingCompletedAt.trim().length > 0
-  );
+  const completedAt = state.setupCompletedAt ?? state.onboardingCompletedAt;
+  return typeof completedAt === "string" && completedAt.trim().length > 0;
+}
+
+export async function isWorkspaceOnboardingCompleted(dir: string): Promise<boolean> {
+  return isWorkspaceSetupCompleted(dir);
 }
 
 async function writeWorkspaceOnboardingState(
@@ -510,8 +535,19 @@ export async function loadExtraBootstrapFiles(
   dir: string,
   extraPatterns: string[],
 ): Promise<WorkspaceBootstrapFile[]> {
+  const loaded = await loadExtraBootstrapFilesWithDiagnostics(dir, extraPatterns);
+  return loaded.files;
+}
+
+export async function loadExtraBootstrapFilesWithDiagnostics(
+  dir: string,
+  extraPatterns: string[],
+): Promise<{
+  files: WorkspaceBootstrapFile[];
+  diagnostics: ExtraBootstrapLoadDiagnostic[];
+}> {
   if (!extraPatterns.length) {
-    return [];
+    return { files: [], diagnostics: [] };
   }
   const resolvedDir = resolveUserPath(dir);
   let realResolvedDir = resolvedDir;
@@ -539,11 +575,18 @@ export async function loadExtraBootstrapFiles(
     }
   }
 
-  const result: WorkspaceBootstrapFile[] = [];
+  const files: WorkspaceBootstrapFile[] = [];
+  const diagnostics: ExtraBootstrapLoadDiagnostic[] = [];
   for (const relPath of resolvedPaths) {
     const filePath = path.resolve(resolvedDir, relPath);
-    // Guard against path traversal — resolved path must stay within workspace
-    if (!filePath.startsWith(resolvedDir + path.sep) && filePath !== resolvedDir) {
+    // Only load files whose basename is a recognized bootstrap filename
+    const baseName = path.basename(relPath);
+    if (!VALID_BOOTSTRAP_NAMES.has(baseName)) {
+      diagnostics.push({
+        path: filePath,
+        reason: "invalid-bootstrap-filename",
+        detail: `unsupported bootstrap basename: ${baseName}`,
+      });
       continue;
     }
     try {
@@ -553,23 +596,27 @@ export async function loadExtraBootstrapFiles(
         !realFilePath.startsWith(realResolvedDir + path.sep) &&
         realFilePath !== realResolvedDir
       ) {
-        continue;
-      }
-      // Only load files whose basename is a recognized bootstrap filename
-      const baseName = path.basename(relPath);
-      if (!VALID_BOOTSTRAP_NAMES.has(baseName)) {
+        diagnostics.push({
+          path: filePath,
+          reason: "security",
+          detail: `path traversal rejected: ${filePath}`,
+        });
         continue;
       }
       const content = await readFileWithCache(realFilePath);
-      result.push({
+      files.push({
         name: baseName as WorkspaceBootstrapFileName,
         path: filePath,
         content,
         missing: false,
       });
-    } catch {
-      // Silently skip missing extra files
+    } catch (error) {
+      diagnostics.push({
+        path: filePath,
+        reason: "io",
+        detail: error instanceof Error ? error.message : typeof error === "string" ? error : "io",
+      });
     }
   }
-  return result;
+  return { files, diagnostics };
 }

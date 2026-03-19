@@ -1,4 +1,7 @@
 import { resolveEnvApiKey } from "../../upstream/src/agents/model-auth.js";
+import { formatApiKeyPreview } from "../../upstream/src/commands/auth-choice.api-key.js";
+import { applyDefaultModelChoice } from "../../upstream/src/commands/auth-choice.default-model.js";
+import type { SecretInputMode } from "../../upstream/src/commands/onboard-types.js";
 import type { OpenClawConfig } from "../../upstream/src/config/types.js";
 import {
   isValidEnvSecretRefId,
@@ -15,10 +18,7 @@ import {
 } from "../../upstream/src/secrets/ref-contract.js";
 import { resolveSecretRefString } from "../../upstream/src/secrets/resolve.js";
 import type { WizardPrompter } from "../../upstream/src/wizard/prompts.js";
-import { formatApiKeyPreview } from "../../upstream/src/commands/auth-choice.api-key.js";
 import type { ApplyAuthChoiceParams } from "./auth-choice.apply.js";
-import { applyDefaultModelChoice } from "../../upstream/src/commands/auth-choice.default-model.js";
-import type { SecretInputMode } from "../../upstream/src/commands/onboard-types.js";
 
 const ENV_SOURCE_LABEL_RE = /(?:^|:\s)([A-Z][A-Z0-9_]*)$/;
 
@@ -32,7 +32,7 @@ export type SecretInputModePromptCopy = {
   refHint?: string;
 };
 
-export type SecretRefOnboardingPromptCopy = {
+export type SecretRefSetupPromptCopy = {
   sourceMessage?: string;
   envVarMessage?: string;
   envVarPlaceholder?: string;
@@ -42,6 +42,9 @@ export type SecretRefOnboardingPromptCopy = {
   envValidatedMessage?: (envVar: string) => string;
   providerValidatedMessage?: (provider: string, id: string, source: "file" | "exec") => string;
 };
+
+/** @deprecated Use SecretRefSetupPromptCopy */
+export type SecretRefOnboardingPromptCopy = SecretRefSetupPromptCopy;
 
 function formatErrorMessage(error: unknown): string {
   if (error instanceof Error && typeof error.message === "string" && error.message.trim()) {
@@ -93,12 +96,22 @@ function resolveRefFallbackInput(params: {
   };
 }
 
+export async function promptSecretRefForSetup(params: {
+  provider: string;
+  config: OpenClawConfig;
+  prompter: WizardPrompter;
+  preferredEnvVar?: string;
+  copy?: SecretRefSetupPromptCopy;
+}): Promise<{ ref: SecretRef; resolvedValue: string }> {
+  return promptSecretRefForOnboarding(params);
+}
+
 export async function promptSecretRefForOnboarding(params: {
   provider: string;
   config: OpenClawConfig;
   prompter: WizardPrompter;
   preferredEnvVar?: string;
-  copy?: SecretRefOnboardingPromptCopy;
+  copy?: SecretRefSetupPromptCopy;
 }): Promise<{ ref: SecretRef; resolvedValue: string }> {
   const defaultEnvVar =
     params.preferredEnvVar ?? resolveDefaultProviderEnvVar(params.provider) ?? "";

@@ -1,15 +1,22 @@
-import { resolveAgentModelFallbacksOverride } from "../../agents/agent-scope.js";
 import type { NormalizedUsage } from "../../../upstream/src/agents/usage.js";
+import type { FollowupRun } from "../../../upstream/src/auto-reply/reply/queue.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import { getChannelDock } from "../../../upstream/src/channels/dock.js";
-import type { ChannelId, ChannelThreadingToolContext } from "../../../upstream/src/channels/plugins/types.js";
-import { normalizeAnyChannelId, normalizeChannelId } from "../../channels/registry.js";
+import type {
+  ChannelId,
+  ChannelThreadingToolContext,
+} from "../../../upstream/src/channels/plugins/types.js";
 import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import { resolveAgentIdFromSessionKey } from "../../../upstream/src/config/sessions.js";
 import { isReasoningTagProvider } from "../../../upstream/src/utils/provider-utils.js";
-import { estimateUsageCost, formatTokenCount, formatUsd } from "../../../upstream/src/utils/usage-format.js";
+import {
+  estimateUsageCost,
+  formatTokenCount,
+  formatUsd,
+} from "../../../upstream/src/utils/usage-format.js";
+import { resolveAgentModelFallbacksOverride } from "../../agents/agent-scope.js";
+import { normalizeAnyChannelId, normalizeChannelId } from "../../channels/registry.js";
 import type { TemplateContext } from "../templating.js";
-import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
-import type { FollowupRun } from "../../../upstream/src/auto-reply/reply/queue.js";
 
 const BUN_FETCH_SOCKET_ERROR_RE = /socket connection was closed unexpectedly/i;
 
@@ -244,12 +251,36 @@ export function buildEmbeddedRunContexts(params: {
   };
 }
 
+export function buildEmbeddedRunExecutionParams(params: {
+  run: FollowupRun["run"];
+  sessionCtx: TemplateContext;
+  hasRepliedRef: { value: boolean } | undefined;
+  provider: string;
+  model: string;
+  runId: string;
+  allowTransientCooldownProbe?: boolean;
+}) {
+  const { authProfile, embeddedContext, senderContext } = buildEmbeddedRunContexts(params);
+  const runBaseParams = buildEmbeddedRunBaseParams({
+    run: params.run,
+    provider: params.provider,
+    model: params.model,
+    runId: params.runId,
+    authProfile,
+  });
+  return {
+    embeddedContext,
+    senderContext,
+    runBaseParams,
+  };
+}
+
 export function resolveProviderScopedAuthProfile(params: {
   provider: string;
   primaryProvider: string;
   authProfileId?: string;
-  authProfileIdSource?: "auto" | "user" | "smart-routing";
-}): { authProfileId?: string; authProfileIdSource?: "auto" | "user" | "smart-routing" } {
+  authProfileIdSource?: "auto" | "user";
+}): { authProfileId?: string; authProfileIdSource?: "auto" | "user" } {
   const authProfileId =
     params.provider === params.primaryProvider ? params.authProfileId : undefined;
   return {

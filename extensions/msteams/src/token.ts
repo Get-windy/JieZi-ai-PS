@@ -17,3 +17,7 @@ export function resolveMSTeamsCredentials(cfg?: MSTeamsConfig): MSTeamsCredentia
 
   return { appId, appPassword, tenantId };
 }
+
+export function hasConfiguredMSTeamsCredentials(cfg?: MSTeamsConfig): boolean {
+  return Boolean(resolveMSTeamsCredentials(cfg));
+}
