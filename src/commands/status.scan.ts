@@ -1,26 +1,26 @@
 import { resolveCommandSecretRefsViaGateway } from "../cli/command-secret-gateway.js";
 import { getStatusCommandSecretTargetIds } from "../cli/command-secret-targets.js";
-import { withProgress } from "../../upstream/src/cli/progress.js";
-import type { OpenClawConfig } from "../../upstream/src/config/config.js";
-import { readBestEffortConfig } from "../../upstream/src/config/config.js";
-import { buildGatewayConnectionDetails, callGateway } from "../../upstream/src/gateway/call.js";
-import { normalizeControlUiBasePath } from "../../upstream/src/gateway/control-ui-shared.js";
-import { probeGateway } from "../../upstream/src/gateway/probe.js";
-import { collectChannelStatusIssues } from "../../upstream/src/infra/channels-status-issues.js";
-import { resolveOsSummary } from "../../upstream/src/infra/os-summary.js";
-import { getTailnetHostname } from "../../upstream/src/infra/tailscale.js";
-import { getMemorySearchManager } from "../../upstream/src/memory/index.js";
-import type { MemoryProviderStatus } from "../../upstream/src/memory/types.js";
-import { runExec } from "../../upstream/src/process/exec.js";
-import type { RuntimeEnv } from "../../upstream/src/runtime.js";
+import { withProgress } from "../cli/progress.js";
+import type { OpenClawConfig } from "../config/config.js";
+import { readBestEffortConfig } from "../config/config.js";
+import { buildGatewayConnectionDetails, callGateway } from "../gateway/call.js";
+import { normalizeControlUiBasePath } from "../gateway/control-ui-shared.js";
+import { probeGateway } from "../gateway/probe.js";
+import { collectChannelStatusIssues } from "../infra/channels-status-issues.js";
+import { resolveOsSummary } from "../infra/os-summary.js";
+import { getTailnetHostname } from "../infra/tailscale.js";
+import { getMemorySearchManager } from "../memory/index.js";
+import type { MemoryProviderStatus } from "../memory/types.js";
+import { runExec } from "../process/exec.js";
+import type { RuntimeEnv } from "../runtime.js";
 import { buildChannelsTable } from "./status-all/channels.js";
 import { getAgentLocalStatuses } from "./status.agent-local.js";
 import {
   pickGatewaySelfPresence,
   resolveGatewayProbeAuthResolution,
-} from "../../upstream/src/commands/status.gateway-probe.js";
+} from "./status.gateway-probe.js";
 import { getStatusSummary } from "./status.summary.js";
-import { getUpdateCheckResult } from "../../upstream/src/commands/status.update.js";
+import { getUpdateCheckResult } from "./status.update.js";
 
 type MemoryStatusSnapshot = MemoryProviderStatus & {
   agentId: string;

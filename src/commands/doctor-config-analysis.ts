@@ -1,10 +1,10 @@
 import path from "node:path";
 import type { ZodIssue } from "zod";
-import type { OpenClawConfig } from "../../upstream/src/config/config.js";
-import { CONFIG_PATH } from "../../upstream/src/config/config.js";
+import type { OpenClawConfig } from "../config/config.js";
+import { CONFIG_PATH } from "../config/config.js";
 import { OpenClawSchema } from "../config/zod-schema.js";
-import { note } from "../../upstream/src/terminal/note.js";
-import { isRecord } from "../../upstream/src/utils.js";
+import { note } from "../terminal/note.js";
+import { isRecord } from "../utils.js";
 
 type UnrecognizedKeysIssue = ZodIssue & {
   code: "unrecognized_keys";

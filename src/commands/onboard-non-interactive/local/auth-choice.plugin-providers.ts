@@ -1,20 +1,20 @@
 import { resolveDefaultAgentId, resolveAgentWorkspaceDir } from "../../../agents/agent-scope.js";
-import type { ApiKeyCredential } from "../../../../upstream/src/agents/auth-profiles/types.js";
-import { resolveDefaultAgentWorkspaceDir } from "../../../../upstream/src/agents/workspace.js";
-import type { OpenClawConfig } from "../../../../upstream/src/config/config.js";
-import { enablePluginInConfig } from "../../../../upstream/src/plugins/enable.js";
+import type { ApiKeyCredential } from "../../../agents/auth-profiles/types.js";
+import { resolveDefaultAgentWorkspaceDir } from "../../../agents/workspace.js";
+import type { OpenClawConfig } from "../../../config/config.js";
+import { enablePluginInConfig } from "../../../plugins/enable.js";
 import {
   PROVIDER_PLUGIN_CHOICE_PREFIX,
   resolveProviderPluginChoice,
-} from "../../../../upstream/src/plugins/provider-wizard.js";
-import { resolvePluginProviders } from "../../../../upstream/src/plugins/providers.js";
+} from "../../../plugins/provider-wizard.js";
+import { resolvePluginProviders } from "../../../plugins/providers.js";
 import type {
   ProviderNonInteractiveApiKeyCredentialParams,
   ProviderResolveNonInteractiveApiKeyParams,
-} from "../../../../upstream/src/plugins/types.js";
-import type { RuntimeEnv } from "../../../../upstream/src/runtime.js";
+} from "../../../plugins/types.js";
+import type { RuntimeEnv } from "../../../runtime.js";
 import { resolvePreferredProviderForAuthChoice } from "../../auth-choice.preferred-provider.js";
-import type { OnboardOptions } from "../../../../upstream/src/commands/onboard-types.js";
+import type { OnboardOptions } from "../../onboard-types.js";
 
 function buildIsolatedProviderResolutionConfig(
   cfg: OpenClawConfig,

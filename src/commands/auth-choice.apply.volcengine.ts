@@ -1,11 +1,11 @@
-import { normalizeApiKeyInput, validateApiKeyInput } from "../../upstream/src/commands/auth-choice.api-key.js";
+import { normalizeApiKeyInput, validateApiKeyInput } from "./auth-choice.api-key.js";
 import {
   ensureApiKeyFromOptionEnvOrPrompt,
   normalizeSecretInputModeInput,
 } from "./auth-choice.apply-helpers.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
 import { applyPrimaryModel } from "./model-picker.js";
-import { applyAuthProfileConfig, setVolcengineApiKey } from "../../upstream/src/commands/onboard-auth.js";
+import { applyAuthProfileConfig, setVolcengineApiKey } from "./onboard-auth.js";
 
 /** Default model for Volcano Engine auth onboarding. */
 export const VOLCENGINE_DEFAULT_MODEL = "volcengine-plan/ark-code-latest";

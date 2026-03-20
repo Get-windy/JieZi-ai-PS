@@ -1,12 +1,12 @@
-import type { OpenClawConfig } from "../../../../upstream/src/config/config.js";
-import { resolveGatewayService } from "../../../../upstream/src/daemon/service.js";
+import type { OpenClawConfig } from "../../../config/config.js";
+import { resolveGatewayService } from "../../../daemon/service.js";
 import { isSystemdUserServiceAvailable } from "../../../daemon/systemd.js";
-import type { RuntimeEnv } from "../../../../upstream/src/runtime.js";
-import { buildGatewayInstallPlan, gatewayInstallErrorHint } from "../../../../upstream/src/commands/daemon-install-helpers.js";
-import { DEFAULT_GATEWAY_DAEMON_RUNTIME, isGatewayDaemonRuntime } from "../../../../upstream/src/commands/daemon-runtime.js";
-import { resolveGatewayInstallToken } from "../../../../upstream/src/commands/gateway-install-token.js";
-import type { OnboardOptions } from "../../../../upstream/src/commands/onboard-types.js";
-import { ensureSystemdUserLingerNonInteractive } from "../../../../upstream/src/commands/systemd-linger.js";
+import type { RuntimeEnv } from "../../../runtime.js";
+import { buildGatewayInstallPlan, gatewayInstallErrorHint } from "../../daemon-install-helpers.js";
+import { DEFAULT_GATEWAY_DAEMON_RUNTIME, isGatewayDaemonRuntime } from "../../daemon-runtime.js";
+import { resolveGatewayInstallToken } from "../../gateway-install-token.js";
+import type { OnboardOptions } from "../../onboard-types.js";
+import { ensureSystemdUserLingerNonInteractive } from "../../systemd-linger.js";
 
 export async function installGatewayDaemonNonInteractive(params: {
   nextConfig: OpenClawConfig;

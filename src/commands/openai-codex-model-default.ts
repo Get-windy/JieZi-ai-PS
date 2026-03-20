@@ -1,5 +1,5 @@
-import type { OpenClawConfig } from "../../upstream/src/config/config.js";
-import type { AgentModelListConfig } from "../../upstream/src/config/types.js";
+import type { OpenClawConfig } from "../config/config.js";
+import type { AgentModelListConfig } from "../config/types.js";
 
 export const OPENAI_CODEX_DEFAULT_MODEL = "openai-codex/gpt-5.4";
 

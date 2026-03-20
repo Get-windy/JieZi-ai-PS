@@ -1,9 +1,9 @@
-import { formatCliCommand } from "../../../upstream/src/cli/command-format.js";
-import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
-import { resolveGatewayPort, writeConfigFile } from "../../../upstream/src/config/config.js";
-import { logConfigUpdated } from "../../../upstream/src/config/logging.js";
-import type { RuntimeEnv } from "../../../upstream/src/runtime.js";
-import { DEFAULT_GATEWAY_DAEMON_RUNTIME } from "../../../upstream/src/commands/daemon-runtime.js";
+import { formatCliCommand } from "../../cli/command-format.js";
+import type { OpenClawConfig } from "../../config/config.js";
+import { resolveGatewayPort, writeConfigFile } from "../../config/config.js";
+import { logConfigUpdated } from "../../config/logging.js";
+import type { RuntimeEnv } from "../../runtime.js";
+import { DEFAULT_GATEWAY_DAEMON_RUNTIME } from "../daemon-runtime.js";
 import { applyOnboardingLocalWorkspaceConfig } from "../onboard-config.js";
 import {
   applyWizardMetadata,
@@ -11,17 +11,17 @@ import {
   ensureWorkspaceAndSessions,
   resolveControlUiLinks,
   waitForGatewayReachable,
-} from "../../../upstream/src/commands/onboard-helpers.js";
-import type { OnboardOptions } from "../../../upstream/src/commands/onboard-types.js";
-import { inferAuthChoiceFromFlags } from "../../../upstream/src/commands/onboard-non-interactive/local/auth-choice-inference.js";
-import { applyNonInteractiveGatewayConfig } from "../../../upstream/src/commands/onboard-non-interactive/local/gateway-config.js";
+} from "../onboard-helpers.js";
+import type { OnboardOptions } from "../onboard-types.js";
+import { inferAuthChoiceFromFlags } from "./local/auth-choice-inference.js";
+import { applyNonInteractiveGatewayConfig } from "./local/gateway-config.js";
 import {
   type GatewayHealthFailureDiagnostics,
   logNonInteractiveOnboardingFailure,
   logNonInteractiveOnboardingJson,
-} from "../../../upstream/src/commands/onboard-non-interactive/local/output.js";
-import { applyNonInteractiveSkillsConfig } from "../../../upstream/src/commands/onboard-non-interactive/local/skills-config.js";
-import { resolveNonInteractiveWorkspaceDir } from "../../../upstream/src/commands/onboard-non-interactive/local/workspace.js";
+} from "./local/output.js";
+import { applyNonInteractiveSkillsConfig } from "./local/skills-config.js";
+import { resolveNonInteractiveWorkspaceDir } from "./local/workspace.js";
 
 const INSTALL_DAEMON_HEALTH_DEADLINE_MS = 45_000;
 const ATTACH_EXISTING_GATEWAY_HEALTH_DEADLINE_MS = 15_000;

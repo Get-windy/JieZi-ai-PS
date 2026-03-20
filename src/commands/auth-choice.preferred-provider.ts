@@ -1,5 +1,5 @@
-import type { OpenClawConfig } from "../../upstream/src/config/config.js";
-import type { AuthChoice } from "../../upstream/src/commands/onboard-types.js";
+import type { OpenClawConfig } from "../config/config.js";
+import type { AuthChoice } from "./onboard-types.js";
 
 const PREFERRED_PROVIDER_BY_AUTH_CHOICE: Partial<Record<AuthChoice, string>> = {
   oauth: "anthropic",

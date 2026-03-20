@@ -15,35 +15,35 @@ import {
   listProfilesForProvider,
   loadAuthProfileStoreForRuntime,
   upsertAuthProfile,
-} from "../../../upstream/src/agents/auth-profiles.js";
-import type { AuthProfileCredential } from "../../../upstream/src/agents/auth-profiles/types.js";
-import { normalizeProviderId } from "../../../upstream/src/agents/model-selection.js";
-import { resolveDefaultAgentWorkspaceDir } from "../../../upstream/src/agents/workspace.js";
-import { formatCliCommand } from "../../../upstream/src/cli/command-format.js";
-import { parseDurationMs } from "../../../upstream/src/cli/parse-duration.js";
-import { logConfigUpdated } from "../../../upstream/src/config/logging.js";
-import { resolvePluginProviders } from "../../../upstream/src/plugins/providers.js";
-import type { ProviderAuthResult, ProviderPlugin } from "../../../upstream/src/plugins/types.js";
-import type { RuntimeEnv } from "../../../upstream/src/runtime.js";
-import { stylePromptHint, stylePromptMessage } from "../../../upstream/src/terminal/prompt-style.js";
-import { createClackPrompter } from "../../../upstream/src/wizard/clack-prompter.js";
-import { validateAnthropicSetupToken } from "../../../upstream/src/commands/auth-token.js";
-import { isRemoteEnvironment } from "../../../upstream/src/commands/oauth-env.js";
-import { createVpsAwareOAuthHandlers } from "../../../upstream/src/commands/oauth-flow.js";
-import { applyAuthProfileConfig, writeOAuthCredentials } from "../../../upstream/src/commands/onboard-auth.js";
-import { openUrl } from "../../../upstream/src/commands/onboard-helpers.js";
+} from "../../agents/auth-profiles.js";
+import type { AuthProfileCredential } from "../../agents/auth-profiles/types.js";
+import { normalizeProviderId } from "../../agents/model-selection.js";
+import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
+import { formatCliCommand } from "../../cli/command-format.js";
+import { parseDurationMs } from "../../cli/parse-duration.js";
+import { logConfigUpdated } from "../../config/logging.js";
+import { resolvePluginProviders } from "../../plugins/providers.js";
+import type { ProviderAuthResult, ProviderPlugin } from "../../plugins/types.js";
+import type { RuntimeEnv } from "../../runtime.js";
+import { stylePromptHint, stylePromptMessage } from "../../terminal/prompt-style.js";
+import { createClackPrompter } from "../../wizard/clack-prompter.js";
+import { validateAnthropicSetupToken } from "../auth-token.js";
+import { isRemoteEnvironment } from "../oauth-env.js";
+import { createVpsAwareOAuthHandlers } from "../oauth-flow.js";
+import { applyAuthProfileConfig, writeOAuthCredentials } from "../onboard-auth.js";
+import { openUrl } from "../onboard-helpers.js";
 import {
   applyOpenAICodexModelDefault,
   OPENAI_CODEX_DEFAULT_MODEL,
 } from "../openai-codex-model-default.js";
-import { loginOpenAICodexOAuth } from "../../../upstream/src/commands/openai-codex-oauth.js";
+import { loginOpenAICodexOAuth } from "../openai-codex-oauth.js";
 import {
   applyDefaultModel,
   mergeConfigPatch,
   pickAuthMethod,
   resolveProviderMatch,
-} from "../../../upstream/src/commands/provider-auth-helpers.js";
-import { loadValidConfigOrThrow, updateConfig } from "../../../upstream/src/commands/models/shared.js";
+} from "../provider-auth-helpers.js";
+import { loadValidConfigOrThrow, updateConfig } from "./shared.js";
 
 function guardCancel<T>(value: T | symbol): T {
   if (typeof value === "symbol" || isCancel(value)) {

@@ -1,16 +1,16 @@
-import type { OpenClawConfig } from "../../upstream/src/config/config.js";
-import type { SecretInput } from "../../upstream/src/config/types.secrets.js";
-import { isSecureWebSocketUrl } from "../../upstream/src/gateway/net.js";
-import type { GatewayBonjourBeacon } from "../../upstream/src/infra/bonjour-discovery.js";
-import { discoverGatewayBeacons } from "../../upstream/src/infra/bonjour-discovery.js";
-import { resolveWideAreaDiscoveryDomain } from "../../upstream/src/infra/widearea-dns.js";
-import type { WizardPrompter } from "../../upstream/src/wizard/prompts.js";
+import type { OpenClawConfig } from "../config/config.js";
+import type { SecretInput } from "../config/types.secrets.js";
+import { isSecureWebSocketUrl } from "../gateway/net.js";
+import type { GatewayBonjourBeacon } from "../infra/bonjour-discovery.js";
+import { discoverGatewayBeacons } from "../infra/bonjour-discovery.js";
+import { resolveWideAreaDiscoveryDomain } from "../infra/widearea-dns.js";
+import type { WizardPrompter } from "../wizard/prompts.js";
 import {
   promptSecretRefForOnboarding,
   resolveSecretInputModeForEnvSelection,
 } from "./auth-choice.apply-helpers.js";
-import { detectBinary } from "../../upstream/src/commands/onboard-helpers.js";
-import type { SecretInputMode } from "../../upstream/src/commands/onboard-types.js";
+import { detectBinary } from "./onboard-helpers.js";
+import type { SecretInputMode } from "./onboard-types.js";
 
 const DEFAULT_GATEWAY_URL = "ws://127.0.0.1:18789";
 

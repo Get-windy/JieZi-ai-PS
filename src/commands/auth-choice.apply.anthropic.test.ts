@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { applyAuthChoiceAnthropic } from "./auth-choice.apply.anthropic.js";
-import { ANTHROPIC_SETUP_TOKEN_PREFIX } from "../../upstream/src/commands/auth-token.js";
+import { ANTHROPIC_SETUP_TOKEN_PREFIX } from "./auth-token.js";
 import {
   createAuthTestLifecycle,
   createExitThrowingRuntime,
   createWizardPrompter,
   readAuthProfilesForAgent,
   setupAuthTestEnv,
-} from "../../upstream/src/commands/test-wizard-helpers.js";
+} from "./test-wizard-helpers.js";
 
 describe("applyAuthChoiceAnthropic", () => {
   const lifecycle = createAuthTestLifecycle([

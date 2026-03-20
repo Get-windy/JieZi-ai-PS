@@ -1,15 +1,15 @@
 import { deleteTelegramUpdateOffset } from "../../../extensions/telegram/src/update-offset-store.js";
-import { resolveChannelDefaultAccountId } from "../../../upstream/src/channels/plugins/helpers.js";
+import { resolveChannelDefaultAccountId } from "../../channels/plugins/helpers.js";
 import {
   getChannelPlugin,
   listChannelPlugins,
   normalizeChannelId,
-} from "../../../upstream/src/channels/plugins/index.js";
-import { type OpenClawConfig, writeConfigFile } from "../../../upstream/src/config/config.js";
+} from "../../channels/plugins/index.js";
+import { type OpenClawConfig, writeConfigFile } from "../../config/config.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../../routing/session-key.js";
-import { defaultRuntime, type RuntimeEnv } from "../../../upstream/src/runtime.js";
-import { createClackPrompter } from "../../../upstream/src/wizard/clack-prompter.js";
-import { type ChatChannel, channelLabel, requireValidConfig, shouldUseWizard } from "../../../upstream/src/commands/channels/shared.js";
+import { defaultRuntime, type RuntimeEnv } from "../../runtime.js";
+import { createClackPrompter } from "../../wizard/clack-prompter.js";
+import { type ChatChannel, channelLabel, requireValidConfig, shouldUseWizard } from "./shared.js";
 
 export type ChannelsRemoveOptions = {
   channel?: string;

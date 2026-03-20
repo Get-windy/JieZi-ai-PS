@@ -1,4 +1,4 @@
-import { normalizeApiKeyInput, validateApiKeyInput } from "../../upstream/src/commands/auth-choice.api-key.js";
+import { normalizeApiKeyInput, validateApiKeyInput } from "./auth-choice.api-key.js";
 import {
   createAuthChoiceDefaultModelApplierForMutableState,
   ensureApiKeyFromOptionEnvOrPrompt,
@@ -13,7 +13,7 @@ import {
   applyMinimaxApiProviderConfig,
   applyMinimaxApiProviderConfigCn,
   setMinimaxApiKey,
-} from "../../upstream/src/commands/onboard-auth.js";
+} from "./onboard-auth.js";
 
 export async function applyAuthChoiceMiniMax(
   params: ApplyAuthChoiceParams,

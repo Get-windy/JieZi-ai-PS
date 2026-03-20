@@ -1,5 +1,5 @@
-import { upsertAuthProfile } from "../../upstream/src/agents/auth-profiles.js";
-import { normalizeApiKeyInput, validateApiKeyInput } from "../../upstream/src/commands/auth-choice.api-key.js";
+import { upsertAuthProfile } from "../agents/auth-profiles.js";
+import { normalizeApiKeyInput, validateApiKeyInput } from "./auth-choice.api-key.js";
 import {
   normalizeSecretInputModeInput,
   ensureApiKeyFromOptionEnvOrPrompt,
@@ -7,9 +7,9 @@ import {
   resolveSecretInputModeForEnvSelection,
 } from "./auth-choice.apply-helpers.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
-import { buildTokenProfileId, validateAnthropicSetupToken } from "../../upstream/src/commands/auth-token.js";
-import { applyAgentDefaultModelPrimary } from "../../upstream/src/commands/onboard-auth.config-shared.js";
-import { applyAuthProfileConfig, setAnthropicApiKey } from "../../upstream/src/commands/onboard-auth.js";
+import { buildTokenProfileId, validateAnthropicSetupToken } from "./auth-token.js";
+import { applyAgentDefaultModelPrimary } from "./onboard-auth.config-shared.js";
+import { applyAuthProfileConfig, setAnthropicApiKey } from "./onboard-auth.js";
 
 const DEFAULT_ANTHROPIC_MODEL = "anthropic/claude-sonnet-4-6";
 

@@ -1,7 +1,7 @@
-import { toAgentModelListLike } from "../../upstream/src/config/model-input.js";
-import { githubCopilotLoginCommand } from "../../upstream/src/providers/github-copilot-auth.js";
+import { toAgentModelListLike } from "../config/model-input.js";
+import { githubCopilotLoginCommand } from "../providers/github-copilot-auth.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
-import { applyAuthProfileConfig } from "../../upstream/src/commands/onboard-auth.js";
+import { applyAuthProfileConfig } from "./onboard-auth.js";
 
 export async function applyAuthChoiceGitHubCopilot(
   params: ApplyAuthChoiceParams,

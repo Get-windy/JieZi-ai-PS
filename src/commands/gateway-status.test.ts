@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { GatewayProbeResult } from "../../upstream/src/gateway/probe.js";
-import type { RuntimeEnv } from "../../upstream/src/runtime.js";
-import { withEnvAsync } from "../../upstream/src/test-utils/env.js";
+import type { GatewayProbeResult } from "../gateway/probe.js";
+import type { RuntimeEnv } from "../runtime.js";
+import { withEnvAsync } from "../test-utils/env.js";
 
 const readBestEffortConfig = vi.fn(async () => ({
   gateway: {
@@ -137,7 +137,7 @@ vi.mock("../infra/ssh-config.js", () => ({
   resolveSshConfig,
 }));
 
-vi.mock("../../upstream/src/gateway/probe.js", () => ({
+vi.mock("../gateway/probe.js", () => ({
   probeGateway,
 }));
 

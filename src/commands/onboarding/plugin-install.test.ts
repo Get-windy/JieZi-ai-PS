@@ -45,7 +45,7 @@ vi.mock("../../plugins/bundled-sources.js", () => ({
   resolveBundledPluginSources: (...args: unknown[]) => resolveBundledPluginSources(...args),
 }));
 
-vi.mock("../../../upstream/src/plugins/loader.js", () => ({
+vi.mock("../../plugins/loader.js", () => ({
   loadOpenClawPlugins: vi.fn(),
 }));
 
@@ -55,10 +55,10 @@ vi.mock("../../plugins/discovery.js", () => ({
 }));
 
 import fs from "node:fs";
-import type { ChannelPluginCatalogEntry } from "../../../upstream/src/channels/plugins/catalog.js";
-import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
-import { loadOpenClawPlugins } from "../../../upstream/src/plugins/loader.js";
-import type { WizardPrompter } from "../../../upstream/src/wizard/prompts.js";
+import type { ChannelPluginCatalogEntry } from "../../channels/plugins/catalog.js";
+import type { OpenClawConfig } from "../../config/config.js";
+import { loadOpenClawPlugins } from "../../plugins/loader.js";
+import type { WizardPrompter } from "../../wizard/prompts.js";
 import { makePrompter, makeRuntime } from "./__tests__/test-utils.js";
 import {
   ensureOnboardingPluginInstalled,

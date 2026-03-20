@@ -1,6 +1,6 @@
 import type { Mock } from "vitest";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { captureEnv } from "../../upstream/src/test-utils/env.js";
+import { captureEnv } from "../test-utils/env.js";
 
 let envSnapshot: ReturnType<typeof captureEnv>;
 
@@ -379,7 +379,7 @@ vi.mock("../security/audit.js", () => ({
   runSecurityAudit: mocks.runSecurityAudit,
 }));
 
-import { statusCommand } from "../../upstream/src/commands/status.js";
+import { statusCommand } from "./status.js";
 
 const runtime = {
   log: vi.fn(),

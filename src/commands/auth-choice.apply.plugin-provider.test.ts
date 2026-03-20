@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ProviderPlugin } from "../../upstream/src/plugins/types.js";
-import type { ProviderAuthMethod } from "../../upstream/src/plugins/types.js";
+import type { ProviderPlugin } from "../plugins/types.js";
+import type { ProviderAuthMethod } from "../plugins/types.js";
 import type { ApplyAuthChoiceParams } from "./auth-choice.apply.js";
 import {
   applyAuthChoiceLoadedPluginProvider,

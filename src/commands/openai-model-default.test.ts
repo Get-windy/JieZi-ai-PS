@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../upstream/src/config/config.js";
-import type { WizardPrompter } from "../../upstream/src/wizard/prompts.js";
-import { applyDefaultModelChoice } from "../../upstream/src/commands/auth-choice.default-model.js";
+import type { OpenClawConfig } from "../config/config.js";
+import type { WizardPrompter } from "../wizard/prompts.js";
+import { applyDefaultModelChoice } from "./auth-choice.default-model.js";
 import {
   applyGoogleGeminiModelDefault,
   GOOGLE_GEMINI_DEFAULT_MODEL,
-} from "../../upstream/src/commands/google-gemini-model-default.js";
+} from "./google-gemini-model-default.js";
 import {
   applyOpenAICodexModelDefault,
   OPENAI_CODEX_DEFAULT_MODEL,
@@ -14,11 +14,11 @@ import {
   applyOpenAIConfig,
   applyOpenAIProviderConfig,
   OPENAI_DEFAULT_MODEL,
-} from "../../upstream/src/commands/openai-model-default.js";
+} from "./openai-model-default.js";
 import {
   applyOpencodeZenModelDefault,
   OPENCODE_ZEN_DEFAULT_MODEL,
-} from "../../upstream/src/commands/opencode-zen-model-default.js";
+} from "./opencode-zen-model-default.js";
 
 function makePrompter(): WizardPrompter {
   return {

@@ -1,29 +1,29 @@
-import { resolveOpenClawAgentDir } from "../../upstream/src/agents/agent-paths.js";
+import { resolveOpenClawAgentDir } from "../agents/agent-paths.js";
 import {
   resolveDefaultAgentId,
   resolveAgentDir,
   resolveAgentWorkspaceDir,
 } from "../agents/agent-scope.js";
-import { upsertAuthProfile } from "../../upstream/src/agents/auth-profiles.js";
-import { resolveDefaultAgentWorkspaceDir } from "../../upstream/src/agents/workspace.js";
-import { enablePluginInConfig } from "../../upstream/src/plugins/enable.js";
+import { upsertAuthProfile } from "../agents/auth-profiles.js";
+import { resolveDefaultAgentWorkspaceDir } from "../agents/workspace.js";
+import { enablePluginInConfig } from "../plugins/enable.js";
 import {
   resolveProviderPluginChoice,
   runProviderModelSelectedHook,
-} from "../../upstream/src/plugins/provider-wizard.js";
-import { resolvePluginProviders } from "../../upstream/src/plugins/providers.js";
-import type { ProviderAuthMethod } from "../../upstream/src/plugins/types.js";
+} from "../plugins/provider-wizard.js";
+import { resolvePluginProviders } from "../plugins/providers.js";
+import type { ProviderAuthMethod } from "../plugins/types.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
-import { isRemoteEnvironment } from "../../upstream/src/commands/oauth-env.js";
-import { createVpsAwareOAuthHandlers } from "../../upstream/src/commands/oauth-flow.js";
-import { applyAuthProfileConfig } from "../../upstream/src/commands/onboard-auth.js";
-import { openUrl } from "../../upstream/src/commands/onboard-helpers.js";
+import { isRemoteEnvironment } from "./oauth-env.js";
+import { createVpsAwareOAuthHandlers } from "./oauth-flow.js";
+import { applyAuthProfileConfig } from "./onboard-auth.js";
+import { openUrl } from "./onboard-helpers.js";
 import {
   applyDefaultModel,
   mergeConfigPatch,
   pickAuthMethod,
   resolveProviderMatch,
-} from "../../upstream/src/commands/provider-auth-helpers.js";
+} from "./provider-auth-helpers.js";
 
 export type PluginProviderAuthChoiceOptions = {
   authChoice: string;

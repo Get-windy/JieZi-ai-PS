@@ -1,14 +1,14 @@
-import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import type { OpenClawConfig } from "../config/config.js";
 import {
   DEFAULT_SECRET_PROVIDER_ALIAS,
   type SecretInput,
   type SecretRef,
   hasConfiguredSecretInput,
   normalizeSecretInputString,
-} from "../../upstream/src/config/types.secrets.js";
-import type { RuntimeEnv } from "../../upstream/src/runtime.js";
-import type { WizardPrompter } from "../../upstream/src/wizard/prompts.js";
-import type { SecretInputMode } from "../../upstream/src/commands/onboard-types.js";
+} from "../config/types.secrets.js";
+import type { RuntimeEnv } from "../runtime.js";
+import type { WizardPrompter } from "../wizard/prompts.js";
+import type { SecretInputMode } from "./onboard-types.js";
 
 export type SearchProvider = "brave" | "gemini" | "grok" | "kimi" | "perplexity";
 

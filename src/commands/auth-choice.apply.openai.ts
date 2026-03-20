@@ -1,24 +1,24 @@
-import { normalizeApiKeyInput, validateApiKeyInput } from "../../upstream/src/commands/auth-choice.api-key.js";
+import { normalizeApiKeyInput, validateApiKeyInput } from "./auth-choice.api-key.js";
 import {
   createAuthChoiceAgentModelNoter,
   ensureApiKeyFromOptionEnvOrPrompt,
   normalizeSecretInputModeInput,
 } from "./auth-choice.apply-helpers.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
-import { applyDefaultModelChoice } from "../../upstream/src/commands/auth-choice.default-model.js";
-import { isRemoteEnvironment } from "../../upstream/src/commands/oauth-env.js";
-import { applyAuthProfileConfig, setOpenaiApiKey, writeOAuthCredentials } from "../../upstream/src/commands/onboard-auth.js";
-import { openUrl } from "../../upstream/src/commands/onboard-helpers.js";
+import { applyDefaultModelChoice } from "./auth-choice.default-model.js";
+import { isRemoteEnvironment } from "./oauth-env.js";
+import { applyAuthProfileConfig, setOpenaiApiKey, writeOAuthCredentials } from "./onboard-auth.js";
+import { openUrl } from "./onboard-helpers.js";
 import {
   applyOpenAICodexModelDefault,
   OPENAI_CODEX_DEFAULT_MODEL,
 } from "./openai-codex-model-default.js";
-import { loginOpenAICodexOAuth } from "../../upstream/src/commands/openai-codex-oauth.js";
+import { loginOpenAICodexOAuth } from "./openai-codex-oauth.js";
 import {
   applyOpenAIConfig,
   applyOpenAIProviderConfig,
   OPENAI_DEFAULT_MODEL,
-} from "../../upstream/src/commands/openai-model-default.js";
+} from "./openai-model-default.js";
 
 export async function applyAuthChoiceOpenAI(
   params: ApplyAuthChoiceParams,

@@ -1,24 +1,24 @@
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
-import { resolveChannelDefaultAccountId } from "../../upstream/src/channels/plugins/helpers.js";
-import { getChannelPlugin, listChannelPlugins } from "../../upstream/src/channels/plugins/index.js";
-import type { ChannelAccountSnapshot } from "../../upstream/src/channels/plugins/types.js";
-import { withProgress } from "../../upstream/src/cli/progress.js";
-import type { OpenClawConfig } from "../../upstream/src/config/config.js";
-import { loadConfig, readBestEffortConfig } from "../../upstream/src/config/config.js";
-import { loadSessionStore, resolveStorePath } from "../../upstream/src/config/sessions.js";
-import { buildGatewayConnectionDetails, callGateway } from "../../upstream/src/gateway/call.js";
-import { info } from "../../upstream/src/globals.js";
-import { isTruthyEnvValue } from "../../upstream/src/infra/env.js";
-import { formatErrorMessage } from "../../upstream/src/infra/errors.js";
+import { resolveChannelDefaultAccountId } from "../channels/plugins/helpers.js";
+import { getChannelPlugin, listChannelPlugins } from "../channels/plugins/index.js";
+import type { ChannelAccountSnapshot } from "../channels/plugins/types.js";
+import { withProgress } from "../cli/progress.js";
+import type { OpenClawConfig } from "../config/config.js";
+import { loadConfig, readBestEffortConfig } from "../config/config.js";
+import { loadSessionStore, resolveStorePath } from "../config/sessions.js";
+import { buildGatewayConnectionDetails, callGateway } from "../gateway/call.js";
+import { info } from "../globals.js";
+import { isTruthyEnvValue } from "../infra/env.js";
+import { formatErrorMessage } from "../infra/errors.js";
 import {
   type HeartbeatSummary,
   resolveHeartbeatSummaryForAgent,
 } from "../infra/heartbeat-runner.js";
 import { buildChannelAccountBindings, resolvePreferredAccountId } from "../routing/bindings.js";
 import { normalizeAgentId } from "../routing/session-key.js";
-import type { RuntimeEnv } from "../../upstream/src/runtime.js";
-import { styleHealthChannelLine } from "../../upstream/src/terminal/health-style.js";
-import { isRich } from "../../upstream/src/terminal/theme.js";
+import type { RuntimeEnv } from "../runtime.js";
+import { styleHealthChannelLine } from "../terminal/health-style.js";
+import { isRich } from "../terminal/theme.js";
 
 export type ChannelAccountHealthSummary = {
   accountId: string;

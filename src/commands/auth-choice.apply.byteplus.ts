@@ -1,11 +1,11 @@
-import { normalizeApiKeyInput, validateApiKeyInput } from "../../upstream/src/commands/auth-choice.api-key.js";
+import { normalizeApiKeyInput, validateApiKeyInput } from "./auth-choice.api-key.js";
 import {
   ensureApiKeyFromOptionEnvOrPrompt,
   normalizeSecretInputModeInput,
 } from "./auth-choice.apply-helpers.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
 import { applyPrimaryModel } from "./model-picker.js";
-import { applyAuthProfileConfig, setByteplusApiKey } from "../../upstream/src/commands/onboard-auth.js";
+import { applyAuthProfileConfig, setByteplusApiKey } from "./onboard-auth.js";
 
 /** Default model for BytePlus auth onboarding. */
 export const BYTEPLUS_DEFAULT_MODEL = "byteplus-plan/ark-code-latest";

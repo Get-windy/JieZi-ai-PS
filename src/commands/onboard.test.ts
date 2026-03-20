@@ -1,6 +1,6 @@
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RuntimeEnv } from "../../upstream/src/runtime.js";
+import type { RuntimeEnv } from "../runtime.js";
 
 const mocks = vi.hoisted(() => ({
   runInteractiveOnboarding: vi.fn(async () => {}),

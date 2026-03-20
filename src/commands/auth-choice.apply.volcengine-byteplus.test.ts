@@ -7,7 +7,7 @@ import {
   createWizardPrompter,
   readAuthProfilesForAgent,
   setupAuthTestEnv,
-} from "../../upstream/src/commands/test-wizard-helpers.js";
+} from "./test-wizard-helpers.js";
 
 describe("volcengine/byteplus auth choice", () => {
   const lifecycle = createAuthTestLifecycle([

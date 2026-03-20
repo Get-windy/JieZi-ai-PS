@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../upstream/src/config/config.js";
-import type { RuntimeEnv } from "../../upstream/src/runtime.js";
-import type { WizardPrompter } from "../../upstream/src/wizard/prompts.js";
+import type { OpenClawConfig } from "../config/config.js";
+import type { RuntimeEnv } from "../runtime.js";
+import type { WizardPrompter } from "../wizard/prompts.js";
 import { SEARCH_PROVIDER_OPTIONS, setupSearch } from "./onboard-search.js";
 
 const runtime: RuntimeEnv = {

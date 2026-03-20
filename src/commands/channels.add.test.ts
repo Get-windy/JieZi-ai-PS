@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { setDefaultChannelPluginRegistryForTests } from "./channel-test-helpers.js";
-import { configMocks, offsetMocks } from "../../upstream/src/commands/channels.mock-harness.js";
-import { baseConfigSnapshot, createTestRuntime } from "../../upstream/src/commands/test-runtime-config-helpers.js";
+import { configMocks, offsetMocks } from "./channels.mock-harness.js";
+import { baseConfigSnapshot, createTestRuntime } from "./test-runtime-config-helpers.js";
 
 const runtime = createTestRuntime();
 let channelsAddCommand: typeof import("./channels.js").channelsAddCommand;

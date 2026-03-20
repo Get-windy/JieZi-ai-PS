@@ -1,6 +1,6 @@
-import { getChannelPlugin } from "../../../upstream/src/channels/plugins/index.js";
-import type { ChannelId, ChannelSetupInput } from "../../../upstream/src/channels/plugins/types.js";
-import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { getChannelPlugin } from "../../channels/plugins/index.js";
+import type { ChannelId, ChannelSetupInput } from "../../channels/plugins/types.js";
+import type { OpenClawConfig } from "../../config/config.js";
 import { normalizeAccountId } from "../../routing/session-key.js";
 
 type ChatChannel = ChannelId;

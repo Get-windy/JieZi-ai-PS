@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyAuthChoiceGoogleGeminiCli } from "./auth-choice.apply.google-gemini-cli.js";
 import type { ApplyAuthChoiceParams } from "./auth-choice.apply.js";
 import { applyAuthChoicePluginProvider } from "./auth-choice.apply.plugin-provider.js";
-import { createExitThrowingRuntime, createWizardPrompter } from "../../upstream/src/commands/test-wizard-helpers.js";
+import { createExitThrowingRuntime, createWizardPrompter } from "./test-wizard-helpers.js";
 
 vi.mock("./auth-choice.apply.plugin-provider.js", () => ({
   applyAuthChoicePluginProvider: vi.fn(),

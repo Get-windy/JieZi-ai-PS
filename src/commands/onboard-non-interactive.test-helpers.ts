@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import type { RuntimeEnv } from "../../upstream/src/runtime.js";
+import type { RuntimeEnv } from "../runtime.js";
 
 type RuntimeLike = Pick<RuntimeEnv, "log" | "error" | "exit">;
 
