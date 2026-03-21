@@ -146,6 +146,8 @@ export type SmartRoutingResult = {
   model?: string;
   /** 选择原因 */
   reason: string;
+  /** 排序后的 fallback 候选账号ID（排除已选中的）—— 用于当主模型超时/失败时自动 fallback */
+  fallbackAccountIds?: string[];
 };
 
 /**
@@ -224,11 +226,25 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
     if (pinnedProfile && modelAccountsConfig.accounts.includes(sessionEntry.authProfileOverride)) {
       // 账号仍然有效，继续使用
       const parsed = parseProviderModelFromAccountId(sessionEntry.authProfileOverride);
+      // 即使 session 固定，也要构建 fallback 列表，使超时时能切换到其他备用模型
+      // 否则 hasDynamicFallbacks=false，超时后直接 surface_error 而非尝试其他模型
+      const pinnedProfileId = sessionEntry.authProfileOverride;
+      const pinnedFallbacks: string[] = [];
+      for (const accountId of modelAccountsConfig.accounts) {
+        if (accountId === pinnedProfileId) {
+          continue;
+        }
+        const fallbackParsed = parseProviderModelFromAccountId(accountId);
+        if (fallbackParsed) {
+          pinnedFallbacks.push(`${fallbackParsed.provider}/${fallbackParsed.model}`);
+        }
+      }
       return {
-        authProfileId: sessionEntry.authProfileOverride,
+        authProfileId: pinnedProfileId,
         provider: parsed?.provider,
         model: parsed?.model,
         reason: "Session pinned (still valid)",
+        fallbackAccountIds: pinnedFallbacks.length > 0 ? pinnedFallbacks : undefined,
       };
     }
   }
@@ -278,6 +294,77 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
       outputPrice: 0.03,
       avgResponseTime: 3,
     };
+
+    // 根据模型名称推断模型特性（补充 benchmark 数据未覆盖的属性）
+    const lowerModelName = modelNameForLookup.toLowerCase();
+
+    // 推断专业领域
+    const inferredSpecializations: ModelSpecialization[] = [];
+    if (lowerModelName.includes("coder") || lowerModelName.includes("code")) {
+      inferredSpecializations.push("coding");
+    }
+    if (
+      lowerModelName.includes("math") ||
+      lowerModelName.includes("reason") ||
+      lowerModelName.includes("r1")
+    ) {
+      inferredSpecializations.push("reasoning");
+    }
+    if (
+      lowerModelName.includes("vision") ||
+      lowerModelName.includes("v") ||
+      lowerModelName.includes("multimodal")
+    ) {
+      inferredSpecializations.push("multimodal");
+      baseInfo.supportsVision = true;
+    }
+    if (lowerModelName.includes("creative") || lowerModelName.includes("claude")) {
+      inferredSpecializations.push("creative");
+    }
+    if (inferredSpecializations.length === 0) {
+      inferredSpecializations.push("general");
+    }
+    baseInfo.specializations = inferredSpecializations;
+
+    // 推断上下文窗口大小
+    if (lowerModelName.includes("128k")) {
+      baseInfo.contextWindow = 128000;
+    } else if (lowerModelName.includes("32k")) {
+      baseInfo.contextWindow = 32000;
+    } else if (lowerModelName.includes("max") || lowerModelName.includes("opus")) {
+      baseInfo.contextWindow = 200000;
+    } else if (lowerModelName.includes("mini") || lowerModelName.includes("haiku")) {
+      baseInfo.contextWindow = 128000;
+    }
+
+    // 推断价格档次（基于模型名称）
+    if (
+      lowerModelName.includes("mini") ||
+      lowerModelName.includes("haiku") ||
+      lowerModelName.includes("flash")
+    ) {
+      baseInfo.inputPrice = 0.0001;
+      baseInfo.outputPrice = 0.0004;
+      baseInfo.avgResponseTime = 1.5;
+    } else if (
+      lowerModelName.includes("max") ||
+      lowerModelName.includes("opus") ||
+      lowerModelName.includes("o1") ||
+      lowerModelName.includes("o3")
+    ) {
+      baseInfo.inputPrice = 0.075;
+      baseInfo.outputPrice = 0.3;
+      baseInfo.avgResponseTime = 8;
+    } else if (lowerModelName.includes("pro") || lowerModelName.includes("sonnet")) {
+      baseInfo.inputPrice = 0.003;
+      baseInfo.outputPrice = 0.015;
+      baseInfo.avgResponseTime = 3;
+    } else {
+      // 默认中等价格
+      baseInfo.inputPrice = 0.001;
+      baseInfo.outputPrice = 0.004;
+      baseInfo.avgResponseTime = 2.5;
+    }
 
     if (benchmarkEntry) {
       const normalizedElo = normalizeEloScore(benchmarkEntry.eloScore);
@@ -347,6 +434,40 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
       return undefined;
     }
 
+    // 构建 fallback 候选列表：
+    // 只从该 agent 自己绑定的账号（modelAccountsConfig.accounts）中选取，
+    // 按路由评分降序排列，排除已选中的主账号。
+    // 不使用其他 agent 的账号，保证权限隔离。
+    const ownAccountSet = new Set(modelAccountsConfig.accounts);
+    // 按评分从高到低排序（scores 已是降序，不需要再排）
+    const fallbackAccountIds: string[] = [];
+    for (const score of routingResult.scores) {
+      if (score.accountId === selectedAccountId) {
+        continue;
+      }
+      // 只使用该 agent 自己绑定的账号
+      if (!ownAccountSet.has(score.accountId)) {
+        continue;
+      }
+      // 尝试解析为 profileId
+      let fallbackProfileId: string | undefined;
+      if (store.profiles[score.accountId]) {
+        fallbackProfileId = score.accountId;
+      } else {
+        fallbackProfileId = resolveModelAccountToAuthProfile({
+          modelId: score.accountId,
+          store,
+        });
+      }
+      if (fallbackProfileId && fallbackProfileId !== resolvedProfileId) {
+        // 转换为 "provider/model" 格式（model-fallback.ts 期望的格式）
+        const parsed = parseProviderModelFromAccountId(score.accountId);
+        if (parsed) {
+          fallbackAccountIds.push(`${parsed.provider}/${parsed.model}`);
+        }
+      }
+    }
+
     // 8. 持久化到 session（如果需要）
     const isAccountChanged =
       sessionEntry?.authProfileOverride !== resolvedProfileId ||
@@ -381,6 +502,7 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
       provider: parsed?.provider,
       model: parsed?.model,
       reason: routingResult.reason,
+      fallbackAccountIds: fallbackAccountIds.length > 0 ? fallbackAccountIds : undefined,
     };
   } catch (err) {
     console.error(t("routing.smart.route_failed"), err);
