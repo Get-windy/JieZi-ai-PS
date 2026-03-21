@@ -11,7 +11,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import { resolveStateDir } from "../../upstream/src/config/paths.js";
-import {
+import { resolveDefaultAgentWorkspaceDir } from "../agents/workspace.js";
+import type {
   GroupWorkspace,
   GroupBootstrapFile,
   GroupMemberPermissions,
@@ -27,20 +28,26 @@ function resolveGroupRootFromConfig(): string | undefined {
     // 读取 openclaw.json 配置文件
     const stateDir = resolveStateDir(process.env);
     const configPath = path.join(stateDir, "openclaw.json");
-    if (!fs.existsSync(configPath)) {return undefined;}
+    if (!fs.existsSync(configPath)) {
+      return undefined;
+    }
     const raw = fs.readFileSync(configPath, "utf-8");
     const config = JSON.parse(raw);
     const root = config?.groups?.workspace?.root;
     if (root && typeof root === "string") {
       // 展开 ~ 前缀
       if (root.startsWith("~")) {
-        const home = process.env.OPENCLAW_HOME?.trim() ||
-          process.env.HOME ||
-          process.env.USERPROFILE ||
-          "";
+        const home =
+          process.env.OPENCLAW_HOME?.trim() || process.env.HOME || process.env.USERPROFILE || "";
         return path.resolve(home, root.slice(1).replace(/^\//, "").replace(/^\\/, ""));
       }
       return path.resolve(root);
+    }
+
+    // 如果 groups.workspace.root 未配置，尝试使用 agents.defaults.workspace + "/groups"
+    const defaultWorkspace = config?.agents?.defaults?.workspace;
+    if (defaultWorkspace && typeof defaultWorkspace === "string") {
+      return path.resolve(defaultWorkspace, "groups");
     }
   } catch {
     // 配置未加载或字段不存在，忽略
@@ -56,14 +63,18 @@ function resolveGroupOverridesFromConfig(): Record<string, string> {
   try {
     const stateDir = resolveStateDir(process.env);
     const configPath = path.join(stateDir, "openclaw.json");
-    if (!fs.existsSync(configPath)) {return {};}
+    if (!fs.existsSync(configPath)) {
+      return {};
+    }
     const raw = fs.readFileSync(configPath, "utf-8");
     const config = JSON.parse(raw);
     const overrides = config?.groups?.overrides;
-    if (!overrides || typeof overrides !== "object") {return {};}
+    if (!overrides || typeof overrides !== "object") {
+      return {};
+    }
     const result: Record<string, string> = {};
     for (const [groupId, val] of Object.entries(overrides)) {
-      const dir = (val as any)?.workspaceDir;
+      const dir = (val as Record<string, unknown>)?.workspaceDir;
       if (dir && typeof dir === "string") {
         result[groupId] = dir;
       }
@@ -87,10 +98,11 @@ export class GroupWorkspaceManager {
   private constructor() {
     // 优先级：
     // 1. openclaw.json 中的 groups.workspace.root 配置
-    // 2. 环境变量 OPENCLAW_STATE_DIR/groups
-    // 3. 默认 ~/.openclaw/groups
+    // 2. openclaw.json 中的 agents.defaults.workspace + "/groups"
+    // 3. 系统默认工作空间根目录 + "/groups"（即使配置文件不存在也能获取）
+    // 4. 环境变量 OPENCLAW_STATE_DIR/groups（最后的后备）
     const configRoot = resolveGroupRootFromConfig();
-    this.rootDir = configRoot ?? path.join(resolveStateDir(process.env), "groups");
+    this.rootDir = configRoot ?? path.join(resolveDefaultAgentWorkspaceDir(), "groups");
     // 加载每个群组的自定义目录覆盖
     this.groupDirOverrides = resolveGroupOverridesFromConfig();
     this.ensureRootDir();

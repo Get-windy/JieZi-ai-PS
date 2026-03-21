@@ -45,6 +45,8 @@ type LaneState = {
   maxConcurrent: number;
   draining: boolean;
   generation: number;
+  // 性能优化：跟踪任务开始时间，用于检测卡住的任务
+  activeTaskStartTimes: Map<number, number>;
 };
 
 /**
@@ -59,6 +61,70 @@ const queueState = resolveGlobalSingleton(COMMAND_QUEUE_STATE_KEY, () => ({
   nextTaskId: 1,
 }));
 
+// 性能优化：超时阈值配置（毫秒）
+const TASK_TIMEOUT_MS = 60 * 1000; // 1 分钟 - 超过此时间视为卡住（原 5 分钟太长）
+const STUCK_TASK_CHECK_INTERVAL_MS = 15 * 1000; // 15 秒检查一次（原 30 秒）
+
+// 性能优化：启动后台超时检测器
+let stuckTaskCheckInterval: NodeJS.Timeout | null = null;
+
+function startStuckTaskMonitoring(): void {
+  if (stuckTaskCheckInterval) {
+    return;
+  }
+
+  stuckTaskCheckInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [laneName, state] of queueState.lanes.entries()) {
+      for (const [taskId, startTime] of state.activeTaskStartTimes.entries()) {
+        const runningTime = now - startTime;
+        if (runningTime > TASK_TIMEOUT_MS) {
+          diag.warn(
+            `stuck task detected: lane=${laneName} taskId=${taskId} runningTime=${runningTime}ms - forcing cleanup`,
+          );
+          // 强制清理卡住的任务（从 activeTaskIds 中移除，但保留执行）
+          state.activeTaskIds.delete(taskId);
+          state.activeTaskStartTimes.delete(taskId);
+          // 触发 pump，让其他任务可以继续
+          drainLane(laneName);
+
+          // 额外措施：如果队列中还有等待任务，记录详细信息
+          if (state.queue.length > 0) {
+            const oldestWaitTime = now - state.queue[0].enqueuedAt;
+            diag.error(
+              `CRITICAL: lane=${laneName} has ${state.queue.length} queued tasks, oldest waiting ${oldestWaitTime}ms`,
+            );
+            // 如果等待时间也超过阈值，考虑清空队列
+            if (oldestWaitTime > TASK_TIMEOUT_MS * 2) {
+              diag.error(
+                `EMERGENCY: Clearing entire queue for lane=${laneName} due to excessive wait time`,
+              );
+              // 拒绝所有排队任务
+              while (state.queue.length > 0) {
+                const entry = state.queue.shift()!;
+                entry.reject(
+                  new Error(`Queue cleared due to timeout (waited ${now - entry.enqueuedAt}ms)`),
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+  }, STUCK_TASK_CHECK_INTERVAL_MS);
+
+  // 优雅关闭时清理定时器
+  process.on("SIGTERM", () => {
+    if (stuckTaskCheckInterval) {
+      clearInterval(stuckTaskCheckInterval);
+      stuckTaskCheckInterval = null;
+    }
+  });
+}
+
+// 启动监控器
+startStuckTaskMonitoring();
+
 function getLaneState(lane: string): LaneState {
   const existing = queueState.lanes.get(lane);
   if (existing) {
@@ -71,6 +137,7 @@ function getLaneState(lane: string): LaneState {
     maxConcurrent: 1,
     draining: false,
     generation: 0,
+    activeTaskStartTimes: new Map(),
   };
   queueState.lanes.set(lane, created);
   return created;
@@ -115,6 +182,7 @@ function drainLane(lane: string) {
         const taskId = queueState.nextTaskId++;
         const taskGeneration = state.generation;
         state.activeTaskIds.add(taskId);
+        state.activeTaskStartTimes.set(taskId, Date.now());
         void (async () => {
           const startTime = Date.now();
           try {
