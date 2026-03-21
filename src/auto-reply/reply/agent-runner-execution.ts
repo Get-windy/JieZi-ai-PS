@@ -12,34 +12,41 @@ import {
   sanitizeUserFacingText,
 } from "../../../upstream/src/agents/pi-embedded-helpers.js";
 import { runEmbeddedPiAgent } from "../../../upstream/src/agents/pi-embedded.js";
+import { stripHeartbeatToken } from "../../../upstream/src/auto-reply/heartbeat.js";
+import { type BlockReplyPipeline } from "../../../upstream/src/auto-reply/reply/block-reply-pipeline.js";
+import type { FollowupRun } from "../../../upstream/src/auto-reply/reply/queue.js";
+import { createBlockReplyDeliveryHandler } from "../../../upstream/src/auto-reply/reply/reply-delivery.js";
+import type { TypingSignaler } from "../../../upstream/src/auto-reply/reply/typing-mode.js";
+import {
+  isSilentReplyPrefixText,
+  isSilentReplyText,
+  SILENT_REPLY_TOKEN,
+} from "../../../upstream/src/auto-reply/tokens.js";
+import type { GetReplyOptions, ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import {
   resolveGroupSessionKey,
   resolveSessionTranscriptPath,
   type SessionEntry,
   updateSessionStore,
 } from "../../../upstream/src/config/sessions.js";
-import { checkModelAvailability } from "../../gateway/server-methods/models.js";
 import { logVerbose } from "../../../upstream/src/globals.js";
-import { emitAgentEvent, registerAgentRunContext } from "../../../upstream/src/infra/agent-events.js";
+import {
+  emitAgentEvent,
+  registerAgentRunContext,
+} from "../../../upstream/src/infra/agent-events.js";
 import { defaultRuntime } from "../../../upstream/src/runtime.js";
 import {
   isMarkdownCapableMessageChannel,
   resolveMessageChannel,
 } from "../../../upstream/src/utils/message-channel.js";
-import { stripHeartbeatToken } from "../../../upstream/src/auto-reply/heartbeat.js";
+import { checkModelAvailability } from "../../gateway/server-methods/models.js";
 import type { TemplateContext } from "../templating.js";
 import type { VerboseLevel } from "../thinking.js";
-import { isSilentReplyPrefixText, isSilentReplyText, SILENT_REPLY_TOKEN } from "../../../upstream/src/auto-reply/tokens.js";
-import type { GetReplyOptions, ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import {
   buildEmbeddedRunBaseParams,
   buildEmbeddedRunContexts,
   resolveModelFallbackOptions,
 } from "./agent-runner-utils.js";
-import { type BlockReplyPipeline } from "../../../upstream/src/auto-reply/reply/block-reply-pipeline.js";
-import type { FollowupRun } from "../../../upstream/src/auto-reply/reply/queue.js";
-import { createBlockReplyDeliveryHandler } from "../../../upstream/src/auto-reply/reply/reply-delivery.js";
-import type { TypingSignaler } from "../../../upstream/src/auto-reply/reply/typing-mode.js";
 
 export type RuntimeFallbackAttempt = {
   provider: string;
@@ -189,8 +196,12 @@ export async function runAgentTurnWithFallback(params: {
         };
       }
 
+      const fallbackOptions = resolveModelFallbackOptions(params.followupRun.run);
+      const hasDynamicFallbacks =
+        Array.isArray(fallbackOptions.fallbacksOverride) &&
+        fallbackOptions.fallbacksOverride.length > 0;
       const fallbackResult = await runWithModelFallback({
-        ...resolveModelFallbackOptions(params.followupRun.run),
+        ...fallbackOptions,
         run: (provider, model) => {
           // Notify that model selection is complete (including after fallback).
           // This allows responsePrefix template interpolation with the actual model.
@@ -316,6 +327,9 @@ export async function runAgentTurnWithFallback(params: {
             ...senderContext,
             ...runBaseParams,
             lane: agentRunLane,
+            // 当外层有动态 fallback 候选时，通知内层认为 fallbackConfigured=true
+            // 这样超时时会抛 FailoverError 而不是 surface_error，外层可以切换模型
+            hasDynamicFallbacks,
             prompt: params.commandBody,
             extraSystemPrompt: params.followupRun.run.extraSystemPrompt,
             toolResultFormat: (() => {
