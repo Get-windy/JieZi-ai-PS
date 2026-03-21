@@ -44,509 +44,635 @@ export type ArenaBenchmarkDB = Record<string, BenchmarkEntry>;
 // Elo 分基于 Bradley-Terry 模型，参考 lmarena.ai 2025-03 快照
 
 /** @internal */
+// 数据来源：openlm.ai/chatbot-arena + lmarena.ai，更新于 2026-03
 const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
   // ── OpenAI ──────────────────────────────────────────────────────────────
   o3: {
-    eloScore: 1338,
-    arenaRank: 1,
+    eloScore: 1424,
+    arenaRank: 38,
     mmlu: 92.0,
     humanEval: 97.0,
     math: 97.8,
-    mtBench: 9.5,
     gpqa: 87.7,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   "o3-mini": {
-    eloScore: 1305,
-    arenaRank: 5,
+    eloScore: 1338,
+    arenaRank: 65,
     mmlu: 88.0,
     humanEval: 95.0,
     math: 96.7,
-    mtBench: 9.1,
     gpqa: 79.7,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   o1: {
-    eloScore: 1316,
-    arenaRank: 3,
+    eloScore: 1366,
+    arenaRank: 55,
     mmlu: 92.3,
     humanEval: 92.4,
     math: 94.8,
-    mtBench: 9.3,
     gpqa: 77.3,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
-  "o1-mini": {
-    eloScore: 1280,
-    arenaRank: 10,
+  "o4-mini": {
+    eloScore: 1362,
+    arenaRank: 57,
     mmlu: 85.0,
-    humanEval: 87.4,
-    math: 90.0,
-    mtBench: 8.8,
-    updatedAt: "2025-03-01",
-  },
-  "o1-preview": {
-    eloScore: 1293,
-    arenaRank: 8,
-    mmlu: 90.8,
-    humanEval: 90.3,
-    math: 85.5,
-    gpqa: 73.3,
-    updatedAt: "2025-03-01",
+    humanEval: 90.0,
+    math: 95.0,
+    gpqa: 83.2,
+    updatedAt: "2026-03-01",
   },
   "gpt-4o": {
-    eloScore: 1287,
-    arenaRank: 9,
+    eloScore: 1427,
+    arenaRank: 36,
     mmlu: 88.7,
     humanEval: 90.2,
     math: 76.6,
-    mtBench: 9.0,
-    updatedAt: "2025-03-01",
+    gpqa: 80.3,
+    updatedAt: "2026-03-01",
   },
   "gpt-4o-mini": {
-    eloScore: 1233,
-    arenaRank: 25,
+    eloScore: 1338,
+    arenaRank: 65,
     mmlu: 82.0,
     humanEval: 87.2,
     math: 70.2,
-    mtBench: 8.4,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
-  "gpt-4-turbo": {
-    eloScore: 1256,
-    arenaRank: 17,
+  "gpt-4.1": {
+    eloScore: 1381,
+    arenaRank: 50,
     mmlu: 86.5,
     humanEval: 87.1,
     math: 72.6,
-    mtBench: 9.0,
-    updatedAt: "2025-03-01",
+    gpqa: 80.6,
+    updatedAt: "2026-03-01",
+  },
+  "gpt-4.1-mini": {
+    eloScore: 1338,
+    arenaRank: 65,
+    mmlu: 82.0,
+    humanEval: 85.0,
+    math: 70.0,
+    gpqa: 78.1,
+    updatedAt: "2026-03-01",
+  },
+  "gpt-4-turbo": {
+    eloScore: 1256,
+    arenaRank: 90,
+    mmlu: 86.5,
+    humanEval: 87.1,
+    math: 72.6,
+    updatedAt: "2026-03-01",
   },
   "gpt-4": {
     eloScore: 1220,
-    arenaRank: 32,
+    arenaRank: 100,
     mmlu: 86.4,
     humanEval: 67.0,
     math: 52.9,
-    mtBench: 8.99,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   "gpt-3.5-turbo": {
     eloScore: 1106,
-    arenaRank: 65,
+    arenaRank: 130,
     mmlu: 70.0,
     humanEval: 48.1,
     math: 34.1,
-    mtBench: 7.94,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
 
   // ── Anthropic Claude ─────────────────────────────────────────────────────
+  "claude-sonnet-4": {
+    eloScore: 1335,
+    arenaRank: 70,
+    mmlu: 90.0,
+    humanEval: 93.0,
+    math: 90.0,
+    gpqa: 83.7,
+    updatedAt: "2026-03-01",
+  },
+  "claude-opus-4": {
+    eloScore: 1366,
+    arenaRank: 55,
+    mmlu: 92.0,
+    humanEval: 94.0,
+    math: 93.0,
+    gpqa: 86.0,
+    updatedAt: "2026-03-01",
+  },
   "claude-3-7-sonnet": {
     eloScore: 1320,
-    arenaRank: 2,
+    arenaRank: 75,
     mmlu: 93.0,
     humanEval: 96.0,
     math: 96.2,
     gpqa: 84.8,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   "claude-3-5-sonnet": {
     eloScore: 1300,
-    arenaRank: 6,
+    arenaRank: 80,
     mmlu: 90.4,
     humanEval: 92.0,
     math: 78.3,
     gpqa: 65.0,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   "claude-3-5-haiku": {
     eloScore: 1254,
-    arenaRank: 18,
+    arenaRank: 92,
     mmlu: 84.0,
     humanEval: 88.1,
     math: 69.2,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   "claude-3-opus": {
     eloScore: 1248,
-    arenaRank: 20,
+    arenaRank: 93,
     mmlu: 86.8,
     humanEval: 84.9,
     math: 60.1,
-    mtBench: 9.0,
     gpqa: 50.4,
-    updatedAt: "2025-03-01",
-  },
-  "claude-3-sonnet": {
-    eloScore: 1194,
-    arenaRank: 40,
-    mmlu: 79.0,
-    humanEval: 73.0,
-    math: 40.0,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   "claude-3-haiku": {
     eloScore: 1179,
-    arenaRank: 46,
+    arenaRank: 115,
     mmlu: 75.2,
     humanEval: 75.9,
     math: 38.9,
-    updatedAt: "2025-03-01",
-  },
-  "claude-2": {
-    eloScore: 1152,
-    arenaRank: 56,
-    mmlu: 78.5,
-    humanEval: 71.2,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
 
   // ── Google Gemini ─────────────────────────────────────────────────────────
-  "gemini-2.0-flash": {
-    eloScore: 1308,
-    arenaRank: 4,
-    mmlu: 89.0,
+  "gemini-2.5-pro": {
+    eloScore: 1460,
+    arenaRank: 20,
+    mmlu: 91.0,
+    humanEval: 93.0,
+    math: 92.0,
+    gpqa: 86.2,
+    updatedAt: "2026-03-01",
+  },
+  "gemini-2.5-flash": {
+    eloScore: 1412,
+    arenaRank: 42,
+    mmlu: 87.0,
     humanEval: 90.0,
-    math: 89.7,
-    updatedAt: "2025-03-01",
+    math: 88.0,
+    gpqa: 83.2,
+    updatedAt: "2026-03-01",
+  },
+  "gemini-2.0-flash": {
+    eloScore: 1370,
+    arenaRank: 53,
+    mmlu: 83.0,
+    humanEval: 86.0,
+    math: 82.0,
+    updatedAt: "2026-03-01",
   },
   "gemini-2.0-flash-thinking": {
-    eloScore: 1303,
-    arenaRank: 6,
-    mmlu: 90.0,
-    humanEval: 92.0,
-    math: 94.0,
-    updatedAt: "2025-03-01",
+    eloScore: 1397,
+    arenaRank: 45,
+    mmlu: 86.0,
+    humanEval: 90.0,
+    math: 90.0,
+    updatedAt: "2026-03-01",
   },
   "gemini-1.5-pro": {
     eloScore: 1261,
-    arenaRank: 15,
+    arenaRank: 88,
     mmlu: 85.9,
     humanEval: 84.1,
     math: 67.7,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   "gemini-1.5-flash": {
     eloScore: 1226,
-    arenaRank: 29,
+    arenaRank: 100,
     mmlu: 78.9,
     humanEval: 74.3,
     math: 57.0,
-    updatedAt: "2025-03-01",
-  },
-  "gemini-pro": {
-    eloScore: 1147,
-    arenaRank: 59,
-    mmlu: 71.8,
-    humanEval: 67.7,
-    updatedAt: "2025-03-01",
-  },
-  "gemini-ultra": {
-    eloScore: 1208,
-    arenaRank: 35,
-    mmlu: 90.0,
-    humanEval: 74.4,
-    math: 53.2,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
 
   // ── Meta Llama ────────────────────────────────────────────────────────────
   "llama-3.3-70b": {
     eloScore: 1255,
-    arenaRank: 17,
+    arenaRank: 91,
     mmlu: 86.0,
     humanEval: 88.4,
     math: 77.0,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   "llama-3.1-405b": {
     eloScore: 1266,
-    arenaRank: 13,
+    arenaRank: 88,
     mmlu: 88.6,
     humanEval: 89.0,
     math: 73.8,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   "llama-3.1-70b": {
     eloScore: 1224,
-    arenaRank: 30,
+    arenaRank: 100,
     mmlu: 83.6,
     humanEval: 80.5,
     math: 58.0,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   "llama-3.1-8b": {
     eloScore: 1151,
-    arenaRank: 57,
+    arenaRank: 125,
     mmlu: 73.0,
     humanEval: 72.6,
     math: 51.9,
-    updatedAt: "2025-03-01",
-  },
-  "llama-3-70b": {
-    eloScore: 1207,
-    arenaRank: 36,
-    mmlu: 82.0,
-    humanEval: 81.7,
-    math: 50.4,
-    updatedAt: "2025-03-01",
-  },
-  "llama-3-8b": {
-    eloScore: 1153,
-    arenaRank: 55,
-    mmlu: 68.4,
-    humanEval: 62.2,
-    math: 30.0,
-    updatedAt: "2025-03-01",
-  },
-  "llama-2-70b": {
-    eloScore: 1084,
-    arenaRank: 73,
-    mmlu: 68.9,
-    humanEval: 29.9,
-    math: 13.5,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
 
-  // ── Mistral / Mixtral ─────────────────────────────────────────────────────
+  // ── Mistral ───────────────────────────────────────────────────────────────
   "mistral-large": {
     eloScore: 1195,
-    arenaRank: 39,
+    arenaRank: 112,
     mmlu: 81.2,
     humanEval: 73.0,
     math: 45.0,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
-  "mistral-medium": {
-    eloScore: 1148,
-    arenaRank: 58,
-    mmlu: 75.3,
-    humanEval: 38.4,
-    updatedAt: "2025-03-01",
+  "mistral-large-3": {
+    eloScore: 1428,
+    arenaRank: 35,
+    mmlu: 85.0,
+    humanEval: 88.0,
+    math: 80.0,
+    updatedAt: "2026-03-01",
+  },
+  "mistral-medium-3": {
+    eloScore: 1369,
+    arenaRank: 54,
+    mmlu: 78.0,
+    humanEval: 80.0,
+    updatedAt: "2026-03-01",
   },
   "mistral-7b": {
     eloScore: 1106,
-    arenaRank: 64,
+    arenaRank: 130,
     mmlu: 64.2,
     humanEval: 26.2,
     math: 13.0,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   "mixtral-8x7b": {
     eloScore: 1138,
-    arenaRank: 60,
+    arenaRank: 125,
     mmlu: 70.6,
     humanEval: 40.2,
     math: 28.4,
-    updatedAt: "2025-03-01",
-  },
-  "mixtral-8x22b": {
-    eloScore: 1146,
-    arenaRank: 58,
-    mmlu: 77.8,
-    humanEval: 45.1,
-    math: 41.8,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
 
   // ── DeepSeek ──────────────────────────────────────────────────────────────
   "deepseek-v3": {
-    eloScore: 1295,
-    arenaRank: 7,
+    eloScore: 1334,
+    arenaRank: 70,
     mmlu: 88.5,
     humanEval: 91.0,
     math: 90.2,
     gpqa: 59.1,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
+  },
+  "deepseek-v3-0324": {
+    eloScore: 1377,
+    arenaRank: 50,
+    mmlu: 90.0,
+    humanEval: 93.0,
+    math: 92.0,
+    gpqa: 81.9,
+    updatedAt: "2026-03-01",
   },
   "deepseek-r1": {
-    eloScore: 1310,
-    arenaRank: 3,
+    eloScore: 1373,
+    arenaRank: 52,
     mmlu: 90.8,
     humanEval: 92.6,
     math: 97.3,
     gpqa: 71.5,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
+  },
+  "deepseek-r1-0528": {
+    eloScore: 1426,
+    arenaRank: 37,
+    mmlu: 92.0,
+    humanEval: 94.0,
+    math: 97.0,
+    gpqa: 84.9,
+    updatedAt: "2026-03-01",
+  },
+  "deepseek-v3.2": {
+    eloScore: 1418,
+    arenaRank: 40,
+    mmlu: 91.0,
+    humanEval: 93.0,
+    math: 93.0,
+    gpqa: 83.7,
+    updatedAt: "2026-03-01",
   },
   "deepseek-r1-distill-qwen-32b": {
     eloScore: 1252,
-    arenaRank: 19,
+    arenaRank: 92,
     mmlu: 84.0,
     humanEval: 87.0,
     math: 90.0,
-    updatedAt: "2025-03-01",
-  },
-  "deepseek-r1-distill-llama-70b": {
-    eloScore: 1240,
-    arenaRank: 22,
-    mmlu: 83.0,
-    humanEval: 85.0,
-    math: 86.7,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   "deepseek-coder-v2": {
     eloScore: 1220,
-    arenaRank: 31,
+    arenaRank: 100,
     humanEval: 90.2,
-    updatedAt: "2025-03-01",
-  },
-  "deepseek-v2": {
-    eloScore: 1232,
-    arenaRank: 26,
-    mmlu: 78.5,
-    humanEval: 81.1,
-    math: 74.9,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
 
   // ── Qwen (Alibaba) ────────────────────────────────────────────────────────
-  "qwen2.5-72b": {
-    eloScore: 1265,
-    arenaRank: 14,
-    mmlu: 86.1,
-    humanEval: 86.7,
-    math: 83.1,
-    updatedAt: "2025-03-01",
+  // qwen3.5-max：通用旗舰，Arena Elo 1460（来源：openlm.ai 2026-03）
+  "qwen3.5-max": {
+    eloScore: 1460,
+    arenaRank: 19,
+    mmlu: 87.8,
+    humanEval: 92.0,
+    math: 88.0,
+    updatedAt: "2026-03-01",
   },
-  "qwen2.5-coder-32b": {
-    eloScore: 1243,
-    arenaRank: 21,
-    humanEval: 92.7,
-    updatedAt: "2025-03-01",
+  // qwen3.5-plus：旗舰次档，与 qwen3.5-max 同系列但更快更便宜
+  // openlm.ai 中 Qwen3.5-397B-A17B（开源版）Arena Elo 1451，plus 为云端服务版估算 Elo 1440
+  "qwen3.5-plus": {
+    eloScore: 1440,
+    arenaRank: 24,
+    mmlu: 87.8,
+    humanEval: 91.0,
+    math: 87.0,
+    updatedAt: "2026-03-20",
   },
-  "qwen2-72b": {
-    eloScore: 1185,
-    arenaRank: 43,
-    mmlu: 84.2,
-    humanEval: 86.0,
-    math: 79.5,
-    updatedAt: "2025-03-01",
+  // qwen3-max：Arena Elo 1443（来源：openlm.ai 2026-03）
+  // qwen3-max-2026-01-23 为 qwen3-max 的版本快照，数据相同
+  "qwen3-max": {
+    eloScore: 1443,
+    arenaRank: 26,
+    mmlu: 85.3,
+    humanEval: 91.0,
+    math: 87.0,
+    updatedAt: "2026-03-20",
+  },
+  // qwen3-max-2026-01-23：qwen3-max 版本快照，Arena Elo 与 qwen3-max 相同
+  "qwen3-max-2026-01-23": {
+    eloScore: 1443,
+    arenaRank: 26,
+    mmlu: 85.3,
+    humanEval: 91.0,
+    math: 87.0,
+    updatedAt: "2026-03-20",
+  },
+  // qwen3-coder-next：coding 专用，基于 Qwen3-Next-80B 架构强化 coding
+  // Qwen3-Next-80B-A3B-Instruct Arena Elo 1417，Coding Elo 1456（来源：openlm.ai 2026-03）
+  // qwen3-coder-next 为 coding 专用精调版，coding 能力更强，整体 Elo 估算 1435
+  "qwen3-coder-next": {
+    eloScore: 1435,
+    arenaRank: 28,
+    mmlu: 82.4,
+    humanEval: 95.0,
+    math: 84.0,
+    updatedAt: "2026-03-20",
+  },
+  // qwen3-coder-plus：qwen3-coder 系列小版本，Elo 低于 qwen3-coder-480b（1358）
+  // 相比 qwen3-coder-next 参数更少，估算 Elo 1340
+  "qwen3-coder-plus": {
+    eloScore: 1340,
+    arenaRank: 65,
+    mmlu: 78.8,
+    humanEval: 93.0,
+    math: 80.0,
+    updatedAt: "2026-03-20",
+  },
+  // qwen3-coder-480b：完整大版本，Arena Elo 1358（来源：openlm.ai 2026-03）
+  "qwen3-coder-480b": {
+    eloScore: 1358,
+    arenaRank: 62,
+    mmlu: 83.0,
+    humanEval: 93.0,
+    math: 83.0,
+    updatedAt: "2026-03-01",
+  },
+  "qwen3-235b": {
+    eloScore: 1369,
+    arenaRank: 54,
+    mmlu: 82.8,
+    humanEval: 91.0,
+    math: 85.0,
+    updatedAt: "2026-03-01",
+  },
+  "qwen3-32b": {
+    eloScore: 1342,
+    arenaRank: 68,
+    mmlu: 79.8,
+    humanEval: 88.0,
+    math: 82.0,
+    updatedAt: "2026-03-01",
   },
   "qwq-32b": {
-    eloScore: 1268,
-    arenaRank: 12,
+    eloScore: 1332,
+    arenaRank: 72,
     mmlu: 85.0,
     humanEval: 90.0,
     math: 90.6,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
+  "qwen2.5-max": {
+    eloScore: 1367,
+    arenaRank: 55,
+    mmlu: 86.1,
+    humanEval: 88.0,
+    math: 85.0,
+    updatedAt: "2026-03-01",
+  },
+  "qwen2.5-72b": {
+    eloScore: 1265,
+    arenaRank: 88,
+    mmlu: 86.1,
+    humanEval: 86.7,
+    math: 83.1,
+    updatedAt: "2026-03-01",
+  },
+  "qwen2.5-coder-32b": {
+    eloScore: 1243,
+    arenaRank: 93,
+    humanEval: 92.7,
+    updatedAt: "2026-03-01",
+  },
+  // qwen-plus：中档通用，估算 Elo 1300
+  "qwen-plus": {
+    eloScore: 1300,
+    arenaRank: 80,
+    mmlu: 80.0,
+    humanEval: 79.0,
+    math: 72.0,
+    updatedAt: "2026-03-01",
+  },
+  // qwen-turbo：轻量快速
+  "qwen-turbo": {
+    eloScore: 1200,
+    arenaRank: 110,
+    mmlu: 70.0,
+    humanEval: 66.0,
+    math: 55.0,
+    updatedAt: "2026-03-01",
+  },
+  // qwen-max：较旧通用旗舰
   "qwen-max": {
-    eloScore: 1250,
-    arenaRank: 19,
+    eloScore: 1367,
+    arenaRank: 55,
     mmlu: 87.0,
     humanEval: 89.0,
     math: 85.0,
-    updatedAt: "2025-03-01",
-  },
-
-  // ── Zhipu GLM ─────────────────────────────────────────────────────────────
-  "glm-4-plus": {
-    eloScore: 1218,
-    arenaRank: 33,
-    mmlu: 80.5,
-    humanEval: 78.0,
-    updatedAt: "2025-03-01",
-  },
-  "glm-4": {
-    eloScore: 1195,
-    arenaRank: 41,
-    mmlu: 76.0,
-    humanEval: 71.8,
-    updatedAt: "2025-03-01",
-  },
-  "glm-4-air": {
-    eloScore: 1178,
-    arenaRank: 48,
-    mmlu: 73.0,
-    humanEval: 65.0,
-    updatedAt: "2025-03-01",
-  },
-  "glm-4-flash": {
-    eloScore: 1155,
-    arenaRank: 54,
-    mmlu: 68.0,
-    humanEval: 58.0,
-    updatedAt: "2025-03-01",
-  },
-
-  // ── Baidu ERNIE ───────────────────────────────────────────────────────────
-  "ernie-4.0": {
-    eloScore: 1189,
-    arenaRank: 44,
-    mmlu: 77.5,
-    humanEval: 68.0,
-    updatedAt: "2025-03-01",
-  },
-  "ernie-3.5": {
-    eloScore: 1148,
-    arenaRank: 57,
-    mmlu: 68.0,
-    updatedAt: "2025-03-01",
-  },
-
-  // ── Moonshot / Kimi ───────────────────────────────────────────────────────
-  "moonshot-v1-128k": {
-    eloScore: 1183,
-    arenaRank: 45,
-    mmlu: 76.0,
-    humanEval: 69.0,
-    updatedAt: "2025-03-01",
-  },
-  "kimi-k1.5": {
-    eloScore: 1258,
-    arenaRank: 16,
-    mmlu: 87.0,
-    humanEval: 89.0,
-    math: 94.6,
-    updatedAt: "2025-03-01",
-  },
-
-  // ── Yi (01.AI) ────────────────────────────────────────────────────────────
-  "yi-large": {
-    eloScore: 1200,
-    arenaRank: 37,
-    mmlu: 76.0,
-    humanEval: 60.0,
-    updatedAt: "2025-03-01",
-  },
-  "yi-34b": {
-    eloScore: 1162,
-    arenaRank: 52,
-    mmlu: 76.3,
-    humanEval: 23.1,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
 
   // ── MiniMax ───────────────────────────────────────────────────────────────
-  "abab6.5s": {
-    eloScore: 1165,
-    arenaRank: 51,
-    mmlu: 74.5,
-    updatedAt: "2025-03-01",
+  // MiniMax-M2.5：Arena Elo 1408，Coding Elo 1436（来源：openlm.ai 2026-03）
+  "minimax-m2.5": {
+    eloScore: 1408,
+    arenaRank: 43,
+    mmlu: 87.1,
+    humanEval: 90.0,
+    math: 85.0,
+    gpqa: 65.0,
+    updatedAt: "2026-03-20",
+  },
+  // MiniMax-M2.7：Arena Elo 1416，Coding Elo 1448（来源：openlm.ai 2026-03）
+  "minimax-m2.7": {
+    eloScore: 1416,
+    arenaRank: 41,
+    mmlu: 87.1,
+    humanEval: 91.0,
+    math: 86.0,
+    updatedAt: "2026-03-20",
+  },
+  "minimax-text-01": {
+    eloScore: 1240,
+    arenaRank: 93,
+    mmlu: 82.0,
+    humanEval: 80.0,
+    updatedAt: "2026-03-01",
+  },
+
+  // ── Zhipu GLM ─────────────────────────────────────────────────────────────
+  // GLM-5：Arena Elo 1452，Coding Elo 1461（来源：openlm.ai 2026-03）
+  "glm-5": {
+    eloScore: 1452,
+    arenaRank: 22,
+    mmlu: 87.0,
+    humanEval: 91.0,
+    math: 87.0,
+    updatedAt: "2026-03-20",
+  },
+  // GLM-4.7：Arena Elo 1445，Coding Elo 1460（来源：openlm.ai 2026-03）
+  "glm-4.7": {
+    eloScore: 1445,
+    arenaRank: 25,
+    mmlu: 85.6,
+    humanEval: 90.0,
+    math: 85.0,
+    updatedAt: "2026-03-20",
+  },
+  // GLM-4.5：Arena Elo 1430，Coding Elo 1448（来源：openlm.ai 2026-03）
+  "glm-4.5": {
+    eloScore: 1430,
+    arenaRank: 34,
+    mmlu: 83.5,
+    humanEval: 88.0,
+    math: 83.0,
+    updatedAt: "2026-03-20",
+  },
+  "glm-4-plus": {
+    eloScore: 1332,
+    arenaRank: 72,
+    mmlu: 78.6,
+    humanEval: 82.0,
+    updatedAt: "2026-03-20",
+  },
+  "glm-4": {
+    eloScore: 1195,
+    arenaRank: 112,
+    mmlu: 76.0,
+    humanEval: 71.8,
+    updatedAt: "2026-03-20",
+  },
+
+  // ── Baidu ERNIE ───────────────────────────────────────────────────────────
+  "ernie-5.0": {
+    eloScore: 1458,
+    arenaRank: 21,
+    mmlu: 86.0,
+    humanEval: 88.0,
+    updatedAt: "2026-03-01",
+  },
+  "ernie-4.0": {
+    eloScore: 1189,
+    arenaRank: 113,
+    mmlu: 77.5,
+    humanEval: 68.0,
+    updatedAt: "2026-03-01",
+  },
+
+  // ── Moonshot / Kimi ───────────────────────────────────────────────────────
+  "kimi-k2": {
+    eloScore: 1438,
+    arenaRank: 31,
+    mmlu: 84.8,
+    humanEval: 92.0,
+    math: 88.0,
+    updatedAt: "2026-03-01",
+  },
+  // Kimi-K2.5-Thinking：Arena Elo 1451，Coding Elo 1480（来源：openlm.ai 2026-03）
+  "kimi-k2.5": {
+    eloScore: 1451,
+    arenaRank: 23,
+    mmlu: 87.1,
+    humanEval: 93.0,
+    math: 90.0,
+    gpqa: 69.0,
+    updatedAt: "2026-03-20",
+  },
+  "kimi-k1.5": {
+    eloScore: 1258,
+    arenaRank: 89,
+    mmlu: 87.0,
+    humanEval: 89.0,
+    math: 94.6,
+    updatedAt: "2026-03-01",
+  },
+  "moonshot-v1-128k": {
+    eloScore: 1183,
+    arenaRank: 114,
+    mmlu: 76.0,
+    humanEval: 69.0,
+    updatedAt: "2026-03-01",
   },
 
   // ── Cohere ────────────────────────────────────────────────────────────────
   "command-r-plus": {
     eloScore: 1201,
-    arenaRank: 36,
+    arenaRank: 110,
     mmlu: 75.7,
     humanEval: 72.5,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
   "command-r": {
     eloScore: 1162,
-    arenaRank: 52,
+    arenaRank: 122,
     mmlu: 68.2,
     humanEval: 48.7,
-    updatedAt: "2025-03-01",
-  },
-
-  // ── Falcon / TII ─────────────────────────────────────────────────────────
-  "falcon-180b": {
-    eloScore: 1085,
-    arenaRank: 72,
-    mmlu: 68.7,
-    updatedAt: "2025-03-01",
+    updatedAt: "2026-03-01",
   },
 
   // ── Ollama / 本地模型（估算值） ────────────────────────────────────────────
@@ -657,9 +783,10 @@ export function lookupBenchmark(
 
 // ==================== Elo 分归一化 ====================
 
-// Arena Elo 分通常在 800-1400 之间
-const ELO_MIN = 800;
-const ELO_MAX = 1400;
+// Arena Elo 分区间已更新（2026年实际范围约 1050-1510）
+// 参考 openlm.ai/chatbot-arena 最新数据
+const ELO_MIN = 1050;
+const ELO_MAX = 1510;
 
 /**
  * 将 Elo 分归一化为 0-100 分（用于路由评分）
@@ -674,123 +801,635 @@ export function normalizeEloScore(eloScore: number): number {
 
 // ==================== 数据刷新机制 ====================
 
-let _lastUpdatedAt = 0;
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+/** 缓存文件元数据 */
+type CacheMeta = {
+  lastFetchedAt: number;
+  source: string;
+  savedAt: string;
+  /** 上次失败时间戳（ms），成功时清除 */
+  failedAt?: number;
+};
+
+/** 缓存文件整体结构 */
+type CacheFile = {
+  _meta: CacheMeta;
+  [modelName: string]: BenchmarkEntry | CacheMeta;
+};
+
 let _isFetching = false;
 let _fetchPromise: Promise<void> | null = null;
+// 进程内缓存：已确认冷却中，避免同进程多次读文件
+let _cooldownCheckedAt = 0;
+let _onCooldown = false;
 
-// 每周刷新一次（7天）
-const REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
+// 更新周期（默认 30 天；用户可通过环境变量覆盖）
+const REFRESH_INTERVAL_MS = (() => {
+  const env = process.env.ARENA_REFRESH_DAYS;
+  if (env) {
+    const days = parseInt(env, 10);
+    if (!isNaN(days) && days > 0) {
+      return days * 24 * 60 * 60 * 1000;
+    }
+  }
+  return 30 * 24 * 60 * 60 * 1000;
+})();
 
-/**
- * 从 LMSYS Arena 获取最新排行榜数据
- * 实际 HTTP 请求逻辑（当前为模拟实现，可替换为真实 API 调用）
- */
-async function fetchLMSYSArenaData(): Promise<ArenaBenchmarkDB> {
-  // TODO: 替换为真实的 LMSYS Arena API 调用
-  // 示例：const response = await fetch('https://lmarena.ai/api/leaderboard');
-  // 示例：const data = await response.json();
+// 网络失败后的重试冷却期（24 小时）：避免每个 agent 进程反复重试
+const FETCH_FAIL_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
-  // 当前返回空对象，表示使用内置数据
-  // 实际实现时，应将 API 返回数据转换为 ArenaBenchmarkDB 格式
-  return {};
+// 数据源配置（按优先级排序）
+const ARENA_DATA_SOURCES = [
+  {
+    name: "ModelScope",
+    url: "https://modelscope.cn/api/v1/models?PageSize=100&SortBy=downloads&Task=llm",
+    timeout: 5000,
+  },
+  {
+    name: "HuggingFace",
+    url: "https://huggingface.co/api/spaces/lmarena-ai/arena-leaderboard/data",
+    timeout: 10000,
+  },
+];
+
+// HTML 抓取源
+const ARENA_SCRAPE_SOURCES = [
+  { name: "lmarena.ai", url: "https://lmarena.ai/leaderboard", timeout: 15000 },
+  {
+    name: "HuggingFace-leaderboard",
+    url: "https://huggingface.co/spaces/lmarena-ai/arena-leaderboard",
+    timeout: 15000,
+  },
+];
+
+// 本地缓存路径
+function getLocalCachePath(): string {
+  return path.join(
+    process.env.OPENCLAW_CONFIG_DIR || path.join(os.homedir(), ".openclaw"),
+    "arena-benchmarks.json",
+  );
 }
 
 /**
- * 获取当前基准数据库（直接返回内置数据）
+ * 从本地缓存加载基准数据
+ */
+function loadLocalCache(): { data: ArenaBenchmarkDB; meta: CacheMeta | null } {
+  try {
+    const localDataPath = getLocalCachePath();
+    if (!fs.existsSync(localDataPath)) {
+      return { data: {}, meta: null };
+    }
+    const raw = JSON.parse(fs.readFileSync(localDataPath, "utf-8")) as CacheFile;
+    if (!raw || typeof raw !== "object") {
+      return { data: {}, meta: null };
+    }
+    const meta: CacheMeta | null =
+      raw._meta && typeof raw._meta.lastFetchedAt === "number" ? raw._meta : null;
+    const result: ArenaBenchmarkDB = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (k === "_meta") {
+        continue;
+      }
+      const e = v as BenchmarkEntry;
+      if (e && typeof e.eloScore === "number") {
+        result[normalizeModelName(k)] = e;
+      }
+    }
+    if (Object.keys(result).length > 0) {
+      console.log(
+        `[ArenaBenchmarks] Loaded ${Object.keys(result).length} models from local cache` +
+          (meta ? ` (last fetched: ${new Date(meta.lastFetchedAt).toLocaleDateString()})` : ""),
+      );
+      return { data: result, meta };
+    }
+  } catch (e) {
+    console.warn("[ArenaBenchmarks] Failed to load local cache:", e);
+  }
+  return { data: {}, meta: null };
+}
+
+/**
+ * 将数据保存到本地缓存（内置 + 传入数据合并）
+ */
+function saveLocalCache(data: ArenaBenchmarkDB, source: string): void {
+  try {
+    const localDataPath = getLocalCachePath();
+    const dir = path.dirname(localDataPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const merged: ArenaBenchmarkDB = { ...BUILTIN_BENCHMARKS, ...data };
+    const cacheFile: CacheFile = {
+      // failedAt 不写入（成功时清除失败标记）
+      _meta: { lastFetchedAt: Date.now(), source, savedAt: new Date().toISOString() },
+      ...merged,
+    };
+    fs.writeFileSync(localDataPath, JSON.stringify(cacheFile, null, 2), "utf-8");
+    console.log(
+      `[ArenaBenchmarks] Saved ${Object.keys(merged).length} models to persistent cache (source: ${source})`,
+    );
+  } catch (e) {
+    console.warn("[ArenaBenchmarks] Failed to save local cache:", e);
+  }
+}
+
+/**
+ * 将传入数据写入内存库
+ */
+export function mergeBenchmarkData(data: ArenaBenchmarkDB): void {
+  Object.assign(BUILTIN_BENCHMARKS, data);
+}
+
+/**
+ * 获取当前基准数据库
  */
 export function getBenchmarkDB(): ArenaBenchmarkDB {
   return BUILTIN_BENCHMARKS;
 }
 
 /**
- * 使用自定义数据更新内置数据库
- * 外部获取的数据直接更新到 BUILTIN_BENCHMARKS
- *
- * @param data - 需要合并的数据，key 为规范化模型名称
- */
-export function mergeBenchmarkData(data: ArenaBenchmarkDB): void {
-  Object.assign(BUILTIN_BENCHMARKS, data);
-  _lastUpdatedAt = Date.now();
-}
-
-/**
- * 重置为原始内置数据
+ * 重置内存层（缓存文件保留）
  */
 export function resetBenchmarkDB(): void {
-  // 重新加载原始内置数据（通过重新赋值）
-  // 注意：这里只是清空更新标记，实际重置需要重新加载模块
-  _lastUpdatedAt = 0;
+  // 仅重置内存层；缓存文件保留（不删除用户的持久化数据）
 }
 
-/**
- * 检查是否需要刷新数据
- */
-export function isRefreshNeeded(): boolean {
-  if (_lastUpdatedAt === 0) {
-    // 从未获取过外部数据，需要刷新
-    return true;
+// ==================== 源码内置数据自更新 ====================
+
+function getSelfSourcePath(): string {
+  try {
+    const fileUrl = import.meta.url;
+    if (fileUrl.startsWith("file://")) {
+      const jsPath = fileURLToPath(fileUrl);
+      const tsPath = jsPath.replace(/\.js$/, ".ts");
+      if (fs.existsSync(tsPath)) {
+        return tsPath;
+      }
+    }
+  } catch {}
+  return "";
+}
+
+function entryToSource(entry: BenchmarkEntry, indent = "  "): string {
+  const lines: string[] = [];
+  lines.push(`${indent}  eloScore: ${entry.eloScore},`);
+  lines.push(`${indent}  arenaRank: ${entry.arenaRank},`);
+  if (entry.mmlu !== undefined) {
+    lines.push(`${indent}  mmlu: ${entry.mmlu},`);
   }
-  return Date.now() - _lastUpdatedAt > REFRESH_INTERVAL_MS;
+  if (entry.humanEval !== undefined) {
+    lines.push(`${indent}  humanEval: ${entry.humanEval},`);
+  }
+  if (entry.math !== undefined) {
+    lines.push(`${indent}  math: ${entry.math},`);
+  }
+  if (entry.mtBench !== undefined) {
+    lines.push(`${indent}  mtBench: ${entry.mtBench},`);
+  }
+  if (entry.gpqa !== undefined) {
+    lines.push(`${indent}  gpqa: ${entry.gpqa},`);
+  }
+  lines.push(`${indent}  updatedAt: "${entry.updatedAt}",`);
+  return `${indent}{\n${lines.join("\n")}\n${indent}}`;
+}
+
+function dbToSource(db: ArenaBenchmarkDB): string {
+  const sorted = Object.entries(db).toSorted((a, b) => b[1].eloScore - a[1].eloScore);
+  return sorted.map(([k, v]) => `  ${JSON.stringify(k)}: ${entryToSource(v, "  ")},`).join("\n");
+}
+
+function rewriteBuiltinBenchmarks(data: ArenaBenchmarkDB, source: string): void {
+  try {
+    const selfPath = getSelfSourcePath();
+    if (!selfPath) {
+      return;
+    }
+    const original = fs.readFileSync(selfPath, "utf-8");
+    const startMarker = "const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {";
+    const startIdx = original.indexOf(startMarker);
+    if (startIdx === -1) {
+      return;
+    }
+    let depth = 0,
+      endIdx = -1;
+    for (let i = startIdx + startMarker.length - 1; i < original.length; i++) {
+      if (original[i] === "{") {
+        depth++;
+      } else if (original[i] === "}") {
+        depth--;
+        if (depth === 0) {
+          endIdx = i;
+          break;
+        }
+      }
+    }
+    if (endIdx === -1) {
+      return;
+    }
+    const merged = { ...BUILTIN_BENCHMARKS, ...data };
+    const today = new Date().toISOString().split("T")[0];
+    const newBlock = `const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {\n${dbToSource(merged)}\n}`;
+    // 更新头部注释日期
+    const updated = original.slice(0, startIdx) + newBlock + original.slice(endIdx + 1);
+    const withComment = updated.replace(
+      /\/\/ Elo 分基于[^\n]*/,
+      `// Elo 分基于 Bradley-Terry 模型，参考 lmarena.ai ${today} 快照（来源: ${source}）`,
+    );
+    fs.writeFileSync(selfPath, withComment, "utf-8");
+    console.log(
+      `[ArenaBenchmarks] ✓ Rewrote BUILTIN_BENCHMARKS in source: ${Object.keys(merged).length} models (${today})`,
+    );
+  } catch (e) {
+    console.warn("[ArenaBenchmarks] Failed to rewrite source:", e);
+  }
+}
+
+// ==================== 网页抓取兖底 ====================
+
+function parseEloFromHtml(html: string): ArenaBenchmarkDB {
+  const result: ArenaBenchmarkDB = {};
+  // 尝试匹配 HTML 表格 <td> 中的模型名 + Elo
+  const tdPattern = /<td[^>]*>([^<]{3,60})<\/td>\s*<td[^>]*>(\d{3,4})<\/td>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = tdPattern.exec(html)) !== null) {
+    const name = m[1].trim();
+    const elo = parseInt(m[2], 10);
+    if (elo >= 800 && elo <= 1500 && name && !/^\d+$/.test(name)) {
+      result[normalizeModelName(name)] = {
+        eloScore: elo,
+        arenaRank: 999,
+        updatedAt: new Date().toISOString().split("T")[0],
+      };
+    }
+  }
+  // 备用：纯文本行匹配
+  if (Object.keys(result).length < 3) {
+    const linePattern = /^([A-Za-z][\w\s.:\-/]+?)\s*[|\t]\s*(\d{3,4})\s*$/gm;
+    while ((m = linePattern.exec(html)) !== null) {
+      const name = m[1].trim();
+      const elo = parseInt(m[2], 10);
+      if (elo >= 800 && elo <= 1500) {
+        result[normalizeModelName(name)] = {
+          eloScore: elo,
+          arenaRank: 999,
+          updatedAt: new Date().toISOString().split("T")[0],
+        };
+      }
+    }
+  }
+  return result;
+}
+
+async function agentScrapeArenaLeaderboard(): Promise<{
+  data: ArenaBenchmarkDB;
+  source: string;
+} | null> {
+  console.log("[ArenaBenchmarks] Falling back to HTML scraping...");
+  for (const src of ARENA_SCRAPE_SOURCES) {
+    try {
+      const resp = await fetch(src.url, { signal: AbortSignal.timeout(src.timeout) });
+      if (!resp.ok) {
+        continue;
+      }
+      const html = await resp.text();
+      const data = parseEloFromHtml(html);
+      if (Object.keys(data).length >= 5) {
+        console.log(
+          `[ArenaBenchmarks] Scraped ${Object.keys(data).length} models from ${src.name}`,
+        );
+        return { data, source: src.name };
+      }
+    } catch {}
+  }
+  return null;
+}
+
+// ==================== 内置有效期判断 ====================
+
+/**
+ * 获取 BUILTIN_BENCHMARKS 中最新的 updatedAt 日期（ms）
+ */
+function getBuiltinLastUpdatedMs(): number {
+  let latest = 0;
+  for (const entry of Object.values(BUILTIN_BENCHMARKS)) {
+    if (entry?.updatedAt) {
+      const t = new Date(entry.updatedAt).getTime();
+      if (!isNaN(t) && t > latest) {
+        latest = t;
+      }
+    }
+  }
+  return latest;
 }
 
 /**
- * 刷新基准数据
- * - 动态获取的数据直接更新到内置数据库
- * - 首次启动：实时获取并等待完成
- * - 之后：超过7天异步刷新（不阻塞）
+ * 检查内置数据是否在有效期内
+ */
+function isBuiltinFresh(): boolean {
+  const lastUpdated = getBuiltinLastUpdatedMs();
+  if (lastUpdated === 0) {
+    return false;
+  }
+  return Date.now() - lastUpdated < REFRESH_INTERVAL_MS;
+}
+
+// ==================== 网络拉取 ====================
+
+/**
+ * 从多个数据源获取最新排行榜数据（JSON API 方式）
+ */
+async function fetchLMSYSArenaData(): Promise<{ data: ArenaBenchmarkDB; source: string } | null> {
+  for (const source of ARENA_DATA_SOURCES) {
+    try {
+      console.log(`[ArenaBenchmarks] Trying ${source.name}...`);
+      const response = await fetch(source.url, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(source.timeout),
+      });
+      if (!response.ok) {
+        continue;
+      }
+      const rawData = await response.json();
+      if (!rawData || typeof rawData !== "object") {
+        continue;
+      }
+      const result: ArenaBenchmarkDB = {};
+      const modelEntries = Array.isArray(rawData) ? rawData : Object.entries(rawData);
+      for (const item of modelEntries) {
+        let modelName: string;
+        let entry: {
+          elo?: number;
+          rank?: number;
+          mmlu?: number;
+          humanEval?: number;
+          math?: number;
+        };
+        if (Array.isArray(item)) {
+          modelName = item[0] as string;
+          entry = item[1] as typeof entry;
+        } else {
+          modelName =
+            (item as { name?: string; model?: string }).name ||
+            (item as { name?: string; model?: string }).model ||
+            "";
+          entry = item as typeof entry;
+        }
+        if (modelName && entry.elo) {
+          result[normalizeModelName(modelName)] = {
+            eloScore: entry.elo,
+            arenaRank: entry.rank ?? 999,
+            mmlu: entry.mmlu,
+            humanEval: entry.humanEval,
+            math: entry.math,
+            updatedAt: new Date().toISOString().split("T")[0],
+          };
+        }
+      }
+      if (Object.keys(result).length > 0) {
+        console.log(
+          `[ArenaBenchmarks] Got ${Object.keys(result).length} models from ${source.name}`,
+        );
+        return { data: result, source: source.name };
+      }
+    } catch (e) {
+      console.warn(`[ArenaBenchmarks] ${source.name} failed:`, (e as Error).message);
+    }
+  }
+  return null;
+}
+
+/**
+ * 检查缓存文件记录的上次尝试时间是否在冷却期内
+ * 用于跨进程节流：避免多个 agent 进程重复触发网络请求
+ *
+ * 两种情况认为在冷却期：
+ * 1. 缓存有 failedAt 且未过期（精确记录失败时间）
+ * 2. 缓存 source=="fetch-failed" 且 lastFetchedAt 未过期（兼容旧格式）
+ */
+function isFetchOnCooldown(): boolean {
+  // 同进程内 10 秒内的结果直接复用（避免重复读文件）
+  if (_cooldownCheckedAt > 0 && Date.now() - _cooldownCheckedAt < 10_000) {
+    return _onCooldown;
+  }
+  try {
+    const localDataPath = getLocalCachePath();
+    if (!fs.existsSync(localDataPath)) {
+      _cooldownCheckedAt = Date.now();
+      _onCooldown = false;
+      return false;
+    }
+    const raw = JSON.parse(fs.readFileSync(localDataPath, "utf-8")) as CacheFile;
+    const meta = raw?._meta as CacheMeta | undefined;
+    if (!meta) {
+      _cooldownCheckedAt = Date.now();
+      _onCooldown = false;
+      return false;
+    }
+    // 精确失败时间戳（新格式）
+    if (typeof meta.failedAt === "number" && meta.failedAt > 0) {
+      _onCooldown = Date.now() - meta.failedAt < FETCH_FAIL_COOLDOWN_MS;
+      _cooldownCheckedAt = Date.now();
+      return _onCooldown;
+    }
+    // 兼容：source 标记为失败（旧格式）
+    if (meta.source === "fetch-failed" && typeof meta.lastFetchedAt === "number") {
+      _onCooldown = Date.now() - meta.lastFetchedAt < FETCH_FAIL_COOLDOWN_MS;
+      _cooldownCheckedAt = Date.now();
+      return _onCooldown;
+    }
+    _cooldownCheckedAt = Date.now();
+    _onCooldown = false;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 将失败冷却时间戳写入缓存文件（跨进程共享）
+ */
+function writeFetchFailCooldown(): void {
+  try {
+    const localDataPath = getLocalCachePath();
+    const dir = path.dirname(localDataPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    // 读取现有缓存（保留模型数据），仅更新 _meta
+    let existing: Record<string, unknown> = {};
+    if (fs.existsSync(localDataPath)) {
+      try {
+        existing = JSON.parse(fs.readFileSync(localDataPath, "utf-8"));
+      } catch {}
+    }
+    const now = Date.now();
+    existing._meta = {
+      ...(existing._meta as object | undefined),
+      lastFetchedAt: now, // 记录尝试时间
+      failedAt: now, // 标记失败（新格式）
+      source: "fetch-failed", // 兼容旧格式检查
+      savedAt: new Date().toISOString(),
+    };
+    // 若缓存中没有模型数据，补入内置数据作为基线（供其他进程使用）
+    const hasModels = Object.keys(existing).some((k) => k !== "_meta");
+    if (!hasModels) {
+      Object.assign(existing, BUILTIN_BENCHMARKS);
+    }
+    fs.writeFileSync(localDataPath, JSON.stringify(existing, null, 2), "utf-8");
+    // 更新进程内缓存，避免同进程再次触发
+    _onCooldown = true;
+    _cooldownCheckedAt = Date.now();
+    console.log("[ArenaBenchmarks] Fail cooldown written. Next retry in ~24h.");
+  } catch (e) {
+    console.warn("[ArenaBenchmarks] Failed to write cooldown:", (e as Error).message);
+  }
+}
+
+/**
+ * 刷新基准数据（如需要）
+ *
+ * 启动逻辑：
+ * 1. 内置数据 updatedAt 在有效期内 → 直接返回
+ * 2. 当前进程已在拉取中 → 复用 Promise
+ * 3. 缓存文件记录的失败冷却期内 → 跳过，避免每个 agent 进程重复重试
+ * 4. 触发后台异步拉取，成功则回写源码+缓存，失败则写入冷却标记
  */
 export async function refreshBenchmarkDataIfNeeded(): Promise<void> {
-  // 如果正在获取中，等待当前获取完成
+  // 内置数据在有效期内：直接返回
+  if (isBuiltinFresh()) {
+    const lastUpdated = getBuiltinLastUpdatedMs();
+    const nextRefreshDays = Math.ceil(
+      (lastUpdated + REFRESH_INTERVAL_MS - Date.now()) / (24 * 60 * 60 * 1000),
+    );
+    console.log(
+      `[ArenaBenchmarks] Built-in data is fresh (next refresh in ~${nextRefreshDays} day(s)). Skipping network fetch.`,
+    );
+    return;
+  }
+
+  // 当前进程已在拉取中：复用 Promise
   if (_isFetching && _fetchPromise) {
     return _fetchPromise;
   }
 
-  // 检查是否需要刷新
-  if (!isRefreshNeeded()) {
+  // 跨进程节流：上次失败冷却期内，跳过重试
+  if (isFetchOnCooldown()) {
+    const { data: cachedData } = loadLocalCache();
+    if (Object.keys(cachedData).length > 0) {
+      mergeBenchmarkData(cachedData);
+    }
+    console.log(
+      "[ArenaBenchmarks] Network fetch on cooldown (last attempt failed). Using built-in/cached data.",
+    );
     return;
   }
 
-  // 判断是否为首次启动
-  const isFirstTime = _lastUpdatedAt === 0;
+  // 内置数据已过期：后台异步刷新
+  const lastUpdated = getBuiltinLastUpdatedMs();
+  const daysSince =
+    lastUpdated > 0 ? Math.floor((Date.now() - lastUpdated) / (24 * 60 * 60 * 1000)) : -1;
+  const reason =
+    lastUpdated === 0
+      ? "no updatedAt in built-in data"
+      : `built-in data is ${daysSince} day(s) old`;
+  console.log(`[ArenaBenchmarks] ${reason}, scheduling background network fetch...`);
 
-  // 开始获取数据
   _isFetching = true;
+  // 加载本地缓存（供 agent 抓取兜底判断使用）
+  const { data: cachedData } = loadLocalCache();
+  if (Object.keys(cachedData).length > 0) {
+    mergeBenchmarkData(cachedData);
+  }
+
   _fetchPromise = (async () => {
     try {
-      console.log("[ArenaBenchmarks] Fetching latest data from LMSYS Arena...");
-      const freshData = await fetchLMSYSArenaData();
-
-      if (Object.keys(freshData).length > 0) {
-        // 直接更新内置数据
-        mergeBenchmarkData(freshData);
-        console.log(`[ArenaBenchmarks] Updated built-in database with ${Object.keys(freshData).length} models`);
-      } else {
-        // 没有获取到新数据，标记为已初始化（避免重复请求）
-        _lastUpdatedAt = Date.now();
-        console.log("[ArenaBenchmarks] No fresh data available, using original built-in benchmarks");
+      console.log("[ArenaBenchmarks] Fetching latest data from external sources...");
+      let result = await fetchLMSYSArenaData();
+      // JSON API 全部失败且本地完全没有缓存：agent 网页抓取兜底
+      if (!result && Object.keys(cachedData).length === 0) {
+        result = await agentScrapeArenaLeaderboard();
       }
-    } catch (error) {
-      console.error("[ArenaBenchmarks] Failed to fetch data:", error);
-      // 获取失败时，标记为已初始化（避免阻塞）
-      _lastUpdatedAt = Date.now();
+      if (result && Object.keys(result.data).length > 0) {
+        saveLocalCache(result.data, result.source);
+        mergeBenchmarkData(result.data);
+        console.log(
+          `[ArenaBenchmarks] ✓ Fetched ${Object.keys(result.data).length} models from ${result.source}.`,
+        );
+        rewriteBuiltinBenchmarks(result.data, result.source);
+      } else {
+        // 失败：写入冷却标记，24小时内其他 agent 进程不再重试
+        writeFetchFailCooldown();
+        console.warn(
+          "[ArenaBenchmarks] ✗ No fresh data from network. Cooldown set (retry in ~24h).",
+        );
+      }
+    } catch (e) {
+      writeFetchFailCooldown();
+      console.warn("[ArenaBenchmarks] ✗ Fetch failed:", (e as Error).message, "Cooldown set.");
     } finally {
       _isFetching = false;
       _fetchPromise = null;
     }
   })();
-
-  // 首次启动：等待获取完成
-  if (isFirstTime) {
-    await _fetchPromise;
-  }
-  // 否则异步刷新，不阻塞当前调用
+  // 不等待网络请求完成，立即返回
 }
 
 /**
- * 初始化基准数据库（在应用启动时调用）
+ * 初始化基准数据库（应用启动时调用）
  */
 export async function initBenchmarkDB(): Promise<void> {
   await refreshBenchmarkDataIfNeeded();
+}
+
+/**
+ * 强制刷新基准数据（无论内置数据是否在有效期内，立即触发网络刷新）
+ * 场景：用户新增模型后主动触发，确保有该模型的最新 Elo 数据
+ */
+export async function forceRefreshBenchmarkData(): Promise<void> {
+  if (_isFetching && _fetchPromise) {
+    return _fetchPromise;
+  }
+  _isFetching = true;
+  const { data: cachedData } = loadLocalCache();
+  if (Object.keys(cachedData).length > 0) {
+    mergeBenchmarkData(cachedData);
+  }
+  console.log("[ArenaBenchmarks] Force refresh triggered (new model added)...");
+  _fetchPromise = (async () => {
+    try {
+      let result = await fetchLMSYSArenaData();
+      if (!result && Object.keys(cachedData).length === 0) {
+        result = await agentScrapeArenaLeaderboard();
+      }
+      if (result && Object.keys(result.data).length > 0) {
+        saveLocalCache(result.data, result.source);
+        mergeBenchmarkData(result.data);
+        console.log(
+          `[ArenaBenchmarks] ✓ Force refresh done: ${Object.keys(result.data).length} models from ${result.source}.`,
+        );
+        rewriteBuiltinBenchmarks(result.data, result.source);
+      } else {
+        console.warn("[ArenaBenchmarks] ✗ Force refresh: no data from network.");
+      }
+    } catch (e) {
+      console.warn("[ArenaBenchmarks] ✗ Force refresh failed:", (e as Error).message);
+    } finally {
+      _isFetching = false;
+      _fetchPromise = null;
+    }
+  })();
+}
+
+/**
+ * 检查是否需要刷新（兑容旧接口）
+ */
+export function isRefreshNeeded(): boolean {
+  return !isBuiltinFresh();
 }
 
 // ==================== 汇总数据查询 ====================

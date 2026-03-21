@@ -255,8 +255,14 @@ export async function listTasks(filter?: TaskFilter): Promise<Task[]> {
 
   // 应用筛选条件
   if (filter.assigneeId) {
+    // 大小写不敏感匹配：agentId 经过 normalizeAgentId 会统一转小写，
+    // 但历史数据可能存了大写，用 toLowerCase 兼容两侧格式
+    const filterIdLower = filter.assigneeId.toLowerCase();
     results = results.filter((task) =>
-      (task.assignees ?? []).some((assignee) => assignee.id === filter.assigneeId),
+      (task.assignees ?? []).some(
+        (assignee) =>
+          assignee.id === filter.assigneeId || assignee.id.toLowerCase() === filterIdLower,
+      ),
     );
   }
 

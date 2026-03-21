@@ -459,6 +459,19 @@ async function scheduleNextTaskForAgent(
   projectId?: string,
 ): Promise<void> {
   try {
+    // 先检查是否已有 in-progress 任务（防止并发触发导致双 in-progress 违规）
+    // 调度器扫描 和 task.report 可能同时触发，需保证串行性
+    const inProgressTasks = await taskStorage.listTasks({
+      assigneeId: agentId,
+      status: ["in-progress"],
+    });
+    if (inProgressTasks.length > 0) {
+      console.log(
+        `[scheduleNextTask] Agent ${agentId} already has ${inProgressTasks.length} in-progress task(s), skipping auto-start`,
+      );
+      return;
+    }
+
     const todoTasks = await taskStorage.listTasks({
       assigneeId: agentId,
       status: ["todo"],
@@ -2470,6 +2483,11 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         availability: "available",
         default: agent.default || false,
         workspace: resolveAgentWorkspaceDir(cfg, agent.id),
+        // 通道绑定说明：帮助主控agent正确理解通道绑定的作用
+        // 通道绑定用于入站消息路由（用户通过飞书/微信发消息 → 路由到哪个agent）
+        // subagent通过agent()工具内部调用，不需要通道绑定
+        _note:
+          "Channel bindings are for inbound message routing only. Subagents work via internal agent() tool calls and do NOT need channel bindings. An agent without channel bindings can still work as a subagent.",
       }));
 
     respond(true, result, undefined);
@@ -2537,6 +2555,11 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       default: agent.default || false,
       workspace: resolveAgentWorkspaceDir(cfg, agent.id),
       model: agent.model || null,
+      // 通道绑定说明：帮助主控agent正确理解通道绑定的作用
+      // 通道绑定用于入站消息路由（用户通过飞书/微信发消息 → 路由到哪个agent）
+      // subagent通过agent()工具内部调用，不需要通道绑定
+      _note:
+        "Channel bindings are for inbound message routing only. Subagents work via internal agent() tool calls and do NOT need channel bindings. An agent without channel bindings can still work as a subagent.",
     };
 
     if (includeStats) {
@@ -2948,7 +2971,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             assignedBy: requesterId,
           },
         ],
-        status: "todo",
+        status: "in-progress",
         priority,
         organizationId: p?.organizationId ? String(p.organizationId) : undefined,
         teamId: p?.teamId ? String(p.teamId) : undefined,
@@ -2956,6 +2979,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         dueDate: p?.deadline ? new Date(p.deadline).getTime() || undefined : undefined,
         timeTracking: {
           timeSpent: 0,
+          startedAt: Date.now(),
           lastActivityAt: Date.now(),
         },
         metadata: {
@@ -2982,7 +3006,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       cfg,
     );
     const taskLines = [
-      `[NEW TASK QUEUED]`,
+      `[TASK ASSIGNMENT - EXECUTE NOW]`,
       `Task ID: ${taskId}`,
       `From: ${requesterId}`,
       `Priority: ${priority}`,
@@ -3003,7 +3027,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         : null,
       ``,
       `Instructions:`,
-      `- This task has been added to your queue with status "todo". Set it to "in-progress" immediately and start executing.`,
+      `- This task has been set to "in-progress". Execute it immediately.`,
       `- DO NOT just acknowledge or describe what you plan to do. Execute the actual work right now.`,
       `- Execute tasks in order: urgent > high > medium > low, then by creation time (oldest first).`,
       `- When you complete this task, use the task_report_to_supervisor tool to report results back. Task ID: ${taskId}`,
@@ -3517,15 +3541,16 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       const normalizedLeader = normalizeAgentId(resolvedLeaderId);
       const allowed = new Set(listAgentIds(cfg));
       if (allowed.has(normalizedLeader)) {
-        // 查询 reporter 当前任务状态摘要
+        // 查询 reporter 当前任务状态摘要（用 normalized ID 确保匹配存储格式）
+        const normalizedReporter = normalizeAgentId(reporterId);
         let inProgressCount = 0;
         let todoCount = 0;
         let inProgressTitles: string[] = [];
         let todoTitles: string[] = [];
         try {
           const [inProgressTasks, todoTasksForReport] = await Promise.all([
-            taskStorage.listTasks({ assigneeId: reporterId, status: ["in-progress"] }),
-            taskStorage.listTasks({ assigneeId: reporterId, status: ["todo"] }),
+            taskStorage.listTasks({ assigneeId: normalizedReporter, status: ["in-progress"] }),
+            taskStorage.listTasks({ assigneeId: normalizedReporter, status: ["todo"] }),
           ]);
           inProgressCount = inProgressTasks.length;
           todoCount = todoTasksForReport.length;
@@ -3618,8 +3643,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       undefined,
     );
 
-    // === 步骤 3：任务完成后自动驱动下一条 todo 任务 ===
-    if (finalStatus === "done" || finalStatus === "cancelled") {
+    // === 步骤 3：任务完成/取消/阻塞后自动驱动下一条 todo 任务 ===
+    // blocked：当前任务阻塞无法继续，agent 应立即切换到队列中下一条任务
+    if (finalStatus === "done" || finalStatus === "cancelled" || finalStatus === "blocked") {
       await scheduleNextTaskForAgent(normalizeAgentId(reporterId), taskId, task?.projectId);
     }
   },

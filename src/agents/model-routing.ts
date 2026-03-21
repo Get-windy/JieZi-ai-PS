@@ -182,18 +182,25 @@ export function detectTaskDomain(message: string, context: SessionContext): Task
 
   const lowerMessage = message.toLowerCase();
 
-  // 编程任务检测
+  // 编程任务检测（收紧条件，避免普通业务任务被误判为 coding）
   if (
     context.hasCode ||
     lowerMessage.includes("代码") ||
-    lowerMessage.includes("code") ||
     lowerMessage.includes("编程") ||
-    lowerMessage.includes("程序") ||
+    lowerMessage.includes("编写代码") ||
+    lowerMessage.includes("写代码") ||
     lowerMessage.includes("debug") ||
-    lowerMessage.includes("bug") ||
-    lowerMessage.includes("function") ||
-    lowerMessage.includes("class") ||
-    /\b(python|java|javascript|typescript|c\+\+|rust|go)\b/i.test(message)
+    lowerMessage.includes("debugging") ||
+    lowerMessage.includes("implement") ||
+    // 仅在代码相关语境下才判定：code 单词出现 + 其他代码信号
+    (lowerMessage.includes("code") &&
+      (lowerMessage.includes("write") ||
+        lowerMessage.includes("fix") ||
+        lowerMessage.includes("review") ||
+        lowerMessage.includes("error"))) ||
+    /\b(python|javascript|typescript|c\+\+|rust|golang)\b/i.test(message) ||
+    // 代码块关键词（不误判含 function/class 的普通中文业务消息）
+    /```[a-z]/.test(message)
   ) {
     return "coding";
   }
@@ -352,15 +359,16 @@ export function assessSpecializationMatch(taskDomain: TaskDomain, modelInfo: Mod
   const specializations = modelInfo.specializations || ["general"];
 
   // 任务领域到专业领域的映射
+  // 注意：附加 "general" 到 coding/reasoning 等映射，防止通用强模型不必要地失分
   const domainToSpecialization: Record<TaskDomain, ModelSpecialization[]> = {
-    general: ["general", "multimodal"],
-    coding: ["coding", "general"],
+    general: ["general", "multimodal", "coding", "reasoning", "creative"],
+    coding: ["coding", "general", "reasoning"],
     math: ["math", "reasoning", "general"],
     creative: ["creative", "general"],
-    analysis: ["reasoning", "general"],
+    analysis: ["reasoning", "general", "coding"],
     translation: ["translation", "general"],
     vision: ["vision", "multimodal"],
-    reasoning: ["reasoning", "general"],
+    reasoning: ["reasoning", "general", "coding"],
   };
 
   // 获取任务对应的专业领域
@@ -635,14 +643,14 @@ export async function scoreAllAccounts(
   const taskDomain = detectTaskDomain(message, context);
 
   // 3. 获取权重配置（使用默认值）
-  const complexityWeight = config.smartRouting?.complexityWeight ?? 30;
+  const complexityWeight = config.smartRouting?.complexityWeight ?? 20; // 降低复杂度权重，避免简单任务都被判为 coding
   const capabilityWeight = config.smartRouting?.capabilityWeight ?? 20;
   const costWeight = config.smartRouting?.costWeight ?? 15;
   const speedWeight = config.smartRouting?.speedWeight ?? 10;
   // 新增权重：专业领域、模态匹配、外部评测 Elo
-  const specializationWeight = 12; // 专业领域匹配权重
+  const specializationWeight = 10; // 专业领域匹配权重（降低，避免 coder 模型在通用任务中过度占优）
   const modalityWeight = 8; // 模态匹配权重
-  const eloWeight = 5; // LMSYS Arena Elo 权重（搏低以确保未配置数据时不过分影响其他维度）
+  const eloWeight = 17; // LMSYS Arena Elo 权重（提高，让真实能力排行更有影响力）
 
   // 4. 为每个账号打分
   const scores: AccountScore[] = await Promise.all(
@@ -859,12 +867,20 @@ export async function routeToOptimalModelAccount(
   const selectedScore = scores.find((s) => s.accountId === selectedAccountId);
   let reason = `智能路由：选择账号 ${selectedAccountId}`;
   if (selectedScore) {
-    reason += ` (总分: ${selectedScore.totalScore}, 能力: ${selectedScore.capabilityScore}, 成本: ${selectedScore.costScore}`;
+    reason += ` (总分: ${selectedScore.totalScore}`;
+    reason += `, 能力: ${selectedScore.capabilityScore}`;
+    reason += `, 成本: ${selectedScore.costScore}`;
+    reason += `, 速度: ${selectedScore.speedScore}`;
+    reason += `, 专业: ${selectedScore.specializationScore}`;
     if (selectedScore.eloScore > 0 && selectedScore.eloScore !== 50) {
       reason += `, Elo: ${selectedScore.eloScore}`;
       if (selectedScore.modelInfo?.benchmarks?.eloScore) {
         reason += `[${selectedScore.modelInfo.benchmarks.eloScore}]`;
       }
+    }
+    // 显示模型的专业领域
+    if (selectedScore.modelInfo?.specializations?.length) {
+      reason += `, 领域: ${selectedScore.modelInfo.specializations.join(",")}`;
     }
     reason += ")";
   }
