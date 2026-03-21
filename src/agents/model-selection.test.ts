@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
-import { resetLogger, setLoggerOverride } from "../logging/logger.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { resetLogger, setLoggerOverride } from "../../upstream/src/logging/logger.js";
 import {
   parseModelRef,
   resolveModelRefFromString,
@@ -8,7 +8,7 @@ import {
   buildModelAliasIndex,
   normalizeProviderId,
   modelKey,
-} from "./model-selection.js";
+} from "../../upstream/src/agents/model-selection.js";
 
 describe("model-selection", () => {
   describe("normalizeProviderId", () => {

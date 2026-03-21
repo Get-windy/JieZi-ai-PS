@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { resolveAgentConfig, resolveDefaultAgentId } from "../../agents/agent-scope.js";
-import { loadConfig } from "../../config/config.js";
-import { randomIdempotencyKey } from "../../gateway/call.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
+import { randomIdempotencyKey } from "../../../upstream/src/gateway/call.js";
 import {
   DEFAULT_EXEC_APPROVAL_TIMEOUT_MS,
   type ExecApprovalsFile,
@@ -10,15 +10,15 @@ import {
   maxAsk,
   minSecurity,
   resolveExecApprovalsFromFile,
-} from "../../infra/exec-approvals.js";
-import { buildNodeShellCommand } from "../../infra/node-shell.js";
-import { applyPathPrepend } from "../../infra/path-prepend.js";
-import { defaultRuntime } from "../../runtime.js";
-import { parseEnvPairs, parseTimeoutMs } from "../nodes-run.js";
-import { getNodesTheme, runNodesCommand } from "./cli-utils.js";
-import { parseNodeList } from "./format.js";
-import { callGatewayCli, nodesCallOpts, resolveNodeId, unauthorizedHintForMessage } from "./rpc.js";
-import type { NodesRpcOpts } from "./types.js";
+} from "../../../upstream/src/infra/exec-approvals.js";
+import { buildNodeShellCommand } from "../../../upstream/src/infra/node-shell.js";
+import { applyPathPrepend } from "../../../upstream/src/infra/path-prepend.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
+import { parseEnvPairs, parseTimeoutMs } from "../../../upstream/src/cli/nodes-run.js";
+import { getNodesTheme, runNodesCommand } from "../../../upstream/src/cli/nodes-cli/cli-utils.js";
+import { parseNodeList } from "../../../upstream/src/cli/nodes-cli/format.js";
+import { callGatewayCli, nodesCallOpts, resolveNodeId, unauthorizedHintForMessage } from "../../../upstream/src/cli/nodes-cli/rpc.js";
+import type { NodesRpcOpts } from "../../../upstream/src/cli/nodes-cli/types.js";
 
 type NodesRunOpts = NodesRpcOpts & {
   node?: string;

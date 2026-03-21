@@ -5,9 +5,9 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import type { AnyAgentTool } from "./common.js";
-import { jsonResult, readStringParam } from "./common.js";
-import { callGatewayTool, readGatewayCallOptions } from "./gateway.js";
+import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
+import { jsonResult, readStringParam } from "../../../upstream/src/agents/tools/common.js";
+import { callGatewayTool, readGatewayCallOptions } from "../../../upstream/src/agents/tools/gateway.js";
 
 /**
  * friend_add 工具参数 schema

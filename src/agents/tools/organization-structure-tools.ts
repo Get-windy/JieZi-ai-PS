@@ -3,9 +3,9 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import { jsonResult } from "./common.js";
-import type { AnyAgentTool } from "./common.js";
-import { callGatewayTool } from "./gateway.js";
+import { jsonResult } from "../../../upstream/src/agents/tools/common.js";
+import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
+import { callGatewayTool } from "../../../upstream/src/agents/tools/gateway.js";
 
 export function createOrgDepartmentTool(opts?: {
   currentAgentId?: string;

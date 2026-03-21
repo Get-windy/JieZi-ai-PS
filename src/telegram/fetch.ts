@@ -1,8 +1,8 @@
 import * as dns from "node:dns";
 import * as net from "node:net";
-import type { TelegramNetworkConfig } from "../config/types.telegram.js";
-import { resolveFetch } from "../infra/fetch.js";
-import { createSubsystemLogger } from "../logging/subsystem.js";
+import type { TelegramNetworkConfig } from "../../upstream/src/config/types.telegram.js";
+import { resolveFetch } from "../../upstream/src/infra/fetch.js";
+import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
 import {
   resolveTelegramAutoSelectFamilyDecision,
   resolveTelegramDnsResultOrderDecision,

@@ -8,18 +8,18 @@
  * 不影响上游：该文件是本地新增，上游同步不会覆盖。
  */
 
-import { loadConfig } from "../../config/config.js";
-import { resolveStorePath, loadSessionStore } from "../../config/sessions.js";
-import { stripEnvelopeFromMessages } from "../chat-sanitize.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
-import { getMaxChatHistoryMessagesBytes } from "../server-constants.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
+import { resolveStorePath, loadSessionStore } from "../../../upstream/src/config/sessions.js";
+import { stripEnvelopeFromMessages } from "../../../upstream/src/gateway/chat-sanitize.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import { getMaxChatHistoryMessagesBytes } from "../../../upstream/src/gateway/server-constants.js";
 import {
   capArrayByJsonBytes,
   listSessionsFromStore,
   loadSessionEntry,
   readSessionMessages,
 } from "../session-utils.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 /** 单条聚合消息（带来源元数据） */
 type AggregatedMessage = {

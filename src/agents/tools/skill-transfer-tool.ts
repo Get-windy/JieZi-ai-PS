@@ -4,14 +4,15 @@
  * 允许培训师将技能文件从导师工作空间复制到学员工作空间
  */
 
-import { Type } from "@sinclair/typebox";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { AnyAgentTool } from "./common.js";
-import { loadConfig } from "../../config/config.js";
+import { Type } from "@sinclair/typebox";
+import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
+import { jsonResult, readStringParam } from "../../../upstream/src/agents/tools/common.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import { LifecycleManager } from "../../lifecycle/lifecycle-manager.js";
 import { TrainingSystem } from "../../lifecycle/training-system.js";
-import { jsonResult, readStringParam } from "./common.js";
+import { registerToolFactory } from "./registry.js";
 
 /**
  * skill_transfer 工具参数 schema
@@ -53,7 +54,7 @@ export function createSkillTransferTool(opts?: {
       const overwrite = typeof params.overwrite === "boolean" ? params.overwrite : false;
 
       const cfg = loadConfig();
-      const trainingSystem = TrainingSystem.getInstance();
+      const _trainingSystem = TrainingSystem.getInstance();
       const lifecycleManager = LifecycleManager.getInstance();
 
       // 1. 验证培训师权限
@@ -197,3 +198,13 @@ export function createSkillTransferTool(opts?: {
     },
   };
 }
+
+// 自动注册到工具注册表——openclaw-tools.ts import 此模块时自动生效
+registerToolFactory({
+  name: "skill_transfer",
+  factory: (opts) =>
+    createSkillTransferTool({
+      trainerAgentId: opts?.agentId,
+      workspaceRoot: opts?.workspaceDir,
+    }),
+});

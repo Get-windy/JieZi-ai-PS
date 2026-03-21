@@ -4,11 +4,11 @@
  * 提供智能体培训、技能转移、评估功能
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
-import { loadConfig } from "../../config/config.js";
-import { listAgentEntries } from "../../commands/agents.config.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
+import { listAgentEntries } from "../../../upstream/src/commands/agents.config.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 /**
  * 培训记录

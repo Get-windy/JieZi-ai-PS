@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { describe, expect, it } from "vitest";
-import { sanitizeSessionMessagesImages } from "./pi-embedded-helpers.js";
+import { sanitizeSessionMessagesImages } from "../../upstream/src/agents/pi-embedded-helpers.js";
 
 describe("sanitizeSessionMessagesImages", () => {
   it("keeps tool call + tool result IDs unchanged by default", async () => {

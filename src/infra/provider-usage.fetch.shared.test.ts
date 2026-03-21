@@ -4,7 +4,7 @@ import {
   buildUsageHttpErrorSnapshot,
   fetchJson,
   parseFiniteNumber,
-} from "./provider-usage.fetch.shared.js";
+} from "../../upstream/src/infra/provider-usage.fetch.shared.js";
 
 describe("provider usage fetch shared helpers", () => {
   afterEach(() => {

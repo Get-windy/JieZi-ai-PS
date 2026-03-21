@@ -1,7 +1,7 @@
 import path from "node:path";
 import { resolveSandboxInputPath, resolveSandboxPath } from "../sandbox-paths.js";
-import { SANDBOX_AGENT_WORKSPACE_MOUNT } from "./constants.js";
-import type { SandboxContext } from "./types.js";
+import { SANDBOX_AGENT_WORKSPACE_MOUNT } from "../../../upstream/src/agents/sandbox/constants.js";
+import type { SandboxContext } from "../../../upstream/src/agents/sandbox/types.js";
 
 export type SandboxFsMount = {
   hostRoot: string;

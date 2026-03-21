@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { castAgentMessage } from "../../test-helpers/agent-message-fixtures.js";
+import { castAgentMessage } from "../../../../upstream/src/agents/test-helpers/agent-message-fixtures.js";
 import {
   selectCompactionTimeoutSnapshot,
   shouldFlagCompactionTimeout,
-} from "./compaction-timeout.js";
+} from "../../../../upstream/src/agents/pi-embedded-runner/run/compaction-timeout.js";
 
 describe("compaction-timeout helpers", () => {
   it("flags compaction timeout consistently for internal and external timeout sources", () => {

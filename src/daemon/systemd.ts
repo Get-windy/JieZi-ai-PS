@@ -4,12 +4,12 @@ import {
   LEGACY_GATEWAY_SYSTEMD_SERVICE_NAMES,
   resolveGatewayServiceDescription,
   resolveGatewaySystemdServiceName,
-} from "./constants.js";
-import { execFileUtf8 } from "./exec-file.js";
-import { formatLine, toPosixPath, writeFormattedLines } from "./output.js";
-import { resolveHomeDir } from "./paths.js";
-import { parseKeyValueOutput } from "./runtime-parse.js";
-import type { GatewayServiceRuntime } from "./service-runtime.js";
+} from "../../upstream/src/daemon/constants.js";
+import { execFileUtf8 } from "../../upstream/src/daemon/exec-file.js";
+import { formatLine, toPosixPath, writeFormattedLines } from "../../upstream/src/daemon/output.js";
+import { resolveHomeDir } from "../../upstream/src/daemon/paths.js";
+import { parseKeyValueOutput } from "../../upstream/src/daemon/runtime-parse.js";
+import type { GatewayServiceRuntime } from "../../upstream/src/daemon/service-runtime.js";
 import type {
   GatewayServiceCommandConfig,
   GatewayServiceControlArgs,
@@ -17,17 +17,17 @@ import type {
   GatewayServiceEnvArgs,
   GatewayServiceInstallArgs,
   GatewayServiceManageArgs,
-} from "./service-types.js";
+} from "../../upstream/src/daemon/service-types.js";
 import {
   enableSystemdUserLinger,
   readSystemdUserLingerStatus,
   type SystemdUserLingerStatus,
-} from "./systemd-linger.js";
+} from "../../upstream/src/daemon/systemd-linger.js";
 import {
   buildSystemdUnit,
   parseSystemdEnvAssignment,
   parseSystemdExecStart,
-} from "./systemd-unit.js";
+} from "../../upstream/src/daemon/systemd-unit.js";
 
 function resolveSystemdUnitPathForName(env: GatewayServiceEnv, name: string): string {
   const home = toPosixPath(resolveHomeDir(env));
@@ -341,6 +341,46 @@ export async function readSystemdServiceRuntime(
     lastExitReason: parsed.execMainCode,
   };
 }
+function isSystemctlBusUnavailable(detail: string): boolean {
+  if (!detail) {
+    return false;
+  }
+  const normalized = detail.toLowerCase();
+  return (
+    normalized.includes("failed to connect to bus") ||
+    normalized.includes("failed to connect to user scope bus") ||
+    normalized.includes("dbus_session_bus_address") ||
+    normalized.includes("xdg_runtime_dir") ||
+    normalized.includes("no medium found")
+  );
+}
+
+function isGenericSystemctlIsEnabledFailure(detail: string): boolean {
+  if (!detail) {
+    return false;
+  }
+  const normalized = detail.toLowerCase().trim();
+  return (
+    normalized.startsWith("command failed: systemctl") &&
+    normalized.includes(" is-enabled ") &&
+    !normalized.includes("permission denied") &&
+    !normalized.includes("access denied") &&
+    !normalized.includes("no space left") &&
+    !normalized.includes("read-only file system") &&
+    !normalized.includes("out of memory") &&
+    !normalized.includes("cannot allocate memory")
+  );
+}
+
+export function isNonFatalSystemdInstallProbeError(error: unknown): boolean {
+  const detail = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  if (!detail) {
+    return false;
+  }
+  const normalized = detail.toLowerCase();
+  return isSystemctlBusUnavailable(normalized) || isGenericSystemctlIsEnabledFailure(normalized);
+}
+
 export type LegacySystemdUnit = {
   name: string;
   unitPath: string;

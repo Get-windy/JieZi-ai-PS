@@ -1,14 +1,18 @@
 import {
-  addWildcardAllowFrom,
   DEFAULT_ACCOUNT_ID,
   formatDocsLink,
-  promptAccountId,
-  promptChannelAccessConfig,
   type ChannelOnboardingAdapter,
   type ChannelOnboardingDmPolicy,
   type DmPolicy,
   type WizardPrompter,
 } from "openclaw/plugin-sdk";
+import {
+  addWildcardAllowFrom,
+  promptAccountId,
+} from "../../../upstream/src/channels/plugins/setup-wizard-helpers.js";
+import {
+  promptChannelAccessConfig,
+} from "../../../src/channels/plugins/channel-access-wizard.js";
 import { listIrcAccountIds, resolveDefaultIrcAccountId, resolveIrcAccount } from "./accounts.js";
 import {
   isChannelTarget,

@@ -1,16 +1,16 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, type Mock } from "vitest";
-import { resolveSessionTranscriptPath } from "../config/sessions.js";
-import { emitAgentEvent } from "../infra/agent-events.js";
-import { captureEnv } from "../test-utils/env.js";
+import { resolveSessionTranscriptPath } from "../../upstream/src/config/sessions.js";
+import { emitAgentEvent } from "../../upstream/src/infra/agent-events.js";
+import { captureEnv } from "../../upstream/src/test-utils/env.js";
 import {
   agentCommand,
   getFreePort,
   installGatewayTestHooks,
   startGatewayServer,
   testState,
-} from "./test-helpers.js";
+} from "../../upstream/src/gateway/test-helpers.js";
 
 const { createOpenClawTools } = await import("../agents/openclaw-tools.js");
 

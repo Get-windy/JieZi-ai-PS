@@ -4,7 +4,7 @@ import path from "node:path";
 import type { Chat, Message } from "@grammyjs/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { escapeRegExp, formatEnvelopeTimestamp } from "../../test/helpers/envelope-timestamp.js";
-import { withEnvAsync } from "../test-utils/env.js";
+import { withEnvAsync } from "../../upstream/src/test-utils/env.js";
 import {
   answerCallbackQuerySpy,
   botCtorSpy,

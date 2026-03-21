@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SubagentRunRecord } from "../../agents/subagent-registry.js";
-import type { OpenClawConfig } from "../../config/config.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import {
   getAbortMemory,
   getAbortMemorySizeForTest,
@@ -14,9 +14,9 @@ import {
   setAbortMemory,
   tryFastAbortFromMessage,
 } from "./abort.js";
-import { enqueueFollowupRun, getFollowupQueueDepth, type FollowupRun } from "./queue.js";
-import { initSessionState } from "./session.js";
-import { buildTestCtx } from "./test-ctx.js";
+import { enqueueFollowupRun, getFollowupQueueDepth, type FollowupRun } from "../../../upstream/src/auto-reply/reply/queue.js";
+import { initSessionState } from "../../../upstream/src/auto-reply/reply/session.js";
+import { buildTestCtx } from "../../../upstream/src/auto-reply/reply/test-ctx.js";
 
 vi.mock("../../agents/pi-embedded.js", () => ({
   abortEmbeddedPiRun: vi.fn().mockReturnValue(true),

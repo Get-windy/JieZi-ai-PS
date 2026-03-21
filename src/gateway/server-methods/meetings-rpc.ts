@@ -35,8 +35,8 @@ import type {
   MeetingSummary,
   TaskPriority,
 } from "../../tasks/types.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 // 辅助类型：将params的属性转换为可字符串化的类型
 type StringifiableParams = Record<string, string | number | boolean | null | undefined>;

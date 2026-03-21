@@ -3,17 +3,17 @@ import { createServer } from "node:net";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { WebSocket } from "ws";
-import { getChannelPlugin } from "../channels/plugins/index.js";
-import type { ChannelOutboundAdapter } from "../channels/plugins/types.js";
-import { clearConfigCache } from "../config/config.js";
-import { resolveCanvasHostUrl } from "../infra/canvas-host-url.js";
-import { GatewayLockError } from "../infra/gateway-lock.js";
-import { getActivePluginRegistry, setActivePluginRegistry } from "../plugins/runtime.js";
-import { createOutboundTestPlugin } from "../test-utils/channel-plugins.js";
-import { withEnvAsync } from "../test-utils/env.js";
-import { createTempHomeEnv } from "../test-utils/temp-home.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
-import { createRegistry } from "./server.e2e-registry-helpers.js";
+import { getChannelPlugin } from "../../upstream/src/channels/plugins/index.js";
+import type { ChannelOutboundAdapter } from "../../upstream/src/channels/plugins/types.js";
+import { clearConfigCache } from "../../upstream/src/config/config.js";
+import { resolveCanvasHostUrl } from "../../upstream/src/infra/canvas-host-url.js";
+import { GatewayLockError } from "../../upstream/src/infra/gateway-lock.js";
+import { getActivePluginRegistry, setActivePluginRegistry } from "../../upstream/src/plugins/runtime.js";
+import { createOutboundTestPlugin } from "../../upstream/src/test-utils/channel-plugins.js";
+import { withEnvAsync } from "../../upstream/src/test-utils/env.js";
+import { createTempHomeEnv } from "../../upstream/src/test-utils/temp-home.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../upstream/src/utils/message-channel.js";
+import { createRegistry } from "../../upstream/src/gateway/server.e2e-registry-helpers.js";
 import {
   connectOk,
   getFreePort,
@@ -28,7 +28,7 @@ import {
   testState,
   testTailnetIPv4,
   trackConnectChallengeNonce,
-} from "./test-helpers.js";
+} from "../../upstream/src/gateway/test-helpers.js";
 
 installGatewayTestHooks({ scope: "suite" });
 

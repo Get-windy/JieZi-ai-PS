@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { getBlockedNetworkModeReason } from "../agents/sandbox/network-mode.js";
-import { parseDurationMs } from "../cli/parse-duration.js";
-import { AgentModelSchema } from "./zod-schema.agent-model.js";
+import { getBlockedNetworkModeReason } from "../../upstream/src/agents/sandbox/network-mode.js";
+import { parseDurationMs } from "../../upstream/src/cli/parse-duration.js";
+import { AgentModelSchema } from "../../upstream/src/config/zod-schema.agent-model.js";
 import {
   GroupChatSchema,
   HumanDelaySchema,
@@ -9,8 +9,8 @@ import {
   SecretInputSchema,
   ToolsLinksSchema,
   ToolsMediaSchema,
-} from "./zod-schema.core.js";
-import { sensitive } from "./zod-schema.sensitive.js";
+} from "../../upstream/src/config/zod-schema.core.js";
+import { sensitive } from "../../upstream/src/config/zod-schema.sensitive.js";
 
 export const HeartbeatSchema = z
   .object({
@@ -266,6 +266,7 @@ export const ToolsWebSearchSchema = z
     provider: z
       .union([
         z.literal("brave"),
+        z.literal("firecrawl"),
         z.literal("perplexity"),
         z.literal("grok"),
         z.literal("gemini"),
@@ -298,6 +299,13 @@ export const ToolsWebSearchSchema = z
       .object({
         apiKey: SecretInputSchema.optional().register(sensitive),
         model: z.string().optional(),
+      })
+      .strict()
+      .optional(),
+    firecrawl: z
+      .object({
+        apiKey: SecretInputSchema.optional().register(sensitive),
+        baseUrl: z.string().optional(),
       })
       .strict()
       .optional(),
@@ -493,15 +501,34 @@ const ToolLoopDetectionSchema = z
   })
   .optional();
 
+export const SandboxSshSchema = z
+  .object({
+    target: z.string().min(1).optional(),
+    command: z.string().min(1).optional(),
+    workspaceRoot: z.string().min(1).optional(),
+    strictHostKeyChecking: z.boolean().optional(),
+    updateHostKeys: z.boolean().optional(),
+    identityFile: z.string().min(1).optional(),
+    certificateFile: z.string().min(1).optional(),
+    knownHostsFile: z.string().min(1).optional(),
+    identityData: SecretInputSchema.optional().register(sensitive),
+    certificateData: SecretInputSchema.optional().register(sensitive),
+    knownHostsData: SecretInputSchema.optional().register(sensitive),
+  })
+  .strict()
+  .optional();
+
 export const AgentSandboxSchema = z
   .object({
     mode: z.union([z.literal("off"), z.literal("non-main"), z.literal("all")]).optional(),
+    backend: z.string().min(1).optional(),
     workspaceAccess: z.union([z.literal("none"), z.literal("ro"), z.literal("rw")]).optional(),
     sessionToolsVisibility: z.union([z.literal("spawned"), z.literal("all")]).optional(),
     scope: z.union([z.literal("session"), z.literal("agent"), z.literal("shared")]).optional(),
     perSession: z.boolean().optional(),
     workspaceRoot: z.string().optional(),
     docker: SandboxDockerSchema,
+    ssh: SandboxSshSchema,
     browser: SandboxBrowserSchema,
     prune: SandboxPruneSchema,
   })
@@ -773,13 +800,26 @@ export const AgentEntrySchema = z
     params: z.record(z.string(), z.unknown()).optional(),
     tools: AgentToolsSchema,
     runtime: AgentRuntimeSchema,
+    // Local overlay: per-agent model accounts routing config (not in upstream).
     modelAccounts: z
       .object({
-        accounts: z.array(z.string()).optional(),
-        routingMode: z.string().optional(),
+        accounts: z.array(z.string()),
+        routingMode: z.union([z.literal("manual"), z.literal("smart"), z.literal("roundRobin")]).optional(),
         defaultAccountId: z.string().optional(),
+        smartRouting: z
+          .object({
+            complexityWeight: z.number().optional(),
+            capabilityWeight: z.number().optional(),
+            costWeight: z.number().optional(),
+            speedWeight: z.number().optional(),
+            eloWeight: z.number().optional(),
+          })
+          .strict()
+          .optional(),
       })
+      .strict()
       .optional(),
+    // Local overlay: per-agent permissions config (not in upstream).
     permissions: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();

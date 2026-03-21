@@ -7,10 +7,10 @@ import {
   PresenceUpdateListener,
   type User,
 } from "@buape/carbon";
-import { danger } from "../../globals.js";
+import { danger } from "../../../upstream/src/globals.js";
 import { formatDurationSeconds } from "../../infra/format-time/format-duration.ts";
-import { enqueueSystemEvent } from "../../infra/system-events.js";
-import { createSubsystemLogger } from "../../logging/subsystem.js";
+import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
+import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
 import { resolveAgentRoute } from "../../routing/resolve-route.js";
 import {
   normalizeDiscordSlug,
@@ -24,7 +24,7 @@ import { setPresence } from "./presence-cache.js";
 
 type LoadedConfig = ReturnType<typeof import("../../config/config.js").loadConfig>;
 type RuntimeEnv = import("../../runtime.js").RuntimeEnv;
-type Logger = ReturnType<typeof import("../../logging/subsystem.js").createSubsystemLogger>;
+type Logger = ReturnType<typeof import("../../../upstream/src/logging/subsystem.js").createSubsystemLogger>;
 
 export type DiscordMessageEvent = Parameters<MessageCreateListener["handle"]>[0];
 

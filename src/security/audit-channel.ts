@@ -2,16 +2,16 @@ import {
   isNumericTelegramUserId,
   normalizeTelegramAllowFromEntry,
 } from "../../extensions/telegram/src/allow-from.js";
-import { resolveChannelDefaultAccountId } from "../channels/plugins/helpers.js";
-import type { listChannelPlugins } from "../channels/plugins/index.js";
-import type { ChannelId } from "../channels/plugins/types.js";
-import { formatCliCommand } from "../cli/command-format.js";
+import { resolveChannelDefaultAccountId } from "../../upstream/src/channels/plugins/helpers.js";
+import type { listChannelPlugins } from "../../upstream/src/channels/plugins/index.js";
+import type { ChannelId } from "../../upstream/src/channels/plugins/types.js";
+import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
 import { resolveNativeCommandsEnabled, resolveNativeSkillsEnabled } from "../config/commands.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { readChannelAllowFromStore } from "../pairing/pairing-store.js";
-import { normalizeStringEntries } from "../shared/string-normalization.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { readChannelAllowFromStore } from "../../upstream/src/pairing/pairing-store.js";
+import { normalizeStringEntries } from "../../upstream/src/shared/string-normalization.js";
 import type { SecurityAuditFinding, SecurityAuditSeverity } from "./audit.js";
-import { resolveDmAllowState } from "./dm-policy-shared.js";
+import { resolveDmAllowState } from "../../upstream/src/security/dm-policy-shared.js";
 
 function normalizeAllowFromList(list: Array<string | number> | undefined | null): string[] {
   return normalizeStringEntries(Array.isArray(list) ? list : undefined);

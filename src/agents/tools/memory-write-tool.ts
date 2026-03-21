@@ -16,9 +16,9 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import type { AnyAgentTool } from "./common.js";
-import { jsonResult, readStringParam } from "./common.js";
-import { callGatewayTool, readGatewayCallOptions } from "./gateway.js";
+import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
+import { jsonResult, readStringParam } from "../../../upstream/src/agents/tools/common.js";
+import { callGatewayTool, readGatewayCallOptions } from "../../../upstream/src/agents/tools/gateway.js";
 
 /**
  * 记忆命名空间（分层结构）

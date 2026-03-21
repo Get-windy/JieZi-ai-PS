@@ -1,10 +1,10 @@
-import { type QueueDropPolicy, type QueueMode } from "../auto-reply/reply/queue.js";
-import { defaultRuntime } from "../runtime.js";
+import { type QueueDropPolicy, type QueueMode } from "../../upstream/src/auto-reply/reply/queue.js";
+import { defaultRuntime } from "../../upstream/src/runtime.js";
 import {
   type DeliveryContext,
   deliveryContextKey,
   normalizeDeliveryContext,
-} from "../utils/delivery-context.js";
+} from "../../upstream/src/utils/delivery-context.js";
 import {
   applyQueueRuntimeSettings,
   applyQueueDropPolicy,
@@ -16,7 +16,7 @@ import {
   hasCrossChannelItems,
   previewQueueSummaryPrompt,
   waitForQueueDebounce,
-} from "../utils/queue-helpers.js";
+} from "../../upstream/src/utils/queue-helpers.js";
 
 export type AnnounceQueueItem = {
   // Stable announce identity shared by direct + queued delivery paths.

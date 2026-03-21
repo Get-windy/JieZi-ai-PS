@@ -1,30 +1,30 @@
 import crypto from "node:crypto";
 import { resolveAgentModelFallbacksOverride } from "../../agents/agent-scope.js";
-import { lookupContextTokens } from "../../agents/context.js";
-import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
-import { runWithModelFallback } from "../../agents/model-fallback.js";
-import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
-import { resolveAgentIdFromSessionKey, type SessionEntry } from "../../config/sessions.js";
-import type { TypingMode } from "../../config/types.js";
-import { logVerbose } from "../../globals.js";
-import { registerAgentRunContext } from "../../infra/agent-events.js";
-import { defaultRuntime } from "../../runtime.js";
-import { stripHeartbeatToken } from "../heartbeat.js";
+import { lookupContextTokens } from "../../../upstream/src/agents/context.js";
+import { DEFAULT_CONTEXT_TOKENS } from "../../../upstream/src/agents/defaults.js";
+import { runWithModelFallback } from "../../../upstream/src/agents/model-fallback.js";
+import { runEmbeddedPiAgent } from "../../../upstream/src/agents/pi-embedded.js";
+import { resolveAgentIdFromSessionKey, type SessionEntry } from "../../../upstream/src/config/sessions.js";
+import type { TypingMode } from "../../../upstream/src/config/types.js";
+import { logVerbose } from "../../../upstream/src/globals.js";
+import { registerAgentRunContext } from "../../../upstream/src/infra/agent-events.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
+import { stripHeartbeatToken } from "../../../upstream/src/auto-reply/heartbeat.js";
 import type { OriginatingChannelType } from "../templating.js";
-import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../tokens.js";
-import type { GetReplyOptions, ReplyPayload } from "../types.js";
+import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../../../upstream/src/auto-reply/tokens.js";
+import type { GetReplyOptions, ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import { resolveRunAuthProfile } from "./agent-runner-utils.js";
-import type { FollowupRun } from "./queue.js";
+import type { FollowupRun } from "../../../upstream/src/auto-reply/reply/queue.js";
 import {
   applyReplyThreading,
   filterMessagingToolDuplicates,
   filterMessagingToolMediaDuplicates,
   shouldSuppressMessagingToolReplies,
 } from "./reply-payloads.js";
-import { resolveReplyToMode } from "./reply-threading.js";
+import { resolveReplyToMode } from "../../../upstream/src/auto-reply/reply/reply-threading.js";
 import { isRoutableChannel, routeReply } from "./route-reply.js";
-import { incrementRunCompactionCount, persistRunSessionUsage } from "./session-run-accounting.js";
-import { createTypingSignaler } from "./typing-mode.js";
+import { incrementRunCompactionCount, persistRunSessionUsage } from "../../../upstream/src/auto-reply/reply/session-run-accounting.js";
+import { createTypingSignaler } from "../../../upstream/src/auto-reply/reply/typing-mode.js";
 import type { TypingController } from "./typing.js";
 
 export function createFollowupRunner(params: {
@@ -137,6 +137,10 @@ export function createFollowupRunner(params: {
           ),
           run: (provider, model) => {
             const authProfile = resolveRunAuthProfile(queued.run, provider);
+            // 每个 agent 使用独立的 global lane，避免共享 CommandLane.Main 造成软死锁
+            const agentRunLane = queued.run.agentId
+              ? `agent-run:${queued.run.agentId}`
+              : undefined;
             return runEmbeddedPiAgent({
               sessionId: queued.run.sessionId,
               sessionKey: queued.run.sessionKey,
@@ -164,6 +168,7 @@ export function createFollowupRunner(params: {
               enforceFinalTag: queued.run.enforceFinalTag,
               provider,
               model,
+              lane: agentRunLane,
               ...authProfile,
               thinkLevel: queued.run.thinkLevel,
               verboseLevel: queued.run.verboseLevel,

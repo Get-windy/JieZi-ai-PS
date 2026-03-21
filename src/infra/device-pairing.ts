@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { normalizeDeviceAuthScopes } from "../shared/device-auth.js";
-import { roleScopesAllow } from "../shared/operator-scope-compat.js";
+import { normalizeDeviceAuthScopes } from "../../upstream/src/shared/device-auth.js";
+import { roleScopesAllow } from "../../upstream/src/shared/operator-scope-compat.js";
 import {
   createAsyncLock,
   pruneExpiredPending,
   readJsonFile,
   resolvePairingPaths,
   writeJsonAtomic,
-} from "./pairing-files.js";
-import { rejectPendingPairingRequest } from "./pairing-pending.js";
-import { generatePairingToken, verifyPairingToken } from "./pairing-token.js";
+} from "../../upstream/src/infra/pairing-files.js";
+import { rejectPendingPairingRequest } from "../../upstream/src/infra/pairing-pending.js";
+import { generatePairingToken, verifyPairingToken } from "../../upstream/src/infra/pairing-token.js";
 
 export type DevicePairingPendingRequest = {
   requestId: string;

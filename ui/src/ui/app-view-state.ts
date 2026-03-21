@@ -237,7 +237,13 @@ export type AppViewState = {
     | "channelPolicies"
     | "permissionsConfig";
   // Collaboration 协作管理状态
-  collaborationActivePanel: "groups" | "friends" | "monitor" | "scenarios" | "team-monitor" | "projects";
+  collaborationActivePanel:
+    | "groups"
+    | "friends"
+    | "monitor"
+    | "scenarios"
+    | "team-monitor"
+    | "projects";
   agentFilesLoading: boolean;
   agentFilesError: string | null;
   agentFilesList: AgentsFilesListResult | null;
@@ -263,10 +269,14 @@ export type AppViewState = {
   projectsList: import("./views/projects.ts").ProjectsListResult | null;
   projectsError: string | null;
   selectedProjectId: string | null;
-  activeProjectPanel: "list" | "config" | "members" | "progress";
+  activeProjectPanel: "list" | "config" | "members" | "progress" | "handoff";
   creatingProject: boolean;
   editingProject: import("./views/projects.ts").ProjectInfo | null;
   upgradingGroupToProject: boolean;
+  // 项目跨团队协作 Handoff 状态
+  projectTeamRelations: import("./views/projects.ts").ProjectTeamRelation[];
+  projectTeamRelationsLoading: boolean;
+  handoffForm: import("./views/projects.ts").HandoffFormState;
   // 群组文件管理状态
   groupFilesLoading: boolean;
   groupFileContentLoading: boolean;
@@ -537,6 +547,8 @@ export type AppViewState = {
   organizationData: any;
   organizationDataLoading: boolean;
   organizationDataError: string | null;
+  // 待提交的权限变更（暂存，用户点击保存时批量提交）
+  pendingPermissionChanges: Array<{ target: string; permission: string; granted: boolean }>;
   // 组织与权限管理统一状态
   orgPermActiveTab: "organization" | "permissions" | "approvals" | "system";
   // 组织管理状态

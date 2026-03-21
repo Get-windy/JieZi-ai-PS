@@ -5,10 +5,10 @@
  */
 
 import type { ChannelPolicy } from "../../config/types.channel-policies.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { policyEngineManager } from "../../channels/policy-integration.js";
-import { loadConfig } from "../../config/config.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 /**
  * 通道策略管理 RPC Handlers

@@ -1,0 +1,12 @@
+feat: 实现跨团队协作与项目交付(Handoff)机制
+
+- 新增 ProjectTeamRole / ProjectTeamStatus / HandoffRecord / ProjectTeamRelation 类型(organization/types.ts)
+- 在 organizationStorage 中新增 projectTeamRelations 持久化存储及 CRUD 方法(organization/storage.ts)
+- 新建 project-handoff-rpc.ts 实现6个 RPC handler:
+    project.team.assign / project.team.remove / project.team.relations
+    project.team.my-projects / project.handoff / project.team.status
+- 在 server-methods/index.ts 注册 projectHandoffHandlers
+- 在 method-scopes.ts 注册读写权限(READ: team.relations / my-projects; WRITE: assign/remove/handoff/status)
+- 前端 projects.ts 新增 handoff 类型定义和「跨团队协作」Tab 渲染面板
+- app-view-state.ts / app.ts 新增 projectTeamRelations / handoffForm 状态字段
+- app-render.ts 中 projectsProps 接通所有 handoff RPC 调用

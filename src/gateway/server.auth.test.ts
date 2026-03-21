@@ -1,11 +1,11 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { WebSocket } from "ws";
-import { withEnvAsync } from "../test-utils/env.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
-import { buildDeviceAuthPayload } from "./device-auth.js";
-import { ConnectErrorDetailCodes } from "./protocol/connect-error-details.js";
-import { PROTOCOL_VERSION } from "./protocol/index.js";
-import { getHandshakeTimeoutMs } from "./server-constants.js";
+import { withEnvAsync } from "../../upstream/src/test-utils/env.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../upstream/src/utils/message-channel.js";
+import { buildDeviceAuthPayload } from "../../upstream/src/gateway/device-auth.js";
+import { ConnectErrorDetailCodes } from "../../upstream/src/gateway/protocol/connect-error-details.js";
+import { PROTOCOL_VERSION } from "../../upstream/src/gateway/protocol/index.js";
+import { getHandshakeTimeoutMs } from "../../upstream/src/gateway/server-constants.js";
 import {
   connectReq,
   getTrackedConnectChallengeNonce,
@@ -19,7 +19,7 @@ import {
   testTailscaleWhois,
   testState,
   withGatewayServer,
-} from "./test-helpers.js";
+} from "../../upstream/src/gateway/test-helpers.js";
 
 installGatewayTestHooks({ scope: "suite" });
 
@@ -1102,7 +1102,7 @@ describe("gateway server auth/connect", () => {
     const { mkdtemp } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
-    const { buildDeviceAuthPayload } = await import("./device-auth.js");
+    const { buildDeviceAuthPayload } = await import("../../upstream/src/gateway/device-auth.js");
     const { loadOrCreateDeviceIdentity, publicKeyRawBase64UrlFromPem, signDevicePayload } =
       await import("../infra/device-identity.js");
     const { getPairedDevice, listDevicePairing } = await import("../infra/device-pairing.js");
@@ -1170,7 +1170,7 @@ describe("gateway server auth/connect", () => {
     const { mkdtemp } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
-    const { buildDeviceAuthPayload } = await import("./device-auth.js");
+    const { buildDeviceAuthPayload } = await import("../../upstream/src/gateway/device-auth.js");
     const { loadOrCreateDeviceIdentity, publicKeyRawBase64UrlFromPem, signDevicePayload } =
       await import("../infra/device-identity.js");
     const { approveDevicePairing, getPairedDevice, listDevicePairing, requestDevicePairing } =
@@ -1401,7 +1401,7 @@ describe("gateway server auth/connect", () => {
     const { mkdtemp } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
-    const { buildDeviceAuthPayload } = await import("./device-auth.js");
+    const { buildDeviceAuthPayload } = await import("../../upstream/src/gateway/device-auth.js");
     const { loadOrCreateDeviceIdentity, publicKeyRawBase64UrlFromPem, signDevicePayload } =
       await import("../infra/device-identity.js");
     const { resolvePairingPaths, readJsonFile } = await import("../infra/pairing-files.js");
@@ -1489,13 +1489,13 @@ describe("gateway server auth/connect", () => {
     const { join } = await import("node:path");
     const { readJsonFile, resolvePairingPaths } = await import("../infra/pairing-files.js");
     const { writeJsonAtomic } = await import("../infra/json-files.js");
-    const { buildDeviceAuthPayload } = await import("./device-auth.js");
+    const { buildDeviceAuthPayload } = await import("../../upstream/src/gateway/device-auth.js");
     const { loadOrCreateDeviceIdentity, publicKeyRawBase64UrlFromPem, signDevicePayload } =
       await import("../infra/device-identity.js");
     const { approveDevicePairing, getPairedDevice, listDevicePairing, requestDevicePairing } =
       await import("../infra/device-pairing.js");
     const { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } =
-      await import("../utils/message-channel.js");
+      await import("../../upstream/src/utils/message-channel.js");
     const identityDir = await mkdtemp(join(tmpdir(), "openclaw-device-legacy-"));
     const identity = loadOrCreateDeviceIdentity(join(identityDir, "device.json"));
     const devicePublicKey = publicKeyRawBase64UrlFromPem(identity.publicKeyPem);

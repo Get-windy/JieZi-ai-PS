@@ -1,5 +1,5 @@
 import { beforeEach, vi, type Mock } from "vitest";
-import { resetInboundDedupe } from "../auto-reply/reply/inbound-dedupe.js";
+import { resetInboundDedupe } from "../../upstream/src/auto-reply/reply/inbound-dedupe.js";
 
 export const useSpy: Mock = vi.fn();
 export const middlewareUseSpy: Mock = vi.fn();

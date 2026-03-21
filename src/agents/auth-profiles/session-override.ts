@@ -9,15 +9,15 @@
  * 3. 保持与上游代码的兼容性，方便未来合并
  */
 
-import type { OpenClawConfig } from "../../config/config.js";
-import { updateSessionStore, type SessionEntry } from "../../config/sessions.js";
-import { resolveAgentModelAccounts } from "../agent-scope.js";
 import {
   ensureAuthProfileStore,
   isProfileInCooldown,
   resolveAuthProfileOrder,
-} from "../auth-profiles.js";
-import { normalizeProviderId } from "../model-selection.js";
+} from "../../../upstream/src/agents/auth-profiles.js";
+import { normalizeProviderId } from "../../../upstream/src/agents/model-selection.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { updateSessionStore, type SessionEntry } from "../../../upstream/src/config/sessions.js";
+import { resolveAgentModelAccounts } from "../agent-scope.js";
 
 function isProfileForProvider(params: {
   provider: string;
@@ -115,6 +115,31 @@ export async function resolveSessionAuthProfileOverride(params: {
   const order = resolveAuthProfileOrder({ cfg, store, provider });
   let current = sessionEntry.authProfileOverride?.trim();
 
+  // ============ 本地增强：过滤 order 只保留 agent 绑定的模型账号 ============
+  // agent 只能用自己绑定的模型，不允许跨 agent 使用其他 agent 的认证。
+  // 若 agent 未配置 modelAccounts.accounts，则使用全局 order（默认功能不受限）。
+  let allowedProfiles: string[] | undefined;
+  if (agentId) {
+    const mc = resolveAgentModelAccounts(cfg, agentId);
+    if (mc?.accounts && mc.accounts.length > 0) {
+      allowedProfiles = mc.accounts
+        .map((modelId) => resolveModelAccountToAuthProfile({ modelId, store }))
+        .filter((profileId): profileId is string => profileId !== undefined);
+    }
+  }
+  // 过滤 order 只保留允许的 profiles（如果有配置且非空）
+  // 注意：如果 allowedProfiles 是空数组（accounts 配置了但 profile 全部解析失败），
+  // 则回退到全局 order，避免无账号可用导致模型调用静默失败。
+  // 同理：若 allowedProfiles 非空但与当前 provider 的 order 没有交集（账号属于不同
+  // provider，此 provider 调用时 filteredOrder 会为空），也回退到全局 order，
+  // 避免 filteredOrder.length === 0 导致 authProfileId 返回 undefined。
+  const _filteredByAccounts =
+    allowedProfiles && allowedProfiles.length > 0
+      ? order.filter((profileId) => allowedProfiles.includes(profileId))
+      : order;
+  const filteredOrder = _filteredByAccounts.length > 0 ? _filteredByAccounts : order;
+  // ============ 本地增强结束 ============
+
   if (current && !store.profiles[current]) {
     await clearSessionAuthProfileOverride({ sessionEntry, sessionStore, sessionKey, storePath });
     current = undefined;
@@ -125,29 +150,29 @@ export async function resolveSessionAuthProfileOverride(params: {
     current = undefined;
   }
 
-  if (current && order.length > 0 && !order.includes(current)) {
+  if (current && filteredOrder.length > 0 && !filteredOrder.includes(current)) {
     await clearSessionAuthProfileOverride({ sessionEntry, sessionStore, sessionKey, storePath });
     current = undefined;
   }
 
-  if (order.length === 0) {
+  if (filteredOrder.length === 0) {
     return undefined;
   }
 
   const pickFirstAvailable = () =>
-    order.find((profileId) => !isProfileInCooldown(store, profileId)) ?? order[0];
+    filteredOrder.find((profileId) => !isProfileInCooldown(store, profileId)) ?? filteredOrder[0];
   const pickNextAvailable = (active: string) => {
-    const startIndex = order.indexOf(active);
+    const startIndex = filteredOrder.indexOf(active);
     if (startIndex < 0) {
       return pickFirstAvailable();
     }
-    for (let offset = 1; offset <= order.length; offset += 1) {
-      const candidate = order[(startIndex + offset) % order.length];
+    for (let offset = 1; offset <= filteredOrder.length; offset += 1) {
+      const candidate = filteredOrder[(startIndex + offset) % filteredOrder.length];
       if (!isProfileInCooldown(store, candidate)) {
         return candidate;
       }
     }
-    return order[startIndex] ?? order[0];
+    return filteredOrder[startIndex] ?? filteredOrder[0];
   };
 
   const compactionCount = sessionEntry.compactionCount ?? 0;
@@ -163,7 +188,9 @@ export async function resolveSessionAuthProfileOverride(params: {
       : current
         ? "user"
         : undefined);
-  if (source === "user" && current && !isNewSession) {
+  // 用户手动固定的账号，仅在非新会话且当前账号可用（不在冷却期）时才尊重，
+  // 否则回退到轮询逻辑，避免卡在已报错（401/rate-limit）的账号上。
+  if (source === "user" && current && !isNewSession && !isProfileInCooldown(store, current)) {
     return current;
   }
 
@@ -194,7 +221,7 @@ export async function resolveSessionAuthProfileOverride(params: {
           if (!isProfileInCooldown(store, defaultProfileId)) {
             // 使用默认账号
             sessionEntry.authProfileOverride = defaultProfileId;
-            sessionEntry.authProfileOverrideSource = "default-account"; // 新来源标记
+            sessionEntry.authProfileOverrideSource = "auto"; // 使用 auto，与主流程一致
             sessionEntry.authProfileOverrideCompactionCount = compactionCount;
             sessionEntry.updatedAt = Date.now();
             sessionStore[sessionKey] = sessionEntry;

@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
-import type { OpenClawConfig } from "../config/config.js";
-import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
-import { resolveControlUiRootSync } from "../infra/control-ui-assets.js";
-import { isWithinDir } from "../infra/path-safety.js";
-import { openVerifiedFileSync } from "../infra/safe-open-sync.js";
-import { AVATAR_MAX_BYTES } from "../shared/avatar-policy.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { openBoundaryFileSync } from "../../upstream/src/infra/boundary-file-read.js";
+import { resolveControlUiRootSync } from "../../upstream/src/infra/control-ui-assets.js";
+import { isWithinDir } from "../../upstream/src/infra/path-safety.js";
+import { openVerifiedFileSync } from "../../upstream/src/infra/safe-open-sync.js";
+import { AVATAR_MAX_BYTES } from "../../upstream/src/shared/avatar-policy.js";
 import { DEFAULT_ASSISTANT_IDENTITY, resolveAssistantIdentity } from "./assistant-identity.js";
 import {
   CONTROL_UI_BOOTSTRAP_CONFIG_PATH,
@@ -18,7 +18,7 @@ import {
   CONTROL_UI_AVATAR_PREFIX,
   normalizeControlUiBasePath,
   resolveAssistantAvatarUrl,
-} from "./control-ui-shared.js";
+} from "../../upstream/src/gateway/control-ui-shared.js";
 
 const ROOT_PREFIX = "/";
 

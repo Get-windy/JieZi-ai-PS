@@ -6,10 +6,10 @@ import {
   isEmbeddedPiRunActive,
   isEmbeddedPiRunStreaming,
   runEmbeddedPiAgent,
-} from "../agents/pi-embedded.js";
-import { getReplyFromConfig } from "./reply.js";
+} from "../../upstream/src/agents/pi-embedded.js";
+import { getReplyFromConfig } from "../../upstream/src/auto-reply/reply.js";
 
-vi.mock("../agents/pi-embedded.js", () => ({
+vi.mock("../../upstream/src/agents/pi-embedded.js", () => ({
   abortEmbeddedPiRun: vi.fn().mockReturnValue(false),
   runEmbeddedPiAgent: vi.fn(),
   queueEmbeddedPiMessage: vi.fn().mockReturnValue(false),

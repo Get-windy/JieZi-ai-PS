@@ -17,28 +17,28 @@ import {
 } from "@buape/carbon";
 import type { APIStringSelectComponent } from "discord-api-types/v10";
 import { ButtonStyle, ChannelType } from "discord-api-types/v10";
-import { resolveHumanDelayConfig } from "../../agents/identity.js";
+import { resolveHumanDelayConfig } from "../../../upstream/src/agents/identity.js";
 import { resolveChunkMode, resolveTextChunkLimit } from "../../auto-reply/chunk.js";
-import { formatInboundEnvelope, resolveEnvelopeFormatOptions } from "../../auto-reply/envelope.js";
-import { finalizeInboundContext } from "../../auto-reply/reply/inbound-context.js";
-import { dispatchReplyWithBufferedBlockDispatcher } from "../../auto-reply/reply/provider-dispatcher.js";
-import { createReplyReferencePlanner } from "../../auto-reply/reply/reply-reference.js";
-import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
-import { recordInboundSession } from "../../channels/session.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { resolveMarkdownTableMode } from "../../config/markdown-tables.js";
-import { readSessionUpdatedAt, resolveStorePath } from "../../config/sessions.js";
-import type { DiscordAccountConfig } from "../../config/types.discord.js";
-import { logVerbose } from "../../globals.js";
-import { enqueueSystemEvent } from "../../infra/system-events.js";
-import { logDebug, logError } from "../../logger.js";
-import { buildPairingReply } from "../../pairing/pairing-messages.js";
+import { formatInboundEnvelope, resolveEnvelopeFormatOptions } from "../../../upstream/src/auto-reply/envelope.js";
+import { finalizeInboundContext } from "../../../upstream/src/auto-reply/reply/inbound-context.js";
+import { dispatchReplyWithBufferedBlockDispatcher } from "../../../upstream/src/auto-reply/reply/provider-dispatcher.js";
+import { createReplyReferencePlanner } from "../../../upstream/src/auto-reply/reply/reply-reference.js";
+import { createReplyPrefixOptions } from "../../../upstream/src/channels/reply-prefix.js";
+import { recordInboundSession } from "../../../upstream/src/channels/session.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { resolveMarkdownTableMode } from "../../../upstream/src/config/markdown-tables.js";
+import { readSessionUpdatedAt, resolveStorePath } from "../../../upstream/src/config/sessions.js";
+import type { DiscordAccountConfig } from "../../../upstream/src/config/types.discord.js";
+import { logVerbose } from "../../../upstream/src/globals.js";
+import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
+import { logDebug, logError } from "../../../upstream/src/logger.js";
+import { buildPairingReply } from "../../../upstream/src/pairing/pairing-messages.js";
 import {
   readChannelAllowFromStore,
   upsertChannelPairingRequest,
-} from "../../pairing/pairing-store.js";
+} from "../../../upstream/src/pairing/pairing-store.js";
 import { resolveAgentRoute } from "../../routing/resolve-route.js";
-import { createNonExitingRuntime, type RuntimeEnv } from "../../runtime.js";
+import { createNonExitingRuntime, type RuntimeEnv } from "../../../upstream/src/runtime.js";
 import { resolveDiscordComponentEntry, resolveDiscordModalEntry } from "../components-registry.js";
 import {
   createDiscordFormModal,

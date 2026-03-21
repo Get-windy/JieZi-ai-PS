@@ -1,27 +1,27 @@
 import type { Message, ReactionTypeEmoji } from "@grammyjs/types";
 import { resolveAgentDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
-import { hasControlCommand } from "../auto-reply/command-detection.js";
+import { hasControlCommand } from "../../upstream/src/auto-reply/command-detection.js";
 import {
   createInboundDebouncer,
   resolveInboundDebounceMs,
-} from "../auto-reply/inbound-debounce.js";
-import { buildCommandsPaginationKeyboard } from "../auto-reply/reply/commands-info.js";
+} from "../../upstream/src/auto-reply/inbound-debounce.js";
+import { buildCommandsPaginationKeyboard } from "../../upstream/src/auto-reply/reply/commands-info.js";
 import {
   buildModelsProviderData,
   formatModelsAvailableHeader,
 } from "../auto-reply/reply/commands-models.js";
-import { resolveStoredModelOverride } from "../auto-reply/reply/model-selection.js";
-import { listSkillCommandsForAgents } from "../auto-reply/skill-commands.js";
-import { buildCommandsMessagePaginated } from "../auto-reply/status.js";
+import { resolveStoredModelOverride } from "../../upstream/src/auto-reply/reply/model-selection.js";
+import { listSkillCommandsForAgents } from "../../upstream/src/auto-reply/skill-commands.js";
+import { buildCommandsMessagePaginated } from "../../upstream/src/auto-reply/status.js";
 import { resolveChannelConfigWrites } from "../channels/plugins/config-writes.js";
-import { loadConfig } from "../config/config.js";
-import { writeConfigFile } from "../config/io.js";
-import { loadSessionStore, resolveStorePath } from "../config/sessions.js";
-import type { TelegramGroupConfig, TelegramTopicConfig } from "../config/types.js";
-import { danger, logVerbose, warn } from "../globals.js";
-import { enqueueSystemEvent } from "../infra/system-events.js";
-import { MediaFetchError } from "../media/fetch.js";
-import { readChannelAllowFromStore } from "../pairing/pairing-store.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
+import { writeConfigFile } from "../../upstream/src/config/io.js";
+import { loadSessionStore, resolveStorePath } from "../../upstream/src/config/sessions.js";
+import type { TelegramGroupConfig, TelegramTopicConfig } from "../../upstream/src/config/types.js";
+import { danger, logVerbose, warn } from "../../upstream/src/globals.js";
+import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
+import { MediaFetchError } from "../../upstream/src/media/fetch.js";
+import { readChannelAllowFromStore } from "../../upstream/src/pairing/pairing-store.js";
 import { resolveAgentRoute } from "../routing/resolve-route.js";
 import { resolveThreadSessionKeys } from "../routing/session-key.js";
 import { withTelegramApiErrorLogging } from "./api-logging.js";

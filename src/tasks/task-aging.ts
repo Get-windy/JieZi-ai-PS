@@ -5,8 +5,8 @@
  * 基于业界最佳实践（Jira Automation、Scrum Backlog Grooming）
  */
 
-import { chatHandlers } from "../gateway/server-methods/chat.js";
-import type { GatewayRequestHandlerOptions } from "../gateway/server-methods/types.js";
+import { chatHandlers } from "../../upstream/src/gateway/server-methods/chat.js";
+import type { GatewayRequestHandlerOptions } from "../../upstream/src/gateway/server-methods/types.js";
 import { t } from "../i18n/index.js";
 import * as storage from "./storage.js";
 import type { Task, TaskPriority } from "./types.js";

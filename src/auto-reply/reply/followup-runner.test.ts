@@ -2,9 +2,9 @@ import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { loadSessionStore, saveSessionStore, type SessionEntry } from "../../config/sessions.js";
-import type { FollowupRun } from "./queue.js";
-import { createMockTypingController } from "./test-helpers.js";
+import { loadSessionStore, saveSessionStore, type SessionEntry } from "../../../upstream/src/config/sessions.js";
+import type { FollowupRun } from "../../../upstream/src/auto-reply/reply/queue.js";
+import { createMockTypingController } from "../../../upstream/src/auto-reply/reply/test-helpers.js";
 
 const runEmbeddedPiAgentMock = vi.fn();
 

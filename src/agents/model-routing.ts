@@ -10,6 +10,7 @@
  */
 
 import type { AgentModelAccountsConfig } from "../config/types.agents.js";
+import { normalizeEloScore } from "./arena-benchmarks.js";
 
 // ==================== 类型定义 ====================
 
@@ -71,6 +72,28 @@ export type SessionContext = {
 };
 
 /**
+ * 外部评测基准分数
+ */
+export type ModelBenchmarkScores = {
+  /** LMSYS Chatbot Arena Elo 分（原始值，约 800-1400） */
+  eloScore?: number;
+  /** Arena 排名（越小越好） */
+  arenaRank?: number;
+  /** MMLU 分数（0-100%） */
+  mmlu?: number;
+  /** HumanEval 代码生成分数（0-100%） */
+  humanEval?: number;
+  /** MATH 数学推理分数（0-100%） */
+  math?: number;
+  /** MT-Bench 多轮对话分（1-10） */
+  mtBench?: number;
+  /** GPQA 博士级科学推理分数（0-100%） */
+  gpqa?: number;
+  /** 归一化 Elo（0-100，用于路由计算） */
+  normalizedElo?: number;
+};
+
+/**
  * 模型信息
  */
 export type ModelInfo = {
@@ -96,6 +119,8 @@ export type ModelInfo = {
   supportedModalities?: DataModality[];
   /** 领域能力评分 (0-100，按领域分类) */
   domainScores?: Partial<Record<TaskDomain, number>>;
+  /** 外部评测基准数据（LMSYS Arena Elo 等） */
+  benchmarks?: ModelBenchmarkScores;
 };
 
 /**
@@ -118,6 +143,8 @@ export type AccountScore = {
   specializationScore: number;
   /** 模态匹配分 */
   modalityScore: number;
+  /** 外部评测 Elo 归一化分（0-100） */
+  eloScore: number;
   /** 模型信息 */
   modelInfo?: ModelInfo;
   /** 是否可用 */
@@ -155,18 +182,25 @@ export function detectTaskDomain(message: string, context: SessionContext): Task
 
   const lowerMessage = message.toLowerCase();
 
-  // 编程任务检测
+  // 编程任务检测（收紧条件，避免普通业务任务被误判为 coding）
   if (
     context.hasCode ||
     lowerMessage.includes("代码") ||
-    lowerMessage.includes("code") ||
     lowerMessage.includes("编程") ||
-    lowerMessage.includes("程序") ||
+    lowerMessage.includes("编写代码") ||
+    lowerMessage.includes("写代码") ||
     lowerMessage.includes("debug") ||
-    lowerMessage.includes("bug") ||
-    lowerMessage.includes("function") ||
-    lowerMessage.includes("class") ||
-    /\b(python|java|javascript|typescript|c\+\+|rust|go)\b/i.test(message)
+    lowerMessage.includes("debugging") ||
+    lowerMessage.includes("implement") ||
+    // 仅在代码相关语境下才判定：code 单词出现 + 其他代码信号
+    (lowerMessage.includes("code") &&
+      (lowerMessage.includes("write") ||
+        lowerMessage.includes("fix") ||
+        lowerMessage.includes("review") ||
+        lowerMessage.includes("error"))) ||
+    /\b(python|javascript|typescript|c\+\+|rust|golang)\b/i.test(message) ||
+    // 代码块关键词（不误判含 function/class 的普通中文业务消息）
+    /```[a-z]/.test(message)
   ) {
     return "coding";
   }
@@ -269,8 +303,8 @@ export function assessModalityMatch(context: SessionContext, modelInfo: ModelInf
     requiredModalities.push("text");
   }
 
-  // 如果没有指定支持的模态，假设支持 text
-  const supportedModalities = modelInfo.supportedModalities || ["text"];
+  // 如果没有指定支持的模态，假设支持 text 和 code（绝大多数 LLM 都支持）
+  const supportedModalities = modelInfo.supportedModalities || ["text", "code"];
 
   // 计算匹配度
   if (requiredModalities.length === 0) {
@@ -325,15 +359,16 @@ export function assessSpecializationMatch(taskDomain: TaskDomain, modelInfo: Mod
   const specializations = modelInfo.specializations || ["general"];
 
   // 任务领域到专业领域的映射
+  // 注意：附加 "general" 到 coding/reasoning 等映射，防止通用强模型不必要地失分
   const domainToSpecialization: Record<TaskDomain, ModelSpecialization[]> = {
-    general: ["general", "multimodal"],
-    coding: ["coding", "general"],
+    general: ["general", "multimodal", "coding", "reasoning", "creative"],
+    coding: ["coding", "general", "reasoning"],
     math: ["math", "reasoning", "general"],
     creative: ["creative", "general"],
-    analysis: ["reasoning", "general"],
+    analysis: ["reasoning", "general", "coding"],
     translation: ["translation", "general"],
     vision: ["vision", "multimodal"],
-    reasoning: ["reasoning", "general"],
+    reasoning: ["reasoning", "general", "coding"],
   };
 
   // 获取任务对应的专业领域
@@ -608,13 +643,14 @@ export async function scoreAllAccounts(
   const taskDomain = detectTaskDomain(message, context);
 
   // 3. 获取权重配置（使用默认值）
-  const complexityWeight = config.smartRouting?.complexityWeight ?? 30;
+  const complexityWeight = config.smartRouting?.complexityWeight ?? 20; // 降低复杂度权重，避免简单任务都被判为 coding
   const capabilityWeight = config.smartRouting?.capabilityWeight ?? 20;
   const costWeight = config.smartRouting?.costWeight ?? 15;
   const speedWeight = config.smartRouting?.speedWeight ?? 10;
-  // 新增权重：专业领域和模态匹配
-  const specializationWeight = 15; // 专业领域匹配权重
-  const modalityWeight = 10; // 模态匹配权重
+  // 新增权重：专业领域、模态匹配、外部评测 Elo
+  const specializationWeight = 10; // 专业领域匹配权重（降低，避免 coder 模型在通用任务中过度占优）
+  const modalityWeight = 8; // 模态匹配权重
+  const eloWeight = 17; // LMSYS Arena Elo 权重（提高，让真实能力排行更有影响力）
 
   // 4. 为每个账号打分
   const scores: AccountScore[] = await Promise.all(
@@ -632,6 +668,7 @@ export async function scoreAllAccounts(
           speedScore: 0,
           specializationScore: 0,
           modalityScore: 0,
+          eloScore: 0,
           available: false,
         };
       }
@@ -653,6 +690,7 @@ export async function scoreAllAccounts(
           speedScore: 0,
           specializationScore: 0,
           modalityScore: 0,
+          eloScore: 0,
           modelInfo,
           available: false,
         };
@@ -669,17 +707,25 @@ export async function scoreAllAccounts(
       // 响应速度分数
       const speedScore = assessSpeed(modelInfo);
 
-      // 复杂度匹配分数（复杂度越低越好）
+      // 外部评测 Elo 分（优先使用 benchmarks 字段，如果没有则默认 50 分中立）
+      const eloScore =
+        modelInfo.benchmarks?.normalizedElo ??
+        (modelInfo.benchmarks?.eloScore !== undefined
+          ? normalizeEloScore(modelInfo.benchmarks.eloScore)
+          : 50); // 未知模型给中立分
+
+      // 复杂度匹配分数（复杂度越高，越需要负荷能力强的模型）
       const complexityScore = 100 - complexity * 10;
 
-      // 综合打分（加入专业领域和模态权重）
+      // 综合打分（加入专业领域、模态和 Elo 权重）
       const totalScore =
         capabilityScore * (capabilityWeight / 100) +
         costScore * (costWeight / 100) +
         speedScore * (speedWeight / 100) +
         complexityScore * (complexityWeight / 100) +
         specializationScore * (specializationWeight / 100) +
-        modalityScore * (modalityWeight / 100);
+        modalityScore * (modalityWeight / 100) +
+        eloScore * (eloWeight / 100);
 
       return {
         accountId,
@@ -690,6 +736,7 @@ export async function scoreAllAccounts(
         speedScore,
         specializationScore,
         modalityScore,
+        eloScore,
         modelInfo,
         available: true,
       };
@@ -754,6 +801,7 @@ export async function routeToOptimalModelAccount(
   // 0. 先过滤仅保留已绑定且已启用的模型账号（核心检查）
   const boundAndEnabledAccounts = config.accounts.filter((accountId: string) => {
     // 查找账号配置
+    // oxlint-disable-next-line typescript/no-explicit-any
     const accountConfig = config.accountConfigs?.find((cfg: any) => cfg.accountId === accountId);
 
     // 【修复】如果没有找到 accountConfig，说明这个账号没有被单独配置过
@@ -819,7 +867,22 @@ export async function routeToOptimalModelAccount(
   const selectedScore = scores.find((s) => s.accountId === selectedAccountId);
   let reason = `智能路由：选择账号 ${selectedAccountId}`;
   if (selectedScore) {
-    reason += ` (总分: ${selectedScore.totalScore}, 能力: ${selectedScore.capabilityScore}, 成本: ${selectedScore.costScore})`;
+    reason += ` (总分: ${selectedScore.totalScore}`;
+    reason += `, 能力: ${selectedScore.capabilityScore}`;
+    reason += `, 成本: ${selectedScore.costScore}`;
+    reason += `, 速度: ${selectedScore.speedScore}`;
+    reason += `, 专业: ${selectedScore.specializationScore}`;
+    if (selectedScore.eloScore > 0 && selectedScore.eloScore !== 50) {
+      reason += `, Elo: ${selectedScore.eloScore}`;
+      if (selectedScore.modelInfo?.benchmarks?.eloScore) {
+        reason += `[${selectedScore.modelInfo.benchmarks.eloScore}]`;
+      }
+    }
+    // 显示模型的专业领域
+    if (selectedScore.modelInfo?.specializations?.length) {
+      reason += `, 领域: ${selectedScore.modelInfo.specializations.join(",")}`;
+    }
+    reason += ")";
   }
 
   return {
@@ -842,6 +905,7 @@ export async function routeToOptimalModelAccount(
 export function handleFailover(
   failedAccountId: string,
   scores: AccountScore[],
+  // oxlint-disable-next-line no-unused-vars
   reason: string,
 ): string | undefined {
   // 找到失败账号的索引

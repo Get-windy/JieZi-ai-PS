@@ -1,10 +1,10 @@
-import type { getReplyFromConfig } from "../../../auto-reply/reply.js";
+import type { getReplyFromConfig } from "../../../../upstream/src/auto-reply/reply.js";
 import type { MsgContext } from "../../../auto-reply/templating.js";
-import { loadConfig } from "../../../config/config.js";
-import { logVerbose } from "../../../globals.js";
+import { loadConfig } from "../../../../upstream/src/config/config.js";
+import { logVerbose } from "../../../../upstream/src/globals.js";
 import { resolveAgentRoute } from "../../../routing/resolve-route.js";
 import { buildGroupHistoryKey } from "../../../routing/session-key.js";
-import { normalizeE164 } from "../../../utils.js";
+import { normalizeE164 } from "../../../../upstream/src/utils.js";
 import type { MentionConfig } from "../mentions.js";
 import type { WebInboundMsg } from "../types.js";
 import { maybeBroadcastMessage } from "./broadcast.js";

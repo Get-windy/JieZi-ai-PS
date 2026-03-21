@@ -1,16 +1,16 @@
 import type { Command } from "commander";
-import { setVerbose } from "../../globals.js";
-import { isTruthyEnvValue } from "../../infra/env.js";
-import type { LogLevel } from "../../logging/levels.js";
-import { defaultRuntime } from "../../runtime.js";
+import { setVerbose } from "../../../upstream/src/globals.js";
+import { isTruthyEnvValue } from "../../../upstream/src/infra/env.js";
+import type { LogLevel } from "../../../upstream/src/logging/levels.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
 import {
   getCommandPathWithRootOptions,
   getVerboseFlag,
   hasFlag,
   hasHelpOrVersion,
-} from "../argv.js";
-import { emitCliBanner } from "../banner.js";
-import { resolveCliName } from "../cli-name.js";
+} from "../../../upstream/src/cli/argv.js";
+import { emitCliBanner } from "../../../upstream/src/cli/banner.js";
+import { resolveCliName } from "../../../upstream/src/cli/cli-name.js";
 
 function setProcessTitleForCommand(actionCommand: Command) {
   let current: Command = actionCommand;

@@ -1,4 +1,4 @@
-import { loadConfig } from "../../config/config.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import { listDevicePairing } from "../../infra/device-pairing.js";
 import {
   approveNodePairing,
@@ -7,14 +7,14 @@ import {
   renamePairedNode,
   requestNodePairing,
   verifyNodeToken,
-} from "../../infra/node-pairing.js";
+} from "../../../upstream/src/infra/node-pairing.js";
 import {
   loadApnsRegistration,
   resolveApnsAuthConfigFromEnv,
   sendApnsAlert,
   sendApnsBackgroundWake,
-} from "../../infra/push-apns.js";
-import { isNodeCommandAllowed, resolveNodeCommandAllowlist } from "../node-command-policy.js";
+} from "../../../upstream/src/infra/push-apns.js";
+import { isNodeCommandAllowed, resolveNodeCommandAllowlist } from "../../../upstream/src/gateway/node-command-policy.js";
 import { sanitizeNodeInvokeParamsForForwarding } from "../node-invoke-sanitize.js";
 import {
   ErrorCodes,
@@ -29,16 +29,16 @@ import {
   validateNodePairRequestParams,
   validateNodePairVerifyParams,
   validateNodeRenameParams,
-} from "../protocol/index.js";
-import { handleNodeInvokeResult } from "./nodes.handlers.invoke-result.js";
+} from "../../../upstream/src/gateway/protocol/index.js";
+import { handleNodeInvokeResult } from "../../../upstream/src/gateway/server-methods/nodes.handlers.invoke-result.js";
 import {
   respondInvalidParams,
   respondUnavailableOnNodeInvokeError,
   respondUnavailableOnThrow,
   safeParseJson,
   uniqueSortedStrings,
-} from "./nodes.helpers.js";
-import type { GatewayRequestHandlers } from "./types.js";
+} from "../../../upstream/src/gateway/server-methods/nodes.helpers.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 const NODE_WAKE_RECONNECT_WAIT_MS = 3_000;
 const NODE_WAKE_RECONNECT_RETRY_WAIT_MS = 12_000;

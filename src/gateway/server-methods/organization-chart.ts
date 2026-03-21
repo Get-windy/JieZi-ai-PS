@@ -22,7 +22,7 @@
  * - organization.agent.onboard - 智能助手入职
  */
 
-import type { OpenClawConfig } from "../../config/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/types.js";
 import type {
   Organization,
   Team,
@@ -34,12 +34,12 @@ import type {
   AgentRecruitRequest,
   AgentOnboardingInfo,
 } from "../../organization/types.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import type { PermissionSubject } from "../../config/types.permissions.js";
-import { listAgentEntries } from "../../commands/agents.config.js";
-import { loadConfig } from "../../config/config.js";
+import { listAgentEntries } from "../../../upstream/src/commands/agents.config.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 import { organizationStorage } from "../../organization/storage.js";
 import { permissionMiddleware } from "../../permissions/middleware.js";
 

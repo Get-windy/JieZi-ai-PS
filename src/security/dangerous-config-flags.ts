@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "../config/config.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 
 export function collectEnabledInsecureOrDangerousFlags(cfg: OpenClawConfig): string[] {
   const enabledFlags: string[] = [];

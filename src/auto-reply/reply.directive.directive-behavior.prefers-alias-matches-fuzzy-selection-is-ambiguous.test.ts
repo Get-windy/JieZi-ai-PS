@@ -2,10 +2,10 @@ import "./reply.directive.directive-behavior.e2e-mocks.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
-import { loadSessionStore } from "../config/sessions.js";
-import type { ModelDefinitionConfig } from "../config/types.models.js";
-import { drainSystemEvents } from "../infra/system-events.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { loadSessionStore } from "../../upstream/src/config/sessions.js";
+import type { ModelDefinitionConfig } from "../../upstream/src/config/types.models.js";
+import { drainSystemEvents } from "../../upstream/src/infra/system-events.js";
 import {
   assertModelSelection,
   installDirectiveBehaviorE2EHooks,
@@ -15,8 +15,8 @@ import {
   runEmbeddedPiAgent,
   sessionStorePath,
   withTempHome,
-} from "./reply.directive.directive-behavior.e2e-harness.js";
-import { getReplyFromConfig } from "./reply.js";
+} from "../../upstream/src/auto-reply/reply.directive.directive-behavior.e2e-harness.js";
+import { getReplyFromConfig } from "../../upstream/src/auto-reply/reply.js";
 
 function makeModelDefinition(id: string, name: string): ModelDefinitionConfig {
   return {

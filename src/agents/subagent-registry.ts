@@ -1,44 +1,44 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
-import { loadConfig } from "../config/config.js";
+import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../../upstream/src/auto-reply/tokens.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
 import {
   loadSessionStore,
   resolveAgentIdFromSessionKey,
   resolveStorePath,
   type SessionEntry,
-} from "../config/sessions.js";
-import { ensureContextEnginesInitialized } from "../context-engine/init.js";
-import { resolveContextEngine } from "../context-engine/registry.js";
-import type { SubagentEndReason } from "../context-engine/types.js";
-import { callGateway } from "../gateway/call.js";
-import { onAgentEvent } from "../infra/agent-events.js";
-import { createSubsystemLogger } from "../logging/subsystem.js";
-import { defaultRuntime } from "../runtime.js";
-import { type DeliveryContext, normalizeDeliveryContext } from "../utils/delivery-context.js";
-import { ensureRuntimePluginsLoaded } from "./runtime-plugins.js";
+} from "../../upstream/src/config/sessions.js";
+import { ensureContextEnginesInitialized } from "../../upstream/src/context-engine/init.js";
+import { resolveContextEngine } from "../../upstream/src/context-engine/registry.js";
+import type { SubagentEndReason } from "../../upstream/src/context-engine/types.js";
+import { callGateway } from "../../upstream/src/gateway/call.js";
+import { onAgentEvent } from "../../upstream/src/infra/agent-events.js";
+import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
+import { defaultRuntime } from "../../upstream/src/runtime.js";
+import { type DeliveryContext, normalizeDeliveryContext } from "../../upstream/src/utils/delivery-context.js";
+import { ensureRuntimePluginsLoaded } from "../agents/runtime-plugins.js";
 import { resetAnnounceQueuesForTests } from "./subagent-announce-queue.js";
 import {
   captureSubagentCompletionReply,
   runSubagentAnnounceFlow,
   type SubagentRunOutcome,
-} from "./subagent-announce.js";
+} from "../../upstream/src/agents/subagent-announce.js";
 import {
   SUBAGENT_ENDED_OUTCOME_KILLED,
   SUBAGENT_ENDED_REASON_COMPLETE,
   SUBAGENT_ENDED_REASON_ERROR,
   SUBAGENT_ENDED_REASON_KILLED,
   type SubagentLifecycleEndedReason,
-} from "./subagent-lifecycle-events.js";
+} from "../../upstream/src/agents/subagent-lifecycle-events.js";
 import {
   resolveCleanupCompletionReason,
   resolveDeferredCleanupDecision,
-} from "./subagent-registry-cleanup.js";
+} from "../../upstream/src/agents/subagent-registry-cleanup.js";
 import {
   emitSubagentEndedHookOnce,
   resolveLifecycleOutcomeFromRunOutcome,
   runOutcomesEqual,
-} from "./subagent-registry-completion.js";
+} from "../../upstream/src/agents/subagent-registry-completion.js";
 import {
   countActiveDescendantRunsFromRuns,
   countActiveRunsForSessionFromRuns,
@@ -50,16 +50,16 @@ import {
   listRunsForRequesterFromRuns,
   resolveRequesterForChildSessionFromRuns,
   shouldIgnorePostCompletionAnnounceForSessionFromRuns,
-} from "./subagent-registry-queries.js";
+} from "../../upstream/src/agents/subagent-registry-queries.js";
 import {
   getSubagentRunsSnapshotForRead,
   persistSubagentRunsToDisk,
   restoreSubagentRunsFromDisk,
-} from "./subagent-registry-state.js";
-import type { SubagentRunRecord } from "./subagent-registry.types.js";
-import { resolveAgentTimeoutMs } from "./timeout.js";
+} from "../../upstream/src/agents/subagent-registry-state.js";
+import type { SubagentRunRecord } from "../../upstream/src/agents/subagent-registry.types.js";
+import { resolveAgentTimeoutMs } from "../../upstream/src/agents/timeout.js";
 
-export type { SubagentRunRecord } from "./subagent-registry.types.js";
+export type { SubagentRunRecord } from "../../upstream/src/agents/subagent-registry.types.js";
 const log = createSubsystemLogger("agents/subagent-registry");
 
 const subagentRuns = new Map<string, SubagentRunRecord>();

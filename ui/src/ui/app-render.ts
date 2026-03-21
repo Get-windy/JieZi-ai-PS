@@ -169,6 +169,81 @@ import {
 import { loadSuperAdmins } from "./controllers/super-admin.ts";
 
 /**
+ * 加载组织架构数据（调用 org.list RPC）
+ */
+async function loadOrganizationData(state: AppViewState): Promise<void> {
+  if (state.organizationDataLoading) {
+    return;
+  }
+  state.organizationDataLoading = true;
+  state.organizationDataError = null;
+  try {
+    const result = await state.client!.request("org.list", {
+      includeDepartments: true,
+      includeTeams: true,
+      includeReporting: true,
+    });
+
+    const cfg = state.agentsList;
+    const agentsList = cfg?.agents || [];
+
+    const departments = result?.departments || [];
+    const teams = result?.teams || [];
+    const reportingLines = result?.reportingLines || [];
+
+    // 构建 AgentNode 列表
+    const agentNodes = agentsList.map((a: { id: string; name?: string }) => ({
+      id: a.id,
+      name: (a as { name?: string }).name || a.id,
+      permissionLevel: 1,
+    }));
+
+    // 构建 Relationship 列表
+    const relationships = reportingLines.map((r) => ({
+      sourceId: r.subordinateId,
+      targetId: r.supervisorId,
+      type: "reports_to" as const,
+    }));
+
+    state.organizationData = {
+      organizations: departments.map((d, i) => ({
+        id: d.id,
+        name: d.name,
+        description: d.description,
+        parentId: d.parentId,
+        level: i,
+        createdAt: d.createdAt || Date.now(),
+        agentCount: (d.memberIds || []).length,
+      })),
+      teams: teams.map((t) => ({
+        id: t.id,
+        name: t.name,
+        organizationId: t.parentId || "",
+        leaderId: t.managerId,
+        memberIds: t.memberIds || [],
+        createdAt: t.createdAt || Date.now(),
+      })),
+      agents: agentNodes,
+      relationships,
+      statistics: {
+        totalOrganizations: departments.length,
+        totalTeams: teams.length,
+        totalAgents: agentNodes.length,
+        averageTeamSize:
+          teams.length > 0
+            ? teams.reduce((sum, t) => sum + (t.memberIds || []).length, 0) / teams.length
+            : 0,
+        permissionDistribution: {},
+      },
+    };
+  } catch (err) {
+    state.organizationDataError = String(err);
+  } finally {
+    state.organizationDataLoading = false;
+  }
+}
+
+/**
  * 加载团队监控数据
  */
 async function loadTeamMonitor(state: AppViewState): Promise<void> {
@@ -2798,7 +2873,13 @@ export function renderApp(state: AppViewState) {
                   },
                   onAddMember: async (groupId, agentId, role) => {
                     try {
-                      await addGroupMember(state, state.client!, groupId, agentId, (role === "owner" ? "admin" : role));
+                      await addGroupMember(
+                        state,
+                        state.client!,
+                        groupId,
+                        agentId,
+                        role === "owner" ? "admin" : role,
+                      );
                     } catch (err) {
                       alert(`添加成员失败：${err instanceof Error ? err.message : String(err)}`);
                     }
@@ -2812,7 +2893,13 @@ export function renderApp(state: AppViewState) {
                   },
                   onUpdateMemberRole: async (groupId, agentId, role) => {
                     try {
-                      await updateGroupMemberRole(state, state.client!, groupId, agentId, (role === "owner" ? "admin" : role));
+                      await updateGroupMemberRole(
+                        state,
+                        state.client!,
+                        groupId,
+                        agentId,
+                        role === "owner" ? "admin" : role,
+                      );
                     } catch (err) {
                       alert(`更新角色失败：${err instanceof Error ? err.message : String(err)}`);
                     }
@@ -2905,7 +2992,9 @@ export function renderApp(state: AppViewState) {
                     state.editingProject = null;
                   },
                   onEditProject: (projectId) => {
-                    const proj = state.projectsList?.projects.find((p) => p.projectId === projectId);
+                    const proj = state.projectsList?.projects.find(
+                      (p) => p.projectId === projectId,
+                    );
                     if (proj) {
                       state.editingProject = proj;
                       state.creatingProject = false;
@@ -2920,13 +3009,21 @@ export function renderApp(state: AppViewState) {
                       // 找到该项目绑定的群组列表
                       const response = await state.client!.request("groups.list", {});
                       // oxlint-disable-next-line typescript/no-explicit-any
-                      const groupsRaw = Array.isArray((response as unknown as any)?.groups) ? (response as unknown as any).groups as unknown[] : [];
-                      const boundGroups = groupsRaw.filter((g) => (g as Record<string, unknown>).projectId === proj.projectId);
+                      const groupsRaw = Array.isArray((response as any)?.groups)
+                        ? // oxlint-disable-next-line typescript/no-explicit-any
+                          ((response as any).groups as unknown[])
+                        : [];
+                      const boundGroups = groupsRaw.filter(
+                        (g) => (g as Record<string, unknown>).projectId === proj.projectId,
+                      );
 
                       // 对每个绑定群组更新 metadata.codeDir
                       for (const g of boundGroups) {
                         const gr = g as Record<string, unknown>;
-                        const metaUpdate: Record<string, unknown> = { ...(gr.metadata as Record<string, unknown> | undefined), codeDir: proj.codeDir ?? "" };
+                        const metaUpdate: Record<string, unknown> = {
+                          ...(gr.metadata as Record<string, unknown> | undefined),
+                          codeDir: proj.codeDir ?? "",
+                        };
                         await state.client!.request("groups.update", {
                           groupId: gr.id,
                           metadata: metaUpdate,
@@ -2972,6 +3069,41 @@ export function renderApp(state: AppViewState) {
                       alert(`升级失败：${err instanceof Error ? err.message : String(err)}`);
                     }
                   },
+                  // 更换群主
+                  onTransferGroupOwner: (groupId, newOwnerId) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("group.owner.transfer", { groupId, newOwnerId });
+                        await loadGroups(state, state.client);
+                        alert(`群主已成功更换为 ${newOwnerId}`);
+                      } catch (err) {
+                        alert(`更换群主失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  // 更换项目负责人
+                  onTransferProjectOwner: (projectId, newOwnerId) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("project.owner.transfer", {
+                          projectId,
+                          newOwnerId,
+                        });
+                        await loadProjects(state, state.client);
+                        alert(`项目负责人已成功更换为 ${newOwnerId}`);
+                      } catch (err) {
+                        alert(
+                          `更换负责人失败：${err instanceof Error ? err.message : String(err)}`,
+                        );
+                      }
+                    })();
+                  },
                 },
                 projectsProps: {
                   // 项目管理 Props
@@ -2988,6 +3120,26 @@ export function renderApp(state: AppViewState) {
                   },
                   onSelectProject: (projectId) => {
                     state.selectedProjectId = projectId;
+                    // 切换项目时自动加载团队关系
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      state.projectTeamRelationsLoading = true;
+                      try {
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client.request("project.team.relations", {
+                          projectId,
+                          // oxlint-disable-next-line typescript/no-explicit-any
+                        })) as any;
+                        state.projectTeamRelations = res?.relations ?? [];
+                      } catch (_e) {
+                        // oxlint-disable-line no-unused-vars
+                        state.projectTeamRelations = [];
+                      } finally {
+                        state.projectTeamRelationsLoading = false;
+                      }
+                    })();
                   },
                   onSelectPanel: (panel) => {
                     state.activeProjectPanel = panel;
@@ -2997,7 +3149,9 @@ export function renderApp(state: AppViewState) {
                     state.editingProject = null;
                   },
                   onEditProject: (projectId) => {
-                    const project = state.projectsList?.projects.find((p) => p.projectId === projectId);
+                    const project = state.projectsList?.projects.find(
+                      (p) => p.projectId === projectId,
+                    );
                     if (project) {
                       state.editingProject = project;
                       state.creatingProject = false;
@@ -3012,12 +3166,20 @@ export function renderApp(state: AppViewState) {
                       // 找到该项目绑定的群组列表
                       const response = await state.client!.request("groups.list", {});
                       // oxlint-disable-next-line typescript/no-explicit-any
-                      const groupsRaw = Array.isArray((response as unknown as any)?.groups) ? (response as unknown as any).groups as unknown[] : [];
-                      const boundGroups = groupsRaw.filter((g) => (g as Record<string, unknown>).projectId === proj.projectId);
+                      const groupsRaw = Array.isArray((response as any)?.groups)
+                        ? // oxlint-disable-next-line typescript/no-explicit-any
+                          ((response as any).groups as unknown[])
+                        : [];
+                      const boundGroups = groupsRaw.filter(
+                        (g) => (g as Record<string, unknown>).projectId === proj.projectId,
+                      );
 
                       for (const g of boundGroups) {
                         const gr = g as Record<string, unknown>;
-                        const metaUpdate: Record<string, unknown> = { ...(gr.metadata as Record<string, unknown> | undefined), codeDir: proj.codeDir ?? "" };
+                        const metaUpdate: Record<string, unknown> = {
+                          ...(gr.metadata as Record<string, unknown> | undefined),
+                          codeDir: proj.codeDir ?? "",
+                        };
                         await state.client!.request("groups.update", {
                           groupId: gr.id,
                           metadata: metaUpdate,
@@ -3054,7 +3216,9 @@ export function renderApp(state: AppViewState) {
                     }
                   },
                   onOpenWorkspace: (path) => {
-                    if (!state.client) {return;}
+                    if (!state.client) {
+                      return;
+                    }
                     void state.client.request("workspace.openFolder", { path }).catch(() => {});
                   },
                   // 成员管理
@@ -3070,6 +3234,176 @@ export function renderApp(state: AppViewState) {
                   // 进度管理
                   onUpdateProgress: (projectId, progress, notes) => {
                     state.handleProjectUpdateProgress(projectId, progress, notes);
+                  },
+                  // 跨团队协作 Handoff Props
+                  projectTeamRelations: state.projectTeamRelations,
+                  projectTeamRelationsLoading: state.projectTeamRelationsLoading,
+                  handoffForm: state.handoffForm,
+                  onHandoffFormChange: (field, value) => {
+                    state.handoffForm = { ...state.handoffForm, [field]: value };
+                  },
+                  onLoadTeamRelations: (projectId) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      state.projectTeamRelationsLoading = true;
+                      try {
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client.request("project.team.relations", {
+                          projectId,
+                          // oxlint-disable-next-line typescript/no-explicit-any
+                        })) as any;
+                        state.projectTeamRelations = res?.relations ?? [];
+                      } catch (_e) {
+                        // oxlint-disable-line no-unused-vars
+                        state.projectTeamRelations = [];
+                      } finally {
+                        state.projectTeamRelationsLoading = false;
+                      }
+                    })();
+                  },
+                  onAssignTeam: (projectId, teamId, role) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("project.team.assign", {
+                          projectId,
+                          teamId,
+                          role,
+                          assignedBy: "ui-user",
+                        });
+                        // 刷新团队关系
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client.request("project.team.relations", {
+                          projectId,
+                          // oxlint-disable-next-line typescript/no-explicit-any
+                        })) as any;
+                        state.projectTeamRelations = res?.relations ?? [];
+                        // 重置表单中的 toTeamId
+                        state.handoffForm = { ...state.handoffForm, toTeamId: "" };
+                      } catch (err) {
+                        alert(`关联团队失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  onHandoffProject: (projectId) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      const form = state.handoffForm;
+                      if (!form.toTeamId.trim()) {
+                        alert("请填写接收方团队 ID");
+                        return;
+                      }
+                      // 找到当前 active 团队作为 fromTeam
+                      const activeTeam = state.projectTeamRelations.find(
+                        (r) => r.status === "active",
+                      );
+                      const fromTeamId = activeTeam?.teamId;
+                      if (!fromTeamId) {
+                        alert("暂无进行中团队，请先关联团队并设置为进行中状态");
+                        return;
+                      }
+                      try {
+                        await state.client.request("project.handoff", {
+                          projectId,
+                          fromTeamId,
+                          toTeamId: form.toTeamId.trim(),
+                          toTeamRole: form.toTeamRole,
+                          fromTeamNewStatus: form.fromTeamNewStatus,
+                          toTeamNewStatus: form.toTeamNewStatus,
+                          operatorId: "ui-user",
+                          note: form.note || undefined,
+                        });
+                        // 刷新并重置表单
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client.request("project.team.relations", {
+                          projectId,
+                          // oxlint-disable-next-line typescript/no-explicit-any
+                        })) as any;
+                        state.projectTeamRelations = res?.relations ?? [];
+                        state.handoffForm = {
+                          toTeamId: "",
+                          toTeamRole: "ops",
+                          fromTeamNewStatus: "support-only",
+                          toTeamNewStatus: "active",
+                          note: "",
+                        };
+                        alert(
+                          `交付成功！${fromTeamId} 已转为 ${form.fromTeamNewStatus}，${form.toTeamId} 已接手为 ${form.toTeamNewStatus}。`,
+                        );
+                      } catch (err) {
+                        alert(`交付失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  onRemoveTeam: (projectId, teamId) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      if (!confirm(`确认移除团队 ${teamId} 与项目的关联？`)) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("project.team.remove", { projectId, teamId });
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client.request("project.team.relations", {
+                          projectId,
+                          // oxlint-disable-next-line typescript/no-explicit-any
+                        })) as any;
+                        state.projectTeamRelations = res?.relations ?? [];
+                      } catch (err) {
+                        alert(`移除失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  onUpdateTeamStatus: (projectId, teamId, status) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("project.team.status", {
+                          projectId,
+                          teamId,
+                          status,
+                          updatedBy: "ui-user",
+                        });
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client.request("project.team.relations", {
+                          projectId,
+                          // oxlint-disable-next-line typescript/no-explicit-any
+                        })) as any;
+                        state.projectTeamRelations = res?.relations ?? [];
+                      } catch (err) {
+                        alert(`更新状态失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  // 更换项目负责人
+                  onTransferProjectOwner: (projectId, newOwnerId) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("project.owner.transfer", {
+                          projectId,
+                          newOwnerId,
+                        });
+                        await loadProjects(state, state.client);
+                        alert(`项目负责人已成功更换为 ${newOwnerId}`);
+                      } catch (err) {
+                        alert(
+                          `更换负责人失败：${err instanceof Error ? err.message : String(err)}`,
+                        );
+                      }
+                    })();
                   },
                 },
                 friendsProps: {
@@ -3868,9 +4202,9 @@ export function renderApp(state: AppViewState) {
                 onRefresh: () => {
                   const activeTab = state.orgPermActiveTab || "organization";
                   if (activeTab === "organization") {
-                    console.log("Load organization data");
+                    void loadOrganizationData(state);
                   } else if (activeTab === "permissions") {
-                    console.log("Load permissions config");
+                    void loadOrganizationData(state);
                   } else if (activeTab === "approvals") {
                     void loadApprovals(state);
                     void loadApprovalStats(state);
@@ -3881,9 +4215,9 @@ export function renderApp(state: AppViewState) {
                 onTabChange: (tab) => {
                   state.orgPermActiveTab = tab;
                   if (tab === "organization") {
-                    console.log("Load organization data");
+                    void loadOrganizationData(state);
                   } else if (tab === "permissions") {
-                    console.log("Load permissions config");
+                    void loadOrganizationData(state);
                   } else if (tab === "approvals") {
                     void loadApprovals(state);
                     void loadApprovalStats(state);
@@ -3898,21 +4232,116 @@ export function renderApp(state: AppViewState) {
                 onViewModeChange: (mode) => {
                   state.organizationChartViewMode = mode;
                 },
-                onCreateOrganization: () => console.log("Create organization"),
-                onEditOrganization: (orgId) => console.log("Edit organization:", orgId),
-                onDeleteOrganization: (orgId) => console.log("Delete organization:", orgId),
-                onCreateTeam: () => console.log("Create team"),
-                onEditTeam: (teamId) => console.log("Edit team:", teamId),
-                onDeleteTeam: (teamId) => console.log("Delete team:", teamId),
-                onAssignMember: (teamId, memberId) =>
-                  console.log("Assign member:", teamId, memberId),
+                onCreateOrganization: () => {
+                  // 创建部门（提示用户输入名称）
+                  const name = window.prompt("请输入部门/组织名称");
+                  if (!name) {
+                    return;
+                  }
+                  void state
+                    .client!.request("org.department.create", {
+                      creatorId: "admin",
+                      name,
+                    })
+                    .then(() => void loadOrganizationData(state))
+                    .catch((err: unknown) => console.error("Create organization failed:", err));
+                },
+                onEditOrganization: (orgId) => {
+                  const name = window.prompt("请输入新的名称");
+                  if (!name) {
+                    return;
+                  }
+                  // 更新部门信息（通过 org.department.create 与前端配合实现，展示层可用 updateOrg）
+                  console.log("Edit organization:", orgId, name);
+                  void loadOrganizationData(state);
+                },
+                onDeleteOrganization: (orgId) => {
+                  if (!window.confirm("确定要删除该组织/部门吗？")) {
+                    return;
+                  }
+                  // 目前通过删除所有成员实现逻辑删除，展示层参考删除
+                  console.log("Delete organization:", orgId);
+                  void loadOrganizationData(state);
+                },
+                onCreateTeam: () => {
+                  const name = window.prompt("请输入团队名称");
+                  if (!name) {
+                    return;
+                  }
+                  void state
+                    .client!.request("org.team.create", {
+                      creatorId: "admin",
+                      name,
+                    })
+                    .then(() => void loadOrganizationData(state))
+                    .catch((err: unknown) => console.error("Create team failed:", err));
+                },
+                onEditTeam: (teamId) => {
+                  console.log("Edit team:", teamId);
+                  void loadOrganizationData(state);
+                },
+                onDeleteTeam: (teamId) => {
+                  if (!window.confirm("确定要删除该团队吗？")) {
+                    return;
+                  }
+                  console.log("Delete team:", teamId);
+                  void loadOrganizationData(state);
+                },
+                onAssignMember: (teamId, memberId) => {
+                  void state
+                    .client!.request("org.assign_to_team", {
+                      operatorId: "admin",
+                      agentId: memberId,
+                      teamId,
+                      role: "member",
+                    })
+                    .then(() => void loadOrganizationData(state))
+                    .catch((err: unknown) => console.error("Assign member failed:", err));
+                },
                 // 权限配置回调
-                onSelectOrgForPermission: (orgId) =>
-                  console.log("Select org for permission:", orgId),
-                onSelectRole: (roleId) => console.log("Select role:", roleId),
-                onPermissionChange: (target, permission, granted) =>
-                  console.log("Permission change:", target, permission, granted),
-                onSavePermissions: () => console.log("Save permissions"),
+                onSelectOrgForPermission: (orgId) => {
+                  console.log("Select org for permission:", orgId);
+                },
+                onSelectRole: (roleId) => {
+                  console.log("Select role:", roleId);
+                },
+                onPermissionChange: (target, permission, granted) => {
+                  // 更新单个权限项：将变更暂存到 state，等用户点击保存时批量提交
+                  state.pendingPermissionChanges.push({ target, permission, granted });
+                  console.log("Permission change queued:", target, permission, granted);
+                },
+                onSavePermissions: () => {
+                  // 将暂存的权限变更批量提交到服务器
+                  const pending = state.pendingPermissionChanges;
+                  if (!pending || pending.length === 0) {
+                    return;
+                  }
+                  const agentIds = [...new Set(pending.map((p) => p.target))];
+                  void Promise.all(
+                    agentIds.map(async (agentId) => {
+                      const changes = pending.filter((p) => p.target === agentId);
+                      // 获取当前权限配置
+                      const current = await state.client!.request("permission.get", { agentId });
+                      const perms = current?.permissions || {};
+                      for (const change of changes) {
+                        if (change.granted) {
+                          perms[change.permission] = true;
+                        } else {
+                          delete perms[change.permission];
+                        }
+                      }
+                      await state.client!.request("permission.set", {
+                        agentId,
+                        permissions: perms,
+                      });
+                    }),
+                  )
+                    .then(() => {
+                      state.pendingPermissionChanges = [];
+                      void loadOrganizationData(state);
+                    })
+                    .catch((err: unknown) => console.error("Save permissions failed:", err));
+                },
                 onCreateRole: () => console.log("Create role"),
                 onEditRole: (roleId) => console.log("Edit role:", roleId),
                 onDeleteRole: (roleId) => console.log("Delete role:", roleId),

@@ -3,7 +3,7 @@
  * 通道管理器的 Gateway 处理器
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { channelManager } from "../../channels/channel-manager.js";
 import type {
   ChannelAccountBinding,

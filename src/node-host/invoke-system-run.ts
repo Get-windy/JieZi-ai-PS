@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { resolveAgentConfig } from "../agents/agent-scope.js";
-import { loadConfig } from "../config/config.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
 import type { GatewayClient } from "../gateway/client.js";
 import {
   addAllowlistEntry,
@@ -14,12 +14,12 @@ import {
   type ExecAsk,
   type ExecCommandSegment,
   type ExecSecurity,
-} from "../infra/exec-approvals.js";
-import type { ExecHostRequest, ExecHostResponse, ExecHostRunResult } from "../infra/exec-host.js";
-import { resolveExecSafeBinRuntimePolicy } from "../infra/exec-safe-bin-runtime-policy.js";
-import { sanitizeSystemRunEnvOverrides } from "../infra/host-env-security.js";
-import { resolveSystemRunCommand } from "../infra/system-run-command.js";
-import { evaluateSystemRunPolicy, resolveExecApprovalDecision } from "./exec-policy.js";
+} from "../../upstream/src/infra/exec-approvals.js";
+import type { ExecHostRequest, ExecHostResponse, ExecHostRunResult } from "../../upstream/src/infra/exec-host.js";
+import { resolveExecSafeBinRuntimePolicy } from "../../upstream/src/infra/exec-safe-bin-runtime-policy.js";
+import { sanitizeSystemRunEnvOverrides } from "../../upstream/src/infra/host-env-security.js";
+import { resolveSystemRunCommand } from "../../upstream/src/infra/system-run-command.js";
+import { evaluateSystemRunPolicy, resolveExecApprovalDecision } from "../../upstream/src/node-host/exec-policy.js";
 import type {
   ExecEventPayload,
   RunResult,
@@ -32,7 +32,7 @@ type SystemRunInvokeResult = {
   payloadJSON?: string | null;
   error?: { code?: string; message?: string } | null;
 };
-export { formatSystemRunAllowlistMissMessage } from "./exec-policy.js";
+export { formatSystemRunAllowlistMissMessage } from "../../upstream/src/node-host/exec-policy.js";
 
 export async function handleSystemRunInvoke(opts: {
   client: GatewayClient;

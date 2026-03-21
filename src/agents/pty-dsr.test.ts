@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { buildCursorPositionResponse, stripDsrRequests } from "./pty-dsr.js";
+import { buildCursorPositionResponse, stripDsrRequests } from "../../upstream/src/agents/pty-dsr.js";
 
 test("stripDsrRequests removes cursor queries and counts them", () => {
   const input = "hi\x1b[6nthere\x1b[?6n";

@@ -5,20 +5,20 @@ import {
   getRuntimeConfigSourceSnapshot,
   type OpenClawConfig,
   loadConfig,
-} from "../config/config.js";
-import { createConfigRuntimeEnv } from "../config/env-vars.js";
-import { isRecord } from "../utils.js";
-import { resolveOpenClawAgentDir } from "./agent-paths.js";
+} from "../../upstream/src/config/config.js";
+import { createConfigRuntimeEnv } from "../../upstream/src/config/env-vars.js";
+import { isRecord } from "../../upstream/src/utils.js";
+import { resolveOpenClawAgentDir } from "../../upstream/src/agents/agent-paths.js";
 import {
   mergeProviders,
   mergeWithExistingProviderSecrets,
   type ExistingProviderConfig,
-} from "./models-config.merge.js";
+} from "../../upstream/src/agents/models-config.merge.js";
 import {
   normalizeProviders,
   type ProviderConfig,
   resolveImplicitProviders,
-} from "./models-config.providers.js";
+} from "../../upstream/src/agents/models-config.providers.js";
 
 type ModelsConfig = NonNullable<OpenClawConfig["models"]>;
 

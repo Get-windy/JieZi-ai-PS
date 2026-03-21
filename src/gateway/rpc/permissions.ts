@@ -9,9 +9,9 @@
  */
 
 import type { PermissionSubject } from "../../config/types.permissions.js";
-import type { GatewayServer } from "../server.js";
+import type { GatewayServer } from "../../../upstream/src/gateway/server.js";
 import { permissionMiddleware } from "../../permissions/middleware.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 /**
  * 注册权限和审批相关的RPC方法

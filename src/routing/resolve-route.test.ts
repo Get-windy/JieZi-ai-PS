@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import type { ChatType } from "../channels/chat-type.js";
-import type { OpenClawConfig } from "../config/config.js";
+import type { ChatType } from "../../upstream/src/channels/chat-type.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import { resolveAgentRoute } from "./resolve-route.js";
 
 describe("resolveAgentRoute", () => {

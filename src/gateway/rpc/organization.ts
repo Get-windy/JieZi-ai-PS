@@ -6,7 +6,7 @@
  * - organization.getAll - 获取完整的组织架构数据
  */
 
-import type { GatewayServer } from "../server.js";
+import type { GatewayServer } from "../../../upstream/src/gateway/server.js";
 
 /**
  * 注册组织架构相关的RPC方法

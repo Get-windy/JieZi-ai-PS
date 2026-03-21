@@ -9,44 +9,44 @@ import {
   resolveChunkMode,
   resolveTextChunkLimit,
 } from "../../auto-reply/chunk.js";
-import type { ReplyPayload } from "../../auto-reply/types.js";
-import { resolveChannelMediaMaxBytes } from "../../channels/plugins/media-limits.js";
-import { loadChannelOutboundAdapter } from "../../channels/plugins/outbound/load.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
+import { resolveChannelMediaMaxBytes } from "../../../upstream/src/channels/plugins/media-limits.js";
+import { loadChannelOutboundAdapter } from "../../../upstream/src/channels/plugins/outbound/load.js";
 import type {
   ChannelOutboundAdapter,
   ChannelOutboundContext,
-} from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { resolveMarkdownTableMode } from "../../config/markdown-tables.js";
+} from "../../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { resolveMarkdownTableMode } from "../../../upstream/src/config/markdown-tables.js";
 import {
   appendAssistantMessageToSessionTranscript,
   resolveMirroredTranscriptText,
-} from "../../config/sessions.js";
-import { fireAndForgetHook } from "../../hooks/fire-and-forget.js";
-import { createInternalHookEvent, triggerInternalHook } from "../../hooks/internal-hooks.js";
+} from "../../../upstream/src/config/sessions.js";
+import { fireAndForgetHook } from "../../../upstream/src/hooks/fire-and-forget.js";
+import { createInternalHookEvent, triggerInternalHook } from "../../../upstream/src/hooks/internal-hooks.js";
 import {
   buildCanonicalSentMessageHookContext,
   toInternalMessageSentContext,
   toPluginMessageContext,
   toPluginMessageSentEvent,
-} from "../../hooks/message-hook-mappers.js";
-import { createSubsystemLogger } from "../../logging/subsystem.js";
+} from "../../../upstream/src/hooks/message-hook-mappers.js";
+import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
 import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
-import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
-import { throwIfAborted } from "./abort.js";
-import { ackDelivery, enqueueDelivery, failDelivery } from "./delivery-queue.js";
+import { getGlobalHookRunner } from "../../../upstream/src/plugins/hook-runner-global.js";
+import { throwIfAborted } from "../../../upstream/src/infra/outbound/abort.js";
+import { ackDelivery, enqueueDelivery, failDelivery } from "../../../upstream/src/infra/outbound/delivery-queue.js";
 import type { OutboundIdentity } from "./identity.js";
-import type { DeliveryMirror } from "./mirror.js";
+import type { DeliveryMirror } from "../../../upstream/src/infra/outbound/mirror.js";
 import type { NormalizedOutboundPayload } from "./payloads.js";
 import { normalizeReplyPayloadsForDelivery } from "./payloads.js";
-import { isPlainTextSurface, sanitizeForPlainText } from "./sanitize-text.js";
-import { resolveOutboundSendDep, type OutboundSendDeps } from "./send-deps.js";
-import type { OutboundSessionContext } from "./session-context.js";
+import { isPlainTextSurface, sanitizeForPlainText } from "../../../upstream/src/infra/outbound/sanitize-text.js";
+import { resolveOutboundSendDep, type OutboundSendDeps } from "../../../upstream/src/infra/outbound/send-deps.js";
+import type { OutboundSessionContext } from "../../../upstream/src/infra/outbound/session-context.js";
 import type { OutboundChannel } from "./targets.js";
 
 export type { NormalizedOutboundPayload } from "./payloads.js";
 export { normalizeOutboundPayloads } from "./payloads.js";
-export { resolveOutboundSendDep, type OutboundSendDeps } from "./send-deps.js";
+export { resolveOutboundSendDep, type OutboundSendDeps } from "../../../upstream/src/infra/outbound/send-deps.js";
 
 const log = createSubsystemLogger("outbound/deliver");
 const TELEGRAM_TEXT_LIMIT = 4096;

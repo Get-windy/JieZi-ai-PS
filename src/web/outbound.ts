@@ -1,12 +1,12 @@
-import { loadConfig } from "../config/config.js";
-import { resolveMarkdownTableMode } from "../config/markdown-tables.js";
-import { generateSecureUuid } from "../infra/secure-random.js";
-import { getChildLogger } from "../logging/logger.js";
-import { createSubsystemLogger } from "../logging/subsystem.js";
-import { convertMarkdownTables } from "../markdown/tables.js";
-import { markdownToWhatsApp } from "../markdown/whatsapp.js";
-import { normalizePollInput, type PollInput } from "../polls.js";
-import { toWhatsappJid } from "../utils.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
+import { resolveMarkdownTableMode } from "../../upstream/src/config/markdown-tables.js";
+import { generateSecureUuid } from "../../upstream/src/infra/secure-random.js";
+import { getChildLogger } from "../../upstream/src/logging/logger.js";
+import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
+import { convertMarkdownTables } from "../../upstream/src/markdown/tables.js";
+import { markdownToWhatsApp } from "../../upstream/src/markdown/whatsapp.js";
+import { normalizePollInput, type PollInput } from "../../upstream/src/polls.js";
+import { toWhatsappJid } from "../../upstream/src/utils.js";
 import { type ActiveWebSendOptions, requireActiveWebListener } from "./active-listener.js";
 import { loadWebMedia } from "./media.js";
 

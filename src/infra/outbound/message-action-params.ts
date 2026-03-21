@@ -4,16 +4,16 @@ import { parseSlackTarget } from "../../../upstream/extensions/slack/src/targets
 import { parseTelegramTarget } from "../../../upstream/extensions/telegram/src/targets.js";
 import { loadWebMedia } from "../../../upstream/extensions/whatsapp/src/media.js";
 import { assertMediaNotDataUrl, resolveSandboxedMediaSource } from "../../agents/sandbox-paths.js";
-import { readStringParam } from "../../agents/tools/common.js";
+import { readStringParam } from "../../../upstream/src/agents/tools/common.js";
 import type {
   ChannelId,
   ChannelMessageActionName,
   ChannelThreadingToolContext,
-} from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { createRootScopedReadFile } from "../../infra/fs-safe.js";
-import { extensionForMime } from "../../media/mime.js";
-import { readBooleanParam as readBooleanParamShared } from "../../plugin-sdk/boolean-param.js";
+} from "../../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { createRootScopedReadFile } from "../../../upstream/src/infra/fs-safe.js";
+import { extensionForMime } from "../../../upstream/src/media/mime.js";
+import { readBooleanParam as readBooleanParamShared } from "../../../upstream/src/plugin-sdk/boolean-param.js";
 
 export const readBooleanParam = readBooleanParamShared;
 

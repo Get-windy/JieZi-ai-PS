@@ -2,11 +2,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ImageContent } from "@mariozechner/pi-ai";
 import { loadWebMedia } from "../../../../upstream/extensions/whatsapp/src/media.js";
-import { resolveUserPath } from "../../../utils.js";
-import type { ImageSanitizationLimits } from "../../image-sanitization.js";
+import { resolveUserPath } from "../../../../upstream/src/utils.js";
+import type { ImageSanitizationLimits } from "../../../../upstream/src/agents/image-sanitization.js";
 import type { SandboxFsBridge } from "../../sandbox/fs-bridge.js";
 import { sanitizeImageBlocks } from "../../tool-images.js";
-import { log } from "../logger.js";
+import { log } from "../../../../upstream/src/agents/pi-embedded-runner/logger.js";
 
 /**
  * Common image file extensions for detection.

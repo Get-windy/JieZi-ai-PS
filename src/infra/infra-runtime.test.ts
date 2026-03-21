@@ -10,7 +10,7 @@ import {
   setGatewaySigusr1RestartPolicy,
   setPreRestartDeferralCheck,
 } from "./restart.js";
-import { listTailnetAddresses } from "./tailnet.js";
+import { listTailnetAddresses } from "../../upstream/src/infra/tailnet.js";
 
 describe("infra runtime", () => {
   function setupRestartSignalSuite() {

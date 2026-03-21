@@ -2,20 +2,20 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { HEARTBEAT_PROMPT } from "../auto-reply/heartbeat.js";
-import * as replyModule from "../auto-reply/reply.js";
-import { whatsappOutbound } from "../channels/plugins/outbound/whatsapp.js";
-import type { OpenClawConfig } from "../config/config.js";
+import { HEARTBEAT_PROMPT } from "../../upstream/src/auto-reply/heartbeat.js";
+import * as replyModule from "../../upstream/src/auto-reply/reply.js";
+import { whatsappOutbound } from "../../upstream/src/channels/plugins/outbound/whatsapp.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import {
   resolveAgentIdFromSessionKey,
   resolveAgentMainSessionKey,
   resolveMainSessionKey,
   resolveStorePath,
-} from "../config/sessions.js";
-import { getActivePluginRegistry, setActivePluginRegistry } from "../plugins/runtime.js";
+} from "../../upstream/src/config/sessions.js";
+import { getActivePluginRegistry, setActivePluginRegistry } from "../../upstream/src/plugins/runtime.js";
 import { buildAgentPeerSessionKey } from "../routing/session-key.js";
-import { createOutboundTestPlugin, createTestRegistry } from "../test-utils/channel-plugins.js";
-import { typedCases } from "../test-utils/typed-cases.js";
+import { createOutboundTestPlugin, createTestRegistry } from "../../upstream/src/test-utils/channel-plugins.js";
+import { typedCases } from "../../upstream/src/test-utils/typed-cases.js";
 import {
   type HeartbeatDeps,
   isHeartbeatEnabledForAgent,
@@ -27,7 +27,7 @@ import {
   resolveHeartbeatDeliveryTarget,
   resolveHeartbeatSenderContext,
 } from "./outbound/targets.js";
-import { enqueueSystemEvent, resetSystemEventsForTest } from "./system-events.js";
+import { enqueueSystemEvent, resetSystemEventsForTest } from "../../upstream/src/infra/system-events.js";
 
 // Avoid pulling optional runtime deps during isolated runs.
 vi.mock("jiti", () => ({ createJiti: () => () => ({}) }));

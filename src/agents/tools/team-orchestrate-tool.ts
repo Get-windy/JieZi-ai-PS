@@ -17,12 +17,15 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { Type } from "@sinclair/typebox";
+import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
+import { jsonResult } from "../../../upstream/src/agents/tools/common.js";
+import { agentCommandFromIngress } from "../../../upstream/src/commands/agent.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
+import { resolveAgentMainSessionKey } from "../../../upstream/src/config/sessions.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
 import { listAgentIds } from "../../agents/agent-scope.js";
 import { createDefaultDeps } from "../../cli/deps.js";
-import { agentCommandFromIngress } from "../../commands/agent.js";
-import { loadConfig } from "../../config/config.js";
-import { resolveAgentMainSessionKey } from "../../config/sessions.js";
-import { defaultRuntime } from "../../runtime.js";
 
 export type TeamRunMode = "fanout" | "pipeline" | "adversarial" | "consensus";
 
@@ -328,6 +331,113 @@ export function createTeamRunTool(_params: { agentId: string }) {
       };
 
       return result;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// AnyAgentTool 兼容包装
+// ---------------------------------------------------------------------------
+
+const TeamRunSchema = Type.Object({
+  task: Type.String({ minLength: 1, description: "The task or question to assign to the team" }),
+  mode: Type.Optional(
+    Type.Union([
+      Type.Literal("fanout"),
+      Type.Literal("pipeline"),
+      Type.Literal("adversarial"),
+      Type.Literal("consensus"),
+    ]),
+  ),
+  agents: Type.Optional(
+    Type.Array(Type.String(), {
+      description: "Agent IDs to include. If omitted, all configured agents are used.",
+    }),
+  ),
+  timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (default: 60)" })),
+  extraSystemPrompt: Type.Optional(
+    Type.String({ description: "Additional system context injected for each agent run" }),
+  ),
+});
+
+/**
+ * 创建兼容 AnyAgentTool 的 team_orchestrate 工具
+ */
+export function createTeamOrchestrateTool(_opts?: { agentId?: string }): AnyAgentTool {
+  return {
+    label: "Team Orchestrate",
+    name: "team_orchestrate",
+    description:
+      "Orchestrate multiple agents as a virtual team to complete a task together.\n" +
+      "Modes:\n" +
+      "- fanout: broadcast task to all agents in parallel (best for independent analysis)\n" +
+      "- pipeline: pass task sequentially through agents (best for review chains)\n" +
+      "- adversarial: first agent produces, rest review/critique (best for quality validation)\n" +
+      "- consensus: fanout then summarize (alias for fanout with summary prompt)",
+    parameters: TeamRunSchema,
+    execute: async (_toolCallId, args) => {
+      const input = args as Record<string, unknown>;
+      const task = typeof input.task === "string" ? input.task.trim() : "";
+      if (!task) {
+        return jsonResult({ success: false, error: "task is required" });
+      }
+
+      const mode: TeamRunMode = (
+        ["fanout", "pipeline", "adversarial", "consensus"] as const
+      ).includes(input.mode as TeamRunMode)
+        ? (input.mode as TeamRunMode)
+        : "fanout";
+
+      const cfg = loadConfig();
+      const allAgents = listAgentIds(cfg);
+      const requestedAgents = Array.isArray(input.agents)
+        ? (input.agents as string[]).filter((a) => typeof a === "string" && allAgents.includes(a))
+        : allAgents;
+
+      if (requestedAgents.length === 0) {
+        return jsonResult({
+          success: false,
+          error: "No valid agents found. Check agent IDs or configure agents in config.",
+        });
+      }
+
+      const runId = `team-run-${Date.now()}-${randomUUID().slice(0, 8)}`;
+      const extraSystemPrompt =
+        typeof input.extraSystemPrompt === "string" ? input.extraSystemPrompt : undefined;
+
+      let executionResults: TeamRunResult["results"];
+
+      switch (mode) {
+        case "fanout":
+        case "consensus":
+          executionResults = await executeFanOut(task, requestedAgents, runId, extraSystemPrompt);
+          break;
+        case "pipeline":
+          executionResults = await executePipeline(task, requestedAgents, runId, extraSystemPrompt);
+          break;
+        case "adversarial":
+          executionResults = await executeAdversarial(
+            task,
+            requestedAgents,
+            runId,
+            extraSystemPrompt,
+          );
+          break;
+        default:
+          executionResults = await executeFanOut(task, requestedAgents, runId, extraSystemPrompt);
+      }
+
+      const successCount = executionResults.filter((r) => r.status === "success").length;
+      const failCount = executionResults.filter((r) => r.status === "failed").length;
+
+      return jsonResult({
+        success: true,
+        runId,
+        mode,
+        participants: requestedAgents,
+        results: executionResults,
+        summary: `Team run complete: ${successCount} succeeded, ${failCount} failed. Mode: ${mode}, Agents: ${requestedAgents.join(", ")}.`,
+      });
     },
   };
 }

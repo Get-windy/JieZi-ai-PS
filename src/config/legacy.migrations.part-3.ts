@@ -3,7 +3,7 @@ import {
   hasConfiguredControlUiAllowedOrigins,
   isGatewayNonLoopbackBindMode,
   resolveGatewayPortWithDefault,
-} from "./gateway-control-ui-origins.js";
+} from "../../upstream/src/config/gateway-control-ui-origins.js";
 import {
   ensureAgentEntry,
   ensureRecord,
@@ -13,9 +13,9 @@ import {
   type LegacyConfigMigration,
   mergeMissing,
   resolveDefaultAgentIdFromRaw,
-} from "./legacy.shared.js";
-import { DEFAULT_GATEWAY_PORT } from "./paths.js";
-import { isBlockedObjectKey } from "./prototype-keys.js";
+} from "../../upstream/src/config/legacy.shared.js";
+import { DEFAULT_GATEWAY_PORT } from "../../upstream/src/config/paths.js";
+import { isBlockedObjectKey } from "../../upstream/src/config/prototype-keys.js";
 
 const AGENT_HEARTBEAT_KEYS = new Set([
   "every",

@@ -1,9 +1,15 @@
-import type { ChatType } from "../channels/chat-type.js";
-import type { AgentDefaultsConfig } from "./types.agent-defaults.js";
-import type { AgentModelConfig, AgentSandboxConfig } from "./types.agents-shared.js";
-import type { HumanDelayConfig, IdentityConfig } from "./types.base.js";
-import type { GroupChatConfig } from "./types.messages.js";
-import type { AgentToolsConfig, MemorySearchConfig } from "./types.tools.js";
+import type { ChatType } from "../../upstream/src/channels/chat-type.js";
+import type { AgentDefaultsConfig } from "../../upstream/src/config/types.agent-defaults.js";
+import type {
+  AgentModelConfig,
+  AgentSandboxConfig,
+} from "../../upstream/src/config/types.agents-shared.js";
+import type { HumanDelayConfig, IdentityConfig } from "../../upstream/src/config/types.base.js";
+import type { GroupChatConfig } from "../../upstream/src/config/types.messages.js";
+import type {
+  AgentToolsConfig,
+  MemorySearchConfig,
+} from "../../upstream/src/config/types.tools.js";
 
 export type AgentRuntimeAcpConfig = {
   /** ACP harness adapter id (for example codex, claude). */
@@ -94,9 +100,29 @@ export type AgentsConfig = {
   list?: AgentConfig[];
 };
 
-/** 智能路由系统的模型账号配置，用于将不同模型请求路由到指定账号 */
+/** Smart routing weight config for modelAccounts. */
+export type AgentModelSmartRoutingConfig = {
+  complexityWeight?: number;
+  capabilityWeight?: number;
+  costWeight?: number;
+  speedWeight?: number;
+  eloWeight?: number;
+  /** Whether to enable cost-based optimization scoring. */
+  enableCostOptimization?: boolean;
+};
+
+/** Per-agent model accounts routing config (local overlay feature). */
 export type AgentModelAccountsConfig = {
-  accounts?: string[];
-  routingMode?: string;
+  /** List of account IDs available for routing. */
+  accounts: string[];
+  /** Routing strategy: 'manual' (fixed default), 'smart' (auto-scored), or 'roundRobin' (rotate through accounts). */
+  routingMode?: "manual" | "smart" | "roundRobin";
+  /** Default account ID used in 'manual' mode. */
   defaultAccountId?: string;
+  /** Weight tuning for 'smart' routing mode. */
+  smartRouting?: AgentModelSmartRoutingConfig;
+  /** Per-account configuration (e.g., enabled flag). */
+  accountConfigs?: Array<{ accountId: string; enabled?: boolean; [key: string]: unknown }>;
+  /** Enable session pinning: once an account is selected for a session, prefer it on subsequent turns (default: true). */
+  enableSessionPinning?: boolean;
 };

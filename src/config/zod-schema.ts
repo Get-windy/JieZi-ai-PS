@@ -1,25 +1,25 @@
 import { z } from "zod";
-import { parseByteSize } from "../cli/parse-bytes.js";
-import { parseDurationMs } from "../cli/parse-duration.js";
+import { parseByteSize } from "../../upstream/src/cli/parse-bytes.js";
+import { parseDurationMs } from "../../upstream/src/cli/parse-duration.js";
 import { ToolsSchema } from "./zod-schema.agent-runtime.js";
-import { AgentsSchema, AudioSchema, BindingsSchema, BroadcastSchema } from "./zod-schema.agents.js";
-import { ApprovalsSchema } from "./zod-schema.approvals.js";
+import { AgentsSchema, AudioSchema, BindingsSchema, BroadcastSchema } from "../../upstream/src/config/zod-schema.agents.js";
+import { ApprovalsSchema } from "../../upstream/src/config/zod-schema.approvals.js";
 import {
   HexColorSchema,
   ModelsConfigSchema,
   SecretInputSchema,
   SecretsConfigSchema,
-} from "./zod-schema.core.js";
-import { HookMappingSchema, HooksGmailSchema, InternalHooksSchema } from "./zod-schema.hooks.js";
-import { InstallRecordShape } from "./zod-schema.installs.js";
-import { ChannelsSchema } from "./zod-schema.providers.js";
-import { sensitive } from "./zod-schema.sensitive.js";
+} from "../../upstream/src/config/zod-schema.core.js";
+import { HookMappingSchema, HooksGmailSchema, InternalHooksSchema } from "../../upstream/src/config/zod-schema.hooks.js";
+import { InstallRecordShape } from "../../upstream/src/config/zod-schema.installs.js";
+import { ChannelsSchema } from "../../upstream/src/config/zod-schema.providers.js";
+import { sensitive } from "../../upstream/src/config/zod-schema.sensitive.js";
 import {
   CommandsSchema,
   MessagesSchema,
   SessionSchema,
   SessionSendPolicySchema,
-} from "./zod-schema.session.js";
+} from "../../upstream/src/config/zod-schema.session.js";
 
 const BrowserSnapshotDefaultsSchema = z
   .object({
@@ -696,6 +696,8 @@ export const OpenClawSchema = z
           .strict()
           .optional(),
         channelHealthCheckMinutes: z.number().int().min(0).optional(),
+        channelStaleEventThresholdMinutes: z.number().int().min(1).optional(),
+        channelMaxRestartsPerHour: z.number().int().min(1).optional(),
         tailscale: z
           .object({
             mode: z.union([z.literal("off"), z.literal("serve"), z.literal("funnel")]).optional(),
@@ -726,6 +728,7 @@ export const OpenClawSchema = z
               ])
               .optional(),
             debounceMs: z.number().int().min(0).optional(),
+            deferralTimeoutMs: z.number().int().min(0).optional(),
           })
           .strict()
           .optional(),
@@ -833,6 +836,21 @@ export const OpenClawSchema = z
           .optional(),
       })
       .strict()
+      .superRefine((gateway, ctx) => {
+        const effectiveHealthCheckMinutes = gateway.channelHealthCheckMinutes ?? 5;
+        if (
+          gateway.channelStaleEventThresholdMinutes != null &&
+          effectiveHealthCheckMinutes !== 0 &&
+          gateway.channelStaleEventThresholdMinutes < effectiveHealthCheckMinutes
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["channelStaleEventThresholdMinutes"],
+            message:
+              "channelStaleEventThresholdMinutes should be >= channelHealthCheckMinutes to avoid delayed stale detection",
+          });
+        }
+      })
       .optional(),
     memory: MemorySchema,
     skills: z
@@ -901,6 +919,7 @@ export const OpenClawSchema = z
       })
       .strict()
       .optional(),
+    // Local overlay: group workspace configuration (not in upstream).
     groups: z.record(z.string(), z.unknown()).optional(),
   })
   .strict()

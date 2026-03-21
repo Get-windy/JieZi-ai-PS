@@ -1,15 +1,15 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { resolveApiKeyForProvider } from "../agents/model-auth.js";
+import { resolveApiKeyForProvider } from "../../upstream/src/agents/model-auth.js";
 import type { MsgContext } from "../auto-reply/templating.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
-import { fetchRemoteMedia } from "../media/fetch.js";
-import { withEnvAsync } from "../test-utils/env.js";
-import { clearMediaUnderstandingBinaryCacheForTests } from "./runner.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { resolvePreferredOpenClawTmpDir } from "../../upstream/src/infra/tmp-openclaw-dir.js";
+import { fetchRemoteMedia } from "../../upstream/src/media/fetch.js";
+import { withEnvAsync } from "../../upstream/src/test-utils/env.js";
+import { clearMediaUnderstandingBinaryCacheForTests } from "../../upstream/src/media-understanding/runner.js";
 
-vi.mock("../agents/model-auth.js", () => ({
+vi.mock("../../upstream/src/agents/model-auth.js", () => ({
   resolveApiKeyForProvider: vi.fn(async () => ({
     apiKey: "test-key",
     source: "test",
@@ -23,7 +23,7 @@ vi.mock("../agents/model-auth.js", () => ({
   },
 }));
 
-vi.mock("../media/fetch.js", () => ({
+vi.mock("../../upstream/src/media/fetch.js", () => ({
   fetchRemoteMedia: vi.fn(),
 }));
 

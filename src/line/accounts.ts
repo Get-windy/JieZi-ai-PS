@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import type { OpenClawConfig } from "../config/config.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import {
   DEFAULT_ACCOUNT_ID,
   normalizeAccountId as normalizeSharedAccountId,
@@ -9,7 +9,7 @@ import type {
   LineAccountConfig,
   ResolvedLineAccount,
   LineTokenSource,
-} from "./types.js";
+} from "../../upstream/src/line/types.js";
 
 export { DEFAULT_ACCOUNT_ID } from "../routing/account-id.js";
 

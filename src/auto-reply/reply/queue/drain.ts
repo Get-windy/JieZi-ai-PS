@@ -1,4 +1,4 @@
-import { defaultRuntime } from "../../../runtime.js";
+import { defaultRuntime } from "../../../../upstream/src/runtime.js";
 import {
   buildCollectPrompt,
   beginQueueDrain,
@@ -8,9 +8,9 @@ import {
   hasCrossChannelItems,
   previewQueueSummaryPrompt,
   waitForQueueDebounce,
-} from "../../../utils/queue-helpers.js";
+} from "../../../../upstream/src/utils/queue-helpers.js";
 import { isRoutableChannel } from "../route-reply.js";
-import { FOLLOWUP_QUEUES } from "./state.js";
+import { FOLLOWUP_QUEUES } from "../../../../upstream/src/auto-reply/reply/queue/state.js";
 import type { FollowupRun } from "./types.js";
 
 // Persists the most recent runFollowup callback per queue key so that

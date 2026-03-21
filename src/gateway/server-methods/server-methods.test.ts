@@ -4,17 +4,17 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { emitAgentEvent } from "../../infra/agent-events.js";
-import { formatZonedTimestamp } from "../../infra/format-time/format-datetime.js";
-import { resetLogger, setLoggerOverride } from "../../logging.js";
+import { emitAgentEvent } from "../../../upstream/src/infra/agent-events.js";
+import { formatZonedTimestamp } from "../../../upstream/src/infra/format-time/format-datetime.js";
+import { resetLogger, setLoggerOverride } from "../../../upstream/src/logging.js";
 import { ExecApprovalManager } from "../exec-approval-manager.js";
-import { validateExecApprovalRequestParams } from "../protocol/index.js";
-import { waitForAgentJob } from "./agent-job.js";
-import { injectTimestamp, timestampOptsFromConfig } from "./agent-timestamp.js";
-import { normalizeRpcAttachmentsToChatAttachments } from "./attachment-normalize.js";
-import { sanitizeChatSendMessageInput } from "./chat.js";
+import { validateExecApprovalRequestParams } from "../../../upstream/src/gateway/protocol/index.js";
+import { waitForAgentJob } from "../../../upstream/src/gateway/server-methods/agent-job.js";
+import { injectTimestamp, timestampOptsFromConfig } from "../../../upstream/src/gateway/server-methods/agent-timestamp.js";
+import { normalizeRpcAttachmentsToChatAttachments } from "../../../upstream/src/gateway/server-methods/attachment-normalize.js";
+import { sanitizeChatSendMessageInput } from "../../../upstream/src/gateway/server-methods/chat.js";
 import { createExecApprovalHandlers } from "./exec-approval.js";
-import { logsHandlers } from "./logs.js";
+import { logsHandlers } from "../../../upstream/src/gateway/server-methods/logs.js";
 
 vi.mock("../../commands/status.js", () => ({
   getStatusSummary: vi.fn().mockResolvedValue({ ok: true }),

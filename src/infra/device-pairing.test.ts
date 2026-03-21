@@ -2,7 +2,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { issueDeviceBootstrapToken, verifyDeviceBootstrapToken } from "./device-bootstrap.js";
+import { issueDeviceBootstrapToken, verifyDeviceBootstrapToken } from "../../upstream/src/infra/device-bootstrap.js";
 import {
   approveDevicePairing,
   clearDevicePairing,
@@ -14,7 +14,7 @@ import {
   verifyDeviceToken,
   type PairedDevice,
 } from "./device-pairing.js";
-import { resolvePairingPaths } from "./pairing-files.js";
+import { resolvePairingPaths } from "../../upstream/src/infra/pairing-files.js";
 
 async function setupPairedOperatorDevice(baseDir: string, scopes: string[]) {
   const request = await requestDevicePairing(

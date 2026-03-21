@@ -21,15 +21,15 @@ import { resolveTelegramTargetChatType } from "../../../upstream/extensions/tele
 import { parseTelegramThreadId } from "../../../upstream/extensions/telegram/src/outbound-params.js";
 import { parseTelegramTarget } from "../../../upstream/extensions/telegram/src/targets.js";
 import type { MsgContext } from "../../auto-reply/templating.js";
-import type { ChatType } from "../../channels/chat-type.js";
-import { getChannelPlugin } from "../../channels/plugins/index.js";
-import type { ChannelId } from "../../channels/plugins/types.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { recordSessionMetaFromInbound, resolveStorePath } from "../../config/sessions.js";
+import type { ChatType } from "../../../upstream/src/channels/chat-type.js";
+import { getChannelPlugin } from "../../../upstream/src/channels/plugins/index.js";
+import type { ChannelId } from "../../../upstream/src/channels/plugins/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { recordSessionMetaFromInbound, resolveStorePath } from "../../../upstream/src/config/sessions.js";
 import { buildAgentSessionKey, type RoutePeer } from "../../routing/resolve-route.js";
 import { resolveThreadSessionKeys } from "../../routing/session-key.js";
-import { isWhatsAppGroupJid, normalizeWhatsAppTarget } from "../../whatsapp/normalize.js";
-import type { ResolvedMessagingTarget } from "./target-resolver.js";
+import { isWhatsAppGroupJid, normalizeWhatsAppTarget } from "../../../upstream/src/whatsapp/normalize.js";
+import type { ResolvedMessagingTarget } from "../../../upstream/src/infra/outbound/target-resolver.js";
 
 export type OutboundSessionRoute = {
   sessionKey: string;

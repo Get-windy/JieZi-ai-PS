@@ -1,31 +1,31 @@
-import { isToolAllowedByPolicies } from "../agents/pi-tools.policy.js";
+import { isToolAllowedByPolicies } from "../../upstream/src/agents/pi-tools.policy.js";
 import {
   resolveSandboxConfigForAgent,
   resolveSandboxToolPolicyForAgent,
-} from "../agents/sandbox.js";
+} from "../../upstream/src/agents/sandbox.js";
 /**
  * Synchronous security audit collector functions.
  *
  * These functions analyze config-based security properties without I/O.
  */
-import type { SandboxToolPolicy } from "../agents/sandbox/types.js";
+import type { SandboxToolPolicy } from "../../upstream/src/agents/sandbox/types.js";
 import { getBlockedBindReason } from "../agents/sandbox/validate-sandbox-security.js";
-import { resolveToolProfilePolicy } from "../agents/tool-policy.js";
+import { resolveToolProfilePolicy } from "../../upstream/src/agents/tool-policy.js";
 import { resolveBrowserConfig } from "../browser/config.js";
-import { formatCliCommand } from "../cli/command-format.js";
-import type { OpenClawConfig } from "../config/config.js";
+import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import {
   resolveAgentModelFallbackValues,
   resolveAgentModelPrimaryValue,
-} from "../config/model-input.js";
-import type { AgentToolsConfig } from "../config/types.tools.js";
-import { resolveGatewayAuth } from "../gateway/auth.js";
+} from "../../upstream/src/config/model-input.js";
+import type { AgentToolsConfig } from "../../upstream/src/config/types.tools.js";
+import { resolveGatewayAuth } from "../../upstream/src/gateway/auth.js";
 import {
   DEFAULT_DANGEROUS_NODE_COMMANDS,
   resolveNodeCommandAllowlist,
-} from "../gateway/node-command-policy.js";
-import { inferParamBFromIdOrName } from "../shared/model-param-b.js";
-import { pickSandboxToolPolicy } from "./audit-tool-policy.js";
+} from "../../upstream/src/gateway/node-command-policy.js";
+import { inferParamBFromIdOrName } from "../../upstream/src/shared/model-param-b.js";
+import { pickSandboxToolPolicy } from "../../upstream/src/security/audit-tool-policy.js";
 
 export type SecurityAuditFinding = {
   checkId: string;

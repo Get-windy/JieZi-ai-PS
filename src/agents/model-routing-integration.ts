@@ -15,7 +15,7 @@
  */
 
 import type { AgentModelAccountsConfig } from "../config/types.agents.js";
-import type { OpenClawConfig } from "../config/types.js";
+import type { OpenClawConfig } from "../../upstream/src/config/types.js";
 import { resolveAgentModelAccounts } from "./agent-scope.js";
 import {
   routeToOptimalModelAccount,

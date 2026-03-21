@@ -1,33 +1,33 @@
-import { resolveIdentityNamePrefix } from "../../../agents/identity.js";
+import { resolveIdentityNamePrefix } from "../../../../upstream/src/agents/identity.js";
 import { resolveChunkMode, resolveTextChunkLimit } from "../../../auto-reply/chunk.js";
-import { shouldComputeCommandAuthorized } from "../../../auto-reply/command-detection.js";
+import { shouldComputeCommandAuthorized } from "../../../../upstream/src/auto-reply/command-detection.js";
 import {
   formatInboundEnvelope,
   resolveEnvelopeFormatOptions,
-} from "../../../auto-reply/envelope.js";
-import type { getReplyFromConfig } from "../../../auto-reply/reply.js";
+} from "../../../../upstream/src/auto-reply/envelope.js";
+import type { getReplyFromConfig } from "../../../../upstream/src/auto-reply/reply.js";
 import {
   buildHistoryContextFromEntries,
   type HistoryEntry,
-} from "../../../auto-reply/reply/history.js";
-import { finalizeInboundContext } from "../../../auto-reply/reply/inbound-context.js";
-import { dispatchReplyWithBufferedBlockDispatcher } from "../../../auto-reply/reply/provider-dispatcher.js";
-import type { ReplyPayload } from "../../../auto-reply/types.js";
-import { toLocationContext } from "../../../channels/location.js";
-import { createReplyPrefixOptions } from "../../../channels/reply-prefix.js";
-import type { loadConfig } from "../../../config/config.js";
-import { resolveMarkdownTableMode } from "../../../config/markdown-tables.js";
+} from "../../../../upstream/src/auto-reply/reply/history.js";
+import { finalizeInboundContext } from "../../../../upstream/src/auto-reply/reply/inbound-context.js";
+import { dispatchReplyWithBufferedBlockDispatcher } from "../../../../upstream/src/auto-reply/reply/provider-dispatcher.js";
+import type { ReplyPayload } from "../../../../upstream/src/auto-reply/types.js";
+import { toLocationContext } from "../../../../upstream/src/channels/location.js";
+import { createReplyPrefixOptions } from "../../../../upstream/src/channels/reply-prefix.js";
+import type { loadConfig } from "../../../../upstream/src/config/config.js";
+import { resolveMarkdownTableMode } from "../../../../upstream/src/config/markdown-tables.js";
 import {
   readSessionUpdatedAt,
   recordSessionMetaFromInbound,
   resolveStorePath,
-} from "../../../config/sessions.js";
-import { logVerbose, shouldLogVerbose } from "../../../globals.js";
-import type { getChildLogger } from "../../../logging.js";
+} from "../../../../upstream/src/config/sessions.js";
+import { logVerbose, shouldLogVerbose } from "../../../../upstream/src/globals.js";
+import type { getChildLogger } from "../../../../upstream/src/logging.js";
 import { getAgentScopedMediaLocalRoots } from "../../../media/local-roots.js";
-import { readChannelAllowFromStore } from "../../../pairing/pairing-store.js";
+import { readChannelAllowFromStore } from "../../../../upstream/src/pairing/pairing-store.js";
 import type { resolveAgentRoute } from "../../../routing/resolve-route.js";
-import { jidToE164, normalizeE164 } from "../../../utils.js";
+import { jidToE164, normalizeE164 } from "../../../../upstream/src/utils.js";
 import { resolveWhatsAppAccount } from "../../accounts.js";
 import { newConnectionId } from "../../reconnect.js";
 import { formatError } from "../../session.js";

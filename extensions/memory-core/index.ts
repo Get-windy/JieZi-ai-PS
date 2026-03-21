@@ -12,7 +12,7 @@ import {
   createAgentSkillListTool,
 } from "../../src/agents/tools/self-evolve-tool.js";
 import { createTeamRunTool } from "../../src/agents/tools/team-orchestrate-tool.js";
-import { loadConfig } from "../../src/config/config.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
 import {
   getRecentReflectionsSummary,
   findRelevantSkills,

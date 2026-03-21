@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAnthropicBillingError } from "./live-auth-keys.js";
+import { isAnthropicBillingError } from "../../upstream/src/agents/live-auth-keys.js";
 
 describe("isAnthropicBillingError", () => {
   it("does not false-positive on plain 'a 402' prose", () => {

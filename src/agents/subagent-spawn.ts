@@ -1,23 +1,23 @@
 import crypto from "node:crypto";
 import { formatThinkingLevels, normalizeThinkLevel } from "../auto-reply/thinking.js";
-import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
-import { loadConfig } from "../config/config.js";
-import { callGateway } from "../gateway/call.js";
-import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
+import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../../upstream/src/config/agent-limits.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
+import { callGateway } from "../../upstream/src/gateway/call.js";
+import { getGlobalHookRunner } from "../../upstream/src/plugins/hook-runner-global.js";
 import { isValidAgentId, isCronSessionKey, normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.js";
-import { normalizeDeliveryContext } from "../utils/delivery-context.js";
+import { normalizeDeliveryContext } from "../../upstream/src/utils/delivery-context.js";
 import { resolveAgentConfig } from "./agent-scope.js";
-import { AGENT_LANE_SUBAGENT } from "./lanes.js";
-import { resolveSubagentSpawnModelSelection } from "./model-selection.js";
-import { buildSubagentSystemPrompt } from "./subagent-announce.js";
-import { getSubagentDepthFromSessionStore } from "./subagent-depth.js";
+import { AGENT_LANE_SUBAGENT } from "../../upstream/src/agents/lanes.js";
+import { resolveSubagentSpawnModelSelection } from "../../upstream/src/agents/model-selection.js";
+import { buildSubagentSystemPrompt } from "../../upstream/src/agents/subagent-announce.js";
+import { getSubagentDepthFromSessionStore } from "../../upstream/src/agents/subagent-depth.js";
 import { countActiveRunsForSession, registerSubagentRun } from "./subagent-registry.js";
-import { readStringParam } from "./tools/common.js";
+import { readStringParam } from "../../upstream/src/agents/tools/common.js";
 import {
   resolveDisplaySessionKey,
   resolveInternalSessionKey,
   resolveMainSessionAlias,
-} from "./tools/sessions-helpers.js";
+} from "../../upstream/src/agents/tools/sessions-helpers.js";
 
 export const SUBAGENT_SPAWN_MODES = ["run", "session"] as const;
 export type SpawnSubagentMode = (typeof SUBAGENT_SPAWN_MODES)[number];
@@ -302,56 +302,58 @@ export async function spawnSubagentDirect(
     }
     thinkingOverride = normalized;
   }
-  try {
-    await callGateway({
-      method: "sessions.patch",
-      params: { key: childSessionKey, spawnDepth: childDepth },
-      timeoutMs: 10_000,
-    });
-  } catch (err) {
-    const messageText =
-      err instanceof Error ? err.message : typeof err === "string" ? err : "error";
+  const patchChildSession = async (patch: Record<string, unknown>): Promise<string | undefined> => {
+    try {
+      await callGateway({
+        method: "sessions.patch",
+        params: { key: childSessionKey, ...patch },
+        timeoutMs: 10_000,
+      });
+      return undefined;
+    } catch (err) {
+      return err instanceof Error ? err.message : typeof err === "string" ? err : "error";
+    }
+  };
+
+  const spawnDepthPatchError = await patchChildSession({ spawnDepth: childDepth });
+  if (spawnDepthPatchError) {
     return {
       status: "error",
-      error: messageText,
+      error: spawnDepthPatchError,
+      childSessionKey,
+    };
+  }
+
+  // Write spawnedBy into the child session store so gateway reads it from entry.spawnedBy
+  // (matches upstream behavior: patch first, then agent call omits spawnedBy param).
+  const spawnLineagePatchError = await patchChildSession({ spawnedBy: spawnedByKey });
+  if (spawnLineagePatchError) {
+    return {
+      status: "error",
+      error: spawnLineagePatchError,
       childSessionKey,
     };
   }
 
   if (resolvedModel) {
-    try {
-      await callGateway({
-        method: "sessions.patch",
-        params: { key: childSessionKey, model: resolvedModel },
-        timeoutMs: 10_000,
-      });
-      modelApplied = true;
-    } catch (err) {
-      const messageText =
-        err instanceof Error ? err.message : typeof err === "string" ? err : "error";
+    const modelPatchError = await patchChildSession({ model: resolvedModel });
+    if (modelPatchError) {
       return {
         status: "error",
-        error: messageText,
+        error: modelPatchError,
         childSessionKey,
       };
     }
+    modelApplied = true;
   }
   if (thinkingOverride !== undefined) {
-    try {
-      await callGateway({
-        method: "sessions.patch",
-        params: {
-          key: childSessionKey,
-          thinkingLevel: thinkingOverride === "off" ? null : thinkingOverride,
-        },
-        timeoutMs: 10_000,
-      });
-    } catch (err) {
-      const messageText =
-        err instanceof Error ? err.message : typeof err === "string" ? err : "error";
+    const thinkingPatchError = await patchChildSession({
+      thinkingLevel: thinkingOverride === "off" ? null : thinkingOverride,
+    });
+    if (thinkingPatchError) {
       return {
         status: "error",
-        error: messageText,
+        error: thinkingPatchError,
         childSessionKey,
       };
     }
@@ -427,7 +429,6 @@ export async function spawnSubagentDirect(
         thinking: thinkingOverride,
         timeout: runTimeoutSeconds,
         label: label || undefined,
-        spawnedBy: spawnedByKey,
         groupId: ctx.agentGroupId ?? undefined,
         groupChannel: ctx.agentGroupChannel ?? undefined,
         groupSpace: ctx.agentGroupSpace ?? undefined,
@@ -493,6 +494,7 @@ export async function spawnSubagentDirect(
   registerSubagentRun({
     runId: childRunId,
     childSessionKey,
+    controllerSessionKey: requesterInternalKey,
     requesterSessionKey: requesterInternalKey,
     requesterOrigin,
     requesterDisplayKey,

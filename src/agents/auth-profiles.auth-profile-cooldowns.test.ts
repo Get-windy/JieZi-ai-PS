@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateAuthProfileCooldownMs } from "./auth-profiles.js";
+import { calculateAuthProfileCooldownMs } from "../../upstream/src/agents/auth-profiles.js";
 
 describe("auth profile cooldowns", () => {
   it("applies exponential backoff with a 1h cap", () => {

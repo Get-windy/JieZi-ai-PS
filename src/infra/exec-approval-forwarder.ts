@@ -1,28 +1,28 @@
 import { buildTelegramExecApprovalButtons } from "../../extensions/telegram/src/approval-buttons.js";
 import { sendTypingTelegram } from "../../extensions/telegram/src/send.js";
-import type { ReplyPayload } from "../auto-reply/types.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { loadConfig } from "../config/config.js";
+import type { ReplyPayload } from "../../upstream/src/auto-reply/types.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
 import type {
   ExecApprovalForwardingConfig,
   ExecApprovalForwardTarget,
-} from "../config/types.approvals.js";
-import { createSubsystemLogger } from "../logging/subsystem.js";
+} from "../../upstream/src/config/types.approvals.js";
+import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
 import { normalizeAccountId, parseAgentSessionKey } from "../routing/session-key.js";
 import { compileSafeRegex, testRegexWithBoundedInput } from "../security/safe-regex.js";
 import {
   isDeliverableMessageChannel,
   normalizeMessageChannel,
   type DeliverableMessageChannel,
-} from "../utils/message-channel.js";
-import { resolveExecApprovalCommandDisplay } from "./exec-approval-command-display.js";
-import { buildExecApprovalPendingReplyPayload } from "./exec-approval-reply.js";
-import { resolveExecApprovalSessionTarget } from "./exec-approval-session-target.js";
+} from "../../upstream/src/utils/message-channel.js";
+import { resolveExecApprovalCommandDisplay } from "../../upstream/src/infra/exec-approval-command-display.js";
+import { buildExecApprovalPendingReplyPayload } from "../../upstream/src/infra/exec-approval-reply.js";
+import { resolveExecApprovalSessionTarget } from "../../upstream/src/infra/exec-approval-session-target.js";
 import type {
   ExecApprovalDecision,
   ExecApprovalRequest,
   ExecApprovalResolved,
-} from "./exec-approvals.js";
+} from "../../upstream/src/infra/exec-approvals.js";
 import { deliverOutboundPayloads } from "./outbound/deliver.js";
 
 const log = createSubsystemLogger("gateway/exec-approvals");

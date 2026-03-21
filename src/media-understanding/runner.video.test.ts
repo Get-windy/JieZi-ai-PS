@@ -2,9 +2,9 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
-import { withEnvAsync } from "../test-utils/env.js";
-import { createMediaAttachmentCache, normalizeMediaAttachments, runCapability } from "./runner.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { withEnvAsync } from "../../upstream/src/test-utils/env.js";
+import { createMediaAttachmentCache, normalizeMediaAttachments, runCapability } from "../../upstream/src/media-understanding/runner.js";
 
 async function withVideoFixture(
   filePrefix: string,

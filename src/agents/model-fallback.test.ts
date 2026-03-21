@@ -3,13 +3,13 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
-import type { AuthProfileStore } from "./auth-profiles.js";
-import { saveAuthProfileStore } from "./auth-profiles.js";
-import { AUTH_STORE_VERSION } from "./auth-profiles/constants.js";
-import { isAnthropicBillingError } from "./live-auth-keys.js";
-import { runWithModelFallback } from "./model-fallback.js";
-import { makeModelFallbackCfg } from "./test-helpers/model-fallback-config-fixture.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import type { AuthProfileStore } from "../../upstream/src/agents/auth-profiles.js";
+import { saveAuthProfileStore } from "../../upstream/src/agents/auth-profiles.js";
+import { AUTH_STORE_VERSION } from "../../upstream/src/agents/auth-profiles/constants.js";
+import { isAnthropicBillingError } from "../../upstream/src/agents/live-auth-keys.js";
+import { runWithModelFallback } from "../../upstream/src/agents/model-fallback.js";
+import { makeModelFallbackCfg } from "../../upstream/src/agents/test-helpers/model-fallback-config-fixture.js";
 
 const makeCfg = makeModelFallbackCfg;
 

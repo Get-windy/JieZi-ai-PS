@@ -7,17 +7,17 @@
  * 使消息可投递并自动激活该 agent 的主会话。
  */
 
-import type { OpenClawConfig } from "../config/config.js";
-import { loadSessionStore, updateSessionStore } from "../config/sessions.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { loadSessionStore, updateSessionStore } from "../../upstream/src/config/sessions.js";
 import { listAgentIds } from "../agents/agent-scope.js";
 import { normalizeAgentId } from "../routing/session-key.js";
-import { parseSessionLabel } from "../sessions/session-label.js";
+import { parseSessionLabel } from "../../upstream/src/sessions/session-label.js";
 import {
   ErrorCodes,
   type ErrorShape,
   errorShape,
   type SessionsResolveParams,
-} from "./protocol/index.js";
+} from "../../upstream/src/gateway/protocol/index.js";
 import {
   listSessionsFromStore,
   loadCombinedSessionStoreForGateway,

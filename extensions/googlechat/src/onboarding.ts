@@ -1,9 +1,5 @@
-import type { OpenClawConfig, DmPolicy } from "openclaw/plugin-sdk";
 import {
-  addWildcardAllowFrom,
   formatDocsLink,
-  mergeAllowFromEntries,
-  promptAccountId,
   type ChannelOnboardingAdapter,
   type ChannelOnboardingDmPolicy,
   type WizardPrompter,
@@ -11,6 +7,12 @@ import {
   normalizeAccountId,
   migrateBaseNameToDefaultAccount,
 } from "openclaw/plugin-sdk";
+import type { OpenClawConfig, DmPolicy } from "openclaw/plugin-sdk";
+import {
+  addWildcardAllowFrom,
+  mergeAllowFromEntries,
+  promptAccountId,
+} from "../../../upstream/src/channels/plugins/setup-wizard-helpers.js";
 import {
   listGoogleChatAccountIds,
   resolveDefaultGoogleChatAccountId,

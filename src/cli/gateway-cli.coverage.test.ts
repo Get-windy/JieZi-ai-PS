@@ -1,8 +1,8 @@
 import { Command } from "commander";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withEnvOverride } from "../config/test-helpers.js";
-import { GatewayLockError } from "../infra/gateway-lock.js";
-import { createCliRuntimeCapture } from "./test-runtime-capture.js";
+import { GatewayLockError } from "../../upstream/src/infra/gateway-lock.js";
+import { createCliRuntimeCapture } from "../../upstream/src/cli/test-runtime-capture.js";
 
 type DiscoveredBeacon = Awaited<
   ReturnType<typeof import("../infra/bonjour-discovery.js").discoverGatewayBeacons>
@@ -227,7 +227,7 @@ describe("gateway-cli coverage", () => {
     resetRuntimeCapture();
     serviceIsLoaded.mockResolvedValue(true);
 
-    const { GatewayLockError } = await import("../infra/gateway-lock.js");
+    const { GatewayLockError } = await import("../../upstream/src/infra/gateway-lock.js");
     startGatewayServer.mockRejectedValueOnce(
       new GatewayLockError("another gateway instance is already listening"),
     );

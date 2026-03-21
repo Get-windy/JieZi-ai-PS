@@ -6,7 +6,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { TokenOptimizationConfig, TokenUsageStats, MODEL_COSTS } from "./config.js";
-import { STATE_DIR } from "../../config/paths.js";
+import { STATE_DIR } from "../../../upstream/src/config/paths.js";
 
 /**
  * 预算使用记录

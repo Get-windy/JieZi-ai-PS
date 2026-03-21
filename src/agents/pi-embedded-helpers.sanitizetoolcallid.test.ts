@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeToolCallId } from "./pi-embedded-helpers.js";
+import { sanitizeToolCallId } from "../../upstream/src/agents/pi-embedded-helpers.js";
 
 describe("sanitizeToolCallId", () => {
   describe("strict mode (default)", () => {

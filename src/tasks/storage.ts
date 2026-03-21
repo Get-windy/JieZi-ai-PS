@@ -6,8 +6,12 @@
  */
 
 import { join } from "node:path";
-import { STATE_DIR } from "../config/paths.js";
-import { readJsonFile, writeJsonAtomic, createAsyncLock } from "../infra/json-files.js";
+import { STATE_DIR } from "../../upstream/src/config/paths.js";
+import {
+  readJsonFile,
+  writeJsonAtomic,
+  createAsyncLock,
+} from "../../upstream/src/infra/json-files.js";
 import type {
   Task,
   TaskFilter,
@@ -251,8 +255,14 @@ export async function listTasks(filter?: TaskFilter): Promise<Task[]> {
 
   // 应用筛选条件
   if (filter.assigneeId) {
+    // 大小写不敏感匹配：agentId 经过 normalizeAgentId 会统一转小写，
+    // 但历史数据可能存了大写，用 toLowerCase 兼容两侧格式
+    const filterIdLower = filter.assigneeId.toLowerCase();
     results = results.filter((task) =>
-      (task.assignees ?? []).some((assignee) => assignee.id === filter.assigneeId),
+      (task.assignees ?? []).some(
+        (assignee) =>
+          assignee.id === filter.assigneeId || assignee.id.toLowerCase() === filterIdLower,
+      ),
     );
   }
 
@@ -315,6 +325,24 @@ export async function listTasks(filter?: TaskFilter): Promise<Task[]> {
         (task.description ?? "").toLowerCase().includes(keyword),
     );
   }
+
+  // 排序规则：优先级（urgent > high > medium > low）→ 权重（越大越高）→ 加入任务时间（早的在前）
+  const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+  results.sort((a, b) => {
+    const pa = PRIORITY_ORDER[a.priority] ?? 2;
+    const pb = PRIORITY_ORDER[b.priority] ?? 2;
+    if (pa !== pb) {
+      return pa - pb;
+    }
+    // 同优先级：权重大的先执行（默认 0）
+    const wa = a.weight ?? 0;
+    const wb = b.weight ?? 0;
+    if (wa !== wb) {
+      return wb - wa;
+    }
+    // 同优先级同权重：按加入时间升序（先入先出）
+    return a.createdAt - b.createdAt;
+  });
 
   return results;
 }

@@ -3,8 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { WebSocket } from "ws";
-import { emitAgentEvent, registerAgentRunContext } from "../infra/agent-events.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
+import { emitAgentEvent, registerAgentRunContext } from "../../upstream/src/infra/agent-events.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../upstream/src/utils/message-channel.js";
 import {
   connectOk,
   getReplyFromConfig,
@@ -14,9 +14,9 @@ import {
   testState,
   trackConnectChallengeNonce,
   writeSessionStore,
-} from "./test-helpers.js";
-import { agentCommand } from "./test-helpers.mocks.js";
-import { installConnectedControlUiServerSuite } from "./test-with-server.js";
+} from "../../upstream/src/gateway/test-helpers.js";
+import { agentCommand } from "../../upstream/src/gateway/test-helpers.mocks.js";
+import { installConnectedControlUiServerSuite } from "../../upstream/src/gateway/test-with-server.js";
 
 installGatewayTestHooks({ scope: "suite" });
 

@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
+import { SILENT_REPLY_TOKEN } from "../../upstream/src/auto-reply/tokens.js";
 import {
   __testing as sessionBindingServiceTesting,
   registerSessionBindingAdapter,
-} from "../infra/outbound/session-binding-service.js";
+} from "../../upstream/src/infra/outbound/session-binding-service.js";
 
 type AgentCallRequest = { method?: string; params?: Record<string, unknown> };
 type RequesterResolution = {

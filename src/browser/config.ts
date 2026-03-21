@@ -1,20 +1,20 @@
-import type { BrowserConfig, BrowserProfileConfig, OpenClawConfig } from "../config/config.js";
-import { resolveGatewayPort } from "../config/paths.js";
+import type { BrowserConfig, BrowserProfileConfig, OpenClawConfig } from "../../upstream/src/config/config.js";
+import { resolveGatewayPort } from "../../upstream/src/config/paths.js";
 import {
   deriveDefaultBrowserCdpPortRange,
   deriveDefaultBrowserControlPort,
   DEFAULT_BROWSER_CONTROL_PORT,
-} from "../config/port-defaults.js";
-import { isLoopbackHost } from "../gateway/net.js";
-import type { SsrFPolicy } from "../infra/net/ssrf.js";
+} from "../../upstream/src/config/port-defaults.js";
+import { isLoopbackHost } from "../../upstream/src/gateway/net.js";
+import type { SsrFPolicy } from "../../upstream/src/infra/net/ssrf.js";
 import {
   DEFAULT_OPENCLAW_BROWSER_COLOR,
   DEFAULT_OPENCLAW_BROWSER_ENABLED,
   DEFAULT_BROWSER_EVALUATE_ENABLED,
   DEFAULT_BROWSER_DEFAULT_PROFILE_NAME,
   DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME,
-} from "./constants.js";
-import { CDP_PORT_RANGE_START, getUsedPorts } from "./profiles.js";
+} from "../../upstream/src/browser/constants.js";
+import { CDP_PORT_RANGE_START, getUsedPorts } from "../../upstream/src/browser/profiles.js";
 
 export type ResolvedBrowserConfig = {
   enabled: boolean;

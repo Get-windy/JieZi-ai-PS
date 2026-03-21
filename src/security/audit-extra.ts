@@ -35,4 +35,4 @@ export {
   collectPluginsTrustFindings,
   collectStateDeepFilesystemFindings,
   readConfigSnapshotForAudit,
-} from "./audit-extra.async.js";
+} from "../../upstream/src/security/audit-extra.async.js";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCloudflareOrHtmlErrorPage } from "./pi-embedded-helpers.js";
+import { isCloudflareOrHtmlErrorPage } from "../../upstream/src/agents/pi-embedded-helpers.js";
 
 describe("isCloudflareOrHtmlErrorPage", () => {
   it("detects Cloudflare 521 HTML pages", () => {

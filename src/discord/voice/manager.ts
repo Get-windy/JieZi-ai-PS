@@ -18,23 +18,23 @@ import {
 } from "@discordjs/voice";
 import { resolveAgentDir } from "../../agents/agent-scope.js";
 import type { MsgContext } from "../../auto-reply/templating.js";
-import { agentCommand } from "../../commands/agent.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { DiscordAccountConfig, TtsConfig } from "../../config/types.js";
-import { logVerbose, shouldLogVerbose } from "../../globals.js";
-import { formatErrorMessage } from "../../infra/errors.js";
-import { resolvePreferredOpenClawTmpDir } from "../../infra/tmp-openclaw-dir.js";
-import { createSubsystemLogger } from "../../logging/subsystem.js";
+import { agentCommand } from "../../../upstream/src/commands/agent.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import type { DiscordAccountConfig, TtsConfig } from "../../../upstream/src/config/types.js";
+import { logVerbose, shouldLogVerbose } from "../../../upstream/src/globals.js";
+import { formatErrorMessage } from "../../../upstream/src/infra/errors.js";
+import { resolvePreferredOpenClawTmpDir } from "../../../upstream/src/infra/tmp-openclaw-dir.js";
+import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
 import {
   buildProviderRegistry,
   createMediaAttachmentCache,
   normalizeMediaAttachments,
   runCapability,
-} from "../../media-understanding/runner.js";
+} from "../../../upstream/src/media-understanding/runner.js";
 import { resolveAgentRoute } from "../../routing/resolve-route.js";
-import type { RuntimeEnv } from "../../runtime.js";
-import { parseTtsDirectives } from "../../tts/tts-core.js";
-import { resolveTtsConfig, textToSpeech, type ResolvedTtsConfig } from "../../tts/tts.js";
+import type { RuntimeEnv } from "../../../upstream/src/runtime.js";
+import { parseTtsDirectives } from "../../../upstream/src/tts/tts-core.js";
+import { resolveTtsConfig, textToSpeech, type ResolvedTtsConfig } from "../../../upstream/src/tts/tts.js";
 
 const require = createRequire(import.meta.url);
 

@@ -1,15 +1,15 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
-import { type ExecHost, maxAsk, minSecurity } from "../infra/exec-approvals.js";
-import { resolveExecSafeBinRuntimePolicy } from "../infra/exec-safe-bin-runtime-policy.js";
+import { type ExecHost, maxAsk, minSecurity } from "../../upstream/src/infra/exec-approvals.js";
+import { resolveExecSafeBinRuntimePolicy } from "../../upstream/src/infra/exec-safe-bin-runtime-policy.js";
 import {
   getShellPathFromLoginShell,
   resolveShellEnvFallbackTimeoutMs,
-} from "../infra/shell-env.js";
-import { logInfo } from "../logger.js";
+} from "../../upstream/src/infra/shell-env.js";
+import { logInfo } from "../../upstream/src/logger.js";
 import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
-import { markBackgrounded } from "./bash-process-registry.js";
+import { markBackgrounded } from "../../upstream/src/agents/bash-process-registry.js";
 import { processGatewayAllowlist } from "./bash-tools.exec-host-gateway.js";
 import { executeNodeHostCommand } from "./bash-tools.exec-host-node.js";
 import {
@@ -27,12 +27,12 @@ import {
   runExecProcess,
   execSchema,
   validateHostEnv,
-} from "./bash-tools.exec-runtime.js";
+} from "../../upstream/src/agents/bash-tools.exec-runtime.js";
 import type {
   ExecElevatedDefaults,
   ExecToolDefaults,
   ExecToolDetails,
-} from "./bash-tools.exec-types.js";
+} from "../../upstream/src/agents/bash-tools.exec-types.js";
 import {
   buildSandboxEnv,
   clampWithDefault,
@@ -41,15 +41,15 @@ import {
   resolveSandboxWorkdir,
   resolveWorkdir,
   truncateMiddle,
-} from "./bash-tools.shared.js";
+} from "../../upstream/src/agents/bash-tools.shared.js";
 import { assertSandboxPath } from "./sandbox-paths.js";
 
-export type { BashSandboxConfig } from "./bash-tools.shared.js";
+export type { BashSandboxConfig } from "../../upstream/src/agents/bash-tools.shared.js";
 export type {
   ExecElevatedDefaults,
   ExecToolDefaults,
   ExecToolDetails,
-} from "./bash-tools.exec-types.js";
+} from "../../upstream/src/agents/bash-tools.exec-types.js";
 
 function extractScriptTargetFromCommand(
   command: string,

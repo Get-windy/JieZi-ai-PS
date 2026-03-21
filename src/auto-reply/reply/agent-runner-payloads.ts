@@ -1,12 +1,12 @@
-import type { ReplyToMode } from "../../config/types.js";
-import { logVerbose } from "../../globals.js";
-import { stripHeartbeatToken } from "../heartbeat.js";
+import type { ReplyToMode } from "../../../upstream/src/config/types.js";
+import { logVerbose } from "../../../upstream/src/globals.js";
+import { stripHeartbeatToken } from "../../../upstream/src/auto-reply/heartbeat.js";
 import type { OriginatingChannelType } from "../templating.js";
-import { SILENT_REPLY_TOKEN } from "../tokens.js";
-import type { ReplyPayload } from "../types.js";
+import { SILENT_REPLY_TOKEN } from "../../../upstream/src/auto-reply/tokens.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import { formatBunFetchSocketError, isBunFetchSocketError } from "./agent-runner-utils.js";
-import { createBlockReplyPayloadKey, type BlockReplyPipeline } from "./block-reply-pipeline.js";
-import { normalizeReplyPayloadDirectives } from "./reply-delivery.js";
+import { createBlockReplyPayloadKey, type BlockReplyPipeline } from "../../../upstream/src/auto-reply/reply/block-reply-pipeline.js";
+import { normalizeReplyPayloadDirectives } from "../../../upstream/src/auto-reply/reply/reply-delivery.js";
 import {
   applyReplyThreading,
   filterMessagingToolDuplicates,

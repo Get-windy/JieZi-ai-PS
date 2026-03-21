@@ -3,9 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { createOpenClawCodingTools } from "./pi-tools.js";
-import { createHostSandboxFsBridge } from "./test-helpers/host-sandbox-fs-bridge.js";
-import { expectReadWriteEditTools, getTextContent } from "./test-helpers/pi-tools-fs-helpers.js";
-import { createPiToolsSandboxContext } from "./test-helpers/pi-tools-sandbox-context.js";
+import { createHostSandboxFsBridge } from "../../upstream/src/agents/test-helpers/host-sandbox-fs-bridge.js";
+import { expectReadWriteEditTools, getTextContent } from "../../upstream/src/agents/test-helpers/pi-tools-fs-helpers.js";
+import { createPiToolsSandboxContext } from "../../upstream/src/agents/test-helpers/pi-tools-sandbox-context.js";
 
 vi.mock("../infra/shell-env.js", async (importOriginal) => {
   const mod = await importOriginal<typeof import("../infra/shell-env.js")>();

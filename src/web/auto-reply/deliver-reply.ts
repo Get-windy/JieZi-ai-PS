@@ -1,10 +1,10 @@
 import { chunkMarkdownTextWithMode, type ChunkMode } from "../../auto-reply/chunk.js";
-import type { ReplyPayload } from "../../auto-reply/types.js";
-import type { MarkdownTableMode } from "../../config/types.base.js";
-import { logVerbose, shouldLogVerbose } from "../../globals.js";
-import { convertMarkdownTables } from "../../markdown/tables.js";
-import { markdownToWhatsApp } from "../../markdown/whatsapp.js";
-import { sleep } from "../../utils.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
+import type { MarkdownTableMode } from "../../../upstream/src/config/types.base.js";
+import { logVerbose, shouldLogVerbose } from "../../../upstream/src/globals.js";
+import { convertMarkdownTables } from "../../../upstream/src/markdown/tables.js";
+import { markdownToWhatsApp } from "../../../upstream/src/markdown/whatsapp.js";
+import { sleep } from "../../../upstream/src/utils.js";
 import { loadWebMedia } from "../media.js";
 import { newConnectionId } from "../reconnect.js";
 import { formatError } from "../session.js";

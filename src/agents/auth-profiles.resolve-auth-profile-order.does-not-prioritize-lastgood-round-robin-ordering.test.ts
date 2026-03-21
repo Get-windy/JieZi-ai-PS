@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { resolveAuthProfileOrder } from "./auth-profiles.js";
+import { resolveAuthProfileOrder } from "../../upstream/src/agents/auth-profiles.js";
 import {
   ANTHROPIC_CFG,
   ANTHROPIC_STORE,
-} from "./auth-profiles.resolve-auth-profile-order.fixtures.js";
-import type { AuthProfileStore } from "./auth-profiles/types.js";
+} from "../../upstream/src/agents/auth-profiles.resolve-auth-profile-order.fixtures.js";
+import type { AuthProfileStore } from "../../upstream/src/agents/auth-profiles/types.js";
 
 describe("resolveAuthProfileOrder", () => {
   const store = ANTHROPIC_STORE;

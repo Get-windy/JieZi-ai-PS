@@ -1,83 +1,80 @@
 /**
  * Agent 任务唤醒调度器
- * 
+ *
  * 每 2 分钟扫描一次所有 Agent 的待办任务
- * 检测到 Agent 有未完成任务时，自动唤醒 Agent 开始工作
- * 
+ *
  * 核心原则：
- * 1. 有任务的 Agent 不应该睡着
- * 2. 任务分配后应该立即唤醒 Agent
- * 3. 直到所有任务完成，Agent 才可以休息
+ * 1. 每个 Agent 同时只能执行 1 条任务（串行执行）
+ * 2. 发现多条 in-progress → 保留优先级最高的 1 条，其余重置回 todo 排队
+ * 3. 无 in-progress 且有 todo → 取优先级最高的 1 条唤醒执行
+ * 4. 有 in-progress（仅 1 条）且超时 → 重新唤醒（可能卡住了）
+ * 5. todo 任务只是排队，不检测超时
  */
 
-import { loadConfig } from "../config/config.js";
-import { listAgentIds, resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
-import * as taskStorage from "../tasks/storage.js";
-import { enqueueSystemEvent } from "../infra/system-events.js";
-import { requestHeartbeatNow } from "../infra/heartbeat-wake.js";
-import { normalizeAgentId } from "../routing/session-key.js";
 import path from "node:path";
-import { getQueueSize } from "../process/command-queue.js";
-import { CommandLane } from "../process/lanes.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
+import { requestHeartbeatNow } from "../../upstream/src/infra/heartbeat-wake.js";
+import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
+import { listAgentIds, resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
+import { normalizeAgentId } from "../routing/session-key.js";
+import { groupManager } from "../sessions/group-manager.js";
+import * as taskStorage from "../tasks/storage.js";
 
 // ============================================================================
 // 配置
 // ============================================================================
 
-const SCAN_INTERVAL_MS = 2 * 60 * 1000; // 每 2 分钟检查一次
+// 优先级排序权重（数字越大优先级越高）
+const PRIORITY_WEIGHT: Record<string, number> = {
+  urgent: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+};
+
+function taskSortKey(t: { priority: string; weight?: number; createdAt: number }): number {
+  // 得分越高越优先：优先级权重 * 1e13 + 任务权重 * 1e6 - 创建时间（越早越高）
+  const priorityScore = (PRIORITY_WEIGHT[t.priority] ?? 2) * 1e13;
+  const weightScore = (t.weight ?? 0) * 1e6;
+  return priorityScore + weightScore - t.createdAt;
+}
+
+const STARTUP_DELAY_MS = 30 * 1000; // 30 秒
 let scanInterval: NodeJS.Timeout | null = null;
 
-// ============================================================================
-// 辅助函数
-// ============================================================================
+let startupTimer: NodeJS.Timeout | null = null;
 
 /**
  * 从 Agent workspace 路径提取项目 ID
- * 
- * 示例:
- * - `/workspace/project-A` → `project-A`
- * - `/workspace/projects/ops` → `ops`
- * - `/tmp/test-main` → `main`
  */
 function extractProjectIdFromWorkspace(workspacePath: string): string | null {
   if (!workspacePath) {
     return null;
   }
-  
+
   const normalizedPath = path.resolve(workspacePath);
   const parts = normalizedPath.split(path.sep).filter(Boolean);
-  
-  // 尝试从路径中提取有意义的项目名称
-  // 规则：取最后一级或倒数第二级目录名作为项目 ID
+
   if (parts.length === 0) {
     return null;
   }
-  
+
   const lastName = parts[parts.length - 1];
-  
-  // 检查是否是工作组模式 (根目录包含 "workspace" 或 "openclaw")
-  // 例如:H:\OpenClaw_Workspace\workspace-product-analyst
-  // 这种情况下，整个 OpenClaw_Workspace 是一个工作组，Agent 可以处理所有项目
-  const rootDir = parts.length >= 2 ? parts[parts.length - 2] : '';
-  const isWorkspaceMode = rootDir.toLowerCase().includes('workspace') || 
-                          rootDir.toLowerCase().includes('openclaw');
-  
+  const rootDir = parts.length >= 2 ? parts[parts.length - 2] : "";
+  const isWorkspaceMode =
+    rootDir.toLowerCase().includes("workspace") || rootDir.toLowerCase().includes("openclaw");
+
   if (isWorkspaceMode) {
-    // 工作组模式:Agent 没有项目限制，可以处理任何项目的任务
-    console.log(`[Task Wake] 📋 Agent in workspace mode (root: ${rootDir}) - can handle all projects`);
-    return null;
+    return null; // 工作组模式，无项目限制
   }
-  
-  // 单项目模式：使用原来的逻辑
-  const skipKeywords = ['workspace', 'projects', 'openclaw', 'tmp'];
-  if (skipKeywords.some(kw => lastName.toLowerCase().includes(kw))) {
-    // 向上级目录
+
+  const skipKeywords = ["workspace", "projects", "openclaw", "tmp"];
+  if (skipKeywords.some((kw) => lastName.toLowerCase().includes(kw))) {
     if (parts.length >= 2) {
       return parts[parts.length - 2];
     }
   }
-  
-  // 否则使用最后一级
+
   return lastName || null;
 }
 
@@ -87,17 +84,12 @@ function extractProjectIdFromWorkspace(workspacePath: string): string | null {
 
 /**
  * 扫描所有 Agent 的待办任务并唤醒有任务的 Agent
- * 
- * 核心原则:
- * 1. 工作任务必须与项目挂钩 (projectId/teamId/organizationId)
- * 2. 个人任务不需要项目上下文 (仅 assigneeId)
- * 3. 严禁跨项目执行任务 (A 项目的任务不能在 B 项目执行)
  */
 export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
   scannedAgents: number;
   wokenAgents: number;
   pendingTasks: number;
-  skippedTasks: number; // 跳过的项目不匹配任务数
+  skippedTasks: number;
 }> {
   const stats = {
     scannedAgents: 0,
@@ -111,216 +103,239 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
     const agentIds = listAgentIds(cfg);
 
     if (agentIds.length === 0) {
-      console.log("[Task Wake] No agents configured");
       return stats;
     }
 
-    console.log(`[Task Wake] Scanning ${agentIds.length} agents for pending tasks...`);
     stats.scannedAgents = agentIds.length;
+
+    const now = Date.now();
 
     for (const agentId of agentIds) {
       const normalizedId = normalizeAgentId(agentId);
-      
-      // 查询此 Agent 的所有未完成任务
-      const allPendingTasks = await taskStorage.listTasks({
-        assigneeId: normalizedId,
-        status: ["todo", "in-progress", "blocked"],
+
+      // 获取该 agent 所有 in-progress 和 todo 任务
+      const [inProgressTasks, todoTasks] = await Promise.all([
+        taskStorage.listTasks({ assigneeId: normalizedId, status: ["in-progress"] }),
+        taskStorage.listTasks({ assigneeId: normalizedId, status: ["todo"] }),
+      ]);
+
+      // === 核心约束：每个 agent 同时只执行 1 条任务 ===
+      // 宽限期：任务刚被系统分配（startedAt 在 5 分钟内），不参与违规检测
+      // 避免 scheduleNextTaskForAgent 刚推了一条任务，调度器就把它重置回去
+      const GRACE_PERIOD_MS = 5 * 60 * 1000; // 5 分钟宽限期
+      const matureInProgress = inProgressTasks.filter((t) => {
+        const startedAt = t.timeTracking?.startedAt;
+        return !startedAt || now - startedAt >= GRACE_PERIOD_MS;
       });
 
-      if (allPendingTasks.length === 0) {
-        continue; // 没有待办任务，跳过
-      }
+      // 如果有多条「成熟」的 in-progress，说明之前被一次性唤醒导致并发执行，需要修复
+      if (matureInProgress.length > 1) {
+        // 按优先级排序，保留优先级最高的那条继续执行
+        const sorted = [...matureInProgress].toSorted((a, b) => taskSortKey(b) - taskSortKey(a));
+        const keepTask = sorted[0];
+        const resetTasks = sorted.slice(1);
 
-      // === 关键：区分工作任务和个人任务 ===
-      // 工作任务：必须有 projectId/teamId/organizationId 之一
-      // 个人任务：没有任何项目上下文，仅分配给个人
-      const workTasks = allPendingTasks.filter(
-        (task) => task.projectId || task.teamId || task.organizationId,
-      );
-      const personalTasks = allPendingTasks.filter(
-        (task) => !task.projectId && !task.teamId && !task.organizationId,
-      );
-
-      // === 项目上下文隔离检查 ===
-      // 获取 Agent 当前工作空间对应的项目 ID
-      const agentWorkspaceDir = resolveAgentWorkspaceDir(cfg, normalizedId);
-      const agentProjectId = extractProjectIdFromWorkspace(agentWorkspaceDir);
-
-      // 过滤出 Agent 有权限处理的任务
-      const validTasks = workTasks.filter((task) => {
-        // 如果任务有 projectId，需要检查项目匹配
-        if (task.projectId) {
-          // 如果 Agent 没有项目绑定 (workspace 模式),可以处理任何项目
-          if (!agentProjectId) {
-            console.log(
-              `[Task Wake] ✓ Task ${task.id}: Agent ${normalizedId} in workspace mode - can handle project ${task.projectId}`,
-            );
-            return true; // 工作组模式，允许处理
-          }
-          if (task.projectId !== agentProjectId) {
-            // 项目不匹配，跳过
-            console.log(
-              `[Task Wake] ⚠️ Skip task ${task.id}: Project mismatch (${task.projectId} vs ${agentProjectId})`,
-            );
-            stats.skippedTasks++;
-            return false;
-          }
-        }
-        // 如果没有 projectId，但有 teamId/organizationId，也认为是有效的工作任务
-        return true;
-      });
-
-      // 合并有效的工作任务和个人任务
-      const tasksToProcess = [...validTasks, ...personalTasks];
-
-      if (tasksToProcess.length === 0) {
         console.log(
-          `[Task Wake] Agent ${normalizedId} has ${allPendingTasks.length} pending tasks but all are from other projects`,
+          `[Task Wake] Agent ${normalizedId} has ${inProgressTasks.length} in-progress tasks (violation of 1-task rule). Resetting ${resetTasks.length} back to todo. Keeping: ${keepTask.id} (${keepTask.priority})`,
         );
+
+        // 将多余任务重置回 todo
+        for (const t of resetTasks) {
+          await taskStorage.updateTask(t.id, {
+            status: "todo",
+            timeTracking: {
+              ...t.timeTracking,
+              startedAt: undefined,
+            },
+          });
+        }
+
+        // 重置后，当前循环不再唤醒（让 agent 就着手头的那条跨完成）
+        stats.skippedTasks += resetTasks.length;
         continue;
       }
 
-      stats.pendingTasks += tasksToProcess.length;
+      const agentWorkspaceDir = resolveAgentWorkspaceDir(cfg, normalizedId);
+      const agentProjectId = extractProjectIdFromWorkspace(agentWorkspaceDir);
+      const agentMemoryPath = path.join(agentWorkspaceDir, "MEMORY.md");
 
-      // 有未完成任务，唤醒 Agent
-      const sessionKey = `agent:${normalizedId}:main`;
-      
-      // === 关键改进：检测是否处于"假工作、真空闲"状态 ===
-      // 如果 Agent 有 pending 任务但 main lane 队列为空（无实际活动），说明它在假装工作或真空闲
-      const mainLaneQueueSize = getQueueSize(CommandLane.Main);
-      const hasActiveWork = mainLaneQueueSize > 0;
-      const isIdleWithPendingTasks = !hasActiveWork && tasksToProcess.length > 0;
-      
-      if (isIdleWithPendingTasks) {
-        console.log(
-          `[Task Wake] ⚠️ Agent ${normalizedId} detected IDLE with ${tasksToProcess.length} pending tasks but NO active work in queue!`,
-        );
+      // 预先构建项目 -> 工作群 sessionKey 的映射
+      const projectGroupCache = new Map<string, string>();
+      const allGroups = groupManager.getAllGroups();
+      for (const g of allGroups) {
+        if (g.projectId && !projectGroupCache.has(g.projectId)) {
+          projectGroupCache.set(g.projectId, `group:${g.id}`);
+        }
       }
-      
-      // === 关键：为每个任务构建项目上下文 ===
-      // 工作组模式下，Agent 根据任务的 projectId 动态切换工作目录
-      const hasProjectContext = tasksToProcess.some(t => t.projectId);
-      const projectContextNote = hasProjectContext 
-        ? `
 
-📁 PROJECT CONTEXT: You will work in different project directories based on each task's projectId. For each task, you should:
-  1. Navigate to the project workspace (e.g., H:\\OpenClaw_Workspace\\groups\\{projectId})
-  2. Load project shared memory (SHARED_MEMORY.md)
-  3. Read project-specific documentation
-  4. Work within project code directory` 
-        : '';
-      
-      // 构建唤醒消息 (增强版：包含项目上下文信息)
-      const wakeMessage = [
-        `[TASK WAKE UP - AUTO TRIGGERED]`,
-        `⚠️ URGENT: You have ${tasksToProcess.length} pending task(s) that MUST be addressed IMMEDIATELY.`,
-        ``,
-        `YOUR PENDING TASKS:`,
-        ...tasksToProcess.map((task, index) => {
-          const statusEmoji = task.status === "in-progress" ? "🔄" : task.status === "blocked" ? "⚠️" : "⏳";
-          const projectContext = task.projectId 
-            ? `[Project: ${task.projectId}] ` 
-            : task.teamId 
-              ? `[Team: ${task.teamId}] ` 
-              : task.organizationId 
-                ? `[Org: ${task.organizationId}] ` 
-                : `[Personal] `;
-          return `${index + 1}. ${statusEmoji} ${projectContext}[${task.status.toUpperCase()}] ${task.title}`;
-        }),
-        ``,
-        `⚡ MANDATORY INSTRUCTIONS:`,
-        `1. STOP any current idle or low-priority activities RIGHT NOW`,
-        `2. Review these tasks IMMEDIATELY - do NOT defer or ignore them`,
-        `3. If you're currently idle, START the highest priority task THIS INSTANT`,
-        `4. If you're busy with something else, FINISH IT QUICKLY then move to these tasks`,
-        `5. For project tasks: Navigate to the correct project workspace FIRST`,
-        `6. Load project shared memory (SHARED_MEMORY.md) for context`,
-        `7. Work within the project's directory structure (groups/{projectId}/)`,
-        `8. Use task_report_to_supervisor to report progress when completed`,
-        ``,
-        `⛔ CRITICAL: These tasks are ASSIGNED TO YOU and CANNOT be ignored!`,
-        `⛔ DO NOT go back to sleep or remain idle - TAKE ACTION NOW!`,
-        projectContextNote,
-      ].join("\n");
+      // === 情况 A：有 in-progress 任务 ===
+      // 如果所有 in-progress 都在宽限期内（刚分配），不打扰，等 agent 开始执行
+      if (inProgressTasks.length > 0) {
+        if (matureInProgress.length === 0) {
+          // 所有任务都在宽限期内，说明刚刪分配，等 agent 响应中
+          continue;
+        }
 
-      // 将任务事件放入系统队列
-      enqueueSystemEvent(wakeMessage, { 
-        sessionKey, 
-        contextKey: `task-wake:${Date.now()}` 
-      });
+        // 有成熟的 in-progress 且只有 1 条，检测执行超时
+        const activeTask = matureInProgress[0];
+        // 只用 startedAt 或 updatedAt（都是进入执行后才会设置）
+        const executionStartedAt = activeTask.timeTracking?.startedAt ?? activeTask.updatedAt;
+        const STALE_IN_PROGRESS_MS = 30 * 60 * 1000; // 30 分钟
+        const isStale =
+          executionStartedAt != null && now - executionStartedAt > STALE_IN_PROGRESS_MS;
 
-      // === 强化唤醒机制：连续触发多次心跳，确保 Agent 真正执行 ===
-      // 第一次：立即触发心跳唤醒（强制执行）
-      requestHeartbeatNow({
-        reason: `pending-tasks:${tasksToProcess.length}`,
-        sessionKey,
-        agentId: normalizedId,
-      });
-      
-      // 第二次：1 秒后再次触发，防止 Agent 忽略或休眠
-      setTimeout(() => {
-        const followupMessage = `[URGENT REMINDER] ⚠️ You still have ${tasksToProcess.length} pending task(s). This is a CRITICAL reminder - you MUST start working on them NOW. Do NOT remain idle or go back to sleep!`;
-        enqueueSystemEvent(followupMessage, {
+        if (isStale) {
+          stats.pendingTasks++;
+          const sessionKey = `agent:${normalizedId}:main`;
+          const stuckMinutes = Math.floor((now - executionStartedAt) / 60000);
+          const wakeMessage = [
+            `[TASK STUCK] Your current task has been in-progress for ${stuckMinutes} minutes without completion.`,
+            ``,
+            `Task ID: ${activeTask.id}`,
+            `Title: ${activeTask.title}`,
+            `Priority: ${activeTask.priority}`,
+            activeTask.type ? `Type: ${activeTask.type}` : null,
+            activeTask.description ? `Description: ${activeTask.description.slice(0, 200)}` : null,
+            ``,
+            `Working Context:`,
+            `- Working Directory: ${agentWorkspaceDir}`,
+            `- Memory File: ${agentMemoryPath}`,
+            ``,
+            `Please take one of the following actions:`,
+            `1. If already completed: call task_report_to_supervisor immediately`,
+            `2. If blocked: update status to "blocked" and explain why`,
+            `3. If still working: continue and report when done`,
+            ``,
+            `NOTE: Your supervisor has been notified and may choose to extend your time, reset, or cancel this task.`,
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          enqueueSystemEvent(wakeMessage, {
+            sessionKey,
+            contextKey: `cron:task-wake:${normalizedId}`,
+          });
+          requestHeartbeatNow({
+            reason: `task-stuck:${activeTask.id}`,
+            sessionKey,
+            agentId: normalizedId,
+            coalesceMs: 5000,
+          });
+
+          // 同时通知负责人，让其可决策延时/重置/取消
+          const supervisorRaw = (activeTask.metadata?.supervisorId ?? activeTask.creatorId) as
+            | string
+            | undefined;
+          if (supervisorRaw) {
+            const normalizedSupervisor = normalizeAgentId(supervisorRaw);
+            const supervisorSession = `agent:${normalizedSupervisor}:main`;
+            const supervisorNotice = [
+              `[TASK TIMEOUT ALERT] Agent ${normalizedId}'s task has been stuck for ${stuckMinutes} minutes.`,
+              ``,
+              `Agent: ${normalizedId}`,
+              `Task ID: ${activeTask.id}`,
+              `Title: ${activeTask.title}`,
+              `Priority: ${activeTask.priority}`,
+              activeTask.type ? `Type: ${activeTask.type}` : null,
+              activeTask.description
+                ? `Description: ${activeTask.description.slice(0, 150)}`
+                : null,
+              ``,
+              `You can intervene using agent_task_manage tool:`,
+              `- extend: Give the agent more time (if task is complex)`,
+              `- reset:  Reset to todo queue (retry later)`,
+              `- cancel: Cancel the task (if deemed unresolvable)`,
+            ]
+              .filter(Boolean)
+              .join("\n");
+            enqueueSystemEvent(supervisorNotice, {
+              sessionKey: supervisorSession,
+              contextKey: `cron:task-timeout-alert:${activeTask.id}`,
+            });
+            requestHeartbeatNow({
+              reason: `task-timeout:${activeTask.id}`,
+              sessionKey: supervisorSession,
+              agentId: normalizedSupervisor,
+              coalesceMs: 10000,
+            });
+          }
+          stats.wokenAgents++;
+        }
+        // 正常执行中，不打扰
+        continue;
+      }
+
+      // === 情况 B：无 in-progress，有 todo → 取优先级最高的 1 条唤醒 ===
+      if (inProgressTasks.length === 0 && todoTasks.length > 0) {
+        // 过滤出属于该 agent 项目的任务
+        const validTodos = todoTasks.filter((task) => {
+          if (task.projectId && agentProjectId && task.projectId !== agentProjectId) {
+            stats.skippedTasks++;
+            return false;
+          }
+          return true;
+        });
+
+        if (validTodos.length === 0) {
+          continue;
+        }
+
+        // 按优先级排序，只唤醒最高优先级的 1 条
+        const sortedTodos = [...validTodos].toSorted((a, b) => taskSortKey(b) - taskSortKey(a));
+        const nextTask = sortedTodos[0];
+        const queueRemaining = sortedTodos.length - 1;
+
+        stats.pendingTasks++;
+        const sessionKey = `agent:${normalizedId}:main`;
+        const projectGroupKey = nextTask.projectId
+          ? projectGroupCache.get(nextTask.projectId)
+          : undefined;
+
+        const taskLines = [
+          `1. [TODO] ${nextTask.title}`,
+          `   Task ID: ${nextTask.id}`,
+          `   Priority: ${nextTask.priority}`,
+          nextTask.projectId ? `   Project: ${nextTask.projectId}` : null,
+          nextTask.teamId ? `   Team: ${nextTask.teamId}` : null,
+          nextTask.organizationId ? `   Organization: ${nextTask.organizationId}` : null,
+          nextTask.type ? `   Type: ${nextTask.type}` : null,
+          nextTask.dueDate ? `   Due: ${new Date(nextTask.dueDate).toISOString()}` : null,
+          projectGroupKey ? `   Project Group Channel: sessionKey=${projectGroupKey}` : null,
+          nextTask.description ? `   Description: ${nextTask.description.slice(0, 200)}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        const wakeMessage = [
+          `[TASK WAKE] You have 1 task to execute now${queueRemaining > 0 ? ` (${queueRemaining} more waiting in queue)` : ""}:`,
+          ``,
+          taskLines,
+          ``,
+          `Working Context:`,
+          `- Working Directory (code lives here): ${agentWorkspaceDir}`,
+          `- Memory File (read/update project knowledge): ${agentMemoryPath}`,
+          ``,
+          `IMPORTANT: Set this task to "in-progress" and execute it NOW. Complete it fully before starting the next queued task. After completion, call task_report_to_supervisor to report.`,
+        ].join("\n");
+
+        enqueueSystemEvent(wakeMessage, {
           sessionKey,
-          contextKey: `task-reminder:${Date.now()}`
+          contextKey: `cron:task-wake:${normalizedId}`,
         });
         requestHeartbeatNow({
-          reason: `task-reminder:urgent`,
+          reason: `next-task:${nextTask.id}`,
           sessionKey,
           agentId: normalizedId,
+          coalesceMs: 5000,
         });
-        console.log(
-          `[Task Wake] 🔔 Follow-up reminder sent to Agent ${normalizedId}`,
-        );
-        
-        // === 新增：第三次检查（2 秒后）===
-        // 如果仍然没有活动，强制清理可能的卡住任务
-        setTimeout(() => {
-          const currentQueueSize = getQueueSize(CommandLane.Main);
-          if (currentQueueSize === 0 && tasksToProcess.length > 0) {
-            console.warn(
-              `[Task Wake] 🚨 Agent ${normalizedId} still IDLE after wake + reminders! Forcing stuck task cleanup...`,
-            );
-            // 尝试强制清理 main lane 的卡住任务
-            try {
-              // 通过发送特殊指令让 Agent 重置状态
-              const forceStartMessage = `[SYSTEM OVERRIDE] ⛔ DETECTED: You have been IDLE for too long despite having ${tasksToProcess.length} pending tasks. FORCING STATE RESET. Clear all queues and START WORKING NOW.`;
-              enqueueSystemEvent(forceStartMessage, {
-                sessionKey,
-                contextKey: `force-start:${Date.now()}`
-              });
-              requestHeartbeatNow({
-                reason: `force-start:idle-timeout`,
-                sessionKey,
-                agentId: normalizedId,
-              });
-              console.log(
-                `[Task Wake] ✅ Force-start command sent to Agent ${normalizedId}`,
-              );
-            } catch (error) {
-              console.error(
-                `[Task Wake] ❌ Failed to force-start Agent ${normalizedId}:`,
-                error instanceof Error ? error.message : error,
-              );
-            }
-          }
-        }, 2000); // 2 秒后检查并可能强制执行
-        
-      }, 1000); // 1 秒后发送跟进提醒
-
-      stats.wokenAgents++;
-      
-      console.log(
-        `[Task Wake] ✓ Agent ${normalizedId} woken up (${validTasks.length} work tasks + ${personalTasks.length} personal tasks)`,
-      );
+        stats.wokenAgents++;
+      }
     }
 
     if (stats.wokenAgents > 0) {
       console.log(
-        `[Task Wake] Scan complete: ${stats.wokenAgents}/${stats.scannedAgents} agents woken up, ${stats.pendingTasks} total pending tasks, ${stats.skippedTasks} skipped (project mismatch)`,
+        `[Task Wake] Scan: ${stats.wokenAgents}/${stats.scannedAgents} agents woken, ${stats.pendingTasks} tasks, ${stats.skippedTasks} skipped`,
       );
-    } else {
-      console.log(`[Task Wake] Scan complete: All agents are caught up (no pending tasks)`);
     }
 
     return stats;
@@ -336,46 +351,47 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
 
 /**
  * 启动 Agent 任务唤醒调度器
- * 
- * 在项目启动时自动运行，定期扫描并唤醒有任务的 Agent
- * 
- * 示例：
- * ```typescript
- * import { startAgentTaskWakeScheduler } from './cron/agent-task-wake-scheduler.js';
- * 
- * // 在系统启动时调用
- * startAgentTaskWakeScheduler();
- * ```
+ *
+ * 首次扫描延迟 30 秒（等待系统初始化完毕），之后每 2 分钟一次
  */
-export function startAgentTaskWakeScheduler(options?: {
-  intervalMinutes?: number;
-}): void {
-  const intervalMinutes = options?.intervalMinutes ?? 2; // 默认每 2 分钟一次！
+export function startAgentTaskWakeScheduler(options?: { intervalMinutes?: number }): void {
+  const intervalMinutes = options?.intervalMinutes ?? 2;
 
   if (scanInterval) {
     clearInterval(scanInterval);
   }
+  if (startupTimer) {
+    clearTimeout(startupTimer);
+  }
 
-  console.log(`[Task Wake] Starting scheduler (interval: ${intervalMinutes} minutes)...`);
-
-  // 立即运行一次
-  void scanAndWakeAgentsWithPendingTasks();
-
-  // 定时运行（Agent 全年无休！）
-  scanInterval = setInterval(
-    () => {
-      void scanAndWakeAgentsWithPendingTasks();
-    },
-    intervalMinutes * 60 * 1000,
+  console.log(
+    `[Task Wake] Scheduler starting (first scan in ${STARTUP_DELAY_MS / 1000}s, then every ${intervalMinutes}min)`,
   );
 
-  console.log(`[Task Wake] ✓ Scheduler started (will scan every ${intervalMinutes} minutes)`);
+  // 延迟首次扫描，等待系统完全初始化，避免阻塞启动
+  startupTimer = setTimeout(() => {
+    void scanAndWakeAgentsWithPendingTasks();
+
+    // 首次扫描完成后启动定时器
+    scanInterval = setInterval(
+      () => {
+        void scanAndWakeAgentsWithPendingTasks();
+      },
+      intervalMinutes * 60 * 1000,
+    );
+
+    console.log(`[Task Wake] ✓ Scheduler active (interval: ${intervalMinutes}min)`);
+  }, STARTUP_DELAY_MS);
 }
 
 /**
  * 停止调度器
  */
 export function stopAgentTaskWakeScheduler(): void {
+  if (startupTimer) {
+    clearTimeout(startupTimer);
+    startupTimer = null;
+  }
   if (scanInterval) {
     clearInterval(scanInterval);
     scanInterval = null;

@@ -481,6 +481,7 @@ export const FIELD_LABELS: Record<string, string> = {
     "Compaction Memory Flush Transcript Size Threshold",
   "agents.defaults.compaction.memoryFlush.prompt": "Compaction Memory Flush Prompt",
   "agents.defaults.compaction.memoryFlush.systemPrompt": "Compaction Memory Flush System Prompt",
+  "agents.defaults.compaction.timeoutSeconds": "Compaction Timeout (sec)",
   "agents.defaults.embeddedPi": "Embedded Pi",
   "agents.defaults.embeddedPi.projectSettingsPolicy": "Embedded Pi Project Settings Policy",
   "agents.defaults.heartbeat.directPolicy": "Heartbeat Direct Policy",

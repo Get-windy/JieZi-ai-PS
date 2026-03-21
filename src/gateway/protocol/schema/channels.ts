@@ -1,5 +1,5 @@
 import { Type } from "@sinclair/typebox";
-import { NonEmptyString, SecretInputSchema } from "./primitives.js";
+import { NonEmptyString, SecretInputSchema } from "../../../../upstream/src/gateway/protocol/schema/primitives.js";
 
 export const TalkModeParamsSchema = Type.Object(
   {

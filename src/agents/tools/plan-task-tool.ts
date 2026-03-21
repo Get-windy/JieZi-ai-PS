@@ -12,7 +12,7 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import { type AnyAgentTool, jsonResult } from "./common.js";
+import { type AnyAgentTool, jsonResult } from "../../../upstream/src/agents/tools/common.js";
 
 // ---------------------------------------------------------------------------
 // Types

@@ -1,20 +1,20 @@
 import crypto from "node:crypto";
-import { startBrowserBridgeServer, stopBrowserBridgeServer } from "../../browser/bridge-server.js";
+import { startBrowserBridgeServer, stopBrowserBridgeServer } from "../../../upstream/src/browser/bridge-server.js";
 import { type ResolvedBrowserConfig, resolveProfile } from "../../browser/config.js";
 import {
   DEFAULT_BROWSER_EVALUATE_ENABLED,
   DEFAULT_OPENCLAW_BROWSER_COLOR,
   DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME,
-} from "../../browser/constants.js";
-import { defaultRuntime } from "../../runtime.js";
-import { BROWSER_BRIDGES } from "./browser-bridges.js";
-import { computeSandboxBrowserConfigHash } from "./config-hash.js";
-import { resolveSandboxBrowserDockerCreateConfig } from "./config.js";
+} from "../../../upstream/src/browser/constants.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
+import { BROWSER_BRIDGES } from "../../../upstream/src/agents/sandbox/browser-bridges.js";
+import { computeSandboxBrowserConfigHash } from "../../../upstream/src/agents/sandbox/config-hash.js";
+import { resolveSandboxBrowserDockerCreateConfig } from "../../../upstream/src/agents/sandbox/config.js";
 import {
   DEFAULT_SANDBOX_BROWSER_IMAGE,
   SANDBOX_AGENT_WORKSPACE_MOUNT,
   SANDBOX_BROWSER_SECURITY_HASH_EPOCH,
-} from "./constants.js";
+} from "../../../upstream/src/agents/sandbox/constants.js";
 import {
   buildSandboxCreateArgs,
   dockerContainerState,
@@ -22,7 +22,7 @@ import {
   readDockerContainerEnvVar,
   readDockerContainerLabel,
   readDockerPort,
-} from "./docker.js";
+} from "../../../upstream/src/agents/sandbox/docker.js";
 import {
   buildNoVncDirectUrl,
   buildNoVncObserverTokenUrl,
@@ -31,11 +31,11 @@ import {
   isNoVncEnabled,
   NOVNC_PASSWORD_ENV_KEY,
   issueNoVncObserverToken,
-} from "./novnc-auth.js";
-import { readBrowserRegistry, updateBrowserRegistry } from "./registry.js";
-import { resolveSandboxAgentId, slugifySessionKey } from "./shared.js";
-import { isToolAllowed } from "./tool-policy.js";
-import type { SandboxBrowserContext, SandboxConfig } from "./types.js";
+} from "../../../upstream/src/agents/sandbox/novnc-auth.js";
+import { readBrowserRegistry, updateBrowserRegistry } from "../../../upstream/src/agents/sandbox/registry.js";
+import { resolveSandboxAgentId, slugifySessionKey } from "../../../upstream/src/agents/sandbox/shared.js";
+import { isToolAllowed } from "../../../upstream/src/agents/sandbox/tool-policy.js";
+import type { SandboxBrowserContext, SandboxConfig } from "../../../upstream/src/agents/sandbox/types.js";
 
 const HOT_BROWSER_WINDOW_MS = 5 * 60 * 1000;
 const CDP_SOURCE_RANGE_ENV_KEY = "OPENCLAW_BROWSER_CDP_SOURCE_RANGE";

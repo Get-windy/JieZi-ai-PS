@@ -45,7 +45,7 @@ export interface Organization {
   childOrgs?: string[]; // 子组织ID列表
   managerId?: string; // 负责人助手ID
   memberIds: string[]; // 成员助手ID列表（兼容旧版）
-  
+
   // P0.1 新增：详细成员列表
   members?: OrganizationMember[]; // 详细成员信息（人类+智能助手）
 
@@ -140,6 +140,7 @@ export interface CollaborationRelation {
   organizationId?: string; // 所属组织
   description?: string;
   permissions?: string[]; // 此关系下的特殊权限
+  // oxlint-disable-next-line typescript/no-explicit-any
   metadata?: Record<string, any>; // 元数据
 
   // 有效期
@@ -265,7 +266,7 @@ export interface CollaborationConfig {
 
   // 业务协作伙伴
   partners?: string[]; // 常协作的助手ID
-  
+
   // P1.1 新增：好友关系
   colleagues?: string[]; // 同事ID列表
   projectPartners?: string[]; // 项目协作伙伴
@@ -279,26 +280,107 @@ export interface AgentRecruitRequest {
   organizationId: string; // 目标组织ID
   requesterId: string; // 发起人ID
   requesterType: MemberType; // 发起人类型
-  
+
   // 招聘信息
   agentTemplate?: string; // 使用的助手模板
+  // oxlint-disable-next-line typescript/no-explicit-any
   agentConfig?: any; // 自定义助手配置
   position: string; // 职位名称
   role: MemberRole; // 角色
   title?: string; // 职位描述
-  
+
   // 审批状态
   status: "pending" | "approved" | "rejected" | "cancelled";
   approvedBy?: string; // 审批人ID
   approvedAt?: number; // 审批时间
   rejectionReason?: string; // 拒绝原因
-  
+
   // 招聘结果
   agentId?: string; // 创建的助手ID（审批通过后）
-  
+
   // 元数据
   createdAt: number;
   updatedAt?: number;
+}
+
+// ============================================================================
+// 项目跨团队协作与交付（Handoff）
+// ============================================================================
+
+/**
+ * 团队在项目中的角色
+ * - dev: 开发团队（负责功能实现/技术交付）
+ * - ops: 运营实施团队（负责上线/落地运营）
+ * - support: 技术支撑（问题反馈处理，不作为主力开发）
+ * - qa: 质量保障
+ * - observer: 只读观察者
+ */
+export type ProjectTeamRole = "dev" | "ops" | "support" | "qa" | "observer";
+
+/**
+ * 团队在项目中的参与状态
+ * - active: 正在积极参与（主力负责阶段）
+ * - handed-off: 已完成交付，不再作为主力维护；但保留 support 通道
+ * - archived: 彻底归档，不再有任何职责
+ * - support-only: 仅提供技术支撑（接受反馈、修复问题）
+ */
+export type ProjectTeamStatus = "active" | "handed-off" | "archived" | "support-only";
+
+/**
+ * 交付记录（Handoff Record）
+ * 记录一次团队责任转移事件
+ */
+export interface HandoffRecord {
+  /** 交付记录ID */
+  id: string;
+  /** 转出团队ID（完成本阶段、将责任移交出去的团队） */
+  fromTeamId: string;
+  /** 接收团队ID（接手下一阶段责任的团队） */
+  toTeamId: string;
+  /** 交付时的阶段说明（如"开发完成，进入运营实施"） */
+  note?: string;
+  /** 交付操作者 agentId */
+  operatorId: string;
+  /** 交付时间 */
+  handoffAt: number;
+  /** 转出团队交付后的新状态 */
+  fromTeamNewStatus: ProjectTeamStatus;
+  /** 接收团队接手后的新状态 */
+  toTeamNewStatus: ProjectTeamStatus;
+}
+
+/**
+ * 项目-团队关系（ProjectTeamRelation）
+ *
+ * 同一个项目对每个参与团队有独立的「关系状态」：
+ * - 团队 B 开发项目 A → status=active, role=dev
+ * - 交付给团队 C 后 → B: status=support-only, role=support；C: status=active, role=ops
+ * - 团队 B 的视图中项目 A 显示为「已交付」
+ * - 团队 C 发现问题反馈给 B → B 保留 support-only 通道处理技术问题
+ */
+export interface ProjectTeamRelation {
+  /** 关系唯一ID */
+  id: string;
+  /** 项目ID（对应 GroupInfo.projectId 或独立项目 ID） */
+  projectId: string;
+  /** 团队ID（对应 Organization.id where type=team） */
+  teamId: string;
+  /** 该团队在项目中的职能角色 */
+  role: ProjectTeamRole;
+  /** 该团队当前对该项目的参与状态 */
+  status: ProjectTeamStatus;
+  /** 该团队加入项目时间 */
+  joinedAt: number;
+  /** 该团队被分配此项目的操作者 */
+  assignedBy: string;
+  /** 最近一次状态变更时间 */
+  updatedAt?: number;
+  /** 最近一次状态变更操作者 */
+  updatedBy?: string;
+  /** 交付历史记录（按时间正序） */
+  handoffHistory: HandoffRecord[];
+  /** 备注：当前阶段描述 */
+  note?: string;
 }
 
 /**

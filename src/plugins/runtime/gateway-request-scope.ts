@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type {
   GatewayRequestContext,
   GatewayRequestOptions,
-} from "../../gateway/server-methods/types.js";
+} from "../../../upstream/src/gateway/server-methods/types.js";
 
 export type PluginRuntimeGatewayRequestScope = {
   context: GatewayRequestContext;

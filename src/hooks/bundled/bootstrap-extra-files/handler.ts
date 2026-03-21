@@ -1,10 +1,10 @@
 import {
   filterBootstrapFilesForSession,
   loadExtraBootstrapFiles,
-} from "../../../agents/workspace.js";
-import { createSubsystemLogger } from "../../../logging/subsystem.js";
-import { resolveHookConfig } from "../../config.js";
-import { isAgentBootstrapEvent, type HookHandler } from "../../hooks.js";
+} from "../../../../upstream/src/agents/workspace.js";
+import { createSubsystemLogger } from "../../../../upstream/src/logging/subsystem.js";
+import { resolveHookConfig } from "../../../../upstream/src/hooks/config.js";
+import { isAgentBootstrapEvent, type HookHandler } from "../../../../upstream/src/hooks/hooks.js";
 
 const HOOK_KEY = "bootstrap-extra-files";
 const log = createSubsystemLogger("bootstrap-extra-files");

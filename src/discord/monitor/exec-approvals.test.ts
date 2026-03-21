@@ -4,8 +4,8 @@ import path from "node:path";
 import type { ButtonInteraction, ComponentData } from "@buape/carbon";
 import { Routes } from "discord-api-types/v10";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { clearSessionStoreCacheForTest } from "../../config/sessions.js";
-import type { DiscordExecApprovalConfig } from "../../config/types.discord.js";
+import { clearSessionStoreCacheForTest } from "../../../upstream/src/config/sessions.js";
+import type { DiscordExecApprovalConfig } from "../../../upstream/src/config/types.discord.js";
 import {
   buildExecApprovalCustomId,
   extractDiscordChannelId,

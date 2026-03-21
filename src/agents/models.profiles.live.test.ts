@@ -1,19 +1,19 @@
 import { type Api, completeSimple, type Model } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
-import { loadConfig } from "../config/config.js";
-import { isTruthyEnvValue } from "../infra/env.js";
-import { resolveOpenClawAgentDir } from "./agent-paths.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
+import { isTruthyEnvValue } from "../../upstream/src/infra/env.js";
+import { resolveOpenClawAgentDir } from "../../upstream/src/agents/agent-paths.js";
 import {
   collectAnthropicApiKeys,
   isAnthropicBillingError,
   isAnthropicRateLimitError,
-} from "./live-auth-keys.js";
-import { isModernModelRef } from "./live-model-filter.js";
-import { getApiKeyForModel, requireApiKey } from "./model-auth.js";
+} from "../../upstream/src/agents/live-auth-keys.js";
+import { isModernModelRef } from "../../upstream/src/agents/live-model-filter.js";
+import { getApiKeyForModel, requireApiKey } from "../../upstream/src/agents/model-auth.js";
 import { ensureOpenClawModelsJson } from "./models-config.js";
 import { isRateLimitErrorMessage } from "./pi-embedded-helpers/errors.js";
-import { discoverAuthStorage, discoverModels } from "./pi-model-discovery.js";
+import { discoverAuthStorage, discoverModels } from "../../upstream/src/agents/pi-model-discovery.js";
 
 const LIVE = isTruthyEnvValue(process.env.LIVE) || isTruthyEnvValue(process.env.OPENCLAW_LIVE_TEST);
 const DIRECT_ENABLED = Boolean(process.env.OPENCLAW_LIVE_MODELS?.trim());

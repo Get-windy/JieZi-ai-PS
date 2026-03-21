@@ -11,7 +11,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveStateDir } from "../config/paths.js";
+import { resolveStateDir } from "../../upstream/src/config/paths.js";
 import { groupWorkspaceManager } from "../workspace/group-workspace.js";
 import type { GroupMessage, GroupSessionMetadata } from "./group-message-storage.js";
 import { groupMessageStorage } from "./group-message-storage.js";
@@ -341,7 +341,19 @@ export class GroupManager {
    */
   async updateGroup(
     groupId: string,
-    updates: Partial<Pick<GroupInfo, "name" | "description" | "isPublic" | "maxMembers" | "tags" | "projectId" | "workspacePath" | "metadata">>,
+    updates: Partial<
+      Pick<
+        GroupInfo,
+        | "name"
+        | "description"
+        | "isPublic"
+        | "maxMembers"
+        | "tags"
+        | "projectId"
+        | "workspacePath"
+        | "metadata"
+      >
+    >,
   ): Promise<GroupInfo> {
     const group = this.groups.get(groupId);
     if (!group) {
@@ -473,6 +485,50 @@ export class GroupManager {
   }
 
   /**
+   * 转让群主（更换负责人）
+   * 原群主降为 admin，新群主升为 owner
+   */
+  async transferOwner(groupId: string, newOwnerId: string): Promise<GroupInfo> {
+    const group = this.groups.get(groupId);
+    if (!group) {
+      throw new Error(`Group "${groupId}" not found`);
+    }
+
+    const oldOwnerId = group.ownerId;
+    if (oldOwnerId === newOwnerId) {
+      throw new Error(`Agent "${newOwnerId}" is already the owner of group "${groupId}"`);
+    }
+
+    // 新群主必须是群成员
+    const newOwnerMember = group.members.find((m) => m.agentId === newOwnerId);
+    if (!newOwnerMember) {
+      throw new Error(`Agent "${newOwnerId}" is not a member of group "${groupId}"`);
+    }
+
+    // 原群主成员记录改为 admin
+    const oldOwnerMember = group.members.find((m) => m.agentId === oldOwnerId);
+    if (oldOwnerMember) {
+      oldOwnerMember.role = "admin";
+    }
+
+    // 新群主成员记录改为 owner
+    newOwnerMember.role = "owner";
+
+    // 更新 ownerId
+    group.ownerId = newOwnerId;
+    this.groups.set(groupId, group);
+    this._saveToDisk();
+
+    // 发送系统消息
+    await this.sendSystemMessage(groupId, `🔄 群主已变更：${oldOwnerId} → ${newOwnerId}`);
+
+    console.log(
+      `[Group Manager] Owner of group ${groupId} transferred: ${oldOwnerId} → ${newOwnerId}`,
+    );
+    return group;
+  }
+
+  /**
    * 禁言/解除禁言成员
    */
   async muteMember(groupId: string, agentId: string, muted: boolean): Promise<void> {
@@ -494,6 +550,11 @@ export class GroupManager {
 
   /**
    * 检查成员是否有权限发言
+   *
+   * 发言权限规则（优先级从高到低）：
+   * 1. 成员个人被禁言（member.muted = true）→ 不能发言，任何角色均适用
+   * 2. 群组全员禁言（config.allowSpeak = false）→ 只有 owner/admin 可以发言，普通 member 不行
+   * 3. 默认：可以发言
    */
   canSpeak(groupId: string, agentId: string): boolean {
     const group = this.groups.get(groupId);
@@ -506,7 +567,17 @@ export class GroupManager {
       return false;
     }
 
-    return !member.muted;
+    // 规则1：个人禁言优先，任何角色都不能说话
+    if (member.muted) {
+      return false;
+    }
+
+    // 规则2：全员禁言（allowSpeak = false）时，只有 owner/admin 可以发言
+    if (group.config?.allowSpeak === false) {
+      return member.role === "owner" || member.role === "admin";
+    }
+
+    return true;
   }
 
   /**

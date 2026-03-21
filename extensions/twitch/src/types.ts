@@ -12,7 +12,7 @@ import type {
   ChannelResolveKind,
   ChannelResolveResult,
   ChannelStatusAdapter,
-} from "../../../src/channels/plugins/types.adapters.js";
+} from "../../../upstream/src/channels/plugins/types.adapters.js";
 import type {
   ChannelAccountSnapshot,
   ChannelCapabilities,
@@ -20,11 +20,11 @@ import type {
   ChannelMessageActionAdapter,
   ChannelMessageActionContext,
   ChannelMeta,
-} from "../../../src/channels/plugins/types.core.js";
-import type { ChannelPlugin } from "../../../src/channels/plugins/types.plugin.js";
-import type { OpenClawConfig } from "../../../src/config/config.js";
+} from "../../../upstream/src/channels/plugins/types.core.js";
+import type { ChannelPlugin } from "../../../upstream/src/channels/plugins/types.plugin.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import type { OutboundDeliveryResult } from "../../../src/infra/outbound/deliver.js";
-import type { RuntimeEnv } from "../../../src/runtime.js";
+import type { RuntimeEnv } from "../../../upstream/src/runtime.js";
 
 // ============================================================================
 // Twitch-Specific Types

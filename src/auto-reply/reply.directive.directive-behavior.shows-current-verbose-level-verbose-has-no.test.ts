@@ -1,7 +1,7 @@
 import "./reply.directive.directive-behavior.e2e-mocks.js";
 import { describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
-import { loadSessionStore } from "../config/sessions.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { loadSessionStore } from "../../upstream/src/config/sessions.js";
 import {
   AUTHORIZED_WHATSAPP_COMMAND,
   assertElevatedOffStatusReply,
@@ -13,8 +13,8 @@ import {
   runEmbeddedPiAgent,
   sessionStorePath,
   withTempHome,
-} from "./reply.directive.directive-behavior.e2e-harness.js";
-import { getReplyFromConfig } from "./reply.js";
+} from "../../upstream/src/auto-reply/reply.directive.directive-behavior.e2e-harness.js";
+import { getReplyFromConfig } from "../../upstream/src/auto-reply/reply.js";
 
 const COMMAND_MESSAGE_BASE = {
   From: "+1222",

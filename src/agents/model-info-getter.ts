@@ -4,13 +4,22 @@
  * 该模块提供从 model-management.json 获取模型信息的功能，
  * 用于模型路由和选择逻辑。
  */
+// oxlint-disable typescript/no-explicit-any
 
 import type {
   ModelManagementStorage,
   ProviderAuth,
+  // oxlint-disable-next-line no-unused-vars
   ProviderInstance,
 } from "../gateway/server-methods/models.js";
-import type { ModelCatalogEntry } from "./model-catalog.js";
+import {
+  lookupBenchmark,
+  normalizeEloScore,
+  getOverallBenchmarkScore,
+  getCodingBenchmarkScore,
+  getReasoningBenchmarkScore,
+} from "./arena-benchmarks.js";
+import type { ModelCatalogEntry } from "../../upstream/src/agents/model-catalog.js";
 import type { ModelInfo, ModelSpecialization, DataModality } from "./model-routing.js";
 
 /**
@@ -238,11 +247,11 @@ export function createModelInfoGetter(
       );
 
       if (!catalogEntry) {
-        // 如果目录中没有，使用默认值
+        // 如果目录中没有，尝试从外部评测数据库获取基准信息
         console.warn(
           `[ModelInfoGetter] Model not found in catalog: ${providerId}/${modelName}, using defaults`,
         );
-        return {
+        const fallbackInfo: ModelInfo = {
           id: modelName,
           contextWindow: 128000,
           supportsTools: true,
@@ -253,10 +262,27 @@ export function createModelInfoGetter(
           supportedModalities: ["text", "code"],
           specializations: ["general"],
         };
+        // 尝试从 Arena 数据库获取数据
+        const fallbackBenchmark = lookupBenchmark(modelName);
+        if (fallbackBenchmark) {
+          const normalizedElo = normalizeEloScore(fallbackBenchmark.eloScore);
+          fallbackInfo.benchmarks = {
+            eloScore: fallbackBenchmark.eloScore,
+            arenaRank: fallbackBenchmark.arenaRank,
+            mmlu: fallbackBenchmark.mmlu,
+            humanEval: fallbackBenchmark.humanEval,
+            math: fallbackBenchmark.math,
+            normalizedElo,
+          };
+          if ((fallbackBenchmark.math ?? 0) >= 90 || normalizedElo >= 80) {
+            fallbackInfo.reasoningLevel = 3;
+          }
+        }
+        return fallbackInfo;
       }
 
       // 构建 ModelInfo
-      return {
+      const baseInfo: ModelInfo = {
         id: modelName,
         contextWindow: catalogEntry.contextWindow ?? 128000,
         supportsTools: true, // 假设所有模型都支持工具调用
@@ -269,6 +295,50 @@ export function createModelInfoGetter(
         supportedModalities: detectSupportedModalities(catalogEntry, providerId, modelName),
         specializations: detectSpecializations(providerId, modelName, catalogEntry),
       };
+
+      // 注入外部评测基准数据
+      const benchmarkEntry = lookupBenchmark(modelName);
+      if (benchmarkEntry) {
+        const normalizedElo = normalizeEloScore(benchmarkEntry.eloScore);
+        baseInfo.benchmarks = {
+          eloScore: benchmarkEntry.eloScore,
+          arenaRank: benchmarkEntry.arenaRank,
+          mmlu: benchmarkEntry.mmlu,
+          humanEval: benchmarkEntry.humanEval,
+          math: benchmarkEntry.math,
+          mtBench: benchmarkEntry.mtBench,
+          gpqa: benchmarkEntry.gpqa,
+          normalizedElo,
+        };
+        // 基于基准数据修正 reasoningLevel：如果 MATH 很高则提升推理等级
+        if ((benchmarkEntry.math ?? 0) >= 90 || (benchmarkEntry.gpqa ?? 0) >= 70) {
+          baseInfo.reasoningLevel = 3;
+        } else if ((benchmarkEntry.math ?? 0) >= 60 || normalizedElo >= 70) {
+          baseInfo.reasoningLevel = Math.max(baseInfo.reasoningLevel, 2);
+        }
+        // 基于 HumanEval 更新领域评分
+        const codingScore = getCodingBenchmarkScore(modelName);
+        const reasoningScore = getReasoningBenchmarkScore(modelName);
+        const overallScore = getOverallBenchmarkScore(modelName);
+        if (
+          codingScore !== undefined ||
+          reasoningScore !== undefined ||
+          overallScore !== undefined
+        ) {
+          baseInfo.domainScores = {
+            ...baseInfo.domainScores,
+            ...(codingScore !== undefined ? { coding: codingScore } : {}),
+            ...(reasoningScore !== undefined
+              ? { reasoning: reasoningScore, math: reasoningScore }
+              : {}),
+            ...(overallScore !== undefined
+              ? { general: overallScore, analysis: overallScore }
+              : {}),
+          };
+        }
+      }
+
+      return baseInfo;
     } catch (err) {
       console.error(`[ModelInfoGetter] Error getting model info for ${accountId}:`, err);
       return undefined;

@@ -3,11 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { WebSocket } from "ws";
-import { CONFIG_PATH } from "../config/config.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
+import { CONFIG_PATH } from "../../upstream/src/config/config.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../upstream/src/utils/message-channel.js";
 import type { GatewayClient } from "./client.js";
 
-vi.mock("../infra/update-runner.js", () => ({
+vi.mock("../../upstream/src/infra/update-runner.js", () => ({
   runGatewayUpdate: vi.fn(async () => ({
     status: "ok",
     mode: "git",
@@ -17,10 +17,10 @@ vi.mock("../infra/update-runner.js", () => ({
   })),
 }));
 
-import { runGatewayUpdate } from "../infra/update-runner.js";
-import { connectGatewayClient } from "./test-helpers.e2e.js";
-import { installGatewayTestHooks, onceMessage, rpcReq } from "./test-helpers.js";
-import { installConnectedControlUiServerSuite } from "./test-with-server.js";
+import { runGatewayUpdate } from "../../upstream/src/infra/update-runner.js";
+import { connectGatewayClient } from "../../upstream/src/gateway/test-helpers.e2e.js";
+import { installGatewayTestHooks, onceMessage, rpcReq } from "../../upstream/src/gateway/test-helpers.js";
+import { installConnectedControlUiServerSuite } from "../../upstream/src/gateway/test-with-server.js";
 
 installGatewayTestHooks({ scope: "suite" });
 

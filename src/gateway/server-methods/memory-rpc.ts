@@ -23,9 +23,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { resolveStateDir } from "../../config/paths.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import { resolveStateDir } from "../../../upstream/src/config/paths.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 // ============================================================================
 // 类型定义

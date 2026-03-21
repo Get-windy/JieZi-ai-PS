@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { resetLogger, setLoggerOverride } from "../logging.js";
+import { resetLogger, setLoggerOverride } from "../../upstream/src/logging.js";
 import { setActiveWebListener } from "./active-listener.js";
 
 const loadWebMediaMock = vi.fn();

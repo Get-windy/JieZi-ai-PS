@@ -4,13 +4,13 @@
  * 提供系统报表、数据分析和统计功能
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { lifecycleManager } from "../../lifecycle/lifecycle-manager.js";
 import { skillManagement } from "../../lifecycle/skill-management.js";
 import { trainingSystem } from "../../lifecycle/training-system.js";
 import { organizationHierarchy } from "../../organization/organization-hierarchy.js";
 import { organizationSystem } from "../../organization/organization-system.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 /**
  * 报表类型

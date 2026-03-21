@@ -2,10 +2,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
-import { captureFullEnv } from "../test-utils/env.js";
-import { resolveSandboxContext } from "./sandbox.js";
-import { writeSkill } from "./skills.e2e-test-helpers.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { captureFullEnv } from "../../upstream/src/test-utils/env.js";
+import { resolveSandboxContext } from "../../upstream/src/agents/sandbox.js";
+import { writeSkill } from "../../upstream/src/agents/skills.e2e-test-helpers.js";
 
 vi.mock("./sandbox/docker.js", () => ({
   ensureSandboxContainer: vi.fn(async () => "openclaw-sbx-test"),

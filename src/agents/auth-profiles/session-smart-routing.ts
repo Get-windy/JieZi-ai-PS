@@ -5,11 +5,19 @@
  * 使用智能路由引擎选择最优模型账号，而非简单的轮询策略。
  */
 
-import type { OpenClawConfig } from "../../config/config.js";
-import { updateSessionStore, type SessionEntry } from "../../config/sessions.js";
+import { ensureAuthProfileStore } from "../../../upstream/src/agents/auth-profiles.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { updateSessionStore, type SessionEntry } from "../../../upstream/src/config/sessions.js";
 import { t } from "../../i18n/index.js";
 import { resolveAgentConfig, resolveAgentModelAccounts } from "../agent-scope.js";
-import { ensureAuthProfileStore } from "../auth-profiles.js";
+import {
+  lookupBenchmark,
+  normalizeEloScore,
+  getCodingBenchmarkScore,
+  getReasoningBenchmarkScore,
+  getOverallBenchmarkScore,
+  refreshBenchmarkDataIfNeeded,
+} from "../arena-benchmarks.js";
 import {
   routeToOptimalModelAccount,
   type SessionContext,
@@ -177,9 +185,13 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
   // 1. 检查是否配置了智能路由
   const modelAccountsConfig = resolveAgentModelAccounts(cfg, agentId);
   if (!modelAccountsConfig || modelAccountsConfig.routingMode !== "smart") {
-    // 未配置智能路由，返回 undefined 让调用方回退到默认逻辑
+    // 未配置智能路由或配置了轮询模式，返回 undefined 让调用方回退到默认逻辑
+    // routingMode === 'roundRobin' 时也会回退到 session-override.ts 的轮询逻辑
     return undefined;
   }
+
+  // 1.5 智能路由模式下，确保基准数据已刷新（首次实时获取，之后每周异步刷新）
+  await refreshBenchmarkDataIfNeeded();
 
   // 2. 如果不是新会话且已有用户手动指定的账号，则保持不变
   if (
@@ -203,7 +215,7 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
   if (
     sessionPinningEnabled &&
     sessionEntry?.authProfileOverride &&
-    sessionEntry?.authProfileOverrideSource === "smart-routing" &&
+    sessionEntry?.authProfileOverrideSource === "auto" &&
     !isNewSession
   ) {
     // 检查固定的账号是否仍在可用列表中
@@ -243,13 +255,22 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
         const resolved = resolveModelAccountToAuthProfile({ modelId: accountId, store });
         return resolved ? store.profiles[resolved] : undefined;
       })();
-    if (!profile) {
-      return undefined;
-    }
 
-    return {
+    // 从 accountId 或 profile 中提取真实模型名称用于 Arena 匹配
+    // accountId 格式示例："siliconflow/Pro/deepseek-ai/DeepSeek-V3.2"
+    // profile.model 格式示例："deepseek-v3" 或 "gpt-4o"
+    // 注意：即使 profile 找不到（如快照时序问题），也用 accountId 中的模型名继续路由评分
+    // 不能因找不到 profile 就返回 undefined，否则所有账号都被标记为不可用，触发故障兜底
+    const modelNameForLookup =
+      (profile as { model?: string } | undefined)?.model ?? accountId.split("/").pop() ?? accountId;
+
+    // 尝试从 Arena 数据库查找基准数据
+    const benchmarkEntry = lookupBenchmark(modelNameForLookup);
+
+    // 默认 ModelInfo（用于无法获取真实配置的情况）
+    const baseInfo: ModelInfo = {
       id: accountId,
-      contextWindow: 100000, // 默认值
+      contextWindow: 100000,
       supportsTools: true,
       supportsVision: false,
       reasoningLevel: 2,
@@ -257,6 +278,43 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
       outputPrice: 0.03,
       avgResponseTime: 3,
     };
+
+    if (benchmarkEntry) {
+      const normalizedElo = normalizeEloScore(benchmarkEntry.eloScore);
+      baseInfo.benchmarks = {
+        eloScore: benchmarkEntry.eloScore,
+        arenaRank: benchmarkEntry.arenaRank,
+        mmlu: benchmarkEntry.mmlu,
+        humanEval: benchmarkEntry.humanEval,
+        math: benchmarkEntry.math,
+        mtBench: benchmarkEntry.mtBench,
+        gpqa: benchmarkEntry.gpqa,
+        normalizedElo,
+      };
+      // 基于 Arena 数据修正能力等级
+      if ((benchmarkEntry.math ?? 0) >= 90 || (benchmarkEntry.gpqa ?? 0) >= 70) {
+        baseInfo.reasoningLevel = 3;
+      } else if ((benchmarkEntry.math ?? 0) >= 60 || normalizedElo >= 70) {
+        baseInfo.reasoningLevel = 2;
+      } else {
+        baseInfo.reasoningLevel = 1;
+      }
+      // 更新领域评分
+      const codingScore = getCodingBenchmarkScore(modelNameForLookup);
+      const reasoningScore = getReasoningBenchmarkScore(modelNameForLookup);
+      const overallScore = getOverallBenchmarkScore(modelNameForLookup);
+      if (codingScore !== undefined || reasoningScore !== undefined || overallScore !== undefined) {
+        baseInfo.domainScores = {
+          ...(codingScore !== undefined ? { coding: codingScore } : {}),
+          ...(reasoningScore !== undefined
+            ? { reasoning: reasoningScore, math: reasoningScore }
+            : {}),
+          ...(overallScore !== undefined ? { general: overallScore, analysis: overallScore } : {}),
+        };
+      }
+    }
+
+    return baseInfo;
   };
 
   try {
@@ -292,10 +350,10 @@ export async function resolveSessionAuthProfileWithSmartRouting(params: {
     // 8. 持久化到 session（如果需要）
     const isAccountChanged =
       sessionEntry?.authProfileOverride !== resolvedProfileId ||
-      sessionEntry?.authProfileOverrideSource !== "smart-routing";
+      sessionEntry?.authProfileOverrideSource !== "auto";
     if (sessionEntry && sessionStore && sessionKey && isAccountChanged) {
       sessionEntry.authProfileOverride = resolvedProfileId;
-      sessionEntry.authProfileOverrideSource = "smart-routing";
+      sessionEntry.authProfileOverrideSource = "auto"; // 智能路由自动选择，语义等同于 auto
       sessionEntry.updatedAt = Date.now();
       sessionStore[sessionKey] = sessionEntry;
 

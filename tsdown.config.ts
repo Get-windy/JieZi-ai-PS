@@ -170,6 +170,48 @@ const inputOptions = {
   },
 };
 
+// manualChunks：将插件加载器及其缓存依赖强制提取为单一共享 chunk。
+// 背景：rolldown 在 chunkOptimization:false 模式下会将 plugins/loader.ts、
+// plugins/discovery.ts、plugins/manifest-registry.ts 内联进多个 chunk，
+// 每份内联各自持有独立的 Map/Set 实例导致缓存永远 MISS，每次调用都触发
+// 一次完整的 jiti 插件加载（每秒数十次循环）。
+// 将这三个文件固定到命名 chunk 后，所有调用方共享同一个缓存实例。
+const pluginLoaderManualChunks = (id: string): string | undefined => {
+  const norm = id.replace(/\\/g, "/");
+  if (
+    norm.includes("upstream/src/plugins/loader") ||
+    norm.includes("src/plugins/loader")
+  ) {
+    return "plugin-loader";
+  }
+  if (
+    norm.includes("upstream/src/plugins/discovery") ||
+    norm.includes("src/plugins/discovery")
+  ) {
+    return "plugin-loader";
+  }
+  if (
+    norm.includes("upstream/src/plugins/manifest-registry") ||
+    norm.includes("src/plugins/manifest-registry")
+  ) {
+    return "plugin-loader";
+  }
+  return undefined;
+};
+
+const outputOptionsWithManualChunks = {
+  manualChunks: pluginLoaderManualChunks,
+};
+
+// plugin-sdk 多入口构建：禁用 chunkOptimization，同时通过 rollupOptions 强制
+// 每个入口独立打包（不共享 chunk），规避 rolldown rc.3 多入口共享 chunk 时
+// 产生的 TDZ（Temporal Dead Zone）初始化顺序错误。
+const pluginSdkInputOptions = {
+  experimental: {
+    chunkOptimization: false,
+  },
+};
+
 export default defineConfig([
   {
     entry: "src/index.ts",
@@ -179,6 +221,7 @@ export default defineConfig([
     fixedExtension: false,
     platform: "node",
     inputOptions,
+    outputOptions: outputOptionsWithManualChunks,
   },
   {
     entry: "src/entry.ts",
@@ -188,6 +231,7 @@ export default defineConfig([
     fixedExtension: false,
     platform: "node",
     inputOptions,
+    outputOptions: outputOptionsWithManualChunks,
   },
   {
     // Ensure this module is bundled as an entry so legacy CLI shims can resolve its exports.
@@ -196,6 +240,7 @@ export default defineConfig([
     plugins: [overlayPlugin],
     fixedExtension: false,
     platform: "node",
+    outputOptions: outputOptionsWithManualChunks,
   },
   {
     entry: "src/infra/warning-filter.ts",
@@ -205,25 +250,63 @@ export default defineConfig([
     fixedExtension: false,
     platform: "node",
     inputOptions,
+    outputOptions: outputOptionsWithManualChunks,
   },
-  {
-    entry: "src/plugin-sdk/index.ts",
+  // plugin-sdk 各入口独立构建，避免共享 chunk 导致的 TDZ 初始化顺序错误
+  ...[
+    "src/plugin-sdk/index.ts",
+    "src/plugin-sdk/core.ts",
+    "src/plugin-sdk/compat.ts",
+    "src/plugin-sdk/telegram.ts",
+    "src/plugin-sdk/discord.ts",
+    "src/plugin-sdk/slack.ts",
+    "src/plugin-sdk/signal.ts",
+    "src/plugin-sdk/imessage.ts",
+    "src/plugin-sdk/whatsapp.ts",
+    "src/plugin-sdk/line.ts",
+    "src/plugin-sdk/msteams.ts",
+    "src/plugin-sdk/acpx.ts",
+    "src/plugin-sdk/bluebubbles.ts",
+    "src/plugin-sdk/copilot-proxy.ts",
+    "src/plugin-sdk/device-pair.ts",
+    "src/plugin-sdk/diagnostics-otel.ts",
+    "src/plugin-sdk/diffs.ts",
+    "src/plugin-sdk/feishu.ts",
+    "src/plugin-sdk/googlechat.ts",
+    "src/plugin-sdk/irc.ts",
+    "src/plugin-sdk/llm-task.ts",
+    "src/plugin-sdk/lobster.ts",
+    "src/plugin-sdk/matrix.ts",
+    "src/plugin-sdk/mattermost.ts",
+    "src/plugin-sdk/memory-core.ts",
+    "src/plugin-sdk/memory-lancedb.ts",
+    "src/plugin-sdk/minimax-portal-auth.ts",
+    "src/plugin-sdk/nextcloud-talk.ts",
+    "src/plugin-sdk/nostr.ts",
+    "src/plugin-sdk/open-prose.ts",
+    "src/plugin-sdk/phone-control.ts",
+    "src/plugin-sdk/qwen-portal-auth.ts",
+    "src/plugin-sdk/synology-chat.ts",
+    "src/plugin-sdk/talk-voice.ts",
+    "src/plugin-sdk/test-utils.ts",
+    "src/plugin-sdk/thread-ownership.ts",
+    "src/plugin-sdk/tlon.ts",
+    "src/plugin-sdk/twitch.ts",
+    "src/plugin-sdk/voice-call.ts",
+    "src/plugin-sdk/zalo.ts",
+    "src/plugin-sdk/zalouser.ts",
+    "src/plugin-sdk/account-id.ts",
+    "src/plugin-sdk/keyed-async-queue.ts",
+  ].map((entry) => ({
+    entry,
     outDir: "dist/plugin-sdk",
     env,
     external,
     plugins: [overlayPlugin],
     fixedExtension: false,
-    platform: "node",
-    inputOptions,
-  },
-  {
-    entry: "src/plugin-sdk/account-id.ts",
-    outDir: "dist/plugin-sdk",
-    env,
-    plugins: [overlayPlugin],
-    fixedExtension: false,
-    platform: "node",
-  },
+    platform: "node" as const,
+    inputOptions: pluginSdkInputOptions,
+  })),
   {
     entry: "src/extensionAPI.ts",
     env,
@@ -235,6 +318,19 @@ export default defineConfig([
   },
   {
     entry: ["src/hooks/bundled/*/handler.ts", "src/hooks/llm-slug-generator.ts"],
+    env,
+    external,
+    plugins: [overlayPlugin],
+    fixedExtension: false,
+    platform: "node",
+    inputOptions,
+  },
+  {
+    // Plugin runtime entry: required for loading memory-core and other plugins at runtime.
+    // resolvePluginRuntimeModulePath() in upstream/src/plugins/loader.ts looks for
+    // dist/plugins/runtime/index.js relative to the package root.
+    entry: "src/plugins/runtime/index.ts",
+    outDir: "dist/plugins/runtime",
     env,
     external,
     plugins: [overlayPlugin],

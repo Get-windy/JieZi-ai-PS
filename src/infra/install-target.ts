@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import { fileExists } from "./archive.js";
+import { fileExists } from "../../upstream/src/infra/archive.js";
 import { assertCanonicalPathWithinBase, resolveSafeInstallDir } from "./install-safe-path.js";
 
 export async function resolveCanonicalInstallTarget(params: {

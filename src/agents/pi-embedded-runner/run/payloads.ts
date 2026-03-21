@@ -1,9 +1,9 @@
 import type { AssistantMessage } from "@mariozechner/pi-ai";
-import { parseReplyDirectives } from "../../../auto-reply/reply/reply-directives.js";
+import { parseReplyDirectives } from "../../../../upstream/src/auto-reply/reply/reply-directives.js";
 import type { ReasoningLevel, VerboseLevel } from "../../../auto-reply/thinking.js";
-import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../../../auto-reply/tokens.js";
-import { formatToolAggregate } from "../../../auto-reply/tool-meta.js";
-import type { OpenClawConfig } from "../../../config/config.js";
+import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../../../../upstream/src/auto-reply/tokens.js";
+import { formatToolAggregate } from "../../../../upstream/src/auto-reply/tool-meta.js";
+import type { OpenClawConfig } from "../../../../upstream/src/config/config.js";
 import {
   BILLING_ERROR_USER_MESSAGE,
   formatAssistantErrorText,
@@ -11,14 +11,14 @@ import {
   getApiErrorPayloadFingerprint,
   isRawApiErrorPayload,
   normalizeTextForComparison,
-} from "../../pi-embedded-helpers.js";
-import type { ToolResultFormat } from "../../pi-embedded-subscribe.js";
+} from "../../../../upstream/src/agents/pi-embedded-helpers.js";
+import type { ToolResultFormat } from "../../../../upstream/src/agents/pi-embedded-subscribe.js";
 import {
   extractAssistantText,
   extractAssistantThinking,
   formatReasoningMessage,
-} from "../../pi-embedded-utils.js";
-import { isLikelyMutatingToolName } from "../../tool-mutation.js";
+} from "../../../../upstream/src/agents/pi-embedded-utils.js";
+import { isLikelyMutatingToolName } from "../../../../upstream/src/agents/tool-mutation.js";
 
 type ToolMetaEntry = { toolName: string; meta?: string };
 type LastToolError = {

@@ -3,21 +3,21 @@ import type {
   GatewayBindMode,
   GatewayTailscaleConfig,
   loadConfig,
-} from "../config/config.js";
+} from "../../upstream/src/config/config.js";
 import {
   assertGatewayAuthConfigured,
   type ResolvedGatewayAuth,
   resolveGatewayAuth,
-} from "./auth.js";
-import { normalizeControlUiBasePath } from "./control-ui-shared.js";
-import { resolveHooksConfig } from "./hooks.js";
+} from "../../upstream/src/gateway/auth.js";
+import { normalizeControlUiBasePath } from "../../upstream/src/gateway/control-ui-shared.js";
+import { resolveHooksConfig } from "../../upstream/src/gateway/hooks.js";
 import {
   isLoopbackHost,
   isTrustedProxyAddress,
   isValidIPv4,
   resolveGatewayBindHost,
-} from "./net.js";
-import { mergeGatewayTailscaleConfig } from "./startup-auth.js";
+} from "../../upstream/src/gateway/net.js";
+import { mergeGatewayTailscaleConfig } from "../../upstream/src/gateway/startup-auth.js";
 
 export type GatewayRuntimeConfig = {
   bindHost: string;

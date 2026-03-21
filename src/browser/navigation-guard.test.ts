@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { SsrFBlockedError, type LookupFn } from "../infra/net/ssrf.js";
+import { SsrFBlockedError, type LookupFn } from "../../upstream/src/infra/net/ssrf.js";
 import {
   assertBrowserNavigationAllowed,
   InvalidBrowserNavigationUrlError,

@@ -1,16 +1,16 @@
 import { resolveSessionAgentId } from "../../agents/agent-scope.js";
-import { getFinishedSession, getSession, markExited } from "../../agents/bash-process-registry.js";
-import { createExecTool } from "../../agents/bash-tools.js";
-import { resolveSandboxRuntimeStatus } from "../../agents/sandbox.js";
+import { getFinishedSession, getSession, markExited } from "../../../upstream/src/agents/bash-process-registry.js";
+import { createExecTool } from "../../../upstream/src/agents/bash-tools.js";
+import { resolveSandboxRuntimeStatus } from "../../../upstream/src/agents/sandbox.js";
 import { killProcessTree } from "../../agents/shell-utils.js";
 import { isCommandFlagEnabled } from "../../config/commands.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { logVerbose } from "../../globals.js";
-import { clampInt } from "../../utils.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { logVerbose } from "../../../upstream/src/globals.js";
+import { clampInt } from "../../../upstream/src/utils.js";
 import type { MsgContext } from "../templating.js";
-import type { ReplyPayload } from "../types.js";
-import { buildDisabledCommandReply } from "./command-gates.js";
-import { formatElevatedUnavailableMessage } from "./elevated-unavailable.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
+import { buildDisabledCommandReply } from "../../../upstream/src/auto-reply/reply/command-gates.js";
+import { formatElevatedUnavailableMessage } from "../../../upstream/src/auto-reply/reply/elevated-unavailable.js";
 import { stripMentions, stripStructuralPrefixes } from "./mentions.js";
 
 const CHAT_BASH_SCOPE_KEY = "chat:bash";

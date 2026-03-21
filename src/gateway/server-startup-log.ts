@@ -1,9 +1,13 @@
 import chalk from "chalk";
-import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
-import { resolveConfiguredModelRef } from "../agents/model-selection.js";
-import type { loadConfig } from "../config/config.js";
-import { getResolvedLoggerSettings } from "../logging.js";
+import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../../upstream/src/agents/defaults.js";
+import { resolveConfiguredModelRef } from "../../upstream/src/agents/model-selection.js";
+import type { loadConfig } from "../../upstream/src/config/config.js";
+import { getResolvedLoggerSettings } from "../../upstream/src/logging.js";
 import { collectEnabledInsecureOrDangerousFlags } from "../security/dangerous-config-flags.js";
+import {
+  resolveDefaultAgentId,
+  resolveAgentEffectiveModelPrimary,
+} from "../agents/agent-scope.js";
 
 export async function logGatewayStartup(params: {
   cfg: ReturnType<typeof loadConfig>;
@@ -14,10 +18,23 @@ export async function logGatewayStartup(params: {
   log: { info: (msg: string, meta?: Record<string, unknown>) => void; warn: (msg: string) => void };
   isNixMode: boolean;
 }) {
+  // Resolve fallback defaults dynamically from the default agent's effective model
+  // to avoid falling back to stale hardcoded provider/model (e.g. anthropic/claude-opus-4-6).
+  const defaultAgentId = resolveDefaultAgentId(params.cfg);
+  const effectiveModelRef = resolveAgentEffectiveModelPrimary(params.cfg, defaultAgentId);
+  let fallbackProvider = DEFAULT_PROVIDER;
+  let fallbackModel = DEFAULT_MODEL;
+  if (effectiveModelRef) {
+    const slashIdx = effectiveModelRef.indexOf("/");
+    if (slashIdx !== -1) {
+      fallbackProvider = effectiveModelRef.slice(0, slashIdx);
+      fallbackModel = effectiveModelRef.slice(slashIdx + 1);
+    }
+  }
   const { provider: agentProvider, model: agentModel } = resolveConfiguredModelRef({
     cfg: params.cfg,
-    defaultProvider: DEFAULT_PROVIDER,
-    defaultModel: DEFAULT_MODEL,
+    defaultProvider: fallbackProvider,
+    defaultModel: fallbackModel,
   });
   const modelRef = `${agentProvider}/${agentModel}`;
   params.log.info(`agent model: ${modelRef}`, {
@@ -46,7 +63,7 @@ export async function logGatewayStartup(params: {
   const autoOpen = params.cfg.gateway?.controlUi?.autoOpen ?? true; // 修改：默认为 true
   const controlUiEnabled = params.cfg.gateway?.controlUi?.enabled ?? true;
   if (autoOpen && controlUiEnabled) {
-    const { resolveGatewayPort } = await import("../config/config.js");
+    const { resolveGatewayPort } = await import("../../upstream/src/config/config.js");
     const { resolveControlUiLinks } = await import("../commands/onboard-helpers.js");
     const { detectBrowserOpenSupport, openUrl } = await import("../commands/onboard-helpers.js");
 

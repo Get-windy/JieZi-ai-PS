@@ -1,10 +1,10 @@
-import { execDockerRaw, type ExecDockerRawResult } from "./docker.js";
+import { execDockerRaw, type ExecDockerRawResult } from "../../../upstream/src/agents/sandbox/docker.js";
 import {
   buildSandboxFsMounts,
   resolveSandboxFsPathWithMounts,
   type SandboxResolvedFsPath,
 } from "./fs-paths.js";
-import type { SandboxContext, SandboxWorkspaceAccess } from "./types.js";
+import type { SandboxContext, SandboxWorkspaceAccess } from "../../../upstream/src/agents/sandbox/types.js";
 
 type RunCommandOptions = {
   args?: string[];

@@ -20,31 +20,31 @@
 
 import { agentHandlers } from "./agent.js";
 import { agentsManagementHandlers } from "./agents-management.js";
-import { agentsHandlers } from "./agents.js";
+import { agentsHandlers } from "../../../upstream/src/gateway/server-methods/agents.js";
 import { approvalHandlers } from "./approval.js";
 import { assessmentHandlers } from "./assessment-rpc.js";
-import { browserHandlers } from "./browser.js";
+import { browserHandlers } from "../../../upstream/src/gateway/server-methods/browser.js";
 import { channelManagerHandlers } from "./channel-manager.js";
 import { channelPoliciesHandlers } from "./channel-policies.js";
 import { channelsHandlers } from "./channels.js";
 import { chatAggregateHandlers } from "./chat-aggregate.js";
-import { chatHandlers } from "./chat.js";
-import { configHandlers } from "./config.js";
-import { connectHandlers } from "./connect.js";
-import { cronHandlers } from "./cron.js";
+import { chatHandlers } from "../../../upstream/src/gateway/server-methods/chat.js";
+import { configHandlers } from "../../../upstream/src/gateway/server-methods/config.js";
+import { connectHandlers } from "../../../upstream/src/gateway/server-methods/connect.js";
+import { cronHandlers } from "../../../upstream/src/gateway/server-methods/cron.js";
 import { dataScopeHandlers } from "./data-scope-rpc.js";
-import { deviceHandlers } from "./devices.js";
-import { doctorHandlers } from "./doctor.js";
+import { deviceHandlers } from "../../../upstream/src/gateway/server-methods/devices.js";
+import { doctorHandlers } from "../../../upstream/src/gateway/server-methods/doctor.js";
 import { evolveRpc } from "./evolve-rpc.js";
-import { execApprovalsHandlers } from "./exec-approvals.js";
+import { execApprovalsHandlers } from "../../../upstream/src/gateway/server-methods/exec-approvals.js";
 import { friendsHandlers } from "./friends-rpc.js";
 import { groupsHandlers } from "./groups-rpc.js";
-import { healthHandlers } from "./health.js";
+import { healthHandlers } from "../../../upstream/src/gateway/server-methods/health.js";
 import { hrManagementHandlers } from "./hr-management.js";
 import { humanAuthHandlers } from "./human-auth.js";
 import { knowledgeSinkHandlers } from "./knowledge-sink.js";
 import { lifecycleHandlers } from "./lifecycle-rpc.js";
-import { logsHandlers } from "./logs.js";
+import { logsHandlers } from "../../../upstream/src/gateway/server-methods/logs.js";
 import { meetingsRpc } from "./meetings-rpc.js";
 import { memoryRpc } from "./memory-rpc.js";
 import { mentorshipHandlers } from "./mentorship-rpc.js";
@@ -63,28 +63,29 @@ import { phase5RpcHandlers } from "./phase5-rpc.js";
 import { phase6IntegrationHandlers } from "./phase6-integration-rpc.js";
 import { phase7AdminHandlers } from "./phase7-admin-rpc.js";
 import { policyIntegrationHandlers } from "./policy-integration.js";
+import { projectHandoffHandlers } from "./project-handoff-rpc.js";
 import { projectsHandlers } from "./projects-rpc.js";
-import { pushHandlers } from "./push.js";
+import { pushHandlers } from "../../../upstream/src/gateway/server-methods/push.js";
 import { reportsHandlers } from "./reports-rpc.js";
 import { scenariosHandlers } from "./scenarios-rpc.js";
-import { sendHandlers } from "./send.js";
+import { sendHandlers } from "../../../upstream/src/gateway/server-methods/send.js";
 import { sessionsHandlers } from "./sessions.js";
 import { skillManagementHandlers } from "./skill-management-rpc.js";
-import { skillsHandlers } from "./skills.js";
+import { skillsHandlers } from "../../../upstream/src/gateway/server-methods/skills.js";
 import { storageHandlers } from "./storage.js";
-import { systemHandlers } from "./system.js";
+import { systemHandlers } from "../../../upstream/src/gateway/server-methods/system.js";
 import { talkHandlers } from "./talk.js";
 import { tasksRpc } from "./tasks-rpc.js";
-import { toolsCatalogHandlers } from "./tools-catalog.js";
+import { toolsCatalogHandlers } from "../../../upstream/src/gateway/server-methods/tools-catalog.js";
 import { trainingPlanHandlers } from "./training-plan-rpc.js";
 import { trainingHandlers } from "./training.js";
-import { ttsHandlers } from "./tts.js";
-import type { GatewayRequestHandlers } from "./types.js";
-import { updateHandlers } from "./update.js";
-import { usageHandlers } from "./usage.js";
-import { voicewakeHandlers } from "./voicewake.js";
-import { webHandlers } from "./web.js";
-import { wizardHandlers } from "./wizard.js";
+import { ttsHandlers } from "../../../upstream/src/gateway/server-methods/tts.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import { updateHandlers } from "../../../upstream/src/gateway/server-methods/update.js";
+import { usageHandlers } from "../../../upstream/src/gateway/server-methods/usage.js";
+import { voicewakeHandlers } from "../../../upstream/src/gateway/server-methods/voicewake.js";
+import { webHandlers } from "../../../upstream/src/gateway/server-methods/web.js";
+import { wizardHandlers } from "../../../upstream/src/gateway/server-methods/wizard.js";
 
 /**
  * 将 incoming 中尚未在 base 中注册的 handler 合并进来，已存在的 key 不覆盖。
@@ -193,6 +194,8 @@ const hardcodedHandlers: GatewayRequestHandlers = {
   ...groupsHandlers,
   ...mentorshipHandlers,
   ...projectsHandlers,
+  // 项目跨团队协作与交付
+  ...projectHandoffHandlers,
 
   // 工作流 & 场景 & 报告
   ...scenariosHandlers,

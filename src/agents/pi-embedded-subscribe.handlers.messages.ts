@@ -1,14 +1,14 @@
 import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
-import { parseReplyDirectives } from "../auto-reply/reply/reply-directives.js";
-import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
-import { emitAgentEvent } from "../infra/agent-events.js";
-import { createInlineCodeState } from "../markdown/code-spans.js";
+import { parseReplyDirectives } from "../../upstream/src/auto-reply/reply/reply-directives.js";
+import { SILENT_REPLY_TOKEN } from "../../upstream/src/auto-reply/tokens.js";
+import { emitAgentEvent } from "../../upstream/src/infra/agent-events.js";
+import { createInlineCodeState } from "../../upstream/src/markdown/code-spans.js";
 import {
   isMessagingToolDuplicateNormalized,
   normalizeTextForComparison,
-} from "./pi-embedded-helpers.js";
-import type { EmbeddedPiSubscribeContext } from "./pi-embedded-subscribe.handlers.types.js";
-import { appendRawStream } from "./pi-embedded-subscribe.raw-stream.js";
+} from "../../upstream/src/agents/pi-embedded-helpers.js";
+import type { EmbeddedPiSubscribeContext } from "../../upstream/src/agents/pi-embedded-subscribe.handlers.types.js";
+import { appendRawStream } from "../../upstream/src/agents/pi-embedded-subscribe.raw-stream.js";
 import {
   extractAssistantText,
   extractAssistantThinking,
@@ -16,7 +16,7 @@ import {
   extractThinkingFromTaggedText,
   formatReasoningMessage,
   promoteThinkingTagsToBlocks,
-} from "./pi-embedded-utils.js";
+} from "../../upstream/src/agents/pi-embedded-utils.js";
 
 const stripTrailingDirective = (text: string): string => {
   const openIndex = text.lastIndexOf("[[");

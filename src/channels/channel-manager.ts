@@ -6,6 +6,10 @@
  * - 提供通道绑定的 CRUD 操作
  * - 支持绑定的启用/禁用
  * - 支持通道切换和策略更新
+ * 
+ * 重要：本地 agent.channelBindings 只作扩展元数据存储，
+ * 消息路由实际读取的是 cfg.bindings（上游标准格式）。
+ * 所有增删改操作需同时维护 cfg.bindings。
  */
 
 import type {
@@ -14,7 +18,7 @@ import type {
   ChannelPolicyConfig,
 } from "../config/types.channel-bindings.js";
 import type { AgentConfig } from "../config/types.agents.js";
-import { loadConfig, writeConfigFile } from "../config/config.js";
+import { loadConfig, writeConfigFile } from "../../upstream/src/config/config.js";
 import { channelBindingResolver } from "./bindings/resolver.js";
 
 /**
@@ -33,6 +37,35 @@ export class ChannelManager {
       ChannelManager.instance = new ChannelManager();
     }
     return ChannelManager.instance;
+  }
+
+  /**
+   * 同步本地 channelBindings 到 cfg.bindings（上游路由实际读取的地方）
+   * 
+   * cfg.bindings 格式: { agentId, match: { channel, accountId } }
+   * 只同步已启用的绑定。
+   */
+  private syncToCfgBindings(config: any, agentId: string, channelBindings: AgentChannelBindings): void {
+    if (!Array.isArray(config.bindings)) {
+      config.bindings = [];
+    }
+    // 移除该 agent 由本工具管理的旧条目（带 _managedBy 标记）
+    config.bindings = (config.bindings as any[]).filter(
+      (b: any) => !(b._managedBy === "channelManager" && b.agentId === agentId),
+    );
+    // 写入已启用的绑定
+    for (const binding of channelBindings.bindings) {
+      if (binding.enabled === false) continue;
+      config.bindings.push({
+        agentId,
+        match: {
+          channel: binding.channelId,
+          accountId: binding.accountId || "default",
+        },
+        _managedBy: "channelManager",
+        _bindingId: binding.id,
+      });
+    }
   }
 
   /**
@@ -108,6 +141,9 @@ export class ChannelManager {
       },
     });
 
+    // 同步到 cfg.bindings（上游路由实际读取）
+    this.syncToCfgBindings(config, agentId, channelBindings);
+
     // 保存配置
     await writeConfigFile(config);
 
@@ -161,6 +197,9 @@ export class ChannelManager {
       throw new Error(`Invalid binding configuration: ${validation.errors?.join(", ")}`);
     }
 
+    // 同步到 cfg.bindings
+    this.syncToCfgBindings(config, agentId, channelBindings);
+
     // 保存配置
     await writeConfigFile(config);
 
@@ -197,6 +236,9 @@ export class ChannelManager {
 
     // 删除绑定
     channelBindings.bindings.splice(index, 1);
+
+    // 同步到 cfg.bindings
+    this.syncToCfgBindings(config, agentId, channelBindings);
 
     // 保存配置
     await writeConfigFile(config);
@@ -348,6 +390,9 @@ export class ChannelManager {
       }
     }
 
+    // 同步到 cfg.bindings
+    this.syncToCfgBindings(config, agentId, channelBindings);
+
     // 保存配置
     await writeConfigFile(config);
 
@@ -402,6 +447,8 @@ export class ChannelManager {
     // 设置默认策略
     channelBindings.defaultPolicy = policy;
 
+    // 同步到 cfg.bindings（策略不影响路由条目，无需重新同步）
+
     // 保存配置
     await writeConfigFile(config);
 
@@ -416,6 +463,28 @@ export class ChannelManager {
   private findAgent(config: any, agentId: string): AgentConfig | undefined {
     const agents = config?.agents?.list || [];
     return agents.find((a: AgentConfig) => a.id === agentId);
+  }
+
+  /**
+   * 启动时迁移：将所有 agent 的 channelBindings 同步到 cfg.bindings
+   *
+   * 对于升级前已经通过 channels.bindings.add 保存的绑定数据，
+   * 本方法确保它们被同步到上游路由读取的 cfg.bindings。
+   */
+  async migrateAllAgentBindingsToCfg(): Promise<void> {
+    const config = await loadConfig();
+    const agents: AgentConfig[] = (config as any)?.agents?.list ?? [];
+    let migrated = 0;
+    for (const agent of agents) {
+      const channelBindings = (agent as any).channelBindings as AgentChannelBindings | undefined;
+      if (!channelBindings?.bindings?.length) continue;
+      this.syncToCfgBindings(config, agent.id, channelBindings);
+      migrated++;
+    }
+    if (migrated > 0) {
+      await writeConfigFile(config);
+      console.log(`[ChannelManager] Migrated channel bindings for ${migrated} agent(s) to cfg.bindings`);
+    }
   }
 }
 

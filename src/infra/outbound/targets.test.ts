@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { telegramOutbound } from "../../channels/plugins/outbound/telegram.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { SessionEntry } from "../../config/sessions/types.js";
-import { setActivePluginRegistry } from "../../plugins/runtime.js";
-import { createOutboundTestPlugin, createTestRegistry } from "../../test-utils/channel-plugins.js";
+import { telegramOutbound } from "../../../upstream/src/channels/plugins/outbound/telegram.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import type { SessionEntry } from "../../../upstream/src/config/sessions/types.js";
+import { setActivePluginRegistry } from "../../../upstream/src/plugins/runtime.js";
+import { createOutboundTestPlugin, createTestRegistry } from "../../../upstream/src/test-utils/channel-plugins.js";
 import {
   resolveHeartbeatDeliveryTarget,
   resolveOutboundTarget,
@@ -13,7 +13,7 @@ import type { SessionDeliveryTarget } from "./targets.js";
 import {
   installResolveOutboundTargetPluginRegistryHooks,
   runResolveOutboundTargetCoreTests,
-} from "./targets.shared-test.js";
+} from "../../../upstream/src/infra/outbound/targets.shared-test.js";
 
 runResolveOutboundTargetCoreTests();
 

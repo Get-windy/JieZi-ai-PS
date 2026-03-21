@@ -5,26 +5,26 @@ import {
   getDefaultLocalRoots,
   loadWebMedia,
 } from "../../../upstream/extensions/whatsapp/src/media.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { resolveUserPath } from "../../utils.js";
-import { ensureAuthProfileStore, listProfilesForProvider } from "../auth-profiles.js";
-import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../defaults.js";
-import { minimaxUnderstandImage } from "../minimax-vlm.js";
-import { getApiKeyForModel, requireApiKey, resolveEnvApiKey } from "../model-auth.js";
-import { runWithImageModelFallback } from "../model-fallback.js";
-import { resolveConfiguredModelRef } from "../model-selection.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { resolveUserPath } from "../../../upstream/src/utils.js";
+import { ensureAuthProfileStore, listProfilesForProvider } from "../../../upstream/src/agents/auth-profiles.js";
+import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../../../upstream/src/agents/defaults.js";
+import { minimaxUnderstandImage } from "../../../upstream/src/agents/minimax-vlm.js";
+import { getApiKeyForModel, requireApiKey, resolveEnvApiKey } from "../../../upstream/src/agents/model-auth.js";
+import { runWithImageModelFallback } from "../../../upstream/src/agents/model-fallback.js";
+import { resolveConfiguredModelRef } from "../../../upstream/src/agents/model-selection.js";
 import { ensureOpenClawModelsJson } from "../models-config.js";
-import { discoverAuthStorage, discoverModels } from "../pi-model-discovery.js";
+import { discoverAuthStorage, discoverModels } from "../../../upstream/src/agents/pi-model-discovery.js";
 import type { SandboxFsBridge } from "../sandbox/fs-bridge.js";
-import { normalizeWorkspaceDir } from "../workspace-dir.js";
-import type { AnyAgentTool } from "./common.js";
+import { normalizeWorkspaceDir } from "../../../upstream/src/agents/workspace-dir.js";
+import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
 import {
   coerceImageAssistantText,
   coerceImageModelConfig,
   decodeDataUrl,
   type ImageModelConfig,
   resolveProviderVisionModelFromConfig,
-} from "./image-tool.helpers.js";
+} from "../../../upstream/src/agents/tools/image-tool.helpers.js";
 
 const DEFAULT_PROMPT = "Describe the image.";
 const ANTHROPIC_IMAGE_PRIMARY = "anthropic/claude-opus-4-6";

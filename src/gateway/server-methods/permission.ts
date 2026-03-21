@@ -1,14 +1,14 @@
 /**
  * 权限管理 Gateway RPC Handlers
- * 
+ *
  * 提供权限配置的查询和修改功能
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
-import type { AgentPermissionsConfig } from "../../config/types.permissions.js";
-import { loadConfig, saveConfig } from "../../config/config.js";
-import { listAgentEntries } from "../../commands/agents.config.js";
-import { normalizeAgentId } from "../../routing/session-key.js";
+import { listAgentEntries } from "../../../upstream/src/commands/agents.config.js";
+import { loadConfig, writeConfigFile } from "../../../upstream/src/config/config.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import { clearPermissionCache } from "../../agents/tools/permission-middleware.js";
 import {
   createPermissionTemplate,
   assignRoleToAgent,
@@ -18,8 +18,20 @@ import {
   PREDEFINED_ROLES,
   TOOL_CATEGORIES,
 } from "../../agents/tools/permission-templates.js";
-import { clearPermissionCache } from "../../agents/tools/permission-middleware.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import type { AgentPermissionsConfig } from "../../config/types.permissions.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
+
+function resolveStringParam(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function getAgentPermissions(agent: object): AgentPermissionsConfig | undefined {
+  return (agent as Record<string, unknown>).permissions as AgentPermissionsConfig | undefined;
+}
+
+function setAgentPermissions(agent: object, permissions: AgentPermissionsConfig | null): void {
+  (agent as Record<string, unknown>).permissions = permissions;
+}
 
 export const permissionHandlers: GatewayRequestHandlers = {
   /**
@@ -27,24 +39,28 @@ export const permissionHandlers: GatewayRequestHandlers = {
    */
   "permission.get": async ({ params, respond }) => {
     try {
-      const agentId = normalizeAgentId(String(params.agentId || ""));
-      
+      const agentId = normalizeAgentId(resolveStringParam(params.agentId));
+
       if (!agentId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
         return;
       }
-      
+
       const config = loadConfig();
       const agents = listAgentEntries(config);
       const agent = agents.find((a) => normalizeAgentId(a.id) === agentId);
-      
+
       if (!agent) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+        );
         return;
       }
-      
-      const permissions = (agent as any).permissions as AgentPermissionsConfig | undefined;
-      
+
+      const permissions = getAgentPermissions(agent);
+
       respond(true, {
         success: true,
         agentId,
@@ -55,38 +71,45 @@ export const permissionHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
     }
   },
-  
+
   /**
    * permission.set - 设置智能体的权限配置
    */
   "permission.set": async ({ params, respond }) => {
     try {
-      const agentId = normalizeAgentId(String(params.agentId || ""));
+      const agentId = normalizeAgentId(resolveStringParam(params.agentId));
       const permissions = params.permissions as AgentPermissionsConfig | null;
-      
+
       if (!agentId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
         return;
       }
-      
+
       const config = loadConfig();
       const agents = listAgentEntries(config);
       const agentIndex = agents.findIndex((a) => normalizeAgentId(a.id) === agentId);
-      
+
       if (agentIndex === -1) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+        );
         return;
       }
-      
+
       // 更新权限配置
-      (agents[agentIndex] as any).permissions = permissions;
-      
+      const agentEntry = agents[agentIndex];
+      if (agentEntry) {
+        setAgentPermissions(agentEntry, permissions);
+      }
+
       // 保存配置
-      await saveConfig(config);
-      
+      await writeConfigFile(config);
+
       // 清除权限缓存
       clearPermissionCache(agentId);
-      
+
       respond(true, {
         success: true,
         agentId,
@@ -96,41 +119,48 @@ export const permissionHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
     }
   },
-  
+
   /**
    * permission.init - 初始化智能体的权限配置（使用模板）
    */
   "permission.init": async ({ params, respond }) => {
     try {
-      const agentId = normalizeAgentId(String(params.agentId || ""));
+      const agentId = normalizeAgentId(resolveStringParam(params.agentId));
       const includeAllRoles = params.includeAllRoles !== false;
-      
+
       if (!agentId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
         return;
       }
-      
+
       const config = loadConfig();
       const agents = listAgentEntries(config);
       const agentIndex = agents.findIndex((a) => normalizeAgentId(a.id) === agentId);
-      
+
       if (agentIndex === -1) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+        );
         return;
       }
-      
+
       // 创建权限配置模板
       const permissionTemplate = createPermissionTemplate({ includeAllRoles });
-      
+
       // 更新权限配置
-      (agents[agentIndex] as any).permissions = permissionTemplate;
-      
+      const initEntry = agents[agentIndex];
+      if (initEntry) {
+        setAgentPermissions(initEntry, permissionTemplate);
+      }
+
       // 保存配置
-      await saveConfig(config);
-      
+      await writeConfigFile(config);
+
       // 清除权限缓存
       clearPermissionCache(agentId);
-      
+
       respond(true, {
         success: true,
         agentId,
@@ -141,49 +171,67 @@ export const permissionHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
     }
   },
-  
+
   /**
    * permission.role.assign - 为智能体分配角色
    */
   "permission.role.assign": async ({ params, respond }) => {
     try {
-      const agentId = normalizeAgentId(String(params.agentId || ""));
-      const targetAgentId = normalizeAgentId(String(params.targetAgentId || ""));
-      const roleId = String(params.roleId || "");
-      
+      const agentId = normalizeAgentId(resolveStringParam(params.agentId));
+      const targetAgentId = normalizeAgentId(resolveStringParam(params.targetAgentId));
+      const roleId = resolveStringParam(params.roleId);
+
       if (!agentId || !targetAgentId || !roleId) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId, targetAgentId, and roleId are required"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "agentId, targetAgentId, and roleId are required"),
+        );
         return;
       }
-      
+
       const config = loadConfig();
       const agents = listAgentEntries(config);
       const agentIndex = agents.findIndex((a) => normalizeAgentId(a.id) === agentId);
-      
+
       if (agentIndex === -1) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+        );
         return;
       }
-      
-      const currentPermissions = (agents[agentIndex] as any).permissions as AgentPermissionsConfig;
-      
+
+      const assignEntry = agents[agentIndex];
+      const currentPermissions = assignEntry ? getAgentPermissions(assignEntry) : undefined;
+
       if (!currentPermissions) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} has no permissions config. Initialize first.`));
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Agent ${agentId} has no permissions config. Initialize first.`,
+          ),
+        );
         return;
       }
-      
+
       // 分配角色
       const updatedPermissions = assignRoleToAgent(targetAgentId, roleId, currentPermissions);
-      
+
       // 更新配置
-      (agents[agentIndex] as any).permissions = updatedPermissions;
-      
+      if (assignEntry) {
+        setAgentPermissions(assignEntry, updatedPermissions);
+      }
+
       // 保存配置
-      await saveConfig(config);
-      
+      await writeConfigFile(config);
+
       // 清除权限缓存
       clearPermissionCache(agentId);
-      
+
       respond(true, {
         success: true,
         message: `Role ${roleId} assigned to agent ${targetAgentId}`,
@@ -194,49 +242,64 @@ export const permissionHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
     }
   },
-  
+
   /**
    * permission.role.remove - 移除智能体的角色
    */
   "permission.role.remove": async ({ params, respond }) => {
     try {
-      const agentId = normalizeAgentId(String(params.agentId || ""));
-      const targetAgentId = normalizeAgentId(String(params.targetAgentId || ""));
-      const roleId = String(params.roleId || "");
-      
+      const agentId = normalizeAgentId(resolveStringParam(params.agentId));
+      const targetAgentId = normalizeAgentId(resolveStringParam(params.targetAgentId));
+      const roleId = resolveStringParam(params.roleId);
+
       if (!agentId || !targetAgentId || !roleId) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId, targetAgentId, and roleId are required"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "agentId, targetAgentId, and roleId are required"),
+        );
         return;
       }
-      
+
       const config = loadConfig();
       const agents = listAgentEntries(config);
       const agentIndex = agents.findIndex((a) => normalizeAgentId(a.id) === agentId);
-      
+
       if (agentIndex === -1) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+        );
         return;
       }
-      
-      const currentPermissions = (agents[agentIndex] as any).permissions as AgentPermissionsConfig;
-      
+
+      const removeEntry = agents[agentIndex];
+      const currentPermissions = removeEntry ? getAgentPermissions(removeEntry) : undefined;
+
       if (!currentPermissions) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} has no permissions config`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} has no permissions config`),
+        );
         return;
       }
-      
+
       // 移除角色
       const updatedPermissions = removeRoleFromAgent(targetAgentId, roleId, currentPermissions);
-      
+
       // 更新配置
-      (agents[agentIndex] as any).permissions = updatedPermissions;
-      
+      if (removeEntry) {
+        setAgentPermissions(removeEntry, updatedPermissions);
+      }
+
       // 保存配置
-      await saveConfig(config);
-      
+      await writeConfigFile(config);
+
       // 清除权限缓存
       clearPermissionCache(agentId);
-      
+
       respond(true, {
         success: true,
         message: `Role ${roleId} removed from agent ${targetAgentId}`,
@@ -247,31 +310,39 @@ export const permissionHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
     }
   },
-  
+
   /**
    * permission.role.list - 获取智能体的所有角色
    */
   "permission.role.list": async ({ params, respond }) => {
     try {
-      const agentId = normalizeAgentId(String(params.agentId || ""));
-      const targetAgentId = normalizeAgentId(String(params.targetAgentId || ""));
-      
+      const agentId = normalizeAgentId(resolveStringParam(params.agentId));
+      const targetAgentId = normalizeAgentId(resolveStringParam(params.targetAgentId));
+
       if (!agentId || !targetAgentId) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId and targetAgentId are required"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "agentId and targetAgentId are required"),
+        );
         return;
       }
-      
+
       const config = loadConfig();
       const agents = listAgentEntries(config);
       const agent = agents.find((a) => normalizeAgentId(a.id) === agentId);
-      
+
       if (!agent) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+        );
         return;
       }
-      
-      const permissions = (agent as any).permissions as AgentPermissionsConfig | undefined;
-      
+
+      const permissions = getAgentPermissions(agent);
+
       if (!permissions) {
         respond(true, {
           success: true,
@@ -280,9 +351,9 @@ export const permissionHandlers: GatewayRequestHandlers = {
         });
         return;
       }
-      
+
       const roles = getAgentRoles(targetAgentId, permissions);
-      
+
       respond(true, {
         success: true,
         agentId: targetAgentId,
@@ -296,30 +367,34 @@ export const permissionHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
     }
   },
-  
+
   /**
    * permission.roles.available - 获取所有可用角色
    */
   "permission.roles.available": async ({ params, respond }) => {
     try {
-      const agentId = normalizeAgentId(String(params.agentId || ""));
-      
+      const agentId = normalizeAgentId(resolveStringParam(params.agentId));
+
       if (!agentId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
         return;
       }
-      
+
       const config = loadConfig();
       const agents = listAgentEntries(config);
       const agent = agents.find((a) => normalizeAgentId(a.id) === agentId);
-      
+
       if (!agent) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+        );
         return;
       }
-      
-      const permissions = (agent as any).permissions as AgentPermissionsConfig | undefined;
-      
+
+      const permissions = getAgentPermissions(agent);
+
       if (!permissions || !permissions.roles) {
         respond(true, {
           success: true,
@@ -327,7 +402,7 @@ export const permissionHandlers: GatewayRequestHandlers = {
         });
         return;
       }
-      
+
       respond(true, {
         success: true,
         roles: permissions.roles.map((r) => ({
@@ -341,40 +416,56 @@ export const permissionHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
     }
   },
-  
+
   /**
    * permission.rule.add - 添加自定义权限规则
    */
   "permission.rule.add": async ({ params, respond }) => {
     try {
-      const agentId = normalizeAgentId(String(params.agentId || ""));
-      const toolName = String(params.toolName || "");
+      const agentId = normalizeAgentId(resolveStringParam(params.agentId));
+      const toolName = resolveStringParam(params.toolName);
       const agentIds = params.agentIds as string[] | undefined;
       const roleIds = params.roleIds as string[] | undefined;
       const action = params.action as "allow" | "deny" | "require_approval";
       const description = params.description as string | undefined;
-      
+
       if (!agentId || !toolName || !action) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId, toolName, and action are required"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "agentId, toolName, and action are required"),
+        );
         return;
       }
-      
+
       const config = loadConfig();
       const agents = listAgentEntries(config);
       const agentIndex = agents.findIndex((a) => normalizeAgentId(a.id) === agentId);
-      
+
       if (agentIndex === -1) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+        );
         return;
       }
-      
-      const currentPermissions = (agents[agentIndex] as any).permissions as AgentPermissionsConfig;
-      
+
+      const ruleEntry = agents[agentIndex];
+      const currentPermissions = ruleEntry ? getAgentPermissions(ruleEntry) : undefined;
+
       if (!currentPermissions) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} has no permissions config. Initialize first.`));
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Agent ${agentId} has no permissions config. Initialize first.`,
+          ),
+        );
         return;
       }
-      
+
       // 创建自定义规则
       const newRule = createCustomToolRule({
         toolName,
@@ -383,22 +474,24 @@ export const permissionHandlers: GatewayRequestHandlers = {
         action,
         description,
       });
-      
+
       // 添加规则
       const updatedPermissions = {
         ...currentPermissions,
         rules: [...currentPermissions.rules, newRule],
       };
-      
+
       // 更新配置
-      (agents[agentIndex] as any).permissions = updatedPermissions;
-      
+      if (ruleEntry) {
+        setAgentPermissions(ruleEntry, updatedPermissions);
+      }
+
       // 保存配置
-      await saveConfig(config);
-      
+      await writeConfigFile(config);
+
       // 清除权限缓存
       clearPermissionCache(agentId);
-      
+
       respond(true, {
         success: true,
         message: `Rule added for tool ${toolName}`,
@@ -408,7 +501,7 @@ export const permissionHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
     }
   },
-  
+
   /**
    * permission.constants - 获取权限系统的常量定义
    */

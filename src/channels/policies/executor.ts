@@ -14,7 +14,7 @@ import type {
   PolicyProcessContext,
 } from "./types.js";
 import { channelBindingResolver } from "../bindings/resolver.js";
-import { loadConfig } from "../../config/config.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import type { AgentChannelBindings } from "../../config/types.channel-bindings.js";
 
 /**

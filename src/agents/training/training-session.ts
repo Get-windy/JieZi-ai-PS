@@ -4,7 +4,7 @@
  * 支持专用培训会话创建和上下文管理
  */
 
-import { callGateway } from "../../gateway/call.js";
+import { callGateway } from "../../../upstream/src/gateway/call.js";
 import { LifecycleManager } from "../../lifecycle/lifecycle-manager.js";
 import { TrainingSystem } from "../../lifecycle/training-system.js";
 

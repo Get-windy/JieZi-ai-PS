@@ -4,9 +4,9 @@
  * 提供评估相关的RPC方法
  */
 
-import type { GatewayRequestHandlers } from "./types.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { assessmentSystem } from "../../lifecycle/assessment-system.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 
 export const assessmentHandlers: GatewayRequestHandlers = {
   /**

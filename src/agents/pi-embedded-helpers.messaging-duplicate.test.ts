@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMessagingToolDuplicate, normalizeTextForComparison } from "./pi-embedded-helpers.js";
+import { isMessagingToolDuplicate, normalizeTextForComparison } from "../../upstream/src/agents/pi-embedded-helpers.js";
 
 describe("normalizeTextForComparison", () => {
   it("lowercases text", () => {

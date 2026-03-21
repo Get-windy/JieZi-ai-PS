@@ -2,8 +2,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import type { GetReplyOptions } from "../auto-reply/types.js";
-import { __setMaxChatHistoryMessagesBytesForTest } from "./server-constants.js";
+import type { GetReplyOptions } from "../../upstream/src/auto-reply/types.js";
+import { __setMaxChatHistoryMessagesBytesForTest } from "../../upstream/src/gateway/server-constants.js";
 import {
   connectOk,
   getReplyFromConfig,
@@ -13,7 +13,7 @@ import {
   startServerWithClient,
   testState,
   writeSessionStore,
-} from "./test-helpers.js";
+} from "../../upstream/src/gateway/test-helpers.js";
 
 installGatewayTestHooks({ scope: "suite" });
 

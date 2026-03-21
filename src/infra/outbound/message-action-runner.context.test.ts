@@ -2,10 +2,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { slackPlugin } from "../../../extensions/slack/src/channel.js";
 import { telegramPlugin } from "../../../extensions/telegram/src/channel.js";
 import { whatsappPlugin } from "../../../extensions/whatsapp/src/channel.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import { setActivePluginRegistry } from "../../plugins/runtime.js";
-import { createTestRegistry } from "../../test-utils/channel-plugins.js";
-import { createIMessageTestPlugin } from "../../test-utils/imessage-test-plugin.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { setActivePluginRegistry } from "../../../upstream/src/plugins/runtime.js";
+import { createTestRegistry } from "../../../upstream/src/test-utils/channel-plugins.js";
+import { createIMessageTestPlugin } from "../../../upstream/src/test-utils/imessage-test-plugin.js";
 import { runMessageAction } from "./message-action-runner.js";
 
 const slackConfig = {

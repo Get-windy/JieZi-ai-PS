@@ -10,8 +10,8 @@ import { existsSync } from "node:fs";
 import { readFile, appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { normalizeAgentId } from "../../routing/session-key.js";
-import { ErrorCodes, errorShape } from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 // 数据目录：兼容 OPENCLAW_STATE_DIR 环境变量
 const DATA_DIR = (() => {

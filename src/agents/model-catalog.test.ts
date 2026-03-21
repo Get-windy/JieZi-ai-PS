@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
-import { resetLogger, setLoggerOverride } from "../logging/logger.js";
-import { __setModelCatalogImportForTest, loadModelCatalog } from "./model-catalog.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { resetLogger, setLoggerOverride } from "../../upstream/src/logging/logger.js";
+import { __setModelCatalogImportForTest, loadModelCatalog } from "../../upstream/src/agents/model-catalog.js";
 import {
   installModelCatalogTestHooks,
   mockCatalogImportFailThenRecover,
   type PiSdkModule,
-} from "./model-catalog.test-harness.js";
+} from "../../upstream/src/agents/model-catalog.test-harness.js";
 
 describe("loadModelCatalog", () => {
   installModelCatalogTestHooks();

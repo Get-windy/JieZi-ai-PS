@@ -1,9 +1,9 @@
+import type { ChatType } from "../../upstream/src/channels/chat-type.js";
+import { normalizeChatType } from "../../upstream/src/channels/chat-type.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { shouldLogVerbose } from "../../upstream/src/globals.js";
+import { logDebug } from "../../upstream/src/logger.js";
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
-import type { ChatType } from "../channels/chat-type.js";
-import { normalizeChatType } from "../channels/chat-type.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { shouldLogVerbose } from "../globals.js";
-import { logDebug } from "../logger.js";
 import { listBindings } from "./bindings.js";
 import {
   buildAgentMainSessionKey,
@@ -44,6 +44,8 @@ export type ResolvedAgentRoute = {
   sessionKey: string;
   /** Convenience alias for direct-chat collapse. */
   mainSessionKey: string;
+  /** Which session should receive inbound last-route updates. */
+  lastRoutePolicy: "main" | "session";
   /** Match description for debugging/logging. */
   matchedBy:
     | "binding.peer"
@@ -57,6 +59,20 @@ export type ResolvedAgentRoute = {
 };
 
 export { DEFAULT_ACCOUNT_ID, DEFAULT_AGENT_ID } from "./session-key.js";
+
+export function deriveLastRoutePolicy(params: {
+  sessionKey: string;
+  mainSessionKey: string;
+}): ResolvedAgentRoute["lastRoutePolicy"] {
+  return params.sessionKey === params.mainSessionKey ? "main" : "session";
+}
+
+export function resolveInboundLastRouteSessionKey(params: {
+  route: Pick<ResolvedAgentRoute, "lastRoutePolicy" | "mainSessionKey">;
+  sessionKey: string;
+}): string {
+  return params.route.lastRoutePolicy === "main" ? params.route.mainSessionKey : params.sessionKey;
+}
 
 function normalizeToken(value: string | undefined | null): string {
   return (value ?? "").trim().toLowerCase();
@@ -322,6 +338,7 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
       accountId,
       sessionKey,
       mainSessionKey,
+      lastRoutePolicy: deriveLastRoutePolicy({ sessionKey, mainSessionKey }),
       matchedBy,
     };
   };

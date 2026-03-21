@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { ChannelId } from "./plugins/types.js";
-import { resolveOAuthDir, resolveStateDir } from "../config/paths.js";
-import { resolveRequiredHomeDir } from "../infra/home-dir.js";
+import type { ChannelId } from "../../upstream/src/channels/plugins/types.js";
+import { resolveOAuthDir, resolveStateDir } from "../../upstream/src/config/paths.js";
+import { resolveRequiredHomeDir } from "../../upstream/src/infra/home-dir.js";
 import os from "node:os";
 
 export type ChannelPairingRequest = {

@@ -1,42 +1,43 @@
 import fs from "node:fs/promises";
-import { resolveHumanDelayConfig } from "../../agents/identity.js";
+import { resolveHumanDelayConfig } from "../../../upstream/src/agents/identity.js";
 import { resolveTextChunkLimit } from "../../auto-reply/chunk.js";
-import { hasControlCommand } from "../../auto-reply/command-detection.js";
-import { dispatchInboundMessage } from "../../auto-reply/dispatch.js";
+import { hasControlCommand } from "../../../upstream/src/auto-reply/command-detection.js";
+import { dispatchInboundMessage } from "../../../upstream/src/auto-reply/dispatch.js";
+import { getReplyFromConfig } from "../../auto-reply/reply/get-reply.js";
 import {
   createInboundDebouncer,
   resolveInboundDebounceMs,
-} from "../../auto-reply/inbound-debounce.js";
+} from "../../../upstream/src/auto-reply/inbound-debounce.js";
 import {
   clearHistoryEntriesIfEnabled,
   DEFAULT_GROUP_HISTORY_LIMIT,
   type HistoryEntry,
-} from "../../auto-reply/reply/history.js";
+} from "../../../upstream/src/auto-reply/reply/history.js";
 import { createReplyDispatcher } from "../../auto-reply/reply/reply-dispatcher.js";
-import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
-import { recordInboundSession } from "../../channels/session.js";
-import { loadConfig } from "../../config/config.js";
+import { createReplyPrefixOptions } from "../../../upstream/src/channels/reply-prefix.js";
+import { recordInboundSession } from "../../../upstream/src/channels/session.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import {
   resolveOpenProviderRuntimeGroupPolicy,
   resolveDefaultGroupPolicy,
   warnMissingProviderGroupPolicyFallbackOnce,
-} from "../../config/runtime-group-policy.js";
-import { readSessionUpdatedAt, resolveStorePath } from "../../config/sessions.js";
-import { danger, logVerbose, shouldLogVerbose, warn } from "../../globals.js";
-import { normalizeScpRemoteHost } from "../../infra/scp-host.js";
-import { waitForTransportReady } from "../../infra/transport-ready.js";
-import { mediaKindFromMime } from "../../media/constants.js";
+} from "../../../upstream/src/config/runtime-group-policy.js";
+import { readSessionUpdatedAt, resolveStorePath } from "../../../upstream/src/config/sessions.js";
+import { danger, logVerbose, shouldLogVerbose, warn } from "../../../upstream/src/globals.js";
+import { normalizeScpRemoteHost } from "../../../upstream/src/infra/scp-host.js";
+import { waitForTransportReady } from "../../../upstream/src/infra/transport-ready.js";
+import { mediaKindFromMime } from "../../../upstream/src/media/constants.js";
 import {
   isInboundPathAllowed,
   resolveIMessageAttachmentRoots,
   resolveIMessageRemoteAttachmentRoots,
-} from "../../media/inbound-path-policy.js";
-import { buildPairingReply } from "../../pairing/pairing-messages.js";
+} from "../../../upstream/src/media/inbound-path-policy.js";
+import { buildPairingReply } from "../../../upstream/src/pairing/pairing-messages.js";
 import {
   readChannelAllowFromStore,
   upsertChannelPairingRequest,
-} from "../../pairing/pairing-store.js";
-import { truncateUtf16Safe } from "../../utils.js";
+} from "../../../upstream/src/pairing/pairing-store.js";
+import { truncateUtf16Safe } from "../../../upstream/src/utils.js";
 import { resolveIMessageAccount } from "../accounts.js";
 import { createIMessageRpcClient } from "../client.js";
 import { DEFAULT_IMESSAGE_PROBE_TIMEOUT_MS } from "../constants.js";
@@ -422,6 +423,7 @@ export async function monitorIMessageProvider(opts: MonitorIMessageOpts = {}): P
       ctx: ctxPayload,
       cfg,
       dispatcher,
+      replyResolver: getReplyFromConfig,
       replyOptions: {
         disableBlockStreaming:
           typeof accountInfo.config.blockStreaming === "boolean"

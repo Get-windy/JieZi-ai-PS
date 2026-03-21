@@ -7,14 +7,14 @@ import {
   listProfilesForProvider,
   resolveApiKeyForProfile,
   resolveAuthProfileOrder,
-} from "../agents/auth-profiles.js";
-import { isNonSecretApiKeyMarker } from "../agents/model-auth-markers.js";
-import { resolveUsableCustomProviderApiKey } from "../agents/model-auth.js";
-import { normalizeProviderId } from "../agents/model-selection.js";
-import { loadConfig } from "../config/config.js";
-import { normalizeSecretInput } from "../utils/normalize-secret-input.js";
-import { resolveRequiredHomeDir } from "./home-dir.js";
-import type { UsageProviderId } from "./provider-usage.types.js";
+} from "../../upstream/src/agents/auth-profiles.js";
+import { isNonSecretApiKeyMarker } from "../../upstream/src/agents/model-auth-markers.js";
+import { resolveUsableCustomProviderApiKey } from "../../upstream/src/agents/model-auth.js";
+import { normalizeProviderId } from "../../upstream/src/agents/model-selection.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
+import { normalizeSecretInput } from "../../upstream/src/utils/normalize-secret-input.js";
+import { resolveRequiredHomeDir } from "../../upstream/src/infra/home-dir.js";
+import type { UsageProviderId } from "../../upstream/src/infra/provider-usage.types.js";
 
 export type ProviderAuth = {
   provider: UsageProviderId;

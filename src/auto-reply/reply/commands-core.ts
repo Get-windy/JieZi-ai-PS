@@ -1,14 +1,14 @@
 import fs from "node:fs/promises";
-import { logVerbose } from "../../globals.js";
-import { createInternalHookEvent, triggerInternalHook } from "../../hooks/internal-hooks.js";
-import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
-import { resolveSendPolicy } from "../../sessions/send-policy.js";
-import { shouldHandleTextCommands } from "../commands-registry.js";
+import { logVerbose } from "../../../upstream/src/globals.js";
+import { createInternalHookEvent, triggerInternalHook } from "../../../upstream/src/hooks/internal-hooks.js";
+import { getGlobalHookRunner } from "../../../upstream/src/plugins/hook-runner-global.js";
+import { resolveSendPolicy } from "../../../upstream/src/sessions/send-policy.js";
+import { shouldHandleTextCommands } from "../../../upstream/src/auto-reply/commands-registry.js";
 import { handleAllowlistCommand } from "./commands-allowlist.js";
 import { handleApproveCommand } from "./commands-approve.js";
-import { handleBashCommand } from "./commands-bash.js";
-import { handleCompactCommand } from "./commands-compact.js";
-import { handleConfigCommand, handleDebugCommand } from "./commands-config.js";
+import { handleBashCommand } from "../../../upstream/src/auto-reply/reply/commands-bash.js";
+import { handleCompactCommand } from "../../../upstream/src/auto-reply/reply/commands-compact.js";
+import { handleConfigCommand, handleDebugCommand } from "../../../upstream/src/auto-reply/reply/commands-config.js";
 import {
   handleCommandsListCommand,
   handleContextCommand,
@@ -16,9 +16,9 @@ import {
   handleHelpCommand,
   handleStatusCommand,
   handleWhoamiCommand,
-} from "./commands-info.js";
+} from "../../../upstream/src/auto-reply/reply/commands-info.js";
 import { handleModelsCommand } from "./commands-models.js";
-import { handlePluginCommand } from "./commands-plugin.js";
+import { handlePluginCommand } from "../../../upstream/src/auto-reply/reply/commands-plugin.js";
 import {
   handleAbortTrigger,
   handleActivationCommand,
@@ -28,8 +28,8 @@ import {
   handleStopCommand,
   handleUsageCommand,
 } from "./commands-session.js";
-import { handleSubagentsCommand } from "./commands-subagents.js";
-import { handleTtsCommands } from "./commands-tts.js";
+import { handleSubagentsCommand } from "../../../upstream/src/auto-reply/reply/commands-subagents.js";
+import { handleTtsCommands } from "../../../upstream/src/auto-reply/reply/commands-tts.js";
 import type {
   CommandHandler,
   CommandHandlerResult,

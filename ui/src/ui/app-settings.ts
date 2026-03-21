@@ -27,6 +27,7 @@ import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
 import { loadSessions } from "./controllers/sessions.ts";
 import { loadSkills } from "./controllers/skills.ts";
+import { loadSuperAdmins } from "./controllers/super-admin.ts";
 import {
   inferBasePathFromPathname,
   normalizeBasePath,
@@ -303,6 +304,71 @@ export async function refreshActiveTab(host: SettingsHost) {
   if (host.tab === "organization-chart") {
     // TODO: 加载组织架构数据
     console.log("Load organization chart data");
+  }
+  if (host.tab === "organization-permissions") {
+    // 切换到组织与权限页面时，自动加载组织数据
+    void import("./app-render.js")
+      .then(async (_m) => {
+        // app-render 中的 loadOrganizationData 是模块级函数，不对外导出。
+        // 通过直接调用 org.list RPC 进行加载。
+        const app = host as unknown as OpenClawApp;
+        if (app.client && !app.organizationDataLoading) {
+          app.organizationDataLoading = true;
+          app.organizationDataError = null;
+          try {
+            const result = await app.client.request("org.list", {
+              includeDepartments: true,
+              includeTeams: true,
+              includeReporting: true,
+            });
+            const agentNodes = (app.agentsList?.agents || []).map((a) => ({
+              id: a.id,
+              name: (a as { name?: string }).name || a.id,
+              permissionLevel: 1,
+            }));
+            app.organizationData = {
+              organizations: (result?.departments || []).map((d, i) => ({
+                id: d.id,
+                name: d.name,
+                description: d.description,
+                parentId: d.parentId,
+                level: i,
+                createdAt: d.createdAt || Date.now(),
+                agentCount: (d.memberIds || []).length,
+              })),
+              teams: (result?.teams || []).map((t) => ({
+                id: t.id,
+                name: t.name,
+                organizationId: t.parentId || "",
+                leaderId: t.managerId,
+                memberIds: t.memberIds || [],
+                createdAt: t.createdAt || Date.now(),
+              })),
+              agents: agentNodes,
+              relationships: (result?.reportingLines || []).map((r) => ({
+                sourceId: r.subordinateId,
+                targetId: r.supervisorId,
+                type: "reports_to" as const,
+              })),
+              statistics: {
+                totalOrganizations: (result?.departments || []).length,
+                totalTeams: (result?.teams || []).length,
+                totalAgents: agentNodes.length,
+                averageTeamSize: 0,
+                permissionDistribution: {},
+              },
+            };
+          } catch (err) {
+            app.organizationDataError = String(err);
+          } finally {
+            app.organizationDataLoading = false;
+          }
+        }
+      })
+      .catch((err) => console.warn("Failed to load org data:", err));
+    await loadApprovals(host as unknown as OpenClawApp);
+    await loadApprovalStats(host as unknown as OpenClawApp);
+    await loadSuperAdmins(host as unknown as OpenClawApp);
   }
   if (host.tab === "collaboration") {
     // 默认加载群组管理数据

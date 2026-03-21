@@ -1,20 +1,20 @@
 import { isIP } from "node:net";
-import { resolveSandboxConfigForAgent } from "../agents/sandbox.js";
-import { execDockerRaw } from "../agents/sandbox/docker.js";
+import { resolveSandboxConfigForAgent } from "../../upstream/src/agents/sandbox.js";
+import { execDockerRaw } from "../../upstream/src/agents/sandbox/docker.js";
 import { resolveBrowserConfig, resolveProfile } from "../browser/config.js";
-import { resolveBrowserControlAuth } from "../browser/control-auth.js";
-import { listChannelPlugins } from "../channels/plugins/index.js";
-import { formatCliCommand } from "../cli/command-format.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { resolveConfigPath, resolveStateDir } from "../config/paths.js";
-import { resolveGatewayAuth } from "../gateway/auth.js";
-import { buildGatewayConnectionDetails } from "../gateway/call.js";
-import { resolveGatewayProbeAuth } from "../gateway/probe-auth.js";
-import { probeGateway } from "../gateway/probe.js";
+import { resolveBrowserControlAuth } from "../../upstream/src/browser/control-auth.js";
+import { listChannelPlugins } from "../../upstream/src/channels/plugins/index.js";
+import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { resolveConfigPath, resolveStateDir } from "../../upstream/src/config/paths.js";
+import { resolveGatewayAuth } from "../../upstream/src/gateway/auth.js";
+import { buildGatewayConnectionDetails } from "../../upstream/src/gateway/call.js";
+import { resolveGatewayProbeAuth } from "../../upstream/src/gateway/probe-auth.js";
+import { probeGateway } from "../../upstream/src/gateway/probe.js";
 import {
   listInterpreterLikeSafeBins,
   resolveMergedSafeBinProfileFixtures,
-} from "../infra/exec-safe-bin-runtime-policy.js";
+} from "../../upstream/src/infra/exec-safe-bin-runtime-policy.js";
 import { collectChannelSecurityFindings } from "./audit-channel.js";
 import {
   collectAttackSurfaceSummaryFindings,
@@ -43,10 +43,10 @@ import {
   formatPermissionDetail,
   formatPermissionRemediation,
   inspectPathPermissions,
-} from "./audit-fs.js";
+} from "../../upstream/src/security/audit-fs.js";
 import { collectEnabledInsecureOrDangerousFlags } from "./dangerous-config-flags.js";
 import { DEFAULT_GATEWAY_HTTP_TOOL_DENY } from "./dangerous-tools.js";
-import type { ExecFn } from "./windows-acl.js";
+import type { ExecFn } from "../../upstream/src/security/windows-acl.js";
 
 export type SecurityAuditSeverity = "info" | "warn" | "critical";
 

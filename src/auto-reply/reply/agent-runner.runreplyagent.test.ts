@@ -2,14 +2,14 @@ import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SessionEntry } from "../../config/sessions.js";
-import * as sessions from "../../config/sessions.js";
-import type { TypingMode } from "../../config/types.js";
-import { withStateDirEnv } from "../../test-helpers/state-dir-env.js";
+import type { SessionEntry } from "../../../upstream/src/config/sessions.js";
+import * as sessions from "../../../upstream/src/config/sessions.js";
+import type { TypingMode } from "../../../upstream/src/config/types.js";
+import { withStateDirEnv } from "../../../upstream/src/test-helpers/state-dir-env.js";
 import type { TemplateContext } from "../templating.js";
-import type { GetReplyOptions } from "../types.js";
-import type { FollowupRun, QueueSettings } from "./queue.js";
-import { createMockTypingController } from "./test-helpers.js";
+import type { GetReplyOptions } from "../../../upstream/src/auto-reply/types.js";
+import type { FollowupRun, QueueSettings } from "../../../upstream/src/auto-reply/reply/queue.js";
+import { createMockTypingController } from "../../../upstream/src/auto-reply/reply/test-helpers.js";
 
 type AgentRunParams = {
   onPartialReply?: (payload: { text?: string }) => Promise<void> | void;
@@ -71,7 +71,7 @@ vi.mock("../../agents/cli-runner.js", () => ({
   runCliAgent: (params: unknown) => state.runCliAgentMock(params),
 }));
 
-vi.mock("./queue.js", () => ({
+vi.mock("../../../upstream/src/auto-reply/reply/queue.js", () => ({
   enqueueFollowupRun: vi.fn(),
   scheduleFollowupDrain: vi.fn(),
 }));

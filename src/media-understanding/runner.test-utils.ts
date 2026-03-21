@@ -2,8 +2,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { MsgContext } from "../auto-reply/templating.js";
-import { withEnvAsync } from "../test-utils/env.js";
-import { createMediaAttachmentCache, normalizeMediaAttachments } from "./runner.js";
+import { withEnvAsync } from "../../upstream/src/test-utils/env.js";
+import { createMediaAttachmentCache, normalizeMediaAttachments } from "../../upstream/src/media-understanding/runner.js";
 
 type AudioFixtureParams = {
   ctx: MsgContext;

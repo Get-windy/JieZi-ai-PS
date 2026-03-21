@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./docker.js", () => ({
+vi.mock("../../../upstream/src/agents/sandbox/docker.js", () => ({
   execDockerRaw: vi.fn(),
 }));
 
-import { execDockerRaw } from "./docker.js";
+import { execDockerRaw } from "../../../upstream/src/agents/sandbox/docker.js";
 import { createSandboxFsBridge } from "./fs-bridge.js";
-import { createSandboxTestContext } from "./test-fixtures.js";
-import type { SandboxContext } from "./types.js";
+import { createSandboxTestContext } from "../../../upstream/src/agents/sandbox/test-fixtures.js";
+import type { SandboxContext } from "../../../upstream/src/agents/sandbox/types.js";
 
 const mockedExecDockerRaw = vi.mocked(execDockerRaw);
 

@@ -4,9 +4,9 @@
  * 用于动态更新 Agent 配置，包括 subagents.allowAgents 等
  */
 
-import { loadConfig, writeConfigFile } from "../config/config.js";
+import { loadConfig, writeConfigFile } from "../../upstream/src/config/config.js";
 import { normalizeAgentId } from "../routing/session-key.js";
-import type { OpenClawConfig, AgentEntry } from "../config/config.js";
+import type { OpenClawConfig, AgentEntry } from "../../upstream/src/config/config.js";
 
 /**
  * 将指定 Agent ID 添加到 main Agent 的 subagents.allowAgents 列表
