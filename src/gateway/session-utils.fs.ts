@@ -6,11 +6,11 @@ import {
   resolveSessionTranscriptPath,
   resolveSessionTranscriptPathInDir,
 } from "../../upstream/src/config/sessions.js";
+import { stripEnvelope } from "../../upstream/src/gateway/chat-sanitize.js";
 import { resolveRequiredHomeDir } from "../../upstream/src/infra/home-dir.js";
 import { hasInterSessionUserProvenance } from "../../upstream/src/sessions/input-provenance.js";
 import { stripInlineDirectiveTagsForDisplay } from "../../upstream/src/utils/directive-tags.js";
 import { extractToolCallNames, hasToolCall } from "../../upstream/src/utils/transcript-tools.js";
-import { stripEnvelope } from "../../upstream/src/gateway/chat-sanitize.js";
 import type { SessionPreviewItem } from "./session-utils.types.js";
 
 type SessionTitleFields = {
@@ -168,6 +168,15 @@ export function archiveFileOnDisk(filePath: string, reason: ArchiveFileReason): 
   return archived;
 }
 
+function canonicalizePathForComparison(filePath: string): string {
+  const resolved = path.resolve(filePath);
+  try {
+    return fs.realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
 /**
  * Archives all transcript files for a given session.
  * Best-effort: silently skips files that don't exist or fail to rename.
@@ -178,19 +187,35 @@ export function archiveSessionTranscripts(opts: {
   sessionFile?: string;
   agentId?: string;
   reason: "reset" | "deleted";
+  /**
+   * When true, only archive files resolved under the session store directory.
+   * This prevents maintenance operations from mutating paths outside the agent sessions dir.
+   */
+  restrictToStoreDir?: boolean;
 }): string[] {
   const archived: string[] = [];
+  const storeDir =
+    opts.restrictToStoreDir && opts.storePath
+      ? canonicalizePathForComparison(path.dirname(opts.storePath))
+      : null;
   for (const candidate of resolveSessionTranscriptCandidates(
     opts.sessionId,
     opts.storePath,
     opts.sessionFile,
     opts.agentId,
   )) {
-    if (!fs.existsSync(candidate)) {
+    const candidatePath = canonicalizePathForComparison(candidate);
+    if (storeDir) {
+      const relative = path.relative(storeDir, candidatePath);
+      if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+        continue;
+      }
+    }
+    if (!fs.existsSync(candidatePath)) {
       continue;
     }
     try {
-      archived.push(archiveFileOnDisk(candidate, opts.reason));
+      archived.push(archiveFileOnDisk(candidatePath, opts.reason));
     } catch {
       // Best-effort.
     }
@@ -223,7 +248,7 @@ function parseArchivedTimestamp(fileName: string, reason: ArchiveFileReason): nu
 export async function cleanupArchivedSessionTranscripts(opts: {
   directories: string[];
   olderThanMs: number;
-  reason?: "deleted";
+  reason?: ArchiveFileReason;
   nowMs?: number;
 }): Promise<{ removed: number; scanned: number }> {
   if (!Number.isFinite(opts.olderThanMs) || opts.olderThanMs < 0) {

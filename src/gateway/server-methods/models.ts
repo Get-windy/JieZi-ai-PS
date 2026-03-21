@@ -16,6 +16,7 @@ import {
 } from "../../../upstream/src/gateway/protocol/index.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { resolveDefaultAgentId, resolveAgentDir } from "../../agents/agent-scope.js";
+import { forceRefreshBenchmarkData } from "../../agents/arena-benchmarks.js";
 
 // 模型管理配置文件路径 - UI 管理系统的主存储
 const MODEL_MANAGEMENT_FILE = path.join(STATE_DIR, "model-management.json");
@@ -2538,6 +2539,8 @@ export const modelsHandlers: GatewayRequestHandlers = {
         config: mergedConfig,
       });
       respond(true, { config: modelConfig }, undefined);
+      // 新模型加入后强制刷新 Arena 基准数据
+      void forceRefreshBenchmarkData().catch(() => {});
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }

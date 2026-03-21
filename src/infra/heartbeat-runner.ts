@@ -639,6 +639,9 @@ function resolveHeartbeatRunPrompt(params: {
       "\n\nPlease execute these tasks now using your available tools. " +
       "Call the relevant tools to complete the work described above. " +
       "When all tasks are done, call task_report_to_supervisor to report completion. " +
+      "If you encounter any problem or blocker that prevents you from completing the task, " +
+      'immediately call task_report_to_supervisor with status="blocked" and describe the issue in errorMessage, ' +
+      "so the supervisor can be notified and coordinate a solution. " +
       "Do NOT just acknowledge the tasks — actually execute them.";
   } else if (hasExecCompletion) {
     basePrompt = buildExecEventPrompt({ deliverToUser: params.canRelayToUser });

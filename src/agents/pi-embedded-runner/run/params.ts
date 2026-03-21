@@ -1,13 +1,19 @@
 import type { ImageContent } from "@mariozechner/pi-ai";
-import type { ReasoningLevel, ThinkLevel, VerboseLevel } from "../../../auto-reply/thinking.js";
+import type {
+  ExecElevatedDefaults,
+  ExecToolDefaults,
+} from "../../../../upstream/src/agents/bash-tools.js";
+import type {
+  BlockReplyChunking,
+  ToolResultFormat,
+} from "../../../../upstream/src/agents/pi-embedded-subscribe.js";
+import type { SkillSnapshot } from "../../../../upstream/src/agents/skills.js";
 import type { AgentStreamParams } from "../../../../upstream/src/commands/agent/types.js";
 import type { OpenClawConfig } from "../../../../upstream/src/config/config.js";
 import type { enqueueCommand } from "../../../../upstream/src/process/command-queue.js";
 import type { InputProvenance } from "../../../../upstream/src/sessions/input-provenance.js";
-import type { ExecElevatedDefaults, ExecToolDefaults } from "../../../../upstream/src/agents/bash-tools.js";
+import type { ReasoningLevel, ThinkLevel, VerboseLevel } from "../../../auto-reply/thinking.js";
 import type { BlockReplyPayload } from "../../pi-embedded-payloads.js";
-import type { BlockReplyChunking, ToolResultFormat } from "../../../../upstream/src/agents/pi-embedded-subscribe.js";
-import type { SkillSnapshot } from "../../../../upstream/src/agents/skills.js";
 
 // Simplified tool definition for client-provided tools (OpenResponses hosted tools)
 export type ClientToolDefinition = {
@@ -79,6 +85,15 @@ export type RunEmbeddedPiAgentParams = {
   toolResultFormat?: ToolResultFormat;
   /** If true, suppress tool error warning payloads for this run (including mutating tools). */
   suppressToolErrorWarnings?: boolean;
+  fastMode?: boolean;
+  /** Bootstrap context mode for workspace file injection. */
+  bootstrapContextMode?: "full" | "lightweight";
+  /** Run kind hint for context mode behavior. */
+  bootstrapContextRunKind?: "default" | "heartbeat" | "cron";
+  /** Seen bootstrap truncation warning signatures for this session (once mode dedupe). */
+  bootstrapPromptWarningSignaturesSeen?: string[];
+  /** Last shown bootstrap truncation warning signature for this session. */
+  bootstrapPromptWarningSignature?: string;
   execOverrides?: Pick<ExecToolDefaults, "host" | "security" | "ask" | "node">;
   bashElevated?: ExecElevatedDefaults;
   timeoutMs: number;
@@ -103,4 +118,10 @@ export type RunEmbeddedPiAgentParams = {
   streamParams?: AgentStreamParams;
   ownerNumbers?: string[];
   enforceFinalTag?: boolean;
+  /**
+   * 外层调用方是否配置了动态 fallback（如智能路由提供的候选列表）。
+   * 当为 true 时，让内层 run.ts 认为 fallbackConfigured=true，这样超时时会 throw FailoverError
+   * 而不是 surface_error，使外层 runWithModelFallback 能够捕获并切换到备选模型。
+   */
+  hasDynamicFallbacks?: boolean;
 };

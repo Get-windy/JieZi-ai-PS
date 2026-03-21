@@ -1667,6 +1667,7 @@ export function renderAgents(props: AgentsProps) {
                       onFileSave: props.onFileSave,
                       onAddFile: props.onAddFile,
                       onOpenFolder: props.onOpenFolder,
+                      onMigrateWorkspace: props.onMigrateWorkspace,
                     })
                   : nothing
               }
@@ -1861,10 +1862,13 @@ export function renderAgents(props: AgentsProps) {
                           return;
                         }
                         // oxlint-disable-next-line typescript/no-explicit-any
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const updated = {
                           ...current,
-                          rules: current.rules.map((r: any) =>
-                            r.id === ruleId ? { ...r, ...updates } : r,
+                          rules: current.rules.map((r: unknown) =>
+                            (r as { id: string }).id === ruleId
+                              ? { ...(r as object), ...updates }
+                              : r,
                           ),
                         };
                         await props.onPermissionsConfigChange?.(agentId, updated);
@@ -1875,9 +1879,12 @@ export function renderAgents(props: AgentsProps) {
                           return;
                         }
                         // oxlint-disable-next-line typescript/no-explicit-any
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const updated = {
                           ...current,
-                          rules: current.rules.filter((r: any) => r.id !== ruleId),
+                          rules: current.rules.filter(
+                            (r: unknown) => (r as { id: string }).id !== ruleId,
+                          ),
                         };
                         await props.onPermissionsConfigChange?.(agentId, updated);
                       },
@@ -1887,10 +1894,13 @@ export function renderAgents(props: AgentsProps) {
                           return;
                         }
                         // oxlint-disable-next-line typescript/no-explicit-any
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const updated = {
                           ...current,
-                          rules: current.rules.map((r: any) =>
-                            r.id === ruleId ? { ...r, enabled: !enabled } : r,
+                          rules: current.rules.map((r: unknown) =>
+                            (r as { id: string }).id === ruleId
+                              ? { ...(r as object), enabled: !enabled }
+                              : r,
                           ),
                         };
                         await props.onPermissionsConfigChange?.(agentId, updated);
@@ -2612,6 +2622,7 @@ function renderAgentFiles(params: {
   onFileSave: (name: string) => void;
   onAddFile?: (agentId: string, name: string) => void;
   onOpenFolder?: (folderPath: string) => void;
+  onMigrateWorkspace?: (agentId: string) => void | Promise<void>;
 }) {
   const list = params.agentFilesList?.agentId === params.agentId ? params.agentFilesList : null;
   const files = list?.files ?? [];
@@ -2629,7 +2640,22 @@ function renderAgentFiles(params: {
           <div class="card-sub">${t("agents.files.subtitle")}</div>
         </div>
         <div class="row" style="gap: 8px;">
-          ${list && params.onOpenFolder ? html`
+          ${
+            params.onMigrateWorkspace
+              ? html`
+            <button
+              class="btn btn--sm"
+              @click=${() => params.onMigrateWorkspace!(params.agentId)}
+              title="${t("agents.migrate_workspace")}"
+            >
+              \u{1F4BB} ${t("agents.migrate_workspace")}
+            </button>
+          `
+              : nothing
+          }
+          ${
+            list && params.onOpenFolder
+              ? html`
             <button
               class="btn btn--sm"
               @click=${() => params.onOpenFolder!(list.workspace)}
@@ -2637,8 +2663,12 @@ function renderAgentFiles(params: {
             >
               \u{1F4C2} \u5728\u6587\u4ef6\u5939\u4e2d\u6253\u5f00
             </button>
-          ` : nothing}
-          ${params.onAddFile ? html`
+          `
+              : nothing
+          }
+          ${
+            params.onAddFile
+              ? html`
             <button
               class="btn btn--sm"
               ?disabled=${params.agentFilesLoading}
@@ -2651,7 +2681,9 @@ function renderAgentFiles(params: {
             >
               + \u6dfb\u52a0\u6587\u4ef6
             </button>
-          ` : nothing}
+          `
+              : nothing
+          }
           <button
             class="btn btn--sm"
             ?disabled=${params.agentFilesLoading}

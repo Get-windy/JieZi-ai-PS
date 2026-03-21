@@ -1,9 +1,14 @@
 import type { ExecToolDefaults } from "../../../../upstream/src/agents/bash-tools.js";
 import type { SkillSnapshot } from "../../../../upstream/src/agents/skills.js";
+import type {
+  ElevatedLevel,
+  ReasoningLevel,
+  ThinkLevel,
+  VerboseLevel,
+} from "../../../../upstream/src/auto-reply/reply/directives.js";
 import type { OpenClawConfig } from "../../../../upstream/src/config/config.js";
 import type { SessionEntry } from "../../../../upstream/src/config/sessions.js";
 import type { OriginatingChannelType } from "../../templating.js";
-import type { ElevatedLevel, ReasoningLevel, ThinkLevel, VerboseLevel } from "../../../../upstream/src/auto-reply/reply/directives.js";
 
 export type QueueMode = "steer" | "followup" | "collect" | "steer-backlog" | "interrupt" | "queue";
 
@@ -79,6 +84,8 @@ export type FollowupRun = {
     ownerNumbers?: string[];
     extraSystemPrompt?: string;
     enforceFinalTag?: boolean;
+    /** 智能路由提供的 fallback 模型列表（provider/model 格式）—— 当首选模型超时/失败时自动切换 */
+    smartRoutingFallbacks?: string[];
   };
 };
 

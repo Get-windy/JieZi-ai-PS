@@ -804,7 +804,9 @@ export const AgentEntrySchema = z
     modelAccounts: z
       .object({
         accounts: z.array(z.string()),
-        routingMode: z.union([z.literal("manual"), z.literal("smart"), z.literal("roundRobin")]).optional(),
+        routingMode: z
+          .union([z.literal("manual"), z.literal("smart"), z.literal("roundRobin")])
+          .optional(),
         defaultAccountId: z.string().optional(),
         smartRouting: z
           .object({
@@ -813,14 +815,45 @@ export const AgentEntrySchema = z
             costWeight: z.number().optional(),
             speedWeight: z.number().optional(),
             eloWeight: z.number().optional(),
+            enableCostOptimization: z.boolean().optional(),
           })
           .strict()
           .optional(),
+        accountConfigs: z
+          .array(
+            z
+              .object({
+                accountId: z.string(),
+                enabled: z.boolean().optional(),
+              })
+              .passthrough(),
+          )
+          .optional(),
+        enableSessionPinning: z.boolean().optional(),
       })
       .strict()
       .optional(),
     // Local overlay: per-agent permissions config (not in upstream).
-    permissions: z.record(z.string(), z.unknown()).optional(),
+    permissions: z
+      .object({
+        rules: z
+          .array(
+            z
+              .object({
+                id: z.string(),
+                toolName: z.string(),
+                action: z.enum(["allow", "deny", "ask"]),
+                roleIds: z.array(z.string()).optional(),
+                enabled: z.boolean().optional(),
+              })
+              .passthrough(),
+          )
+          .optional(),
+        roles: z.array(z.unknown()).optional(),
+        groups: z.array(z.unknown()).optional(),
+      })
+      .passthrough()
+      .optional(),
   })
   .strict();
 

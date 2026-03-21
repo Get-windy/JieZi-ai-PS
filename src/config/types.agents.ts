@@ -71,6 +71,21 @@ export type AgentConfig = {
   workspace?: string;
   agentDir?: string;
   model?: AgentModelConfig;
+  /** Local extension: model accounts for smart routing */
+  modelAccounts?: AgentModelAccountsConfig;
+  /** Local extension: permissions system */
+  permissions?: {
+    rules?: Array<{
+      id: string;
+      toolName: string;
+      action: "allow" | "deny" | "ask";
+      roleIds?: string[];
+      enabled?: boolean;
+      [key: string]: unknown;
+    }>;
+    roles?: unknown[];
+    groups?: unknown[];
+  };
   /** Optional allowlist of skills for this agent (omit = all skills; empty = none). */
   skills?: string[];
   memorySearch?: MemorySearchConfig;

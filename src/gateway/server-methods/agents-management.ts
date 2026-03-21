@@ -456,7 +456,7 @@ async function updateAgentField(
 async function scheduleNextTaskForAgent(
   agentId: string,
   completedTaskId: string,
-  projectId?: string,
+  _projectId?: string,
 ): Promise<void> {
   try {
     // 先检查是否已有 in-progress 任务（防止并发触发导致双 in-progress 违规）
@@ -472,10 +472,11 @@ async function scheduleNextTaskForAgent(
       return;
     }
 
+    // 查全量 todo（不按 projectId 过滤），避免跨项目/无项目任务被遗漏
+    // projectId 仅用于排序偏好（同项目优先），不作为过滤条件
     const todoTasks = await taskStorage.listTasks({
       assigneeId: agentId,
       status: ["todo"],
-      ...(projectId ? { projectId } : {}),
     });
     // listTasks 已按优先级+权重+创建时间排序
     let nextTask: Task | undefined;
@@ -3564,13 +3565,15 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           finalStatus === "done"
             ? "✅ 已完成"
             : finalStatus === "blocked"
-              ? "⚠️ 已阻塞"
+              ? "⚠️ 已阻塞（需要你介入协调）"
               : finalStatus === "cancelled"
                 ? "❌ 已取消"
                 : `状态: ${finalStatus}`;
 
         const reportLines = [
-          `[TASK REPORT] ${reporterId} 任务汇报`,
+          finalStatus === "blocked"
+            ? `[TASK BLOCKED - ACTION REQUIRED] ${reporterId} 遇到问题，无法继续执行，需要主控介入`
+            : `[TASK REPORT] ${reporterId} 任务汇报`,
           `汇报时间: ${new Date().toISOString()} (刚刚完成)`,
           ``,
           `完成任务: ${statusLabel}`,
@@ -3603,6 +3606,17 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
                 .filter(Boolean)
                 .join("\n")
             : `待执行任务: 无`,
+          finalStatus === "blocked"
+            ? [
+                ``,
+                `❗ 需要主控介入：`,
+                `请检查上述错误信息，并采取以下其中一种操作：`,
+                `  - 调度分配: 用 agent_assign_task 将阻塞源头任务分配给其他 agent`,
+                `  - 延时继续: 用 agent.task.manage action=extend 延长该任务的执行时间`,
+                `  - 取消任务: 用 agent.task.manage action=cancel 取消该任务`,
+                `  - 重置重试: 用 agent.task.manage action=reset 将该任务重置回 todo 队列`,
+              ].join("\n")
+            : null,
         ]
           .filter((l) => l !== null)
           .join("\n");

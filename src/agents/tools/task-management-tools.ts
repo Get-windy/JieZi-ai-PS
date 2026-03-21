@@ -85,14 +85,20 @@ const TaskListToolSchema = Type.Object({
   priority: Type.Optional(TaskPriority),
   /** 过滤负责人（可选） */
   assignee: Type.Optional(Type.String({ maxLength: 64 })),
-  /** 过滤标签（可选） */
-  tag: Type.Optional(Type.String({ maxLength: 32 })),
   /** 只显示今日到期的任务（可选） */
   dueToday: Type.Optional(Type.Boolean()),
   /** 最大返回数量（可选，默认20） */
   limit: Type.Optional(Type.Number({ minimum: 1, maximum: 100 })),
   /** 过滤所属项目（可选，如 "wo-shi-renlei"） */
   project: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 过滤标签（可选） */
+  tag: Type.Optional(Type.String({ maxLength: 32 })),
+  /**
+   * 只显示分配给自己的任务（可选，默认 false）
+   * 设为 true 时等效于 assignee=currentAgentId，适合 worker agent 查询自己的待办
+   * 设为 false 时不过滤 assignee，适合 coordinator 查看全局任务
+   */
+  selfOnly: Type.Optional(Type.Boolean()),
 });
 
 /**
@@ -224,7 +230,7 @@ export function createTaskCreateTool(opts?: {
 /**
  * 创建任务列表查询工具
  */
-export function createTaskListTool(_opts?: {
+export function createTaskListTool(opts?: {
   /** 当前操作者的智能助手ID */
   currentAgentId?: string;
 }): AnyAgentTool {
@@ -232,7 +238,7 @@ export function createTaskListTool(_opts?: {
     label: "Task List",
     name: "task_list",
     description:
-      "List tasks with optional filters: status (todo/in-progress/done/review/blocked/cancelled), priority, assignee, tag, dueToday, project (project ID for multi-project isolation). Returns a list of tasks matching the criteria.",
+      "List tasks with optional filters: status (todo/in-progress/done/review/blocked/cancelled), priority, assignee, tag, dueToday, project (project ID for multi-project isolation), selfOnly (true = only my tasks, false = all tasks). Returns a list of tasks matching the criteria.",
     parameters: TaskListToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -243,16 +249,20 @@ export function createTaskListTool(_opts?: {
       const dueToday = typeof params.dueToday === "boolean" ? params.dueToday : undefined;
       const limit = typeof params.limit === "number" ? params.limit : 20;
       const project = readStringParam(params, "project");
+      const selfOnly = typeof params.selfOnly === "boolean" ? params.selfOnly : false;
       const gatewayOpts = readGatewayCallOptions(params);
+
+      // selfOnly=true 时自动用 currentAgentId 作为 assignee 过滤
+      // 适合 worker agent 只查自己的任务，避免大量无关任务干扰上下文
+      const resolvedAssignee =
+        assignee || (selfOnly && opts?.currentAgentId ? opts.currentAgentId : undefined);
 
       try {
         // 调用 task.list RPC
-        // 注意：不将 currentAgentId 作为默认 assignee 过滤条件
-        // 否则 coordinator 调用时只能看到分配给自己的任务，无法查看团队整体任务
         const response = await callGatewayTool("task.list", gatewayOpts, {
           status,
           priority,
-          assignee: assignee || undefined,
+          assignee: resolvedAssignee,
           tag,
           dueToday,
           limit,
@@ -274,10 +284,11 @@ export function createTaskListTool(_opts?: {
           filters: {
             status,
             priority,
-            assignee,
+            assignee: resolvedAssignee,
             tag,
             dueToday,
             project: project || undefined,
+            selfOnly,
           },
         });
       } catch (error) {

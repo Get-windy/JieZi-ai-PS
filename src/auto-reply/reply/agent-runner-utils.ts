@@ -153,15 +153,17 @@ export const resolveEnforceFinalTag = (run: FollowupRun["run"], provider: string
   Boolean(run.enforceFinalTag || isReasoningTagProvider(provider));
 
 export function resolveModelFallbackOptions(run: FollowupRun["run"]) {
+  // 优先使用智能路由提供的 fallback 列表（排序好的次优候选）
+  // 如果没有，则回退到 agent 配置的 model.fallbacks
+  const fallbacksOverride =
+    (run as { smartRoutingFallbacks?: string[] }).smartRoutingFallbacks ??
+    resolveAgentModelFallbacksOverride(run.config, resolveAgentIdFromSessionKey(run.sessionKey));
   return {
     cfg: run.config,
     provider: run.provider,
     model: run.model,
     agentDir: run.agentDir,
-    fallbacksOverride: resolveAgentModelFallbacksOverride(
-      run.config,
-      resolveAgentIdFromSessionKey(run.sessionKey),
-    ),
+    fallbacksOverride,
   };
 }
 

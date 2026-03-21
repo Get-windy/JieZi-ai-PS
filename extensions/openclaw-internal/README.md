@@ -15,21 +15,37 @@ extensions/openclaw-internal/
 
 ### 已实现的工具
 
-#### Groups.* - 群组工作空间管理
+#### Groups.\* - 群组工作空间管理
+
 - `groups.files.list` - 列出群组工作空间文件
 - `groups.files.get` - 读取文件内容
 - `groups.files.set` - 写入/创建文件
 - `groups.files.delete` - 删除文件
 - `groups.workspace.getDir` - 获取工作空间路径
 
+#### Project.\* - 项目管理工具
+
+- `project.create` - 创建新项目
+- `project.list` - 列出所有项目
+
+#### Team.\* - 团队协作工具
+
+- `team.notify` - 发送通知给团队成员
+- `team.list` - 列出团队成员
+
+#### Task.\* - 任务管理工具
+
+- `task.create` - 创建新任务
+- `task.list` - 列出任务
+
 ### 计划中的工具类别
 
-- **project.*** - 项目管理工具
-- **team.*** - 团队协作工具  
-- **code.*** - 代码审查和开发工具
-- **deploy.*** - 部署和 DevOps 工具
-- **notify.*** - 通知工具
-- **report.*** - 报告和分析工具
+- **project.\*** - 项目管理工具
+- **team.\*** - 团队协作工具
+- **code.\*** - 代码审查和开发工具
+- **deploy.\*** - 部署和 DevOps 工具
+- **notify.\*** - 通知工具
+- **report.\*** - 报告和分析工具
 
 ## ➕ 如何添加新工具
 
@@ -77,7 +93,7 @@ api.registerTool({
   "plugins": {
     "entries": {
       "openclaw-internal": {
-        "enabled": true  // 设置为 false 禁用所有内部工具
+        "enabled": true // 设置为 false 禁用所有内部工具
       }
     }
   }
