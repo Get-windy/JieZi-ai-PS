@@ -367,6 +367,8 @@ const BASE_METHODS = [
   "memory.delete",
   "memory.list",
   "memory.namespace.stats",
+  "memory.project.save",
+  "memory.project.list",
   // Self-Evolution（Reflexion 反思 + Voyager 技能库）
   "evolve.reflect.save",
   "evolve.reflect.list",

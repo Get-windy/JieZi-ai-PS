@@ -26,6 +26,10 @@ import path from "node:path";
 import { resolveStateDir } from "../../../upstream/src/config/paths.js";
 import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import { requestHeartbeatNow } from "../../../upstream/src/infra/heartbeat-wake.js";
+import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
+import { groupManager } from "../../sessions/group-manager.js";
+import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
 
 // ============================================================================
 // 类型定义
@@ -231,8 +235,56 @@ export const memoryRpc: GatewayRequestHandlers = {
       ) as MemoryNamespace;
 
       const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const callerAgentId = params?.callerAgentId ? String(params.callerAgentId) : undefined;
       const tags = Array.isArray(params?.tags) ? params.tags.map(String) : [];
       const force = params?.force === true;
+
+      // ======================================================================
+      // 越权检查：调用者不得写入其他 agent 的私有记忆
+      // callerAgentId 由工具创建时注入（不可被 AI 指令篡改），
+      // agentId 是请求写入的目标 agent。两者不一致则转发给目标 agent 自己处理。
+      // ======================================================================
+      if (callerAgentId && agentId && callerAgentId !== agentId) {
+        const targetSessionKey = `agent:${agentId}:main`;
+        const forwardPrompt = [
+          `[MEMORY WRITE DELEGATED - EXECUTE NOW]`,
+          `Another agent (${callerAgentId}) requested that you save the following to your personal memory.`,
+          `Per system policy, only you may write to your own personal memory.`,
+          ``,
+          `Please save this immediately using memory_save:`,
+          `Namespace: ${namespace}`,
+          tags.length > 0 ? `Tags: ${tags.join(", ")}` : null,
+          `Content:`,
+          content,
+        ]
+          .filter((l) => l !== null)
+          .join("\n");
+
+        enqueueSystemEvent(forwardPrompt, {
+          sessionKey: targetSessionKey,
+          contextKey: `memory-delegate:${callerAgentId}:${Date.now()}`,
+        });
+        requestHeartbeatNow({
+          reason: `memory-delegate:${callerAgentId}`,
+          sessionKey: targetSessionKey,
+          agentId,
+        });
+
+        console.log(
+          `[memory.save] Cross-agent write intercepted: caller=${callerAgentId} target=${agentId} → delegated to target agent`,
+        );
+
+        respond(
+          true,
+          {
+            action: "delegated",
+            message: `Memory write delegated to agent ${agentId} to preserve memory ownership.`,
+            targetAgent: agentId,
+          },
+          undefined,
+        );
+        return;
+      }
 
       const filePath = resolveMemoryFile(agentId, namespace);
       const store = loadMemoryStore(filePath);
@@ -328,6 +380,48 @@ export const memoryRpc: GatewayRequestHandlers = {
       }
 
       const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const callerAgentId = params?.callerAgentId ? String(params.callerAgentId) : undefined;
+
+      // ======================================================================
+      // 越权检查：调用者不得删除其他 agent 的私有记忆
+      // ======================================================================
+      if (callerAgentId && agentId && callerAgentId !== agentId) {
+        const targetSessionKey = `agent:${agentId}:main`;
+        const forwardPrompt = [
+          `[MEMORY DELETE DELEGATED - EXECUTE NOW]`,
+          `Another agent (${callerAgentId}) requested deletion of memory entry "${memoryId}" from your personal memory.`,
+          `Per system policy, only you may modify your own personal memory.`,
+          ``,
+          `Please delete this entry immediately using memory_delete:`,
+          `Memory ID: ${memoryId}`,
+        ].join("\n");
+
+        enqueueSystemEvent(forwardPrompt, {
+          sessionKey: targetSessionKey,
+          contextKey: `memory-delete-delegate:${callerAgentId}:${Date.now()}`,
+        });
+        requestHeartbeatNow({
+          reason: `memory-delete-delegate:${callerAgentId}`,
+          sessionKey: targetSessionKey,
+          agentId,
+        });
+
+        console.log(
+          `[memory.delete] Cross-agent delete intercepted: caller=${callerAgentId} target=${agentId} → delegated to target agent`,
+        );
+
+        respond(
+          true,
+          {
+            action: "delegated",
+            message: `Memory delete delegated to agent ${agentId} to preserve memory ownership.`,
+            targetAgent: agentId,
+          },
+          undefined,
+        );
+        return;
+      }
+
       const namespaces: MemoryNamespace[] = ["preferences", "decisions", "context", "facts"];
 
       let deleted = false;
@@ -408,6 +502,199 @@ export const memoryRpc: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(ErrorCodes.UNAVAILABLE, `memory.list failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * memory.project.save — 写入项目共享记忆（追加到 SHARED_MEMORY.md）
+   *
+   * 所有项目成员均可调用，内容追加到群组工作空间的 SHARED_MEMORY.md 文件中。
+   * 支持 section（章节标题）以便分类存储。
+   */
+  "memory.project.save": async ({ params, respond }) => {
+    try {
+      const content = params?.content ? String(params.content) : "";
+      if (!content.trim()) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "content is required"));
+        return;
+      }
+
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const projectId = params?.projectId ? String(params.projectId) : undefined;
+      const section = params?.section ? String(params.section) : "General";
+      const tags = Array.isArray(params?.tags) ? params.tags.map(String) : [];
+
+      // 解析目标群组工作空间
+      let sharedMemoryPath: string | null = null;
+
+      if (projectId) {
+        // 按 projectId 查找群组
+        const allGroups = groupManager.getAllGroups();
+        const projectGroup = allGroups.find(
+          (g) => g.projectId?.toLowerCase() === projectId.toLowerCase(),
+        );
+        if (projectGroup) {
+          const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(projectGroup.id);
+          sharedMemoryPath = path.join(groupDir, "SHARED_MEMORY.md");
+        }
+      } else if (agentId) {
+        // 无 projectId 时，取 agent 所属的第一个项目群组
+        const agentGroups = groupManager.getAgentGroups(agentId);
+        const projectGroup = agentGroups.find((g) => !!g.projectId);
+        if (projectGroup) {
+          const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(projectGroup.id);
+          sharedMemoryPath = path.join(groupDir, "SHARED_MEMORY.md");
+        }
+      }
+
+      if (!sharedMemoryPath) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.UNAVAILABLE,
+            "No project group found. Provide projectId or ensure agent belongs to a project group.",
+          ),
+        );
+        return;
+      }
+
+      // 确保目录存在
+      fs.mkdirSync(path.dirname(sharedMemoryPath), { recursive: true });
+
+      // 初始化文件（若不存在）
+      if (!fs.existsSync(sharedMemoryPath)) {
+        fs.writeFileSync(
+          sharedMemoryPath,
+          `# Project Shared Memory\n\nThis file contains shared knowledge for all team members.\n`,
+          "utf8",
+        );
+      }
+
+      const existing = fs.readFileSync(sharedMemoryPath, "utf8");
+
+      // 构造追加内容
+      const now = new Date().toISOString();
+      const tagNote = tags.length > 0 ? ` [${tags.join(", ")}]` : "";
+      const authorNote = agentId ? ` (by ${agentId})` : "";
+      const entryHeader = `\n\n### ${section}${tagNote}\n<!-- saved: ${now}${authorNote} -->`;
+      const entryBody = `\n${content.trim()}`;
+
+      // 检查章节是否已存在以决定追加位置
+      const sectionPattern = new RegExp(`###\\s+${section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
+      let newContent: string;
+      if (sectionPattern.test(existing)) {
+        // 章节已存在：在同名章节最后一行后追加新条目
+        newContent = existing.trimEnd() + `\n\n---${entryHeader}${entryBody}`;
+      } else {
+        // 章节不存在：追加新章节
+        newContent = existing.trimEnd() + entryHeader + entryBody;
+      }
+
+      fs.writeFileSync(sharedMemoryPath, newContent, "utf8");
+
+      const entryId = `prj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      respond(
+        true,
+        {
+          action: "saved",
+          id: entryId,
+          section,
+          sharedMemoryPath,
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `memory.project.save failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * memory.project.list — 读取项目共享记忆内容（按章节分段返回）
+   */
+  "memory.project.list": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const projectId = params?.projectId ? String(params.projectId) : undefined;
+      const section = params?.section ? String(params.section) : undefined;
+      const maxChars =
+        typeof params?.maxChars === "number" ? Math.min(params.maxChars, 20000) : 8000;
+
+      // 解析目标群组工作空间（逻辑同 save）
+      let sharedMemoryPath: string | null = null;
+
+      if (projectId) {
+        const allGroups = groupManager.getAllGroups();
+        const projectGroup = allGroups.find(
+          (g) => g.projectId?.toLowerCase() === projectId.toLowerCase(),
+        );
+        if (projectGroup) {
+          const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(projectGroup.id);
+          sharedMemoryPath = path.join(groupDir, "SHARED_MEMORY.md");
+        }
+      } else if (agentId) {
+        const agentGroups = groupManager.getAgentGroups(agentId);
+        const projectGroup = agentGroups.find((g) => !!g.projectId);
+        if (projectGroup) {
+          const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(projectGroup.id);
+          sharedMemoryPath = path.join(groupDir, "SHARED_MEMORY.md");
+        }
+      }
+
+      if (!sharedMemoryPath || !fs.existsSync(sharedMemoryPath)) {
+        respond(
+          true,
+          {
+            content: "",
+            sections: [],
+            sharedMemoryPath: sharedMemoryPath ?? null,
+            empty: true,
+          },
+          undefined,
+        );
+        return;
+      }
+
+      let raw = fs.readFileSync(sharedMemoryPath, "utf8");
+
+      // 按章节过滤
+      if (section) {
+        const sectionPattern = new RegExp(
+          `(###\\s+${section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*?)(?=\n###\\s|$)`,
+          "i",
+        );
+        const match = sectionPattern.exec(raw);
+        raw = match ? match[1] : "";
+      }
+
+      // 字符裁剪
+      const truncated = raw.length > maxChars;
+      const content = truncated ? raw.slice(0, maxChars) + "\n...[truncated]" : raw;
+
+      // 提取章节列表
+      const sectionMatches = [...raw.matchAll(/^###\s+(.+)$/gm)].map((m) => m[1].trim());
+
+      respond(
+        true,
+        {
+          content,
+          sections: [...new Set(sectionMatches)],
+          sharedMemoryPath,
+          truncated,
+          totalChars: raw.length,
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `memory.project.list failed: ${String(err)}`),
       );
     }
   },

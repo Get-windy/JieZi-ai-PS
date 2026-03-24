@@ -126,6 +126,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     // 记忆块：查询
     "memory.list",
     "memory.namespace.stats",
+    "memory.project.list",
     // 自我进化：查询类
     "evolve.reflect.list",
     "evolve.skill.list",
@@ -219,6 +220,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     // 记忆块：写操作
     "memory.save",
     "memory.delete",
+    "memory.project.save",
     // 自我进化：写操作
     "evolve.reflect.save",
     "evolve.skill.save",

@@ -350,6 +350,11 @@ export async function listTasks(filter?: TaskFilter): Promise<Task[]> {
     return a.createdAt - b.createdAt;
   });
 
+  // 分页截断：如果指定了 limit，仅返回前 N 条
+  if (filter.limit && filter.limit > 0) {
+    results = results.slice(0, filter.limit);
+  }
+
   return results;
 }
 

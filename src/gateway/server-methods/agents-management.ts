@@ -50,11 +50,10 @@ import {
   resolveAgentModelAccounts,
   resolveAgentWorkspaceDir,
 } from "../../agents/agent-scope.js";
-import type { AgentBinding, AgentConfig } from "../../config/types.agents.js";
+import type { AgentConfig } from "../../config/types.agents.js";
 import type { AgentChannelBindings } from "../../config/types.channel-bindings.js";
 import { organizationStorage } from "../../organization/storage.js";
 import { teamManagement } from "../../organization/team-management.js";
-import { listBindings } from "../../routing/bindings.js";
 import { normalizeAgentId, DEFAULT_AGENT_ID } from "../../routing/session-key.js";
 import { groupManager } from "../../sessions/group-manager.js";
 import * as taskStorage from "../../tasks/storage.js";
@@ -165,12 +164,17 @@ function _getAgentManagedScope(
 }
 
 /**
- * 解析任务执行上下文：工作区路径、记忆文件路径、项目工作群 sessionKey
+ * 解析任务执行上下文：工作区路径、私有记忆路径、项目共享记忆路径、项目工作群 sessionKey
+ *
+ * 记忆边界原则：
+ * - privateMemoryPath：执行者自己的私有记忆，只有执行者本人可写
+ * - sharedMemoryPath：项目工作空间下的共享记忆，团队所有成员可读写
+ * - 任何 agent 都不得写入其他 agent 的私有记忆文件
  *
  * @param agentId       执行任务的 agent ID（normalized）
  * @param projectId     任务所属项目 ID（可选）
  * @param cfg           当前配置
- * @returns             { workspaceDir, memoryPath, projectGroupSessionKey }
+ * @returns             { workspaceDir, privateMemoryPath, sharedMemoryPath, projectGroupSessionKey }
  */
 function resolveTaskContext(
   agentId: string,
@@ -178,23 +182,30 @@ function resolveTaskContext(
   cfg: OpenClawConfig,
 ): {
   workspaceDir: string;
-  memoryPath: string;
+  privateMemoryPath: string;
+  sharedMemoryPath: string | null;
   projectGroupSessionKey: string | null;
 } {
   const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
-  const memoryPath = path.join(workspaceDir, "MEMORY.md");
+  const privateMemoryPath = path.join(workspaceDir, "MEMORY.md");
 
   // 查找项目工作群：遍历所有群组，找第一个 projectId 匹配的
   let projectGroupSessionKey: string | null = null;
+  let sharedMemoryPath: string | null = null;
   if (projectId) {
     const allGroups = groupManager.getAllGroups();
     const projectGroup = allGroups.find((g) => g.projectId === projectId);
     if (projectGroup) {
       projectGroupSessionKey = `group:${projectGroup.id}`;
+      // 项目共享记忆：存放在项目工作空间下，所有成员共同读写
+      const groupWorkspaceDir = groupWorkspaceManager.getGroupWorkspaceDir(projectGroup.id);
+      if (groupWorkspaceDir) {
+        sharedMemoryPath = path.join(groupWorkspaceDir, "SHARED_MEMORY.md");
+      }
     }
   }
 
-  return { workspaceDir, memoryPath, projectGroupSessionKey };
+  return { workspaceDir, privateMemoryPath, sharedMemoryPath, projectGroupSessionKey };
 }
 
 /**
@@ -317,10 +328,7 @@ function validateChannelPoliciesConfig(config: unknown): void {
 }
 
 /**
- * 获取智能助手的通道绑定配置
- *
- * 优先从 agent.channelBindings 读取，如果没有则从全局 config.bindings[] 读取并转换格式
- * 这样可以兼容旧的通道绑定机制（通过助手管理页面的通道标签页绑定的数据）
+ * 获取智能助手的通道绑定配置（只读新机制 channelBindings）
  */
 function getAgentChannelBindings(
   cfg: OpenClawConfig,
@@ -334,47 +342,12 @@ function getAgentChannelBindings(
     return null;
   }
 
-  // 优先从agent配置中提取channelBindings（新机制）
   const channelBindings = (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
-
-  if (channelBindings && channelBindings.bindings && channelBindings.bindings.length > 0) {
+  if (channelBindings) {
     return channelBindings;
   }
 
-  // 如果没有，从config.bindings[]读取并转换（旧机制兼容）
-  const globalBindings = listBindings(cfg);
-  const agentGlobalBindings = globalBindings.filter(
-    (b) => normalizeAgentId(b.agentId) === normalized && b.match?.channel,
-  );
-
-  if (agentGlobalBindings.length > 0) {
-    // 转换为新格式
-    const convertedBindings = agentGlobalBindings.map((b, index) => ({
-      id: `${b.match.channel}-${b.match.accountId || "default"}-${index}`,
-      channelId: b.match.channel,
-      accountId: b.match.accountId || "default",
-      policy: {
-        type: "private" as const,
-        config: {
-          allowedUsers: [],
-        },
-      },
-      enabled: true,
-      priority: 50,
-    }));
-
-    return {
-      bindings: convertedBindings,
-      defaultPolicy: {
-        type: "private",
-        config: {
-          allowedUsers: [],
-        },
-      },
-    };
-  }
-
-  // 如果都没有，返回默认空配置
+  // agent 存在但尚未配置任何通道绑定，返回空配置
   return {
     defaultPolicy: {
       type: "private",
@@ -546,10 +519,15 @@ export async function scheduleNextTaskForAgent(
       ``,
       `Working Context:`,
       `- Working Directory: ${ctx.workspaceDir}`,
-      `- Memory File: ${ctx.memoryPath}`,
+      `- Your Personal Memory (only YOU may write this): ${ctx.privateMemoryPath}`,
+      ctx.sharedMemoryPath
+        ? `- Project Shared Memory (all team members read/write): ${ctx.sharedMemoryPath}`
+        : null,
       ctx.projectGroupSessionKey
         ? `- Project Group: sessionKey=${ctx.projectGroupSessionKey}`
         : null,
+      ``,
+      `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
       ``,
       `Status has been set to in-progress automatically. Previous task ${completedTaskId} is now done.`,
       queueRemaining > 0
@@ -733,7 +711,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
   },
 
   /**
-   * agent.channelAccounts.list - 获取智能助手绑定的通道账号
+   * agent.channelAccounts.list - 获取智能助手绑定的通道账号（只读新机制 channelBindings）
    */
   "agent.channelAccounts.list": ({ params, respond }) => {
     const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
@@ -747,25 +725,17 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const normalized = normalizeAgentId(agentId);
-    const bindings = listBindings(cfg);
-
-    // 筛选出该助手的绑定
-    const agentBindings = bindings.filter((b) => normalizeAgentId(b.agentId) === normalized);
-
-    // 扩展为平铺列表，每个 channelId:accountId 组合为一个条目
-    const result = agentBindings
-      .filter((b) => b.match?.channel)
-      .map((b) => ({
-        channelId: b.match.channel,
-        accountId: b.match.accountId || "default",
-      }));
+    const channelBindings = getAgentChannelBindings(cfg, agentId);
+    const result = (channelBindings?.bindings ?? []).map((b) => ({
+      channelId: b.channelId,
+      accountId: b.accountId,
+    }));
 
     respond(true, { agentId, bindings: result }, undefined);
   },
 
   /**
-   * agent.channelAccounts.add - 为智能助手添加通道账号绑定
+   * agent.channelAccounts.add - 为智能助手添加通道账号绑定（写入新机制 channelBindings）
    */
   "agent.channelAccounts.add": async ({ params, respond }) => {
     const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
@@ -778,6 +748,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     }
     if (!channelId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "channelId is required"));
+      return;
+    }
+    if (!accountId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "accountId is required"));
       return;
     }
 
@@ -796,92 +770,91 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    // 验证通道是否存在
+    // 验证通道是否存在（宽松验证：外部插件可能延迟注册，找不到时仅警告不拦截）
     const plugin = getChannelPlugin(channelId);
     if (!plugin) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `Unknown channel: ${channelId}`),
+      console.warn(
+        `[agent.channelAccounts.add] Channel plugin "${channelId}" not found in registry. ` +
+          `It may be an external plugin loaded later. Proceeding with binding.`,
       );
-      return;
     }
 
     const normalized = normalizeAgentId(agentId);
-    const bindings = listBindings(cfg);
 
-    // 检查该通道账号是否已被其他助手绑定（排他性绑定）
-    const otherAgentBinding = bindings.find(
-      (b) =>
-        normalizeAgentId(b.agentId) !== normalized &&
-        b.match?.channel === channelId &&
-        (b.match?.accountId || "default") === (accountId || "default"),
-    );
-
-    if (otherAgentBinding) {
-      const otherAgentId = otherAgentBinding.agentId;
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          `Channel account ${channelId}:${accountId || "default"} is already bound to agent "${otherAgentId}". A channel account can only be bound to one agent.`,
-        ),
+    // 排他性检查：遍历所有 agent 的 channelBindings，确保该账号未被其他 agent 占用
+    for (const agent of listAgentEntries(cfg)) {
+      const otherNormalized = normalizeAgentId(agent.id);
+      if (otherNormalized === normalized) {
+        continue;
+      }
+      const otherBindings = (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
+      if (!otherBindings?.bindings) {
+        continue;
+      }
+      const conflict = otherBindings.bindings.find(
+        (b) => b.channelId === channelId && b.accountId === accountId,
       );
-      return;
+      if (conflict) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Channel account ${channelId}:${accountId} is already bound to agent "${agent.id}". A channel account can only be bound to one agent.`,
+          ),
+        );
+        return;
+      }
     }
 
-    // 检查当前助手是否已经绑定该通道账号
-    const existingBinding = bindings.find(
-      (b) =>
-        normalizeAgentId(b.agentId) === normalized &&
-        b.match?.channel === channelId &&
-        (b.match?.accountId || "default") === (accountId || "default"),
+    // 检查当前 agent 是否已经绑定该账号
+    const currentBindings = getAgentChannelBindings(cfg, agentId);
+    const existingBinding = currentBindings?.bindings?.find(
+      (b) => b.channelId === channelId && b.accountId === accountId,
     );
-
     if (existingBinding) {
       respond(
         false,
         undefined,
         errorShape(
           ErrorCodes.INVALID_REQUEST,
-          `Binding already exists for ${channelId}:${accountId || "default"}`,
+          `Binding already exists for ${channelId}:${accountId}`,
         ),
       );
       return;
     }
 
-    // 添加新绑定
-    const newBinding: AgentBinding = {
-      agentId,
-      match: {
-        channel: channelId,
+    // 构建新绑定条目
+    const newEntry = {
+      id: `${channelId}-${accountId}-${Date.now()}`,
+      channelId,
+      accountId,
+      policy: { type: "private" as const, config: { allowedUsers: [] } },
+      enabled: true,
+      priority: 50,
+    };
+
+    const updatedChannelBindings: AgentChannelBindings = {
+      defaultPolicy: currentBindings?.defaultPolicy ?? {
+        type: "private",
+        config: { allowedUsers: [] },
       },
+      bindings: [...(currentBindings?.bindings ?? []), newEntry],
     };
 
-    if (accountId) {
-      newBinding.match.accountId = accountId;
-    }
-
-    const updatedConfig: OpenClawConfig = {
-      ...cfg,
-      bindings: [...bindings, newBinding],
-    };
-
-    try {
-      await writeConfigFile(updatedConfig);
+    const success = await updateAgentField(
+      agentId,
+      "channelBindings",
+      updatedChannelBindings,
+      respond,
+    );
+    if (success) {
       respond(true, { success: true, agentId, channelId, accountId }, undefined);
-    } catch (err) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, `Failed to save config: ${String(err)}`),
-      );
     }
   },
 
   /**
-   * agent.channelAccounts.remove - 移除智能助手的通道账号绑定
+   * agent.channelAccounts.remove - 移除智能助手的通道账号绑定（从新机制 channelBindings 移除）
    */
   "agent.channelAccounts.remove": async ({ params, respond }) => {
     const agentId = String((params as { agentId?: string | number })?.agentId ?? "").trim();
@@ -912,45 +885,37 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const normalized = normalizeAgentId(agentId);
-    const bindings = listBindings(cfg);
-
-    // 找到并移除绑定
-    const filteredBindings = bindings.filter(
-      (b) =>
-        !(
-          normalizeAgentId(b.agentId) === normalized &&
-          b.match?.channel === channelId &&
-          (b.match?.accountId || "default") === (accountId || "default")
-        ),
+    const currentBindings = getAgentChannelBindings(cfg, agentId);
+    const existingList = currentBindings?.bindings ?? [];
+    const filteredList = existingList.filter(
+      (b) => !(b.channelId === channelId && b.accountId === accountId),
     );
 
-    if (filteredBindings.length === bindings.length) {
+    if (filteredList.length === existingList.length) {
       respond(
         false,
         undefined,
-        errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          `Binding not found for ${channelId}:${accountId || "default"}`,
-        ),
+        errorShape(ErrorCodes.INVALID_REQUEST, `Binding not found for ${channelId}:${accountId}`),
       );
       return;
     }
 
-    const updatedConfig: OpenClawConfig = {
-      ...cfg,
-      bindings: filteredBindings,
+    const updatedChannelBindings: AgentChannelBindings = {
+      defaultPolicy: currentBindings?.defaultPolicy ?? {
+        type: "private",
+        config: { allowedUsers: [] },
+      },
+      bindings: filteredList,
     };
 
-    try {
-      await writeConfigFile(updatedConfig);
+    const success = await updateAgentField(
+      agentId,
+      "channelBindings",
+      updatedChannelBindings,
+      respond,
+    );
+    if (success) {
       respond(true, { success: true, agentId, channelId, accountId }, undefined);
-    } catch (err) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, `Failed to save config: ${String(err)}`),
-      );
     }
   },
 
@@ -969,16 +934,19 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const bindings = listBindings(cfg);
-
-    // 获取所有已被绑定的通道账号（包括其他助手绑定的）
+    // 获取所有已被绑定的通道账号（只看新的 channelBindings 机制，不依赖旧的全局路由绑定）
+    // 通道账号排他性：一个账号只能绑定给一个助手
     const allBoundAccounts = new Set<string>();
-    for (const binding of bindings) {
-      if (!binding.match?.channel) {
+    for (const agent of listAgentEntries(cfg)) {
+      const agentBindings = (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
+      if (!agentBindings?.bindings) {
         continue;
       }
-      const key = `${binding.match.channel}:${binding.match.accountId || "default"}`;
-      allBoundAccounts.add(key);
+      for (const b of agentBindings.bindings) {
+        if (b.channelId && b.accountId) {
+          allBoundAccounts.add(`${b.channelId}:${b.accountId}`);
+        }
+      }
     }
 
     // 获取所有可用的通道账号
@@ -1008,6 +976,28 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
               } catch {
                 configured = false;
               }
+            }
+
+            // 若插件没有 isConfigured 方法，则通过 accountId 判断：
+            // listAccountIds 在无真实账号时会兜底返回 ["default"]，
+            // 这类空壳账号不应出现在可用列表中，直接跳过。
+            if (!plugin.config.isConfigured && accountId === "default") {
+              // 尝试检查 resolveAccount 是否返回了有意义的内容
+              const accountRecord = account as Record<string, unknown> | null | undefined;
+              const hasAnyValue =
+                accountRecord &&
+                typeof accountRecord === "object" &&
+                Object.values(accountRecord).some(
+                  (v) => typeof v === "string" && v.trim().length > 0,
+                );
+              if (!hasAnyValue) {
+                return; // 跳过无实质配置的兜底账号
+              }
+            }
+
+            // 未完成配置的账号不放入可用列表（避免显示无法绑定的空壳账号）
+            if (!configured) {
+              return;
             }
 
             const channelLabel = (plugin.meta as { label?: string }).label || plugin.id;
@@ -1969,17 +1959,13 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     // 从列表中移除
     const filteredAgents = agents.filter((_, idx) => idx !== agentIndex);
 
-    // 同时移除该助手的所有绑定
-    const bindings = listBindings(cfg);
-    const filteredBindings = bindings.filter((b) => normalizeAgentId(b.agentId) !== normalized);
-
+    // channelBindings 存储在 agent 配置内部，随 agent 一起删除，无需单独清理
     const updatedConfig: OpenClawConfig = {
       ...cfg,
       agents: {
         ...cfg.agents,
         list: filteredAgents,
       },
-      bindings: filteredBindings,
     };
 
     try {
@@ -3062,10 +3048,15 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       ``,
       `Working Context:`,
       `- Working Directory (code lives here): ${taskCtx.workspaceDir}`,
-      `- Memory File (read/update project knowledge): ${taskCtx.memoryPath}`,
+      `- Your Personal Memory (only YOU may write this): ${taskCtx.privateMemoryPath}`,
+      taskCtx.sharedMemoryPath
+        ? `- Project Shared Memory (all team members read/write): ${taskCtx.sharedMemoryPath}`
+        : null,
       taskCtx.projectGroupSessionKey
         ? `- Project Group Channel (for team communication): sessionKey=${taskCtx.projectGroupSessionKey}`
         : null,
+      ``,
+      `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
       ``,
       `Instructions:`,
       `- This task has been set to "in-progress". Execute it immediately.`,

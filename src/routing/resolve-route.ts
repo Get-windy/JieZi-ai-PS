@@ -4,6 +4,7 @@ import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import { shouldLogVerbose } from "../../upstream/src/globals.js";
 import { logDebug } from "../../upstream/src/logger.js";
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
+import type { AgentChannelBindings } from "../config/types.channel-bindings.js";
 import { listBindings } from "./bindings.js";
 import {
   buildAgentMainSessionKey,
@@ -187,7 +188,12 @@ type BindingScope = {
 };
 
 type EvaluatedBindingsCache = {
+  /**
+   * 用于检测旧的全局 config.bindings 是否变更。
+   * 新的 channelBindings 存储在各 agent 内，通过 agentsRef 跟踪。
+   */
   bindingsRef: OpenClawConfig["bindings"];
+  agentsRef: OpenClawConfig["agents"];
   byChannelAccount: Map<string, EvaluatedBinding[]>;
 };
 
@@ -200,11 +206,12 @@ function getEvaluatedBindingsForChannelAccount(
   accountId: string,
 ): EvaluatedBinding[] {
   const bindingsRef = cfg.bindings;
+  const agentsRef = cfg.agents;
   const existing = evaluatedBindingsCacheByCfg.get(cfg);
   const cache =
-    existing && existing.bindingsRef === bindingsRef
+    existing && existing.bindingsRef === bindingsRef && existing.agentsRef === agentsRef
       ? existing
-      : { bindingsRef, byChannelAccount: new Map<string, EvaluatedBinding[]>() };
+      : { bindingsRef, agentsRef, byChannelAccount: new Map<string, EvaluatedBinding[]>() };
   if (cache !== existing) {
     evaluatedBindingsCacheByCfg.set(cfg, cache);
   }
@@ -215,6 +222,7 @@ function getEvaluatedBindingsForChannelAccount(
     return hit;
   }
 
+  // 1. 旧的全局路由绑定（config.bindings[]）
   const evaluated: EvaluatedBinding[] = listBindings(cfg).flatMap((binding) => {
     if (!binding || typeof binding !== "object") {
       return [];
@@ -227,6 +235,44 @@ function getEvaluatedBindingsForChannelAccount(
     }
     return [{ binding, match: normalizeBindingMatch(binding.match) }];
   });
+
+  // 2. 新的 channelBindings（存储在各 agent 配置里），合并进路由候选列表
+  // channelBindings 只有 channelId + accountId，没有 peer/guild/roles 约束，
+  // 等价于最基础的 account 级匹配（accountPattern = accountId）。
+  const agents = Array.isArray(cfg.agents?.list) ? cfg.agents.list : [];
+  for (const agent of agents) {
+    const agentId = typeof agent.id === "string" ? agent.id.trim() : "";
+    if (!agentId) {
+      continue;
+    }
+    const channelBindings = (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
+    if (!channelBindings?.bindings) {
+      continue;
+    }
+    for (const b of channelBindings.bindings) {
+      if (!b.enabled && b.enabled !== undefined) {
+        continue;
+      }
+      const bChannel = (b.channelId ?? "").trim().toLowerCase();
+      const bAccount = normalizeAccountId(b.accountId ?? "");
+      if (bChannel !== channel) {
+        continue;
+      }
+      if (bAccount !== accountId) {
+        continue;
+      }
+      // 构造等价的 AgentRouteBinding 以复用现有路由逻辑
+      const syntheticBinding = {
+        type: "route" as const,
+        agentId,
+        match: { channel: b.channelId, accountId: b.accountId },
+      };
+      evaluated.push({
+        binding: syntheticBinding,
+        match: normalizeBindingMatch(syntheticBinding.match),
+      });
+    }
+  }
 
   cache.byChannelAccount.set(cacheKey, evaluated);
   if (cache.byChannelAccount.size > MAX_EVALUATED_BINDINGS_CACHE_KEYS) {
