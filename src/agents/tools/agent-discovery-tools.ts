@@ -147,7 +147,7 @@ export function createAgentDiscoverTool(opts?: {
     label: "Agent Discover",
     name: "agent_discover",
     description:
-      "Discover and search for other agents in the system. Filter by status, role, tags. Returns agent ID, name, status, capabilities and availability. Requires discovery permission.",
+      "Discover and search for other agents in the system. Filter by status, role, tags. Returns agent ID, name, status, capabilities and availability. Requires discovery permission. IMPORTANT: Channel bindings are for inbound message routing only (user sends message via Feishu/WeChat -> route to which agent). Subagents work via internal agent() tool calls and do NOT need channel bindings. An agent without channel bindings can still work as a subagent.",
     parameters: AgentDiscoverToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -211,7 +211,7 @@ export function createAgentInspectTool(opts?: {
     label: "Agent Inspect",
     name: "agent_inspect",
     description:
-      "Inspect detailed information about a specific agent. Returns configuration, statistics, active sessions, skills, and runtime status. Requires inspect permission.",
+      "Inspect detailed information about a specific agent. Returns configuration, statistics, active sessions, skills, and runtime status. Requires inspect permission. IMPORTANT: Channel bindings are for inbound message routing only (user sends message via Feishu/WeChat -> route to which agent). Subagents work via internal agent() tool calls and do NOT need channel bindings. An agent without channel bindings can still work as a subagent.",
     parameters: AgentInspectToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -564,7 +564,11 @@ export function createTaskReportToSupervisorTool(opts?: {
     label: "Task Report to Supervisor",
     name: "task_report_to_supervisor",
     description:
-      "Report task completion or failure back to the supervisor agent. Call this when you finish a task assigned via agent_assign_task. Updates task status in the task system and notifies the supervisor.",
+      "Report task status back to the supervisor agent. MUST be called in the following situations: " +
+      '(1) Task completed successfully — use status="done" with a result summary. ' +
+      '(2) Task is blocked and cannot proceed — use status="blocked" and describe the blocker in errorMessage so the supervisor can coordinate a solution. ' +
+      '(3) Task must be abandoned — use status="cancelled" with a reason. ' +
+      "DO NOT silently stop working on a task. Always report back so the supervisor knows the current situation and can take action.",
     parameters: TaskReportToSupervisorToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -617,7 +621,7 @@ export function createAgentTeamStatusTool(opts?: {
     label: "Agent Team Status",
     name: "agent_team_status",
     description:
-      "Query the current task status of your team members. Returns who is doing what, task progress, blocked tasks, and team-wide summary. Use this to supervise and monitor your team's work.",
+      "Query the current task status of your team members. Returns who is doing what, task progress, blocked tasks, and team-wide summary. Use this to supervise and monitor your team's work. IMPORTANT: Channel bindings are for inbound message routing only (user sends message via Feishu/WeChat -> route to which agent). Subagents work via internal agent() tool calls and do NOT need channel bindings. An agent without channel bindings can still work as a subagent.",
     parameters: AgentTeamStatusToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;

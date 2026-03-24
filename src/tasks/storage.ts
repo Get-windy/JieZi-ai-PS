@@ -313,6 +313,12 @@ export async function listTasks(filter?: TaskFilter): Promise<Task[]> {
     results = results.filter((task) => task.dueDate && task.dueDate < filter.dueDateBefore!);
   }
 
+  // excludeStatus: 排除指定状态（配合 overdueOnly 使用）
+  const excludeStatus = (filter as Record<string, unknown>).excludeStatus as string[] | undefined;
+  if (excludeStatus && excludeStatus.length > 0) {
+    results = results.filter((task) => !excludeStatus.includes(task.status));
+  }
+
   if (filter.dueDateAfter) {
     results = results.filter((task) => task.dueDate && task.dueDate > filter.dueDateAfter!);
   }

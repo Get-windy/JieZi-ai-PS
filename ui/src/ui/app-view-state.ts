@@ -273,6 +273,10 @@ export type AppViewState = {
   creatingProject: boolean;
   editingProject: import("./views/projects.ts").ProjectInfo | null;
   upgradingGroupToProject: boolean;
+  /** 项目代码根目录（用户在页面顶部设置） */
+  projectCodeRoot: string;
+  /** 项目列表状态筛选 */
+  projectStatusFilter: import("./views/projects.ts").ProjectStatusFilter;
   // 项目跨团队协作 Handoff 状态
   projectTeamRelations: import("./views/projects.ts").ProjectTeamRelation[];
   projectTeamRelationsLoading: boolean;

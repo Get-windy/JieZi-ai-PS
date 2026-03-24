@@ -4,7 +4,7 @@
  */
 
 import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
-import { refreshQwenPortalCredentials } from "../../../upstream/src/providers/qwen-portal-oauth.js";
+import { refreshQwenPortalCredentials } from "../../../upstream/extensions/qwen-portal-auth/refresh.js";
 import {
   ensureAuthProfileStore,
   saveAuthProfileStore,

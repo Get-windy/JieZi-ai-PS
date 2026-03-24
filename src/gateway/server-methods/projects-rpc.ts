@@ -79,12 +79,39 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const { listAvailableProjects, buildProjectContext } =
         await import("../../utils/project-context.js");
 
-      const projectIds = listAvailableProjects(workspaceRoot);
+      const fsDirs = listAvailableProjects(workspaceRoot);
       const allGroups = groupManager.getAllGroups();
 
-      const projects = projectIds.map((projectId) => {
+      // 构建所有已知 projectId 的合并集合：
+      // 1. 文件系统目录名（原始大小写保留）
+      // 2. 群组中存储的 projectId（可能大小写不同）
+      // 用 Map<小写key, 原始projectId> 做去重合并，优先保留文件系统目录名
+      const projectIdMap = new Map<string, string>();
+
+      for (const dir of fsDirs) {
+        projectIdMap.set(dir.toLowerCase(), dir);
+      }
+
+      // 过滤掉没有 projectId 的群组
+      for (const g of allGroups) {
+        if (g.projectId) {
+          const key = g.projectId.toLowerCase();
+          if (!projectIdMap.has(key)) {
+            // 群组有 projectId 但没有对应文件系统目录，仍然纳入列表
+            projectIdMap.set(key, g.projectId);
+          }
+        }
+      }
+
+      const projects = Array.from(projectIdMap.values()).map((projectId) => {
         const projectCtx = buildProjectContext(projectId, workspaceRoot);
-        const projectGroups = allGroups.filter((g) => g.projectId === projectId);
+
+        // 大小写不敏感匹配群组：群组的 projectId 与当前目录名等价
+        const projectIdLower = projectId.toLowerCase();
+        const projectGroups = allGroups.filter(
+          (g) => g.projectId && g.projectId.toLowerCase() === projectIdLower,
+        );
+
         // 项目负责人：取第一个绑定群的 ownerId
         const ownerId = projectGroups[0]?.ownerId || undefined;
 
@@ -98,6 +125,29 @@ export const projectsHandlers: GatewayRequestHandlers = {
           docsDir: projectCtx.docsDir,
           requirementsDir: projectCtx.config?.requirementsDir,
           ownerId,
+          createdAt: projectCtx.config?.createdAt,
+          // ===== 进度管理字段 =====
+          status: projectCtx.config?.status,
+          // 进度优先由 sprints 自动计算
+          progress: (() => {
+            const sprints = projectCtx.config?.sprints ?? projectCtx.config?.milestones;
+            if (sprints && sprints.length > 0) {
+              const allTasks = sprints.flatMap((s: import("../../utils/project-context.js").ProjectSprint) => s.tasks).filter((t: import("../../utils/project-context.js").ProjectTask) => t.status !== "cancelled");
+              if (allTasks.length > 0) {
+                const total = allTasks.reduce((sum: number, t: import("../../utils/project-context.js").ProjectTask) => sum + (t.storyPoints ?? 1), 0);
+                const done = allTasks.filter((t: import("../../utils/project-context.js").ProjectTask) => t.status === "done").reduce((sum: number, t: import("../../utils/project-context.js").ProjectTask) => sum + (t.storyPoints ?? 1), 0);
+                return total === 0 ? 0 : Math.round((done / total) * 100);
+              }
+            }
+            return projectCtx.config?.progress;
+          })(),
+          deadline: projectCtx.config?.deadline,
+          sprints: projectCtx.config?.sprints,
+          milestones: projectCtx.config?.milestones,
+          backlog: projectCtx.config?.backlog,
+          acceptanceCriteria: projectCtx.config?.acceptanceCriteria,
+          progressNotes: projectCtx.config?.progressNotes,
+          progressUpdatedAt: projectCtx.config?.progressUpdatedAt,
           groups: projectGroups.map((g) => ({
             groupId: g.id,
             name: g.name,
@@ -219,6 +269,114 @@ export const projectsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(ErrorCodes.UNAVAILABLE, `Failed to update project workspace: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 更新项目进度
+   *
+   * 将进度、状态、截止时间等写入 PROJECT_CONFIG.json
+   */
+  "projects.updateProgress": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
+        return;
+      }
+
+      const { buildProjectContext, readProjectConfig } = await import(
+        "../../utils/project-context.js"
+      );
+      const path = await import("path");
+      const fs = await import("fs");
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+      const configPath = path.join(ctx.workspacePath, "PROJECT_CONFIG.json");
+
+      // 读取现有配置，若不存在则新建基础结构
+      const existing = readProjectConfig(ctx.workspacePath) ?? {
+        projectId,
+        workspacePath: ctx.workspacePath,
+      };
+
+      // 合并进度字段
+      if (params?.progress !== undefined) existing.progress = Number(params.progress);
+      if (params?.status !== undefined) existing.status = String(params.status) as import("../../utils/project-context.js").ProjectStatus;
+      if (params?.deadline !== undefined) existing.deadline = params.deadline ? Number(params.deadline) : undefined;
+      if (params?.acceptanceCriteria !== undefined) existing.acceptanceCriteria = String(params.acceptanceCriteria);
+      if (params?.progressNotes !== undefined) existing.progressNotes = String(params.progressNotes);
+      // 新增：sprint 列表（直接覆盖）
+      if (params?.sprints !== undefined) {
+        existing.sprints = params.sprints as import("../../utils/project-context.js").ProjectSprint[];
+        // 自动重算 progress
+        const { calcProjectProgress } = await import("../../utils/project-context.js");
+        existing.progress = calcProjectProgress(existing.sprints);
+      }
+      if (params?.backlog !== undefined) existing.backlog = params.backlog as import("../../utils/project-context.js").ProjectTask[];
+      // 向后兼容： milestones 字段
+      if (params?.milestones !== undefined) existing.milestones = params.milestones as import("../../utils/project-context.js").ProjectSprint[];
+      existing.progressUpdatedAt = Date.now();
+
+      // 确保目录存在
+      if (!fs.existsSync(ctx.workspacePath)) {
+        fs.mkdirSync(ctx.workspacePath, { recursive: true });
+      }
+      fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+
+      respond(true, { success: true, projectId, config: existing }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to update progress: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 保存项目基础信息（名称、描述、目录等）
+   */
+  "projects.save": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
+        return;
+      }
+
+      const { buildProjectContext, readProjectConfig } = await import(
+        "../../utils/project-context.js"
+      );
+      const path = await import("path");
+      const fs = await import("fs");
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+      const configPath = path.join(ctx.workspacePath, "PROJECT_CONFIG.json");
+
+      const existing = readProjectConfig(ctx.workspacePath) ?? {
+        projectId,
+        workspacePath: ctx.workspacePath,
+      };
+
+      if (params?.name !== undefined) existing.name = String(params.name);
+      if (params?.description !== undefined) existing.description = String(params.description);
+      if (params?.codeDir !== undefined) existing.codeDir = String(params.codeDir);
+      if (params?.docsDir !== undefined) existing.docsDir = String(params.docsDir);
+      if (params?.requirementsDir !== undefined) existing.requirementsDir = String(params.requirementsDir);
+
+      if (!fs.existsSync(ctx.workspacePath)) {
+        fs.mkdirSync(ctx.workspacePath, { recursive: true });
+      }
+      fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+
+      respond(true, { success: true, projectId }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to save project: ${String(error)}`),
       );
     }
   },

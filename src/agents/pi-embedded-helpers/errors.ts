@@ -112,7 +112,9 @@ export function isContextOverflowError(errorMessage?: string): boolean {
     errorMessage.includes("上下文超出") ||
     errorMessage.includes("上下文长度超") ||
     errorMessage.includes("超出最大上下文") ||
-    errorMessage.includes("请压缩上下文")
+    errorMessage.includes("请压缩上下文") ||
+    // Alibaba Bailian / DashScope: "Range of input length should be [1, N]"
+    /range of input length should be/i.test(lower)
   );
 }
 

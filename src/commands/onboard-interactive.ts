@@ -6,7 +6,7 @@ import { WizardCancelledError } from "../wizard/prompts.js";
 import { runSetupWizard } from "../wizard/setup.js";
 import type { OnboardOptions } from "./onboard-types.js";
 
-export async function runInteractiveOnboarding(
+export async function runInteractiveSetup(
   opts: OnboardOptions,
   runtime: RuntimeEnv = defaultRuntime,
 ) {
@@ -23,7 +23,7 @@ export async function runInteractiveOnboarding(
     throw err;
   } finally {
     // Keep stdin paused so non-daemon runs can exit cleanly (e.g. Docker setup).
-    restoreTerminalState("onboarding finish", { resumeStdinIfPaused: false });
+    restoreTerminalState("setup finish", { resumeStdinIfPaused: false });
     if (exitCode !== null) {
       runtime.exit(exitCode);
     }

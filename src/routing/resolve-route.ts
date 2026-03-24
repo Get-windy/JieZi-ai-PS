@@ -56,6 +56,12 @@ export type ResolvedAgentRoute = {
     | "binding.account"
     | "binding.channel"
     | "default";
+  /**
+   * True when no binding matched this channel+account — the message arrived on
+   * an account that has not been assigned to any agent.
+   * Callers MUST reply with an error and drop the message instead of processing it.
+   */
+  isUnbound?: boolean;
 };
 
 export { DEFAULT_ACCOUNT_ID, DEFAULT_AGENT_ID } from "./session-key.js";
@@ -448,5 +454,6 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
     }
   }
 
-  return choose(resolveDefaultAgentId(input.cfg), "default");
+  const fallbackRoute = choose(resolveDefaultAgentId(input.cfg), "default");
+  return { ...fallbackRoute, isUnbound: true };
 }

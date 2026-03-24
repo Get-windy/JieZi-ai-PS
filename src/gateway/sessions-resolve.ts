@@ -9,15 +9,15 @@
 
 import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import { loadSessionStore, updateSessionStore } from "../../upstream/src/config/sessions.js";
-import { listAgentIds } from "../agents/agent-scope.js";
-import { normalizeAgentId } from "../routing/session-key.js";
-import { parseSessionLabel } from "../../upstream/src/sessions/session-label.js";
 import {
   ErrorCodes,
   type ErrorShape,
   errorShape,
   type SessionsResolveParams,
 } from "../../upstream/src/gateway/protocol/index.js";
+import { parseSessionLabel } from "../../upstream/src/sessions/session-label.js";
+import { listAgentIds } from "../agents/agent-scope.js";
+import { normalizeAgentId } from "../routing/session-key.js";
 import {
   listSessionsFromStore,
   loadCombinedSessionStoreForGateway,
@@ -63,6 +63,22 @@ export async function resolveSessionKeyFromResolveParams(params: {
     }
     const legacyKey = target.storeKeys.find((candidate) => store[candidate]);
     if (!legacyKey) {
+      // Fallback：如果 key 本身是已知 agentId（或能解析出 agentId 的 main session key），
+      // 自动构造 agent:{agentId}:main，允许消息投递并激活该 agent 的主会话
+      const knownAgentIds = listAgentIds(cfg);
+      const normalizedKey = normalizeAgentId(key);
+      // 情况1：key 直接是 agentId（如 "team-member"）
+      if (knownAgentIds.includes(normalizedKey)) {
+        return { ok: true, key: `agent:${normalizedKey}:main` };
+      }
+      // 情况2：key 是 agent:{agentId}:main 格式但 store 里还没有记录
+      const agentMainMatch = /^agent:([^:]+):main$/.exec(key);
+      if (agentMainMatch) {
+        const agentIdFromKey = normalizeAgentId(agentMainMatch[1]);
+        if (knownAgentIds.includes(agentIdFromKey)) {
+          return { ok: true, key: target.canonicalKey };
+        }
+      }
       return {
         ok: false,
         error: errorShape(ErrorCodes.INVALID_REQUEST, `No session found: ${key}`),

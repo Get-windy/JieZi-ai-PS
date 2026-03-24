@@ -294,6 +294,10 @@ export async function preflightDiscordMessage(
     // Pass parent peer for thread binding inheritance
     parentPeer: earlyThreadParentId ? { kind: "channel", id: earlyThreadParentId } : undefined,
   });
+  if (route.isUnbound) {
+    logVerbose(`discord: drop unbound account ${params.accountId} (not assigned to any agent)`);
+    return null;
+  }
   const threadBinding = earlyThreadChannel
     ? params.threadBindings.getByThreadId(messageChannelId)
     : undefined;

@@ -102,11 +102,7 @@ import {
   createRecruitListTool,
 } from "./tools/recruit-management-tools.js";
 import { buildRegisteredTools } from "./tools/registry.js";
-import {
-  createAgentReflectTool,
-  createAgentSkillSaveTool,
-  createAgentSkillListTool,
-} from "./tools/self-evolve-tool.js";
+// agent_reflect/agent_skill_save/agent_skill_list are provided exclusively by memory-core plugin
 import { createSessionStatusTool } from "./tools/session-status-tool.js";
 import { createSessionsHistoryTool } from "./tools/sessions-history-tool.js";
 import { createSessionsListTool } from "./tools/sessions-list-tool.js";
@@ -119,6 +115,9 @@ import {
   createTaskUpdateTool,
   createTaskCompleteTool,
   createTaskDeleteTool,
+  createTaskGetTool,
+  createTaskSubtaskCreateTool,
+  createTaskWorklogAddTool,
 } from "./tools/task-management-tools.js";
 import { createTeamOrchestrateTool } from "./tools/team-orchestrate-tool.js";
 import {
@@ -461,6 +460,24 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
     }),
+    createTaskGetTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTaskSubtaskCreateTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTaskWorklogAddTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
     createAgentDiscoverTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
@@ -717,25 +734,7 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
     }),
-    // 自我进化工具
-    createAgentReflectTool({
-      agentId: resolveSessionAgentId({
-        sessionKey: options?.agentSessionKey,
-        config: options?.config,
-      }),
-    }),
-    createAgentSkillSaveTool({
-      agentId: resolveSessionAgentId({
-        sessionKey: options?.agentSessionKey,
-        config: options?.config,
-      }),
-    }),
-    createAgentSkillListTool({
-      agentId: resolveSessionAgentId({
-        sessionKey: options?.agentSessionKey,
-        config: options?.config,
-      }),
-    }),
+    // 自我进化工具 (agent_reflect/agent_skill_save/agent_skill_list) 由 memory-core 插件提供，此处不重复注册
     // 团队编排工具
     createTeamOrchestrateTool({
       agentId: resolveSessionAgentId({

@@ -370,6 +370,10 @@ export class OpenClawApp extends LitElement {
   @state() creatingProject = false;
   @state() editingProject: import("./views/projects.ts").ProjectInfo | null = null;
   @state() upgradingGroupToProject = false;
+  /** 项目代码根目录（用户在项目管理页面顶部设置，常驻内存） */
+  @state() projectCodeRoot = "";
+  /** 项目列表状态筛选（默认显示进行中） */
+  @state() projectStatusFilter: import("./views/projects.ts").ProjectStatusFilter = "active";
   // 项目跨团队协作 Handoff 状态
   @state() projectTeamRelations: import("./views/projects.ts").ProjectTeamRelation[] = [];
   @state() projectTeamRelationsLoading = false;
@@ -1123,12 +1127,16 @@ export class OpenClawApp extends LitElement {
       });
       console.log(`[handleSaveAccount] request succeeded for ${channelId}/${accountId}`);
 
-      // 刷新配置和通道状态
-      const { loadConfig } = await import("./controllers/config.js");
-      await loadConfig(this);
-      await this.handleChannelsRefresh(false);
+      // 先关闭弹窗，再异步刷新状态（避免 channels.status 超时导致"保存中"卡住）
       this.editingChannelAccount = null;
       this.managingChannelId = channelId;
+
+      // 异步刷新配置和通道状态，不阻塞 UI 恢复
+      const { loadConfig } = await import("./controllers/config.js");
+      loadConfig(this).catch((err) => console.warn("[handleSaveAccount] loadConfig failed:", err));
+      this.handleChannelsRefresh(false).catch((err) =>
+        console.warn("[handleSaveAccount] channelsRefresh failed:", err),
+      );
     } catch (err) {
       console.error("Save account failed:", err);
       this.channelsError = String(err);

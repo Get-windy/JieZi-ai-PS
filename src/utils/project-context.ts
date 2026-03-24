@@ -33,6 +33,101 @@ export interface ProjectContext {
   config?: ProjectConfig;
 }
 
+/** 项目生命周期状态 */
+export type ProjectStatus =
+  | "planning"
+  | "active"
+  | "dev_done"
+  | "operating"
+  | "maintenance"
+  | "paused"
+  | "completed"
+  | "deprecated"
+  | "cancelled";
+
+/** 任务优先级（借鉴 Linear/Jira 标准） */
+export type TaskPriority = "urgent" | "high" | "medium" | "low" | "none";
+
+/** 任务看板状态 */
+export type TaskStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done" | "cancelled";
+
+/**
+ * 项目任务/Issue（借鉴 Linear 的 Issue 模型）
+ * 每个任务是可追踪的最小工作单元
+ */
+export interface ProjectTask {
+  id: string;
+  title: string;
+  description?: string;
+  /** 任务看板状态 */
+  status: TaskStatus;
+  /** 优先级 */
+  priority: TaskPriority;
+  /** 负责人 Agent ID */
+  assigneeId?: string;
+  /** Story Point 估算（Fibonacci: 1,2,3,5,8,13） */
+  storyPoints?: number;
+  /** 标签 */
+  labels?: string[];
+  /** 截止时间 */
+  dueDate?: number;
+  /** 完成时间 */
+  completedAt?: number;
+  /** 创建时间 */
+  createdAt: number;
+  /** 最后更新时间 */
+  updatedAt?: number;
+  /** 阻塞此任务的任务 ID 列表（依赖关系）*/
+  blockedBy?: string[];
+}
+
+/**
+ * 项目 Sprint / 阶段（借鉴 Scrum Sprint 概念）
+ * 一个有时间边界的迭代周期，包含一批任务
+ */
+export interface ProjectSprint {
+  id: string;
+  title: string;
+  /** Sprint 目标（类似 Scrum Sprint Goal） */
+  goal?: string;
+  /** Sprint 开始时间 */
+  startDate?: number;
+  /** Sprint 截止时间 */
+  endDate?: number;
+  /** 完成时间 */
+  completedAt?: number;
+  /** 排序序号（从1开始）*/
+  order: number;
+  /** 包含的任务列表 */
+  tasks: ProjectTask[];
+}
+
+/** 计算 Sprint 的完成进度（基于 done 任务的 storyPoints 或任务数量）*/
+export function calcSprintProgress(sprint: ProjectSprint): number {
+  const tasks = sprint.tasks.filter((t) => t.status !== "cancelled");
+  if (tasks.length === 0) return 0;
+  const totalPoints = tasks.reduce((sum, t) => sum + (t.storyPoints ?? 1), 0);
+  const donePoints = tasks
+    .filter((t) => t.status === "done")
+    .reduce((sum, t) => sum + (t.storyPoints ?? 1), 0);
+  return totalPoints === 0 ? 0 : Math.round((donePoints / totalPoints) * 100);
+}
+
+/** 计算项目整体进度（基于所有 Sprint 的加权平均）*/
+export function calcProjectProgress(sprints: ProjectSprint[]): number {
+  if (sprints.length === 0) return 0;
+  const allTasks = sprints.flatMap((s) => s.tasks).filter((t) => t.status !== "cancelled");
+  if (allTasks.length === 0) return 0;
+  const total = allTasks.reduce((sum, t) => sum + (t.storyPoints ?? 1), 0);
+  const done = allTasks
+    .filter((t) => t.status === "done")
+    .reduce((sum, t) => sum + (t.storyPoints ?? 1), 0);
+  return total === 0 ? 0 : Math.round((done / total) * 100);
+}
+
+/** 向后兼容：保留 ProjectMilestone 类型别名 */
+export type ProjectMilestone = ProjectSprint;
+
 /**
  * 项目配置文件结构
  */
@@ -51,6 +146,33 @@ export interface ProjectConfig {
   docsDir?: string;
   /** 需求目录路径 (可选，默认在 workspace/requirements) */
   requirementsDir?: string;
+  // ===== 进度管理字段 =====
+  /** 项目状态 */
+  status?: ProjectStatus;
+  /**
+   * 整体进度 0-100。
+   * 若有 sprints 则由 calcProjectProgress(sprints) 自动计算，手动字段仅作兜底缓存。
+   */
+  progress?: number;
+  /** 截止时间（Unix 毫秒时间戳） */
+  deadline?: number;
+  /**
+   * Sprint 列表（主要进度载体，替代原里程碑）
+   * 每个 Sprint 内含 tasks，整体进度由此自动计算
+   */
+  sprints?: ProjectSprint[];
+  /** 向后兼容：原 milestones 字段，优先使用 sprints */
+  milestones?: ProjectSprint[];
+  /** Backlog 任务列表（未分配到 Sprint 的任务） */
+  backlog?: ProjectTask[];
+  /** 验收标准（Markdown 格式） */
+  acceptanceCriteria?: string;
+  /** 最后一次进度更新的备注 */
+  progressNotes?: string;
+  /** 进度最后更新时间 */
+  progressUpdatedAt?: number;
+  /** 创建时间 */
+  createdAt?: number;
   /**
    * 项目级工具策略（可选）。
    * 在 Agent 级策略之后生效，可用于按项目类型限制工具访问。

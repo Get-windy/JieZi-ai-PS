@@ -544,6 +544,14 @@ export async function registerSlackMonitorSlashCommands(params: {
           id: isDirectMessage ? command.user_id : command.channel_id,
         },
       });
+      if (route.isUnbound) {
+        logVerbose(`slack: drop slash command — account ${account.accountId} not assigned to any agent`);
+        await respond({
+          text: "此通道账号暂未分配给任何助手，无法处理您的消息。请联系管理员完成绑定配置。",
+          response_type: "ephemeral",
+        });
+        return;
+      }
 
       const { untrustedChannelMetadata, groupSystemPrompt } = resolveSlackRoomContextHints({
         isRoomish,

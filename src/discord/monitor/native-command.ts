@@ -1494,6 +1494,19 @@ async function dispatchDiscordCommandInteraction(params: {
     },
     parentPeer: threadParentId ? { kind: "channel", id: threadParentId } : undefined,
   });
+  if (route.isUnbound) {
+    logVerbose(`discord: drop slash command — account ${accountId} not assigned to any agent`);
+    try {
+      await interaction.reply({
+        content:
+          "此通道账号暂未分配给任何助手，无法处理您的消息。请联系管理员完成绑定配置。",
+        ephemeral: true,
+      });
+    } catch (_err) {
+      // ignore reply errors
+    }
+    return;
+  }
   const threadBinding = isThreadChannel ? threadBindings.getByThreadId(rawChannelId) : undefined;
   const boundSessionKey = threadBinding?.targetSessionKey?.trim();
   const boundAgentId = boundSessionKey ? resolveAgentIdFromSessionKey(boundSessionKey) : undefined;

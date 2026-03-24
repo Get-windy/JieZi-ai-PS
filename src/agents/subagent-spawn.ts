@@ -1,26 +1,48 @@
 import crypto from "node:crypto";
-import { formatThinkingLevels, normalizeThinkLevel } from "../auto-reply/thinking.js";
-import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../../upstream/src/config/agent-limits.js";
-import { loadConfig } from "../../upstream/src/config/config.js";
-import { callGateway } from "../../upstream/src/gateway/call.js";
-import { getGlobalHookRunner } from "../../upstream/src/plugins/hook-runner-global.js";
-import { isValidAgentId, isCronSessionKey, normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.js";
-import { normalizeDeliveryContext } from "../../upstream/src/utils/delivery-context.js";
-import { resolveAgentConfig } from "./agent-scope.js";
+import { promises as fs } from "node:fs";
 import { AGENT_LANE_SUBAGENT } from "../../upstream/src/agents/lanes.js";
 import { resolveSubagentSpawnModelSelection } from "../../upstream/src/agents/model-selection.js";
+import { resolveSandboxRuntimeStatus } from "../../upstream/src/agents/sandbox/runtime-status.js";
+import {
+  mapToolContextToSpawnedRunMetadata,
+  normalizeSpawnedRunMetadata,
+  resolveSpawnedWorkspaceInheritance,
+} from "../../upstream/src/agents/spawned-context.js";
 import { buildSubagentSystemPrompt } from "../../upstream/src/agents/subagent-announce.js";
+import {
+  decodeStrictBase64,
+  materializeSubagentAttachments,
+  type SubagentAttachmentReceiptFile,
+} from "../../upstream/src/agents/subagent-attachments.js";
+import { resolveSubagentCapabilities } from "../../upstream/src/agents/subagent-capabilities.js";
 import { getSubagentDepthFromSessionStore } from "../../upstream/src/agents/subagent-depth.js";
-import { countActiveRunsForSession, registerSubagentRun } from "./subagent-registry.js";
 import { readStringParam } from "../../upstream/src/agents/tools/common.js";
 import {
   resolveDisplaySessionKey,
   resolveInternalSessionKey,
   resolveMainSessionAlias,
 } from "../../upstream/src/agents/tools/sessions-helpers.js";
+import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../../upstream/src/config/agent-limits.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
+import { callGateway } from "../../upstream/src/gateway/call.js";
+import { getGlobalHookRunner } from "../../upstream/src/plugins/hook-runner-global.js";
+import { normalizeDeliveryContext } from "../../upstream/src/utils/delivery-context.js";
+import { formatThinkingLevels, normalizeThinkLevel } from "../auto-reply/thinking.js";
+import {
+  isValidAgentId,
+  isCronSessionKey,
+  normalizeAgentId,
+  parseAgentSessionKey,
+} from "../routing/session-key.js";
+import { resolveAgentConfig } from "./agent-scope.js";
+import { countActiveRunsForSession, registerSubagentRun } from "./subagent-registry.js";
 
 export const SUBAGENT_SPAWN_MODES = ["run", "session"] as const;
 export type SpawnSubagentMode = (typeof SUBAGENT_SPAWN_MODES)[number];
+export const SUBAGENT_SPAWN_SANDBOX_MODES = ["inherit", "require"] as const;
+export type SpawnSubagentSandboxMode = (typeof SUBAGENT_SPAWN_SANDBOX_MODES)[number];
+
+export { decodeStrictBase64 };
 
 export type SpawnSubagentParams = {
   task: string;
@@ -32,7 +54,15 @@ export type SpawnSubagentParams = {
   thread?: boolean;
   mode?: SpawnSubagentMode;
   cleanup?: "delete" | "keep";
+  sandbox?: SpawnSubagentSandboxMode;
   expectsCompletionMessage?: boolean;
+  attachments?: Array<{
+    name: string;
+    content: string;
+    encoding?: "utf8" | "base64";
+    mimeType?: string;
+  }>;
+  attachMountPath?: string;
 };
 
 export type SpawnSubagentContext = {
@@ -45,6 +75,8 @@ export type SpawnSubagentContext = {
   agentGroupChannel?: string | null;
   agentGroupSpace?: string | null;
   requesterAgentIdOverride?: string;
+  /** Explicit workspace directory for subagent to inherit (optional). */
+  workspaceDir?: string;
 };
 
 export const SUBAGENT_SPAWN_ACCEPTED_NOTE =
@@ -60,6 +92,12 @@ export type SpawnSubagentResult = {
   note?: string;
   modelApplied?: boolean;
   error?: string;
+  attachments?: {
+    count: number;
+    totalBytes: number;
+    files: Array<{ name: string; bytes: number; sha256: string }>;
+    relDir: string;
+  };
 };
 
 export function splitModelRef(ref?: string) {
@@ -75,6 +113,63 @@ export function splitModelRef(ref?: string) {
     return { provider, model };
   }
   return { provider: undefined, model: trimmed };
+}
+
+function sanitizeMountPathHint(value?: string): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  // Prevent prompt injection via control/newline characters in system prompt hints.
+  // eslint-disable-next-line no-control-regex
+  if (/[\r\n\u0000-\u001F\u007F\u0085\u2028\u2029]/.test(trimmed)) {
+    return undefined;
+  }
+  if (!/^[A-Za-z0-9._ \-/:]+$/.test(trimmed)) {
+    return undefined;
+  }
+  return trimmed;
+}
+
+async function cleanupProvisionalSession(
+  childSessionKey: string,
+  options?: {
+    emitLifecycleHooks?: boolean;
+    deleteTranscript?: boolean;
+  },
+): Promise<void> {
+  try {
+    await callGateway({
+      method: "sessions.delete",
+      params: {
+        key: childSessionKey,
+        emitLifecycleHooks: options?.emitLifecycleHooks === true,
+        deleteTranscript: options?.deleteTranscript === true,
+      },
+      timeoutMs: 10_000,
+    });
+  } catch {
+    // Best-effort cleanup only.
+  }
+}
+
+async function cleanupFailedSpawnBeforeAgentStart(params: {
+  childSessionKey: string;
+  attachmentAbsDir?: string;
+  emitLifecycleHooks?: boolean;
+  deleteTranscript?: boolean;
+}): Promise<void> {
+  if (params.attachmentAbsDir) {
+    try {
+      await fs.rm(params.attachmentAbsDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }
+  await cleanupProvisionalSession(params.childSessionKey, {
+    emitLifecycleHooks: params.emitLifecycleHooks,
+    deleteTranscript: params.deleteTranscript,
+  });
 }
 
 function resolveSpawnMode(params: {
@@ -180,6 +275,7 @@ export async function spawnSubagentDirect(
   const modelOverride = params.model;
   const thinkingOverrideRaw = params.thinking;
   const requestThreadBinding = params.thread === true;
+  const sandboxMode = params.sandbox === "require" ? "require" : "inherit";
   const spawnMode = resolveSpawnMode({
     requestedMode: params.mode,
     threadRequested: requestThreadBinding,
@@ -275,8 +371,34 @@ export async function spawnSubagentDirect(
     }
   }
   const childSessionKey = `agent:${targetAgentId}:subagent:${crypto.randomUUID()}`;
+  const requesterRuntime = resolveSandboxRuntimeStatus({
+    cfg,
+    sessionKey: requesterInternalKey,
+  });
+  const childRuntime = resolveSandboxRuntimeStatus({
+    cfg,
+    sessionKey: childSessionKey,
+  });
+  if (!childRuntime.sandboxed && (requesterRuntime.sandboxed || sandboxMode === "require")) {
+    if (requesterRuntime.sandboxed) {
+      return {
+        status: "forbidden",
+        error:
+          "Sandboxed sessions cannot spawn unsandboxed subagents. Set a sandboxed target agent or use the same agent runtime.",
+      };
+    }
+    return {
+      status: "forbidden",
+      error:
+        'sessions_spawn sandbox="require" needs a sandboxed target runtime. Pick a sandboxed agentId or use sandbox="inherit".',
+    };
+  }
   const childDepth = callerDepth + 1;
   const spawnedByKey = requesterInternalKey;
+  const childCapabilities = resolveSubagentCapabilities({
+    depth: childDepth,
+    maxSpawnDepth,
+  });
   const targetAgentConfig = resolveAgentConfig(cfg, targetAgentId);
   const resolvedModel = resolveSubagentSpawnModelSelection({
     cfg,
@@ -315,22 +437,15 @@ export async function spawnSubagentDirect(
     }
   };
 
-  const spawnDepthPatchError = await patchChildSession({ spawnDepth: childDepth });
+  const spawnDepthPatchError = await patchChildSession({
+    spawnDepth: childDepth,
+    subagentRole: childCapabilities.role === "main" ? null : childCapabilities.role,
+    subagentControlScope: childCapabilities.controlScope,
+  });
   if (spawnDepthPatchError) {
     return {
       status: "error",
       error: spawnDepthPatchError,
-      childSessionKey,
-    };
-  }
-
-  // Write spawnedBy into the child session store so gateway reads it from entry.spawnedBy
-  // (matches upstream behavior: patch first, then agent call omits spawnedBy param).
-  const spawnLineagePatchError = await patchChildSession({ spawnedBy: spawnedByKey });
-  if (spawnLineagePatchError) {
-    return {
-      status: "error",
-      error: spawnLineagePatchError,
       childSessionKey,
     };
   }
@@ -391,15 +506,55 @@ export async function spawnSubagentDirect(
     }
     threadBindingReady = true;
   }
-  const childSystemPrompt = buildSubagentSystemPrompt({
+  const childSystemPromptBase = buildSubagentSystemPrompt({
     requesterSessionKey,
     requesterOrigin,
     childSessionKey,
     label: label || undefined,
     task,
+    acpEnabled: cfg.acp?.enabled !== false && !childRuntime.sandboxed,
     childDepth,
     maxSpawnDepth,
   });
+
+  const mountPathHint = sanitizeMountPathHint(params.attachMountPath);
+
+  let retainOnSessionKeep = false;
+  let attachmentsReceipt:
+    | {
+        count: number;
+        totalBytes: number;
+        files: SubagentAttachmentReceiptFile[];
+        relDir: string;
+      }
+    | undefined;
+  let attachmentAbsDir: string | undefined;
+  let attachmentRootDir: string | undefined;
+  const materializedAttachments = await materializeSubagentAttachments({
+    config: cfg,
+    targetAgentId,
+    attachments: params.attachments,
+    mountPathHint,
+  });
+  if (materializedAttachments && materializedAttachments.status !== "ok") {
+    await cleanupProvisionalSession(childSessionKey, {
+      emitLifecycleHooks: threadBindingReady,
+      deleteTranscript: true,
+    });
+    return {
+      status: materializedAttachments.status,
+      error: materializedAttachments.error,
+    };
+  }
+  let childSystemPrompt = childSystemPromptBase;
+  if (materializedAttachments?.status === "ok") {
+    retainOnSessionKeep = materializedAttachments.retainOnSessionKeep;
+    attachmentsReceipt = materializedAttachments.receipt;
+    attachmentAbsDir = materializedAttachments.absDir;
+    attachmentRootDir = materializedAttachments.rootDir;
+    childSystemPrompt = `${childSystemPrompt}\n\n${materializedAttachments.systemPromptSuffix}`;
+  }
+
   const childTaskMessage = [
     `[Subagent Context] You are running as a subagent (depth ${childDepth}/${maxSpawnDepth}). Results auto-announce to your requester; do not busy-poll for status.`,
     spawnMode === "session"
@@ -410,9 +565,50 @@ export async function spawnSubagentDirect(
     .filter((line): line is string => Boolean(line))
     .join("\n\n");
 
+  const toolSpawnMetadata = mapToolContextToSpawnedRunMetadata({
+    agentGroupId: ctx.agentGroupId,
+    agentGroupChannel: ctx.agentGroupChannel,
+    agentGroupSpace: ctx.agentGroupSpace,
+    workspaceDir: ctx.workspaceDir,
+  });
+  const spawnedMetadata = normalizeSpawnedRunMetadata({
+    spawnedBy: spawnedByKey,
+    ...toolSpawnMetadata,
+    workspaceDir: resolveSpawnedWorkspaceInheritance({
+      config: cfg,
+      targetAgentId,
+      // For cross-agent spawns, ignore the caller's inherited workspace;
+      // let targetAgentId resolve the correct workspace instead.
+      explicitWorkspaceDir:
+        targetAgentId !== requesterAgentId ? undefined : toolSpawnMetadata.workspaceDir,
+    }),
+  });
+  const spawnLineagePatchError = await patchChildSession({
+    spawnedBy: spawnedByKey,
+    ...(spawnedMetadata.workspaceDir ? { spawnedWorkspaceDir: spawnedMetadata.workspaceDir } : {}),
+  });
+  if (spawnLineagePatchError) {
+    await cleanupFailedSpawnBeforeAgentStart({
+      childSessionKey,
+      attachmentAbsDir,
+      emitLifecycleHooks: threadBindingReady,
+      deleteTranscript: true,
+    });
+    return {
+      status: "error",
+      error: spawnLineagePatchError,
+      childSessionKey,
+    };
+  }
+
   const childIdem = crypto.randomUUID();
   let childRunId: string = childIdem;
   try {
+    const {
+      spawnedBy: _spawnedBy,
+      workspaceDir: _workspaceDir,
+      ...publicSpawnedMetadata
+    } = spawnedMetadata;
     const response = await callGateway<{ runId: string }>({
       method: "agent",
       params: {
@@ -429,9 +625,7 @@ export async function spawnSubagentDirect(
         thinking: thinkingOverride,
         timeout: runTimeoutSeconds,
         label: label || undefined,
-        groupId: ctx.agentGroupId ?? undefined,
-        groupChannel: ctx.agentGroupChannel ?? undefined,
-        groupSpace: ctx.agentGroupSpace ?? undefined,
+        ...publicSpawnedMetadata,
       },
       timeoutMs: 10_000,
     });
@@ -439,6 +633,13 @@ export async function spawnSubagentDirect(
       childRunId = response.runId;
     }
   } catch (err) {
+    if (attachmentAbsDir) {
+      try {
+        await fs.rm(attachmentAbsDir, { recursive: true, force: true });
+      } catch {
+        // Best-effort cleanup only.
+      }
+    }
     if (threadBindingReady) {
       const hasEndedHook = hookRunner?.hasHooks("subagent_ended") === true;
       let endedHookEmitted = false;
@@ -491,21 +692,50 @@ export async function spawnSubagentDirect(
     };
   }
 
-  registerSubagentRun({
-    runId: childRunId,
-    childSessionKey,
-    controllerSessionKey: requesterInternalKey,
-    requesterSessionKey: requesterInternalKey,
-    requesterOrigin,
-    requesterDisplayKey,
-    task,
-    cleanup,
-    label: label || undefined,
-    model: resolvedModel,
-    runTimeoutSeconds,
-    expectsCompletionMessage,
-    spawnMode,
-  });
+  try {
+    registerSubagentRun({
+      runId: childRunId,
+      childSessionKey,
+      controllerSessionKey: requesterInternalKey,
+      requesterSessionKey: requesterInternalKey,
+      requesterOrigin,
+      requesterDisplayKey,
+      task,
+      cleanup,
+      label: label || undefined,
+      model: resolvedModel,
+      workspaceDir: spawnedMetadata.workspaceDir,
+      runTimeoutSeconds,
+      expectsCompletionMessage,
+      spawnMode,
+      attachmentsDir: attachmentAbsDir,
+      attachmentsRootDir: attachmentRootDir,
+      retainAttachmentsOnKeep: retainOnSessionKeep,
+    });
+  } catch (err) {
+    if (attachmentAbsDir) {
+      try {
+        await fs.rm(attachmentAbsDir, { recursive: true, force: true });
+      } catch {
+        // Best-effort cleanup only.
+      }
+    }
+    try {
+      await callGateway({
+        method: "sessions.delete",
+        params: { key: childSessionKey, deleteTranscript: true, emitLifecycleHooks: false },
+        timeoutMs: 10_000,
+      });
+    } catch {
+      // Best-effort cleanup only.
+    }
+    return {
+      status: "error",
+      error: `Failed to register subagent run: ${summarizeError(err)}`,
+      childSessionKey,
+      runId: childRunId,
+    };
+  }
 
   if (hookRunner?.hasHooks("subagent_spawned")) {
     try {
@@ -553,5 +783,6 @@ export async function spawnSubagentDirect(
     mode: spawnMode,
     note,
     modelApplied: resolvedModel ? modelApplied : undefined,
+    attachments: attachmentsReceipt,
   };
 }

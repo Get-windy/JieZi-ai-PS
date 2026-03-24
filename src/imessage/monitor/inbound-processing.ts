@@ -215,6 +215,10 @@ export function resolveIMessageInboundDecision(params: {
       id: isGroup ? String(chatId ?? "unknown") : senderNormalized,
     },
   });
+  if (route.isUnbound) {
+    params.logVerbose?.(`imessage: drop — account ${params.accountId} not assigned to any agent`);
+    return { kind: "drop", reason: "unbound account" };
+  }
   const mentionRegexes = buildMentionRegexes(params.cfg, route.agentId);
   const messageText = params.messageText.trim();
   const bodyText = params.bodyText.trim();

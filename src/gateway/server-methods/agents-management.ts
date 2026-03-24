@@ -453,10 +453,10 @@ async function updateAgentField(
  * 自动驱动 agent 的下一条 todo 任务（任务完成/取消/重置后复用）
  * 找出优先级最高且无依赖阻塞的第一条，自动设为 in-progress 并唤醒 agent
  */
-async function scheduleNextTaskForAgent(
+export async function scheduleNextTaskForAgent(
   agentId: string,
   completedTaskId: string,
-  projectId?: string,
+  _projectId?: string,
 ): Promise<void> {
   try {
     // 先检查是否已有 in-progress 任务（防止并发触发导致双 in-progress 违规）
@@ -472,10 +472,11 @@ async function scheduleNextTaskForAgent(
       return;
     }
 
+    // 查全量 todo（不按 projectId 过滤），避免跨项目/无项目任务被遗漏
+    // projectId 仅用于排序偏好（同项目优先），不作为过滤条件
     const todoTasks = await taskStorage.listTasks({
       assigneeId: agentId,
       status: ["todo"],
-      ...(projectId ? { projectId } : {}),
     });
     // listTasks 已按优先级+权重+创建时间排序
     let nextTask: Task | undefined;
@@ -2955,6 +2956,24 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const title = (p?.title ?? task.slice(0, 100)).trim();
 
     // === 步骤1：写入任务系统，建立可追踪任务记录 ===
+    // 若 agent 当前已有 in-progress 任务，则新任务状态设为 todo（排队等待）
+    // 若 agent 当前空闲（无 in-progress），则直接设为 in-progress 并立即推送
+    let initialTaskStatus: Task["status"] = "in-progress";
+    try {
+      const existingInProgress = await taskStorage.listTasks({
+        assigneeId: normalizeAgentId(targetAgentId),
+        status: ["in-progress"],
+      });
+      if (existingInProgress.length > 0) {
+        initialTaskStatus = "todo";
+        console.log(
+          `[agent.assign_task] Agent ${targetAgentId} already has ${existingInProgress.length} in-progress task(s), queuing new task ${taskId} as todo`,
+        );
+      }
+    } catch (checkErr) {
+      console.warn(`[agent.assign_task] Failed to check in-progress tasks: ${String(checkErr)}`);
+    }
+
     try {
       const newTask: Task = {
         id: taskId,
@@ -2971,7 +2990,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             assignedBy: requesterId,
           },
         ],
-        status: "in-progress",
+        status: initialTaskStatus,
         priority,
         organizationId: p?.organizationId ? String(p.organizationId) : undefined,
         teamId: p?.teamId ? String(p.teamId) : undefined,
@@ -2979,7 +2998,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         dueDate: p?.deadline ? new Date(p.deadline).getTime() || undefined : undefined,
         timeTracking: {
           timeSpent: 0,
-          startedAt: Date.now(),
+          startedAt: initialTaskStatus === "in-progress" ? Date.now() : undefined,
           lastActivityAt: Date.now(),
         },
         metadata: {
@@ -2996,6 +3015,28 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     } catch (taskErr) {
       // 写入任务系统失败不阻止消息投递，但记录警告
       console.warn(`[agent.assign_task] Failed to write task to storage: ${String(taskErr)}`);
+    }
+
+    // === 步骤 2：根据任务初始状态决定是否立即推送消息 ===
+    // 如果任务入队排候（todo）：预计反馈已排队，由自动调度器处理，不需要立即推送
+    // 如果任务直接入场（in-progress）：推送任务消息 + 唐醒 agent
+    if (initialTaskStatus === "todo") {
+      respond(
+        true,
+        {
+          queued: true,
+          taskId,
+          targetAgent: targetAgentId,
+          sessionKey,
+          priority,
+          assignedAt: Date.now(),
+          trackedInTaskSystem: true,
+          taskStatus: "todo",
+          note: `Agent ${targetAgentId} is currently busy. Task has been queued and will be auto-started when current task completes.`,
+        },
+        undefined,
+      );
+      return;
     }
 
     // === 步骤 2：格式化任务消息并投递到目标 Agent ===
@@ -3564,13 +3605,15 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           finalStatus === "done"
             ? "✅ 已完成"
             : finalStatus === "blocked"
-              ? "⚠️ 已阻塞"
+              ? "⚠️ 已阻塞（需要你介入协调）"
               : finalStatus === "cancelled"
                 ? "❌ 已取消"
                 : `状态: ${finalStatus}`;
 
         const reportLines = [
-          `[TASK REPORT] ${reporterId} 任务汇报`,
+          finalStatus === "blocked"
+            ? `[TASK BLOCKED - ACTION REQUIRED] ${reporterId} 遇到问题，无法继续执行，需要主控介入`
+            : `[TASK REPORT] ${reporterId} 任务汇报`,
           `汇报时间: ${new Date().toISOString()} (刚刚完成)`,
           ``,
           `完成任务: ${statusLabel}`,
@@ -3603,6 +3646,17 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
                 .filter(Boolean)
                 .join("\n")
             : `待执行任务: 无`,
+          finalStatus === "blocked"
+            ? [
+                ``,
+                `❗ 需要主控介入：`,
+                `请检查上述错误信息，并采取以下其中一种操作：`,
+                `  - 调度分配: 用 agent_assign_task 将阻塞源头任务分配给其他 agent`,
+                `  - 延时继续: 用 agent.task.manage action=extend 延长该任务的执行时间`,
+                `  - 取消任务: 用 agent.task.manage action=cancel 取消该任务`,
+                `  - 重置重试: 用 agent.task.manage action=reset 将该任务重置回 todo 队列`,
+              ].join("\n")
+            : null,
         ]
           .filter((l) => l !== null)
           .join("\n");

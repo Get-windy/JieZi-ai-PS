@@ -1105,6 +1105,10 @@ function renderAgentChannelPolicies(params: {
   saveSuccess: boolean;
   // oxlint-disable-next-line typescript/no-explicit-any
   boundChannelAccounts?: any[];
+  // oxlint-disable-next-line typescript/no-explicit-any
+  availableChannelAccounts?: any[];
+  availableChannelAccountsLoading?: boolean;
+  onAddAccount?: (channelId: string, accountId: string) => void;
   onChange?: (agentId: string, config: ChannelPoliciesConfig) => void;
   onEditPolicyBinding?: (agentId: string, index: number, binding: ChannelBinding) => void;
   onAddPolicyBinding?: (agentId: string) => void;
@@ -1525,10 +1529,52 @@ function renderAgentChannelPolicies(params: {
             : html`
                 <div class="callout" style="margin-top: 8px">
                   <div style="font-weight: 500; margin-bottom: 4px">⚠️ 尚未绑定任何通道账号</div>
-                  <div style="font-size: 0.875rem">请先在「通道」标签页绑定通道账号，然后再配置策略。</div>
+                  <div style="font-size: 0.875rem">请在下方可绑定账号列表中选择账号绑定给此助手，绑定后即可配置策略。</div>
                 </div>
               `
         }
+
+      <!-- 可绑定账号列表 -->
+      <div style="margin-top: 24px;">
+        <div class="label" style="margin-bottom: 12px;">可绑定账号</div>
+        <div style="color: var(--fg-muted); font-size: 0.875rem; margin-bottom: 12px;">
+          将未被任何助手使用的通道账号绑定给此助手，绑定后可在上方配置其策略。
+        </div>
+        ${
+          params.availableChannelAccountsLoading
+            ? html`<div class="loading" style="margin-top: 8px">加载中...</div>`
+            : !params.availableChannelAccounts || params.availableChannelAccounts.length === 0
+              ? html`<div class="muted" style="margin-top: 8px">暂无可绑定的通道账号（所有账号已被绑定或尚未配置任何通道）</div>`
+              : html`
+                <div class="list" style="margin-top: 8px;">
+                  ${params.availableChannelAccounts.map(
+                    (account) => html`
+                      <div class="list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 4px; background: var(--bg-1); margin-bottom: 8px;">
+                        <div style="flex: 1;">
+                          <div class="mono" style="font-weight: 500;">${account.channelId}:${account.accountId}</div>
+                          <div class="muted" style="font-size: 0.875rem; margin-top: 2px;">
+                            ${account.label}${!account.configured ? html` &mdash; <span style="color: var(--color-warning)">未完成配置</span>` : nothing}
+                          </div>
+                        </div>
+                        <button
+                          class="btn btn--sm"
+                          ?disabled=${!account.configured || !params.onAddAccount}
+                          title=${!account.configured ? "该账号尚未完成配置，无法绑定" : ""}
+                          @click=${() => {
+                            if (params.onAddAccount && account.configured) {
+                              params.onAddAccount(account.channelId, account.accountId);
+                            }
+                          }}
+                        >
+                          + 绑定
+                        </button>
+                      </div>
+                    `,
+                  )}
+                </div>
+              `
+        }
+      </div>
 
       <!-- 策略说明 -->
       <details style="margin-top: 24px; padding: 16px; border: 1px solid var(--border); border-radius: 6px;">
@@ -1667,6 +1713,7 @@ export function renderAgents(props: AgentsProps) {
                       onFileSave: props.onFileSave,
                       onAddFile: props.onAddFile,
                       onOpenFolder: props.onOpenFolder,
+                      onMigrateWorkspace: props.onMigrateWorkspace,
                     })
                   : nothing
               }
@@ -1811,6 +1858,13 @@ export function renderAgents(props: AgentsProps) {
                       saving: props.channelPoliciesSaving,
                       saveSuccess: props.channelPoliciesSaveSuccess,
                       boundChannelAccounts: props.boundChannelAccounts || [],
+                      availableChannelAccounts: props.availableChannelAccounts || [],
+                      availableChannelAccountsLoading: props.availableChannelAccountsLoading || false,
+                      onAddAccount: (channelId, accountId) => {
+                        if (props.onAddChannelAccount) {
+                          props.onAddChannelAccount(channelId, accountId);
+                        }
+                      },
                       onChange: props.onChannelPoliciesChange,
                       onEditPolicyBinding: props.onEditPolicyBinding,
                       onAddPolicyBinding: props.onAddPolicyBinding,
@@ -1861,10 +1915,13 @@ export function renderAgents(props: AgentsProps) {
                           return;
                         }
                         // oxlint-disable-next-line typescript/no-explicit-any
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const updated = {
                           ...current,
-                          rules: current.rules.map((r: any) =>
-                            r.id === ruleId ? { ...r, ...updates } : r,
+                          rules: current.rules.map((r: unknown) =>
+                            (r as { id: string }).id === ruleId
+                              ? { ...(r as object), ...updates }
+                              : r,
                           ),
                         };
                         await props.onPermissionsConfigChange?.(agentId, updated);
@@ -1875,9 +1932,12 @@ export function renderAgents(props: AgentsProps) {
                           return;
                         }
                         // oxlint-disable-next-line typescript/no-explicit-any
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const updated = {
                           ...current,
-                          rules: current.rules.filter((r: any) => r.id !== ruleId),
+                          rules: current.rules.filter(
+                            (r: unknown) => (r as { id: string }).id !== ruleId,
+                          ),
                         };
                         await props.onPermissionsConfigChange?.(agentId, updated);
                       },
@@ -1887,10 +1947,13 @@ export function renderAgents(props: AgentsProps) {
                           return;
                         }
                         // oxlint-disable-next-line typescript/no-explicit-any
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         const updated = {
                           ...current,
-                          rules: current.rules.map((r: any) =>
-                            r.id === ruleId ? { ...r, enabled: !enabled } : r,
+                          rules: current.rules.map((r: unknown) =>
+                            (r as { id: string }).id === ruleId
+                              ? { ...(r as object), enabled: !enabled }
+                              : r,
                           ),
                         };
                         await props.onPermissionsConfigChange?.(agentId, updated);
@@ -2612,6 +2675,7 @@ function renderAgentFiles(params: {
   onFileSave: (name: string) => void;
   onAddFile?: (agentId: string, name: string) => void;
   onOpenFolder?: (folderPath: string) => void;
+  onMigrateWorkspace?: (agentId: string) => void | Promise<void>;
 }) {
   const list = params.agentFilesList?.agentId === params.agentId ? params.agentFilesList : null;
   const files = list?.files ?? [];
@@ -2629,7 +2693,22 @@ function renderAgentFiles(params: {
           <div class="card-sub">${t("agents.files.subtitle")}</div>
         </div>
         <div class="row" style="gap: 8px;">
-          ${list && params.onOpenFolder ? html`
+          ${
+            params.onMigrateWorkspace
+              ? html`
+            <button
+              class="btn btn--sm"
+              @click=${() => params.onMigrateWorkspace!(params.agentId)}
+              title="${t("agents.migrate_workspace")}"
+            >
+              \u{1F4BB} ${t("agents.migrate_workspace")}
+            </button>
+          `
+              : nothing
+          }
+          ${
+            list && params.onOpenFolder
+              ? html`
             <button
               class="btn btn--sm"
               @click=${() => params.onOpenFolder!(list.workspace)}
@@ -2637,8 +2716,12 @@ function renderAgentFiles(params: {
             >
               \u{1F4C2} \u5728\u6587\u4ef6\u5939\u4e2d\u6253\u5f00
             </button>
-          ` : nothing}
-          ${params.onAddFile ? html`
+          `
+              : nothing
+          }
+          ${
+            params.onAddFile
+              ? html`
             <button
               class="btn btn--sm"
               ?disabled=${params.agentFilesLoading}
@@ -2651,7 +2734,9 @@ function renderAgentFiles(params: {
             >
               + \u6dfb\u52a0\u6587\u4ef6
             </button>
-          ` : nothing}
+          `
+              : nothing
+          }
           <button
             class="btn btn--sm"
             ?disabled=${params.agentFilesLoading}

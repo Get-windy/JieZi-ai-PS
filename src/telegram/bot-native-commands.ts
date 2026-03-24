@@ -483,6 +483,18 @@ export const registerTelegramNativeCommands = ({
               isForum,
               resolvedThreadId,
             });
+          if (route.isUnbound) {
+            logVerbose(`telegram: drop native command — account ${accountId} not assigned to any agent`);
+            try {
+              await bot.api.sendMessage(
+                chatId,
+                "此通道账号暂未分配给任何助手，无法处理您的消息。请联系管理员完成绑定配置。",
+              );
+            } catch (_err) {
+              // ignore send errors
+            }
+            return;
+          }
           const deliveryBaseOptions = buildCommandDeliveryBaseOptions({
             chatId,
             mediaLocalRoots,

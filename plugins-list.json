@@ -1,0 +1,5350 @@
+Config warnings:\n- plugins.entries.bluebubbles: plugin bluebubbles: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\bluebubbles\index.ts)
+- plugins.entries.copilot-proxy: plugin copilot-proxy: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\copilot-proxy\index.ts)
+- plugins.entries.device-pair: plugin device-pair: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\device-pair\index.ts)
+- plugins.entries.diagnostics-otel: plugin diagnostics-otel: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\diagnostics-otel\index.ts)
+- plugins.entries.discord: plugin discord: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\discord\index.ts)
+- plugins.entries.feishu: plugin feishu: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\feishu\index.ts)
+- plugins.entries.googlechat: plugin googlechat: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\googlechat\index.ts)
+- plugins.entries.imessage: plugin imessage: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\imessage\index.ts)
+- plugins.entries.irc: plugin irc: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\irc\index.ts)
+- plugins.entries.line: plugin line: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\line\index.ts)
+- plugins.entries.llm-task: plugin llm-task: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\llm-task\index.ts)
+- plugins.entries.lobster: plugin lobster: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\lobster\index.ts)
+- plugins.entries.matrix: plugin matrix: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\matrix\index.ts)
+- plugins.entries.mattermost: plugin mattermost: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\mattermost\index.ts)
+- plugins.entries.memory-core: plugin memory-core: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\memory-core\index.ts)
+- plugins.entries.memory-lancedb: plugin memory-lancedb: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\memory-lancedb\index.ts)
+- plugins.entries.msteams: plugin msteams: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\msteams\index.ts)
+- plugins.entries.nextcloud-talk: plugin nextcloud-talk: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\nextcloud-talk\index.ts)
+- plugins.entries.nostr: plugin nostr: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\nostr\index.ts)
+- plugins.entries.open-prose: plugin open-prose: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\open-prose\index.ts)
+- plugins.entries.phone-control: plugin phone-control: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\phone-control\index.ts)
+- plugins.entries.qwen-portal-auth: plugin qwen-portal-auth: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\qwen-portal-auth\index.ts)
+- plugins.entries.signal: plugin signal: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\signal\index.ts)
+- plugins.entries.slack: plugin slack: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\slack\index.ts)
+- plugins.entries.synology-chat: plugin synology-chat: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\synology-chat\index.ts)
+- plugins.entries.talk-voice: plugin talk-voice: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\talk-voice\index.ts)
+- plugins.entries.telegram: plugin telegram: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\telegram\index.ts)
+- plugins.entries.thread-ownership: plugin thread-ownership: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\thread-ownership\index.ts)
+- plugins.entries.tlon: plugin tlon: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\tlon\index.ts)
+- plugins.entries.twitch: plugin twitch: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\twitch\index.ts)
+- plugins.entries.voice-call: plugin voice-call: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\voice-call\index.ts)
+- plugins.entries.whatsapp: plugin whatsapp: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\whatsapp\index.ts)
+- plugins.entries.zalo: plugin zalo: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\zalo\index.ts)
+- plugins.entries.zalouser: plugin zalouser: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\zalouser\index.ts)
+[Group Manager] Loaded 7 groups from disk
+[plugins] dingtalk-connector failed to load from C:\Users\Administrator\.openclaw\extensions\dingtalk-connector\index.ts: Error: ParseError: I:\: Export 'mapAllowlistResolutionInputs' is not defined.  
+ I:/JieZI/JieZi-ai-PS/dist/plugin-sdk/compat.js:137:2355
+Config warnings:\n- plugins.entries.bluebubbles: plugin bluebubbles: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\bluebubbles\index.ts)
+- plugins.entries.copilot-proxy: plugin copilot-proxy: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\copilot-proxy\index.ts)
+- plugins.entries.device-pair: plugin device-pair: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\device-pair\index.ts)
+- plugins.entries.diagnostics-otel: plugin diagnostics-otel: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\diagnostics-otel\index.ts)
+- plugins.entries.discord: plugin discord: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\discord\index.ts)
+- plugins.entries.feishu: plugin feishu: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\feishu\index.ts)
+- plugins.entries.googlechat: plugin googlechat: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\googlechat\index.ts)
+- plugins.entries.imessage: plugin imessage: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\imessage\index.ts)
+- plugins.entries.irc: plugin irc: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\irc\index.ts)
+- plugins.entries.line: plugin line: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\line\index.ts)
+- plugins.entries.llm-task: plugin llm-task: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\llm-task\index.ts)
+- plugins.entries.lobster: plugin lobster: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\lobster\index.ts)
+- plugins.entries.matrix: plugin matrix: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\matrix\index.ts)
+- plugins.entries.mattermost: plugin mattermost: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\mattermost\index.ts)
+- plugins.entries.memory-core: plugin memory-core: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\memory-core\index.ts)
+- plugins.entries.memory-lancedb: plugin memory-lancedb: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\memory-lancedb\index.ts)
+- plugins.entries.msteams: plugin msteams: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\msteams\index.ts)
+- plugins.entries.nextcloud-talk: plugin nextcloud-talk: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\nextcloud-talk\index.ts)
+- plugins.entries.nostr: plugin nostr: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\nostr\index.ts)
+- plugins.entries.open-prose: plugin open-prose: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\open-prose\index.ts)
+- plugins.entries.phone-control: plugin phone-control: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\phone-control\index.ts)
+- plugins.entries.qwen-portal-auth: plugin qwen-portal-auth: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\qwen-portal-auth\index.ts)
+- plugins.entries.signal: plugin signal: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\signal\index.ts)
+- plugins.entries.slack: plugin slack: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\slack\index.ts)
+- plugins.entries.synology-chat: plugin synology-chat: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\synology-chat\index.ts)
+- plugins.entries.talk-voice: plugin talk-voice: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\talk-voice\index.ts)
+- plugins.entries.telegram: plugin telegram: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\telegram\index.ts)
+- plugins.entries.thread-ownership: plugin thread-ownership: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\thread-ownership\index.ts)
+- plugins.entries.tlon: plugin tlon: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\tlon\index.ts)
+- plugins.entries.twitch: plugin twitch: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\twitch\index.ts)
+- plugins.entries.voice-call: plugin voice-call: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\voice-call\index.ts)
+- plugins.entries.whatsapp: plugin whatsapp: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\whatsapp\index.ts)
+- plugins.entries.zalo: plugin zalo: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\zalo\index.ts)
+- plugins.entries.zalouser: plugin zalouser: duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\JieZI\JieZi-ai-PS\upstream\extensions\zalouser\index.ts)
+{
+  "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+  "plugins": [
+    {
+      "id": "bluebubbles",
+      "name": "@openclaw/bluebubbles",
+      "description": "OpenClaw BlueBubbles channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\bluebubbles\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\bluebubbles",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "copilot-proxy",
+      "name": "@openclaw/copilot-proxy",
+      "description": "OpenClaw Copilot Proxy provider plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\copilot-proxy\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\copilot-proxy",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "device-pair",
+      "name": "Device Pairing",
+      "description": "Generate setup codes and approve device pairing requests.",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\device-pair\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\device-pair",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "publicUrl": {
+          "label": "Gateway URL",
+          "help": "Public WebSocket URL used for /pair setup codes (ws/wss or http/https)."
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "publicUrl": {
+            "type": "string"
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "diagnostics-otel",
+      "name": "@openclaw/diagnostics-otel",
+      "description": "OpenClaw diagnostics OpenTelemetry exporter",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\diagnostics-otel\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\diagnostics-otel",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "discord",
+      "name": "@openclaw/discord",
+      "description": "OpenClaw Discord channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\discord\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\discord",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "feishu",
+      "name": "feishu",
+      "format": "bundle",
+      "bundleFormat": "claude",
+      "bundleCapabilities": [
+        "skills"
+      ],
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\feishu",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\feishu",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": true,
+      "status": "loaded",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": false
+    },
+    {
+      "id": "google-gemini-cli-auth",
+      "name": "@openclaw/google-gemini-cli-auth",
+      "description": "OpenClaw Gemini CLI OAuth provider plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\google-gemini-cli-auth\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\google-gemini-cli-auth",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "googlechat",
+      "name": "@openclaw/googlechat",
+      "description": "OpenClaw Google Chat channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\googlechat\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\googlechat",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "imessage",
+      "name": "@openclaw/imessage",
+      "description": "OpenClaw iMessage channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\imessage\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\imessage",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "irc",
+      "name": "@openclaw/irc",
+      "description": "OpenClaw IRC channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\irc\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\irc",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "line",
+      "name": "@openclaw/line",
+      "description": "OpenClaw LINE channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\line\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\line",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "llm-task",
+      "name": "LLM Task",
+      "description": "Generic JSON-only LLM tool for structured tasks callable from workflows.",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\llm-task\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\llm-task",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "defaultProvider": {
+            "type": "string"
+          },
+          "defaultModel": {
+            "type": "string"
+          },
+          "defaultAuthProfileId": {
+            "type": "string"
+          },
+          "allowedModels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Allowlist of provider/model keys like openai-codex/gpt-5.2."
+          },
+          "maxTokens": {
+            "type": "number"
+          },
+          "timeoutMs": {
+            "type": "number"
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "lobster",
+      "name": "Lobster",
+      "description": "Typed workflow tool with resumable approvals.",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\lobster\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\lobster",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "matrix",
+      "name": "@openclaw/matrix",
+      "description": "OpenClaw Matrix channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\matrix\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\matrix",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "disabled in config"
+    },
+    {
+      "id": "mattermost",
+      "name": "@openclaw/mattermost",
+      "description": "OpenClaw Mattermost channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\mattermost\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\mattermost",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "memory-core",
+      "name": "Memory (Core)",
+      "description": "File-backed memory search tools and CLI",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\memory-core\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\memory-core",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": true,
+      "status": "loaded",
+      "toolNames": [
+        "memory_search",
+        "memory_get",
+        "memory_save",
+        "memory_delete",
+        "memory_list",
+        "agent_reflect",
+        "agent_skill_save",
+        "agent_skill_list",
+        "team_run",
+        "plan_create",
+        "plan_step_done",
+        "plan_complete"
+      ],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [
+        "memory"
+      ],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 2,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "kind": "memory"
+    },
+    {
+      "id": "memory-lancedb",
+      "name": "@openclaw/memory-lancedb",
+      "description": "OpenClaw LanceDB-backed long-term memory plugin with auto-recall/capture",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\memory-lancedb\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\memory-lancedb",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "embedding.apiKey": {
+          "label": "OpenAI API Key",
+          "sensitive": true,
+          "placeholder": "sk-proj-...",
+          "help": "API key for OpenAI embeddings (or use ${OPENAI_API_KEY})"
+        },
+        "embedding.model": {
+          "label": "Embedding Model",
+          "placeholder": "text-embedding-3-small",
+          "help": "OpenAI embedding model to use"
+        },
+        "dbPath": {
+          "label": "Database Path",
+          "placeholder": "~/.openclaw/memory/lancedb",
+          "advanced": true
+        },
+        "autoCapture": {
+          "label": "Auto-Capture",
+          "help": "Automatically capture important information from conversations"
+        },
+        "autoRecall": {
+          "label": "Auto-Recall",
+          "help": "Automatically inject relevant memories into context"
+        },
+        "captureMaxChars": {
+          "label": "Capture Max Chars",
+          "help": "Maximum message length eligible for auto-capture",
+          "advanced": true,
+          "placeholder": "500"
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "embedding": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "apiKey": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string",
+                "enum": [
+                  "text-embedding-3-small",
+                  "text-embedding-3-large"
+                ]
+              }
+            },
+            "required": [
+              "apiKey"
+            ]
+          },
+          "dbPath": {
+            "type": "string"
+          },
+          "autoCapture": {
+            "type": "boolean"
+          },
+          "autoRecall": {
+            "type": "boolean"
+          },
+          "captureMaxChars": {
+            "type": "number",
+            "minimum": 100,
+            "maximum": 10000
+          }
+        },
+        "required": [
+          "embedding"
+        ]
+      },
+      "kind": "memory",
+      "error": "not in allowlist"
+    },
+    {
+      "id": "minimax-portal-auth",
+      "name": "@openclaw/minimax-portal-auth",
+      "description": "OpenClaw MiniMax Portal OAuth provider plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\minimax-portal-auth\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\minimax-portal-auth",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "msteams",
+      "name": "@openclaw/msteams",
+      "description": "OpenClaw Microsoft Teams channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\msteams\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\msteams",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "nextcloud-talk",
+      "name": "@openclaw/nextcloud-talk",
+      "description": "OpenClaw Nextcloud Talk channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\nextcloud-talk\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\nextcloud-talk",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "nostr",
+      "name": "@openclaw/nostr",
+      "description": "OpenClaw Nostr channel plugin for NIP-04 encrypted DMs",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\nostr\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\nostr",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "open-prose",
+      "name": "OpenProse",
+      "description": "OpenProse VM skill pack with a /prose slash command.",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\open-prose\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\open-prose",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "openclaw-internal",
+      "name": "OpenClaw Internal Tools",
+      "description": "Internal tools registry for custom development and team-specific utilities",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\openclaw-internal\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\openclaw-internal",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "phone-control",
+      "name": "Phone Control",
+      "description": "Arm/disarm high-risk phone node commands (camera/screen/writes) with an optional auto-expiry.",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\phone-control\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\phone-control",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "qwen-portal-auth",
+      "name": "Qwen OAuth",
+      "description": "OAuth flow for Qwen (free-tier) models",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\qwen-portal-auth\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\qwen-portal-auth",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": true,
+      "status": "loaded",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [
+        "qwen-portal"
+      ],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    },
+    {
+      "id": "signal",
+      "name": "@openclaw/signal",
+      "description": "OpenClaw Signal channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\signal\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\signal",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "slack",
+      "name": "@openclaw/slack",
+      "description": "OpenClaw Slack channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\slack\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\slack",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "synology-chat",
+      "name": "@openclaw/synology-chat",
+      "description": "Synology Chat channel plugin for OpenClaw",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\synology-chat\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\synology-chat",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "talk-voice",
+      "name": "Talk Voice",
+      "description": "Manage Talk voice selection (list/set).",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\talk-voice\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\talk-voice",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "telegram",
+      "name": "@openclaw/telegram",
+      "description": "OpenClaw Telegram channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\telegram\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\telegram",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "thread-ownership",
+      "name": "Thread Ownership",
+      "description": "Prevents multiple agents from responding in the same Slack thread. Uses HTTP calls to the slack-forwarder ownership API.",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\thread-ownership\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\thread-ownership",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "forwarderUrl": {
+          "label": "Forwarder URL",
+          "help": "Base URL of the slack-forwarder ownership API (default: http://slack-forwarder:8750)"
+        },
+        "abTestChannels": {
+          "label": "A/B Test Channels",
+          "help": "Slack channel IDs where thread ownership is enforced"
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "forwarderUrl": {
+            "type": "string"
+          },
+          "abTestChannels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "tlon",
+      "name": "@openclaw/tlon",
+      "description": "OpenClaw Tlon/Urbit channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\tlon\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\tlon",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "twitch",
+      "name": "@openclaw/twitch",
+      "description": "OpenClaw Twitch channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\twitch\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\twitch",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "voice-call",
+      "name": "@openclaw/voice-call",
+      "description": "OpenClaw voice-call plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\voice-call\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\voice-call",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "provider": {
+          "label": "Provider",
+          "help": "Use twilio, telnyx, or mock for dev/no-network."
+        },
+        "fromNumber": {
+          "label": "From Number",
+          "placeholder": "+15550001234"
+        },
+        "toNumber": {
+          "label": "Default To Number",
+          "placeholder": "+15550001234"
+        },
+        "inboundPolicy": {
+          "label": "Inbound Policy"
+        },
+        "allowFrom": {
+          "label": "Inbound Allowlist"
+        },
+        "inboundGreeting": {
+          "label": "Inbound Greeting",
+          "advanced": true
+        },
+        "telnyx.apiKey": {
+          "label": "Telnyx API Key",
+          "sensitive": true
+        },
+        "telnyx.connectionId": {
+          "label": "Telnyx Connection ID"
+        },
+        "telnyx.publicKey": {
+          "label": "Telnyx Public Key",
+          "sensitive": true
+        },
+        "twilio.accountSid": {
+          "label": "Twilio Account SID"
+        },
+        "twilio.authToken": {
+          "label": "Twilio Auth Token",
+          "sensitive": true
+        },
+        "outbound.defaultMode": {
+          "label": "Default Call Mode"
+        },
+        "outbound.notifyHangupDelaySec": {
+          "label": "Notify Hangup Delay (sec)",
+          "advanced": true
+        },
+        "serve.port": {
+          "label": "Webhook Port"
+        },
+        "serve.bind": {
+          "label": "Webhook Bind"
+        },
+        "serve.path": {
+          "label": "Webhook Path"
+        },
+        "tailscale.mode": {
+          "label": "Tailscale Mode",
+          "advanced": true
+        },
+        "tailscale.path": {
+          "label": "Tailscale Path",
+          "advanced": true
+        },
+        "tunnel.provider": {
+          "label": "Tunnel Provider",
+          "advanced": true
+        },
+        "tunnel.ngrokAuthToken": {
+          "label": "ngrok Auth Token",
+          "sensitive": true,
+          "advanced": true
+        },
+        "tunnel.ngrokDomain": {
+          "label": "ngrok Domain",
+          "advanced": true
+        },
+        "tunnel.allowNgrokFreeTierLoopbackBypass": {
+          "label": "Allow ngrok Free Tier (Loopback Bypass)",
+          "advanced": true
+        },
+        "streaming.enabled": {
+          "label": "Enable Streaming",
+          "advanced": true
+        },
+        "streaming.openaiApiKey": {
+          "label": "OpenAI Realtime API Key",
+          "sensitive": true,
+          "advanced": true
+        },
+        "streaming.sttModel": {
+          "label": "Realtime STT Model",
+          "advanced": true
+        },
+        "streaming.streamPath": {
+          "label": "Media Stream Path",
+          "advanced": true
+        },
+        "tts.provider": {
+          "label": "TTS Provider Override",
+          "help": "Deep-merges with messages.tts (Edge is ignored for calls).",
+          "advanced": true
+        },
+        "tts.openai.model": {
+          "label": "OpenAI TTS Model",
+          "advanced": true
+        },
+        "tts.openai.voice": {
+          "label": "OpenAI TTS Voice",
+          "advanced": true
+        },
+        "tts.openai.apiKey": {
+          "label": "OpenAI API Key",
+          "sensitive": true,
+          "advanced": true
+        },
+        "tts.elevenlabs.modelId": {
+          "label": "ElevenLabs Model ID",
+          "advanced": true
+        },
+        "tts.elevenlabs.voiceId": {
+          "label": "ElevenLabs Voice ID",
+          "advanced": true
+        },
+        "tts.elevenlabs.apiKey": {
+          "label": "ElevenLabs API Key",
+          "sensitive": true,
+          "advanced": true
+        },
+        "tts.elevenlabs.baseUrl": {
+          "label": "ElevenLabs Base URL",
+          "advanced": true
+        },
+        "publicUrl": {
+          "label": "Public Webhook URL",
+          "advanced": true
+        },
+        "skipSignatureVerification": {
+          "label": "Skip Signature Verification",
+          "advanced": true
+        },
+        "store": {
+          "label": "Call Log Store Path",
+          "advanced": true
+        },
+        "responseModel": {
+          "label": "Response Model",
+          "advanced": true
+        },
+        "responseSystemPrompt": {
+          "label": "Response System Prompt",
+          "advanced": true
+        },
+        "responseTimeoutMs": {
+          "label": "Response Timeout (ms)",
+          "advanced": true
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "telnyx",
+              "twilio",
+              "plivo",
+              "mock"
+            ]
+          },
+          "telnyx": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "apiKey": {
+                "type": "string"
+              },
+              "connectionId": {
+                "type": "string"
+              },
+              "publicKey": {
+                "type": "string"
+              }
+            }
+          },
+          "twilio": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "accountSid": {
+                "type": "string"
+              },
+              "authToken": {
+                "type": "string"
+              }
+            }
+          },
+          "plivo": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "authId": {
+                "type": "string"
+              },
+              "authToken": {
+                "type": "string"
+              }
+            }
+          },
+          "fromNumber": {
+            "type": "string",
+            "pattern": "^\\+[1-9]\\d{1,14}$"
+          },
+          "toNumber": {
+            "type": "string",
+            "pattern": "^\\+[1-9]\\d{1,14}$"
+          },
+          "inboundPolicy": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "allowlist",
+              "pairing",
+              "open"
+            ]
+          },
+          "allowFrom": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^\\+[1-9]\\d{1,14}$"
+            }
+          },
+          "inboundGreeting": {
+            "type": "string"
+          },
+          "outbound": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "defaultMode": {
+                "type": "string",
+                "enum": [
+                  "notify",
+                  "conversation"
+                ]
+              },
+              "notifyHangupDelaySec": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "maxDurationSeconds": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "silenceTimeoutMs": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "transcriptTimeoutMs": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "ringTimeoutMs": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "maxConcurrentCalls": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "serve": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "port": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "bind": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "webhookSecurity": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "allowedHosts": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "trustForwardingHeaders": {
+                    "type": "boolean"
+                  },
+                  "trustedProxyIPs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "tailscale": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "serve",
+                  "funnel"
+                ]
+              },
+              "path": {
+                "type": "string"
+              }
+            }
+          },
+          "tunnel": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "ngrok",
+                  "tailscale-serve",
+                  "tailscale-funnel"
+                ]
+              },
+              "ngrokAuthToken": {
+                "type": "string"
+              },
+              "ngrokDomain": {
+                "type": "string"
+              },
+              "allowNgrokFreeTierLoopbackBypass": {
+                "type": "boolean"
+              }
+            }
+          },
+          "streaming": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "sttProvider": {
+                "type": "string",
+                "enum": [
+                  "openai-realtime"
+                ]
+              },
+              "openaiApiKey": {
+                "type": "string"
+              },
+              "sttModel": {
+                "type": "string"
+              },
+              "silenceDurationMs": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "vadThreshold": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "streamPath": {
+                "type": "string"
+              },
+              "preStartTimeoutMs": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "maxPendingConnections": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "maxPendingConnectionsPerIp": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "maxConnections": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "publicUrl": {
+            "type": "string"
+          },
+          "skipSignatureVerification": {
+            "type": "boolean"
+          },
+          "stt": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "openai"
+                ]
+              },
+              "model": {
+                "type": "string"
+              }
+            }
+          },
+          "tts": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "auto": {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "always",
+                  "inbound",
+                  "tagged"
+                ]
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "final",
+                  "all"
+                ]
+              },
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "openai",
+                  "elevenlabs",
+                  "edge"
+                ]
+              },
+              "summaryModel": {
+                "type": "string"
+              },
+              "modelOverrides": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "allowText": {
+                    "type": "boolean"
+                  },
+                  "allowProvider": {
+                    "type": "boolean"
+                  },
+                  "allowVoice": {
+                    "type": "boolean"
+                  },
+                  "allowModelId": {
+                    "type": "boolean"
+                  },
+                  "allowVoiceSettings": {
+                    "type": "boolean"
+                  },
+                  "allowNormalization": {
+                    "type": "boolean"
+                  },
+                  "allowSeed": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "elevenlabs": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "apiKey": {
+                    "type": "string"
+                  },
+                  "baseUrl": {
+                    "type": "string"
+                  },
+                  "voiceId": {
+                    "type": "string"
+                  },
+                  "modelId": {
+                    "type": "string"
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "applyTextNormalization": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "on",
+                      "off"
+                    ]
+                  },
+                  "languageCode": {
+                    "type": "string"
+                  },
+                  "voiceSettings": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "stability": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "similarityBoost": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "style": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "useSpeakerBoost": {
+                        "type": "boolean"
+                      },
+                      "speed": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 2
+                      }
+                    }
+                  }
+                }
+              },
+              "openai": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "apiKey": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "voice": {
+                    "type": "string"
+                  },
+                  "baseUrl": {
+                    "type": "string"
+                  },
+                  "speed": {
+                    "type": "number",
+                    "minimum": 0.25,
+                    "maximum": 4
+                  },
+                  "instructions": {
+                    "type": "string"
+                  }
+                }
+              },
+              "edge": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "voice": {
+                    "type": "string"
+                  },
+                  "lang": {
+                    "type": "string"
+                  },
+                  "outputFormat": {
+                    "type": "string"
+                  },
+                  "pitch": {
+                    "type": "string"
+                  },
+                  "rate": {
+                    "type": "string"
+                  },
+                  "volume": {
+                    "type": "string"
+                  },
+                  "saveSubtitles": {
+                    "type": "boolean"
+                  },
+                  "proxy": {
+                    "type": "string"
+                  },
+                  "timeoutMs": {
+                    "type": "integer",
+                    "minimum": 1000,
+                    "maximum": 120000
+                  }
+                }
+              },
+              "prefsPath": {
+                "type": "string"
+              },
+              "maxTextLength": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "timeoutMs": {
+                "type": "integer",
+                "minimum": 1000,
+                "maximum": 120000
+              }
+            }
+          },
+          "store": {
+            "type": "string"
+          },
+          "responseModel": {
+            "type": "string"
+          },
+          "responseSystemPrompt": {
+            "type": "string"
+          },
+          "responseTimeoutMs": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "whatsapp",
+      "name": "@openclaw/whatsapp",
+      "description": "OpenClaw WhatsApp channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\whatsapp\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\whatsapp",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "zalo",
+      "name": "@openclaw/zalo",
+      "description": "OpenClaw Zalo channel plugin",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\zalo\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\zalo",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "zalouser",
+      "name": "@openclaw/zalouser",
+      "description": "OpenClaw Zalo Personal Account plugin via zca-cli",
+      "version": "2026.2.23",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\extensions\\zalouser\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\extensions\\zalouser",
+      "origin": "config",
+      "workspaceDir": "H:\\OpenClaw_Workspace\\main",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "acpx",
+      "name": "ACPX Runtime",
+      "description": "ACP runtime backend powered by acpx with configurable command path and version policy.",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\acpx\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\acpx",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "command": {
+          "label": "acpx Command",
+          "help": "Optional path/command override for acpx (for example /home/user/repos/acpx/dist/cli.js). Leave unset to use plugin-local bundled acpx."
+        },
+        "expectedVersion": {
+          "label": "Expected acpx Version",
+          "help": "Exact version to enforce (for example 0.1.16) or \"any\" to skip strict version matching."
+        },
+        "cwd": {
+          "label": "Default Working Directory",
+          "help": "Default cwd for ACP session operations when not set per session."
+        },
+        "permissionMode": {
+          "label": "Permission Mode",
+          "help": "Default acpx permission policy for runtime prompts."
+        },
+        "nonInteractivePermissions": {
+          "label": "Non-Interactive Permission Policy",
+          "help": "acpx policy when interactive permission prompts are unavailable."
+        },
+        "strictWindowsCmdWrapper": {
+          "label": "Strict Windows cmd Wrapper",
+          "help": "Enabled by default. On Windows, reject unresolved .cmd/.bat wrappers instead of shell fallback. Disable only for compatibility with non-standard wrappers.",
+          "advanced": true
+        },
+        "timeoutSeconds": {
+          "label": "Prompt Timeout Seconds",
+          "help": "Optional acpx timeout for each runtime turn.",
+          "advanced": true
+        },
+        "queueOwnerTtlSeconds": {
+          "label": "Queue Owner TTL Seconds",
+          "help": "Idle queue-owner TTL for acpx prompt turns. Keep this short in OpenClaw to avoid delayed completion after each turn.",
+          "advanced": true
+        },
+        "mcpServers": {
+          "label": "MCP Servers",
+          "help": "Named MCP server definitions to inject into ACPX-backed session bootstrap. Each entry needs a command and can include args and env.",
+          "advanced": true
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "expectedVersion": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "permissionMode": {
+            "type": "string",
+            "enum": [
+              "approve-all",
+              "approve-reads",
+              "deny-all"
+            ]
+          },
+          "nonInteractivePermissions": {
+            "type": "string",
+            "enum": [
+              "deny",
+              "fail"
+            ]
+          },
+          "strictWindowsCmdWrapper": {
+            "type": "boolean"
+          },
+          "timeoutSeconds": {
+            "type": "number",
+            "minimum": 0.001
+          },
+          "queueOwnerTtlSeconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "mcpServers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "Command to run the MCP server"
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Arguments to pass to the command"
+                },
+                "env": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Environment variables for the MCP server"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            }
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "amazon-bedrock",
+      "name": "@openclaw/amazon-bedrock-provider",
+      "description": "OpenClaw Amazon Bedrock provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\amazon-bedrock\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\amazon-bedrock",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "anthropic",
+      "name": "@openclaw/anthropic-provider",
+      "description": "OpenClaw Anthropic provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\anthropic\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\anthropic",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "bluebubbles",
+      "name": "@openclaw/bluebubbles",
+      "description": "OpenClaw BlueBubbles channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\bluebubbles\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\bluebubbles",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "brave",
+      "name": "@openclaw/brave-plugin",
+      "description": "OpenClaw Brave plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\brave\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\brave",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "webSearch.apiKey": {
+          "label": "Brave Search API Key",
+          "help": "Brave Search API key (fallback: BRAVE_API_KEY env var).",
+          "sensitive": true,
+          "placeholder": "BSA..."
+        },
+        "webSearch.mode": {
+          "label": "Brave Search Mode",
+          "help": "Brave Search mode: web or llm-context."
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "webSearch": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "apiKey": {
+                "type": [
+                  "string",
+                  "object"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "web",
+                  "llm-context"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "byteplus",
+      "name": "@openclaw/byteplus-provider",
+      "description": "OpenClaw BytePlus provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\byteplus\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\byteplus",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "chutes",
+      "name": "@openclaw/chutes-provider",
+      "description": "OpenClaw Chutes.ai provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\chutes\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\chutes",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "cloudflare-ai-gateway",
+      "name": "@openclaw/cloudflare-ai-gateway-provider",
+      "description": "OpenClaw Cloudflare AI Gateway provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\cloudflare-ai-gateway\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\cloudflare-ai-gateway",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "copilot-proxy",
+      "name": "@openclaw/copilot-proxy",
+      "description": "OpenClaw Copilot Proxy provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\copilot-proxy\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\copilot-proxy",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "device-pair",
+      "name": "Device Pairing",
+      "description": "Generate setup codes and approve device pairing requests.",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\device-pair\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\device-pair",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "diagnostics-otel",
+      "name": "@openclaw/diagnostics-otel",
+      "description": "OpenClaw diagnostics OpenTelemetry exporter",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\diagnostics-otel\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\diagnostics-otel",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "diffs",
+      "name": "Diffs",
+      "description": "Read-only diff viewer and file renderer for agents.",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\diffs\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\diffs",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "defaults.fontFamily": {
+          "label": "Default Font",
+          "help": "Preferred font family name for diff content and headers."
+        },
+        "defaults.fontSize": {
+          "label": "Default Font Size",
+          "help": "Base diff font size in pixels."
+        },
+        "defaults.lineSpacing": {
+          "label": "Default Line Spacing",
+          "help": "Line-height multiplier applied to diff rows."
+        },
+        "defaults.layout": {
+          "label": "Default Layout",
+          "help": "Initial diff layout shown in the viewer."
+        },
+        "defaults.showLineNumbers": {
+          "label": "Show Line Numbers",
+          "help": "Show line numbers by default."
+        },
+        "defaults.diffIndicators": {
+          "label": "Diff Indicator Style",
+          "help": "Choose added/removed indicators style."
+        },
+        "defaults.wordWrap": {
+          "label": "Default Word Wrap",
+          "help": "Wrap long lines by default."
+        },
+        "defaults.background": {
+          "label": "Default Background Highlights",
+          "help": "Show added/removed background highlights by default."
+        },
+        "defaults.theme": {
+          "label": "Default Theme",
+          "help": "Initial viewer theme."
+        },
+        "defaults.fileFormat": {
+          "label": "Default File Format",
+          "help": "Rendered file format for file mode (PNG or PDF)."
+        },
+        "defaults.fileQuality": {
+          "label": "Default File Quality",
+          "help": "Quality preset for PNG/PDF rendering."
+        },
+        "defaults.fileScale": {
+          "label": "Default File Scale",
+          "help": "Device scale factor used while rendering file artifacts."
+        },
+        "defaults.fileMaxWidth": {
+          "label": "Default File Max Width",
+          "help": "Maximum file render width in CSS pixels."
+        },
+        "defaults.mode": {
+          "label": "Default Output Mode",
+          "help": "Tool default when mode is omitted. Use view for canvas/gateway viewer, file for PNG/PDF, or both."
+        },
+        "security.allowRemoteViewer": {
+          "label": "Allow Remote Viewer",
+          "help": "Allow non-loopback access to diff viewer URLs when the token path is known."
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "defaults": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "fontFamily": {
+                "type": "string",
+                "default": "Fira Code"
+              },
+              "fontSize": {
+                "type": "number",
+                "minimum": 10,
+                "maximum": 24,
+                "default": 15
+              },
+              "lineSpacing": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 3,
+                "default": 1.6
+              },
+              "layout": {
+                "type": "string",
+                "enum": [
+                  "unified",
+                  "split"
+                ],
+                "default": "unified"
+              },
+              "showLineNumbers": {
+                "type": "boolean",
+                "default": true
+              },
+              "diffIndicators": {
+                "type": "string",
+                "enum": [
+                  "bars",
+                  "classic",
+                  "none"
+                ],
+                "default": "bars"
+              },
+              "wordWrap": {
+                "type": "boolean",
+                "default": true
+              },
+              "background": {
+                "type": "boolean",
+                "default": true
+              },
+              "theme": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "dark"
+                ],
+                "default": "dark"
+              },
+              "fileFormat": {
+                "type": "string",
+                "enum": [
+                  "png",
+                  "pdf"
+                ],
+                "default": "png"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "png",
+                  "pdf"
+                ]
+              },
+              "fileQuality": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "hq",
+                  "print"
+                ],
+                "default": "standard"
+              },
+              "fileScale": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 4,
+                "default": 2
+              },
+              "fileMaxWidth": {
+                "type": "number",
+                "minimum": 640,
+                "maximum": 2400,
+                "default": 960
+              },
+              "imageFormat": {
+                "type": "string",
+                "enum": [
+                  "png",
+                  "pdf"
+                ]
+              },
+              "imageQuality": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "hq",
+                  "print"
+                ]
+              },
+              "imageScale": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 4
+              },
+              "imageMaxWidth": {
+                "type": "number",
+                "minimum": 640,
+                "maximum": 2400
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "view",
+                  "image",
+                  "file",
+                  "both"
+                ],
+                "default": "both"
+              }
+            }
+          },
+          "security": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "allowRemoteViewer": {
+                "type": "boolean",
+                "default": false
+              }
+            }
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "discord",
+      "name": "@openclaw/discord",
+      "description": "OpenClaw Discord channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\discord\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\discord",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "elevenlabs",
+      "name": "@openclaw/elevenlabs-speech",
+      "description": "OpenClaw ElevenLabs speech plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\elevenlabs\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\elevenlabs",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "fal",
+      "name": "@openclaw/fal-provider",
+      "description": "OpenClaw fal provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\fal\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\fal",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "feishu",
+      "name": "@openclaw/feishu",
+      "description": "OpenClaw Feishu/Lark channel plugin (community maintained by @m1heng)",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\feishu\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\feishu",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "firecrawl",
+      "name": "@openclaw/firecrawl-plugin",
+      "description": "OpenClaw Firecrawl plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\firecrawl\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\firecrawl",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "webSearch.apiKey": {
+          "label": "Firecrawl Search API Key",
+          "help": "Firecrawl API key for web search (fallback: FIRECRAWL_API_KEY env var).",
+          "sensitive": true,
+          "placeholder": "fc-..."
+        },
+        "webSearch.baseUrl": {
+          "label": "Firecrawl Search Base URL",
+          "help": "Firecrawl Search base URL override."
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "webSearch": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "apiKey": {
+                "type": [
+                  "string",
+                  "object"
+                ]
+              },
+              "baseUrl": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "github-copilot",
+      "name": "@openclaw/github-copilot-provider",
+      "description": "OpenClaw GitHub Copilot provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\github-copilot\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\github-copilot",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "google",
+      "name": "@openclaw/google-plugin",
+      "description": "OpenClaw Google plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\google\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\google",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "webSearch.apiKey": {
+          "label": "Gemini Search API Key",
+          "help": "Gemini API key for Google Search grounding (fallback: GEMINI_API_KEY env var).",
+          "sensitive": true,
+          "placeholder": "AIza..."
+        },
+        "webSearch.model": {
+          "label": "Gemini Search Model",
+          "help": "Gemini model override for web search grounding."
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "webSearch": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "apiKey": {
+                "type": [
+                  "string",
+                  "object"
+                ]
+              },
+              "model": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "googlechat",
+      "name": "@openclaw/googlechat",
+      "description": "OpenClaw Google Chat channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\googlechat\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\googlechat",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "huggingface",
+      "name": "@openclaw/huggingface-provider",
+      "description": "OpenClaw Hugging Face provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\huggingface\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\huggingface",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "imessage",
+      "name": "@openclaw/imessage",
+      "description": "OpenClaw iMessage channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\imessage\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\imessage",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "irc",
+      "name": "@openclaw/irc",
+      "description": "OpenClaw IRC channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\irc\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\irc",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "kilocode",
+      "name": "@openclaw/kilocode-provider",
+      "description": "OpenClaw Kilo Gateway provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\kilocode\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\kilocode",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "kimi",
+      "name": "@openclaw/kimi-provider",
+      "description": "OpenClaw Kimi provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\kimi-coding\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\kimi-coding",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "line",
+      "name": "@openclaw/line",
+      "description": "OpenClaw LINE channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\line\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\line",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "llm-task",
+      "name": "LLM Task",
+      "description": "Generic JSON-only LLM tool for structured tasks callable from workflows.",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\llm-task\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\llm-task",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "lobster",
+      "name": "Lobster",
+      "description": "Typed workflow tool with resumable approvals.",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\lobster\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\lobster",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "matrix",
+      "name": "@openclaw/matrix",
+      "description": "OpenClaw Matrix channel plugin",
+      "version": "2026.3.11",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\matrix\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\matrix",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "mattermost",
+      "name": "@openclaw/mattermost",
+      "description": "OpenClaw Mattermost channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\mattermost\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\mattermost",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "memory-core",
+      "name": "@openclaw/memory-core",
+      "description": "OpenClaw core memory search plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\memory-core\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\memory-core",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "memory-lancedb",
+      "name": "@openclaw/memory-lancedb",
+      "description": "OpenClaw LanceDB-backed long-term memory plugin with auto-recall/capture",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\memory-lancedb\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\memory-lancedb",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "microsoft",
+      "name": "@openclaw/microsoft-speech",
+      "description": "OpenClaw Microsoft speech plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\microsoft\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\microsoft",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "minimax",
+      "name": "@openclaw/minimax-provider",
+      "description": "OpenClaw MiniMax provider and OAuth plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\minimax\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\minimax",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "mistral",
+      "name": "@openclaw/mistral-provider",
+      "description": "OpenClaw Mistral provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\mistral\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\mistral",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "modelstudio",
+      "name": "@openclaw/modelstudio-provider",
+      "description": "OpenClaw Model Studio provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\modelstudio\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\modelstudio",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "moonshot",
+      "name": "@openclaw/moonshot-provider",
+      "description": "OpenClaw Moonshot provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\moonshot\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\moonshot",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "webSearch.apiKey": {
+          "label": "Kimi Search API Key",
+          "help": "Moonshot/Kimi API key (fallback: KIMI_API_KEY or MOONSHOT_API_KEY env var).",
+          "sensitive": true
+        },
+        "webSearch.baseUrl": {
+          "label": "Kimi Search Base URL",
+          "help": "Kimi base URL override."
+        },
+        "webSearch.model": {
+          "label": "Kimi Search Model",
+          "help": "Kimi model override."
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "webSearch": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "apiKey": {
+                "type": [
+                  "string",
+                  "object"
+                ]
+              },
+              "baseUrl": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "msteams",
+      "name": "@openclaw/msteams",
+      "description": "OpenClaw Microsoft Teams channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\msteams\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\msteams",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "nextcloud-talk",
+      "name": "@openclaw/nextcloud-talk",
+      "description": "OpenClaw Nextcloud Talk channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\nextcloud-talk\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\nextcloud-talk",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "nostr",
+      "name": "@openclaw/nostr",
+      "description": "OpenClaw Nostr channel plugin for NIP-04 encrypted DMs",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\nostr\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\nostr",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "nvidia",
+      "name": "@openclaw/nvidia-provider",
+      "description": "OpenClaw NVIDIA provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\nvidia\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\nvidia",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "ollama",
+      "name": "@openclaw/ollama-provider",
+      "description": "OpenClaw Ollama provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\ollama\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\ollama",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "open-prose",
+      "name": "OpenProse",
+      "description": "OpenProse VM skill pack with a /prose slash command.",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\open-prose\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\open-prose",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "openai",
+      "name": "@openclaw/openai-provider",
+      "description": "OpenClaw OpenAI provider plugins",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\openai\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\openai",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "opencode",
+      "name": "@openclaw/opencode-provider",
+      "description": "OpenClaw OpenCode Zen provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\opencode\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\opencode",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "opencode-go",
+      "name": "@openclaw/opencode-go-provider",
+      "description": "OpenClaw OpenCode Go provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\opencode-go\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\opencode-go",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "openrouter",
+      "name": "@openclaw/openrouter-provider",
+      "description": "OpenClaw OpenRouter provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\openrouter\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\openrouter",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "openshell",
+      "name": "OpenShell Sandbox",
+      "description": "Sandbox backend powered by OpenShell with mirrored local workspaces and SSH-based command execution.",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\openshell\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\openshell",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "command": {
+          "label": "OpenShell Command",
+          "help": "Path or command name for the openshell CLI."
+        },
+        "gateway": {
+          "label": "Gateway Name",
+          "help": "Optional OpenShell gateway name passed as --gateway."
+        },
+        "gatewayEndpoint": {
+          "label": "Gateway Endpoint",
+          "help": "Optional OpenShell gateway endpoint passed as --gateway-endpoint."
+        },
+        "from": {
+          "label": "Sandbox Source",
+          "help": "OpenShell sandbox source for first-time create. Defaults to openclaw."
+        },
+        "policy": {
+          "label": "Policy File",
+          "help": "Optional path to a custom OpenShell sandbox policy YAML."
+        },
+        "providers": {
+          "label": "Providers",
+          "help": "Provider names to attach when a sandbox is created."
+        },
+        "gpu": {
+          "label": "GPU",
+          "help": "Request GPU resources when creating the sandbox.",
+          "advanced": true
+        },
+        "autoProviders": {
+          "label": "Auto-create Providers",
+          "help": "When enabled, pass --auto-providers during sandbox create.",
+          "advanced": true
+        },
+        "remoteWorkspaceDir": {
+          "label": "Remote Workspace Dir",
+          "help": "Primary writable workspace inside the OpenShell sandbox.",
+          "advanced": true
+        },
+        "remoteAgentWorkspaceDir": {
+          "label": "Remote Agent Dir",
+          "help": "Mirror path for the real agent workspace when workspaceAccess is read-only.",
+          "advanced": true
+        },
+        "timeoutSeconds": {
+          "label": "Command Timeout Seconds",
+          "help": "Timeout for openshell CLI operations such as create/upload/download.",
+          "advanced": true
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "gateway": {
+            "type": "string"
+          },
+          "gatewayEndpoint": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "policy": {
+            "type": "string"
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "gpu": {
+            "type": "boolean"
+          },
+          "autoProviders": {
+            "type": "boolean"
+          },
+          "remoteWorkspaceDir": {
+            "type": "string"
+          },
+          "remoteAgentWorkspaceDir": {
+            "type": "string"
+          },
+          "timeoutSeconds": {
+            "type": "number",
+            "minimum": 1
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "perplexity",
+      "name": "@openclaw/perplexity-plugin",
+      "description": "OpenClaw Perplexity plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\perplexity\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\perplexity",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "webSearch.apiKey": {
+          "label": "Perplexity API Key",
+          "help": "Perplexity or OpenRouter API key for web search.",
+          "sensitive": true,
+          "placeholder": "pplx-..."
+        },
+        "webSearch.baseUrl": {
+          "label": "Perplexity Base URL",
+          "help": "Optional Perplexity/OpenRouter chat-completions base URL override."
+        },
+        "webSearch.model": {
+          "label": "Perplexity Model",
+          "help": "Optional Sonar/OpenRouter model override."
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "webSearch": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "apiKey": {
+                "type": [
+                  "string",
+                  "object"
+                ]
+              },
+              "baseUrl": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "phone-control",
+      "name": "Phone Control",
+      "description": "Arm/disarm high-risk phone node commands (camera/screen/writes) with an optional auto-expiry.",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\phone-control\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\phone-control",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "qianfan",
+      "name": "@openclaw/qianfan-provider",
+      "description": "OpenClaw Qianfan provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\qianfan\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\qianfan",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "qwen-portal-auth",
+      "name": "qwen-portal-auth",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\qwen-portal-auth\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\qwen-portal-auth",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "sglang",
+      "name": "@openclaw/sglang-provider",
+      "description": "OpenClaw SGLang provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\sglang\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\sglang",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "signal",
+      "name": "@openclaw/signal",
+      "description": "OpenClaw Signal channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\signal\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\signal",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "slack",
+      "name": "@openclaw/slack",
+      "description": "OpenClaw Slack channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\slack\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\slack",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "synology-chat",
+      "name": "@openclaw/synology-chat",
+      "description": "Synology Chat channel plugin for OpenClaw",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\synology-chat\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\synology-chat",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "synthetic",
+      "name": "@openclaw/synthetic-provider",
+      "description": "OpenClaw Synthetic provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\synthetic\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\synthetic",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "talk-voice",
+      "name": "Talk Voice",
+      "description": "Manage Talk voice selection (list/set).",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\talk-voice\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\talk-voice",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "tavily",
+      "name": "@openclaw/tavily-plugin",
+      "description": "OpenClaw Tavily plugin",
+      "version": "2026.3.17",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\tavily\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\tavily",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "webSearch.apiKey": {
+          "label": "Tavily API Key",
+          "help": "Tavily API key for web search and extraction (fallback: TAVILY_API_KEY env var).",
+          "sensitive": true,
+          "placeholder": "tvly-..."
+        },
+        "webSearch.baseUrl": {
+          "label": "Tavily Base URL",
+          "help": "Tavily API base URL override."
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "webSearch": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "apiKey": {
+                "type": [
+                  "string",
+                  "object"
+                ]
+              },
+              "baseUrl": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "telegram",
+      "name": "@openclaw/telegram",
+      "description": "OpenClaw Telegram channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\telegram\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\telegram",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "thread-ownership",
+      "name": "Thread Ownership",
+      "description": "Prevents multiple agents from responding in the same Slack thread. Uses HTTP calls to the slack-forwarder ownership API.",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\thread-ownership\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\thread-ownership",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "tlon",
+      "name": "@openclaw/tlon",
+      "description": "OpenClaw Tlon/Urbit channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\tlon\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\tlon",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "together",
+      "name": "@openclaw/together-provider",
+      "description": "OpenClaw Together provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\together\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\together",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "twitch",
+      "name": "@openclaw/twitch",
+      "description": "OpenClaw Twitch channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\twitch\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\twitch",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "venice",
+      "name": "@openclaw/venice-provider",
+      "description": "OpenClaw Venice provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\venice\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\venice",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "vercel-ai-gateway",
+      "name": "@openclaw/vercel-ai-gateway-provider",
+      "description": "OpenClaw Vercel AI Gateway provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\vercel-ai-gateway\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\vercel-ai-gateway",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "vllm",
+      "name": "@openclaw/vllm-provider",
+      "description": "OpenClaw vLLM provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\vllm\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\vllm",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "voice-call",
+      "name": "@openclaw/voice-call",
+      "description": "OpenClaw voice-call plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\voice-call\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\voice-call",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "volcengine",
+      "name": "@openclaw/volcengine-provider",
+      "description": "OpenClaw Volcengine provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\volcengine\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\volcengine",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "whatsapp",
+      "name": "@openclaw/whatsapp",
+      "description": "OpenClaw WhatsApp channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\whatsapp\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\whatsapp",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "xai",
+      "name": "@openclaw/xai-plugin",
+      "description": "OpenClaw xAI plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\xai\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\xai",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "webSearch.apiKey": {
+          "label": "Grok Search API Key",
+          "help": "xAI API key for Grok web search (fallback: XAI_API_KEY env var).",
+          "sensitive": true
+        },
+        "webSearch.model": {
+          "label": "Grok Search Model",
+          "help": "Grok model override for web search."
+        },
+        "webSearch.inlineCitations": {
+          "label": "Inline Citations",
+          "help": "Include inline markdown citations in Grok responses."
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "webSearch": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "apiKey": {
+                "type": [
+                  "string",
+                  "object"
+                ]
+              },
+              "model": {
+                "type": "string"
+              },
+              "inlineCitations": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "xiaomi",
+      "name": "@openclaw/xiaomi-provider",
+      "description": "OpenClaw Xiaomi provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\xiaomi\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\xiaomi",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "zai",
+      "name": "@openclaw/zai-provider",
+      "description": "OpenClaw Z.AI provider plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\zai\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\zai",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "error": "not in allowlist"
+    },
+    {
+      "id": "zalo",
+      "name": "@openclaw/zalo",
+      "description": "OpenClaw Zalo channel plugin",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\zalo\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\zalo",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "zalouser",
+      "name": "@openclaw/zalouser",
+      "description": "OpenClaw Zalo Personal Account plugin via native zca-js integration",
+      "version": "2026.3.14",
+      "format": "openclaw",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\zalouser\\index.ts",
+      "rootDir": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\zalouser",
+      "origin": "bundled",
+      "enabled": false,
+      "status": "disabled",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "error": "overridden by config plugin"
+    },
+    {
+      "id": "dingtalk-connector",
+      "name": "DingTalk Channel",
+      "description": "DingTalk (钉钉) messaging channel via Stream mode with AI Card streaming",
+      "version": "0.8.1",
+      "format": "openclaw",
+      "source": "C:\\Users\\Administrator\\.openclaw\\extensions\\dingtalk-connector\\index.ts",
+      "rootDir": "C:\\Users\\Administrator\\.openclaw\\extensions\\dingtalk-connector",
+      "origin": "global",
+      "enabled": true,
+      "status": "error",
+      "toolNames": [],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "error": "Error: ParseError: I:\\: Export 'mapAllowlistResolutionInputs' is not defined.  \n I:/JieZI/JieZi-ai-PS/dist/plugin-sdk/compat.js:137:2355"
+    },
+    {
+      "id": "exa-search",
+      "name": "Exa Search Plugin",
+      "description": "Direct integration with Exa AI search via HTTP/SSE - No API key required. Includes web_search, code_search, and company_research tools.",
+      "version": "1.4.0",
+      "format": "openclaw",
+      "source": "C:\\Users\\Administrator\\.openclaw\\extensions\\exa-search\\index.ts",
+      "rootDir": "C:\\Users\\Administrator\\.openclaw\\extensions\\exa-search",
+      "origin": "global",
+      "enabled": true,
+      "status": "loaded",
+      "toolNames": [
+        "web_search",
+        "code_search",
+        "company_research"
+      ],
+      "hookNames": [],
+      "channelIds": [],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 0,
+      "configSchema": true,
+      "configUiHints": {
+        "enabled": {
+          "label": "Enable Exa Search",
+          "description": "Enable web search, code search, and company research tools via Exa AI"
+        }
+      },
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    },
+    {
+      "id": "wecom-openclaw-plugin",
+      "name": "企业微信",
+      "description": "企业微信 OpenClaw 插件",
+      "version": "2026.3.20",
+      "format": "openclaw",
+      "source": "C:\\Users\\Administrator\\.openclaw\\extensions\\wecom-openclaw-plugin\\dist\\index.esm.js",
+      "rootDir": "C:\\Users\\Administrator\\.openclaw\\extensions\\wecom-openclaw-plugin",
+      "origin": "global",
+      "enabled": true,
+      "status": "loaded",
+      "toolNames": [
+        "wecom_mcp",
+        "wecom_mcp"
+      ],
+      "hookNames": [],
+      "channelIds": [
+        "wecom"
+      ],
+      "providerIds": [],
+      "speechProviderIds": [],
+      "mediaUnderstandingProviderIds": [],
+      "imageGenerationProviderIds": [],
+      "webSearchProviderIds": [],
+      "gatewayMethods": [],
+      "cliCommands": [],
+      "services": [],
+      "commands": [],
+      "httpRoutes": 0,
+      "hookCount": 1,
+      "configSchema": true,
+      "configJsonSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "level": "warn",
+      "pluginId": "bluebubbles",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\bluebubbles\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\bluebubbles\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "copilot-proxy",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\copilot-proxy\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\copilot-proxy\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "device-pair",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\device-pair\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\device-pair\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "diagnostics-otel",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\diagnostics-otel\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\diagnostics-otel\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "discord",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\discord\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\discord\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "feishu",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\feishu\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\feishu\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "googlechat",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\googlechat\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\googlechat\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "imessage",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\imessage\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\imessage\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "irc",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\irc\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\irc\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "line",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\line\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\line\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "llm-task",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\llm-task\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\llm-task\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "lobster",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\lobster\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\lobster\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "matrix",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\matrix\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\matrix\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "mattermost",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\mattermost\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\mattermost\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "memory-core",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\memory-core\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\memory-core\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "memory-lancedb",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\memory-lancedb\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\memory-lancedb\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "msteams",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\msteams\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\msteams\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "nextcloud-talk",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\nextcloud-talk\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\nextcloud-talk\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "nostr",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\nostr\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\nostr\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "open-prose",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\open-prose\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\open-prose\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "phone-control",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\phone-control\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\phone-control\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "qwen-portal-auth",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\qwen-portal-auth\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\qwen-portal-auth\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "signal",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\signal\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\signal\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "slack",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\slack\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\slack\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "synology-chat",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\synology-chat\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\synology-chat\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "talk-voice",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\talk-voice\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\talk-voice\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "telegram",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\telegram\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\telegram\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "thread-ownership",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\thread-ownership\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\thread-ownership\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "tlon",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\tlon\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\tlon\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "twitch",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\twitch\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\twitch\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "voice-call",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\voice-call\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\voice-call\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "whatsapp",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\whatsapp\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\whatsapp\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "zalo",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\zalo\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\zalo\\index.ts)"
+    },
+    {
+      "level": "warn",
+      "pluginId": "zalouser",
+      "source": "I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\zalouser\\index.ts",
+      "message": "duplicate plugin id detected; bundled plugin will be overridden by config plugin (I:\\JieZI\\JieZi-ai-PS\\upstream\\extensions\\zalouser\\index.ts)"
+    },
+    {
+      "level": "error",
+      "pluginId": "dingtalk-connector",
+      "source": "C:\\Users\\Administrator\\.openclaw\\extensions\\dingtalk-connector\\index.ts",
+      "message": "failed to load plugin: Error: ParseError: I:\\: Export 'mapAllowlistResolutionInputs' is not defined.  \n I:/JieZI/JieZi-ai-PS/dist/plugin-sdk/compat.js:137:2355"
+    }
+  ]
+}

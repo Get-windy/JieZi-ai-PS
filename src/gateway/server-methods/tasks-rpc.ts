@@ -27,6 +27,7 @@
 import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import type { MemberType } from "../../organization/types.js";
+import { scheduleNextTaskForAgent } from "./agents-management.js";
 import {
   checkTaskAccess,
   checkTaskModifyAccess,
@@ -517,6 +518,8 @@ export const tasksRpc: GatewayRequestHandlers = {
       const keyword = params?.keyword ? String(params.keyword) : undefined;
       // dueToday: 转换为 dueDateBefore/dueDateAfter 筛选
       const dueToday = params?.dueToday === true || params?.dueToday === "true";
+      const overdueOnly = params?.overdueOnly === true || params?.overdueOnly === "true";
+      const blockedOnly = params?.blockedOnly === true || params?.blockedOnly === "true";
       const now = Date.now();
       const todayStart = new Date(now);
       todayStart.setHours(0, 0, 0, 0);
@@ -536,6 +539,10 @@ export const tasksRpc: GatewayRequestHandlers = {
         ...(dueToday
           ? { dueDateAfter: todayStart.getTime(), dueDateBefore: todayEnd.getTime() }
           : {}),
+        // overdueOnly: 截止日期已过且不是 done/cancelled
+        ...(overdueOnly ? { dueDateBefore: now, excludeStatus: ["done", "cancelled"] } : {}),
+        // blockedOnly: 只返回 blocked 状态
+        ...(blockedOnly ? { status: "blocked" } : {}),
       };
 
       // 从数据库查询任务列表
@@ -1002,7 +1009,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         return;
       }
 
-      const isAssignee = (task.assignees ?? []).some((a) => a.id === agentId && a.type === "agent");
+      const isAssignee = (task.assignees ?? []).some((a) => a.id === agentId);
       if (!isAssignee) {
         respond(
           false,
@@ -1287,6 +1294,21 @@ export const tasksRpc: GatewayRequestHandlers = {
         },
         undefined,
       );
+
+      // === 任务完成后自动驱动该 agent 的下一条 todo 任务 ===
+      // 从 assignees 中取第一个 assignee，触发任务驱动流水线
+      const primaryAssignee = (updatedTask?.assignees ?? [])[0]?.id;
+      if (primaryAssignee) {
+        const { normalizeAgentId } = await import("../../routing/session-key.js");
+        // 异步触发，不阻塞 respond
+        scheduleNextTaskForAgent(
+          normalizeAgentId(primaryAssignee),
+          taskId,
+          updatedTask?.projectId,
+        ).catch((schedErr) => {
+          console.warn(`[task.complete] scheduleNextTask failed: ${String(schedErr)}`);
+        });
+      }
     } catch (err) {
       respond(
         false,
@@ -1294,6 +1316,37 @@ export const tasksRpc: GatewayRequestHandlers = {
         errorShape(
           ErrorCodes.UNAVAILABLE,
           `Failed to complete task: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
+  /**
+   * task.stats - 获取任务统计数据
+   * 供前端仪表盘展示和 AI agent 健康检查使用
+   */
+  "task.stats": async ({ params, respond }) => {
+    try {
+      const organizationId = params?.organizationId ? String(params.organizationId) : undefined;
+      const teamId = params?.teamId ? String(params.teamId) : undefined;
+      const projectId = params?.projectId ? String(params.projectId) : undefined;
+      const assigneeId = params?.assigneeId ? String(params.assigneeId) : undefined;
+
+      const stats = await storage.getTaskStats({
+        organizationId,
+        teamId,
+        projectId,
+        assigneeId,
+      });
+
+      respond(true, stats, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to get task stats: ${String(err instanceof Error ? err.message : err)}`,
         ),
       );
     }

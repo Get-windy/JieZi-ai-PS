@@ -7,8 +7,11 @@
  * 1. 每个 Agent 同时只能执行 1 条任务（串行执行）
  * 2. 发现多条 in-progress → 保留优先级最高的 1 条，其余重置回 todo 排队
  * 3. 无 in-progress 且有 todo → 取优先级最高的 1 条唤醒执行
- * 4. 有 in-progress（仅 1 条）且超时 → 重新唤醒（可能卡住了）
+ * 4. 有 in-progress（仅 1 条）且超时（>12min）→ 自动重置回 todo 并立即重新派发（避免模型超时死循环）
+ *    4a. 超时 >60min → 强制重置回 todo，等下轮调度器扫描再分配（通知负责人）
  * 5. todo 任务只是排队，不检测超时
+ * 6. Context Overflow 防循环：记录连续失败次数，超过阈値则暂停重试并通知 supervisor
+ *    （业界最佳实践：overflow 属于 non-retriable 错误，不应无限重试）
  */
 
 import path from "node:path";
@@ -32,6 +35,14 @@ const PRIORITY_WEIGHT: Record<string, number> = {
   low: 1,
 };
 
+// Context Overflow 循环防护
+// 记录每个 agent 还没成功唤醒的连续次数（如果任务状态没变化）
+const agentStaleWakeCount = new Map<string, { count: number; taskId: string; lastAt: number }>();
+// 连续失败 N 次后暂停重试（业界最佳实践：3-5 次）
+const MAX_STALE_WAKE_BEFORE_PAUSE = 3;
+// 暂停期间（10 分钟，等 heartbeat-runner 的 overflow 清空生效）
+const OVERFLOW_PAUSE_MS = 10 * 60 * 1000;
+
 function taskSortKey(t: { priority: string; weight?: number; createdAt: number }): number {
   // 得分越高越优先：优先级权重 * 1e13 + 任务权重 * 1e6 - 创建时间（越早越高）
   const priorityScore = (PRIORITY_WEIGHT[t.priority] ?? 2) * 1e13;
@@ -39,7 +50,7 @@ function taskSortKey(t: { priority: string; weight?: number; createdAt: number }
   return priorityScore + weightScore - t.createdAt;
 }
 
-const STARTUP_DELAY_MS = 30 * 1000; // 30 秒
+const STARTUP_DELAY_MS = 5 * 1000; // 5 秒（等待基础模块初始化，避免冷启动冲突）
 let scanInterval: NodeJS.Timeout | null = null;
 
 let startupTimer: NodeJS.Timeout | null = null;
@@ -119,6 +130,33 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
         taskStorage.listTasks({ assigneeId: normalizedId, status: ["todo"] }),
       ]);
 
+      // === Context Overflow 防循环检测 ===
+      // 业界最佳实践：overflow 属于 non-retriable 错误。
+      // 如果 agent 对同一个任务连续尝试多次却任务状态始终没变，
+      // 说明它占着任务却没在执行（最常见原因：context overflow 導致 embedded run 静默失败）。
+      // 连续超过阈値后暂停唤醒，等待 heartbeat-runner 的自动清空生效。
+      const activeInProgress = inProgressTasks[0];
+      if (activeInProgress) {
+        const staleKey = `${normalizedId}:${activeInProgress.id}`;
+        const staleInfo = agentStaleWakeCount.get(staleKey);
+        const taskUpdatedAt = activeInProgress.updatedAt ?? 0;
+        // 如果任务在上次扫描后有更新（说明 agent 在执行），重置计数器
+        if (staleInfo && taskUpdatedAt > staleInfo.lastAt) {
+          agentStaleWakeCount.delete(staleKey);
+        } else if (staleInfo && staleInfo.count >= MAX_STALE_WAKE_BEFORE_PAUSE) {
+          const pauseRemaining = staleInfo.lastAt + OVERFLOW_PAUSE_MS - now;
+          if (pauseRemaining > 0) {
+            console.log(
+              `[Task Wake] Agent ${normalizedId} paused due to repeated stale wakes (${staleInfo.count}/${MAX_STALE_WAKE_BEFORE_PAUSE}) — possible context overflow loop. Resuming in ${Math.ceil(pauseRemaining / 60000)}min.`,
+            );
+            stats.skippedTasks++;
+            continue;
+          }
+          // 暂停期已过，清除计数器重新尝试
+          agentStaleWakeCount.delete(staleKey);
+        }
+      }
+
       // === 核心约束：每个 agent 同时只执行 1 条任务 ===
       // 宽限期：任务刚被系统分配（startedAt 在 5 分钟内），不参与违规检测
       // 避免 scheduleNextTaskForAgent 刚推了一条任务，调度器就把它重置回去
@@ -180,33 +218,127 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
         const activeTask = matureInProgress[0];
         // 只用 startedAt 或 updatedAt（都是进入执行后才会设置）
         const executionStartedAt = activeTask.timeTracking?.startedAt ?? activeTask.updatedAt;
-        const STALE_IN_PROGRESS_MS = 30 * 60 * 1000; // 30 分钟
+        // 模型超时是 10 分钟（600s），超时后 surface_error，任务卡在 in-progress
+        // 设置为 12 分钟，略大于模型超时，确保能及时检测到卡住的任务
+        const STALE_IN_PROGRESS_MS = 12 * 60 * 1000; // 12 分钟
+        // 超长任务（>60分钟）认为需要强制重置而非重唤醒
+        const FORCE_RESET_MS = 60 * 60 * 1000; // 60 分钟
+
+        // 检查主控是否通过 agent.task.manage action=extend 延长了超时
+        const timeoutExtendedUntil =
+          typeof activeTask.metadata?.timeoutExtendedUntil === "number"
+            ? activeTask.metadata.timeoutExtendedUntil
+            : null;
+        // 如果在延期截止时间之内，跳过本次 stale 检测，让 agent 继续执行
+        if (timeoutExtendedUntil !== null && now < timeoutExtendedUntil) {
+          const remainingMin = Math.ceil((timeoutExtendedUntil - now) / 60000);
+          console.log(
+            `[Task Wake] Agent ${normalizedId} task ${activeTask.id} is extended — skipping stale check (${remainingMin}min remaining)`,
+          );
+          continue;
+        }
+
         const isStale =
           executionStartedAt != null && now - executionStartedAt > STALE_IN_PROGRESS_MS;
+        const shouldForceReset =
+          executionStartedAt != null && now - executionStartedAt > FORCE_RESET_MS;
 
         if (isStale) {
           stats.pendingTasks++;
           const sessionKey = `agent:${normalizedId}:main`;
           const stuckMinutes = Math.floor((now - executionStartedAt) / 60000);
+
+          if (shouldForceReset) {
+            // 任务卡住超过 60 分钟：强制重置回 todo，让调度器重新派发
+            // 这样可以避免因模型 API 超时导致任务永久卡住
+            console.log(
+              `[Task Wake] Agent ${normalizedId} task ${activeTask.id} stuck for ${stuckMinutes}min — force resetting to todo`,
+            );
+            await taskStorage.updateTask(activeTask.id, {
+              status: "todo",
+              timeTracking: {
+                ...activeTask.timeTracking,
+                startedAt: undefined,
+              },
+            });
+            // 通知负责人
+            const supervisorRaw = (activeTask.metadata?.supervisorId ?? activeTask.creatorId) as
+              | string
+              | undefined;
+            if (supervisorRaw) {
+              const normalizedSupervisor = normalizeAgentId(supervisorRaw);
+              const supervisorSession = `agent:${normalizedSupervisor}:main`;
+              const supervisorNotice = [
+                `[TASK AUTO-RESET] Agent ${normalizedId}'s task was stuck for ${stuckMinutes} minutes and has been automatically reset to todo queue.`,
+                ``,
+                `Agent: ${normalizedId}`,
+                `Task ID: ${activeTask.id}`,
+                `Title: ${activeTask.title}`,
+                `Priority: ${activeTask.priority}`,
+                activeTask.type ? `Type: ${activeTask.type}` : null,
+                ``,
+                `The task will be automatically retried in the next task scheduling cycle.`,
+                `If this task keeps failing, you may want to cancel it or investigate the cause.`,
+              ]
+                .filter(Boolean)
+                .join("\n");
+              enqueueSystemEvent(supervisorNotice, {
+                sessionKey: supervisorSession,
+                contextKey: `cron:task-autoreset:${activeTask.id}`,
+              });
+              requestHeartbeatNow({
+                reason: `task-autoreset:${activeTask.id}`,
+                sessionKey: supervisorSession,
+                agentId: normalizedSupervisor,
+                coalesceMs: 10000,
+              });
+            }
+            stats.wokenAgents++;
+            // 重置后不再走 todo 派发，等下轮扫描再分配
+            continue;
+          }
+
+          // 任务卡住 12-60 分钟：先尝试重置回 todo 再立即重新派发
+          // 这样避免重唤醒时模型再次超时导致死循环
+          console.log(
+            `[Task Wake] Agent ${normalizedId} task ${activeTask.id} stuck for ${stuckMinutes}min — resetting to todo and re-dispatching`,
+          );
+          await taskStorage.updateTask(activeTask.id, {
+            status: "todo",
+            timeTracking: {
+              ...activeTask.timeTracking,
+              startedAt: undefined,
+            },
+          });
+
+          // 重置后立即重新派发（走情况 B 逻辑：立即唤醒 todo 任务）
+          const projectGroupKey = activeTask.projectId
+            ? projectGroupCache.get(activeTask.projectId)
+            : undefined;
+          const taskLines = [
+            `1. [TODO] ${activeTask.title}`,
+            `   Task ID: ${activeTask.id}`,
+            `   Priority: ${activeTask.priority}`,
+            activeTask.projectId ? `   Project: ${activeTask.projectId}` : null,
+            activeTask.type ? `   Type: ${activeTask.type}` : null,
+            projectGroupKey ? `   Project Group Channel: sessionKey=${projectGroupKey}` : null,
+            activeTask.description
+              ? `   Description: ${activeTask.description.slice(0, 200)}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join("\n");
+
           const wakeMessage = [
-            `[TASK STUCK] Your current task has been in-progress for ${stuckMinutes} minutes without completion.`,
+            `[TASK RETRY] Your previous task attempt timed out after ${stuckMinutes} minutes. Retrying now:`,
             ``,
-            `Task ID: ${activeTask.id}`,
-            `Title: ${activeTask.title}`,
-            `Priority: ${activeTask.priority}`,
-            activeTask.type ? `Type: ${activeTask.type}` : null,
-            activeTask.description ? `Description: ${activeTask.description.slice(0, 200)}` : null,
+            taskLines,
             ``,
             `Working Context:`,
             `- Working Directory: ${agentWorkspaceDir}`,
             `- Memory File: ${agentMemoryPath}`,
             ``,
-            `Please take one of the following actions:`,
-            `1. If already completed: call task_report_to_supervisor immediately`,
-            `2. If blocked: update status to "blocked" and explain why`,
-            `3. If still working: continue and report when done`,
-            ``,
-            `NOTE: Your supervisor has been notified and may choose to extend your time, reset, or cancel this task.`,
+            `IMPORTANT: Execute this task now. If you cannot complete it, update its status to "blocked" and explain why. Do NOT let it time out again.`,
           ]
             .filter(Boolean)
             .join("\n");
@@ -216,13 +348,28 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
             contextKey: `cron:task-wake:${normalizedId}`,
           });
           requestHeartbeatNow({
-            reason: `task-stuck:${activeTask.id}`,
+            reason: `task-retry:${activeTask.id}`,
             sessionKey,
             agentId: normalizedId,
             coalesceMs: 5000,
           });
 
-          // 同时通知负责人，让其可决策延时/重置/取消
+          // 连续失败计数：每次尝试重唤醒同一任务次数 +1
+          // 达到阈値后 Task Wake 将暂停唤醒，等待 heartbeat-runner 的 overflow 清空生效
+          const staleKey = `${normalizedId}:${activeTask.id}`;
+          const existing = agentStaleWakeCount.get(staleKey);
+          agentStaleWakeCount.set(staleKey, {
+            count: (existing?.count ?? 0) + 1,
+            taskId: activeTask.id,
+            lastAt: now,
+          });
+          if ((existing?.count ?? 0) + 1 >= MAX_STALE_WAKE_BEFORE_PAUSE) {
+            console.log(
+              `[Task Wake] Agent ${normalizedId} task ${activeTask.id} has been retried ${(existing?.count ?? 0) + 1} times without progress — possible context overflow. Will pause wakes for ${OVERFLOW_PAUSE_MS / 60000}min.`,
+            );
+          }
+
+          // 同时通知负责人
           const supervisorRaw = (activeTask.metadata?.supervisorId ?? activeTask.creatorId) as
             | string
             | undefined;
@@ -230,7 +377,7 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
             const normalizedSupervisor = normalizeAgentId(supervisorRaw);
             const supervisorSession = `agent:${normalizedSupervisor}:main`;
             const supervisorNotice = [
-              `[TASK TIMEOUT ALERT] Agent ${normalizedId}'s task has been stuck for ${stuckMinutes} minutes.`,
+              `[TASK TIMEOUT ALERT] Agent ${normalizedId}'s task timed out after ${stuckMinutes} minutes and has been auto-retried.`,
               ``,
               `Agent: ${normalizedId}`,
               `Task ID: ${activeTask.id}`,
@@ -241,10 +388,9 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
                 ? `Description: ${activeTask.description.slice(0, 150)}`
                 : null,
               ``,
-              `You can intervene using agent_task_manage tool:`,
-              `- extend: Give the agent more time (if task is complex)`,
-              `- reset:  Reset to todo queue (retry later)`,
+              `The task has been reset to todo and the agent has been re-woken. If this keeps happening, you can use agent_task_manage to:`,
               `- cancel: Cancel the task (if deemed unresolvable)`,
+              `- reset:  Reset to todo queue again (already done automatically)`,
             ]
               .filter(Boolean)
               .join("\n");
