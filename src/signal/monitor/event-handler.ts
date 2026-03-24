@@ -88,6 +88,10 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
         id: entry.isGroup ? (entry.groupId ?? "unknown") : entry.senderPeerId,
       },
     });
+    if (route.isUnbound) {
+      logVerbose(`signal: drop — account ${deps.accountId} not assigned to any agent`);
+      return;
+    }
     const storePath = resolveStorePath(deps.cfg.session?.store, {
       agentId: route.agentId,
     });
@@ -539,6 +543,10 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
         id: isGroup ? (groupId ?? "unknown") : senderPeerId,
       },
     });
+    if (route.isUnbound) {
+      logVerbose(`signal: drop — account ${deps.accountId} not assigned to any agent (message handler)`);
+      return;
+    }
     const mentionRegexes = buildMentionRegexes(deps.cfg, route.agentId);
     const wasMentioned = isGroup && matchesMentionPatterns(messageText, mentionRegexes);
     const requireMention =

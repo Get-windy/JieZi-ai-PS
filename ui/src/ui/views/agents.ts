@@ -1105,6 +1105,10 @@ function renderAgentChannelPolicies(params: {
   saveSuccess: boolean;
   // oxlint-disable-next-line typescript/no-explicit-any
   boundChannelAccounts?: any[];
+  // oxlint-disable-next-line typescript/no-explicit-any
+  availableChannelAccounts?: any[];
+  availableChannelAccountsLoading?: boolean;
+  onAddAccount?: (channelId: string, accountId: string) => void;
   onChange?: (agentId: string, config: ChannelPoliciesConfig) => void;
   onEditPolicyBinding?: (agentId: string, index: number, binding: ChannelBinding) => void;
   onAddPolicyBinding?: (agentId: string) => void;
@@ -1525,10 +1529,52 @@ function renderAgentChannelPolicies(params: {
             : html`
                 <div class="callout" style="margin-top: 8px">
                   <div style="font-weight: 500; margin-bottom: 4px">⚠️ 尚未绑定任何通道账号</div>
-                  <div style="font-size: 0.875rem">请先在「通道」标签页绑定通道账号，然后再配置策略。</div>
+                  <div style="font-size: 0.875rem">请在下方可绑定账号列表中选择账号绑定给此助手，绑定后即可配置策略。</div>
                 </div>
               `
         }
+
+      <!-- 可绑定账号列表 -->
+      <div style="margin-top: 24px;">
+        <div class="label" style="margin-bottom: 12px;">可绑定账号</div>
+        <div style="color: var(--fg-muted); font-size: 0.875rem; margin-bottom: 12px;">
+          将未被任何助手使用的通道账号绑定给此助手，绑定后可在上方配置其策略。
+        </div>
+        ${
+          params.availableChannelAccountsLoading
+            ? html`<div class="loading" style="margin-top: 8px">加载中...</div>`
+            : !params.availableChannelAccounts || params.availableChannelAccounts.length === 0
+              ? html`<div class="muted" style="margin-top: 8px">暂无可绑定的通道账号（所有账号已被绑定或尚未配置任何通道）</div>`
+              : html`
+                <div class="list" style="margin-top: 8px;">
+                  ${params.availableChannelAccounts.map(
+                    (account) => html`
+                      <div class="list-item" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 4px; background: var(--bg-1); margin-bottom: 8px;">
+                        <div style="flex: 1;">
+                          <div class="mono" style="font-weight: 500;">${account.channelId}:${account.accountId}</div>
+                          <div class="muted" style="font-size: 0.875rem; margin-top: 2px;">
+                            ${account.label}${!account.configured ? html` &mdash; <span style="color: var(--color-warning)">未完成配置</span>` : nothing}
+                          </div>
+                        </div>
+                        <button
+                          class="btn btn--sm"
+                          ?disabled=${!account.configured || !params.onAddAccount}
+                          title=${!account.configured ? "该账号尚未完成配置，无法绑定" : ""}
+                          @click=${() => {
+                            if (params.onAddAccount && account.configured) {
+                              params.onAddAccount(account.channelId, account.accountId);
+                            }
+                          }}
+                        >
+                          + 绑定
+                        </button>
+                      </div>
+                    `,
+                  )}
+                </div>
+              `
+        }
+      </div>
 
       <!-- 策略说明 -->
       <details style="margin-top: 24px; padding: 16px; border: 1px solid var(--border); border-radius: 6px;">
@@ -1812,6 +1858,13 @@ export function renderAgents(props: AgentsProps) {
                       saving: props.channelPoliciesSaving,
                       saveSuccess: props.channelPoliciesSaveSuccess,
                       boundChannelAccounts: props.boundChannelAccounts || [],
+                      availableChannelAccounts: props.availableChannelAccounts || [],
+                      availableChannelAccountsLoading: props.availableChannelAccountsLoading || false,
+                      onAddAccount: (channelId, accountId) => {
+                        if (props.onAddChannelAccount) {
+                          props.onAddChannelAccount(channelId, accountId);
+                        }
+                      },
                       onChange: props.onChannelPoliciesChange,
                       onEditPolicyBinding: props.onEditPolicyBinding,
                       onAddPolicyBinding: props.onAddPolicyBinding,

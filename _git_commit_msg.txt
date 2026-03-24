@@ -1,0 +1,24 @@
+feat: 任务驱动系统强化 & 架构精简优化
+
+核心功能增强：
+- 任务自动流转：task.complete RPC 完成后立即触发 scheduleNextTaskForAgent，实现零延迟任务接力
+- 任务排队机制：agent.assign_task 分配前检查 in-progress 状态，忙碌时新任务入 todo 队列，避免并发违规
+- scheduleNextTaskForAgent 改为 export，支持跨模块调用
+- 新增 task_get / task_subtask_create / task_worklog_add 三个 agent 工具，完善任务驱动工作流
+- task_list 支持 includeNextTask / overdueOnly / blockedOnly 智能过滤
+- task.stats RPC 任务统计数据接口
+- task.worklog.add 修复 assignee 类型限制过严问题
+
+UI 优化：
+- 项目管理视图重构：筛选栏 + 卡片网格 + 详情面板，支持完整项目生命周期状态
+- Agent 面板：可绑定账号列表内嵌展示
+- 通道未绑定时路由拦截，防止消息误投
+
+路由与通道：
+- resolve-route 新增 isUnbound 字段，未绑定通道统一返回错误提示
+- bindings 路由逻辑优化
+
+架构精简（物理分离）：
+- 移除已迁移至 upstream 的大量 infra/extensions 冗余文件
+- tsdown.config 精简构建入口
+- plugin-sdk、plugins 模块边界重整

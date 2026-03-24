@@ -1,22 +1,16 @@
-import type { NormalizedUsage } from "../../../upstream/src/agents/usage.js";
-import type { FollowupRun } from "../../../upstream/src/auto-reply/reply/queue.js";
-import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
-import { getChannelDock } from "../../../upstream/src/channels/dock.js";
-import type {
-  ChannelId,
-  ChannelThreadingToolContext,
-} from "../../../upstream/src/channels/plugins/types.js";
-import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
-import { resolveAgentIdFromSessionKey } from "../../../upstream/src/config/sessions.js";
-import { isReasoningTagProvider } from "../../../upstream/src/utils/provider-utils.js";
-import {
-  estimateUsageCost,
-  formatTokenCount,
-  formatUsd,
-} from "../../../upstream/src/utils/usage-format.js";
 import { resolveAgentModelFallbacksOverride } from "../../agents/agent-scope.js";
+import type { NormalizedUsage } from "../../agents/usage.js";
+import { getChannelPlugin } from "../../channels/plugins/index.js";
+import type { ChannelId, ChannelThreadingToolContext } from "../../channels/plugins/types.js";
 import { normalizeAnyChannelId, normalizeChannelId } from "../../channels/registry.js";
+import type { OpenClawConfig } from "../../config/config.js";
+import { resolveAgentIdFromSessionKey } from "../../config/sessions.js";
+import { isReasoningTagProvider } from "../../utils/provider-utils.js";
+import { estimateUsageCost, formatTokenCount, formatUsd } from "../../utils/usage-format.js";
 import type { TemplateContext } from "../templating.js";
+import type { ReplyPayload } from "../types.js";
+import { resolveOriginMessageProvider, resolveOriginMessageTo } from "./origin-routing.js";
+import type { FollowupRun } from "./queue.js";
 
 const BUN_FETCH_SOCKET_ERROR_RE = /socket connection was closed unexpectedly/i;
 
@@ -30,12 +24,20 @@ export function buildThreadingToolContext(params: {
 }): ChannelThreadingToolContext {
   const { sessionCtx, config, hasRepliedRef } = params;
   const currentMessageId = sessionCtx.MessageSidFull ?? sessionCtx.MessageSid;
+  const originProvider = resolveOriginMessageProvider({
+    originatingChannel: sessionCtx.OriginatingChannel,
+    provider: sessionCtx.Provider,
+  });
+  const originTo = resolveOriginMessageTo({
+    originatingTo: sessionCtx.OriginatingTo,
+    to: sessionCtx.To,
+  });
   if (!config) {
     return {
       currentMessageId,
     };
   }
-  const rawProvider = sessionCtx.Provider?.trim().toLowerCase();
+  const rawProvider = originProvider?.trim().toLowerCase();
   if (!rawProvider) {
     return {
       currentMessageId,
@@ -43,34 +45,35 @@ export function buildThreadingToolContext(params: {
   }
   const provider = normalizeChannelId(rawProvider) ?? normalizeAnyChannelId(rawProvider);
   // Fallback for unrecognized/plugin channels (e.g., BlueBubbles before plugin registry init)
-  const dock = provider ? getChannelDock(provider) : undefined;
-  if (!dock?.threading?.buildToolContext) {
+  const threading = provider ? getChannelPlugin(provider)?.threading : undefined;
+  if (!threading?.buildToolContext) {
     return {
-      currentChannelId: sessionCtx.To?.trim() || undefined,
+      currentChannelId: originTo?.trim() || undefined,
       currentChannelProvider: provider ?? (rawProvider as ChannelId),
       currentMessageId,
       hasRepliedRef,
     };
   }
   const context =
-    dock.threading.buildToolContext({
+    threading.buildToolContext({
       cfg: config,
       accountId: sessionCtx.AccountId,
       context: {
-        Channel: sessionCtx.Provider,
+        Channel: originProvider,
         From: sessionCtx.From,
-        To: sessionCtx.To,
+        To: originTo,
         ChatType: sessionCtx.ChatType,
         CurrentMessageId: currentMessageId,
         ReplyToId: sessionCtx.ReplyToId,
         ThreadLabel: sessionCtx.ThreadLabel,
         MessageThreadId: sessionCtx.MessageThreadId,
+        NativeChannelId: sessionCtx.NativeChannelId,
       },
       hasRepliedRef,
     }) ?? {};
   return {
     ...context,
-    currentChannelProvider: provider!, // guaranteed non-null since dock exists
+    currentChannelProvider: provider!, // guaranteed non-null since threading exists
     currentMessageId: context.currentMessageId ?? currentMessageId,
   };
 }
@@ -173,6 +176,7 @@ export function buildEmbeddedRunBaseParams(params: {
   model: string;
   runId: string;
   authProfile: ReturnType<typeof resolveProviderScopedAuthProfile>;
+  allowTransientCooldownProbe?: boolean;
 }) {
   return {
     sessionFile: params.run.sessionFile,
@@ -181,6 +185,7 @@ export function buildEmbeddedRunBaseParams(params: {
     config: params.run.config,
     skillsSnapshot: params.run.skillsSnapshot,
     ownerNumbers: params.run.ownerNumbers,
+    inputProvenance: params.run.inputProvenance,
     senderIsOwner: params.run.senderIsOwner,
     enforceFinalTag: resolveEnforceFinalTag(params.run, params.provider),
     provider: params.provider,
@@ -193,6 +198,7 @@ export function buildEmbeddedRunBaseParams(params: {
     bashElevated: params.run.bashElevated,
     timeoutMs: params.run.timeoutMs,
     runId: params.runId,
+    allowTransientCooldownProbe: params.allowTransientCooldownProbe,
   };
 }
 
@@ -205,9 +211,15 @@ export function buildEmbeddedContextFromTemplate(params: {
     sessionId: params.run.sessionId,
     sessionKey: params.run.sessionKey,
     agentId: params.run.agentId,
-    messageProvider: params.sessionCtx.Provider?.trim().toLowerCase() || undefined,
+    messageProvider: resolveOriginMessageProvider({
+      originatingChannel: params.sessionCtx.OriginatingChannel,
+      provider: params.sessionCtx.Provider,
+    }),
     agentAccountId: params.sessionCtx.AccountId,
-    messageTo: params.sessionCtx.OriginatingTo ?? params.sessionCtx.To,
+    messageTo: resolveOriginMessageTo({
+      originatingTo: params.sessionCtx.OriginatingTo,
+      to: params.sessionCtx.To,
+    }),
     messageThreadId: params.sessionCtx.MessageThreadId ?? undefined,
     // Provider threading context for tool auto-injection
     ...buildThreadingToolContext({
@@ -269,6 +281,7 @@ export function buildEmbeddedRunExecutionParams(params: {
     model: params.model,
     runId: params.runId,
     authProfile,
+    allowTransientCooldownProbe: params.allowTransientCooldownProbe,
   });
   return {
     embeddedContext,

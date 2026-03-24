@@ -10,6 +10,8 @@
  * 4. 有 in-progress（仅 1 条）且超时（>12min）→ 自动重置回 todo 并立即重新派发（避免模型超时死循环）
  *    4a. 超时 >60min → 强制重置回 todo，等下轮调度器扫描再分配（通知负责人）
  * 5. todo 任务只是排队，不检测超时
+ * 6. Context Overflow 防循环：记录连续失败次数，超过阈値则暂停重试并通知 supervisor
+ *    （业界最佳实践：overflow 属于 non-retriable 错误，不应无限重试）
  */
 
 import path from "node:path";
@@ -32,6 +34,14 @@ const PRIORITY_WEIGHT: Record<string, number> = {
   medium: 2,
   low: 1,
 };
+
+// Context Overflow 循环防护
+// 记录每个 agent 还没成功唤醒的连续次数（如果任务状态没变化）
+const agentStaleWakeCount = new Map<string, { count: number; taskId: string; lastAt: number }>();
+// 连续失败 N 次后暂停重试（业界最佳实践：3-5 次）
+const MAX_STALE_WAKE_BEFORE_PAUSE = 3;
+// 暂停期间（10 分钟，等 heartbeat-runner 的 overflow 清空生效）
+const OVERFLOW_PAUSE_MS = 10 * 60 * 1000;
 
 function taskSortKey(t: { priority: string; weight?: number; createdAt: number }): number {
   // 得分越高越优先：优先级权重 * 1e13 + 任务权重 * 1e6 - 创建时间（越早越高）
@@ -119,6 +129,33 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
         taskStorage.listTasks({ assigneeId: normalizedId, status: ["in-progress"] }),
         taskStorage.listTasks({ assigneeId: normalizedId, status: ["todo"] }),
       ]);
+
+      // === Context Overflow 防循环检测 ===
+      // 业界最佳实践：overflow 属于 non-retriable 错误。
+      // 如果 agent 对同一个任务连续尝试多次却任务状态始终没变，
+      // 说明它占着任务却没在执行（最常见原因：context overflow 導致 embedded run 静默失败）。
+      // 连续超过阈値后暂停唤醒，等待 heartbeat-runner 的自动清空生效。
+      const activeInProgress = inProgressTasks[0];
+      if (activeInProgress) {
+        const staleKey = `${normalizedId}:${activeInProgress.id}`;
+        const staleInfo = agentStaleWakeCount.get(staleKey);
+        const taskUpdatedAt = activeInProgress.updatedAt ?? 0;
+        // 如果任务在上次扫描后有更新（说明 agent 在执行），重置计数器
+        if (staleInfo && taskUpdatedAt > staleInfo.lastAt) {
+          agentStaleWakeCount.delete(staleKey);
+        } else if (staleInfo && staleInfo.count >= MAX_STALE_WAKE_BEFORE_PAUSE) {
+          const pauseRemaining = staleInfo.lastAt + OVERFLOW_PAUSE_MS - now;
+          if (pauseRemaining > 0) {
+            console.log(
+              `[Task Wake] Agent ${normalizedId} paused due to repeated stale wakes (${staleInfo.count}/${MAX_STALE_WAKE_BEFORE_PAUSE}) — possible context overflow loop. Resuming in ${Math.ceil(pauseRemaining / 60000)}min.`,
+            );
+            stats.skippedTasks++;
+            continue;
+          }
+          // 暂停期已过，清除计数器重新尝试
+          agentStaleWakeCount.delete(staleKey);
+        }
+      }
 
       // === 核心约束：每个 agent 同时只执行 1 条任务 ===
       // 宽限期：任务刚被系统分配（startedAt 在 5 分钟内），不参与违规检测
@@ -316,6 +353,21 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
             agentId: normalizedId,
             coalesceMs: 5000,
           });
+
+          // 连续失败计数：每次尝试重唤醒同一任务次数 +1
+          // 达到阈値后 Task Wake 将暂停唤醒，等待 heartbeat-runner 的 overflow 清空生效
+          const staleKey = `${normalizedId}:${activeTask.id}`;
+          const existing = agentStaleWakeCount.get(staleKey);
+          agentStaleWakeCount.set(staleKey, {
+            count: (existing?.count ?? 0) + 1,
+            taskId: activeTask.id,
+            lastAt: now,
+          });
+          if ((existing?.count ?? 0) + 1 >= MAX_STALE_WAKE_BEFORE_PAUSE) {
+            console.log(
+              `[Task Wake] Agent ${normalizedId} task ${activeTask.id} has been retried ${(existing?.count ?? 0) + 1} times without progress — possible context overflow. Will pause wakes for ${OVERFLOW_PAUSE_MS / 60000}min.`,
+            );
+          }
 
           // 同时通知负责人
           const supervisorRaw = (activeTask.metadata?.supervisorId ?? activeTask.creatorId) as

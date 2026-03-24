@@ -42,9 +42,10 @@ import {
   wrapToolParamNormalization,
 } from "./pi-tools.read.js";
 import { cleanToolSchemaForGemini, normalizeToolParameters } from "../../upstream/src/agents/pi-tools.schema.js";
+import type { ModelCompatConfig } from "../../upstream/src/config/types.models.js";
+import { hasNativeWebSearchTool } from "../../upstream/src/agents/model-compat.js";
 import type { AnyAgentTool } from "../../upstream/src/agents/pi-tools.types.js";
 import type { SandboxContext } from "../../upstream/src/agents/sandbox.js";
-import { isXaiProvider } from "../../upstream/src/agents/schema/clean-for-xai.js";
 import { createToolFsPolicy, resolveToolFsConfig } from "../../upstream/src/agents/tool-fs-policy.js";
 import {
   applyToolPolicyPipeline,
@@ -93,13 +94,13 @@ function applyMessageProviderToolPolicy(
 
 function applyModelProviderToolPolicy(
   tools: AnyAgentTool[],
-  params?: { modelProvider?: string; modelId?: string },
+  params?: { modelCompat?: ModelCompatConfig },
 ): AnyAgentTool[] {
-  if (!isXaiProvider(params?.modelProvider, params?.modelId)) {
+  if (!hasNativeWebSearchTool(params?.modelCompat)) {
     return tools;
   }
-  // xAI/Grok providers expose a native web_search tool; sending OpenClaw's
-  // web_search alongside it causes duplicate-name request failures.
+  // Models with a native web_search tool cannot receive OpenClaw's
+  // web_search at the same time or the request will collide.
   return tools.filter((tool) => !TOOL_DENY_FOR_XAI_PROVIDERS.has(tool.name));
 }
 
@@ -260,6 +261,8 @@ export function createOpenClawCodingTools(options?: {
   replyToMode?: "off" | "first" | "all";
   /** Mutable ref to track if a reply was sent (for "first" mode). */
   hasRepliedRef?: { value: boolean };
+  /** Resolved runtime model compatibility hints. */
+  modelCompat?: ModelCompatConfig;
   /** If true, the model has native vision capability */
   modelHasVision?: boolean;
   /** Require explicit message targets (no implicit last-route sends). */
@@ -270,6 +273,8 @@ export function createOpenClawCodingTools(options?: {
   senderIsOwner?: boolean;
   /** Callback invoked when sessions_yield tool is called. */
   onYield?: (message: string) => Promise<void> | void;
+  /** Allow plugin tools for this run to late-bind the gateway subagent. */
+  allowGatewaySubagentBinding?: boolean;
 }): AnyAgentTool[] {
   const execToolName = "exec";
   const sandbox = options?.sandbox?.enabled ? options.sandbox : undefined;
@@ -552,6 +557,7 @@ export function createOpenClawCodingTools(options?: {
       senderIsOwner: options?.senderIsOwner,
       sessionId: options?.sessionId,
       onYield: options?.onYield,
+      allowGatewaySubagentBinding: options?.allowGatewaySubagentBinding,
     }),
   ];
   const toolsForMemoryFlush =
@@ -581,8 +587,7 @@ export function createOpenClawCodingTools(options?: {
     options?.messageProvider,
   );
   const toolsForModelProvider = applyModelProviderToolPolicy(toolsForMessageProvider, {
-    modelProvider: options?.modelProvider,
-    modelId: options?.modelId,
+    modelCompat: options?.modelCompat,
   });
   // Security: treat unknown/undefined as unauthorized (opt-in, not opt-out)
   const senderIsOwner = options?.senderIsOwner === true;
@@ -616,6 +621,7 @@ export function createOpenClawCodingTools(options?: {
     normalizeToolParameters(tool, {
       modelProvider: options?.modelProvider,
       modelId: options?.modelId,
+      modelCompat: options?.modelCompat,
     }),
   );
   const withHooks = normalized.map((tool) =>

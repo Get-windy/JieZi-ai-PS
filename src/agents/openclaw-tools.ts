@@ -115,6 +115,9 @@ import {
   createTaskUpdateTool,
   createTaskCompleteTool,
   createTaskDeleteTool,
+  createTaskGetTool,
+  createTaskSubtaskCreateTool,
+  createTaskWorklogAddTool,
 } from "./tools/task-management-tools.js";
 import { createTeamOrchestrateTool } from "./tools/team-orchestrate-tool.js";
 import {
@@ -452,6 +455,24 @@ export function createOpenClawTools(options?: {
       }),
     }),
     createTaskDeleteTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTaskGetTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTaskSubtaskCreateTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTaskWorklogAddTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
         config: options?.config,

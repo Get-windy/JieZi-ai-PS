@@ -197,6 +197,10 @@ export async function prepareSlackMessage(params: {
       id: isDirectMessage ? (message.user ?? "unknown") : message.channel,
     },
   });
+  if (route.isUnbound) {
+    logVerbose(`slack: drop — account ${account.accountId} not assigned to any agent`);
+    return null;
+  }
 
   const baseSessionKey = route.sessionKey;
   const threadContext = resolveSlackThreadContext({ message, replyToMode: ctx.replyToMode });

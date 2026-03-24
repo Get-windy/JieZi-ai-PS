@@ -16,6 +16,7 @@ describe("resolveAgentRoute", () => {
     expect(route.accountId).toBe("default");
     expect(route.sessionKey).toBe("agent:main:main");
     expect(route.matchedBy).toBe("default");
+    expect(route.isUnbound).toBe(true);
   });
 
   test("dmScope controls direct-message session key isolation", () => {
@@ -365,6 +366,7 @@ describe("resolveAgentRoute", () => {
     });
     expect(route.agentId).toBe("home");
     expect(route.sessionKey).toBe("agent:home:main");
+    expect(route.isUnbound).toBe(true);
   });
 });
 
@@ -485,6 +487,7 @@ describe("parentPeer binding inheritance (thread support)", () => {
     const route = resolveDiscordThreadRoute({ cfg, parentPeer: { kind: "channel", id: "" } });
     expect(route.agentId).toBe("main");
     expect(route.matchedBy).toBe("default");
+    expect(route.isUnbound).toBe(true);
   });
 
   test("null parentPeer is handled gracefully", () => {
@@ -494,6 +497,7 @@ describe("parentPeer binding inheritance (thread support)", () => {
     const route = resolveDiscordThreadRoute({ cfg, parentPeer: null });
     expect(route.agentId).toBe("main");
     expect(route.matchedBy).toBe("default");
+    expect(route.isUnbound).toBe(true);
   });
 });
 

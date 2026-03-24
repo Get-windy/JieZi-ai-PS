@@ -59,6 +59,9 @@ import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
 import { getQueueSize, resetAllLanes } from "../../upstream/src/process/command-queue.js";
 import { defaultRuntime, type RuntimeEnv } from "../../upstream/src/runtime.js";
 import { escapeRegExp } from "../../upstream/src/utils.js";
+import { resolveContextTokensForModel } from "../../upstream/src/agents/context.js";
+import { DEFAULT_CONTEXT_TOKENS } from "../../upstream/src/agents/defaults.js";
+import { CHARS_PER_TOKEN_ESTIMATE } from "../../upstream/src/agents/pi-embedded-runner/tool-result-char-estimator.js";
 import {
   listAgentIds,
   resolveAgentConfig,
@@ -73,6 +76,7 @@ import {
   parseAgentSessionKey,
   toAgentStoreSessionKey,
 } from "../routing/session-key.js";
+import { isLikelyContextOverflowError } from "../agents/pi-embedded-helpers/errors.js";
 import { compactHeartbeatFileIfNeeded } from "./heartbeat-bootstrap-compact.js";
 import type { OutboundSendDeps } from "./outbound/deliver.js";
 import { deliverOutboundPayloads } from "./outbound/deliver.js";
@@ -911,6 +915,60 @@ export async function runHeartbeatOnce(opts: {
       agentId,
     });
 
+    // ── 事前上下文大小门控（Proactive Transcript Size Gate）────────────
+    // 业界最佳实践（Claude Code / OpenHands）：
+    // 在发起 embedded run 之前，先检查 transcript 文件大小。
+    // 若文件已超出安全阈值，则在本次运行前主动清空，
+    // 让 Pi 从空 context 开始，内置的 compaction 机制可以正常工作。
+    // 这比事后检测 overflow 更优：直接切断超大 context 进入 LLM 的通路。
+    //
+    // 阈值设计依据：
+    //   - 动态取当前 agent 所用模型的 contextWindow（tokens）
+    //   - tokens × CHARS_PER_TOKEN_ESTIMATE（≈4） × 0.75 = 字节安全上限
+    //   - 0.75 对齐 tool-result-context-guard 的 CONTEXT_INPUT_HEADROOM_RATIO
+    //   - 回退值：DEFAULT_CONTEXT_TOKENS（128k） × 4 × 0.75 ≈ 384 KB
+    //   - 超过此值时，Pi 初始化阶段就会溢出，tool-result-context-guard 和
+    //     Pi 的 threshold-based compaction 根本来不及触发
+    const heartbeatModelForCtx = heartbeat?.model?.trim() || undefined;
+    const agentPrimaryModel = resolveAgentExplicitModelPrimary(cfg, agentId);
+    const ctxModelId = heartbeatModelForCtx ?? agentPrimaryModel ?? undefined;
+    const agentContextTokens =
+      resolveContextTokensForModel({
+        cfg,
+        model: ctxModelId,
+        fallbackContextTokens: DEFAULT_CONTEXT_TOKENS,
+      }) ?? DEFAULT_CONTEXT_TOKENS;
+    // 安全阈值 = contextWindow × chars/token × 0.75，单位字节
+    const TRANSCRIPT_PROACTIVE_RESET_BYTES = Math.floor(
+      agentContextTokens * CHARS_PER_TOKEN_ESTIMATE * 0.75,
+    );
+    if (
+      transcriptState.transcriptPath &&
+      typeof transcriptState.preHeartbeatSize === "number" &&
+      transcriptState.preHeartbeatSize > TRANSCRIPT_PROACTIVE_RESET_BYTES
+    ) {
+      log.warn(
+        `heartbeat: transcript size ${transcriptState.preHeartbeatSize} bytes exceeds safe threshold ` +
+          `${TRANSCRIPT_PROACTIVE_RESET_BYTES} (model ctx=${agentContextTokens} tokens) — proactively clearing before run to prevent overflow`,
+        { agentId, sessionKey: runSessionKey, bytes: transcriptState.preHeartbeatSize, thresholdBytes: TRANSCRIPT_PROACTIVE_RESET_BYTES, contextTokens: agentContextTokens },
+      );
+      try {
+        await fs.writeFile(transcriptState.transcriptPath, "", "utf-8");
+        // 重置 preHeartbeatSize 让事后 pruneHeartbeatTranscript 从 0 开始
+        transcriptState.preHeartbeatSize = 0;
+        log.info(
+          `heartbeat: proactive transcript reset done for agent "${agentId}" — context starts fresh`,
+          { agentId },
+        );
+      } catch (resetErr) {
+        log.warn(
+          `heartbeat: failed to proactively reset transcript for agent "${agentId}": ${String(resetErr)}`,
+          { agentId },
+        );
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────
+
     const heartbeatModelOverride = heartbeat?.model?.trim() || undefined;
     const suppressToolErrorWarnings = heartbeat?.suppressToolErrorWarnings === true;
     const bootstrapContextMode: "lightweight" | undefined =
@@ -928,6 +986,39 @@ export async function runHeartbeatOnce(opts: {
     // ── 心跳结束后压缩 HEARTBEAT.md（滚动摘要，控制文件大小）────────
     // 在 LLM 已读取并处理完 HEARTBEAT.md 内容之后执行压缩，不影响本次回复。
     void compactHeartbeatFileIfNeeded(workspaceDir);
+    // ─────────────────────────────────────────────────────────────────
+
+    // ── Context Overflow 自动恢复 ─────────────────────────────────────
+    // 业界最佳实践（参考 Anthropic Claude compaction、OpenHands）：
+    // overflow 属于 non-retriable 错误，不应无限重试。
+    // 检测到 overflow error payload 后，立即清空该 agent 的 session transcript，
+    // 让下次唤醒从空 context 开始，彻底打破循环。
+    const replyPayloads = Array.isArray(replyResult)
+      ? replyResult
+      : replyResult
+        ? [replyResult]
+        : [];
+    const overflowPayload = replyPayloads.find(
+      (p) => p.isError && isLikelyContextOverflowError(p.text ?? ""),
+    );
+    if (overflowPayload && transcriptState.transcriptPath) {
+      log.warn(
+        `heartbeat: context overflow detected for agent "${agentId}" session "${runSessionKey}" — auto-clearing transcript to break retry loop`,
+        { agentId, sessionKey: runSessionKey },
+      );
+      try {
+        await fs.writeFile(transcriptState.transcriptPath, "", "utf-8");
+        log.info(
+          `heartbeat: transcript cleared for agent "${agentId}" (${transcriptState.transcriptPath})`,
+          { agentId },
+        );
+      } catch (clearErr) {
+        log.warn(
+          `heartbeat: failed to clear transcript for agent "${agentId}": ${String(clearErr)}`,
+          { agentId },
+        );
+      }
+    }
     // ─────────────────────────────────────────────────────────────────
 
     const replyPayload = resolveHeartbeatReplyPayload(replyResult);

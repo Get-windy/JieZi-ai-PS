@@ -453,7 +453,7 @@ async function updateAgentField(
  * 自动驱动 agent 的下一条 todo 任务（任务完成/取消/重置后复用）
  * 找出优先级最高且无依赖阻塞的第一条，自动设为 in-progress 并唤醒 agent
  */
-async function scheduleNextTaskForAgent(
+export async function scheduleNextTaskForAgent(
   agentId: string,
   completedTaskId: string,
   _projectId?: string,
@@ -2956,6 +2956,24 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const title = (p?.title ?? task.slice(0, 100)).trim();
 
     // === 步骤1：写入任务系统，建立可追踪任务记录 ===
+    // 若 agent 当前已有 in-progress 任务，则新任务状态设为 todo（排队等待）
+    // 若 agent 当前空闲（无 in-progress），则直接设为 in-progress 并立即推送
+    let initialTaskStatus: Task["status"] = "in-progress";
+    try {
+      const existingInProgress = await taskStorage.listTasks({
+        assigneeId: normalizeAgentId(targetAgentId),
+        status: ["in-progress"],
+      });
+      if (existingInProgress.length > 0) {
+        initialTaskStatus = "todo";
+        console.log(
+          `[agent.assign_task] Agent ${targetAgentId} already has ${existingInProgress.length} in-progress task(s), queuing new task ${taskId} as todo`,
+        );
+      }
+    } catch (checkErr) {
+      console.warn(`[agent.assign_task] Failed to check in-progress tasks: ${String(checkErr)}`);
+    }
+
     try {
       const newTask: Task = {
         id: taskId,
@@ -2972,7 +2990,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             assignedBy: requesterId,
           },
         ],
-        status: "in-progress",
+        status: initialTaskStatus,
         priority,
         organizationId: p?.organizationId ? String(p.organizationId) : undefined,
         teamId: p?.teamId ? String(p.teamId) : undefined,
@@ -2980,7 +2998,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         dueDate: p?.deadline ? new Date(p.deadline).getTime() || undefined : undefined,
         timeTracking: {
           timeSpent: 0,
-          startedAt: Date.now(),
+          startedAt: initialTaskStatus === "in-progress" ? Date.now() : undefined,
           lastActivityAt: Date.now(),
         },
         metadata: {
@@ -2997,6 +3015,28 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     } catch (taskErr) {
       // 写入任务系统失败不阻止消息投递，但记录警告
       console.warn(`[agent.assign_task] Failed to write task to storage: ${String(taskErr)}`);
+    }
+
+    // === 步骤 2：根据任务初始状态决定是否立即推送消息 ===
+    // 如果任务入队排候（todo）：预计反馈已排队，由自动调度器处理，不需要立即推送
+    // 如果任务直接入场（in-progress）：推送任务消息 + 唐醒 agent
+    if (initialTaskStatus === "todo") {
+      respond(
+        true,
+        {
+          queued: true,
+          taskId,
+          targetAgent: targetAgentId,
+          sessionKey,
+          priority,
+          assignedAt: Date.now(),
+          trackedInTaskSystem: true,
+          taskStatus: "todo",
+          note: `Agent ${targetAgentId} is currently busy. Task has been queued and will be auto-started when current task completes.`,
+        },
+        undefined,
+      );
+      return;
     }
 
     // === 步骤 2：格式化任务消息并投递到目标 Agent ===

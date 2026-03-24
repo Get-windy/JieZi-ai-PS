@@ -189,6 +189,18 @@ export const buildTelegramMessageContext = async ({
     },
     parentPeer,
   });
+  if (route.isUnbound) {
+    logVerbose(`telegram: drop — account ${account.accountId} not assigned to any agent`);
+    try {
+      await bot.api.sendMessage(
+        chatId,
+        "此通道账号暂未分配给任何助手，无法处理您的消息。请联系管理员完成绑定配置。",
+      );
+    } catch (_err) {
+      // ignore send errors
+    }
+    return null;
+  }
 
   const baseSessionKey = route.sessionKey;
   // DMs: use raw messageThreadId for thread sessions (not forum topic ids)

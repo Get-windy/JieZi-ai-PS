@@ -1,3 +1,8 @@
+import fs from "node:fs/promises";
+import { resolveContextTokensForModel } from "../../../upstream/src/agents/context.js";
+import { DEFAULT_CONTEXT_TOKENS } from "../../../upstream/src/agents/defaults.js";
+import { CHARS_PER_TOKEN_ESTIMATE } from "../../../upstream/src/agents/pi-embedded-runner/tool-result-char-estimator.js";
+import { resolveSessionFilePath } from "../../../upstream/src/config/sessions/paths.js";
 import { resolveModelRefFromString } from "../../../upstream/src/agents/model-selection.js";
 import { resolveAgentTimeoutMs } from "../../../upstream/src/agents/timeout.js";
 import {
@@ -346,6 +351,43 @@ export async function getReplyFromConfig(
     sessionKey,
     workspaceDir,
   });
+
+  // ── 用户消息路径事前 Transcript Size Gate ─────────────────────
+  // 和 heartbeat 路径的逗止一致：在进入 embedded run 前，
+  // 先根据当前模型的 contextWindow 动态计算安全阈值，
+  // 超过则清空 transcript —— 上游模块应主动控制，不依赖下游手动清空。
+  // (isHeartbeat == true 时已在 heartbeat-runner.ts 处理，此处跳过)
+  if (!opts?.isHeartbeat && sessionId && storePath) {
+    try {
+      const transcriptPath = resolveSessionFilePath(
+        sessionId,
+        sessionEntry ? { sessionFile: sessionEntry.sessionFile } : undefined,
+        { agentId },
+      );
+      const stat = await fs.stat(transcriptPath).catch(() => null);
+      if (stat && stat.size > 0) {
+        const ctxTokens =
+          resolveContextTokensForModel({
+            cfg,
+            provider,
+            model,
+            fallbackContextTokens: DEFAULT_CONTEXT_TOKENS,
+          }) ?? DEFAULT_CONTEXT_TOKENS;
+        const safeThresholdBytes = Math.floor(ctxTokens * CHARS_PER_TOKEN_ESTIMATE * 0.75);
+        if (stat.size > safeThresholdBytes) {
+          defaultRuntime.log.warn(
+            `get-reply: transcript size ${stat.size} bytes exceeds safe threshold ` +
+              `${safeThresholdBytes} (model ${provider}/${model}, ctx=${ctxTokens} tokens) — proactively clearing to prevent overflow`,
+            { agentId, sessionKey, bytes: stat.size, thresholdBytes: safeThresholdBytes, contextTokens: ctxTokens },
+          );
+          await fs.writeFile(transcriptPath, "", "utf-8").catch(() => undefined);
+        }
+      }
+    } catch {
+      // 读取失败不阅断正常消息流程
+    }
+  }
+  // ───────────────────────────────────────────────────────────
 
   return runPreparedReply({
     ctx,

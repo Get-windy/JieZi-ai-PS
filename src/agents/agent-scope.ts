@@ -20,7 +20,7 @@ import {
   parseAgentSessionKey,
   resolveAgentIdFromSessionKey,
 } from "../routing/session-key.js";
-import { hasUsableCustomProviderApiKey } from "./model-auth.js";
+import { hasUsableCustomProviderApiKey } from "../../upstream/src/agents/model-auth.js";
 const log = createSubsystemLogger("agent-scope");
 
 export { resolveAgentIdFromSessionKey };

@@ -3115,6 +3115,14 @@ export function renderApp(state: AppViewState) {
                   creatingProject: state.creatingProject,
                   editingProject: state.editingProject,
                   agentsList: state.agentsList,
+                  projectCodeRoot: state.projectCodeRoot,
+                  onCodeRootChange: (root) => {
+                    state.projectCodeRoot = root;
+                  },
+                  projectStatusFilter: state.projectStatusFilter,
+                  onStatusFilterChange: (filter) => {
+                    state.projectStatusFilter = filter;
+                  },
                   onRefresh: () => {
                     void loadProjects(state, state.client!);
                   },
@@ -3232,8 +3240,31 @@ export function renderApp(state: AppViewState) {
                     state.handleProjectUpdateMemberRole(projectId, agentId, role);
                   },
                   // 进度管理
-                  onUpdateProgress: (projectId, progress, notes) => {
-                    state.handleProjectUpdateProgress(projectId, progress, notes);
+                  onUpdateProgress: (projectId, patch) => {
+                    // 实时更新内存中的项目字段（不发请求，仅更新本地状态）
+                    if (!state.projectsList) return;
+                    state.projectsList = {
+                      ...state.projectsList,
+                      projects: state.projectsList.projects.map((p) =>
+                        p.projectId === projectId ? { ...p, ...patch } : p,
+                      ),
+                    };
+                  },
+                  onSaveProgress: (projectId, patch) => {
+                    void (async () => {
+                      if (!state.client) return;
+                      try {
+                        await state.client.request("projects.updateProgress", {
+                          projectId,
+                          ...patch,
+                        });
+                        // 刷新项目列表以同步持久化数据
+                        const { loadProjects } = await import("./controllers/projects.js");
+                        await loadProjects(state, state.client);
+                      } catch (err) {
+                        alert(`保存进度失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
                   },
                   // 跨团队协作 Handoff Props
                   projectTeamRelations: state.projectTeamRelations,

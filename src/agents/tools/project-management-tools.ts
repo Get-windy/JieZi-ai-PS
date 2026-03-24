@@ -16,17 +16,33 @@ import { callGatewayTool, readGatewayCallOptions } from "../../../upstream/src/a
 const ProjectCreateToolSchema = Type.Object({
   /** 项目名称（必填） */
   name: Type.String({ minLength: 1, maxLength: 128 }),
+  /**
+   * 项目负责人 Agent ID（必填）
+   * 必须是具体的 agent ID（如 "main"、"coordinator" 等），
+   * 禁止使用 "system"，必须是真实存在且有权限的 agent。
+   */
+  ownerId: Type.String({ minLength: 1 }),
   /** 项目 ID（可选，不传则自动生成） */
   projectId: Type.Optional(Type.String()),
   /** 项目描述（可选） */
   description: Type.Optional(Type.String()),
-  /** 项目代码目录路径（可选，默认在 I:\{projectName}） */
+  /** 项目代码目录路径（可选，完整绝对路径，优先级高于 codeRoot） */
   codeDir: Type.Optional(Type.String()),
+  /**
+   * 项目代码根目录（可选）。
+   * 如果用户在项目管理页面设置了代码根目录，将该值传入，
+   * 新项目的 codeDir 将自动计算为 codeRoot\\projectName。
+   * 若 codeDir 和 codeRoot 都未提供，工具将返回错误，
+   * 提示用户先在项目管理页面设置代码根目录。
+   */
+  codeRoot: Type.Optional(Type.String()),
   /** 项目工作空间根目录（可选，默认 H:\\OpenClaw_Workspace\\groups） */
   workspaceRoot: Type.Optional(Type.String()),
-  /** 项目负责人 ID（可选） */
-  ownerId: Type.Optional(Type.String()),
-  /** 是否同时创建项目群（可选，默认 true） */
+  /**
+   * 是否同时创建项目群（默认 false）
+   * 必须明确传 true 且在用户/上级明确要求时才创建，
+   * 不得在没有明确指令的情况下自动创建。
+   */
   createGroup: Type.Optional(Type.Boolean()),
 });
 
@@ -38,25 +54,58 @@ export function createProjectCreateTool(): AnyAgentTool {
     label: "Project Create",
     name: "project_create",
     description:
-      "Create a new project with workspace and configuration. Automatically creates project workspace directory, PROJECT_CONFIG.json, and initial structure. Returns project ID and configuration.",
+      "Create a new project with workspace and configuration. " +
+      "REQUIRED: You MUST provide ownerId as a real agent ID (e.g. 'main', 'coordinator') — " +
+      "NEVER use 'system' as ownerId. " +
+      "createGroup defaults to FALSE — only pass createGroup=true when the user or supervisor has explicitly requested a project group to be created. " +
+      "Do NOT create projects silently in the background; this tool must only be called after an explicit user/chat instruction.",
     parameters: ProjectCreateToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
       const name = readStringParam(params, "name", { required: true });
+      const ownerId = readStringParam(params, "ownerId", { required: true });
       const projectId = readStringParam(params, "projectId"); // 可选，自动生成
       const description = readStringParam(params, "description");
-      const codeDir = readStringParam(params, "codeDir"); // 可选，默认 I:\{projectName}
-      const workspaceRoot = readStringParam(params, "workspaceRoot"); // 可选，从配置或环境变量读取
-      const ownerId = readStringParam(params, "ownerId");
-      const createGroup = typeof params.createGroup === "boolean" ? params.createGroup : true; // 默认创建项目群
+      const codeDir = readStringParam(params, "codeDir");
+      const codeRoot = readStringParam(params, "codeRoot");
+      const workspaceRoot = readStringParam(params, "workspaceRoot");
+      const createGroup = typeof params.createGroup === "boolean" ? params.createGroup : false; // 默认不创建群组
       const gatewayOpts = readGatewayCallOptions(params);
+
+      // 拦截非法 ownerId
+      if (!ownerId || ownerId.toLowerCase() === "system") {
+        return jsonResult({
+          success: false,
+          error:
+            '禁止使用 "system" 作为项目负责人。' +
+            "必须提供真实的 agent ID（如 \"main\"\u3001\"coordinator\" 等）。" +
+            "请先确认项目负责人后再调用此工具。",
+        });
+      }
 
       try {
         // 如果没有指定 projectId，使用项目名称生成
         const finalProjectId = projectId || `project-${name.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`;
         
-        // 如果没有指定 codeDir，默认在 I:\{projectName}
-        const finalCodeDir = codeDir || `I:\\${name}`;
+        // codeDir 优先级：显式传入的 codeDir > codeRoot + name 拼接 > 报错
+        let finalCodeDir: string | undefined;
+        if (codeDir) {
+          finalCodeDir = codeDir;
+        } else if (codeRoot) {
+          // 拼接：去掉末尾斜杠后加项目名称
+          const root = codeRoot.replace(/[\\/]+$/, "");
+          finalCodeDir = `${root}\\${name}`;
+        } else {
+          // 既没有 codeDir 也没有 codeRoot，拒绝创建
+          return jsonResult({
+            success: false,
+            error:
+              "未设置项目代码目录根路径。" +
+              "请在项目管理页面顶部设置「项目代码根目录」（如 I:\\），" +
+              "新项目的代码目录将自动创建为 <根目录>\\<项目名称>。" +
+              "或者在调用此工具时直接传入 codeDir（完整路径）。",
+          });
+        }
         
         // 计算工作空间路径 (从配置、环境变量或默认值)
         const actualWorkspaceRoot = workspaceRoot || process.env.OPENCLAW_GROUPS_ROOT || "H:\\OpenClaw_Workspace\\groups";
@@ -87,7 +136,7 @@ export function createProjectCreateTool(): AnyAgentTool {
           };
         }
 
-        // 自动创建关联的项目群
+        // 自动创建关联的项目群（仅当 createGroup === true 且 ownerId 已确认时）
         let groupInfo = null;
         if (createGroup) {
           try {
@@ -95,7 +144,7 @@ export function createProjectCreateTool(): AnyAgentTool {
             const groupResponse = await callGatewayTool("groups.create", gatewayOpts, {
               id: `group-${finalProjectId}`,
               name: groupName,
-              ownerId: ownerId || "system",
+              ownerId: ownerId, // 已在前面验证，此处必定是真实 agent ID
               description: `项目「${name}」的专属群组，负责项目的协作和沟通`,
               initialMembers: [],
               isPublic: false,
@@ -132,6 +181,7 @@ export function createProjectCreateTool(): AnyAgentTool {
           ``,
           `📋 Project Configuration:`,
           `- Project ID: ${finalProjectId}`,
+          `- Owner: ${ownerId}`,
           `- Workspace: ${workspacePath}`,
           `- Code Directory: ${finalCodeDir}`,
           ``,
@@ -176,12 +226,9 @@ export function createProjectCreateTool(): AnyAgentTool {
           `   echo "(Add project description here)" >> SHARED_MEMORY.md`,
           `   \`\`\``,
           ``,
-          `5. Verify code directory exists:`,
+          `5. Create code directory if not exists:`,
           `   \`\`\`bash`,
-          `   if not exist "${finalCodeDir}" (`,
-          `     echo "⚠️ Code directory does not exist: ${finalCodeDir}"`,
-          `     echo "Please create it or update PROJECT_CONFIG.json"`,
-          `   )`,
+          `   if not exist "${finalCodeDir}" mkdir "${finalCodeDir}"`,
           `   \`\`\``,
         ];
         

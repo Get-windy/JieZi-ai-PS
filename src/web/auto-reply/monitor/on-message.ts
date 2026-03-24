@@ -73,6 +73,10 @@ export function createWebOnMessageHandler(params: {
         id: peerId,
       },
     });
+    if (route.isUnbound) {
+      logVerbose(`whatsapp: drop — account ${msg.accountId} not assigned to any agent`);
+      return;
+    }
 
     const groupHistoryKey =
       msg.chatType === "group"

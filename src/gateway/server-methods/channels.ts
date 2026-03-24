@@ -202,32 +202,317 @@ export const channelsHandlers: GatewayRequestHandlers = {
 
     const uiCatalog = buildChannelUiCatalog(plugins);
 
+    // 静态 fallback schema：为没有 configSchema 的已知通道提供账号级字段定义
+    // 当插件没有通过 configSchema 暴露账号字段时（如 emptyPluginConfigSchema），使用此处的静态定义
+    const STATIC_ACCOUNT_SCHEMAS: Record<string, Record<string, unknown>> = {
+      // 企业微信（wecom-openclaw-plugin 使用 emptyPluginConfigSchema）
+      wecom: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "账号显示名称" },
+          enabled: { type: "boolean", description: "启用此账号" },
+          botId: { type: "string", description: "企业微信 Bot ID" },
+          secret: {
+            oneOf: [
+              { type: "string" },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["source", "provider", "id"],
+                properties: {
+                  source: { type: "string", enum: ["env", "file", "exec"] },
+                  provider: { type: "string", minLength: 1 },
+                  id: { type: "string", minLength: 1 },
+                },
+              },
+            ],
+            description: "企业微信 Bot Secret",
+          },
+          dmPolicy: { type: "string", enum: ["open", "pairing", "allowlist"] },
+          allowFrom: { type: "array", items: { type: "string" } },
+          groupPolicy: { type: "string", enum: ["open", "allowlist", "disabled"] },
+          requireMention: { type: "boolean" },
+        },
+      },
+      // Telegram（上游 bundled，无 configSchema）
+      telegram: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "账号显示名称" },
+          enabled: { type: "boolean", description: "启用此账号" },
+          token: {
+            oneOf: [
+              { type: "string" },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["source", "provider", "id"],
+                properties: {
+                  source: { type: "string", enum: ["env", "file", "exec"] },
+                  provider: { type: "string", minLength: 1 },
+                  id: { type: "string", minLength: 1 },
+                },
+              },
+            ],
+            description: "Telegram Bot Token",
+          },
+          dmPolicy: { type: "string", enum: ["open", "pairing", "allowlist"] },
+          allowFrom: { type: "array", items: { type: "string" } },
+          groupPolicy: { type: "string", enum: ["open", "allowlist", "disabled"] },
+          requireMention: { type: "boolean" },
+          webhookMode: { type: "boolean", description: "使用 Webhook 模式（默认轮询）" },
+          webhookUrl: { type: "string", description: "Webhook URL（webhook 模式时使用）" },
+        },
+      },
+      // Discord
+      discord: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          enabled: { type: "boolean" },
+          token: {
+            oneOf: [
+              { type: "string" },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["source", "provider", "id"],
+                properties: {
+                  source: { type: "string", enum: ["env", "file", "exec"] },
+                  provider: { type: "string", minLength: 1 },
+                  id: { type: "string", minLength: 1 },
+                },
+              },
+            ],
+            description: "Discord Bot Token",
+          },
+          dmPolicy: { type: "string", enum: ["open", "pairing", "allowlist"] },
+          allowFrom: { type: "array", items: { type: "string" } },
+          groupPolicy: { type: "string", enum: ["open", "allowlist", "disabled"] },
+          requireMention: { type: "boolean" },
+        },
+      },
+      // Slack
+      slack: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          enabled: { type: "boolean" },
+          botToken: {
+            oneOf: [
+              { type: "string" },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["source", "provider", "id"],
+                properties: {
+                  source: { type: "string", enum: ["env", "file", "exec"] },
+                  provider: { type: "string", minLength: 1 },
+                  id: { type: "string", minLength: 1 },
+                },
+              },
+            ],
+            description: "Slack Bot Token (xoxb-...)",
+          },
+          appToken: {
+            oneOf: [
+              { type: "string" },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["source", "provider", "id"],
+                properties: {
+                  source: { type: "string", enum: ["env", "file", "exec"] },
+                  provider: { type: "string", minLength: 1 },
+                  id: { type: "string", minLength: 1 },
+                },
+              },
+            ],
+            description: "Slack App-Level Token (xapp-...)",
+          },
+          dmPolicy: { type: "string", enum: ["open", "pairing", "allowlist"] },
+          allowFrom: { type: "array", items: { type: "string" } },
+          groupPolicy: { type: "string", enum: ["open", "allowlist", "disabled"] },
+          requireMention: { type: "boolean" },
+        },
+      },
+      // 飞书（feishu）
+      feishu: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          enabled: { type: "boolean" },
+          appId: { type: "string", description: "飞书 App ID" },
+          appSecret: {
+            oneOf: [
+              { type: "string" },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["source", "provider", "id"],
+                properties: {
+                  source: { type: "string", enum: ["env", "file", "exec"] },
+                  provider: { type: "string", minLength: 1 },
+                  id: { type: "string", minLength: 1 },
+                },
+              },
+            ],
+            description: "飞书 App Secret",
+          },
+          encryptKey: {
+            oneOf: [
+              { type: "string" },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["source", "provider", "id"],
+                properties: {
+                  source: { type: "string", enum: ["env", "file", "exec"] },
+                  provider: { type: "string", minLength: 1 },
+                  id: { type: "string", minLength: 1 },
+                },
+              },
+            ],
+            description: "飞书 Encrypt Key（Webhook 模式）",
+          },
+          verificationToken: {
+            oneOf: [
+              { type: "string" },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["source", "provider", "id"],
+                properties: {
+                  source: { type: "string", enum: ["env", "file", "exec"] },
+                  provider: { type: "string", minLength: 1 },
+                  id: { type: "string", minLength: 1 },
+                },
+              },
+            ],
+            description: "飞书 Verification Token（Webhook 模式）",
+          },
+          domain: { type: "string", enum: ["feishu", "lark"], description: "feishu.cn 或 larksuite.com" },
+          connectionMode: { type: "string", enum: ["websocket", "webhook"], description: "连接模式" },
+          dmPolicy: { type: "string", enum: ["open", "pairing", "allowlist"] },
+          allowFrom: { type: "array", items: { type: "string" } },
+          groupPolicy: { type: "string", enum: ["open", "allowlist", "disabled"] },
+          requireMention: { type: "boolean" },
+        },
+      },
+      // Signal
+      signal: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          enabled: { type: "boolean" },
+          phoneNumber: { type: "string", description: "Signal 注册手机号" },
+          dmPolicy: { type: "string", enum: ["open", "pairing", "allowlist"] },
+          allowFrom: { type: "array", items: { type: "string" } },
+          groupPolicy: { type: "string", enum: ["open", "allowlist", "disabled"] },
+          requireMention: { type: "boolean" },
+        },
+      },
+      // WhatsApp
+      whatsapp: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          enabled: { type: "boolean" },
+          dmPolicy: { type: "string", enum: ["open", "pairing", "allowlist"] },
+          allowFrom: { type: "array", items: { type: "string" } },
+          groupPolicy: { type: "string", enum: ["open", "allowlist", "disabled"] },
+          requireMention: { type: "boolean" },
+        },
+      },
+      // LINE
+      line: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          enabled: { type: "boolean" },
+          channelAccessToken: {
+            oneOf: [
+              { type: "string" },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["source", "provider", "id"],
+                properties: {
+                  source: { type: "string", enum: ["env", "file", "exec"] },
+                  provider: { type: "string", minLength: 1 },
+                  id: { type: "string", minLength: 1 },
+                },
+              },
+            ],
+            description: "LINE Channel Access Token",
+          },
+          channelSecret: {
+            oneOf: [
+              { type: "string" },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["source", "provider", "id"],
+                properties: {
+                  source: { type: "string", enum: ["env", "file", "exec"] },
+                  provider: { type: "string", minLength: 1 },
+                  id: { type: "string", minLength: 1 },
+                },
+              },
+            ],
+            description: "LINE Channel Secret",
+          },
+          dmPolicy: { type: "string", enum: ["open", "pairing", "allowlist"] },
+          allowFrom: { type: "array", items: { type: "string" } },
+          groupPolicy: { type: "string", enum: ["open", "allowlist", "disabled"] },
+          requireMention: { type: "boolean" },
+        },
+      },
+    };
+
     // 构建每个通道的账号级配置 Schema（用于 UI 编辑弹窗动态渲染表单字段）
     // 优先取 configSchema.schema.properties.accounts.additionalProperties（账号层独立 schema）
     // 否则降级使用整个 configSchema.schema（删除 accounts 字段）
+    // 最终 fallback 到上面的 STATIC_ACCOUNT_SCHEMAS
     const channelConfigSchemas: Record<string, Record<string, unknown>> = {};
+    console.log(`[channels.status] plugins count=${plugins.length}, ids=${plugins.map((p) => p.id).join(",")}`);
     for (const plugin of plugins) {
       const rawSchema = plugin.configSchema?.schema;
-      if (!rawSchema) {
-        continue;
-      }
-      const properties = rawSchema.properties as Record<string, unknown> | undefined;
-      const accountsField = properties?.accounts as Record<string, unknown> | undefined;
-      const accountAdditional = accountsField?.additionalProperties as
-        | Record<string, unknown>
-        | undefined;
 
-      if (accountAdditional?.properties) {
-        // 有明确的账号级 schema
-        channelConfigSchemas[plugin.id] = accountAdditional;
-      } else if (properties) {
-        // 降级：删除 accounts 字段，用全局 schema作为账号 schema
-        const { accounts: _accounts, ...restProperties } = properties;
-        void _accounts;
-        channelConfigSchemas[plugin.id] = {
-          ...rawSchema,
-          properties: restProperties,
-        };
+      if (rawSchema) {
+        const properties = rawSchema.properties as Record<string, unknown> | undefined;
+        const accountsField = properties?.accounts as Record<string, unknown> | undefined;
+        const accountAdditional = accountsField?.additionalProperties as
+          | Record<string, unknown>
+          | undefined;
+
+        if (accountAdditional?.properties) {
+          // 有明确的账号级 schema（properties 齐全），直接用
+          channelConfigSchemas[plugin.id] = accountAdditional;
+        } else if (properties) {
+          // 降级：用顶层 schema properties，去掉 accounts/defaultAccount 这两个容器字段
+          const { accounts: _a, defaultAccount: _d, ...restProperties } = properties;
+          void _a; void _d;
+          if (Object.keys(restProperties).length > 0) {
+            channelConfigSchemas[plugin.id] = {
+              type: "object",
+              properties: restProperties,
+            };
+          }
+        }
+      }
+
+      // 如果插件自身没有提供任何账号字段，使用静态 fallback
+      if (!channelConfigSchemas[plugin.id] && STATIC_ACCOUNT_SCHEMAS[plugin.id]) {
+        channelConfigSchemas[plugin.id] = STATIC_ACCOUNT_SCHEMAS[plugin.id];
+      }
+    }
+
+    // 静态 fallback 兜底：对于内置通道（feishu/telegram 等可能未在外部 plugin 列表中），
+    // 直接补全 STATIC_ACCOUNT_SCHEMAS 里所有未被覆盖的通道 schema
+    for (const [channelId, staticSchema] of Object.entries(STATIC_ACCOUNT_SCHEMAS)) {
+      if (!channelConfigSchemas[channelId]) {
+        channelConfigSchemas[channelId] = staticSchema;
       }
     }
 
@@ -361,7 +646,13 @@ export const channelsHandlers: GatewayRequestHandlers = {
       isNew?: unknown;
     };
 
-    const channelId = typeof rawChannelId === "string" ? normalizeChannelId(rawChannelId) : null;
+    // normalizeChannelId 仅在 plugin 已注册到 registry 时才有返回值。
+    // 对于内置通道（feishu 等）在运行时尚未加载进 registry 时，直接用原始 channelId 字符串作为 fallback。
+    const channelId = (
+      typeof rawChannelId === "string"
+        ? (normalizeChannelId(rawChannelId) ?? rawChannelId.trim().toLowerCase()) || null
+        : null
+    ) as ChannelId | null;
     if (!channelId) {
       respond(
         false,
@@ -381,18 +672,8 @@ export const channelsHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    // plugin 可能为 null（内置通道未加载进 registry），此时走直接 merge config 路径
     const plugin = getChannelPlugin(channelId);
-    if (!plugin) {
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          `channels.account.save: unknown channel ${channelId}`,
-        ),
-      );
-      return;
-    }
 
     try {
       // 使用 ForWrite 变体以正确保留 env var 引用（如 ${TELEGRAM_BOT_TOKEN}）
@@ -400,6 +681,55 @@ export const channelsHandlers: GatewayRequestHandlers = {
       let cfg: OpenClawConfig = snapshot.config ?? loadConfig();
 
       const nameStr = typeof name === "string" ? name.trim() : "";
+
+      // plugin 为 null 时（内置通道未加载进 registry），直接走 config merge 路径
+      if (!plugin) {
+        console.log(
+          `[channels.account.save] plugin not in registry for ${channelId}, using direct config merge` +
+            ` accountId=${accountId} name=${JSON.stringify(nameStr)} config=${JSON.stringify(accountConfig)}`,
+        );
+        const sectionKey = channelId as string;
+        const channelsNode = (cfg.channels ?? {}) as Record<string, unknown>;
+        const section = (channelsNode[sectionKey] ?? {}) as Record<string, unknown>;
+        const accountsNode = section.accounts as Record<string, unknown> | undefined;
+        const incomingConfig = {
+          ...(accountConfig && typeof accountConfig === "object" ? (accountConfig as Record<string, unknown>) : {}),
+          ...(nameStr ? { name: nameStr } : {}),
+        };
+        // 判断是否已有 accounts 子节点（多账号结构）
+        if (accountsNode !== undefined) {
+          // 多账号结构：写入 channels[ch].accounts[accountId]
+          const accounts = accountsNode as Record<string, Record<string, unknown>>;
+          const existing = (accounts[accountId] ?? {}) as Record<string, unknown>;
+          cfg = {
+            ...cfg,
+            channels: {
+              ...channelsNode,
+              [sectionKey]: {
+                ...section,
+                accounts: {
+                  ...accounts,
+                  [accountId]: { ...existing, ...incomingConfig },
+                },
+              },
+            },
+          } as OpenClawConfig;
+        } else {
+          // 单账号/顶层结构：直接 merge 到 channels[ch]
+          cfg = {
+            ...cfg,
+            channels: {
+              ...channelsNode,
+              [sectionKey]: { ...section, ...incomingConfig },
+            },
+          } as OpenClawConfig;
+        }
+        await writeConfigFile(cfg, writeOptions);
+        console.log(`[channels.account.save] writeConfigFile OK (no-plugin path) for ${channelId}/${accountId}`);
+        respond(true, { ok: true }, undefined);
+        return;
+      }
+
       const existingIds = plugin.config.listAccountIds(cfg);
       const isNew = isNewRaw === true || !existingIds.includes(accountId);
 
@@ -545,7 +875,11 @@ export const channelsHandlers: GatewayRequestHandlers = {
       accountId?: unknown;
     };
 
-    const channelId = typeof rawChannelId === "string" ? normalizeChannelId(rawChannelId) : null;
+    const channelId = (
+      typeof rawChannelId === "string"
+        ? (normalizeChannelId(rawChannelId) ?? rawChannelId.trim().toLowerCase()) || null
+        : null
+    ) as ChannelId | null;
     if (!channelId) {
       respond(
         false,
@@ -565,16 +899,23 @@ export const channelsHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    // plugin 可能为 null（内置通道未加载进 registry）
     const plugin = getChannelPlugin(channelId);
     if (!plugin) {
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          `channels.account.delete: unknown channel ${channelId}`,
-        ),
-      );
+      // 没有 plugin：直接从 config 中删除该 channelId 节点
+      try {
+        const { snapshot, writeOptions } = await readConfigFileSnapshotForWrite();
+        const cfgBefore = snapshot.config ?? loadConfig();
+        const { [channelId as string]: _removed, ...restChannels } =
+          (cfgBefore.channels ?? {}) as Record<string, unknown>;
+        void _removed;
+        const cfg = { ...cfgBefore, channels: restChannels } as OpenClawConfig;
+        await writeConfigFile(cfg, writeOptions);
+        console.log(`[channels.account.delete] no-plugin path: removed channel node ${channelId}`);
+        respond(true, { ok: true }, undefined);
+      } catch (err) {
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+      }
       return;
     }
 
@@ -593,10 +934,37 @@ export const channelsHandlers: GatewayRequestHandlers = {
     try {
       const { snapshot, writeOptions } = await readConfigFileSnapshotForWrite();
       const cfgBefore = snapshot.config ?? loadConfig();
-      const cfg = plugin.config.deleteAccount({
+      let cfg = plugin.config.deleteAccount({
         cfg: cfgBefore,
         accountId,
       });
+
+      // 删除后检查：如果该 channel 节点已没有实质账号（无 accounts 子键，
+      // 且顶层也无凭证字段），则把整个 channels[channelId] 节点一并清除，
+      // 避免残留的空节点导致前端出现幽灵账号。
+      const channelSection = (cfg.channels as Record<string, unknown> | undefined)?.[channelId];
+      if (channelSection && typeof channelSection === "object") {
+        const sec = channelSection as Record<string, unknown>;
+        const accounts = sec.accounts as Record<string, unknown> | undefined;
+        const hasSubAccounts = accounts && Object.keys(accounts).length > 0;
+        // 顶层凭证字段：各通道常见的 key 名（token、botToken、appId、appSecret、webhookUrl 等）
+        const CREDENTIAL_KEYS = [
+          "token", "botToken", "appId", "appSecret", "secret", "corpId",
+          "webhookUrl", "apiToken", "accessToken", "clientId", "clientSecret",
+          "robotCode", "agentId", "encodingAESKey",
+        ];
+        const hasTopLevelCreds = CREDENTIAL_KEYS.some((k) => k in sec && sec[k] != null && sec[k] !== "");
+        if (!hasSubAccounts && !hasTopLevelCreds) {
+          // 整个 channel 节点已无实质内容，清除它
+          const { [channelId]: _removed, ...restChannels } = (cfg.channels ?? {}) as Record<string, unknown>;
+          void _removed;
+          cfg = { ...cfg, channels: restChannels } as typeof cfg;
+          console.log(
+            `[channels.account.delete] channel=${channelId} section is now empty → removed entire channel node`,
+          );
+        }
+      }
+
       console.log(
         `[channels.account.delete] channel=${channelId} accountId=${accountId}` +
           ` snapshot.valid=${snapshot.valid}` +
