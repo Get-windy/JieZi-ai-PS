@@ -27,7 +27,6 @@
 import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import type { MemberType } from "../../organization/types.js";
-import { scheduleNextTaskForAgent } from "./agents-management.js";
 import {
   checkTaskAccess,
   checkTaskModifyAccess,
@@ -45,6 +44,7 @@ import type {
   AgentWorkLog,
   TaskDependency,
 } from "../../tasks/types.js";
+import { scheduleNextTaskForAgent } from "./agents-management.js";
 
 /**
  * 任务 RPC 方法注册
@@ -516,6 +516,8 @@ export const tasksRpc: GatewayRequestHandlers = {
       const teamId = params?.teamId ? String(params.teamId) : undefined;
       const projectId = params?.projectId ? String(params.projectId) : undefined;
       const keyword = params?.keyword ? String(params.keyword) : undefined;
+      const limit =
+        params?.limit && Number(params.limit) > 0 ? Math.min(Number(params.limit), 500) : undefined;
       // dueToday: 转换为 dueDateBefore/dueDateAfter 筛选
       const dueToday = params?.dueToday === true || params?.dueToday === "true";
       const overdueOnly = params?.overdueOnly === true || params?.overdueOnly === "true";
@@ -536,6 +538,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         teamId,
         projectId,
         keyword,
+        limit,
         ...(dueToday
           ? { dueDateAfter: todayStart.getTime(), dueDateBefore: todayEnd.getTime() }
           : {}),
@@ -566,39 +569,6 @@ export const tasksRpc: GatewayRequestHandlers = {
           );
           return permCheck.allowed;
         });
-      }
-
-      // 重要修复：确保 agent_assign_task 分配的任务始终可见
-      // 当指定了 assigneeId 时，直接按 assignee ID 过滤，避免权限检查或其他过滤条件遗漏任务
-      if (assigneeId) {
-        // 重新从数据库加载所有任务，移除 assigneeId 过滤条件
-        const allTasksWithoutAssigneeFilter = await storage.listTasks({
-          ...filter,
-          assigneeId: undefined,
-        });
-        // 手动过滤出 assignees 数组中包含该 ID 的任务
-        const directFilteredTasks = allTasksWithoutAssigneeFilter.filter((task) =>
-          (task.assignees ?? []).some((a) => a.id === assigneeId),
-        );
-
-        // 如果有指定 requesterId，再次应用权限检查
-        if (requesterId) {
-          filteredTasks = directFilteredTasks.filter((task) => {
-            const assigneeIds = (task.assignees ?? []).map((a) => a.id);
-            const permCheck = checkTaskAccess(
-              task.creatorId,
-              assigneeIds,
-              task.organizationId,
-              task.teamId,
-              requesterId,
-              undefined,
-              undefined,
-            );
-            return permCheck.allowed;
-          });
-        } else {
-          filteredTasks = directFilteredTasks;
-        }
       }
 
       respond(true, { tasks: filteredTasks, total: filteredTasks.length }, undefined);

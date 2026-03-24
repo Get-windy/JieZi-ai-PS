@@ -18,7 +18,10 @@
 import { Type } from "@sinclair/typebox";
 import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
 import { jsonResult, readStringParam } from "../../../upstream/src/agents/tools/common.js";
-import { callGatewayTool, readGatewayCallOptions } from "../../../upstream/src/agents/tools/gateway.js";
+import {
+  callGatewayTool,
+  readGatewayCallOptions,
+} from "../../../upstream/src/agents/tools/gateway.js";
 
 /**
  * 记忆命名空间（分层结构）
@@ -105,6 +108,7 @@ export function createMemorySaveTool(opts?: {
           tags,
           force,
           agentId: opts?.agentId,
+          callerAgentId: opts?.agentId, // 调用者身份，服务端用于越权检查（不可被 AI 篡改）
           savedAt: Date.now(),
         });
 
@@ -169,6 +173,7 @@ export function createMemoryDeleteTool(opts?: {
         await callGatewayTool("memory.delete", gatewayOpts, {
           memoryId,
           agentId: opts?.agentId,
+          callerAgentId: opts?.agentId, // 调用者身份，服务端用于越权检查
           deletedAt: Date.now(),
         });
 
@@ -181,6 +186,152 @@ export function createMemoryDeleteTool(opts?: {
         return jsonResult({
           success: false,
           error: `Failed to delete memory: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * project_memory_save 工具参数 schema
+ */
+const ProjectMemorySaveToolSchema = Type.Object({
+  /** 内容（必填） */
+  content: Type.String({ minLength: 1, maxLength: 5000 }),
+  /** 章节标题（可选，默认 General），用于分类存储 */
+  section: Type.Optional(Type.String({ maxLength: 100 })),
+  /** 标签（可选） */
+  tags: Type.Optional(Type.Array(Type.String({ maxLength: 32 }), { maxItems: 10 })),
+  /** 项目 ID（可选），省略时自动从 agent 所属群组推断 */
+  projectId: Type.Optional(Type.String()),
+});
+
+/**
+ * project_memory_get 工具参数 schema
+ */
+const ProjectMemoryGetToolSchema = Type.Object({
+  /** 按章节过滤（可选） */
+  section: Type.Optional(Type.String({ maxLength: 100 })),
+  /** 项目 ID（可选） */
+  projectId: Type.Optional(Type.String()),
+  /** 最大返回字符数（可选，默认 8000） */
+  maxChars: Type.Optional(Type.Number({ minimum: 100, maximum: 20000 })),
+});
+
+/**
+ * 创建项目共享记忆写入工具
+ *
+ * 将知识写入项目群组工作空间的 SHARED_MEMORY.md。
+ * 所有项目成员均可读写。
+ */
+export function createProjectMemorySaveTool(opts?: { agentId?: string }): AnyAgentTool {
+  return {
+    label: "Project Memory Save",
+    name: "project_memory_save",
+    description:
+      "Save an important piece of knowledge, decision, or context to the PROJECT SHARED MEMORY (SHARED_MEMORY.md). " +
+      "All team members (agents) can read and write this shared memory. " +
+      "Use this for project-wide facts: architecture decisions, API specs, design patterns, conventions, lessons learned. " +
+      "Use 'section' to categorize content (e.g., 'Architecture', 'Decisions', 'APIs', 'Conventions'). " +
+      "Do NOT use this for personal notes—use memory_save instead.",
+    parameters: ProjectMemorySaveToolSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const content = readStringParam(params, "content", { required: true });
+      const section = readStringParam(params, "section") || "General";
+      const tags = Array.isArray(params.tags) ? params.tags.map(String) : [];
+      const projectId = readStringParam(params, "projectId");
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        const response = await callGatewayTool("memory.project.save", gatewayOpts, {
+          content,
+          section,
+          tags,
+          projectId: projectId || undefined,
+          agentId: opts?.agentId,
+        });
+
+        const result = response as { id?: string; sharedMemoryPath?: string } | null;
+        return jsonResult({
+          success: true,
+          message: `Saved to project shared memory (section: ${section}).`,
+          id: result?.id,
+          section,
+          sharedMemoryPath: result?.sharedMemoryPath,
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to save project memory: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * 创建项目共享记忆读取工具
+ *
+ * 读取项目群组工作空间的 SHARED_MEMORY.md，可按章节过滤。
+ */
+export function createProjectMemoryGetTool(opts?: { agentId?: string }): AnyAgentTool {
+  return {
+    label: "Project Memory Get",
+    name: "project_memory_get",
+    description:
+      "Read the project shared memory (SHARED_MEMORY.md) that all team members share. " +
+      "Use this to get project-wide context: architecture, decisions, conventions, API specs. " +
+      "Use 'section' to read only a specific section and keep context small. " +
+      "This is READ-ONLY retrieval—to write, use project_memory_save.",
+    parameters: ProjectMemoryGetToolSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const section = readStringParam(params, "section");
+      const projectId = readStringParam(params, "projectId");
+      const maxChars = typeof params.maxChars === "number" ? params.maxChars : 8000;
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        const response = await callGatewayTool("memory.project.list", gatewayOpts, {
+          section: section || undefined,
+          projectId: projectId || undefined,
+          agentId: opts?.agentId,
+          maxChars,
+        });
+
+        const result = response as {
+          content?: string;
+          sections?: string[];
+          sharedMemoryPath?: string;
+          empty?: boolean;
+          truncated?: boolean;
+        } | null;
+
+        if (result?.empty) {
+          return jsonResult({
+            success: true,
+            content: "",
+            sections: [],
+            message: "Project shared memory is empty or not found.",
+          });
+        }
+
+        return jsonResult({
+          success: true,
+          content: result?.content ?? "",
+          sections: result?.sections ?? [],
+          sharedMemoryPath: result?.sharedMemoryPath,
+          truncated: result?.truncated ?? false,
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to read project memory: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
         });
       }
     },

@@ -206,6 +206,7 @@ export interface TaskFilter {
   dueDateBefore?: number; // 截止日期之前
   dueDateAfter?: number; // 截止日期之后
   keyword?: string; // 关键词搜索
+  limit?: number; // 最多返回条数（分页截断）
 }
 
 /**

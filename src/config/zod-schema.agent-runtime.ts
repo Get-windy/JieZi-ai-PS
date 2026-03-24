@@ -854,6 +854,41 @@ export const AgentEntrySchema = z
       })
       .passthrough()
       .optional(),
+    // Local overlay: per-agent channel bindings config (not in upstream).
+    channelBindings: z
+      .object({
+        defaultPolicy: z
+          .object({
+            type: z.string(),
+            config: z.record(z.string(), z.unknown()).optional(),
+          })
+          .passthrough()
+          .optional(),
+        bindings: z
+          .array(
+            z
+              .object({
+                id: z.string(),
+                channelId: z.string(),
+                accountId: z.string(),
+                enabled: z.boolean().optional(),
+                priority: z.number().optional(),
+                policy: z
+                  .object({
+                    type: z.string(),
+                    config: z.record(z.string(), z.unknown()).optional(),
+                  })
+                  .passthrough()
+                  .optional(),
+              })
+              .passthrough(),
+          )
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
+    // Local overlay: per-agent role prompt (not in upstream).
+    rolePrompt: z.string().optional(),
   })
   .strict();
 

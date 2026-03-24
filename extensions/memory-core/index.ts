@@ -1,9 +1,13 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import {
   createMemorySaveTool,
   createMemoryDeleteTool,
   createMemoryListTool,
+  createProjectMemorySaveTool,
+  createProjectMemoryGetTool,
 } from "../../src/agents/tools/memory-write-tool.js";
 import { createPlanTaskTools } from "../../src/agents/tools/plan-task-tool.js";
 import {
@@ -12,7 +16,6 @@ import {
   createAgentSkillListTool,
 } from "../../src/agents/tools/self-evolve-tool.js";
 import { createTeamRunTool } from "../../src/agents/tools/team-orchestrate-tool.js";
-import { loadConfig } from "../../upstream/src/config/config.js";
 import {
   getRecentReflectionsSummary,
   findRelevantSkills,
@@ -20,7 +23,8 @@ import {
   updateSkillUsageCount,
 } from "../../src/gateway/server-methods/evolve-rpc.js";
 import { groupManager } from "../../src/sessions/group-manager.js";
-import { groupMessageStorage } from "../../src/sessions/group-message-storage.js";
+import { groupWorkspaceManager } from "../../src/workspace/group-workspace.js";
+import { loadConfig } from "../../upstream/src/config/config.js";
 
 const memoryCorePlugin = {
   id: "memory-core",
@@ -56,6 +60,13 @@ const memoryCorePlugin = {
     });
     api.registerTool((ctx) => createMemoryListTool({ agentId: ctx.agentId }), {
       names: ["memory_list"],
+    });
+    // 项目共享记忆工具（所有项目成员共同读写 SHARED_MEMORY.md）
+    api.registerTool((ctx) => createProjectMemorySaveTool({ agentId: ctx.agentId }), {
+      names: ["project_memory_save"],
+    });
+    api.registerTool((ctx) => createProjectMemoryGetTool({ agentId: ctx.agentId }), {
+      names: ["project_memory_get"],
     });
 
     // 自我进化工具（借鉴 Reflexion 失败反思 + Voyager 技能库）
@@ -206,32 +217,38 @@ const memoryCorePlugin = {
       }
 
       // ----------------------------------------------------------------
-      // 2. 群组共享记忆注入（MetaGPT/AutoGen 共享上下文）
+      // 2. 项目共享记忆注入：SHARED_MEMORY.md 内容（MetaGPT/AutoGen 共享上下文）
       // ----------------------------------------------------------------
       try {
         if (agentId) {
           const agentGroups = groupManager.getAgentGroups(agentId);
-          if (agentGroups.length > 0) {
-            const sharedContextLines: string[] = [];
-            for (const group of agentGroups.slice(0, 3)) {
-              // 取每个群组最近 5 条消息作为共享上下文
-              const msgs = await groupMessageStorage.loadMessages(group.id, { limit: 5 });
-              const recentMsgs = msgs
-                .map((m) => `  [${m.senderName ?? m.senderId}]: ${m.content.slice(0, 200)}`)
-                .join("\n");
-              if (recentMsgs) {
-                sharedContextLines.push(
-                  `Group \u00ab${group.name}\u00bb recent context:\n${recentMsgs}`,
+          // 只取项目群组（有 projectId 的）
+          const projectGroups = agentGroups.filter((g) => !!g.projectId);
+          const sharedContextParts: string[] = [];
+
+          for (const group of projectGroups.slice(0, 2)) {
+            const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(group.id);
+            const sharedMemoryPath = path.join(groupDir, "SHARED_MEMORY.md");
+            if (fs.existsSync(sharedMemoryPath)) {
+              try {
+                const raw = fs.readFileSync(sharedMemoryPath, "utf8");
+                // 最多注入 3000 字符，避免胀胀 context
+                const snippet = raw.length > 3000 ? raw.slice(0, 3000) + "\n...[truncated]" : raw;
+                sharedContextParts.push(
+                  `Project «${group.projectId}» shared memory (${sharedMemoryPath}):\n${snippet}`,
                 );
+              } catch {
+                // 读取失败时静默跳过
               }
             }
-            if (sharedContextLines.length > 0) {
-              const groupCtx =
-                "<group-shared-memory>\nYou are a member of the following team groups. Use this shared context to stay aligned:\n" +
-                sharedContextLines.join("\n\n") +
-                "\n</group-shared-memory>";
-              parts.push(groupCtx);
-            }
+          }
+
+          if (sharedContextParts.length > 0) {
+            parts.push(
+              `<project-shared-memory>\nProject shared knowledge (read this to stay aligned with the team):\n\n` +
+                sharedContextParts.join("\n\n---\n\n") +
+                `\n</project-shared-memory>`,
+            );
           }
         }
       } catch {

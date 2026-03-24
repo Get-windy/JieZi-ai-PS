@@ -1105,6 +1105,13 @@ export class OpenClawApp extends LitElement {
     // 判断是新建（handleAddAccount 初始化时 accountId 为空）还是编辑已有账号
     const existingAccounts = this.channelsSnapshot?.channelAccounts?.[channelId] ?? [];
     const isNew = !existingAccounts.some((a) => a.accountId === accountId);
+    // 保存前整个系统是否已有任何通道账号（用于后续决定是否自动绑定）
+    const allChannelAccounts = this.channelsSnapshot?.channelAccounts ?? {};
+    const totalAccountsBefore = Object.values(allChannelAccounts).reduce(
+      (sum, accounts) => sum + accounts.length,
+      0,
+    );
+    const isFirstAccountEverAdded = totalAccountsBefore === 0;
 
     console.log(
       `[handleSaveAccount] channel=${channelId} accountId=${accountId}`,
@@ -1137,11 +1144,92 @@ export class OpenClawApp extends LitElement {
       this.handleChannelsRefresh(false).catch((err) =>
         console.warn("[handleSaveAccount] channelsRefresh failed:", err),
       );
+
+      // 新账号添加成功后的自动绑定逻辑
+      if (isNew) {
+        if (isFirstAccountEverAdded) {
+          // 系统第一个通道账号 → 自动绑定给默认 agent
+          await this._autoBindChannelToDefaultAgent(channelId, accountId);
+        } else {
+          // 非第一个账号 → 提示用户手动绑定
+          alert(
+            `✅ 通道账号 ${channelId}:${accountId} 已添加成功！\n\n` +
+              `⚠️ 请前往【助手管理】→ 选择助手 → 【通道策略】标签页，将此账号绑定给助手后才可使用。`,
+          );
+        }
+      }
     } catch (err) {
       console.error("Save account failed:", err);
       this.channelsError = String(err);
     } finally {
       this.creatingChannelAccount = false;
+    }
+  }
+
+  /** 将通道账号自动绑定给默认 agent（首个账号添加时调用） */
+  private async _autoBindChannelToDefaultAgent(
+    channelId: string,
+    accountId: string,
+  ): Promise<void> {
+    try {
+      if (!this.client) {
+        return;
+      }
+      // 找到默认 agent（default: true 或第一个）
+      const agents = this.agentsList?.agents ?? [];
+      const defaultAgentId =
+        this.agentsList?.defaultId ||
+        agents.find((a) => (a as { default?: boolean }).default)?.id ||
+        agents[0]?.id;
+
+      if (!defaultAgentId) {
+        console.warn("[autoBindChannel] No default agent found, skipping auto-bind");
+        alert(
+          `✅ 通道账号 ${channelId}:${accountId} 已添加成功！\n\n` +
+            `⚠️ 未找到默认助手，请前往【助手管理】→ 【通道策略】手动绑定后才可使用。`,
+        );
+        return;
+      }
+
+      // 获取默认 agent 当前的 channelBindings
+      const policiesResp = await this.client.request("agent.channelPolicies.list", {
+        agentId: defaultAgentId,
+      });
+
+      const currentBindings: unknown[] =
+        (policiesResp as { config?: { bindings?: unknown[] } })?.config?.bindings ?? [];
+      const defaultPolicy = (policiesResp as { config?: { defaultPolicy?: unknown } })?.config
+        ?.defaultPolicy ?? { type: "private", config: { allowedUsers: [] } };
+
+      // 追加新绑定
+      const newBinding = {
+        id: `${channelId}-${accountId}-${Date.now()}`,
+        channelId,
+        accountId,
+        policy: { type: "private", config: { allowedUsers: [] } },
+        enabled: true,
+        priority: 50,
+      };
+      const updatedBindings = [...currentBindings, newBinding];
+
+      await this.client.request("agent.channelPolicies.update", {
+        agentId: defaultAgentId,
+        config: { bindings: updatedBindings, defaultPolicy },
+      });
+
+      console.log(
+        `[autoBindChannel] Auto-bound ${channelId}:${accountId} to agent ${defaultAgentId}`,
+      );
+      alert(
+        `✅ 通道账号 ${channelId}:${accountId} 已添加成功！\n` +
+          `🔗 已自动绑定给助手 "${defaultAgentId}"，可在【助手管理】→【通道策略】中调整。`,
+      );
+    } catch (err) {
+      console.error("[autoBindChannel] Auto-bind failed:", err);
+      alert(
+        `✅ 通道账号 ${channelId}:${accountId} 已添加成功！\n\n` +
+          `⚠️ 自动绑定助手失败，请前往【助手管理】→ 【通道策略】手动绑定后才可使用。`,
+      );
     }
   }
 
