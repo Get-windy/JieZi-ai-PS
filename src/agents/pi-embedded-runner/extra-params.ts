@@ -563,3 +563,8 @@ export function applyExtraParamsToAgent(
   // server-side conversation state is preserved.
   agent.streamFn = createOpenAIResponsesStoreWrapper(agent.streamFn);
 }
+
+export {
+  resolvePreparedExtraParams,
+  resolveAgentTransportOverride,
+} from "../../../upstream/src/agents/pi-embedded-runner/extra-params.js";
