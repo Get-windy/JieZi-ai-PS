@@ -1,6 +1,6 @@
-import { requireActivePluginRegistry } from "../../upstream/src/plugins/runtime.js";
 import type { ChannelMeta } from "../../upstream/src/channels/plugins/types.js";
 import type { ChannelId } from "../../upstream/src/channels/plugins/types.js";
+import { requireActivePluginRegistry } from "../../upstream/src/plugins/runtime.js";
 
 // Channel docking: add new core channels here (order + meta + aliases), then
 // register the plugin in its extension entrypoint and keep protocol IDs in sync.
@@ -117,7 +117,8 @@ const CHAT_CHANNEL_META: Record<ChatChannelId, ChannelMeta> = {
     detailLabel: "Feishu Bot",
     docsPath: "/channels/feishu",
     docsLabel: "feishu",
-    blurb: "飞书/Lark企业协作平台，支持机器人API。Feishu/Lark enterprise collaboration platform with Bot API.",
+    blurb:
+      "飞书/Lark企业协作平台，支持机器人API。Feishu/Lark enterprise collaboration platform with Bot API.",
     systemImage: "message",
   },
   dingtalk: {
@@ -127,7 +128,8 @@ const CHAT_CHANNEL_META: Record<ChatChannelId, ChannelMeta> = {
     detailLabel: "DingTalk Bot",
     docsPath: "/channels/dingtalk",
     docsLabel: "dingtalk",
-    blurb: "钉钉企业协作平台，支持Stream模式。DingTalk enterprise collaboration platform with Stream Mode.",
+    blurb:
+      "钉钉企业协作平台，支持Stream模式。DingTalk enterprise collaboration platform with Stream Mode.",
     systemImage: "message",
   },
   wecom: {
@@ -137,7 +139,8 @@ const CHAT_CHANNEL_META: Record<ChatChannelId, ChannelMeta> = {
     detailLabel: "WeCom Bot",
     docsPath: "/channels/wecom",
     docsLabel: "wecom",
-    blurb: "企业微信通讯平台，支持机器人API。WeCom (WeChat Work) communication platform with Bot API.",
+    blurb:
+      "企业微信通讯平台，支持机器人API。WeCom (WeChat Work) communication platform with Bot API.",
     systemImage: "message",
   },
 };
@@ -202,6 +205,19 @@ export function normalizeAnyChannelId(raw?: string | null): ChannelId | null {
     return (entry.plugin.meta.aliases ?? []).some((alias) => alias.trim().toLowerCase() === key);
   });
   return hit?.plugin.id ?? null;
+}
+
+export function listRegisteredChannelPluginIds(): ChannelId[] {
+  const registry = requireActivePluginRegistry();
+  return registry.channels.flatMap((entry) => {
+    const id = entry.plugin.id?.trim();
+    return id ? [id as ChannelId] : [];
+  });
+}
+
+export function listRegisteredChannelPluginAliases(): string[] {
+  const registry = requireActivePluginRegistry();
+  return registry.channels.flatMap((entry) => entry.plugin.meta?.aliases ?? []);
 }
 
 export function formatChannelPrimerLine(meta: ChatChannelMeta): string {

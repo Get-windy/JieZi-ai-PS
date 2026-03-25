@@ -44,3 +44,14 @@ export function getPluginRuntimeGatewayRequestScope():
   | undefined {
   return pluginRuntimeGatewayRequestScope.getStore();
 }
+
+export function withPluginRuntimePluginIdScope<T>(pluginId: string, run: () => T): T {
+  const current = pluginRuntimeGatewayRequestScope.getStore();
+  const scoped: PluginRuntimeGatewayRequestScope = current
+    ? { ...current, pluginId }
+    : {
+        pluginId,
+        isWebchatConnect: () => false,
+      };
+  return pluginRuntimeGatewayRequestScope.run(scoped, run);
+}

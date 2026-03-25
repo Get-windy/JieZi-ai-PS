@@ -1,5 +1,5 @@
+import { githubCopilotLoginCommand } from "../../upstream/src/plugin-sdk/provider-auth-login.js";
 import { toAgentModelListLike } from "../config/model-input.js";
-import { githubCopilotLoginCommand } from "../providers/github-copilot-auth.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
 import { applyAuthProfileConfig } from "./onboard-auth.js";
 
