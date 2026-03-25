@@ -19,6 +19,7 @@ import type {
 } from "../config/types.channel-bindings.js";
 import type { AgentConfig } from "../config/types.agents.js";
 import { loadConfig, writeConfigFile } from "../../upstream/src/config/config.js";
+import { getChannelPlugin, listChannelPlugins } from "../../upstream/src/channels/plugins/index.js";
 import { channelBindingResolver } from "./bindings/resolver.js";
 
 /**
@@ -455,6 +456,65 @@ export class ChannelManager {
     console.log(`[ChannelManager] Set default policy for agent ${agentId}`);
 
     return { success: true };
+  }
+
+  /**
+   * 清理所有 agent 中引用了不存在账号的孤立绑定
+   *
+   * 当通道账号被删除后调用此方法，自动从所有 agent 的 channelBindings
+   * 中移除已无效的绑定记录（channelId + accountId 在配置中已不存在）。
+   *
+   * @param cfg - 已更新的配置（账号删除后的）
+   * @returns 被清理的绑定数量
+   */
+  async purgeOrphanBindings(cfg: any): Promise<number> {
+    // 构建当前有效账号集合：Set<"channelId:accountId">
+    const validKeys = new Set<string>();
+    for (const plugin of listChannelPlugins()) {
+      const accountIds: string[] = plugin.config.listAccountIds(cfg);
+      for (const accountId of accountIds) {
+        validKeys.add(`${plugin.id}:${accountId}`);
+      }
+    }
+
+    const agents: AgentConfig[] = (cfg as any)?.agents?.list ?? [];
+    let totalRemoved = 0;
+    let configDirty = false;
+
+    for (const agent of agents) {
+      const channelBindings = (agent as any).channelBindings as AgentChannelBindings | undefined;
+      if (!channelBindings?.bindings?.length) continue;
+
+      const before = channelBindings.bindings.length;
+      channelBindings.bindings = channelBindings.bindings.filter((b) => {
+        // accountId 为空或 "default" 时只校验 channelId 是否还有任意账号
+        if (!b.accountId || b.accountId === "default") {
+          const plugin = getChannelPlugin(b.channelId as any);
+          if (!plugin) return false;
+          const ids: string[] = plugin.config.listAccountIds(cfg);
+          return ids.length > 0;
+        }
+        return validKeys.has(`${b.channelId}:${b.accountId}`);
+      });
+
+      const removed = before - channelBindings.bindings.length;
+      if (removed > 0) {
+        totalRemoved += removed;
+        configDirty = true;
+        // 同步到 cfg.bindings
+        this.syncToCfgBindings(cfg, agent.id, channelBindings);
+        console.log(
+          `[ChannelManager] purgeOrphanBindings: removed ${removed} orphan binding(s) from agent ${agent.id}`,
+        );
+      }
+    }
+
+    if (configDirty) {
+      await writeConfigFile(cfg);
+      console.log(`[ChannelManager] purgeOrphanBindings: saved config, total removed=${totalRemoved}`);
+    }
+
+    return totalRemoved;
   }
 
   /**

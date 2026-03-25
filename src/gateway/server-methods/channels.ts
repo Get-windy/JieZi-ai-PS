@@ -1,5 +1,5 @@
-// 添加配对请求加载函数
 import { loadAllChannelPairingRequests } from "../../channels/pairing-requests.js";
+import { channelManager } from "../../channels/channel-manager.js";
 import { buildChannelUiCatalog } from "../../../upstream/src/channels/plugins/catalog.js";
 import { resolveChannelDefaultAccountId } from "../../../upstream/src/channels/plugins/helpers.js";
 import {
@@ -912,6 +912,10 @@ export const channelsHandlers: GatewayRequestHandlers = {
         const cfg = { ...cfgBefore, channels: restChannels } as OpenClawConfig;
         await writeConfigFile(cfg, writeOptions);
         console.log(`[channels.account.delete] no-plugin path: removed channel node ${channelId}`);
+        // 同步清理孤立绑定
+        await channelManager.purgeOrphanBindings(cfg).catch((e) =>
+          console.error(`[channels.account.delete] purgeOrphanBindings (no-plugin) error:`, e),
+        );
         respond(true, { ok: true }, undefined);
       } catch (err) {
         respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
@@ -972,6 +976,10 @@ export const channelsHandlers: GatewayRequestHandlers = {
       );
       await writeConfigFile(cfg, writeOptions);
       console.log(`[channels.account.delete] writeConfigFile OK for ${channelId}/${accountId}`);
+      // 删除账号后自动清理所有 agent 的孤立绑定
+      await channelManager.purgeOrphanBindings(cfg).catch((e) =>
+        console.error(`[channels.account.delete] purgeOrphanBindings error:`, e),
+      );
       respond(true, { ok: true }, undefined);
     } catch (err) {
       console.error(`[channels.account.delete] ERROR:`, err);
