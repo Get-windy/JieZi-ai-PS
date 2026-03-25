@@ -55,12 +55,26 @@ function buildMemorySection(params: {
   const hasSave = params.availableTools.has("memory_save");
   const hasDelete = params.availableTools.has("memory_delete");
   const hasList = params.availableTools.has("memory_list");
+  const hasProjectMemorySave = params.availableTools.has("project_memory_save");
+  const hasProjectMemoryRead = params.availableTools.has("project_memory_read");
 
   if (!hasSearch && !hasGet && !hasSave) {
     return [];
   }
 
   const lines: string[] = ["## Memory"];
+
+  // 0. 记忆隔离规则（核心约束）
+  lines.push(
+    "**Memory Isolation Rules (CRITICAL)**",
+    "  Your personal memory (MEMORY.md) stores ONLY personal information:",
+    "    - Which projects/teams you belong to (e.g., \"I am a member of project X\", \"My team is Y\")",
+    "    - Personal work style, preferences, and habits",
+    "    - Your own skill development and lesson-learned insights",
+    "    - Personal todos with scope=personal",
+    "  DO NOT write project-specific technical details, code decisions, meeting notes, or deliverables to your personal memory.",
+    "  Project-level knowledge MUST go to the Project Shared Memory (SHARED_MEMORY.md) via project_memory_save.",
+  );
 
   // 1. Recall
   if (hasSearch || hasGet) {
@@ -81,9 +95,24 @@ function buildMemorySection(params: {
   // 2. Proactive Save
   if (hasSave) {
     lines.push(
-      "**Proactive Save** — When you learn something important that should persist across sessions (user preferences, key decisions, project context, facts, constraints), call memory_save IMMEDIATELY—do NOT wait for /new or session reset.",
-      "  Namespaces: 'preferences' (habits/settings) | 'decisions' (choices made) | 'context' (project/task state, default) | 'facts' (rules/knowledge).",
+      "**Proactive Save (Personal)** — Use memory_save for personal information only:",
+      "  - Which project teams you belong to, your role in them",
+      "  - Personal preferences, habits, communication style",
+      "  - Personal todos (scope=personal tasks)",
+      "  Namespaces: 'preferences' (habits/settings) | 'decisions' (personal choices) | 'context' (personal state, default) | 'facts' (personal rules/knowledge).",
       "  The backend auto-deduplicates: semantically similar content is merged (UPDATE) or skipped (SKIP) instead of creating duplicates.",
+    );
+  }
+
+  // 2b. Project Shared Memory
+  if (hasProjectMemorySave || hasProjectMemoryRead) {
+    lines.push(
+      "**Project Shared Memory** — Use project_memory_save / project_memory_read for all project-level knowledge:",
+      "  - Technical decisions, architecture choices, API contracts",
+      "  - Meeting notes, requirements, deliverable status",
+      "  - Progress and outcomes of project tasks (scope=project)",
+      "  - Any information that other team members need to know",
+      "  This is the team's shared knowledge base. All agents on the project can read and write it.",
     );
   }
 
