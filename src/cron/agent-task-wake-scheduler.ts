@@ -22,7 +22,7 @@ import { listAgentIds, resolveAgentWorkspaceDir } from "../agents/agent-scope.js
 import { normalizeAgentId } from "../routing/session-key.js";
 import { groupManager } from "../sessions/group-manager.js";
 import * as taskStorage from "../tasks/storage.js";
-import { buildProjectContext, projectWorkspaceExists } from "../utils/project-context.js";
+import { groupWorkspaceManager } from "../workspace/group-workspace.js";
 
 // ============================================================================
 // 配置
@@ -163,6 +163,27 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
       const agentWorkspaceDir = resolveAgentWorkspaceDir(cfg, normalizedId);
       const agentMemoryPath = path.join(agentWorkspaceDir, "MEMORY.md");
 
+      /**
+       * 根据任务的 projectId 解析项目上下文（群组 sessionKey + 共享记忆路径）
+       * 与 scheduleNextTaskForAgent 保持一致
+       */
+      function resolveProjectCtx(projectId: string | undefined): {
+        sharedMemoryPath: string | null;
+        projectGroupSessionKey: string | null;
+      } {
+        if (!projectId) return { sharedMemoryPath: null, projectGroupSessionKey: null };
+        const allGroups = groupManager.getAllGroups();
+        const projectGroup = allGroups.find((g) => g.projectId === projectId);
+        if (!projectGroup) return { sharedMemoryPath: null, projectGroupSessionKey: null };
+        const groupWorkspaceDir = groupWorkspaceManager.getGroupWorkspaceDir(projectGroup.id);
+        return {
+          projectGroupSessionKey: `group:${projectGroup.id}`,
+          sharedMemoryPath: groupWorkspaceDir
+            ? path.join(groupWorkspaceDir, "SHARED_MEMORY.md")
+            : null,
+        };
+      }
+
       // 预先构建项目 -> 工作群 sessionKey 的映射
       const projectGroupCache = new Map<string, string>();
       const allGroups = groupManager.getAllGroups();
@@ -296,19 +317,7 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
             .join("\n");
 
           const wakeMessage = (() => {
-            let projectCtxLines: string[] = [];
-            if (activeTask.projectId && projectWorkspaceExists(activeTask.projectId)) {
-              try {
-                const pCtx = buildProjectContext(activeTask.projectId);
-                projectCtxLines = [
-                  `- Project Workspace: ${pCtx.workspacePath}`,
-                  `- Project Code Dir: ${pCtx.codeDir}`,
-                  `- Project Shared Memory: ${pCtx.sharedMemoryPath} (read to get project context)`,
-                ];
-              } catch {
-                // 读取失败忽略
-              }
-            }
+            const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(activeTask.projectId);
             return [
               `[TASK RETRY] Your previous task attempt timed out after ${stuckMinutes} minutes. Retrying now:`,
               ``,
@@ -316,8 +325,15 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
               ``,
               `Working Context:`,
               `- Working Directory: ${agentWorkspaceDir}`,
-              `- Memory File: ${agentMemoryPath}`,
-              ...projectCtxLines,
+              `- Your Personal Memory (only YOU may write this): ${agentMemoryPath}`,
+              sharedMemoryPath
+                ? `- Project Shared Memory (all team members read/write): ${sharedMemoryPath}`
+                : null,
+              projectGroupSessionKey
+                ? `- Project Group: sessionKey=${projectGroupSessionKey}`
+                : null,
+              ``,
+              `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
               ``,
               `IMPORTANT: Execute this task now. If you cannot complete it, update its status to "blocked" and explain why. Do NOT let it time out again.`,
             ]
@@ -423,32 +439,26 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
           .join("\n");
 
         const wakeMessage = (() => {
-          // 如果任务关联了项目，把项目工作目录和共享记忆路径告诉 agent
-          let projectCtxLines: string[] = [];
-          if (nextTask.projectId && projectWorkspaceExists(nextTask.projectId)) {
-            try {
-              const pCtx = buildProjectContext(nextTask.projectId);
-              projectCtxLines = [
-                `- Project Workspace: ${pCtx.workspacePath}`,
-                `- Project Code Dir: ${pCtx.codeDir}`,
-                `- Project Shared Memory: ${pCtx.sharedMemoryPath} (read to get project context)`,
-              ];
-            } catch {
-              // 读取失败忽略，不影响唤醒
-            }
-          }
+          const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(nextTask.projectId);
           return [
             `[TASK WAKE] You have 1 task to execute now${queueRemaining > 0 ? ` (${queueRemaining} more waiting in queue)` : ""}:`,
             ``,
             taskLines,
             ``,
             `Working Context:`,
-            `- Working Directory (code lives here): ${agentWorkspaceDir}`,
-            `- Memory File (read/update project knowledge): ${agentMemoryPath}`,
-            ...projectCtxLines,
+            `- Working Directory: ${agentWorkspaceDir}`,
+            `- Your Personal Memory (only YOU may write this): ${agentMemoryPath}`,
+            sharedMemoryPath
+              ? `- Project Shared Memory (all team members read/write): ${sharedMemoryPath}`
+              : null,
+            projectGroupSessionKey
+              ? `- Project Group: sessionKey=${projectGroupSessionKey}`
+              : null,
+            ``,
+            `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
             ``,
             `IMPORTANT: Set this task to "in-progress" and execute it NOW. Complete it fully before starting the next queued task. After completion, call task_report_to_supervisor to report.`,
-          ].join("\n");
+          ].filter(Boolean).join("\n");
         })();
 
         enqueueSystemEvent(wakeMessage, {

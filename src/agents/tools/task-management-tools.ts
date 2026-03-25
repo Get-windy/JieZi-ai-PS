@@ -59,8 +59,12 @@ const TaskCreateToolSchema = Type.Object({
   assignee: Type.Optional(Type.String({ maxLength: 64 })),
   /** 任务标签（可选） */
   tags: Type.Optional(Type.Array(Type.String({ maxLength: 32 }))),
-  /** 所属项目ID（可选，用于多项目隔离，如 "wo-shi-renlei"） */
-  project: Type.Optional(Type.String({ maxLength: 128 })),
+  /**
+   * 所属项目 ID（必填）
+   * 任务必须关联项目，用于隔离工作区间和记忆（项目共享记忆 vs agent 私有记忆）
+   * 例如："jiezi-project-001"
+   */
+  project: Type.String({ minLength: 1, maxLength: 128 }),
   /** 所属团队ID（可选） */
   teamId: Type.Optional(Type.String({ maxLength: 128 })),
   /** 所属组织ID（可选） */
@@ -266,7 +270,7 @@ export function createTaskCreateTool(opts?: {
     label: "Task Create",
     name: "task_create",
     description:
-      "Create a new task with REQUIRED title and description (must describe: what to do, why, and completion criteria). Optional: priority, due date, assignee, tags, project ID, task type, estimatedHours (hours), parentTaskId (for subtask decomposition), blockedBy (list of blocking task IDs). Returns the created task with a unique ID.",
+      "Create a new task. REQUIRED fields: title, description (must describe: what to do, why, and completion criteria), project (project ID — tasks MUST belong to a project for proper workspace/memory isolation). Optional: priority, due date, assignee, tags, task type, estimatedHours, parentTaskId, blockedBy.",
     parameters: TaskCreateToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;

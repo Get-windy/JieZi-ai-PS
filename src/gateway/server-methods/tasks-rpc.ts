@@ -72,7 +72,11 @@ export const tasksRpc: GatewayRequestHandlers = {
       const dueDate = params?.dueDate ? Number(params.dueDate) : undefined;
       const organizationId = params?.organizationId ? String(params.organizationId) : undefined;
       const teamId = params?.teamId ? String(params.teamId) : undefined;
-      const projectId = params?.projectId ? String(params.projectId) : undefined;
+      // 兼容工具端传入 project 或 projectId
+      const projectId =
+        (params?.projectId ? String(params.projectId) : null) ||
+        (params?.project ? String(params.project) : null) ||
+        undefined;
       const parentTaskId = params?.parentTaskId ? String(params.parentTaskId) : undefined;
       const tags = params?.tags ? (params.tags as string[]) : [];
 
@@ -82,6 +86,16 @@ export const tasksRpc: GatewayRequestHandlers = {
           false,
           undefined,
           errorShape(ErrorCodes.INVALID_REQUEST, "任务标题必须为1-200个字符"),
+        );
+        return;
+      }
+
+      // 必须关联项目：确保任务工作区间和记忆隔离正确进行
+      if (!projectId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "任务必须关联项目（projectId 不能为空），请先确认项目 ID 再创建任务"),
         );
         return;
       }
