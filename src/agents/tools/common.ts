@@ -227,6 +227,24 @@ export function readReactionParams(
   return { emoji, remove, isEmpty: !emoji };
 }
 
+export function payloadTextResult<TDetails>(payload: TDetails): AgentToolResult<TDetails> {
+  let text: string;
+  if (typeof payload === "string") {
+    text = payload;
+  } else {
+    try {
+      const encoded = JSON.stringify(payload, null, 2);
+      text = typeof encoded === "string" ? encoded : String(payload);
+    } catch {
+      text = String(payload);
+    }
+  }
+  return {
+    content: [{ type: "text", text }],
+    details: payload,
+  };
+}
+
 export function jsonResult(payload: unknown): AgentToolResult<unknown> {
   return {
     content: [

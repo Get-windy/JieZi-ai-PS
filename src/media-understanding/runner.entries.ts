@@ -6,15 +6,12 @@ import {
   executeWithApiKeyRotation,
 } from "../../upstream/src/agents/api-key-rotation.js";
 import { requireApiKey, resolveApiKeyForProvider } from "../../upstream/src/agents/model-auth.js";
-import type { MsgContext } from "../auto-reply/templating.js";
-import { applyTemplate } from "../auto-reply/templating.js";
 import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import type {
   MediaUnderstandingConfig,
   MediaUnderstandingModelConfig,
 } from "../../upstream/src/config/types.tools.js";
 import { logVerbose, shouldLogVerbose } from "../../upstream/src/globals.js";
-import { runExec } from "../../upstream/src/process/exec.js";
 import { MediaAttachmentCache } from "../../upstream/src/media-understanding/attachments.js";
 import {
   CLI_OUTPUT_MAX_BUFFER,
@@ -23,10 +20,18 @@ import {
 } from "../../upstream/src/media-understanding/defaults.js";
 import { MediaUnderstandingSkipError } from "../../upstream/src/media-understanding/errors.js";
 import { fileExists } from "../../upstream/src/media-understanding/fs.js";
+import { describeImageWithModel } from "../../upstream/src/media-understanding/image.js";
 import { extractGeminiResponse } from "../../upstream/src/media-understanding/output-extract.js";
-import { describeImageWithModel } from "../../upstream/src/media-understanding/providers/image.js";
-import { getMediaUnderstandingProvider, normalizeMediaProviderId } from "../../upstream/src/media-understanding/providers/index.js";
-import { resolveMaxBytes, resolveMaxChars, resolvePrompt, resolveTimeoutMs } from "../../upstream/src/media-understanding/resolve.js";
+import {
+  getMediaUnderstandingProvider,
+  normalizeMediaProviderId,
+} from "../../upstream/src/media-understanding/provider-registry.js";
+import {
+  resolveMaxBytes,
+  resolveMaxChars,
+  resolvePrompt,
+  resolveTimeoutMs,
+} from "../../upstream/src/media-understanding/resolve.js";
 import type {
   MediaUnderstandingCapability,
   MediaUnderstandingDecision,
@@ -34,7 +39,13 @@ import type {
   MediaUnderstandingOutput,
   MediaUnderstandingProvider,
 } from "../../upstream/src/media-understanding/types.js";
-import { estimateBase64Size, resolveVideoMaxBase64Bytes } from "../../upstream/src/media-understanding/video.js";
+import {
+  estimateBase64Size,
+  resolveVideoMaxBase64Bytes,
+} from "../../upstream/src/media-understanding/video.js";
+import { runExec } from "../../upstream/src/process/exec.js";
+import type { MsgContext } from "../auto-reply/templating.js";
+import { applyTemplate } from "../auto-reply/templating.js";
 
 export type ProviderRegistry = Map<string, MediaUnderstandingProvider>;
 

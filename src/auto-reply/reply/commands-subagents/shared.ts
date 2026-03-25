@@ -2,25 +2,32 @@ import { parseDiscordTarget } from "../../../../upstream/extensions/discord/src/
 import { resolveStoredSubagentCapabilities } from "../../../../upstream/src/agents/subagent-capabilities.js";
 import type { ResolvedSubagentController } from "../../../../upstream/src/agents/subagent-control.js";
 import {
-  countPendingDescendantRuns,
-  type SubagentRunRecord,
-} from "../../../agents/subagent-registry.js";
-import {
   extractAssistantText,
   resolveInternalSessionKey,
   resolveMainSessionAlias,
   sanitizeTextContent,
   stripToolMessages,
 } from "../../../../upstream/src/agents/tools/sessions-helpers.js";
+import {
+  isDiscordSurface,
+  isTelegramSurface,
+  isMatrixSurface,
+  resolveCommandSurfaceChannel,
+  resolveDiscordAccountId,
+  resolveChannelAccountId,
+} from "../../../../upstream/src/auto-reply/reply/channel-context.js";
+import {
+  formatRunLabel,
+  formatRunStatus,
+  resolveSubagentTargetFromRuns,
+  type SubagentTargetResolution,
+} from "../../../../upstream/src/auto-reply/reply/subagents-utils.js";
 import type {
   SessionEntry,
   loadSessionStore as loadSessionStoreFn,
   resolveStorePath as resolveStorePathFn,
 } from "../../../../upstream/src/config/sessions.js";
 import { callGateway } from "../../../../upstream/src/gateway/call.js";
-import { formatTimeAgo } from "../../../infra/format-time/format-relative.ts";
-import { parseAgentSessionKey } from "../../../routing/session-key.js";
-import { isSubagentSessionKey } from "../../../routing/session-key.js";
 import { looksLikeSessionId } from "../../../../upstream/src/sessions/session-id.js";
 import { extractTextFromChatContent } from "../../../../upstream/src/shared/chat-content.js";
 import {
@@ -29,25 +36,20 @@ import {
   truncateLine,
 } from "../../../../upstream/src/shared/subagents-format.js";
 import {
-  isDiscordSurface,
-  isTelegramSurface,
-  resolveCommandSurfaceChannel,
-  resolveDiscordAccountId,
-  resolveChannelAccountId,
-} from "../../../../upstream/src/auto-reply/reply/channel-context.js";
+  countPendingDescendantRuns,
+  type SubagentRunRecord,
+} from "../../../agents/subagent-registry.js";
+import { formatTimeAgo } from "../../../infra/format-time/format-relative.ts";
+import { parseAgentSessionKey } from "../../../routing/session-key.js";
+import { isSubagentSessionKey } from "../../../routing/session-key.js";
 import type { CommandHandler, CommandHandlerResult } from "../commands-types.js";
-import {
-  formatRunLabel,
-  formatRunStatus,
-  resolveSubagentTargetFromRuns,
-  type SubagentTargetResolution,
-} from "../../../../upstream/src/auto-reply/reply/subagents-utils.js";
 import { resolveTelegramConversationId } from "../telegram-context.js";
 
 export { extractAssistantText, stripToolMessages };
 export {
   isDiscordSurface,
   isTelegramSurface,
+  isMatrixSurface,
   resolveCommandSurfaceChannel,
   resolveDiscordAccountId,
   resolveChannelAccountId,

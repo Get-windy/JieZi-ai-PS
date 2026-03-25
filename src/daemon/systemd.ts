@@ -448,3 +448,63 @@ export async function uninstallLegacySystemdUnits({
 
   return units;
 }
+
+async function writeSystemdUnit({
+  env,
+  programArguments,
+  workingDirectory,
+  environment,
+  description,
+}: Omit<GatewayServiceInstallArgs, "stdout">): Promise<{ unitPath: string; backedUp: boolean }> {
+  await assertSystemdAvailable(env);
+
+  const unitPath = resolveSystemdUnitPath(env);
+  await fs.mkdir(path.dirname(unitPath), { recursive: true });
+
+  // Preserve user customizations: back up existing unit file before overwriting.
+  let backedUp = false;
+  try {
+    await fs.access(unitPath);
+    const backupPath = `${unitPath}.bak`;
+    await fs.copyFile(unitPath, backupPath);
+    backedUp = true;
+  } catch {
+    // File does not exist yet — nothing to back up.
+  }
+
+  const serviceDescription = resolveGatewayServiceDescription({ env, environment, description });
+  const unit = buildSystemdUnit({
+    description: serviceDescription,
+    programArguments,
+    workingDirectory,
+    environment,
+  });
+  await fs.writeFile(unitPath, unit, "utf8");
+  return { unitPath, backedUp };
+}
+
+export async function stageSystemdService({
+  stdout,
+  ...args
+}: GatewayServiceInstallArgs): Promise<{ unitPath: string }> {
+  const { unitPath, backedUp } = await writeSystemdUnit(args);
+  writeFormattedLines(
+    stdout,
+    [
+      {
+        label: "Staged systemd service",
+        value: unitPath,
+      },
+      ...(backedUp
+        ? [
+            {
+              label: "Previous unit backed up to",
+              value: `${unitPath}.bak`,
+            },
+          ]
+        : []),
+    ],
+    { leadingBlankLine: true },
+  );
+  return { unitPath };
+}

@@ -1,14 +1,9 @@
-export { resolveAgentDir, resolveAgentWorkspaceDir } from "./agents/agent-scope.ts";
+// openclaw/extension-api has been removed. There is no compatibility bridge.
+// Migrate to focused openclaw/plugin-sdk/<subpath> imports.
+// Migration guide: https://docs.openclaw.ai/plugins/sdk-migration
 
-export { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./agents/defaults.ts";
-export { resolveAgentIdentity } from "./agents/identity.ts";
-export { resolveThinkingDefault } from "./agents/model-selection.ts";
-export { runEmbeddedPiAgent } from "./agents/pi-embedded.ts";
-export { resolveAgentTimeoutMs } from "./agents/timeout.ts";
-export { ensureAgentWorkspace } from "./agents/workspace.ts";
-export {
-  resolveStorePath,
-  loadSessionStore,
-  saveSessionStore,
-  resolveSessionFilePath,
-} from "./config/sessions.ts";
+throw new Error(
+  "openclaw/extension-api has been removed. " +
+    "Migrate to openclaw/plugin-sdk/* subpath imports. " +
+    "See https://docs.openclaw.ai/plugins/sdk-migration",
+);

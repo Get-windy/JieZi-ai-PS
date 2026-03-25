@@ -1,4 +1,15 @@
+import type { ChannelStatusAdapter } from "../../upstream/src/channels/plugins/types.adapters.js";
+import type { ChannelAccountSnapshot } from "../../upstream/src/channels/plugins/types.core.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import type { ChannelStatusIssue } from "../channels/plugins/types.js";
+export { isRecord } from "../../upstream/src/channels/plugins/status-issues/shared.js";
+export {
+  appendMatchMetadata,
+  asString,
+  collectIssuesForEnabledAccounts,
+  formatMatchMetadata,
+  resolveEnabledConfiguredAccountId,
+} from "../../upstream/src/channels/plugins/status-issues/shared.js";
 
 type RuntimeLifecycleSnapshot = {
   running?: boolean | null;
@@ -8,6 +19,26 @@ type RuntimeLifecycleSnapshot = {
   lastInboundAt?: number | null;
   lastOutboundAt?: number | null;
 };
+
+type StatusSnapshotExtra = Record<string, unknown>;
+
+type ComputedAccountStatusBase = {
+  accountId: string;
+  name?: string;
+  enabled?: boolean;
+  configured?: boolean;
+};
+
+type ComputedAccountStatusAdapterParams<ResolvedAccount, Probe, Audit> = {
+  account: ResolvedAccount;
+  cfg: OpenClawConfig;
+  runtime?: ChannelAccountSnapshot;
+  probe?: Probe;
+  audit?: Audit;
+};
+
+type ComputedAccountStatusSnapshot<TExtra extends StatusSnapshotExtra = StatusSnapshotExtra> =
+  ComputedAccountStatusBase & { extra?: TExtra };
 
 export function createDefaultChannelRuntimeState<T extends Record<string, unknown>>(
   accountId: string,
@@ -29,15 +60,19 @@ export function createDefaultChannelRuntimeState<T extends Record<string, unknow
   };
 }
 
-export function buildBaseChannelStatusSummary(snapshot: {
-  configured?: boolean | null;
-  running?: boolean | null;
-  lastStartAt?: number | null;
-  lastStopAt?: number | null;
-  lastError?: string | null;
-}) {
+export function buildBaseChannelStatusSummary<TExtra extends StatusSnapshotExtra>(
+  snapshot: {
+    configured?: boolean | null;
+    running?: boolean | null;
+    lastStartAt?: number | null;
+    lastStopAt?: number | null;
+    lastError?: string | null;
+  },
+  extra?: TExtra,
+) {
   return {
     configured: snapshot.configured ?? false,
+    ...(extra ?? ({} as TExtra)),
     running: snapshot.running ?? false,
     lastStartAt: snapshot.lastStartAt ?? null,
     lastStopAt: snapshot.lastStopAt ?? null,
@@ -65,16 +100,19 @@ export function buildProbeChannelStatusSummary<TExtra extends Record<string, unk
   };
 }
 
-export function buildBaseAccountStatusSnapshot(params: {
-  account: {
-    accountId: string;
-    name?: string;
-    enabled?: boolean;
-    configured?: boolean;
-  };
-  runtime?: RuntimeLifecycleSnapshot | null;
-  probe?: unknown;
-}) {
+export function buildBaseAccountStatusSnapshot<TExtra extends StatusSnapshotExtra>(
+  params: {
+    account: {
+      accountId: string;
+      name?: string;
+      enabled?: boolean;
+      configured?: boolean;
+    };
+    runtime?: RuntimeLifecycleSnapshot | null;
+    probe?: unknown;
+  },
+  extra?: TExtra,
+) {
   const { account, runtime, probe } = params;
   return {
     accountId: account.accountId,
@@ -84,34 +122,128 @@ export function buildBaseAccountStatusSnapshot(params: {
     ...buildRuntimeAccountStatusSnapshot({ runtime, probe }),
     lastInboundAt: runtime?.lastInboundAt ?? null,
     lastOutboundAt: runtime?.lastOutboundAt ?? null,
+    ...(extra ?? ({} as TExtra)),
   };
 }
 
-export function buildComputedAccountStatusSnapshot(params: {
-  accountId: string;
-  name?: string;
-  enabled?: boolean;
-  configured?: boolean;
-  runtime?: RuntimeLifecycleSnapshot | null;
-  probe?: unknown;
-}) {
+export function buildComputedAccountStatusSnapshot<TExtra extends StatusSnapshotExtra>(
+  params: {
+    accountId: string;
+    name?: string;
+    enabled?: boolean;
+    configured?: boolean;
+    runtime?: RuntimeLifecycleSnapshot | null;
+    probe?: unknown;
+  },
+  extra?: TExtra,
+) {
   const { accountId, name, enabled, configured, runtime, probe } = params;
-  return buildBaseAccountStatusSnapshot({
-    account: {
-      accountId,
-      name,
-      enabled,
-      configured,
+  return buildBaseAccountStatusSnapshot(
+    {
+      account: {
+        accountId,
+        name,
+        enabled,
+        configured,
+      },
+      runtime,
+      probe,
     },
-    runtime,
-    probe,
-  });
+    extra,
+  );
 }
 
-export function buildRuntimeAccountStatusSnapshot(params: {
-  runtime?: RuntimeLifecycleSnapshot | null;
-  probe?: unknown;
-}) {
+/** Build a full status adapter when only configured/extras vary per account. */
+export function createComputedAccountStatusAdapter<
+  ResolvedAccount,
+  Probe = unknown,
+  Audit = unknown,
+  TExtra extends StatusSnapshotExtra = StatusSnapshotExtra,
+>(
+  options: Omit<ChannelStatusAdapter<ResolvedAccount, Probe, Audit>, "buildAccountSnapshot"> & {
+    resolveAccountSnapshot: (
+      params: ComputedAccountStatusAdapterParams<ResolvedAccount, Probe, Audit>,
+    ) => ComputedAccountStatusSnapshot<TExtra>;
+  },
+): ChannelStatusAdapter<ResolvedAccount, Probe, Audit> {
+  return {
+    defaultRuntime: options.defaultRuntime,
+    buildChannelSummary: options.buildChannelSummary,
+    probeAccount: options.probeAccount,
+    formatCapabilitiesProbe: options.formatCapabilitiesProbe,
+    auditAccount: options.auditAccount,
+    buildCapabilitiesDiagnostics: options.buildCapabilitiesDiagnostics,
+    logSelfId: options.logSelfId,
+    resolveAccountState: options.resolveAccountState,
+    collectStatusIssues: options.collectStatusIssues,
+    buildAccountSnapshot: (params) => {
+      const typedParams = params as ComputedAccountStatusAdapterParams<
+        ResolvedAccount,
+        Probe,
+        Audit
+      >;
+      const { extra, ...snapshot } = options.resolveAccountSnapshot(typedParams);
+      return buildComputedAccountStatusSnapshot(
+        {
+          ...snapshot,
+          runtime: typedParams.runtime,
+          probe: typedParams.probe,
+        },
+        extra,
+      );
+    },
+  };
+}
+
+/** Async variant for channels that compute configured state or snapshot extras from I/O. */
+export function createAsyncComputedAccountStatusAdapter<
+  ResolvedAccount,
+  Probe = unknown,
+  Audit = unknown,
+  TExtra extends StatusSnapshotExtra = StatusSnapshotExtra,
+>(
+  options: Omit<ChannelStatusAdapter<ResolvedAccount, Probe, Audit>, "buildAccountSnapshot"> & {
+    resolveAccountSnapshot: (
+      params: ComputedAccountStatusAdapterParams<ResolvedAccount, Probe, Audit>,
+    ) => Promise<ComputedAccountStatusSnapshot<TExtra>>;
+  },
+): ChannelStatusAdapter<ResolvedAccount, Probe, Audit> {
+  return {
+    defaultRuntime: options.defaultRuntime,
+    buildChannelSummary: options.buildChannelSummary,
+    probeAccount: options.probeAccount,
+    formatCapabilitiesProbe: options.formatCapabilitiesProbe,
+    auditAccount: options.auditAccount,
+    buildCapabilitiesDiagnostics: options.buildCapabilitiesDiagnostics,
+    logSelfId: options.logSelfId,
+    resolveAccountState: options.resolveAccountState,
+    collectStatusIssues: options.collectStatusIssues,
+    buildAccountSnapshot: async (params) => {
+      const typedParams = params as ComputedAccountStatusAdapterParams<
+        ResolvedAccount,
+        Probe,
+        Audit
+      >;
+      const { extra, ...snapshot } = await options.resolveAccountSnapshot(typedParams);
+      return buildComputedAccountStatusSnapshot(
+        {
+          ...snapshot,
+          runtime: typedParams.runtime,
+          probe: typedParams.probe,
+        },
+        extra,
+      );
+    },
+  };
+}
+
+export function buildRuntimeAccountStatusSnapshot<TExtra extends StatusSnapshotExtra>(
+  params: {
+    runtime?: RuntimeLifecycleSnapshot | null;
+    probe?: unknown;
+  },
+  extra?: TExtra,
+) {
   const { runtime, probe } = params;
   return {
     running: runtime?.running ?? false,
@@ -119,6 +251,7 @@ export function buildRuntimeAccountStatusSnapshot(params: {
     lastStopAt: runtime?.lastStopAt ?? null,
     lastError: runtime?.lastError ?? null,
     probe,
+    ...(extra ?? ({} as TExtra)),
   };
 }
 
