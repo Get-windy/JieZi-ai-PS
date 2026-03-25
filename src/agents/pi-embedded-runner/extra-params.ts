@@ -508,7 +508,8 @@ export function applyExtraParamsToAgent(
   extraParamsOverride?: Record<string, unknown>,
   thinkingLevel?: ThinkLevel,
   agentId?: string,
-): void {
+  _workspaceDir?: string,
+): { effectiveExtraParams: Record<string, unknown> } {
   const extraParams = resolveExtraParams({
     cfg,
     provider,
@@ -562,6 +563,8 @@ export function applyExtraParamsToAgent(
   // Force `store=true` for direct OpenAI/OpenAI Codex providers so multi-turn
   // server-side conversation state is preserved.
   agent.streamFn = createOpenAIResponsesStoreWrapper(agent.streamFn);
+
+  return { effectiveExtraParams: merged ?? {} };
 }
 
 export {
