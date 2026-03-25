@@ -3141,8 +3141,7 @@ export function renderApp(state: AppViewState) {
                           // oxlint-disable-next-line typescript/no-explicit-any
                         })) as any;
                         state.projectTeamRelations = res?.relations ?? [];
-                      } catch (_e) {
-                        // oxlint-disable-line no-unused-vars
+                      } catch {
                         state.projectTeamRelations = [];
                       } finally {
                         state.projectTeamRelationsLoading = false;
@@ -3242,7 +3241,9 @@ export function renderApp(state: AppViewState) {
                   // 进度管理
                   onUpdateProgress: (projectId, patch) => {
                     // 实时更新内存中的项目字段（不发请求，仅更新本地状态）
-                    if (!state.projectsList) return;
+                    if (!state.projectsList) {
+                      return;
+                    }
                     state.projectsList = {
                       ...state.projectsList,
                       projects: state.projectsList.projects.map((p) =>
@@ -3252,7 +3253,9 @@ export function renderApp(state: AppViewState) {
                   },
                   onSaveProgress: (projectId, patch) => {
                     void (async () => {
-                      if (!state.client) return;
+                      if (!state.client) {
+                        return;
+                      }
                       try {
                         await state.client.request("projects.updateProgress", {
                           projectId,
@@ -3263,6 +3266,46 @@ export function renderApp(state: AppViewState) {
                         await loadProjects(state, state.client);
                       } catch (err) {
                         alert(`保存进度失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  onCompleteSprint: (projectId, sprintId, unfinishedAction, retrospective) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("projects.completeSprint", {
+                          projectId,
+                          sprintId,
+                          unfinishedAction,
+                          retrospective,
+                        });
+                        const { loadProjects } = await import("./controllers/projects.js");
+                        await loadProjects(state, state.client);
+                      } catch (err) {
+                        alert(
+                          `完成 Sprint 失败：${err instanceof Error ? err.message : String(err)}`,
+                        );
+                      }
+                    })();
+                  },
+                  onStartSprint: (projectId, sprintId) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      try {
+                        await state.client.request("projects.startSprint", {
+                          projectId,
+                          sprintId,
+                        });
+                        const { loadProjects } = await import("./controllers/projects.js");
+                        await loadProjects(state, state.client);
+                      } catch (err) {
+                        alert(
+                          `开始 Sprint 失败：${err instanceof Error ? err.message : String(err)}`,
+                        );
                       }
                     })();
                   },
@@ -3286,8 +3329,7 @@ export function renderApp(state: AppViewState) {
                           // oxlint-disable-next-line typescript/no-explicit-any
                         })) as any;
                         state.projectTeamRelations = res?.relations ?? [];
-                      } catch (_e) {
-                        // oxlint-disable-line no-unused-vars
+                      } catch {
                         state.projectTeamRelations = [];
                       } finally {
                         state.projectTeamRelationsLoading = false;

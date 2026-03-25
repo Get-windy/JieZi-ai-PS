@@ -167,14 +167,19 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
        * 根据任务的 projectId 解析项目上下文（群组 sessionKey + 共享记忆路径）
        * 与 scheduleNextTaskForAgent 保持一致
        */
-      function resolveProjectCtx(projectId: string | undefined): {
+      function resolveProjectCtx(task: { projectId?: string; scope?: string }): {
         sharedMemoryPath: string | null;
         projectGroupSessionKey: string | null;
       } {
-        if (!projectId) return { sharedMemoryPath: null, projectGroupSessionKey: null };
+        // 私人任务（scope=personal）不注入项目共享记忆
+        if (task.scope === "personal" || !task.projectId) {
+          return { sharedMemoryPath: null, projectGroupSessionKey: null };
+        }
         const allGroups = groupManager.getAllGroups();
-        const projectGroup = allGroups.find((g) => g.projectId === projectId);
-        if (!projectGroup) return { sharedMemoryPath: null, projectGroupSessionKey: null };
+        const projectGroup = allGroups.find((g) => g.projectId === task.projectId);
+        if (!projectGroup) {
+          return { sharedMemoryPath: null, projectGroupSessionKey: null };
+        }
         const groupWorkspaceDir = groupWorkspaceManager.getGroupWorkspaceDir(projectGroup.id);
         return {
           projectGroupSessionKey: `group:${projectGroup.id}`,
@@ -317,7 +322,7 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
             .join("\n");
 
           const wakeMessage = (() => {
-            const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(activeTask.projectId);
+            const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(activeTask);
             return [
               `[TASK RETRY] Your previous task attempt timed out after ${stuckMinutes} minutes. Retrying now:`,
               ``,
@@ -439,7 +444,7 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
           .join("\n");
 
         const wakeMessage = (() => {
-          const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(nextTask.projectId);
+          const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(nextTask);
           return [
             `[TASK WAKE] You have 1 task to execute now${queueRemaining > 0 ? ` (${queueRemaining} more waiting in queue)` : ""}:`,
             ``,
@@ -451,14 +456,14 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
             sharedMemoryPath
               ? `- Project Shared Memory (all team members read/write): ${sharedMemoryPath}`
               : null,
-            projectGroupSessionKey
-              ? `- Project Group: sessionKey=${projectGroupSessionKey}`
-              : null,
+            projectGroupSessionKey ? `- Project Group: sessionKey=${projectGroupSessionKey}` : null,
             ``,
             `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
             ``,
             `IMPORTANT: Set this task to "in-progress" and execute it NOW. Complete it fully before starting the next queued task. After completion, call task_report_to_supervisor to report.`,
-          ].filter(Boolean).join("\n");
+          ]
+            .filter(Boolean)
+            .join("\n");
         })();
 
         enqueueSystemEvent(wakeMessage, {

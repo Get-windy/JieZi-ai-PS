@@ -259,6 +259,13 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     }
     if (state === "final") {
       void loadChatHistory(host as unknown as OpenClawApp);
+      // Z4: 外部通道产生了新消息（未读），刷新 sessions 列表使导航树能显示最新 session
+      if (
+        payload?.sessionKey &&
+        !shouldAcceptEventForContext(payload.sessionKey, host.sessionKey, currentContext)
+      ) {
+        void loadSessions(host as unknown as OpenClawApp);
+      }
     }
     return;
   }

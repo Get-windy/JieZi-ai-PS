@@ -27,6 +27,13 @@ export type TaskPriority = "low" | "medium" | "high" | "urgent";
 export type TaskType = "feature" | "bugfix" | "research" | "documentation" | "meeting" | "other";
 
 /**
+ * 任务作用域
+ * - personal: 私人任务（个人待办、学习、个人事项），结果写入 agent 私有记忆，不需要 projectId
+ * - project:  项目任务（团队协作、有项目归属），必须携带 projectId，结果写入项目共享记忆
+ */
+export type TaskScope = "personal" | "project";
+
+/**
  * 任务协作者
  */
 export interface TaskAssignee {
@@ -127,6 +134,12 @@ export interface Task {
   priority: TaskPriority;
   weight?: number; // 任务权重，默认 0，越大越优先（同优先级内细分排序）
   type?: TaskType;
+  /**
+   * 任务作用域（默认 project）
+   * - personal: 私人任务，不需要 projectId，结果写入 agent 私有记忆
+   * - project:  项目任务，必须携带 projectId，结果写入项目共享记忆
+   */
+  scope?: TaskScope;
 
   // 组织归属
   organizationId?: string; // 所属组织

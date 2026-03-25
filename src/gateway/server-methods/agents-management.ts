@@ -178,7 +178,7 @@ function _getAgentManagedScope(
  */
 function resolveTaskContext(
   agentId: string,
-  projectId: string | undefined,
+  task: { projectId?: string; scope?: string } | undefined,
   cfg: OpenClawConfig,
 ): {
   workspaceDir: string;
@@ -189,7 +189,9 @@ function resolveTaskContext(
   const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
   const privateMemoryPath = path.join(workspaceDir, "MEMORY.md");
 
-  // 查找项目工作群：遍历所有群组，找第一个 projectId 匹配的
+  // 私人任务（scope=personal）不注入项目共享记忆
+  const projectId = task?.scope === "personal" ? undefined : task?.projectId;
+
   let projectGroupSessionKey: string | null = null;
   let sharedMemoryPath: string | null = null;
   if (projectId) {
@@ -197,7 +199,6 @@ function resolveTaskContext(
     const projectGroup = allGroups.find((g) => g.projectId === projectId);
     if (projectGroup) {
       projectGroupSessionKey = `group:${projectGroup.id}`;
-      // 项目共享记忆：存放在项目工作空间下，所有成员共同读写
       const groupWorkspaceDir = groupWorkspaceManager.getGroupWorkspaceDir(projectGroup.id);
       if (groupWorkspaceDir) {
         sharedMemoryPath = path.join(groupWorkspaceDir, "SHARED_MEMORY.md");
@@ -502,7 +503,7 @@ export async function scheduleNextTaskForAgent(
     const sessionKey = `agent:${agentId}:main`;
     const contextKey = `cron:task-next:${nextTask.id}`;
     const cfg = loadConfig();
-    const ctx = resolveTaskContext(agentId, nextTask.projectId, cfg);
+    const ctx = resolveTaskContext(agentId, nextTask, cfg);
     const queueRemaining = todoTasks.length - 1;
 
     const prompt = [
@@ -3029,7 +3030,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     // 解析任务上下文：工作区路径、记忆文件路径、项目工作群
     const taskCtx = resolveTaskContext(
       normalizeAgentId(targetAgentId),
-      p?.projectId ? String(p.projectId) : undefined,
+      {
+        projectId: p?.projectId ? String(p.projectId) : undefined,
+        scope: p?.scope ? String(p.scope) : undefined,
+      },
       cfg,
     );
     const taskLines = [

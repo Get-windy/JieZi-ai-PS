@@ -4,8 +4,8 @@ import { formatCliCommand } from "../../../upstream/src/cli/command-format.js";
 import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import type { SessionEntry } from "../../../upstream/src/config/sessions.js";
 import type { AgentDefaultsConfig } from "../../../upstream/src/config/types.agent-defaults.js";
+import { missingTargetError } from "../../../upstream/src/infra/outbound/target-errors.js";
 import { mapAllowFromEntries } from "../../../upstream/src/plugin-sdk/channel-config-helpers.js";
-import { normalizeAccountId } from "../../routing/session-key.js";
 import { deliveryContextFromSession } from "../../../upstream/src/utils/delivery-context.js";
 import type {
   DeliverableMessageChannel,
@@ -17,10 +17,14 @@ import {
   normalizeMessageChannel,
 } from "../../../upstream/src/utils/message-channel.js";
 import {
+  resolveAgentChannelAccountId,
+  resolveDefaultAgentChannelAccount,
+} from "../../routing/resolve-route.js";
+import { normalizeAccountId } from "../../routing/session-key.js";
+import {
   normalizeDeliverableOutboundChannel,
   resolveOutboundChannelPlugin,
 } from "./channel-resolution.js";
-import { missingTargetError } from "../../../upstream/src/infra/outbound/target-errors.js";
 
 export type OutboundChannel = DeliverableMessageChannel | "none";
 
@@ -254,6 +258,12 @@ export function resolveHeartbeatDeliveryTarget(params: {
   cfg: OpenClawConfig;
   entry?: SessionEntry;
   heartbeat?: AgentDefaultsConfig["heartbeat"];
+  /**
+   * 当前执行心跳/任务的 agentId。
+   * effectiveAccountId 为空时优先用该 agent 绑定的 channelBindings 账号，
+   * 仍找不到则兜底到系统默认 agent 绑定的账号。
+   */
+  agentId?: string;
 }): OutboundTarget {
   const { cfg, entry } = params;
   const heartbeat = params.heartbeat ?? cfg.agents?.defaults?.heartbeat;
@@ -287,6 +297,18 @@ export function resolveHeartbeatDeliveryTarget(params: {
   const heartbeatAccountId = heartbeat?.accountId?.trim();
   // Use explicit accountId from heartbeat config if provided, otherwise fall back to session
   let effectiveAccountId = heartbeatAccountId || resolvedTarget.accountId;
+
+  // 系统级兜底：如果还没有 accountId，依次尝试：
+  // 1. 当前 agentId 在该 channel 的 channelBindings 账号
+  // 2. 系统默认 agent 在该 channel 的 channelBindings 账号
+  if (!effectiveAccountId && resolvedTarget.channel) {
+    effectiveAccountId =
+      (params.agentId
+        ? resolveAgentChannelAccountId(params.cfg, params.agentId, resolvedTarget.channel)
+        : null) ??
+      resolveDefaultAgentChannelAccount(params.cfg, resolvedTarget.channel) ??
+      undefined;
+  }
 
   if (heartbeatAccountId && resolvedTarget.channel) {
     const plugin = resolveOutboundChannelPlugin({

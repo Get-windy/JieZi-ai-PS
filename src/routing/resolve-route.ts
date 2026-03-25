@@ -1,11 +1,9 @@
 import type { ChatType } from "../../upstream/src/channels/chat-type.js";
-import { normalizeChatType } from "../../upstream/src/channels/chat-type.js";
 import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import { shouldLogVerbose } from "../../upstream/src/globals.js";
 import { logDebug } from "../../upstream/src/logger.js";
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
 import type { AgentChannelBindings } from "../config/types.channel-bindings.js";
-import { listBindings } from "./bindings.js";
 import {
   buildAgentMainSessionKey,
   buildAgentPeerSessionKey,
@@ -35,6 +33,12 @@ export type ResolveAgentRouteInput = {
   teamId?: string | null;
   /** Discord member role IDs — used for role-based agent routing. */
   memberRoleIds?: string[];
+  /**
+   * 当该通道账号未绑定任何助手时，系统自动通过 routeReply 回复错误提示给用户的目标地址。
+   * 格式与 routeReply 的 `to` 参数相同，例如：`chat:${chatId}`、`user:${senderOpenId}`。
+   * 传入后新通道插件无需任何额外处理，系统层会在 isUnbound 时自动原路回复错误提示。
+   */
+  replyTo?: string;
 };
 
 export type ResolvedAgentRoute = {
@@ -95,17 +99,6 @@ function normalizeId(value: unknown): string {
   return "";
 }
 
-function matchesAccountId(match: string | undefined, actual: string): boolean {
-  const trimmed = (match ?? "").trim();
-  if (!trimmed) {
-    return actual === DEFAULT_ACCOUNT_ID;
-  }
-  if (trimmed === "*") {
-    return true;
-  }
-  return normalizeAccountId(trimmed) === actual;
-}
-
 export function buildAgentSessionKey(params: {
   agentId: string;
   channel: string;
@@ -151,94 +144,61 @@ export function pickFirstExistingAgentId(cfg: OpenClawConfig, agentId: string): 
   return sanitizeAgentId(resolveDefaultAgentId(cfg));
 }
 
-function matchesChannel(
-  match: { channel?: string | undefined } | undefined,
+/**
+ * 获取指定 agent 在某通道的第一个已启用 channelBindings accountId。
+ * 用于系统级兜底：心跳/任务等系统消息找不到 accountId 时，使用该 agent 绑定的默认账号。
+ */
+export function resolveAgentChannelAccountId(
+  cfg: OpenClawConfig,
+  agentId: string,
   channel: string,
-): boolean {
-  const key = normalizeToken(match?.channel);
-  if (!key) {
-    return false;
+): string | null {
+  const agents = Array.isArray(cfg.agents?.list) ? cfg.agents.list : [];
+  const normalizedAgentId = normalizeAgentId(agentId);
+  const normalizedChannel = normalizeToken(channel);
+  for (const agent of agents) {
+    if (normalizeAgentId(typeof agent.id === "string" ? agent.id : "") !== normalizedAgentId) {
+      continue;
+    }
+    const channelBindings = (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
+    if (!channelBindings?.bindings) {
+      continue;
+    }
+    for (const b of channelBindings.bindings) {
+      if (b.enabled === false) {
+        continue;
+      }
+      const bChannel = (b.channelId ?? "").trim().toLowerCase();
+      const bAccount = normalizeAccountId(b.accountId ?? "");
+      if (bChannel === normalizedChannel && bAccount) {
+        return bAccount;
+      }
+    }
   }
-  return key === channel;
+  return null;
 }
 
-type NormalizedPeerConstraint =
-  | { state: "none" }
-  | { state: "invalid" }
-  | { state: "valid"; kind: ChatType; id: string };
+/**
+ * 获取系统默认 agent 在某通道的第一个 channelBindings accountId。
+ * 心跳/任务等系统消息无法确定 accountId 时的最终兜底。
+ */
+export function resolveDefaultAgentChannelAccount(
+  cfg: OpenClawConfig,
+  channel: string,
+): string | null {
+  const defaultAgentId = resolveDefaultAgentId(cfg);
+  return resolveAgentChannelAccountId(cfg, defaultAgentId, channel);
+}
 
-type NormalizedBindingMatch = {
-  accountPattern: string;
-  peer: NormalizedPeerConstraint;
-  guildId: string | null;
-  teamId: string | null;
-  roles: string[] | null;
-};
-
-type EvaluatedBinding = {
-  binding: ReturnType<typeof listBindings>[number];
-  match: NormalizedBindingMatch;
-};
-
-type BindingScope = {
-  peer: RoutePeer | null;
-  guildId: string;
-  teamId: string;
-  memberRoleIds: Set<string>;
-};
-
-type EvaluatedBindingsCache = {
-  /**
-   * 用于检测旧的全局 config.bindings 是否变更。
-   * 新的 channelBindings 存储在各 agent 内，通过 agentsRef 跟踪。
-   */
-  bindingsRef: OpenClawConfig["bindings"];
-  agentsRef: OpenClawConfig["agents"];
-  byChannelAccount: Map<string, EvaluatedBinding[]>;
-};
-
-const evaluatedBindingsCacheByCfg = new WeakMap<OpenClawConfig, EvaluatedBindingsCache>();
-const MAX_EVALUATED_BINDINGS_CACHE_KEYS = 2000;
-
-function getEvaluatedBindingsForChannelAccount(
+/**
+ * 按账号归属查找绑定该账号的 agent（新机制 channelBindings）。
+ * 语义：一个通道账号只能属于一个 agent，找到即直接返回，无需其他优先级。
+ */
+function resolveAgentByChannelAccountOwnership(
   cfg: OpenClawConfig,
   channel: string,
   accountId: string,
-): EvaluatedBinding[] {
-  const bindingsRef = cfg.bindings;
-  const agentsRef = cfg.agents;
-  const existing = evaluatedBindingsCacheByCfg.get(cfg);
-  const cache =
-    existing && existing.bindingsRef === bindingsRef && existing.agentsRef === agentsRef
-      ? existing
-      : { bindingsRef, agentsRef, byChannelAccount: new Map<string, EvaluatedBinding[]>() };
-  if (cache !== existing) {
-    evaluatedBindingsCacheByCfg.set(cfg, cache);
-  }
-
-  const cacheKey = `${channel}\t${accountId}`;
-  const hit = cache.byChannelAccount.get(cacheKey);
-  if (hit) {
-    return hit;
-  }
-
-  // 1. 旧的全局路由绑定（config.bindings[]）
-  const evaluated: EvaluatedBinding[] = listBindings(cfg).flatMap((binding) => {
-    if (!binding || typeof binding !== "object") {
-      return [];
-    }
-    if (!matchesChannel(binding.match, channel)) {
-      return [];
-    }
-    if (!matchesAccountId(binding.match?.accountId, accountId)) {
-      return [];
-    }
-    return [{ binding, match: normalizeBindingMatch(binding.match) }];
-  });
-
-  // 2. 新的 channelBindings（存储在各 agent 配置里），合并进路由候选列表
-  // channelBindings 只有 channelId + accountId，没有 peer/guild/roles 约束，
-  // 等价于最基础的 account 级匹配（accountPattern = accountId）。
+): string | null {
   const agents = Array.isArray(cfg.agents?.list) ? cfg.agents.list : [];
   for (const agent of agents) {
     const agentId = typeof agent.id === "string" ? agent.id.trim() : "";
@@ -250,122 +210,23 @@ function getEvaluatedBindingsForChannelAccount(
       continue;
     }
     for (const b of channelBindings.bindings) {
-      if (!b.enabled && b.enabled !== undefined) {
+      if (b.enabled === false) {
         continue;
       }
       const bChannel = (b.channelId ?? "").trim().toLowerCase();
       const bAccount = normalizeAccountId(b.accountId ?? "");
-      if (bChannel !== channel) {
-        continue;
-      }
-      if (bAccount !== accountId) {
-        continue;
-      }
-      // 构造等价的 AgentRouteBinding 以复用现有路由逻辑
-      const syntheticBinding = {
-        type: "route" as const,
-        agentId,
-        match: { channel: b.channelId, accountId: b.accountId },
-      };
-      evaluated.push({
-        binding: syntheticBinding,
-        match: normalizeBindingMatch(syntheticBinding.match),
-      });
-    }
-  }
-
-  cache.byChannelAccount.set(cacheKey, evaluated);
-  if (cache.byChannelAccount.size > MAX_EVALUATED_BINDINGS_CACHE_KEYS) {
-    cache.byChannelAccount.clear();
-    cache.byChannelAccount.set(cacheKey, evaluated);
-  }
-
-  return evaluated;
-}
-
-function normalizePeerConstraint(
-  peer: { kind?: string; id?: string } | undefined,
-): NormalizedPeerConstraint {
-  if (!peer) {
-    return { state: "none" };
-  }
-  const kind = normalizeChatType(peer.kind);
-  const id = normalizeId(peer.id);
-  if (!kind || !id) {
-    return { state: "invalid" };
-  }
-  return { state: "valid", kind, id };
-}
-
-function normalizeBindingMatch(
-  match:
-    | {
-        accountId?: string | undefined;
-        peer?: { kind?: string; id?: string } | undefined;
-        guildId?: string | undefined;
-        teamId?: string | undefined;
-        roles?: string[] | undefined;
-      }
-    | undefined,
-): NormalizedBindingMatch {
-  const rawRoles = match?.roles;
-  return {
-    accountPattern: (match?.accountId ?? "").trim(),
-    peer: normalizePeerConstraint(match?.peer),
-    guildId: normalizeId(match?.guildId) || null,
-    teamId: normalizeId(match?.teamId) || null,
-    roles: Array.isArray(rawRoles) && rawRoles.length > 0 ? rawRoles : null,
-  };
-}
-
-function hasGuildConstraint(match: NormalizedBindingMatch): boolean {
-  return Boolean(match.guildId);
-}
-
-function hasTeamConstraint(match: NormalizedBindingMatch): boolean {
-  return Boolean(match.teamId);
-}
-
-function hasRolesConstraint(match: NormalizedBindingMatch): boolean {
-  return Boolean(match.roles);
-}
-
-function matchesBindingScope(match: NormalizedBindingMatch, scope: BindingScope): boolean {
-  if (match.peer.state === "invalid") {
-    return false;
-  }
-  if (match.peer.state === "valid") {
-    if (!scope.peer || scope.peer.kind !== match.peer.kind || scope.peer.id !== match.peer.id) {
-      return false;
-    }
-  }
-  if (match.guildId && match.guildId !== scope.guildId) {
-    return false;
-  }
-  if (match.teamId && match.teamId !== scope.teamId) {
-    return false;
-  }
-  if (match.roles) {
-    for (const role of match.roles) {
-      if (scope.memberRoleIds.has(role)) {
-        return true;
+      if (bChannel === channel && bAccount === accountId) {
+        return agentId;
       }
     }
-    return false;
   }
-  return true;
+  return null;
 }
 
 export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentRoute {
   const channel = normalizeToken(input.channel);
   const accountId = normalizeAccountId(input.accountId);
   const peer = input.peer ? { kind: input.peer.kind, id: normalizeId(input.peer.id) } : null;
-  const guildId = normalizeId(input.guildId);
-  const teamId = normalizeId(input.teamId);
-  const memberRoleIds = input.memberRoleIds ?? [];
-  const memberRoleIdSet = new Set(memberRoleIds);
-
-  const bindings = getEvaluatedBindingsForChannelAccount(input.cfg, channel, accountId);
 
   const dmScope = input.cfg.session?.dmScope ?? "main";
   const identityLinks = input.cfg.session?.identityLinks;
@@ -395,111 +256,44 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
     };
   };
 
-  const shouldLogDebug = shouldLogVerbose();
-  const formatPeer = (value?: RoutePeer | null) =>
-    value?.kind && value?.id ? `${value.kind}:${value.id}` : "none";
-  const formatNormalizedPeer = (value: NormalizedPeerConstraint) => {
-    if (value.state === "none") {
-      return "none";
-    }
-    if (value.state === "invalid") {
-      return "invalid";
-    }
-    return `${value.kind}:${value.id}`;
-  };
-
-  if (shouldLogDebug) {
-    logDebug(
-      `[routing] resolveAgentRoute: channel=${channel} accountId=${accountId} peer=${formatPeer(peer)} guildId=${guildId || "none"} teamId=${teamId || "none"} bindings=${bindings.length}`,
-    );
-    for (const entry of bindings) {
+  // 第一优先级：按通道账号归属路由（新机制 channelBindings）。
+  // 语义：一个通道账号只能属于一个 agent，账号归属即路由目标，无需其他优先级。
+  const ownerAgentId = resolveAgentByChannelAccountOwnership(input.cfg, channel, accountId);
+  if (ownerAgentId) {
+    if (shouldLogVerbose()) {
       logDebug(
-        `[routing] binding: agentId=${entry.binding.agentId} accountPattern=${entry.match.accountPattern || "default"} peer=${formatNormalizedPeer(entry.match.peer)} guildId=${entry.match.guildId ?? "none"} teamId=${entry.match.teamId ?? "none"} roles=${entry.match.roles?.length ?? 0}`,
+        `[routing] match: matchedBy=binding.account agentId=${ownerAgentId} (channelBindings ownership)`,
       );
     }
+    return choose(ownerAgentId, "binding.account");
   }
-  // Thread parent inheritance: if peer (thread) didn't match, check parent peer binding
-  const parentPeer = input.parentPeer
-    ? { kind: input.parentPeer.kind, id: normalizeId(input.parentPeer.id) }
-    : null;
-  const baseScope = {
-    guildId,
-    teamId,
-    memberRoleIds: memberRoleIdSet,
-  };
 
-  const tiers: Array<{
-    matchedBy: Exclude<ResolvedAgentRoute["matchedBy"], "default">;
-    enabled: boolean;
-    scopePeer: RoutePeer | null;
-    predicate: (candidate: EvaluatedBinding) => boolean;
-  }> = [
-    {
-      matchedBy: "binding.peer",
-      enabled: Boolean(peer),
-      scopePeer: peer,
-      predicate: (candidate) => candidate.match.peer.state === "valid",
-    },
-    {
-      matchedBy: "binding.peer.parent",
-      enabled: Boolean(parentPeer && parentPeer.id),
-      scopePeer: parentPeer && parentPeer.id ? parentPeer : null,
-      predicate: (candidate) => candidate.match.peer.state === "valid",
-    },
-    {
-      matchedBy: "binding.guild+roles",
-      enabled: Boolean(guildId && memberRoleIds.length > 0),
-      scopePeer: peer,
-      predicate: (candidate) =>
-        hasGuildConstraint(candidate.match) && hasRolesConstraint(candidate.match),
-    },
-    {
-      matchedBy: "binding.guild",
-      enabled: Boolean(guildId),
-      scopePeer: peer,
-      predicate: (candidate) =>
-        hasGuildConstraint(candidate.match) && !hasRolesConstraint(candidate.match),
-    },
-    {
-      matchedBy: "binding.team",
-      enabled: Boolean(teamId),
-      scopePeer: peer,
-      predicate: (candidate) => hasTeamConstraint(candidate.match),
-    },
-    {
-      matchedBy: "binding.account",
-      enabled: true,
-      scopePeer: peer,
-      predicate: (candidate) => candidate.match.accountPattern !== "*",
-    },
-    {
-      matchedBy: "binding.channel",
-      enabled: true,
-      scopePeer: peer,
-      predicate: (candidate) => candidate.match.accountPattern === "*",
-    },
-  ];
-
-  for (const tier of tiers) {
-    if (!tier.enabled) {
-      continue;
-    }
-    const matched = bindings.find(
-      (candidate) =>
-        tier.predicate(candidate) &&
-        matchesBindingScope(candidate.match, {
-          ...baseScope,
-          peer: tier.scopePeer,
-        }),
+  // 账号未绑定任何 agent：触发 onUnbound 回调（通道用自己的发送接口原路回复错误提示），然后返回 isUnbound 路由。
+  // 相当于「空号」——该通道账号尚未分配给任何助手，拒绝处理消息。
+  const unboundRoute = choose(resolveDefaultAgentId(input.cfg), "default");
+  const result: ResolvedAgentRoute = { ...unboundRoute, isUnbound: true };
+  if (shouldLogVerbose()) {
+    logDebug(
+      `[routing] unbound: channel=${channel} accountId=${accountId} — no channelBindings found, dropping message`,
     );
-    if (matched) {
-      if (shouldLogDebug) {
-        logDebug(`[routing] match: matchedBy=${tier.matchedBy} agentId=${matched.binding.agentId}`);
-      }
-      return choose(matched.binding.agentId, tier.matchedBy);
-    }
   }
-
-  const fallbackRoute = choose(resolveDefaultAgentId(input.cfg), "default");
-  return { ...fallbackRoute, isUnbound: true };
+  if (input.replyTo) {
+    // 系统层直接调用统一的 routeReply 接口原路回复错误，fire-and-forget
+    const replyTo = input.replyTo;
+    void import("../auto-reply/reply/route-reply.js").then(({ routeReply }) =>
+      routeReply({
+        payload: {
+          text: "⚠️ 该通道账号尚未绑定助手，无法处理您的消息。请联系管理员在助手管理页面绑定该账号。",
+        },
+        channel: result.channel,
+        to: replyTo,
+        accountId: result.accountId,
+        cfg: input.cfg,
+        mirror: false,
+      }).catch(() => {
+        // 忽略发送失败，不影响路由结果返回
+      }),
+    );
+  }
+  return result;
 }

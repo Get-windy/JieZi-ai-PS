@@ -132,10 +132,28 @@ export const projectsHandlers: GatewayRequestHandlers = {
           progress: (() => {
             const sprints = projectCtx.config?.sprints ?? projectCtx.config?.milestones;
             if (sprints && sprints.length > 0) {
-              const allTasks = sprints.flatMap((s: import("../../utils/project-context.js").ProjectSprint) => s.tasks).filter((t: import("../../utils/project-context.js").ProjectTask) => t.status !== "cancelled");
+              const allTasks = sprints
+                .flatMap((s: import("../../utils/project-context.js").ProjectSprint) => s.tasks)
+                .filter(
+                  (t: import("../../utils/project-context.js").ProjectTask) =>
+                    t.status !== "cancelled",
+                );
               if (allTasks.length > 0) {
-                const total = allTasks.reduce((sum: number, t: import("../../utils/project-context.js").ProjectTask) => sum + (t.storyPoints ?? 1), 0);
-                const done = allTasks.filter((t: import("../../utils/project-context.js").ProjectTask) => t.status === "done").reduce((sum: number, t: import("../../utils/project-context.js").ProjectTask) => sum + (t.storyPoints ?? 1), 0);
+                const total = allTasks.reduce(
+                  (sum: number, t: import("../../utils/project-context.js").ProjectTask) =>
+                    sum + (t.storyPoints ?? 1),
+                  0,
+                );
+                const done = allTasks
+                  .filter(
+                    (t: import("../../utils/project-context.js").ProjectTask) =>
+                      t.status === "done",
+                  )
+                  .reduce(
+                    (sum: number, t: import("../../utils/project-context.js").ProjectTask) =>
+                      sum + (t.storyPoints ?? 1),
+                    0,
+                  );
                 return total === 0 ? 0 : Math.round((done / total) * 100);
               }
             }
@@ -286,9 +304,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const { buildProjectContext, readProjectConfig } = await import(
-        "../../utils/project-context.js"
-      );
+      const { buildProjectContext, readProjectConfig } =
+        await import("../../utils/project-context.js");
       const path = await import("path");
       const fs = await import("fs");
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
@@ -302,21 +319,39 @@ export const projectsHandlers: GatewayRequestHandlers = {
       };
 
       // 合并进度字段
-      if (params?.progress !== undefined) existing.progress = Number(params.progress);
-      if (params?.status !== undefined) existing.status = String(params.status) as import("../../utils/project-context.js").ProjectStatus;
-      if (params?.deadline !== undefined) existing.deadline = params.deadline ? Number(params.deadline) : undefined;
-      if (params?.acceptanceCriteria !== undefined) existing.acceptanceCriteria = String(params.acceptanceCriteria);
-      if (params?.progressNotes !== undefined) existing.progressNotes = String(params.progressNotes);
+      if (params?.progress !== undefined) {
+        existing.progress = Number(params.progress);
+      }
+      if (params?.status !== undefined) {
+        existing.status = String(
+          params.status,
+        ) as import("../../utils/project-context.js").ProjectStatus;
+      }
+      if (params?.deadline !== undefined) {
+        existing.deadline = params.deadline ? Number(params.deadline) : undefined;
+      }
+      if (params?.acceptanceCriteria !== undefined) {
+        existing.acceptanceCriteria = String(params.acceptanceCriteria);
+      }
+      if (params?.progressNotes !== undefined) {
+        existing.progressNotes = String(params.progressNotes);
+      }
       // 新增：sprint 列表（直接覆盖）
       if (params?.sprints !== undefined) {
-        existing.sprints = params.sprints as import("../../utils/project-context.js").ProjectSprint[];
+        existing.sprints =
+          params.sprints as import("../../utils/project-context.js").ProjectSprint[];
         // 自动重算 progress
         const { calcProjectProgress } = await import("../../utils/project-context.js");
         existing.progress = calcProjectProgress(existing.sprints);
       }
-      if (params?.backlog !== undefined) existing.backlog = params.backlog as import("../../utils/project-context.js").ProjectTask[];
+      if (params?.backlog !== undefined) {
+        existing.backlog = params.backlog as import("../../utils/project-context.js").ProjectTask[];
+      }
       // 向后兼容： milestones 字段
-      if (params?.milestones !== undefined) existing.milestones = params.milestones as import("../../utils/project-context.js").ProjectSprint[];
+      if (params?.milestones !== undefined) {
+        existing.milestones =
+          params.milestones as import("../../utils/project-context.js").ProjectSprint[];
+      }
       existing.progressUpdatedAt = Date.now();
 
       // 确保目录存在
@@ -346,9 +381,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const { buildProjectContext, readProjectConfig } = await import(
-        "../../utils/project-context.js"
-      );
+      const { buildProjectContext, readProjectConfig } =
+        await import("../../utils/project-context.js");
       const path = await import("path");
       const fs = await import("fs");
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
@@ -360,11 +394,21 @@ export const projectsHandlers: GatewayRequestHandlers = {
         workspacePath: ctx.workspacePath,
       };
 
-      if (params?.name !== undefined) existing.name = String(params.name);
-      if (params?.description !== undefined) existing.description = String(params.description);
-      if (params?.codeDir !== undefined) existing.codeDir = String(params.codeDir);
-      if (params?.docsDir !== undefined) existing.docsDir = String(params.docsDir);
-      if (params?.requirementsDir !== undefined) existing.requirementsDir = String(params.requirementsDir);
+      if (params?.name !== undefined) {
+        existing.name = String(params.name);
+      }
+      if (params?.description !== undefined) {
+        existing.description = String(params.description);
+      }
+      if (params?.codeDir !== undefined) {
+        existing.codeDir = String(params.codeDir);
+      }
+      if (params?.docsDir !== undefined) {
+        existing.docsDir = String(params.docsDir);
+      }
+      if (params?.requirementsDir !== undefined) {
+        existing.requirementsDir = String(params.requirementsDir);
+      }
 
       if (!fs.existsSync(ctx.workspacePath)) {
         fs.mkdirSync(ctx.workspacePath, { recursive: true });
@@ -446,6 +490,281 @@ export const projectsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(ErrorCodes.UNAVAILABLE, `Failed to transfer project owner: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 完成 Sprint
+   *
+   * 将指定 Sprint 标记为已完成：
+   * - Sprint.status = 'completed'
+   * - Sprint.completedAt = now
+   * - Sprint.velocity = 已完成任务的 SP 总和
+   * - 未完成任务（非 done/cancelled）可选小移入 Backlog 或下一个 Sprint
+   */
+  "projects.completeSprint": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      const sprintId = params?.sprintId ? String(params.sprintId) : "";
+      // unfinishedAction: 'backlog'(default) | 'next_sprint'
+      const unfinishedAction = params?.unfinishedAction
+        ? String(params.unfinishedAction)
+        : "backlog";
+      const retrospective = params?.retrospective ? String(params.retrospective) : undefined;
+
+      if (!projectId || !sprintId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "projectId and sprintId are required"),
+        );
+        return;
+      }
+
+      const { buildProjectContext, readProjectConfig } =
+        await import("../../utils/project-context.js");
+      const path = await import("path");
+      const fs = await import("fs");
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+      const configPath = path.join(ctx.workspacePath, "PROJECT_CONFIG.json");
+
+      const existing = readProjectConfig(ctx.workspacePath);
+      if (!existing) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Project config not found for "${projectId}"`),
+        );
+        return;
+      }
+
+      const sprints = existing.sprints ?? existing.milestones ?? [];
+      const sprintIdx = sprints.findIndex(
+        (s: import("../../utils/project-context.js").ProjectSprint) => s.id === sprintId,
+      );
+      if (sprintIdx === -1) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Sprint "${sprintId}" not found`),
+        );
+        return;
+      }
+
+      const sprint = sprints[sprintIdx];
+      const now = Date.now();
+
+      // 计算 velocity（已完成 SP）
+      const doneTasks = sprint.tasks.filter(
+        (t: import("../../utils/project-context.js").ProjectTask) => t.status === "done",
+      );
+      const velocity = doneTasks.reduce(
+        (sum: number, t: import("../../utils/project-context.js").ProjectTask) =>
+          sum + (t.storyPoints ?? 1),
+        0,
+      );
+
+      // 未完成任务（非 done/cancelled）
+      const unfinishedTasks = sprint.tasks.filter(
+        (t: import("../../utils/project-context.js").ProjectTask) =>
+          t.status !== "done" && t.status !== "cancelled",
+      );
+
+      // 标记 Sprint 已完成
+      sprints[sprintIdx] = {
+        ...sprint,
+        status: "completed" as import("../../utils/project-context.js").SprintStatus,
+        completedAt: now,
+        velocity,
+        retrospective: retrospective ?? sprint.retrospective,
+        // 未完成任务从 Sprint 移出
+        tasks: sprint.tasks.filter(
+          (t: import("../../utils/project-context.js").ProjectTask) =>
+            t.status === "done" || t.status === "cancelled",
+        ),
+      };
+
+      if (unfinishedTasks.length > 0) {
+        if (unfinishedAction === "next_sprint") {
+          // 找下一个 Sprint（order 比当前大的最小的）
+          const currentOrder = sprint.order;
+          const nextSprint = sprints
+            .filter(
+              (s: import("../../utils/project-context.js").ProjectSprint) =>
+                s.order > currentOrder && s.status !== "completed" && s.status !== "cancelled",
+            )
+            .toSorted(
+              (
+                a: import("../../utils/project-context.js").ProjectSprint,
+                b: import("../../utils/project-context.js").ProjectSprint,
+              ) => a.order - b.order,
+            )[0];
+          if (nextSprint) {
+            const nextIdx = sprints.findIndex(
+              (s: import("../../utils/project-context.js").ProjectSprint) => s.id === nextSprint.id,
+            );
+            sprints[nextIdx] = {
+              ...nextSprint,
+              tasks: [
+                ...unfinishedTasks.map(
+                  (t: import("../../utils/project-context.js").ProjectTask) => ({
+                    ...t,
+                    status: "todo" as import("../../utils/project-context.js").TaskStatus,
+                  }),
+                ),
+                ...nextSprint.tasks,
+              ],
+            };
+          } else {
+            // 没有下一个 Sprint，回落到 Backlog
+            existing.backlog = [
+              ...(existing.backlog ?? []),
+              ...unfinishedTasks.map((t: import("../../utils/project-context.js").ProjectTask) => ({
+                ...t,
+                status: "backlog" as import("../../utils/project-context.js").TaskStatus,
+              })),
+            ];
+          }
+        } else {
+          // 默认：移入 Backlog
+          existing.backlog = [
+            ...(existing.backlog ?? []),
+            ...unfinishedTasks.map((t: import("../../utils/project-context.js").ProjectTask) => ({
+              ...t,
+              status: "backlog" as import("../../utils/project-context.js").TaskStatus,
+            })),
+          ];
+        }
+      }
+
+      // 写回配置
+      if (existing.sprints) {
+        existing.sprints = sprints;
+      } else {
+        existing.milestones = sprints;
+      }
+
+      // 重算整体进度
+      const { calcProjectProgress } = await import("../../utils/project-context.js");
+      existing.progress = calcProjectProgress(sprints);
+      existing.progressUpdatedAt = now;
+
+      if (!fs.existsSync(ctx.workspacePath)) {
+        fs.mkdirSync(ctx.workspacePath, { recursive: true });
+      }
+      fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+
+      respond(
+        true,
+        {
+          success: true,
+          projectId,
+          sprintId,
+          velocity,
+          movedToBacklog:
+            unfinishedAction === "backlog" ||
+            !sprints.find(
+              (s: import("../../utils/project-context.js").ProjectSprint) => s.order > sprint.order,
+            )
+              ? unfinishedTasks.length
+              : 0,
+          movedToNextSprint: unfinishedAction === "next_sprint" ? unfinishedTasks.length : 0,
+          config: existing,
+        },
+        undefined,
+      );
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to complete sprint: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 开始 Sprint
+   *
+   * 将指定 Sprint 标记为 active。
+   * 同一项目应只有一个进行中的 Sprint，但不强制限制（可并行）
+   */
+  "projects.startSprint": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      const sprintId = params?.sprintId ? String(params.sprintId) : "";
+
+      if (!projectId || !sprintId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "projectId and sprintId are required"),
+        );
+        return;
+      }
+
+      const { buildProjectContext, readProjectConfig } =
+        await import("../../utils/project-context.js");
+      const path = await import("path");
+      const fs = await import("fs");
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+      const configPath = path.join(ctx.workspacePath, "PROJECT_CONFIG.json");
+
+      const existing = readProjectConfig(ctx.workspacePath);
+      if (!existing) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Project config not found for "${projectId}"`),
+        );
+        return;
+      }
+
+      const sprints = existing.sprints ?? existing.milestones ?? [];
+      const sprintIdx = sprints.findIndex(
+        (s: import("../../utils/project-context.js").ProjectSprint) => s.id === sprintId,
+      );
+      if (sprintIdx === -1) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Sprint "${sprintId}" not found`),
+        );
+        return;
+      }
+
+      const now = Date.now();
+      sprints[sprintIdx] = {
+        ...sprints[sprintIdx],
+        status: "active" as import("../../utils/project-context.js").SprintStatus,
+        startDate: sprints[sprintIdx].startDate ?? now,
+      };
+
+      if (existing.sprints) {
+        existing.sprints = sprints;
+      } else {
+        existing.milestones = sprints;
+      }
+      existing.progressUpdatedAt = now;
+
+      // 如果项目状态还是 planning，自动升级为 active
+      if (!existing.status || existing.status === "planning") {
+        existing.status = "active";
+      }
+
+      if (!fs.existsSync(ctx.workspacePath)) {
+        fs.mkdirSync(ctx.workspacePath, { recursive: true });
+      }
+      fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+
+      respond(true, { success: true, projectId, sprintId, config: existing }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to start sprint: ${String(error)}`),
       );
     }
   },

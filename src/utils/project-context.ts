@@ -82,12 +82,23 @@ export interface ProjectTask {
 }
 
 /**
+ * Sprint 状态
+ * planning  = 待规划（尚未开始，可以往里加任务）
+ * active    = 进行中（当前正在执行的 Sprint）
+ * completed = 已完成（Sprint 结束，数据归档）
+ * cancelled = 已取消
+ */
+export type SprintStatus = "planning" | "active" | "completed" | "cancelled";
+
+/**
  * 项目 Sprint / 阶段（借鉴 Scrum Sprint 概念）
  * 一个有时间边界的迭代周期，包含一批任务
  */
 export interface ProjectSprint {
   id: string;
   title: string;
+  /** Sprint 状态（planning/active/completed/cancelled） */
+  status?: SprintStatus;
   /** Sprint 目标（类似 Scrum Sprint Goal） */
   goal?: string;
   /** Sprint 开始时间 */
@@ -100,12 +111,18 @@ export interface ProjectSprint {
   order: number;
   /** 包含的任务列表 */
   tasks: ProjectTask[];
+  /** Sprint 速度记录（已完成的 Story Points 总量） */
+  velocity?: number;
+  /** Sprint 回顾备注 */
+  retrospective?: string;
 }
 
 /** 计算 Sprint 的完成进度（基于 done 任务的 storyPoints 或任务数量）*/
 export function calcSprintProgress(sprint: ProjectSprint): number {
   const tasks = sprint.tasks.filter((t) => t.status !== "cancelled");
-  if (tasks.length === 0) return 0;
+  if (tasks.length === 0) {
+    return 0;
+  }
   const totalPoints = tasks.reduce((sum, t) => sum + (t.storyPoints ?? 1), 0);
   const donePoints = tasks
     .filter((t) => t.status === "done")
@@ -115,9 +132,13 @@ export function calcSprintProgress(sprint: ProjectSprint): number {
 
 /** 计算项目整体进度（基于所有 Sprint 的加权平均）*/
 export function calcProjectProgress(sprints: ProjectSprint[]): number {
-  if (sprints.length === 0) return 0;
+  if (sprints.length === 0) {
+    return 0;
+  }
   const allTasks = sprints.flatMap((s) => s.tasks).filter((t) => t.status !== "cancelled");
-  if (allTasks.length === 0) return 0;
+  if (allTasks.length === 0) {
+    return 0;
+  }
   const total = allTasks.reduce((sum, t) => sum + (t.storyPoints ?? 1), 0);
   const done = allTasks
     .filter((t) => t.status === "done")
