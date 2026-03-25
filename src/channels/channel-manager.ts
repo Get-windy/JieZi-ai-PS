@@ -58,30 +58,25 @@ export class ChannelManager {
    * 只同步已启用的绑定。
    */
   private syncToCfgBindings(config: OpenClawConfig, agentId: string, channelBindings: AgentChannelBindings): void {
-    // 使用宽松类型操作 bindings，因为我们附加了 _managedBy/_bindingId 内部标记字段
-    const raw = config as Record<string, unknown>;
-    if (!Array.isArray(raw["bindings"])) {
-      raw["bindings"] = [];
+    if (!Array.isArray(config.bindings)) {
+      config.bindings = [];
     }
-    const bindings = raw["bindings"] as Array<Record<string, unknown>>;
-    // 移除该 agent 由本工具管理的旧条目（带 _managedBy 标记）
-    const filtered = bindings.filter(
-      (b) => !(b["_managedBy"] === "channelManager" && b["agentId"] === agentId),
+    // 移除该 agent 由本工具管理的旧条目（comment 以 "[cm:" 开头）
+    config.bindings = config.bindings.filter(
+      (b) => !(b.agentId === agentId && typeof b.comment === "string" && b.comment.startsWith("[cm:")),
     );
-    // 写入已启用的绑定
+    // 写入已启用的绑定（标准 AgentRouteBinding，用 comment 存 bindingId）
     for (const binding of channelBindings.bindings) {
       if (binding.enabled === false) { continue; }
-      filtered.push({
+      config.bindings.push({
         agentId,
         match: {
           channel: binding.channelId,
           accountId: binding.accountId || "default",
         },
-        _managedBy: "channelManager",
-        _bindingId: binding.id,
+        comment: `[cm:${binding.id}]`,
       });
     }
-    raw["bindings"] = filtered;
   }
 
   /**
