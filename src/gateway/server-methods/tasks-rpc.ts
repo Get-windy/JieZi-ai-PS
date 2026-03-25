@@ -38,6 +38,7 @@ import type {
   TaskStatus,
   TaskPriority,
   TaskType,
+  TaskScope,
   TaskAssignee,
   TaskComment,
   TaskAttachment,
@@ -69,6 +70,8 @@ export const tasksRpc: GatewayRequestHandlers = {
           : [];
       const priority = params?.priority ? String(params.priority) : "medium";
       const type = params?.type ? (String(params.type) as TaskType) : undefined;
+      // scope: personal（私人任务）或 project（项目任务，默认），决定记忆写入位置
+      const scope: TaskScope = params?.scope === "personal" ? "personal" : "project";
       const dueDate = params?.dueDate ? Number(params.dueDate) : undefined;
       const organizationId = params?.organizationId ? String(params.organizationId) : undefined;
       const teamId = params?.teamId ? String(params.teamId) : undefined;
@@ -90,12 +93,15 @@ export const tasksRpc: GatewayRequestHandlers = {
         return;
       }
 
-      // 必须关联项目：确保任务工作区间和记忆隔离正确进行
-      if (!projectId) {
+      // 项目任务必须关联 projectId，私人任务不要求
+      if (scope === "project" && !projectId) {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "任务必须关联项目（projectId 不能为空），请先确认项目 ID 再创建任务"),
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            "项目任务（scope=project）必须关联 projectId。若为个人待办请传 scope=\"personal\"",
+          ),
         );
         return;
       }
@@ -152,6 +158,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         })(),
         priority: normalizedPriority,
         type,
+        scope,
         organizationId,
         teamId,
         projectId,
@@ -321,6 +328,13 @@ export const tasksRpc: GatewayRequestHandlers = {
       });
 
       respond(true, updatedTask, undefined);
+
+      // 状态变为 done/cancelled 时触发即时归档
+      if (normalizedStatus === "done" || normalizedStatus === "cancelled") {
+        storage.archiveOldTasks().catch((archErr) => {
+          console.warn(`[task.update] archiveOldTasks failed: ${String(archErr)}`);
+        });
+      }
     } catch (err) {
       respond(
         false,
@@ -1293,6 +1307,11 @@ export const tasksRpc: GatewayRequestHandlers = {
           console.warn(`[task.complete] scheduleNextTask failed: ${String(schedErr)}`);
         });
       }
+
+      // === 任务完成后即时归档：将 done 任务移入冷存储，保持热存储精简 ===
+      storage.archiveOldTasks().catch((archErr) => {
+        console.warn(`[task.complete] archiveOldTasks failed: ${String(archErr)}`);
+      });
     } catch (err) {
       respond(
         false,
