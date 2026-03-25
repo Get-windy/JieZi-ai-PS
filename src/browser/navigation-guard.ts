@@ -1,4 +1,5 @@
 import {
+  isPrivateNetworkAllowedByPolicy,
   resolvePinnedHostnameWithPolicy,
   type LookupFn,
   type SsrFPolicy,
@@ -27,6 +28,10 @@ export function withBrowserNavigationPolicy(
   ssrfPolicy?: SsrFPolicy,
 ): BrowserNavigationPolicyOptions {
   return ssrfPolicy ? { ssrfPolicy } : {};
+}
+
+export function requiresInspectableBrowserNavigationRedirects(ssrfPolicy?: SsrFPolicy): boolean {
+  return !isPrivateNetworkAllowedByPolicy(ssrfPolicy);
 }
 
 export async function assertBrowserNavigationAllowed(

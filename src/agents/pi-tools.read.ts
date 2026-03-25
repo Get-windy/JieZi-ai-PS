@@ -3,21 +3,26 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { createEditTool, createReadTool, createWriteTool } from "@mariozechner/pi-coding-agent";
-import { redactSensitiveContent } from "../infra/sensitive-content-redact.js";
-import { detectMime } from "../../upstream/src/media/mime.js";
-import { sniffMimeFromBase64 } from "../../upstream/src/media/sniff-mime-from-base64.js";
+import type { ImageSanitizationLimits } from "../../upstream/src/agents/image-sanitization.js";
+import { toRelativeWorkspacePath } from "../../upstream/src/agents/path-policy.js";
+import type { AnyAgentTool } from "../../upstream/src/agents/pi-tools.types.js";
 import {
   appendFileWithinRoot,
   readFileWithinRoot,
   writeFileWithinRoot,
 } from "../../upstream/src/infra/fs-safe.js";
-import type { ImageSanitizationLimits } from "../../upstream/src/agents/image-sanitization.js";
-import { toRelativeWorkspacePath } from "../../upstream/src/agents/path-policy.js";
-import { wrapHostEditToolWithPostWriteRecovery } from "../../upstream/src/agents/pi-tools.host-edit.js";
-import type { AnyAgentTool } from "../../upstream/src/agents/pi-tools.types.js";
+import { detectMime } from "../../upstream/src/media/mime.js";
+import { sniffMimeFromBase64 } from "../../upstream/src/media/sniff-mime-from-base64.js";
+import { redactSensitiveContent } from "../infra/sensitive-content-redact.js";
 import { assertSandboxPath } from "./sandbox-paths.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import { sanitizeToolResultImages } from "./tool-images.js";
+
+// wrapHostEditToolWithPostWriteRecovery: upstream pi-tools.host-edit.ts not available;
+// provide a pass-through stub so callers get the base tool unchanged.
+function wrapHostEditToolWithPostWriteRecovery(tool: AnyAgentTool, _root: string): AnyAgentTool {
+  return tool;
+}
 
 // NOTE(steipete): Upstream read now does file-magic MIME detection; we keep the wrapper
 // to normalize payloads and sanitize oversized images before they hit providers.
