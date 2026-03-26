@@ -19,6 +19,7 @@ import { loadConfig } from "../../upstream/src/config/config.js";
 import { requestHeartbeatNow } from "../../upstream/src/infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
 import { listAgentIds, resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
+import { getTaskTypePerfScore } from "../gateway/server-methods/evolve-rpc.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { groupManager } from "../sessions/group-manager.js";
 import * as taskStorage from "../tasks/storage.js";
@@ -459,7 +460,34 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
         }
         // 不做 projectId 过滤：任务只要分配给该 agent 就直接执行，无论属于哪个项目
         // 按优先级排序，只唤醒最高优先级的 1 条
-        const sortedTodos = [...todoTasks].toSorted((a, b) => taskSortKey(b) - taskSortKey(a));
+        // C3 自适应课程：当 Agent 在某类任务的历史成功率 <60% 时，降低该类任务的调度优先级
+        const sortedTodos = [...todoTasks].toSorted((a, b) => {
+          let scoreA = taskSortKey(a);
+          let scoreB = taskSortKey(b);
+          // C3: 读取性能画像，当成功率 <60% 时懒化该类任务（不低于 urgent 级别）
+          if (a.priority !== "urgent" && a.description) {
+            const perfA = getTaskTypePerfScore(
+              normalizedId,
+              a.title + " " + a.description.slice(0, 100),
+            );
+            if (perfA && perfA.successRate < 0.6) {
+              // 成功率越低，惩罚越大：最多降 1e12（相当于把 medium 降到 low 之下）
+              const penalty = Math.round((0.6 - perfA.successRate) * 2e12);
+              scoreA -= penalty;
+            }
+          }
+          if (b.priority !== "urgent" && b.description) {
+            const perfB = getTaskTypePerfScore(
+              normalizedId,
+              b.title + " " + b.description.slice(0, 100),
+            );
+            if (perfB && perfB.successRate < 0.6) {
+              const penalty = Math.round((0.6 - perfB.successRate) * 2e12);
+              scoreB -= penalty;
+            }
+          }
+          return scoreB - scoreA;
+        });
         const nextTask = sortedTodos[0];
         const queueRemaining = sortedTodos.length - 1;
 
@@ -486,6 +514,19 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
 
         const wakeMessage = (() => {
           const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(nextTask);
+          // C3 自适应课程：若此类任务成功率偏低，加入提示警告
+          let perfWarning: string | null = null;
+          try {
+            const perfScore = getTaskTypePerfScore(
+              normalizedId,
+              nextTask.title + " " + (nextTask.description ?? "").slice(0, 100),
+            );
+            if (perfScore && perfScore.successRate < 0.6) {
+              perfWarning = `[C3 ADAPTIVE] Your historical success rate for "${perfScore.taskType}" tasks is ${Math.round(perfScore.successRate * 100)}% (based on ${perfScore.total} tasks). Take extra care, double-check your approach before executing.`;
+            }
+          } catch {
+            /* 不影响主流程 */
+          }
           return [
             `[TASK WAKE] You have 1 task to execute now${queueRemaining > 0 ? ` (${queueRemaining} more waiting in queue)` : ""}:`,
             ``,
@@ -498,6 +539,7 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
               ? `- Project Shared Memory (all team members read/write): ${sharedMemoryPath}`
               : null,
             projectGroupSessionKey ? `- Project Group: sessionKey=${projectGroupSessionKey}` : null,
+            perfWarning ? `\n${perfWarning}` : null,
             ``,
             `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
             ``,

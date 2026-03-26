@@ -2911,10 +2911,6 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       projectId?: string;
       teamId?: string;
       organizationId?: string;
-      /** 任务作用域：personal（私人任务）或 project（项目任务，默认） */
-      scope?: string;
-      /** 上级管理者ID（coordinator 分配任务时传入自身 agentId，使其具备写 worklog 权限） */
-      supervisorId?: string;
     };
 
     const targetAgentId = String(p?.targetAgentId ?? "").trim();
@@ -3002,12 +2998,6 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         ],
         status: initialTaskStatus,
         priority,
-        scope: p?.scope === "personal" ? "personal" : "project",
-        supervisorId: p?.supervisorId
-          ? String(p.supervisorId)
-          : requesterId !== "system"
-            ? requesterId
-            : undefined,
         organizationId: p?.organizationId ? String(p.organizationId) : undefined,
         teamId: p?.teamId ? String(p.teamId) : undefined,
         projectId: p?.projectId ? String(p.projectId) : undefined,
@@ -3019,6 +3009,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         },
         metadata: {
           assignedVia: "agent.assign_task",
+          supervisorId: requesterId,
           context: p?.context,
         },
         createdAt: Date.now(),
@@ -3060,7 +3051,6 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       normalizeAgentId(targetAgentId),
       {
         projectId: p?.projectId ? String(p.projectId) : undefined,
-        scope: p?.scope,
       },
       cfg,
     );

@@ -43,6 +43,8 @@ const MemorySaveToolSchema = Type.Object({
   namespace: Type.Optional(MemoryNamespace),
   /** 标签（可选）——用于快速过滤 */
   tags: Type.Optional(Type.Array(Type.String({ maxLength: 32 }), { maxItems: 10 })),
+  /** 重要度（可选，1-5，默认 3）——越高越优先注入到 context */
+  importance: Type.Optional(Type.Number({ minimum: 1, maximum: 5 })),
   /** 是否强制覆盖已有同类记忆（可选，默认 false——走语义去重流程） */
   force: Type.Optional(Type.Boolean()),
 });
@@ -63,6 +65,10 @@ const MemoryListToolSchema = Type.Object({
   namespace: Type.Optional(MemoryNamespace),
   /** 按标签过滤（可选） */
   tag: Type.Optional(Type.String({ maxLength: 32 })),
+  /** 关键词搜索（可选）——对 content 做大小写不敏感包含匹配 */
+  keyword: Type.Optional(Type.String({ maxLength: 100 })),
+  /** 排序方式（可选）：'time'（默认，最新优先）或 'importance'（重要度优先） */
+  sortBy: Type.Optional(Type.Union([Type.Literal("time"), Type.Literal("importance")])),
   /** 最大返回数量（可选，默认 20） */
   limit: Type.Optional(Type.Number({ minimum: 1, maximum: 100 })),
 });
@@ -86,7 +92,9 @@ export function createMemorySaveTool(opts?: {
       "user preferences, key decisions, project context, facts, or constraints. " +
       "Namespaces: 'preferences' (user habits/settings), 'decisions' (choices made), " +
       "'context' (project/task state, default), 'facts' (rules/knowledge). " +
-      "The backend automatically deduplicates semantically similar memories (Mem0-style ADD/UPDATE/DELETE). " +
+      "Importance: 1=low (personal habit), 3=medium (default), 5=critical (architecture decision, key rule). " +
+      "The backend automatically deduplicates semantically similar memories: " +
+      "similar content is replaced with the latest version (new content is more accurate). " +
       "Do NOT wait for /new or session reset—save proactively when the information matters.",
     parameters: MemorySaveToolSchema,
     execute: async (_toolCallId, args) => {
@@ -99,6 +107,8 @@ export function createMemorySaveTool(opts?: {
         | "facts";
       const tags = Array.isArray(params.tags) ? params.tags.map(String) : [];
       const force = typeof params.force === "boolean" ? params.force : false;
+      // importance: 1-5，默认 3（Mem0 salience 概念：按重要度决定检索优先级）
+      const importance = typeof params.importance === "number" ? params.importance : undefined;
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
@@ -107,6 +117,7 @@ export function createMemorySaveTool(opts?: {
           namespace,
           tags,
           force,
+          importance,
           agentId: opts?.agentId,
           callerAgentId: opts?.agentId, // 调用者身份，服务端用于越权检查（不可被 AI 篡改）
           savedAt: Date.now(),
@@ -352,14 +363,17 @@ export function createMemoryListTool(opts?: {
     label: "Memory List",
     name: "memory_list",
     description:
-      "List stored memory entries, optionally filtered by namespace or tag. " +
+      "List stored memory entries, optionally filtered by namespace, tag, or keyword. " +
       "Use this to audit what is currently remembered, or to find memoryId values before updating/deleting. " +
+      "Use 'keyword' for quick content search; use 'sortBy=importance' to surface the most critical entries first. " +
       "For semantic search across memory content, use memory_search instead.",
     parameters: MemoryListToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
       const namespace = readStringParam(params, "namespace");
       const tag = readStringParam(params, "tag");
+      const keyword = readStringParam(params, "keyword");
+      const sortBy = readStringParam(params, "sortBy") || "time";
       const limit = typeof params.limit === "number" ? params.limit : 20;
       const gatewayOpts = readGatewayCallOptions(params);
 
@@ -368,6 +382,8 @@ export function createMemoryListTool(opts?: {
           agentId: opts?.agentId,
           namespace: namespace || undefined,
           tag: tag || undefined,
+          keyword: keyword || undefined,
+          sortBy: sortBy || undefined,
           limit,
         });
 

@@ -45,6 +45,10 @@ interface MemoryEntry {
   agentId?: string;
   savedAt: number;
   updatedAt?: number;
+  /** 重要度（1=低 / 3=中 / 5=关键决策，默认 3） */
+  importance?: number;
+  /** 上一版本内容（合并时保留，便于追溯） */
+  previousContent?: string;
 }
 
 interface MemoryStore {
@@ -312,12 +316,20 @@ export const memoryRpc: GatewayRequestHandlers = {
           if (idx !== -1) {
             const existing = store.entries[idx];
             if (existing) {
-              // 合并：保留旧内容 + 追加新内容摘要
-              existing.content = `${existing.content}\n\n[Updated] ${content}`;
+              // 合并策略：新内容更新更准确，用新内容替换旧内容
+              // 旧内容压缩成一行备注（便于追溯，不超过 200 字）保存到 previousContent
+              existing.previousContent = existing.content.slice(0, 200);
+              existing.content = content;
               existing.updatedAt = Date.now();
               // 合并标签（去重）
               const mergedTags = Array.from(new Set([...existing.tags, ...tags]));
               existing.tags = mergedTags;
+              // 取新旧 importance 的较大值（更重要的信息定级更高）
+              const incomingImportance =
+                typeof params?.importance === "number"
+                  ? Math.min(5, Math.max(1, Math.round(params.importance)))
+                  : (existing.importance ?? 3);
+              existing.importance = Math.max(existing.importance ?? 3, incomingImportance);
               store.entries[idx] = existing;
               saveMemoryStore(filePath, store);
               respond(
@@ -339,12 +351,17 @@ export const memoryRpc: GatewayRequestHandlers = {
 
       // ADD：新增条目
       const id = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const importance =
+        typeof params?.importance === "number"
+          ? Math.min(5, Math.max(1, Math.round(params.importance)))
+          : 3;
       const entry: MemoryEntry = {
         id,
         content,
         namespace,
         tags,
         agentId,
+        importance,
         savedAt: params?.savedAt ? Number(params.savedAt) : Date.now(),
       };
       store.entries.push(entry);
@@ -466,6 +483,8 @@ export const memoryRpc: GatewayRequestHandlers = {
         ? (String(params.namespace) as MemoryNamespace)
         : undefined;
       const filterTag = params?.tag ? String(params.tag) : undefined;
+      const filterKeyword = params?.keyword ? String(params.keyword).toLowerCase() : undefined;
+      const sortBy = params?.sortBy === "importance" ? "importance" : "time";
       const limit = typeof params?.limit === "number" ? Math.min(params.limit, 100) : 20;
 
       const namespaces: MemoryNamespace[] = filterNamespace
@@ -480,12 +499,18 @@ export const memoryRpc: GatewayRequestHandlers = {
       }
 
       // 标签过滤
-      const filtered = filterTag ? entries.filter((e) => e.tags.includes(filterTag)) : entries;
+      let filtered = filterTag ? entries.filter((e) => e.tags.includes(filterTag)) : entries;
 
-      // 按 savedAt 倒序，取最新的 limit 条
-      const sorted = filtered.toSorted(
-        (a, b) => (b.updatedAt ?? b.savedAt) - (a.updatedAt ?? a.savedAt),
-      );
+      // 关键词过滤（对 content 做大小写不敏感包含匹配）
+      if (filterKeyword) {
+        filtered = filtered.filter((e) => e.content.toLowerCase().includes(filterKeyword));
+      }
+
+      // 排序：按时间倒序（默认）或按重要度倒序
+      const sorted =
+        sortBy === "importance"
+          ? filtered.toSorted((a, b) => (b.importance ?? 3) - (a.importance ?? 3))
+          : filtered.toSorted((a, b) => (b.updatedAt ?? b.savedAt) - (a.updatedAt ?? a.savedAt));
       const page = sorted.slice(0, limit);
 
       respond(
@@ -574,22 +599,66 @@ export const memoryRpc: GatewayRequestHandlers = {
 
       const existing = fs.readFileSync(sharedMemoryPath, "utf8");
 
-      // 构造追加内容
+      // ================================================================
+      // M3：章节内容去重（Mem0 UPDATE 策略）
+      // 如果同名章节内容与新内容 Jaccard 相似度 >= 0.6，则替换而非追加。
+      // 如同一项目每天不断将进展写入共享记忆，文件不会无限膨胀
+      // ================================================================
+      const escSection = section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+      // 提取同名章节内容（下一个 ### 之前或文件末）
+      // 正则含义：章节标题行 + 可选时间注释行 + 章节主体
+      const sectionHeadPat = "###[\\t ]+" + escSection + "[\\t ]*\\n(?:<!-- saved:[^>]*>\\n)?";
+      const existingSectionMatch = new RegExp(
+        "(" + sectionHeadPat + ")([\\s\\S]*?)(?=\\n###[\\t ]|$)",
+        "i",
+      ).exec(existing);
+
+      let newContent: string;
       const now = new Date().toISOString();
       const tagNote = tags.length > 0 ? ` [${tags.join(", ")}]` : "";
       const authorNote = agentId ? ` (by ${agentId})` : "";
-      const entryHeader = `\n\n### ${section}${tagNote}\n<!-- saved: ${now}${authorNote} -->`;
-      const entryBody = `\n${content.trim()}`;
 
-      // 检查章节是否已存在以决定追加位置
-      const sectionPattern = new RegExp(`###\\s+${section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
-      let newContent: string;
-      if (sectionPattern.test(existing)) {
-        // 章节已存在：在同名章节最后一行后追加新条目
-        newContent = existing.trimEnd() + `\n\n---${entryHeader}${entryBody}`;
+      if (existingSectionMatch) {
+        const oldSectionBody = existingSectionMatch[2].trim();
+
+        // 计算 Jaccard 相似度
+        const simScore = jaccardSimilarity(content, oldSectionBody);
+
+        if (simScore >= 0.6) {
+          // 相似度足够高：新内容替换旧内容（新信息更准确）
+          // 保留旧标题，更新内容和时间注释
+          newContent = existing.replace(
+            new RegExp(
+              "(###[\\t ]+" +
+                escSection +
+                ")[\\t ]*((?:\\n<!-- saved:[^>]*>)?)([\\s\\S]*?)(?=\\n###[\\t ]|$)",
+              "i",
+            ),
+            `### ${section}${tagNote}\n<!-- saved: ${now}${authorNote} -->\n${content.trim()}\n`,
+          );
+        } else {
+          // 相似度不够：内容差异较大，在章节内追加新条目
+          newContent =
+            existing.trimEnd() +
+            `
+
+---
+### ${section}${tagNote}
+<!-- saved: ${now}${authorNote} -->
+${content.trim()}
+`;
+        }
       } else {
-        // 章节不存在：追加新章节
-        newContent = existing.trimEnd() + entryHeader + entryBody;
+        // 章节不存在：新增章节
+        newContent =
+          existing.trimEnd() +
+          `
+
+### ${section}${tagNote}
+<!-- saved: ${now}${authorNote} -->
+${content.trim()}
+`;
       }
 
       fs.writeFileSync(sharedMemoryPath, newContent, "utf8");
@@ -727,3 +796,131 @@ export const memoryRpc: GatewayRequestHandlers = {
     }
   },
 };
+
+// ============================================================================
+// 直连存储函数（供 memory-core 插件钩子直接调用，不走 RPC 网络层）
+// ============================================================================
+
+/**
+ * autoSaveMemoryEntry — 直接写入一条记忆（带去重），供 agent_end 钩子调用
+ * 与 memory.save RPC 共用同一套存储+去重逻辑，无需走网络。
+ *
+ * 冷却：同一 agentId 在 AUTO_MEMORY_COOLDOWN_MS 内对同一 namespace 最多写一次，
+ * 防止短对话循环触发大量写入。
+ */
+export type AutoSaveNamespace = MemoryNamespace;
+
+const autoMemoryCooldown = new Map<string, number>();
+const AUTO_MEMORY_COOLDOWN_MS = 30_000; // 30s 冷却
+
+export function autoSaveMemoryEntry(params: {
+  agentId: string | undefined;
+  content: string;
+  namespace: AutoSaveNamespace;
+  tags?: string[];
+  importance?: number;
+}): "saved" | "skipped" | "updated" | "cooldown" {
+  try {
+    const { agentId, content, namespace, tags = [], importance = 3 } = params;
+    if (!content.trim() || content.length < 10) {
+      return "skipped";
+    }
+
+    // 冷却检查（per agentId+namespace）
+    const cooldownKey = `${agentId ?? "_global"}:${namespace}`;
+    const now = Date.now();
+    const lastWrite = autoMemoryCooldown.get(cooldownKey) ?? 0;
+    if (now - lastWrite < AUTO_MEMORY_COOLDOWN_MS) {
+      return "cooldown";
+    }
+
+    const filePath = resolveMemoryFile(agentId, namespace);
+    const store = loadMemoryStore(filePath);
+
+    const decision = decideDedupAction(content, store);
+
+    if (decision.action === "skip") {
+      return "skipped";
+    }
+
+    if (decision.action === "update") {
+      const idx = store.entries.findIndex((e) => e.id === decision.existingId);
+      if (idx !== -1) {
+        const existing = store.entries[idx];
+        if (existing) {
+          existing.previousContent = existing.content.slice(0, 200);
+          existing.content = content;
+          existing.updatedAt = now;
+          existing.tags = Array.from(new Set([...existing.tags, ...tags]));
+          const incomingImportance = Math.min(5, Math.max(1, Math.round(importance)));
+          existing.importance = Math.max(existing.importance ?? 3, incomingImportance);
+          store.entries[idx] = existing;
+          saveMemoryStore(filePath, store);
+          autoMemoryCooldown.set(cooldownKey, now);
+          return "updated";
+        }
+      }
+    }
+
+    // ADD
+    const id = `mem_auto_${now}_${Math.random().toString(36).slice(2, 7)}`;
+    store.entries.push({
+      id,
+      content,
+      namespace,
+      tags,
+      agentId,
+      importance: Math.min(5, Math.max(1, Math.round(importance))),
+      savedAt: now,
+    });
+    saveMemoryStore(filePath, store);
+    autoMemoryCooldown.set(cooldownKey, now);
+    return "saved";
+  } catch {
+    return "skipped";
+  }
+}
+
+/**
+ * loadMemoryEntriesDirect — 直接读取指定 namespace 的记忆条目列表（不走 RPC）
+ * 供 before_prompt_build 钩子直接读取，按 importance 倒序返回
+ */
+export function loadMemoryEntriesDirect(
+  agentId: string | undefined,
+  opts?: { namespaces?: MemoryNamespace[]; limit?: number },
+): Array<{
+  id: string;
+  content: string;
+  namespace: string;
+  importance: number;
+  updatedAt?: number;
+  savedAt: number;
+}> {
+  try {
+    const namespaces: MemoryNamespace[] = opts?.namespaces ?? [
+      "preferences",
+      "decisions",
+      "context",
+      "facts",
+    ];
+    const limit = opts?.limit ?? 50;
+    const entries: MemoryEntry[] = [];
+    for (const ns of namespaces) {
+      const store = loadMemoryStore(resolveMemoryFile(agentId, ns));
+      entries.push(...store.entries);
+    }
+    return entries
+      .toSorted((a, b) => (b.importance ?? 3) - (a.importance ?? 3))
+      .slice(0, limit)
+      .map((e) => ({
+        id: e.id,
+        content: e.content,
+        namespace: e.namespace,
+        importance: e.importance ?? 3,
+        updatedAt: e.updatedAt,
+        savedAt: e.savedAt,
+      }));
+  } catch {
+    return [];
+  }
+}
