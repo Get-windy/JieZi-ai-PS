@@ -100,6 +100,12 @@ const TaskCreateToolSchema = Type.Object({
    * 声明前置依赖，系统会自动将任务状态标记为 blocked
    */
   blockedBy: Type.Optional(Type.Array(Type.String({ maxLength: 128 }))),
+  /**
+   * 上级管理者ID（可选）
+   * coordinator/parent agent 分配子任务时传入自身的 agentId，使其具备查看和写入此任务工作日志的权限
+   * 适用场景：coordinator 创建子任务并将其分配给 sub-agent，希望后续能追踪进展
+   */
+  supervisorId: Type.Optional(Type.String({ maxLength: 128 })),
 });
 
 /**
@@ -290,6 +296,7 @@ export function createTaskCreateTool(opts?: {
         typeof params.estimatedHours === "number" ? params.estimatedHours : undefined;
       const parentTaskId = readStringParam(params, "parentTaskId");
       const blockedBy = Array.isArray(params.blockedBy) ? params.blockedBy.map(String) : undefined;
+      const supervisorId = readStringParam(params, "supervisorId");
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
@@ -315,6 +322,7 @@ export function createTaskCreateTool(opts?: {
           parentTaskId: parentTaskId || undefined,
           estimatedHours,
           blockedBy: blockedBy || undefined,
+          supervisorId: supervisorId || undefined,
         });
 
         // 如果有子任务关系，更新父任务的 subtasks 列表
@@ -760,7 +768,7 @@ export function createTaskWorklogAddTool(opts?: { currentAgentId?: string }): An
     label: "Task Worklog Add",
     name: "task_worklog_add",
     description:
-      "Record a work log entry for a task (agent use only). BEST PRACTICES: (1) log 'started' when you begin working, (2) log progress periodically for long-running tasks, (3) log 'completed' or 'failed' when done, (4) always log 'blocked' with details when you cannot proceed. This creates an audit trail essential for task-driven work.",
+      "Record a work log entry for a task. Can be called by the task's assignee (worker agent) OR its supervisor (coordinator/parent agent who created the task). BEST PRACTICES: (1) log 'started' when you begin working, (2) log progress periodically for long-running tasks, (3) log 'completed' or 'failed' when done, (4) always log 'blocked' with details when you cannot proceed. This creates an audit trail essential for task-driven work.",
     parameters: TaskWorklogAddToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;

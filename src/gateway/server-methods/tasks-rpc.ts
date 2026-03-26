@@ -82,6 +82,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         undefined;
       const parentTaskId = params?.parentTaskId ? String(params.parentTaskId) : undefined;
       const tags = params?.tags ? (params.tags as string[]) : [];
+      const supervisorId = params?.supervisorId ? String(params.supervisorId) : undefined;
 
       // 验证参数
       if (!title || title.length < 1 || title.length > 200) {
@@ -100,7 +101,7 @@ export const tasksRpc: GatewayRequestHandlers = {
           undefined,
           errorShape(
             ErrorCodes.INVALID_REQUEST,
-            "项目任务（scope=project）必须关联 projectId。若为个人待办请传 scope=\"personal\"",
+            '项目任务（scope=project）必须关联 projectId。若为个人待办请传 scope="personal"',
           ),
         );
         return;
@@ -164,6 +165,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         projectId,
         parentTaskId,
         dueDate,
+        supervisorId,
         timeTracking: {
           timeSpent: 0,
           lastActivityAt: Date.now(),
@@ -1007,12 +1009,14 @@ export const tasksRpc: GatewayRequestHandlers = {
         return;
       }
 
+      // 权限检查 - 执行者或上级管理者均可写工作日志
       const isAssignee = (task.assignees ?? []).some((a) => a.id === agentId);
-      if (!isAssignee) {
+      const isSupervisor = task.supervisorId === agentId;
+      if (!isAssignee && !isSupervisor) {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "智能助手不是此任务的执行者"),
+          errorShape(ErrorCodes.INVALID_REQUEST, "智能助手不是此任务的执行者或管理者"),
         );
         return;
       }

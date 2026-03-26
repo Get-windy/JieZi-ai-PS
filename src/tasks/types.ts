@@ -128,6 +128,7 @@ export interface Task {
 
   // 分配信息
   assignees: TaskAssignee[]; // 执行者列表（支持人类和智能助手）
+  supervisorId?: string; // 上级管理者ID（coordinator/parent agent）—— 可以读写此任务的工作日志，但不参与执行
 
   // 任务属性
   status: TaskStatus;
