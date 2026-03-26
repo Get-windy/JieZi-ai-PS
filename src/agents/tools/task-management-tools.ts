@@ -51,6 +51,12 @@ const TaskCreateToolSchema = Type.Object({
    * 任务驱动工作模式的前提是任务定义清晰，必须描述：做什么、为什么做、完成标准是什么
    */
   description: Type.String({ minLength: 1, maxLength: 4000 }),
+  /**
+   * 任务作用域（必填）
+   * - personal: 私人任务（个人待办、学习计划、个人事项）— 无需 project，结果写入自身私有记忆
+   * - project:  项目任务（团队协作、功能开发、交付物）— 必须传入 project，结果写入项目共享记忆
+   */
+  scope: Type.Union([Type.Literal("personal"), Type.Literal("project")]),
   /** 任务优先级（可选，默认medium） */
   priority: Type.Optional(TaskPriority),
   /** 截止时间（可选，ISO 8601格式） */
@@ -59,7 +65,10 @@ const TaskCreateToolSchema = Type.Object({
   assignee: Type.Optional(Type.String({ maxLength: 64 })),
   /** 任务标签（可选） */
   tags: Type.Optional(Type.Array(Type.String({ maxLength: 32 }))),
-  /** 所属项目ID（可选，用于多项目隔离，如 "wo-shi-renlei"） */
+  /**
+   * 所属项目 ID（scope=project 时必填）
+   * scope=personal 时可不传，项目任务必须传入正确的项目 ID
+   */
   project: Type.Optional(Type.String({ maxLength: 128 })),
   /** 所属团队ID（可选） */
   teamId: Type.Optional(Type.String({ maxLength: 128 })),
@@ -91,6 +100,12 @@ const TaskCreateToolSchema = Type.Object({
    * 声明前置依赖，系统会自动将任务状态标记为 blocked
    */
   blockedBy: Type.Optional(Type.Array(Type.String({ maxLength: 128 }))),
+  /**
+   * 上级管理者ID（可选）
+   * coordinator/parent agent 分配子任务时传入自身的 agentId，使其具备查看和写入此任务工作日志的权限
+   * 适用场景：coordinator 创建子任务并将其分配给 sub-agent，希望后续能追踪进展
+   */
+  supervisorId: Type.Optional(Type.String({ maxLength: 128 })),
 });
 
 /**
@@ -245,11 +260,7 @@ const TaskWorklogAddToolSchema = Type.Object({
    * partial: 部分完成，需要说明完成了哪些、还剥何未完成
    */
   result: Type.Optional(
-    Type.Union([
-      Type.Literal("success"),
-      Type.Literal("failure"),
-      Type.Literal("partial"),
-    ]),
+    Type.Union([Type.Literal("success"), Type.Literal("failure"), Type.Literal("partial")]),
   ),
   /** 失败时的错误信息（当 result=failure 时建议填写） */
   errorMessage: Type.Optional(Type.String({ maxLength: 1000 })),
@@ -266,7 +277,7 @@ export function createTaskCreateTool(opts?: {
     label: "Task Create",
     name: "task_create",
     description:
-      "Create a new task with REQUIRED title and description (must describe: what to do, why, and completion criteria). Optional: priority, due date, assignee, tags, project ID, task type, estimatedHours (hours), parentTaskId (for subtask decomposition), blockedBy (list of blocking task IDs). Returns the created task with a unique ID.",
+      'Create a new task. REQUIRED: title, description, scope ("personal" for private todos | "project" for team work). scope=project REQUIRES project (project ID). Results of personal tasks go to agent private memory; project tasks go to project shared memory.',
     parameters: TaskCreateToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -277,6 +288,7 @@ export function createTaskCreateTool(opts?: {
       const assignee = readStringParam(params, "assignee") || opts?.currentAgentId;
       const tags = Array.isArray(params.tags) ? params.tags.map(String) : [];
       const project = readStringParam(params, "project");
+      const scope = params?.scope === "personal" ? "personal" : "project";
       const teamId = readStringParam(params, "teamId");
       const organizationId = readStringParam(params, "organizationId");
       const type = readStringParam(params, "type");
@@ -284,6 +296,7 @@ export function createTaskCreateTool(opts?: {
         typeof params.estimatedHours === "number" ? params.estimatedHours : undefined;
       const parentTaskId = readStringParam(params, "parentTaskId");
       const blockedBy = Array.isArray(params.blockedBy) ? params.blockedBy.map(String) : undefined;
+      const supervisorId = readStringParam(params, "supervisorId");
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
@@ -303,11 +316,13 @@ export function createTaskCreateTool(opts?: {
           status: "pending",
           createdAt: Date.now(),
           projectId: project || undefined,
+          scope,
           teamId: teamId || undefined,
           organizationId: organizationId || undefined,
           parentTaskId: parentTaskId || undefined,
           estimatedHours,
           blockedBy: blockedBy || undefined,
+          supervisorId: supervisorId || undefined,
         });
 
         // 如果有子任务关系，更新父任务的 subtasks 列表
@@ -429,9 +444,7 @@ export function createTaskListTool(opts?: {
             ? {
                 nextTask,
                 nextTaskTip: nextTask
-                  ? `建议优先处理: "${
-                      (nextTask as Record<string, unknown>).title
-                    }" (优先级: ${(nextTask as Record<string, unknown>).priority})`
+                  ? `建议优先处理: "${String((nextTask as Record<string, unknown>).title)}" (优先级: ${String((nextTask as Record<string, unknown>).priority)})`
                   : "暂无待处理任务",
               }
             : {}),
@@ -636,9 +649,7 @@ export function createTaskDeleteTool(opts?: {
  * 创建任务详情查询工具
  * AI agent 在执行任务前，应先调用此工具获取任务完整上下文（描述/评论/工作日志）
  */
-export function createTaskGetTool(opts?: {
-  currentAgentId?: string;
-}): AnyAgentTool {
+export function createTaskGetTool(opts?: { currentAgentId?: string }): AnyAgentTool {
   return {
     label: "Task Get",
     name: "task_get",
@@ -663,7 +674,7 @@ export function createTaskGetTool(opts?: {
           });
         }
 
-        const task = response as Record<string, unknown>;
+        const task = response;
         const comments = (task.comments as unknown[]) || [];
         const workLogs = (task.workLogs as unknown[]) || [];
 
@@ -683,10 +694,8 @@ export function createTaskGetTool(opts?: {
               : 0,
           },
           // 建议 agent 在开始工作之前先阅读最近的评论，了解任务最新进展
-          latestComment:
-            comments.length > 0 ? comments[comments.length - 1] : null,
-          latestWorkLog:
-            workLogs.length > 0 ? workLogs[workLogs.length - 1] : null,
+          latestComment: comments.length > 0 ? comments[comments.length - 1] : null,
+          latestWorkLog: workLogs.length > 0 ? workLogs[workLogs.length - 1] : null,
         });
       } catch (error) {
         return jsonResult({
@@ -702,9 +711,7 @@ export function createTaskGetTool(opts?: {
  * 创建子任务创建工具
  * 实现任务驱动工作模式的核心：复杂任务分解为可执行的子任务
  */
-export function createTaskSubtaskCreateTool(opts?: {
-  currentAgentId?: string;
-}): AnyAgentTool {
+export function createTaskSubtaskCreateTool(opts?: { currentAgentId?: string }): AnyAgentTool {
   return {
     label: "Task Subtask Create",
     name: "task_subtask_create",
@@ -756,14 +763,12 @@ export function createTaskSubtaskCreateTool(opts?: {
  * 主要供 AI agent 在执行任务过程中持续记录工作进展，实现任务可追源性
  * 最佳实践：开始工作时记录 "started"，完成时记录 "completed"，遇到隐贾时记录 "blocked"
  */
-export function createTaskWorklogAddTool(opts?: {
-  currentAgentId?: string;
-}): AnyAgentTool {
+export function createTaskWorklogAddTool(opts?: { currentAgentId?: string }): AnyAgentTool {
   return {
     label: "Task Worklog Add",
     name: "task_worklog_add",
     description:
-      "Record a work log entry for a task (agent use only). BEST PRACTICES: (1) log 'started' when you begin working, (2) log progress periodically for long-running tasks, (3) log 'completed' or 'failed' when done, (4) always log 'blocked' with details when you cannot proceed. This creates an audit trail essential for task-driven work.",
+      "Record a work log entry for a task. Can be called by the task's assignee (worker agent) OR its supervisor (coordinator/parent agent who created the task). BEST PRACTICES: (1) log 'started' when you begin working, (2) log progress periodically for long-running tasks, (3) log 'completed' or 'failed' when done, (4) always log 'blocked' with details when you cannot proceed. This creates an audit trail essential for task-driven work.",
     parameters: TaskWorklogAddToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -792,14 +797,20 @@ export function createTaskWorklogAddTool(opts?: {
 
         // 如果 action 是 blocked，提醒同时更新任务状态
         const blockingActions = ["blocked", "stuck", "waiting", "cannot-proceed"];
-        const isBlocking = blockingActions.some((a) =>
-          action.toLowerCase().includes(a),
-        );
+        const isBlocking = blockingActions.some((a) => action.toLowerCase().includes(a));
 
         return jsonResult({
           success: true,
           message: `Work log recorded for task ${taskId}: [${action}]`,
-          worklog: response || { id: worklogId, taskId, agentId: opts?.currentAgentId, action, details, duration, result },
+          worklog: response || {
+            id: worklogId,
+            taskId,
+            agentId: opts?.currentAgentId,
+            action,
+            details,
+            duration,
+            result,
+          },
           reminder: isBlocking
             ? "任务被阻塞时，建议同时调用 task_update 将任务状态更新为 blocked，并添加阻塞原因注释"
             : undefined,

@@ -3,12 +3,6 @@ import {
   type SignalTextStyleRange,
 } from "../../../upstream/extensions/signal/src/format.js";
 import { sendMessageSignal } from "../../../upstream/extensions/signal/src/send.js";
-import {
-  chunkByParagraph,
-  chunkMarkdownTextWithMode,
-  resolveChunkMode,
-  resolveTextChunkLimit,
-} from "../../auto-reply/chunk.js";
 import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import { resolveChannelMediaMaxBytes } from "../../../upstream/src/channels/plugins/media-limits.js";
 import { loadChannelOutboundAdapter } from "../../../upstream/src/channels/plugins/outbound/load.js";
@@ -23,30 +17,53 @@ import {
   resolveMirroredTranscriptText,
 } from "../../../upstream/src/config/sessions.js";
 import { fireAndForgetHook } from "../../../upstream/src/hooks/fire-and-forget.js";
-import { createInternalHookEvent, triggerInternalHook } from "../../../upstream/src/hooks/internal-hooks.js";
+import {
+  createInternalHookEvent,
+  triggerInternalHook,
+} from "../../../upstream/src/hooks/internal-hooks.js";
 import {
   buildCanonicalSentMessageHookContext,
   toInternalMessageSentContext,
   toPluginMessageContext,
   toPluginMessageSentEvent,
 } from "../../../upstream/src/hooks/message-hook-mappers.js";
-import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
-import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
-import { getGlobalHookRunner } from "../../../upstream/src/plugins/hook-runner-global.js";
 import { throwIfAborted } from "../../../upstream/src/infra/outbound/abort.js";
-import { ackDelivery, enqueueDelivery, failDelivery } from "../../../upstream/src/infra/outbound/delivery-queue.js";
-import type { OutboundIdentity } from "./identity.js";
+import { resolveOutboundChannelPlugin } from "../../../upstream/src/infra/outbound/channel-resolution.js";
+import {
+  ackDelivery,
+  enqueueDelivery,
+  failDelivery,
+} from "../../../upstream/src/infra/outbound/delivery-queue.js";
 import type { DeliveryMirror } from "../../../upstream/src/infra/outbound/mirror.js";
+import {
+  isPlainTextSurface,
+  sanitizeForPlainText,
+} from "../../../upstream/src/infra/outbound/sanitize-text.js";
+import {
+  resolveOutboundSendDep,
+  type OutboundSendDeps,
+} from "../../../upstream/src/infra/outbound/send-deps.js";
+import type { OutboundSessionContext } from "../../../upstream/src/infra/outbound/session-context.js";
+import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
+import { getGlobalHookRunner } from "../../../upstream/src/plugins/hook-runner-global.js";
+import {
+  chunkByParagraph,
+  chunkMarkdownTextWithMode,
+  resolveChunkMode,
+  resolveTextChunkLimit,
+} from "../../auto-reply/chunk.js";
+import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
+import type { OutboundIdentity } from "./identity.js";
 import type { NormalizedOutboundPayload } from "./payloads.js";
 import { normalizeReplyPayloadsForDelivery } from "./payloads.js";
-import { isPlainTextSurface, sanitizeForPlainText } from "../../../upstream/src/infra/outbound/sanitize-text.js";
-import { resolveOutboundSendDep, type OutboundSendDeps } from "../../../upstream/src/infra/outbound/send-deps.js";
-import type { OutboundSessionContext } from "../../../upstream/src/infra/outbound/session-context.js";
 import type { OutboundChannel } from "./targets.js";
 
 export type { NormalizedOutboundPayload } from "./payloads.js";
 export { normalizeOutboundPayloads } from "./payloads.js";
-export { resolveOutboundSendDep, type OutboundSendDeps } from "../../../upstream/src/infra/outbound/send-deps.js";
+export {
+  resolveOutboundSendDep,
+  type OutboundSendDeps,
+} from "../../../upstream/src/infra/outbound/send-deps.js";
 
 const log = createSubsystemLogger("outbound/deliver");
 const TELEGRAM_TEXT_LIMIT = 4096;
@@ -113,6 +130,13 @@ type ChannelHandlerParams = {
 
 // Channel docking: outbound delivery delegates to plugin.outbound adapters.
 async function createChannelHandler(params: ChannelHandlerParams): Promise<ChannelHandler> {
+  // Recover channel plugins the same way target resolution does so direct cron
+  // delivery still works when a prior test or lazy path left the active plugin
+  // registry empty.
+  resolveOutboundChannelPlugin({
+    channel: params.channel,
+    cfg: params.cfg,
+  });
   const outbound = await loadChannelOutboundAdapter(params.channel);
   const handler = createPluginHandler({ ...params, outbound });
   if (!handler) {

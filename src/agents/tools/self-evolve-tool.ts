@@ -20,7 +20,10 @@
 import { Type } from "@sinclair/typebox";
 import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
 import { jsonResult, readStringParam } from "../../../upstream/src/agents/tools/common.js";
-import { callGatewayTool, readGatewayCallOptions } from "../../../upstream/src/agents/tools/gateway.js";
+import {
+  callGatewayTool,
+  readGatewayCallOptions,
+} from "../../../upstream/src/agents/tools/gateway.js";
 
 // ============================================================================
 // Schemas
@@ -39,6 +42,16 @@ const SkillCategory = Type.Union([
   Type.Literal("template"), // 可复用模板
 ]);
 
+// P2 AgentEvolver 细粒度步骤归因
+const StepOutcomeSchema = Type.Object({
+  /** 步骤简述（工具调用名/动作描述） */
+  step: Type.String({ minLength: 1, maxLength: 100 }),
+  /** 步骤结果 */
+  result: Type.Union([Type.Literal("success"), Type.Literal("failure"), Type.Literal("skipped")]),
+  /** 备注（可选） */
+  note: Type.Optional(Type.String({ maxLength: 200 })),
+});
+
 const AgentReflectSchema = Type.Object({
   /** 本次任务/对话的简要描述 */
   taskSummary: Type.String({ minLength: 1, maxLength: 500 }),
@@ -50,10 +63,12 @@ const AgentReflectSchema = Type.Object({
   lessons: Type.Optional(Type.Array(Type.String({ maxLength: 200 }), { maxItems: 5 })),
   /** 相关标签（可选） */
   tags: Type.Optional(Type.Array(Type.String({ maxLength: 32 }), { maxItems: 10 })),
+  /** P2 AgentEvolver：细粒度步骤归因（可选）— 列出每个关键步骤的执行结果 */
+  steps: Type.Optional(Type.Array(StepOutcomeSchema, { maxItems: 20 })),
 });
 
 const AgentSkillSaveSchema = Type.Object({
-  /** 技能名称（简洁描述性，如"Python数据清洗流程"） */
+  /** 技能名称（简洁描述性，如“Python数据清洗流程”） */
   name: Type.String({ minLength: 1, maxLength: 100 }),
   /** 技能描述：适用场景、前提条件、预期效果 */
   description: Type.String({ minLength: 1, maxLength: 500 }),
@@ -65,6 +80,29 @@ const AgentSkillSaveSchema = Type.Object({
   triggers: Type.Optional(Type.Array(Type.String({ maxLength: 50 }), { maxItems: 20 })),
   /** 技能标签 */
   tags: Type.Optional(Type.Array(Type.String({ maxLength: 32 }), { maxItems: 10 })),
+  /** P3 GEP: 是否将技能共享到全局库（为 true 时存入后自动 share） */
+  shareToGlobal: Type.Optional(Type.Boolean()),
+});
+
+/** P3 GEP 工具 Schema */
+const AgentSkillShareSchema = Type.Object({
+  skillId: Type.String({
+    minLength: 1,
+    description: "要共享的技能 ID（由 agent_skill_save 返回）",
+  }),
+});
+
+const AgentSkillImportSchema = Type.Object({
+  skillId: Type.String({
+    minLength: 1,
+    description: "全局库中的技能 ID（由 agent_skill_list_shared 列出）",
+  }),
+});
+
+const AgentSkillListSharedSchema = Type.Object({
+  category: Type.Optional(SkillCategory),
+  query: Type.Optional(Type.String({ maxLength: 200 })),
+  limit: Type.Optional(Type.Number({ minimum: 1, maximum: 50 })),
 });
 
 const AgentSkillListSchema = Type.Object({
@@ -81,10 +119,10 @@ const AgentSkillListSchema = Type.Object({
 // ============================================================================
 
 /**
- * agent_reflect — Reflexion 反思工具
+ * agent_reflect — Reflexion 反思工具（P2 AgentEvolver: 支持 steps 步骤归因）
  *
  * 每次任务结束后调用，生成自然语言反思，存储失败原因和改进建议。
- * 后续运行时历史反思会自动注入 context（由 before_prompt_build 钩子完成）。
+ * 同时自动将结果记录到性能画像（P1 HyperAgent）。
  */
 export function createAgentReflectTool(opts?: { agentId?: string }): AnyAgentTool {
   return {
@@ -95,6 +133,7 @@ export function createAgentReflectTool(opts?: { agentId?: string }): AnyAgentToo
       "Call this AFTER completing (or failing) a significant task to capture lessons learned. " +
       "These reflections will be automatically injected into future sessions for similar tasks. " +
       "outcome: 'success' | 'partial' | 'failure'. " +
+      "steps (optional): list each key action taken with its result — enables fine-grained attribution (AgentEvolver P2). " +
       "Be honest and specific — vague reflections provide no learning value.",
     parameters: AgentReflectSchema,
     execute: async (_toolCallId, args) => {
@@ -107,6 +146,7 @@ export function createAgentReflectTool(opts?: { agentId?: string }): AnyAgentToo
       const reflection = readStringParam(params, "reflection", { required: true });
       const lessons = Array.isArray(params.lessons) ? params.lessons.map(String) : [];
       const tags = Array.isArray(params.tags) ? params.tags.map(String) : [];
+      const steps = Array.isArray(params.steps) ? params.steps : undefined;
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
@@ -117,6 +157,7 @@ export function createAgentReflectTool(opts?: { agentId?: string }): AnyAgentToo
           reflection,
           lessons,
           tags,
+          ...(steps ? { steps } : {}),
           createdAt: Date.now(),
         });
 
@@ -138,10 +179,11 @@ export function createAgentReflectTool(opts?: { agentId?: string }): AnyAgentToo
 }
 
 /**
- * agent_skill_save — Voyager 技能库工具
+ * agent_skill_save — Voyager 技能库工具（P3 GEP: 支持 shareToGlobal）
  *
- * 成功完成一个有价值的任务后，将解决方案压缩为"技能"存入技能库。
+ * 成功完成一个有价値的任务后，将解决方案压缩为“技能”存入技能库。
  * 技能库会随使用不断扩充，后续类似任务可直接复用。
+ * shareToGlobal=true 时将技能同时推送到全局局共享库供其他 Agent 导入。
  */
 export function createAgentSkillSaveTool(opts?: { agentId?: string }): AnyAgentTool {
   return {
@@ -152,7 +194,8 @@ export function createAgentSkillSaveTool(opts?: { agentId?: string }): AnyAgentT
       "Use this when you've developed a generalizable approach worth preserving for future use. " +
       "Good candidates: multi-step workflows, effective code patterns, decision strategies, reusable templates. " +
       "categories: 'workflow' | 'code' | 'strategy' | 'template'. " +
-      "Include clear triggers (keywords) so the skill can be recalled when similar tasks arise.",
+      "Include clear triggers (keywords) so the skill can be recalled when similar tasks arise. " +
+      "Set shareToGlobal=true to share this skill with all agents in the global skill library (GEP P3).",
     parameters: AgentSkillSaveSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -166,6 +209,7 @@ export function createAgentSkillSaveTool(opts?: { agentId?: string }): AnyAgentT
         | "template";
       const triggers = Array.isArray(params.triggers) ? params.triggers.map(String) : [];
       const tags = Array.isArray(params.tags) ? params.tags.map(String) : [];
+      const shareToGlobal = params.shareToGlobal === true;
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
@@ -181,12 +225,26 @@ export function createAgentSkillSaveTool(opts?: { agentId?: string }): AnyAgentT
         });
 
         const result = response as { id?: string; action?: string } | null;
+
+        // P3 GEP: shareToGlobal 时自动推送到全局库
+        if (shareToGlobal && result?.id) {
+          try {
+            await callGatewayTool("evolve.skill.share", gatewayOpts, {
+              agentId: opts?.agentId,
+              skillId: result.id,
+            });
+          } catch {
+            /* 共享失败不影响本地保存 */
+          }
+        }
+
         return jsonResult({
           success: true,
-          message: `Skill "${name}" saved to skill library.`,
+          message: `Skill "${name}" saved to skill library${shareToGlobal ? " (shared globally)" : ""}.`,
           skillId: result?.id,
           action: result?.action ?? "added",
           category,
+          sharedGlobally: shareToGlobal,
         });
       } catch (error) {
         return jsonResult({
@@ -242,6 +300,127 @@ export function createAgentSkillListTool(opts?: { agentId?: string }): AnyAgentT
         return jsonResult({
           success: false,
           error: `Failed to list skills: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * agent_skill_share — P3 GEP 技能共享工具
+ * 将本地技能推送到全局共享库，其他 Agent 可按需导入。
+ */
+export function createAgentSkillShareTool(opts?: { agentId?: string }): AnyAgentTool {
+  return {
+    label: "Agent Skill Share",
+    name: "agent_skill_share",
+    description:
+      "Share a skill from your local library to the global shared skill library (GEP Protocol). " +
+      "Other agents can then discover and import it. Use this after saving a broadly applicable skill.",
+    parameters: AgentSkillShareSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const skillId = readStringParam(params, "skillId", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const response = await callGatewayTool("evolve.skill.share", gatewayOpts, {
+          agentId: opts?.agentId,
+          skillId,
+        });
+        const result = response as { name?: string; action?: string; sharedAt?: number } | null;
+        return jsonResult({
+          success: true,
+          message: `Skill shared globally (action: ${result?.action ?? "shared"}).`,
+          skillId,
+          name: result?.name,
+          action: result?.action,
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to share skill: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * agent_skill_import — P3 GEP 技能导入工具
+ * 从全局库导入技能到本地技能库。
+ */
+export function createAgentSkillImportTool(opts?: { agentId?: string }): AnyAgentTool {
+  return {
+    label: "Agent Skill Import",
+    name: "agent_skill_import",
+    description:
+      "Import a skill from the global shared library into your local skill library. " +
+      "Use agent_skill_list_shared first to find available skills, then import by skillId.",
+    parameters: AgentSkillImportSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const skillId = readStringParam(params, "skillId", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const response = await callGatewayTool("evolve.skill.import", gatewayOpts, {
+          agentId: opts?.agentId,
+          skillId,
+        });
+        const result = response as { skillId?: string; name?: string; action?: string } | null;
+        return jsonResult({
+          success: true,
+          message: `Skill "${result?.name}" imported to local library (action: ${result?.action}).`,
+          localSkillId: result?.skillId,
+          name: result?.name,
+          action: result?.action,
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to import skill: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * agent_skill_list_shared — P3 GEP 全局局共享库检索工具
+ * 列出全局共享技能库中的技能，可按类型或关键词搜索。
+ */
+export function createAgentSkillListSharedTool(): AnyAgentTool {
+  return {
+    label: "Agent Skill List Shared",
+    name: "agent_skill_list_shared",
+    description:
+      "Search the global shared skill library contributed by all agents (GEP Protocol). " +
+      "Find skills shared by other agents. Use agent_skill_import to bring one into your local library.",
+    parameters: AgentSkillListSharedSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const category = readStringParam(params, "category");
+      const query = readStringParam(params, "query");
+      const limit = typeof params.limit === "number" ? params.limit : 10;
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const response = await callGatewayTool("evolve.skill.list.shared", gatewayOpts, {
+          category: category || undefined,
+          query: query || undefined,
+          limit,
+        });
+        const resp = response as { skills?: unknown[]; total?: number } | null;
+        const skills = resp && Array.isArray(resp.skills) ? resp.skills : [];
+        return jsonResult({
+          success: true,
+          count: skills.length,
+          skills,
+          filters: { category, query },
+          tip: "Use agent_skill_import with skillId to import a skill to your local library.",
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to list shared skills: ${error instanceof Error ? error.message : String(error)}`,
         });
       }
     },

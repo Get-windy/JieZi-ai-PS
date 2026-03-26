@@ -18,8 +18,20 @@ import type {
   ChannelPolicyConfig,
 } from "../config/types.channel-bindings.js";
 import type { AgentConfig } from "../config/types.agents.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import { loadConfig, writeConfigFile } from "../../upstream/src/config/config.js";
+import { getChannelPlugin, listChannelPlugins } from "../../upstream/src/channels/plugins/index.js";
 import { channelBindingResolver } from "./bindings/resolver.js";
+
+/** AgentConfig 扩展：携带本地 channelBindings 字段 */
+type AgentConfigWithBindings = AgentConfig & {
+  channelBindings?: AgentChannelBindings;
+};
+
+/** 从 OpenClawConfig 取出 agents.list（类型安全） */
+function getAgentsList(config: OpenClawConfig): AgentConfigWithBindings[] {
+  return (config.agents?.list ?? []) as AgentConfigWithBindings[];
+}
 
 /**
  * 通道管理器
@@ -45,25 +57,24 @@ export class ChannelManager {
    * cfg.bindings 格式: { agentId, match: { channel, accountId } }
    * 只同步已启用的绑定。
    */
-  private syncToCfgBindings(config: any, agentId: string, channelBindings: AgentChannelBindings): void {
+  private syncToCfgBindings(config: OpenClawConfig, agentId: string, channelBindings: AgentChannelBindings): void {
     if (!Array.isArray(config.bindings)) {
       config.bindings = [];
     }
-    // 移除该 agent 由本工具管理的旧条目（带 _managedBy 标记）
-    config.bindings = (config.bindings as any[]).filter(
-      (b: any) => !(b._managedBy === "channelManager" && b.agentId === agentId),
+    // 移除该 agent 由本工具管理的旧条目（comment 以 "[cm:" 开头）
+    config.bindings = config.bindings.filter(
+      (b) => !(b.agentId === agentId && typeof b.comment === "string" && b.comment.startsWith("[cm:")),
     );
-    // 写入已启用的绑定
+    // 写入已启用的绑定（标准 AgentRouteBinding，用 comment 存 bindingId）
     for (const binding of channelBindings.bindings) {
-      if (binding.enabled === false) continue;
+      if (binding.enabled === false) { continue; }
       config.bindings.push({
         agentId,
         match: {
           channel: binding.channelId,
           accountId: binding.accountId || "default",
         },
-        _managedBy: "channelManager",
-        _bindingId: binding.id,
+        comment: `[cm:${binding.id}]`,
       });
     }
   }
@@ -75,17 +86,14 @@ export class ChannelManager {
    * @returns 通道绑定配置
    */
   async getAgentChannelBindings(agentId: string): Promise<AgentChannelBindings | null> {
-    const config = await loadConfig();
+    const config = loadConfig();
     const agent = this.findAgent(config, agentId);
 
     if (!agent) {
       throw new Error(`Agent not found: ${agentId}`);
     }
 
-    // 获取通道绑定配置
-    const channelBindings = (agent as any).channelBindings as AgentChannelBindings | undefined;
-
-    return channelBindings || null;
+    return agent.channelBindings ?? null;
   }
 
   /**
@@ -105,7 +113,7 @@ export class ChannelManager {
       throw new Error(`Invalid binding configuration: ${validation.errors?.join(", ")}`);
     }
 
-    const config = await loadConfig();
+    const config = loadConfig();
     const agent = this.findAgent(config, agentId);
 
     if (!agent) {
@@ -113,13 +121,10 @@ export class ChannelManager {
     }
 
     // 获取或初始化通道绑定配置
-    let channelBindings = (agent as any).channelBindings as AgentChannelBindings | undefined;
-    if (!channelBindings) {
-      channelBindings = {
-        bindings: [],
-      };
-      (agent as any).channelBindings = channelBindings;
+    if (!agent.channelBindings) {
+      agent.channelBindings = { bindings: [] };
     }
+    const channelBindings = agent.channelBindings;
 
     // 检查是否已存在相同的绑定
     const existingBinding = channelBindings.bindings.find(
@@ -165,14 +170,14 @@ export class ChannelManager {
     bindingId: string,
     updates: Partial<ChannelAccountBinding>,
   ): Promise<{ success: boolean }> {
-    const config = await loadConfig();
+    const config = loadConfig();
     const agent = this.findAgent(config, agentId);
 
     if (!agent) {
       throw new Error(`Agent not found: ${agentId}`);
     }
 
-    const channelBindings = (agent as any).channelBindings as AgentChannelBindings | undefined;
+    const channelBindings = agent.channelBindings;
     if (!channelBindings || !channelBindings.bindings) {
       throw new Error(`No channel bindings found for agent ${agentId}`);
     }
@@ -216,14 +221,14 @@ export class ChannelManager {
    * @returns 成功标识
    */
   async removeChannelBinding(agentId: string, bindingId: string): Promise<{ success: boolean }> {
-    const config = await loadConfig();
+    const config = loadConfig();
     const agent = this.findAgent(config, agentId);
 
     if (!agent) {
       throw new Error(`Agent not found: ${agentId}`);
     }
 
-    const channelBindings = (agent as any).channelBindings as AgentChannelBindings | undefined;
+    const channelBindings = agent.channelBindings;
     if (!channelBindings || !channelBindings.bindings) {
       throw new Error(`No channel bindings found for agent ${agentId}`);
     }
@@ -371,14 +376,14 @@ export class ChannelManager {
     agentId: string,
     priorities: Record<string, number>,
   ): Promise<{ success: boolean }> {
-    const config = await loadConfig();
+    const config = loadConfig();
     const agent = this.findAgent(config, agentId);
 
     if (!agent) {
       throw new Error(`Agent not found: ${agentId}`);
     }
 
-    const channelBindings = (agent as any).channelBindings as AgentChannelBindings | undefined;
+    const channelBindings = agent.channelBindings;
     if (!channelBindings || !channelBindings.bindings) {
       throw new Error(`No channel bindings found for agent ${agentId}`);
     }
@@ -428,7 +433,7 @@ export class ChannelManager {
     agentId: string,
     policy: ChannelPolicyConfig,
   ): Promise<{ success: boolean }> {
-    const config = await loadConfig();
+    const config = loadConfig();
     const agent = this.findAgent(config, agentId);
 
     if (!agent) {
@@ -436,13 +441,10 @@ export class ChannelManager {
     }
 
     // 获取或初始化通道绑定配置
-    let channelBindings = (agent as any).channelBindings as AgentChannelBindings | undefined;
-    if (!channelBindings) {
-      channelBindings = {
-        bindings: [],
-      };
-      (agent as any).channelBindings = channelBindings;
+    if (!agent.channelBindings) {
+      agent.channelBindings = { bindings: [] };
     }
+    const channelBindings = agent.channelBindings;
 
     // 设置默认策略
     channelBindings.defaultPolicy = policy;
@@ -458,11 +460,70 @@ export class ChannelManager {
   }
 
   /**
+   * 清理所有 agent 中引用了不存在账号的孤立绑定
+   *
+   * 当通道账号被删除后调用此方法，自动从所有 agent 的 channelBindings
+   * 中移除已无效的绑定记录（channelId + accountId 在配置中已不存在）。
+   *
+   * @param cfg - 已更新的配置（账号删除后的）
+   * @returns 被清理的绑定数量
+   */
+  async purgeOrphanBindings(cfg: OpenClawConfig): Promise<number> {
+    // 构建当前有效账号集合：Set<"channelId:accountId">
+    const validKeys = new Set<string>();
+    for (const plugin of listChannelPlugins()) {
+      const accountIds: string[] = plugin.config.listAccountIds(cfg);
+      for (const accountId of accountIds) {
+        validKeys.add(`${plugin.id}:${accountId}`);
+      }
+    }
+
+    const agents = getAgentsList(cfg);
+    let totalRemoved = 0;
+    let configDirty = false;
+
+    for (const agent of agents) {
+      const channelBindings = agent.channelBindings;
+      if (!channelBindings?.bindings?.length) { continue; }
+
+      const before = channelBindings.bindings.length;
+      channelBindings.bindings = channelBindings.bindings.filter((b) => {
+        // accountId 为空或 "default" 时只校验 channelId 是否还有任意账号
+        if (!b.accountId || b.accountId === "default") {
+          // channelId 来自 ChannelAccountBinding，类型为 string，需转为 ChannelId
+          const plugin = getChannelPlugin(b.channelId as Parameters<typeof getChannelPlugin>[0]);
+          if (!plugin) { return false; }
+          const ids: string[] = plugin.config.listAccountIds(cfg);
+          return ids.length > 0;
+        }
+        return validKeys.has(`${b.channelId}:${b.accountId}`);
+      });
+
+      const removed = before - channelBindings.bindings.length;
+      if (removed > 0) {
+        totalRemoved += removed;
+        configDirty = true;
+        // 同步到 cfg.bindings
+        this.syncToCfgBindings(cfg, agent.id, channelBindings);
+        console.log(
+          `[ChannelManager] purgeOrphanBindings: removed ${removed} orphan binding(s) from agent ${agent.id}`,
+        );
+      }
+    }
+
+    if (configDirty) {
+      await writeConfigFile(cfg);
+      console.log(`[ChannelManager] purgeOrphanBindings: saved config, total removed=${totalRemoved}`);
+    }
+
+    return totalRemoved;
+  }
+
+  /**
    * 辅助方法：查找智能助手
    */
-  private findAgent(config: any, agentId: string): AgentConfig | undefined {
-    const agents = config?.agents?.list || [];
-    return agents.find((a: AgentConfig) => a.id === agentId);
+  private findAgent(config: OpenClawConfig, agentId: string): AgentConfigWithBindings | undefined {
+    return getAgentsList(config).find((a) => a.id === agentId);
   }
 
   /**
@@ -472,12 +533,12 @@ export class ChannelManager {
    * 本方法确保它们被同步到上游路由读取的 cfg.bindings。
    */
   async migrateAllAgentBindingsToCfg(): Promise<void> {
-    const config = await loadConfig();
-    const agents: AgentConfig[] = (config as any)?.agents?.list ?? [];
+    const config = loadConfig();
+    const agents = getAgentsList(config);
     let migrated = 0;
     for (const agent of agents) {
-      const channelBindings = (agent as any).channelBindings as AgentChannelBindings | undefined;
-      if (!channelBindings?.bindings?.length) continue;
+      const channelBindings = agent.channelBindings;
+      if (!channelBindings?.bindings?.length) { continue; }
       this.syncToCfgBindings(config, agent.id, channelBindings);
       migrated++;
     }

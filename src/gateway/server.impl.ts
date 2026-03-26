@@ -737,6 +737,19 @@ export async function startGatewayServer(
     }
   }
 
+  // 启动时自动归档过期已完成的任务（冷/热存储分离，保持调度性能）
+  if (!minimalTestGateway) {
+    try {
+      const { archiveOldTasks } = await import("../tasks/storage.js");
+      const { archived } = await archiveOldTasks();
+      if (archived > 0) {
+        log.info(`Task archive: moved ${archived} completed task(s) to cold storage`);
+      }
+    } catch (err) {
+      log.warn(`Task archive on startup failed: ${String(err)}`);
+    }
+  }
+
   // 启动 Agent 任务唤醒调度器（定期扫描并唤醒有待办任务的 Agent）
   if (!minimalTestGateway) {
     try {

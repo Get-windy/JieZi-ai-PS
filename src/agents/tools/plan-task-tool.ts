@@ -257,7 +257,7 @@ export function createPlanCompleteTool(): AnyAgentTool {
       plan.completedAt = plan.completedAt ?? Date.now();
 
       // Clean up from registry after a short delay to avoid use-after-complete bugs
-      setTimeout(() => PLAN_REGISTRY.delete(params.planId), 60_000);
+      setTimeout(() => PLAN_REGISTRY?.delete(params.planId), 60_000);
 
       const durationMs = plan.completedAt - plan.createdAt;
 

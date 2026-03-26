@@ -165,6 +165,8 @@ export function renderChat(props: ChatProps) {
     }
   };
 
+  const hasMessages = props.messages.length > 0 || props.stream !== null;
+
   const thread = html`
     <div
       class="chat-thread"
@@ -175,9 +177,24 @@ export function renderChat(props: ChatProps) {
       ${
         props.loading
           ? html`
-              <div class="muted">${t("chat.loading")}</div>
+              <div class="chat-empty-state">
+                <div class="muted">${t("chat.loading")}</div>
+              </div>
             `
-          : nothing
+          : !hasMessages
+            ? html`
+              <div class="chat-empty-state">
+                <div class="chat-empty-state__icon">💬</div>
+                <div class="chat-empty-state__title">${t("chat.empty.title")}</div>
+                <div class="chat-empty-state__desc">${t("chat.empty.desc")}</div>
+                ${
+                  props.onRefresh
+                    ? html`<button class="btn btn--sm" type="button" @click=${props.onRefresh}>${t("chat.empty.refresh")}</button>`
+                    : nothing
+                }
+              </div>
+            `
+            : nothing
       }
       ${repeat(
         buildChatItems(props),

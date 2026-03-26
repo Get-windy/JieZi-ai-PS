@@ -178,7 +178,7 @@ function _getAgentManagedScope(
  */
 function resolveTaskContext(
   agentId: string,
-  projectId: string | undefined,
+  task: { projectId?: string; scope?: string } | undefined,
   cfg: OpenClawConfig,
 ): {
   workspaceDir: string;
@@ -189,7 +189,9 @@ function resolveTaskContext(
   const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
   const privateMemoryPath = path.join(workspaceDir, "MEMORY.md");
 
-  // 查找项目工作群：遍历所有群组，找第一个 projectId 匹配的
+  // 私人任务（scope=personal）不注入项目共享记忆
+  const projectId = task?.scope === "personal" ? undefined : task?.projectId;
+
   let projectGroupSessionKey: string | null = null;
   let sharedMemoryPath: string | null = null;
   if (projectId) {
@@ -197,7 +199,6 @@ function resolveTaskContext(
     const projectGroup = allGroups.find((g) => g.projectId === projectId);
     if (projectGroup) {
       projectGroupSessionKey = `group:${projectGroup.id}`;
-      // 项目共享记忆：存放在项目工作空间下，所有成员共同读写
       const groupWorkspaceDir = groupWorkspaceManager.getGroupWorkspaceDir(projectGroup.id);
       if (groupWorkspaceDir) {
         sharedMemoryPath = path.join(groupWorkspaceDir, "SHARED_MEMORY.md");
@@ -423,6 +424,12 @@ async function updateAgentField(
 }
 
 /**
+ * Per-agent 互斥锁：防止 scheduleNextTaskForAgent 并发执行导致双 in-progress 违规
+ * 场景：task.report 触发 + Task Wake 调度器同时触发，两者各自通过了 in-progress 检查
+ */
+const _scheduleNextTaskLocks = new Map<string, Promise<void>>();
+
+/**
  * 自动驱动 agent 的下一条 todo 任务（任务完成/取消/重置后复用）
  * 找出优先级最高且无依赖阻塞的第一条，自动设为 in-progress 并唤醒 agent
  */
@@ -431,6 +438,17 @@ export async function scheduleNextTaskForAgent(
   completedTaskId: string,
   _projectId?: string,
 ): Promise<void> {
+  // 串行化：同一 agentId 的调用排队等待，防止并发双推
+  const prev = _scheduleNextTaskLocks.get(agentId) ?? Promise.resolve();
+  let resolveLock!: () => void;
+  const current = new Promise<void>((resolve) => {
+    resolveLock = resolve;
+  });
+  _scheduleNextTaskLocks.set(
+    agentId,
+    prev.then(() => current),
+  );
+  await prev;
   try {
     // 先检查是否已有 in-progress 任务（防止并发触发导致双 in-progress 违规）
     // 调度器扫描 和 task.report 可能同时触发，需保证串行性
@@ -502,7 +520,7 @@ export async function scheduleNextTaskForAgent(
     const sessionKey = `agent:${agentId}:main`;
     const contextKey = `cron:task-next:${nextTask.id}`;
     const cfg = loadConfig();
-    const ctx = resolveTaskContext(agentId, nextTask.projectId, cfg);
+    const ctx = resolveTaskContext(agentId, nextTask, cfg);
     const queueRemaining = todoTasks.length - 1;
 
     const prompt = [
@@ -545,6 +563,8 @@ export async function scheduleNextTaskForAgent(
     );
   } catch (err) {
     console.warn(`[scheduleNextTask] Failed: ${String(err)}`);
+  } finally {
+    resolveLock();
   }
 }
 
@@ -3029,7 +3049,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     // 解析任务上下文：工作区路径、记忆文件路径、项目工作群
     const taskCtx = resolveTaskContext(
       normalizeAgentId(targetAgentId),
-      p?.projectId ? String(p.projectId) : undefined,
+      {
+        projectId: p?.projectId ? String(p.projectId) : undefined,
+      },
       cfg,
     );
     const taskLines = [

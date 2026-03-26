@@ -19,9 +19,11 @@ import { loadConfig } from "../../upstream/src/config/config.js";
 import { requestHeartbeatNow } from "../../upstream/src/infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
 import { listAgentIds, resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
+import { getTaskTypePerfScore } from "../gateway/server-methods/evolve-rpc.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { groupManager } from "../sessions/group-manager.js";
 import * as taskStorage from "../tasks/storage.js";
+import { groupWorkspaceManager } from "../workspace/group-workspace.js";
 
 // ============================================================================
 // 配置
@@ -54,40 +56,6 @@ const STARTUP_DELAY_MS = 5 * 1000; // 5 秒（等待基础模块初始化，避�
 let scanInterval: NodeJS.Timeout | null = null;
 
 let startupTimer: NodeJS.Timeout | null = null;
-
-/**
- * 从 Agent workspace 路径提取项目 ID
- */
-function extractProjectIdFromWorkspace(workspacePath: string): string | null {
-  if (!workspacePath) {
-    return null;
-  }
-
-  const normalizedPath = path.resolve(workspacePath);
-  const parts = normalizedPath.split(path.sep).filter(Boolean);
-
-  if (parts.length === 0) {
-    return null;
-  }
-
-  const lastName = parts[parts.length - 1];
-  const rootDir = parts.length >= 2 ? parts[parts.length - 2] : "";
-  const isWorkspaceMode =
-    rootDir.toLowerCase().includes("workspace") || rootDir.toLowerCase().includes("openclaw");
-
-  if (isWorkspaceMode) {
-    return null; // 工作组模式，无项目限制
-  }
-
-  const skipKeywords = ["workspace", "projects", "openclaw", "tmp"];
-  if (skipKeywords.some((kw) => lastName.toLowerCase().includes(kw))) {
-    if (parts.length >= 2) {
-      return parts[parts.length - 2];
-    }
-  }
-
-  return lastName || null;
-}
 
 // ============================================================================
 // 核心逻辑
@@ -194,8 +162,33 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
       }
 
       const agentWorkspaceDir = resolveAgentWorkspaceDir(cfg, normalizedId);
-      const agentProjectId = extractProjectIdFromWorkspace(agentWorkspaceDir);
       const agentMemoryPath = path.join(agentWorkspaceDir, "MEMORY.md");
+
+      /**
+       * 根据任务的 projectId 解析项目上下文（群组 sessionKey + 共享记忆路径）
+       * 与 scheduleNextTaskForAgent 保持一致
+       */
+      function resolveProjectCtx(task: { projectId?: string; scope?: string }): {
+        sharedMemoryPath: string | null;
+        projectGroupSessionKey: string | null;
+      } {
+        // 私人任务（scope=personal）不注入项目共享记忆
+        if (task.scope === "personal" || !task.projectId) {
+          return { sharedMemoryPath: null, projectGroupSessionKey: null };
+        }
+        const allGroups = groupManager.getAllGroups();
+        const projectGroup = allGroups.find((g) => g.projectId === task.projectId);
+        if (!projectGroup) {
+          return { sharedMemoryPath: null, projectGroupSessionKey: null };
+        }
+        const groupWorkspaceDir = groupWorkspaceManager.getGroupWorkspaceDir(projectGroup.id);
+        return {
+          projectGroupSessionKey: `group:${projectGroup.id}`,
+          sharedMemoryPath: groupWorkspaceDir
+            ? path.join(groupWorkspaceDir, "SHARED_MEMORY.md")
+            : null,
+        };
+      }
 
       // 预先构建项目 -> 工作群 sessionKey 的映射
       const projectGroupCache = new Map<string, string>();
@@ -329,19 +322,30 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
             .filter(Boolean)
             .join("\n");
 
-          const wakeMessage = [
-            `[TASK RETRY] Your previous task attempt timed out after ${stuckMinutes} minutes. Retrying now:`,
-            ``,
-            taskLines,
-            ``,
-            `Working Context:`,
-            `- Working Directory: ${agentWorkspaceDir}`,
-            `- Memory File: ${agentMemoryPath}`,
-            ``,
-            `IMPORTANT: Execute this task now. If you cannot complete it, update its status to "blocked" and explain why. Do NOT let it time out again.`,
-          ]
-            .filter(Boolean)
-            .join("\n");
+          const wakeMessage = (() => {
+            const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(activeTask);
+            return [
+              `[TASK RETRY] Your previous task attempt timed out after ${stuckMinutes} minutes. Retrying now:`,
+              ``,
+              taskLines,
+              ``,
+              `Working Context:`,
+              `- Working Directory: ${agentWorkspaceDir}`,
+              `- Your Personal Memory (only YOU may write this): ${agentMemoryPath}`,
+              sharedMemoryPath
+                ? `- Project Shared Memory (all team members read/write): ${sharedMemoryPath}`
+                : null,
+              projectGroupSessionKey
+                ? `- Project Group: sessionKey=${projectGroupSessionKey}`
+                : null,
+              ``,
+              `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
+              ``,
+              `IMPORTANT: Execute this task now. If you cannot complete it, update its status to "blocked" and explain why. Do NOT let it time out again.`,
+            ]
+              .filter(Boolean)
+              .join("\n");
+          })();
 
           enqueueSystemEvent(wakeMessage, {
             sessionKey,
@@ -413,21 +417,77 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
 
       // === 情况 B：无 in-progress，有 todo → 取优先级最高的 1 条唤醒 ===
       if (inProgressTasks.length === 0 && todoTasks.length > 0) {
-        // 过滤出属于该 agent 项目的任务
-        const validTodos = todoTasks.filter((task) => {
-          if (task.projectId && agentProjectId && task.projectId !== agentProjectId) {
-            stats.skippedTasks++;
-            return false;
+        // 逐期检测：todo 任务中如果有截止日已过且优先级不是 urgent，自动升级并通知 supervisor
+        // 如同自然人一早起来发现昨天的任务还没完成，上级会主动提醒
+        for (const t of todoTasks) {
+          if (t.dueDate && t.dueDate < now && t.priority !== "urgent") {
+            const overdueMinutes = Math.floor((now - t.dueDate) / 60000);
+            console.log(
+              `[Task Wake] Task ${t.id} (${t.title}) is overdue by ${overdueMinutes}min — auto-escalating priority to urgent`,
+            );
+            await taskStorage.updateTask(t.id, { priority: "urgent" });
+            // 通知 supervisor
+            const overdueSupRaw = t.supervisorId ?? t.creatorId;
+            if (overdueSupRaw && overdueSupRaw !== "system") {
+              const overdueSupId = normalizeAgentId(overdueSupRaw);
+              const overdueSupSession = `agent:${overdueSupId}:main`;
+              const overdueMsg = [
+                `[TASK OVERDUE] A task assigned to ${(t.assignees ?? []).map((a) => a.id).join(", ") || "unknown"} is overdue and has been auto-escalated to urgent priority.`,
+                ``,
+                `Task ID: ${t.id}`,
+                `Title: ${t.title}`,
+                `Due date: ${new Date(t.dueDate).toISOString()}`,
+                `Overdue by: ${overdueMinutes} minutes`,
+                t.projectId ? `Project: ${t.projectId}` : null,
+                ``,
+                `The task priority has been automatically upgraded to urgent.`,
+                `Please review and decide: extend the deadline, reassign, or cancel.`,
+              ]
+                .filter(Boolean)
+                .join("\n");
+              enqueueSystemEvent(overdueMsg, {
+                sessionKey: overdueSupSession,
+                contextKey: `cron:task-overdue:${t.id}`,
+              });
+              requestHeartbeatNow({
+                reason: `task-overdue:${t.id}`,
+                sessionKey: overdueSupSession,
+                agentId: overdueSupId,
+                coalesceMs: 10000,
+              });
+            }
           }
-          return true;
-        });
-
-        if (validTodos.length === 0) {
-          continue;
         }
-
+        // 不做 projectId 过滤：任务只要分配给该 agent 就直接执行，无论属于哪个项目
         // 按优先级排序，只唤醒最高优先级的 1 条
-        const sortedTodos = [...validTodos].toSorted((a, b) => taskSortKey(b) - taskSortKey(a));
+        // C3 自适应课程：当 Agent 在某类任务的历史成功率 <60% 时，降低该类任务的调度优先级
+        const sortedTodos = [...todoTasks].toSorted((a, b) => {
+          let scoreA = taskSortKey(a);
+          let scoreB = taskSortKey(b);
+          // C3: 读取性能画像，当成功率 <60% 时懒化该类任务（不低于 urgent 级别）
+          if (a.priority !== "urgent" && a.description) {
+            const perfA = getTaskTypePerfScore(
+              normalizedId,
+              a.title + " " + a.description.slice(0, 100),
+            );
+            if (perfA && perfA.successRate < 0.6) {
+              // 成功率越低，惩罚越大：最多降 1e12（相当于把 medium 降到 low 之下）
+              const penalty = Math.round((0.6 - perfA.successRate) * 2e12);
+              scoreA -= penalty;
+            }
+          }
+          if (b.priority !== "urgent" && b.description) {
+            const perfB = getTaskTypePerfScore(
+              normalizedId,
+              b.title + " " + b.description.slice(0, 100),
+            );
+            if (perfB && perfB.successRate < 0.6) {
+              const penalty = Math.round((0.6 - perfB.successRate) * 2e12);
+              scoreB -= penalty;
+            }
+          }
+          return scoreB - scoreA;
+        });
         const nextTask = sortedTodos[0];
         const queueRemaining = sortedTodos.length - 1;
 
@@ -452,17 +512,42 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
           .filter(Boolean)
           .join("\n");
 
-        const wakeMessage = [
-          `[TASK WAKE] You have 1 task to execute now${queueRemaining > 0 ? ` (${queueRemaining} more waiting in queue)` : ""}:`,
-          ``,
-          taskLines,
-          ``,
-          `Working Context:`,
-          `- Working Directory (code lives here): ${agentWorkspaceDir}`,
-          `- Memory File (read/update project knowledge): ${agentMemoryPath}`,
-          ``,
-          `IMPORTANT: Set this task to "in-progress" and execute it NOW. Complete it fully before starting the next queued task. After completion, call task_report_to_supervisor to report.`,
-        ].join("\n");
+        const wakeMessage = (() => {
+          const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(nextTask);
+          // C3 自适应课程：若此类任务成功率偏低，加入提示警告
+          let perfWarning: string | null = null;
+          try {
+            const perfScore = getTaskTypePerfScore(
+              normalizedId,
+              nextTask.title + " " + (nextTask.description ?? "").slice(0, 100),
+            );
+            if (perfScore && perfScore.successRate < 0.6) {
+              perfWarning = `[C3 ADAPTIVE] Your historical success rate for "${perfScore.taskType}" tasks is ${Math.round(perfScore.successRate * 100)}% (based on ${perfScore.total} tasks). Take extra care, double-check your approach before executing.`;
+            }
+          } catch {
+            /* 不影响主流程 */
+          }
+          return [
+            `[TASK WAKE] You have 1 task to execute now${queueRemaining > 0 ? ` (${queueRemaining} more waiting in queue)` : ""}:`,
+            ``,
+            taskLines,
+            ``,
+            `Working Context:`,
+            `- Working Directory: ${agentWorkspaceDir}`,
+            `- Your Personal Memory (only YOU may write this): ${agentMemoryPath}`,
+            sharedMemoryPath
+              ? `- Project Shared Memory (all team members read/write): ${sharedMemoryPath}`
+              : null,
+            projectGroupSessionKey ? `- Project Group: sessionKey=${projectGroupSessionKey}` : null,
+            perfWarning ? `\n${perfWarning}` : null,
+            ``,
+            `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
+            ``,
+            `IMPORTANT: Set this task to "in-progress" and execute it NOW. Complete it fully before starting the next queued task. After completion, call task_report_to_supervisor to report.`,
+          ]
+            .filter(Boolean)
+            .join("\n");
+        })();
 
         enqueueSystemEvent(wakeMessage, {
           sessionKey,

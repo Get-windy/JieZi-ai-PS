@@ -274,3 +274,43 @@ export const ToolsCatalogResultSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+export const ToolsEffectiveParamsSchema = Type.Object(
+  {
+    agentId: Type.Optional(NonEmptyString),
+    sessionKey: NonEmptyString,
+  },
+  { additionalProperties: false },
+);
+
+export const ToolsEffectiveEntrySchema = Type.Object(
+  {
+    id: NonEmptyString,
+    label: NonEmptyString,
+    description: Type.String(),
+    rawDescription: Type.String(),
+    source: Type.Union([Type.Literal("core"), Type.Literal("plugin"), Type.Literal("channel")]),
+    pluginId: Type.Optional(NonEmptyString),
+    channelId: Type.Optional(NonEmptyString),
+  },
+  { additionalProperties: false },
+);
+
+export const ToolsEffectiveGroupSchema = Type.Object(
+  {
+    id: Type.Union([Type.Literal("core"), Type.Literal("plugin"), Type.Literal("channel")]),
+    label: NonEmptyString,
+    source: Type.Union([Type.Literal("core"), Type.Literal("plugin"), Type.Literal("channel")]),
+    tools: Type.Array(ToolsEffectiveEntrySchema),
+  },
+  { additionalProperties: false },
+);
+
+export const ToolsEffectiveResultSchema = Type.Object(
+  {
+    agentId: NonEmptyString,
+    profile: NonEmptyString,
+    groups: Type.Array(ToolsEffectiveGroupSchema),
+  },
+  { additionalProperties: false },
+);

@@ -1,7 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { resolveContextTokensForModel } from "../../upstream/src/agents/context.js";
 import { appendCronStyleCurrentTimeLine } from "../../upstream/src/agents/current-time.js";
+import { DEFAULT_CONTEXT_TOKENS } from "../../upstream/src/agents/defaults.js";
 import { resolveEffectiveMessagesConfig } from "../../upstream/src/agents/identity.js";
+import { CHARS_PER_TOKEN_ESTIMATE } from "../../upstream/src/agents/pi-embedded-runner/tool-result-char-estimator.js";
 import { resolveEmbeddedSessionLane } from "../../upstream/src/agents/pi-embedded.js";
 import { DEFAULT_HEARTBEAT_FILENAME } from "../../upstream/src/agents/workspace.js";
 import { resolveHeartbeatReplyPayload } from "../../upstream/src/auto-reply/heartbeat-reply-payload.js";
@@ -59,9 +62,6 @@ import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
 import { getQueueSize, resetAllLanes } from "../../upstream/src/process/command-queue.js";
 import { defaultRuntime, type RuntimeEnv } from "../../upstream/src/runtime.js";
 import { escapeRegExp } from "../../upstream/src/utils.js";
-import { resolveContextTokensForModel } from "../../upstream/src/agents/context.js";
-import { DEFAULT_CONTEXT_TOKENS } from "../../upstream/src/agents/defaults.js";
-import { CHARS_PER_TOKEN_ESTIMATE } from "../../upstream/src/agents/pi-embedded-runner/tool-result-char-estimator.js";
 import {
   listAgentIds,
   resolveAgentConfig,
@@ -70,13 +70,13 @@ import {
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
+import { isLikelyContextOverflowError } from "../agents/pi-embedded-helpers/errors.js";
 import { getReplyFromConfig } from "../auto-reply/reply/get-reply.js";
 import {
   normalizeAgentId,
   parseAgentSessionKey,
   toAgentStoreSessionKey,
 } from "../routing/session-key.js";
-import { isLikelyContextOverflowError } from "../agents/pi-embedded-helpers/errors.js";
 import { compactHeartbeatFileIfNeeded } from "./heartbeat-bootstrap-compact.js";
 import type { OutboundSendDeps } from "./outbound/deliver.js";
 import { deliverOutboundPayloads } from "./outbound/deliver.js";
@@ -808,7 +808,7 @@ export async function runHeartbeatOnce(opts: {
     runStorePath = cronSession.storePath;
   }
 
-  const delivery = resolveHeartbeatDeliveryTarget({ cfg, entry, heartbeat });
+  const delivery = resolveHeartbeatDeliveryTarget({ cfg, entry, heartbeat, agentId });
   const heartbeatAccountId = heartbeat?.accountId?.trim();
   if (delivery.reason === "unknown-account") {
     log.warn("heartbeat: unknown accountId", {
@@ -950,7 +950,13 @@ export async function runHeartbeatOnce(opts: {
       log.warn(
         `heartbeat: transcript size ${transcriptState.preHeartbeatSize} bytes exceeds safe threshold ` +
           `${TRANSCRIPT_PROACTIVE_RESET_BYTES} (model ctx=${agentContextTokens} tokens) — proactively clearing before run to prevent overflow`,
-        { agentId, sessionKey: runSessionKey, bytes: transcriptState.preHeartbeatSize, thresholdBytes: TRANSCRIPT_PROACTIVE_RESET_BYTES, contextTokens: agentContextTokens },
+        {
+          agentId,
+          sessionKey: runSessionKey,
+          bytes: transcriptState.preHeartbeatSize,
+          thresholdBytes: TRANSCRIPT_PROACTIVE_RESET_BYTES,
+          contextTokens: agentContextTokens,
+        },
       );
       try {
         await fs.writeFile(transcriptState.transcriptPath, "", "utf-8");

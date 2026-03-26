@@ -1,5 +1,3 @@
-// 添加配对请求加载函数
-import { loadAllChannelPairingRequests } from "../../channels/pairing-requests.js";
 import { buildChannelUiCatalog } from "../../../upstream/src/channels/plugins/catalog.js";
 import { resolveChannelDefaultAccountId } from "../../../upstream/src/channels/plugins/helpers.js";
 import {
@@ -9,7 +7,10 @@ import {
   normalizeChannelId,
 } from "../../../upstream/src/channels/plugins/index.js";
 import { buildChannelAccountSnapshot } from "../../../upstream/src/channels/plugins/status.js";
-import type { ChannelAccountSnapshot, ChannelPlugin } from "../../../upstream/src/channels/plugins/types.js";
+import type {
+  ChannelAccountSnapshot,
+  ChannelPlugin,
+} from "../../../upstream/src/channels/plugins/types.js";
 import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import {
   loadConfig,
@@ -17,9 +18,6 @@ import {
   readConfigFileSnapshotForWrite,
   writeConfigFile,
 } from "../../../upstream/src/config/config.js";
-import { getChannelActivity } from "../../../upstream/src/infra/channel-activity.js";
-import { DEFAULT_ACCOUNT_ID } from "../../routing/session-key.js";
-import { defaultRuntime } from "../../../upstream/src/runtime.js";
 import {
   ErrorCodes,
   errorShape,
@@ -27,8 +25,16 @@ import {
   validateChannelsLogoutParams,
   validateChannelsStatusParams,
 } from "../../../upstream/src/gateway/protocol/index.js";
+import type {
+  GatewayRequestContext,
+  GatewayRequestHandlers,
+} from "../../../upstream/src/gateway/server-methods/types.js";
 import { formatForLog } from "../../../upstream/src/gateway/ws-log.js";
-import type { GatewayRequestContext, GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import { getChannelActivity } from "../../../upstream/src/infra/channel-activity.js";
+import { defaultRuntime } from "../../../upstream/src/runtime.js";
+import { channelManager } from "../../channels/channel-manager.js";
+import { loadAllChannelPairingRequests } from "../../channels/pairing-requests.js";
+import { DEFAULT_ACCOUNT_ID } from "../../routing/session-key.js";
 
 type ChannelLogoutPayload = {
   channel: ChannelId;
@@ -391,8 +397,16 @@ export const channelsHandlers: GatewayRequestHandlers = {
             ],
             description: "飞书 Verification Token（Webhook 模式）",
           },
-          domain: { type: "string", enum: ["feishu", "lark"], description: "feishu.cn 或 larksuite.com" },
-          connectionMode: { type: "string", enum: ["websocket", "webhook"], description: "连接模式" },
+          domain: {
+            type: "string",
+            enum: ["feishu", "lark"],
+            description: "feishu.cn 或 larksuite.com",
+          },
+          connectionMode: {
+            type: "string",
+            enum: ["websocket", "webhook"],
+            description: "连接模式",
+          },
           dmPolicy: { type: "string", enum: ["open", "pairing", "allowlist"] },
           allowFrom: { type: "array", items: { type: "string" } },
           groupPolicy: { type: "string", enum: ["open", "allowlist", "disabled"] },
@@ -475,7 +489,9 @@ export const channelsHandlers: GatewayRequestHandlers = {
     // 否则降级使用整个 configSchema.schema（删除 accounts 字段）
     // 最终 fallback 到上面的 STATIC_ACCOUNT_SCHEMAS
     const channelConfigSchemas: Record<string, Record<string, unknown>> = {};
-    console.log(`[channels.status] plugins count=${plugins.length}, ids=${plugins.map((p) => p.id).join(",")}`);
+    console.log(
+      `[channels.status] plugins count=${plugins.length}, ids=${plugins.map((p) => p.id).join(",")}`,
+    );
     for (const plugin of plugins) {
       const rawSchema = plugin.configSchema?.schema;
 
@@ -492,7 +508,8 @@ export const channelsHandlers: GatewayRequestHandlers = {
         } else if (properties) {
           // 降级：用顶层 schema properties，去掉 accounts/defaultAccount 这两个容器字段
           const { accounts: _a, defaultAccount: _d, ...restProperties } = properties;
-          void _a; void _d;
+          void _a;
+          void _d;
           if (Object.keys(restProperties).length > 0) {
             channelConfigSchemas[plugin.id] = {
               type: "object",
@@ -693,14 +710,16 @@ export const channelsHandlers: GatewayRequestHandlers = {
         const section = (channelsNode[sectionKey] ?? {}) as Record<string, unknown>;
         const accountsNode = section.accounts as Record<string, unknown> | undefined;
         const incomingConfig = {
-          ...(accountConfig && typeof accountConfig === "object" ? (accountConfig as Record<string, unknown>) : {}),
+          ...(accountConfig && typeof accountConfig === "object"
+            ? (accountConfig as Record<string, unknown>)
+            : {}),
           ...(nameStr ? { name: nameStr } : {}),
         };
         // 判断是否已有 accounts 子节点（多账号结构）
         if (accountsNode !== undefined) {
           // 多账号结构：写入 channels[ch].accounts[accountId]
           const accounts = accountsNode as Record<string, Record<string, unknown>>;
-          const existing = (accounts[accountId] ?? {}) as Record<string, unknown>;
+          const existing = accounts[accountId] ?? {};
           cfg = {
             ...cfg,
             channels: {
@@ -725,7 +744,9 @@ export const channelsHandlers: GatewayRequestHandlers = {
           } as OpenClawConfig;
         }
         await writeConfigFile(cfg, writeOptions);
-        console.log(`[channels.account.save] writeConfigFile OK (no-plugin path) for ${channelId}/${accountId}`);
+        console.log(
+          `[channels.account.save] writeConfigFile OK (no-plugin path) for ${channelId}/${accountId}`,
+        );
         respond(true, { ok: true }, undefined);
         return;
       }
@@ -906,12 +927,18 @@ export const channelsHandlers: GatewayRequestHandlers = {
       try {
         const { snapshot, writeOptions } = await readConfigFileSnapshotForWrite();
         const cfgBefore = snapshot.config ?? loadConfig();
-        const { [channelId as string]: _removed, ...restChannels } =
-          (cfgBefore.channels ?? {}) as Record<string, unknown>;
+        const { [channelId as string]: _removed, ...restChannels } = (cfgBefore.channels ??
+          {}) as Record<string, unknown>;
         void _removed;
         const cfg = { ...cfgBefore, channels: restChannels } as OpenClawConfig;
         await writeConfigFile(cfg, writeOptions);
         console.log(`[channels.account.delete] no-plugin path: removed channel node ${channelId}`);
+        // 同步清理孤立绑定
+        await channelManager
+          .purgeOrphanBindings(cfg)
+          .catch((e) =>
+            console.error(`[channels.account.delete] purgeOrphanBindings (no-plugin) error:`, e),
+          );
         respond(true, { ok: true }, undefined);
       } catch (err) {
         respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
@@ -949,14 +976,30 @@ export const channelsHandlers: GatewayRequestHandlers = {
         const hasSubAccounts = accounts && Object.keys(accounts).length > 0;
         // 顶层凭证字段：各通道常见的 key 名（token、botToken、appId、appSecret、webhookUrl 等）
         const CREDENTIAL_KEYS = [
-          "token", "botToken", "appId", "appSecret", "secret", "corpId",
-          "webhookUrl", "apiToken", "accessToken", "clientId", "clientSecret",
-          "robotCode", "agentId", "encodingAESKey",
+          "token",
+          "botToken",
+          "appId",
+          "appSecret",
+          "secret",
+          "corpId",
+          "webhookUrl",
+          "apiToken",
+          "accessToken",
+          "clientId",
+          "clientSecret",
+          "robotCode",
+          "agentId",
+          "encodingAESKey",
         ];
-        const hasTopLevelCreds = CREDENTIAL_KEYS.some((k) => k in sec && sec[k] != null && sec[k] !== "");
+        const hasTopLevelCreds = CREDENTIAL_KEYS.some(
+          (k) => k in sec && sec[k] != null && sec[k] !== "",
+        );
         if (!hasSubAccounts && !hasTopLevelCreds) {
           // 整个 channel 节点已无实质内容，清除它
-          const { [channelId]: _removed, ...restChannels } = (cfg.channels ?? {}) as Record<string, unknown>;
+          const { [channelId]: _removed, ...restChannels } = (cfg.channels ?? {}) as Record<
+            string,
+            unknown
+          >;
           void _removed;
           cfg = { ...cfg, channels: restChannels } as typeof cfg;
           console.log(
@@ -972,6 +1015,10 @@ export const channelsHandlers: GatewayRequestHandlers = {
       );
       await writeConfigFile(cfg, writeOptions);
       console.log(`[channels.account.delete] writeConfigFile OK for ${channelId}/${accountId}`);
+      // 删除账号后自动清理所有 agent 的孤立绑定
+      await channelManager
+        .purgeOrphanBindings(cfg)
+        .catch((e) => console.error(`[channels.account.delete] purgeOrphanBindings error:`, e));
       respond(true, { ok: true }, undefined);
     } catch (err) {
       console.error(`[channels.account.delete] ERROR:`, err);

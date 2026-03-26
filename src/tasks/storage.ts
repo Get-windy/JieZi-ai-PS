@@ -35,6 +35,8 @@ import type {
 // 数据存储目录和文件路径
 const TASKS_DIR = join(STATE_DIR, "tasks");
 const TASKS_FILE = join(TASKS_DIR, "tasks.json");
+/** 归档文件：存放 done/cancelled 且超过保留期的任务，不参与调度扫描 */
+const TASKS_ARCHIVE_FILE = join(TASKS_DIR, "tasks-archive.json");
 const MEETINGS_FILE = join(TASKS_DIR, "meetings.json");
 const COMMENTS_FILE = join(TASKS_DIR, "comments.json");
 const ATTACHMENTS_FILE = join(TASKS_DIR, "attachments.json");
@@ -42,12 +44,21 @@ const WORKLOGS_FILE = join(TASKS_DIR, "worklogs.json");
 const DEPENDENCIES_FILE = join(TASKS_DIR, "dependencies.json");
 const MEETING_MESSAGES_FILE = join(TASKS_DIR, "meeting-messages.json");
 
+/**
+ * 归档策略：done/cancelled 任务完成超过此天数后自动移入冷存储
+ * 参考 Linear/Jira：已完成任务 7 天后归档，不占用热查询
+ */
+const ARCHIVE_AFTER_DAYS = 7;
+const ARCHIVE_AFTER_MS = ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000;
+
 // 异步锁
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _lock = createAsyncLock();
 
-// 内存缓存
+// 内存缓存（仅热存储，不含归档）
 let tasksCache: Map<string, Task> | null = null;
+/** 归档缓存（懒加载，仅在 includeArchived 查询时加载） */
+let tasksArchiveCache: Map<string, Task> | null = null;
 let meetingsCache: Map<string, Meeting> | null = null;
 let commentsCache: Map<string, TaskComment[]> | null = null;
 let attachmentsCache: Map<string, TaskAttachment[]> | null = null;
@@ -94,13 +105,64 @@ async function saveArrayToFile<T>(filePath: string, data: Map<string, T[]>): Pro
 }
 
 /**
- * 加载所有任务到缓存
+ * 加载热任务（活跃 + 近期完成）到缓存
+ * 不含已归档的冷数据，保持调度扫描性能
  */
 async function loadTasks(): Promise<Map<string, Task>> {
   if (tasksCache === null) {
     tasksCache = await loadFromFile<Task>(TASKS_FILE);
   }
   return tasksCache;
+}
+
+/**
+ * 加载归档任务（懒加载）
+ */
+async function loadArchivedTasks(): Promise<Map<string, Task>> {
+  if (tasksArchiveCache === null) {
+    tasksArchiveCache = await loadFromFile<Task>(TASKS_ARCHIVE_FILE);
+  }
+  return tasksArchiveCache;
+}
+
+/**
+ * 自动归档：将 done/cancelled 且超过保留期的任务移入冷存储
+ * 在服务启动时调用一次，之后每次任务完成时触发
+ * 参考 GTD：完成即归档，活跃清单保持精简
+ */
+export async function archiveOldTasks(): Promise<{ archived: number }> {
+  const tasks = await loadTasks();
+  const archive = await loadArchivedTasks();
+  const now = Date.now();
+  const toArchive: string[] = [];
+
+  for (const [id, task] of tasks) {
+    if (task.status !== "done" && task.status !== "cancelled") {
+      continue;
+    }
+    // 用 completedAt / cancelledAt / updatedAt 判断完成时间
+    const finishedAt = task.completedAt ?? task.cancelledAt ?? task.updatedAt ?? task.createdAt;
+    if (now - finishedAt >= ARCHIVE_AFTER_MS) {
+      toArchive.push(id);
+    }
+  }
+
+  if (toArchive.length === 0) {
+    return { archived: 0 };
+  }
+
+  for (const id of toArchive) {
+    const task = tasks.get(id)!;
+    archive.set(id, task);
+    tasks.delete(id);
+  }
+
+  await Promise.all([saveToFile(TASKS_FILE, tasks), saveToFile(TASKS_ARCHIVE_FILE, archive)]);
+
+  console.log(
+    `[TaskStorage] Archived ${toArchive.length} old task(s) to cold storage (>${ARCHIVE_AFTER_DAYS}d after completion)`,
+  );
+  return { archived: toArchive.length };
 }
 
 /**
@@ -178,11 +240,17 @@ export async function createTask(task: Task): Promise<Task> {
 }
 
 /**
- * 获取任务
+ * 获取任务（先查热存储，再查冷存储归档）
  */
 export async function getTask(taskId: string): Promise<Task | undefined> {
   const tasks = await loadTasks();
-  return tasks.get(taskId);
+  const hot = tasks.get(taskId);
+  if (hot) {
+    return hot;
+  }
+  // 热存储未找到，尝试归档
+  const archive = await loadArchivedTasks();
+  return archive.get(taskId);
 }
 
 /**
@@ -244,10 +312,24 @@ export async function deleteTask(taskId: string): Promise<boolean> {
 
 /**
  * 列出任务
+ * @param filter.includeArchived - 为 true 时同时检索冷存储归档（默认 false，保持性能）
  */
-export async function listTasks(filter?: TaskFilter): Promise<Task[]> {
+export async function listTasks(
+  filter?: TaskFilter & { includeArchived?: boolean },
+): Promise<Task[]> {
   const tasks = await loadTasks();
   let results = Array.from(tasks.values());
+
+  // 需要查历史归档时，合并冷存储数据
+  if (filter?.includeArchived) {
+    const archive = await loadArchivedTasks();
+    // 热存储优先（同 id 以热存储为准）
+    for (const [id, task] of archive) {
+      if (!tasks.has(id)) {
+        results.push(task);
+      }
+    }
+  }
 
   if (!filter) {
     return results;
@@ -269,6 +351,15 @@ export async function listTasks(filter?: TaskFilter): Promise<Task[]> {
   if (filter.assigneeType) {
     results = results.filter((task) =>
       (task.assignees ?? []).some((assignee) => assignee.type === filter.assigneeType),
+    );
+  }
+
+  if (filter.supervisorId) {
+    const supIdLower = filter.supervisorId.toLowerCase();
+    results = results.filter(
+      (task) =>
+        task.supervisorId === filter.supervisorId ||
+        task.supervisorId?.toLowerCase() === supIdLower,
     );
   }
 
@@ -872,6 +963,7 @@ export async function updateAgendaItemStatus(
  */
 export function clearCache(): void {
   tasksCache = null;
+  tasksArchiveCache = null;
   meetingsCache = null;
   commentsCache = null;
   attachmentsCache = null;

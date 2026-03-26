@@ -14,6 +14,9 @@ import {
   createAgentReflectTool,
   createAgentSkillSaveTool,
   createAgentSkillListTool,
+  createAgentSkillShareTool,
+  createAgentSkillImportTool,
+  createAgentSkillListSharedTool,
 } from "../../src/agents/tools/self-evolve-tool.js";
 import { createTeamRunTool } from "../../src/agents/tools/team-orchestrate-tool.js";
 import {
@@ -21,7 +24,15 @@ import {
   findRelevantSkills,
   autoSaveReflection,
   updateSkillUsageCount,
+  getPerformanceSelfAwareness,
+  findRelevantSharedSkills,
+  saveExperienceEntry,
+  getFailurePatternsText,
 } from "../../src/gateway/server-methods/evolve-rpc.js";
+import {
+  autoSaveMemoryEntry,
+  loadMemoryEntriesDirect,
+} from "../../src/gateway/server-methods/memory-rpc.js";
 import { groupManager } from "../../src/sessions/group-manager.js";
 import { groupWorkspaceManager } from "../../src/workspace/group-workspace.js";
 import { loadConfig } from "../../upstream/src/config/config.js";
@@ -69,7 +80,7 @@ const memoryCorePlugin = {
       names: ["project_memory_get"],
     });
 
-    // 自我进化工具（借鉴 Reflexion 失败反思 + Voyager 技能库）
+    // 自我进化工具（借鉴 Reflexion 失败反思 + Voyager 技能库 + HyperAgent 性能画像 + AgentEvolver 步骤归因）
     api.registerTool((ctx) => createAgentReflectTool({ agentId: ctx.agentId }), {
       names: ["agent_reflect"],
     });
@@ -78,6 +89,16 @@ const memoryCorePlugin = {
     });
     api.registerTool((ctx) => createAgentSkillListTool({ agentId: ctx.agentId }), {
       names: ["agent_skill_list"],
+    });
+    // P3 GEP: 跨 Agent 技能共享/导入工具
+    api.registerTool((ctx) => createAgentSkillShareTool({ agentId: ctx.agentId }), {
+      names: ["agent_skill_share"],
+    });
+    api.registerTool((ctx) => createAgentSkillImportTool({ agentId: ctx.agentId }), {
+      names: ["agent_skill_import"],
+    });
+    api.registerTool(() => createAgentSkillListSharedTool(), {
+      names: ["agent_skill_list_shared"],
     });
 
     // 团队编排工具（借鉴 OpenProse fan-out-fan-in + adversarial-validation + pipeline-composition）
@@ -178,6 +199,56 @@ const memoryCorePlugin = {
         lessons.push(`Encountered error: ${event.error.slice(0, 100)}`);
       }
 
+      // ================================================================
+      // cer2: 从 messages 提取 tool_call 轨迹（AgentEvolver P2 自动化）
+      // 遍历 assistant 消息的 tool_calls 数组，生成 toolTrace 供 CER 写入
+      // ================================================================
+      const toolTrace: Array<{ tool: string; result: "ok" | "err" | "skip"; note?: string }> = [];
+      const toolCallResults = new Map<string, "ok" | "err">();
+      // 第一遍：从 tool 角色消息收集每个 tool_call_id 的结果状态
+      for (const rawMsg of event.messages) {
+        if (!rawMsg || typeof rawMsg !== "object") continue;
+        const mo = rawMsg as Record<string, unknown>;
+        if (mo.role !== "tool") continue;
+        const callId = typeof mo.tool_call_id === "string" ? mo.tool_call_id : "";
+        if (!callId) continue;
+        // 简单规则：content 包含 error/失败/Error 字样视为 err，否则 ok
+        const content =
+          typeof mo.content === "string" ? mo.content : JSON.stringify(mo.content ?? "");
+        const isErr = /error|失败|exception|traceback/i.test(content.slice(0, 300));
+        toolCallResults.set(callId, isErr ? "err" : "ok");
+      }
+      // 第二遍：从 assistant 消息中提取有序的 tool_calls，按顺序构建轨迹
+      for (const rawMsg of event.messages) {
+        if (!rawMsg || typeof rawMsg !== "object") continue;
+        const mo = rawMsg as Record<string, unknown>;
+        if (mo.role !== "assistant") continue;
+        if (!Array.isArray(mo.tool_calls)) continue;
+        for (const tc of mo.tool_calls) {
+          if (!tc || typeof tc !== "object") continue;
+          const tco = tc as Record<string, unknown>;
+          const toolName =
+            tco.function && typeof (tco.function as Record<string, unknown>).name === "string"
+              ? String((tco.function as Record<string, unknown>).name)
+              : typeof tco.name === "string"
+                ? tco.name
+                : "";
+          if (!toolName) continue;
+          const callId = typeof tco.id === "string" ? tco.id : "";
+          const result = callId ? (toolCallResults.get(callId) ?? "ok") : "ok";
+          toolTrace.push({ tool: toolName, result });
+          if (toolTrace.length >= 10) break;
+        }
+        if (toolTrace.length >= 10) break;
+      }
+
+      // 自动生成 steps（P2 细粒度步骤归因）
+      const steps = toolTrace.map((t) => ({
+        step: t.tool,
+        result: t.result === "ok" ? ("success" as const) : ("failure" as const),
+        note: t.note,
+      }));
+
       autoSaveReflection({
         agentId: ctx.agentId,
         taskSummary,
@@ -185,7 +256,136 @@ const memoryCorePlugin = {
         reflection,
         lessons,
         durationMs: typeof event.durationMs === "number" ? event.durationMs : undefined,
+        steps: steps.length > 0 ? steps : undefined,
       });
+
+      // cer2: 同步写入 CER 经验库
+      try {
+        const lesson =
+          lessons.length > 0
+            ? lessons.join(" ")
+            : outcome === "failure" && event.error
+              ? `Error: ${event.error.slice(0, 100)}`
+              : "";
+        saveExperienceEntry({
+          agentId: ctx.agentId,
+          taskSummary,
+          outcome,
+          toolTrace,
+          lesson,
+        });
+      } catch {
+        /* 经验写入失败不影响主流程 */
+      }
+      // ================================================================
+      // A. OpenViking 风格：会话结束自动提取实体记忆
+      // 从对话消息里用规则识别用户偏好/项目决策/新事实，写入对应 namespace。
+      // 不走 RPC 网络层，直接调 autoSaveMemoryEntry 写存储文件。
+      // ================================================================
+      try {
+        if (event.messages && event.messages.length >= 3) {
+          // 收集 user / assistant 纯文本（加角色前缀方便正则定位）
+          const allText: string[] = [];
+          for (const rawMsg of event.messages) {
+            if (!rawMsg || typeof rawMsg !== "object") continue;
+            const mo = rawMsg as Record<string, unknown>;
+            if (mo.role !== "user" && mo.role !== "assistant") continue;
+            const mc = mo.content;
+            if (typeof mc === "string" && mc.trim()) {
+              allText.push("[" + String(mo.role) + "] " + mc.trim());
+            } else if (Array.isArray(mc)) {
+              for (const blk of mc) {
+                if (
+                  blk &&
+                  typeof blk === "object" &&
+                  (blk as Record<string, unknown>).type === "text" &&
+                  typeof (blk as Record<string, unknown>).text === "string"
+                ) {
+                  const t = ((blk as Record<string, unknown>).text as string).trim();
+                  if (t) allText.push("[" + String(mo.role) + "] " + t);
+                  break;
+                }
+              }
+            }
+          }
+          const fullText = allText.join("\n").slice(0, 4000);
+
+          // 规则提取器（用 new RegExp 避免字面量换行编译错误）
+          const prefPats: RegExp[] = [
+            new RegExp(
+              "\\[user\\][^\\n]*(?:我偏好|我喜欢|我不喜欢|我不想|我希望|我需要|我想要|我每次|我一向|以后回答)[^\\n]{10,100}",
+              "gi",
+            ),
+            new RegExp(
+              "\\[user\\][^\\n]*(?:please always|i prefer|i like|i want you to|always use|never use|my preference)[^\\n]{10,100}",
+              "gi",
+            ),
+          ];
+          const decPats: RegExp[] = [
+            new RegExp(
+              "\\[(?:user|assistant)\\][^\\n]*(?:决定使用|选择了|技术栈是|架构决策|我们用|采用了)[^\\n]{10,150}",
+              "gi",
+            ),
+            new RegExp(
+              "\\[(?:user|assistant)\\][^\\n]*(?:we decided|we will use|tech stack is|we chose)[^\\n]{10,150}",
+              "gi",
+            ),
+          ];
+          const factPats: RegExp[] = [
+            new RegExp(
+              "\\[user\\][^\\n]*(?:我的[\\s\\S]{0,20}?(?:API|key|密钥|账号|地址|配置)\\s*[=：是][^\\n]{5,80})",
+              "gi",
+            ),
+            new RegExp(
+              "\\[user\\][^\\n]*(?:my (?:api key|server|domain|config) (?:is|=)[^\\n]{5,80})",
+              "gi",
+            ),
+          ];
+
+          const extract = (pats: RegExp[], text: string): string[] => {
+            const out: string[] = [];
+            for (const pat of pats) {
+              for (const m of text.matchAll(pat)) {
+                const cleaned = m[0]
+                  .replace(new RegExp("^\\[(?:user|assistant)\\]\\s*", "i"), "")
+                  .trim();
+                if (cleaned.length >= 10) out.push(cleaned);
+              }
+            }
+            return out;
+          };
+
+          for (const hit of extract(prefPats, fullText).slice(0, 2)) {
+            autoSaveMemoryEntry({
+              agentId: ctx.agentId,
+              content: hit,
+              namespace: "preferences",
+              tags: ["auto-extracted"],
+              importance: 3,
+            });
+          }
+          for (const hit of extract(decPats, fullText).slice(0, 2)) {
+            autoSaveMemoryEntry({
+              agentId: ctx.agentId,
+              content: hit,
+              namespace: "decisions",
+              tags: ["auto-extracted"],
+              importance: 4,
+            });
+          }
+          for (const hit of extract(factPats, fullText).slice(0, 2)) {
+            autoSaveMemoryEntry({
+              agentId: ctx.agentId,
+              content: hit,
+              namespace: "facts",
+              tags: ["auto-extracted"],
+              importance: 3,
+            });
+          }
+        }
+      } catch {
+        // 自动提取失败不影响主流程
+      }
     });
 
     // before_prompt_build 钩子：自动注入历史反思摘要 + 相关技能（Voyager 技能召回）
@@ -232,8 +432,52 @@ const memoryCorePlugin = {
             if (fs.existsSync(sharedMemoryPath)) {
               try {
                 const raw = fs.readFileSync(sharedMemoryPath, "utf8");
-                // 最多注入 3000 字符，避免胀胀 context
-                const snippet = raw.length > 3000 ? raw.slice(0, 3000) + "\n...[truncated]" : raw;
+
+                // M3: 按章节时间倒序注入，最新章节排在前面，防止老内容占满额度导致新内容看不到
+                const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+                interface SBlock {
+                  header: string;
+                  body: string;
+                  savedAt: number;
+                }
+                const sectionBlocks: SBlock[] = [];
+                // 按 ### 章节拆分，提取时间戳
+                const secRe = new RegExp(
+                  "(###[^\\n]+\\n(?:<!-- saved:[^>]*>\\n)?[\\s\\S]*?)(?=\\n###\\s|$)",
+                  "g",
+                );
+                let m: RegExpExecArray | null;
+                while ((m = secRe.exec(raw)) !== null) {
+                  const block = m[1].trim();
+                  const tMatch = /<!-- saved: ([^\s>]+)/.exec(block);
+                  const ts = tMatch ? new Date(tMatch[1]).getTime() : 0;
+                  const [hdr, ...rest] = block.split("\n");
+                  sectionBlocks.push({
+                    header: hdr ?? "",
+                    body: rest
+                      .join("\n")
+                      .replace(/^<!-- saved:[^>]*>\n?/, "")
+                      .trim(),
+                    savedAt: isNaN(ts) ? 0 : ts,
+                  });
+                }
+
+                let snippet: string;
+                if (sectionBlocks.length > 0) {
+                  const recent = sectionBlocks
+                    .filter((s) => s.savedAt >= sevenDaysAgo)
+                    .toSorted((a, b) => b.savedAt - a.savedAt);
+                  const older = sectionBlocks
+                    .filter((s) => s.savedAt < sevenDaysAgo)
+                    .toSorted((a, b) => b.savedAt - a.savedAt);
+                  const ordered = [...recent, ...older]
+                    .map((s) => `${s.header}\n${s.body}`)
+                    .join("\n\n---\n");
+                  snippet =
+                    ordered.length > 3000 ? ordered.slice(0, 3000) + "\n...[truncated]" : ordered;
+                } else {
+                  snippet = raw.length > 3000 ? raw.slice(0, 3000) + "\n...[truncated]" : raw;
+                }
                 sharedContextParts.push(
                   `Project «${group.projectId}» shared memory (${sharedMemoryPath}):\n${snippet}`,
                 );
@@ -256,6 +500,22 @@ const memoryCorePlugin = {
       }
 
       // ----------------------------------------------------------------
+      // 2.5 CER（cer3）：注入失败经验模式（Contextual Experience Replay, ACL 2025）
+      // 按 prompt 关键词相似度检索历史失败案例，注入 <failure-patterns> 块。
+      // 避免 Agent 在相似任务中重蹈覆辙（失败优先，最多 3 条）。
+      // ----------------------------------------------------------------
+      if (agentId) {
+        try {
+          const failureText = getFailurePatternsText(agentId, prompt, 3);
+          if (failureText) {
+            parts.push(`<failure-patterns>\n${failureText}\n</failure-patterns>`);
+          }
+        } catch {
+          /* CER 检索失败不影响主流程 */
+        }
+      }
+
+      // ----------------------------------------------------------------
       // 3. 注入最近 5 条历史反思摘要（Reflexion LAST_ATTEMPT_AND_REFLEXION 策略）
       // ----------------------------------------------------------------
       const reflectionsSummary = getRecentReflectionsSummary(agentId, 5);
@@ -266,11 +526,69 @@ const memoryCorePlugin = {
       }
 
       // ----------------------------------------------------------------
+      // 3.2 P1 HyperAgent 性能画像自知之明
+      // 注入各类任务成功率和趋势，帮助 Agent 了解自身弱点和重点注意方向。
+      // ----------------------------------------------------------------
+      try {
+        const selfAwareness = getPerformanceSelfAwareness(agentId);
+        if (selfAwareness) {
+          parts.push(`<performance-profile>\n${selfAwareness}\n</performance-profile>`);
+        }
+      } catch {
+        /* 性能画像读取失败时静默跳过 */
+      }
+
+      // ----------------------------------------------------------------
+      // 3.5 L0 摘要目录注入（OpenViking L0 层）
+      // 只列本 agent 的 memory blocks 摘要（每条 ≤60 字符），
+      // 让 Agent 了解记忆概览后用 memory_list/memory_get 按需读全文，
+      // 节省 token 预算，避免直接全量注入。
+      // ----------------------------------------------------------------
+      if (agentId) {
+        try {
+          const memEntries = loadMemoryEntriesDirect(agentId, { limit: 30 });
+          if (memEntries.length > 0) {
+            const importanceLabel = (n: number) => (n >= 5 ? "★★★" : n >= 4 ? "★★" : "★");
+            const lines = memEntries.map((e, idx) => {
+              const preview = e.content.length > 60 ? e.content.slice(0, 57) + "..." : e.content;
+              return `${idx + 1}. [${e.namespace}] ${importanceLabel(e.importance)} ${preview}`;
+            });
+            parts.push(
+              `<memory-index>
+Your personal memory index (use memory_get by ID or memory_list to read details):
+${lines.join("\n")}
+</memory-index>`,
+            );
+          }
+        } catch {
+          // 读取记忆条目失败时静默跳过
+        }
+      }
+
+      // ----------------------------------------------------------------
       // 4. 注入相关技能（Voyager 技能召回）并同步更新 usageCount
+      // P3 GEP fallback: 本地技能库为空时，自动从全局共享库补充
       // ----------------------------------------------------------------
       const relevantSkills = findRelevantSkills(agentId, prompt, 3);
-      if (relevantSkills.length > 0) {
-        const skillLines = relevantSkills
+      const localSkillNames = new Set(relevantSkills.map((s) => s.name.toLowerCase()));
+      let allSkills = [...relevantSkills];
+      // P3 GEP: 当本地技能不足 3 条时，从全局库补充
+      if (allSkills.length < 3) {
+        try {
+          const sharedFallback = findRelevantSharedSkills(
+            prompt,
+            localSkillNames,
+            3 - allSkills.length,
+          );
+          if (sharedFallback.length > 0) {
+            allSkills = [...allSkills, ...sharedFallback];
+          }
+        } catch {
+          /* 全局库读取失败不影响主流程 */
+        }
+      }
+      if (allSkills.length > 0) {
+        const skillLines = allSkills
           .map(
             (s, i) =>
               `${i + 1}. [${s.category}] **${s.name}**: ${s.description}\n   Content: ${s.content.slice(0, 300)}`,
@@ -279,7 +597,7 @@ const memoryCorePlugin = {
         parts.push(
           `<skill-library>\nRelevant reusable skills from past experience (consider using these):\n${skillLines}\n</skill-library>`,
         );
-        // 同步更新技能使用计数（不走 RPC，直接写文件）
+        // 同步更新本地技能使用计数（不走 RPC，直接写文件）
         try {
           for (const s of relevantSkills) {
             updateSkillUsageCount(agentId, s.id);
