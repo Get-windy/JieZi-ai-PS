@@ -1032,10 +1032,11 @@ export const tasksRpc: GatewayRequestHandlers = {
         return;
       }
 
-      // 权限检查 - 执行者或上级管理者均可写工作日志
+      // 权限检查 - 执行者、上级管理者、任务创建者均可写工作日志
       const isAssignee = (task.assignees ?? []).some((a) => a.id === agentId);
       const isSupervisor = task.supervisorId === agentId;
-      if (!isAssignee && !isSupervisor) {
+      const isCreator = task.creatorId === agentId;
+      if (!isAssignee && !isSupervisor && !isCreator) {
         respond(
           false,
           undefined,
