@@ -424,6 +424,12 @@ async function updateAgentField(
 }
 
 /**
+ * Per-agent 互斥锁：防止 scheduleNextTaskForAgent 并发执行导致双 in-progress 违规
+ * 场景：task.report 触发 + Task Wake 调度器同时触发，两者各自通过了 in-progress 检查
+ */
+const _scheduleNextTaskLocks = new Map<string, Promise<void>>();
+
+/**
  * 自动驱动 agent 的下一条 todo 任务（任务完成/取消/重置后复用）
  * 找出优先级最高且无依赖阻塞的第一条，自动设为 in-progress 并唤醒 agent
  */
@@ -432,6 +438,17 @@ export async function scheduleNextTaskForAgent(
   completedTaskId: string,
   _projectId?: string,
 ): Promise<void> {
+  // 串行化：同一 agentId 的调用排队等待，防止并发双推
+  const prev = _scheduleNextTaskLocks.get(agentId) ?? Promise.resolve();
+  let resolveLock!: () => void;
+  const current = new Promise<void>((resolve) => {
+    resolveLock = resolve;
+  });
+  _scheduleNextTaskLocks.set(
+    agentId,
+    prev.then(() => current),
+  );
+  await prev;
   try {
     // 先检查是否已有 in-progress 任务（防止并发触发导致双 in-progress 违规）
     // 调度器扫描 和 task.report 可能同时触发，需保证串行性
@@ -546,6 +563,8 @@ export async function scheduleNextTaskForAgent(
     );
   } catch (err) {
     console.warn(`[scheduleNextTask] Failed: ${String(err)}`);
+  } finally {
+    resolveLock();
   }
 }
 
@@ -2892,6 +2911,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       projectId?: string;
       teamId?: string;
       organizationId?: string;
+      /** 任务作用域：personal（私人任务）或 project（项目任务，默认） */
+      scope?: string;
+      /** 上级管理者ID（coordinator 分配任务时传入自身 agentId，使其具备写 worklog 权限） */
+      supervisorId?: string;
     };
 
     const targetAgentId = String(p?.targetAgentId ?? "").trim();
@@ -2979,6 +3002,12 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         ],
         status: initialTaskStatus,
         priority,
+        scope: p?.scope === "personal" ? "personal" : "project",
+        supervisorId: p?.supervisorId
+          ? String(p.supervisorId)
+          : requesterId !== "system"
+            ? requesterId
+            : undefined,
         organizationId: p?.organizationId ? String(p.organizationId) : undefined,
         teamId: p?.teamId ? String(p.teamId) : undefined,
         projectId: p?.projectId ? String(p.projectId) : undefined,
@@ -2990,7 +3019,6 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         },
         metadata: {
           assignedVia: "agent.assign_task",
-          supervisorId: requesterId,
           context: p?.context,
         },
         createdAt: Date.now(),
@@ -3032,7 +3060,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       normalizeAgentId(targetAgentId),
       {
         projectId: p?.projectId ? String(p.projectId) : undefined,
-        scope: p?.scope ? String(p.scope) : undefined,
+        scope: p?.scope,
       },
       cfg,
     );
