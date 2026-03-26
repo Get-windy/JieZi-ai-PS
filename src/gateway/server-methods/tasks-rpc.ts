@@ -26,7 +26,10 @@
 
 import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import { requestHeartbeatNow } from "../../../upstream/src/infra/heartbeat-wake.js";
+import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
 import type { MemberType } from "../../organization/types.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
 import {
   checkTaskAccess,
   checkTaskModifyAccess,
@@ -46,6 +49,24 @@ import type {
   TaskDependency,
 } from "../../tasks/types.js";
 import { scheduleNextTaskForAgent } from "./agents-management.js";
+
+/**
+ * 向 supervisor 发送任务系统事件通知（公共工具函数）
+ * @param supervisorRaw - supervisor agentId（未规范化）
+ * @param message - 通知消息
+ * @param contextKey - 用于合并相同类型通知的容字符串（造成一条透过的通知）
+ */
+function notifySupervisor(supervisorRaw: string, message: string, contextKey: string): void {
+  const supervisorId = normalizeAgentId(supervisorRaw);
+  const sessionKey = `agent:${supervisorId}:main`;
+  enqueueSystemEvent(message, { sessionKey, contextKey });
+  requestHeartbeatNow({
+    reason: contextKey,
+    sessionKey,
+    agentId: supervisorId,
+    coalesceMs: 8000,
+  });
+}
 
 /**
  * 任务 RPC 方法注册
@@ -508,11 +529,12 @@ export const tasksRpc: GatewayRequestHandlers = {
    */
   "task.list": async ({ params, respond }) => {
     try {
-      // 兼容 assigneeId 和 assignee 两种参数名
+      // 兑容 assigneeId 和 assignee 两种参数名
       const assigneeId =
         (params?.assigneeId ? String(params.assigneeId) : null) ||
         (params?.assignee ? String(params.assignee) : undefined);
       const creatorId = params?.creatorId ? String(params.creatorId) : undefined;
+      const supervisorId = params?.supervisorId ? String(params.supervisorId) : undefined;
       // 兼容工具层状态别名（pending→todo, in_progress→in-progress, completed→done）
       const STATUS_ALIASES: Record<string, string> = {
         pending: "todo",
@@ -562,6 +584,7 @@ export const tasksRpc: GatewayRequestHandlers = {
       const filter: Record<string, unknown> = {
         assigneeId,
         creatorId,
+        supervisorId,
         status,
         priority,
         organizationId,
@@ -1301,15 +1324,41 @@ export const tasksRpc: GatewayRequestHandlers = {
       // 从 assignees 中取第一个 assignee，触发任务驱动流水线
       const primaryAssignee = (updatedTask?.assignees ?? [])[0]?.id;
       if (primaryAssignee) {
-        const { normalizeAgentId } = await import("../../routing/session-key.js");
+        const { normalizeAgentId: normId } = await import("../../routing/session-key.js");
         // 异步触发，不阻塞 respond
-        scheduleNextTaskForAgent(
-          normalizeAgentId(primaryAssignee),
-          taskId,
-          updatedTask?.projectId,
-        ).catch((schedErr) => {
-          console.warn(`[task.complete] scheduleNextTask failed: ${String(schedErr)}`);
-        });
+        scheduleNextTaskForAgent(normId(primaryAssignee), taskId, updatedTask?.projectId).catch(
+          (schedErr) => {
+            console.warn(`[task.complete] scheduleNextTask failed: ${String(schedErr)}`);
+          },
+        );
+      }
+
+      // === 任务完成后通知 supervisor ===
+      // 如同自然人完成工作后主动向上级汇报成果
+      const completedSupervisorId = updatedTask?.supervisorId ?? updatedTask?.creatorId;
+      if (
+        completedSupervisorId &&
+        completedSupervisorId !== "system" &&
+        completedSupervisorId !== primaryAssignee
+      ) {
+        const assigneeName = primaryAssignee ?? "unknown";
+        const completionNote = note ? `\n\nCompletion note: ${note}` : "";
+        const supervisorMsg = [
+          `[TASK COMPLETED] Agent ${assigneeName} has completed a task assigned to them.`,
+          ``,
+          `Task ID: ${taskId}`,
+          `Title: ${updatedTask?.title ?? taskId}`,
+          `Priority: ${updatedTask?.priority ?? "medium"}`,
+          updatedTask?.type ? `Type: ${updatedTask.type}` : null,
+          updatedTask?.projectId ? `Project: ${updatedTask.projectId}` : null,
+          `Completed at: ${new Date(completedAt).toISOString()}`,
+          completionNote,
+          ``,
+          `You may review this task's worklogs or assign a follow-up task if needed.`,
+        ]
+          .filter((l) => l !== null)
+          .join("\n");
+        notifySupervisor(completedSupervisorId, supervisorMsg, `task-completed:${taskId}`);
       }
 
       // === 任务完成后即时归档：将 done 任务移入冷存储，保持热存储精简 ===
@@ -1426,9 +1475,32 @@ export const tasksRpc: GatewayRequestHandlers = {
       };
       await storage.addTaskComment(blockComment);
 
-      // 通知相关人员
-      console.log(`[Task Notification] Task ${taskId} is blocked: ${reason}`);
-      // 实际环境中应该通知所有相关人员
+      // === 任务被阻塞时主动通知 supervisor ===
+      // 如同自然人被卡住了不会沉默，会立刻找上级说明情况
+      const blockSupervisorId = task.supervisorId ?? task.creatorId;
+      if (blockSupervisorId && blockSupervisorId !== "system") {
+        const assigneeIds = (task.assignees ?? []).map((a) => a.id).join(", ") || "unknown";
+        const blockNotice = [
+          `[TASK BLOCKED] A task assigned to ${assigneeIds} is now blocked and needs your attention.`,
+          ``,
+          `Task ID: ${taskId}`,
+          `Title: ${task.title}`,
+          `Priority: ${task.priority}`,
+          task.type ? `Type: ${task.type}` : null,
+          task.projectId ? `Project: ${task.projectId}` : null,
+          ``,
+          `Blocked by: ${blockedBy}`,
+          `Reason: ${reason}`,
+          blockedByTaskId ? `Blocking task: ${blockedByTaskId}` : null,
+          ``,
+          `Please review and take action: resolve the blocker, reassign, or cancel the task.`,
+        ]
+          .filter((l) => l !== null)
+          .join("\n");
+        notifySupervisor(blockSupervisorId, blockNotice, `task-blocked:${taskId}`);
+      } else {
+        console.log(`[Task Notification] Task ${taskId} is blocked: ${reason}`);
+      }
 
       const result = {
         taskId,

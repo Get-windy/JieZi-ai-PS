@@ -137,7 +137,9 @@ export async function archiveOldTasks(): Promise<{ archived: number }> {
   const toArchive: string[] = [];
 
   for (const [id, task] of tasks) {
-    if (task.status !== "done" && task.status !== "cancelled") continue;
+    if (task.status !== "done" && task.status !== "cancelled") {
+      continue;
+    }
     // 用 completedAt / cancelledAt / updatedAt 判断完成时间
     const finishedAt = task.completedAt ?? task.cancelledAt ?? task.updatedAt ?? task.createdAt;
     if (now - finishedAt >= ARCHIVE_AFTER_MS) {
@@ -145,7 +147,9 @@ export async function archiveOldTasks(): Promise<{ archived: number }> {
     }
   }
 
-  if (toArchive.length === 0) return { archived: 0 };
+  if (toArchive.length === 0) {
+    return { archived: 0 };
+  }
 
   for (const id of toArchive) {
     const task = tasks.get(id)!;
@@ -153,12 +157,11 @@ export async function archiveOldTasks(): Promise<{ archived: number }> {
     tasks.delete(id);
   }
 
-  await Promise.all([
-    saveToFile(TASKS_FILE, tasks),
-    saveToFile(TASKS_ARCHIVE_FILE, archive),
-  ]);
+  await Promise.all([saveToFile(TASKS_FILE, tasks), saveToFile(TASKS_ARCHIVE_FILE, archive)]);
 
-  console.log(`[TaskStorage] Archived ${toArchive.length} old task(s) to cold storage (>${ARCHIVE_AFTER_DAYS}d after completion)`);
+  console.log(
+    `[TaskStorage] Archived ${toArchive.length} old task(s) to cold storage (>${ARCHIVE_AFTER_DAYS}d after completion)`,
+  );
   return { archived: toArchive.length };
 }
 
@@ -242,7 +245,9 @@ export async function createTask(task: Task): Promise<Task> {
 export async function getTask(taskId: string): Promise<Task | undefined> {
   const tasks = await loadTasks();
   const hot = tasks.get(taskId);
-  if (hot) return hot;
+  if (hot) {
+    return hot;
+  }
   // 热存储未找到，尝试归档
   const archive = await loadArchivedTasks();
   return archive.get(taskId);
@@ -309,7 +314,9 @@ export async function deleteTask(taskId: string): Promise<boolean> {
  * 列出任务
  * @param filter.includeArchived - 为 true 时同时检索冷存储归档（默认 false，保持性能）
  */
-export async function listTasks(filter?: TaskFilter & { includeArchived?: boolean }): Promise<Task[]> {
+export async function listTasks(
+  filter?: TaskFilter & { includeArchived?: boolean },
+): Promise<Task[]> {
   const tasks = await loadTasks();
   let results = Array.from(tasks.values());
 
@@ -318,7 +325,9 @@ export async function listTasks(filter?: TaskFilter & { includeArchived?: boolea
     const archive = await loadArchivedTasks();
     // 热存储优先（同 id 以热存储为准）
     for (const [id, task] of archive) {
-      if (!tasks.has(id)) results.push(task);
+      if (!tasks.has(id)) {
+        results.push(task);
+      }
     }
   }
 
@@ -342,6 +351,15 @@ export async function listTasks(filter?: TaskFilter & { includeArchived?: boolea
   if (filter.assigneeType) {
     results = results.filter((task) =>
       (task.assignees ?? []).some((assignee) => assignee.type === filter.assigneeType),
+    );
+  }
+
+  if (filter.supervisorId) {
+    const supIdLower = filter.supervisorId.toLowerCase();
+    results = results.filter(
+      (task) =>
+        task.supervisorId === filter.supervisorId ||
+        task.supervisorId?.toLowerCase() === supIdLower,
     );
   }
 

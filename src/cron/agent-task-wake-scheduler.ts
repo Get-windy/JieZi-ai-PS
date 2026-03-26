@@ -416,6 +416,47 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
 
       // === 情况 B：无 in-progress，有 todo → 取优先级最高的 1 条唤醒 ===
       if (inProgressTasks.length === 0 && todoTasks.length > 0) {
+        // 逐期检测：todo 任务中如果有截止日已过且优先级不是 urgent，自动升级并通知 supervisor
+        // 如同自然人一早起来发现昨天的任务还没完成，上级会主动提醒
+        for (const t of todoTasks) {
+          if (t.dueDate && t.dueDate < now && t.priority !== "urgent") {
+            const overdueMinutes = Math.floor((now - t.dueDate) / 60000);
+            console.log(
+              `[Task Wake] Task ${t.id} (${t.title}) is overdue by ${overdueMinutes}min — auto-escalating priority to urgent`,
+            );
+            await taskStorage.updateTask(t.id, { priority: "urgent" });
+            // 通知 supervisor
+            const overdueSupRaw = t.supervisorId ?? t.creatorId;
+            if (overdueSupRaw && overdueSupRaw !== "system") {
+              const overdueSupId = normalizeAgentId(overdueSupRaw);
+              const overdueSupSession = `agent:${overdueSupId}:main`;
+              const overdueMsg = [
+                `[TASK OVERDUE] A task assigned to ${(t.assignees ?? []).map((a) => a.id).join(", ") || "unknown"} is overdue and has been auto-escalated to urgent priority.`,
+                ``,
+                `Task ID: ${t.id}`,
+                `Title: ${t.title}`,
+                `Due date: ${new Date(t.dueDate).toISOString()}`,
+                `Overdue by: ${overdueMinutes} minutes`,
+                t.projectId ? `Project: ${t.projectId}` : null,
+                ``,
+                `The task priority has been automatically upgraded to urgent.`,
+                `Please review and decide: extend the deadline, reassign, or cancel.`,
+              ]
+                .filter(Boolean)
+                .join("\n");
+              enqueueSystemEvent(overdueMsg, {
+                sessionKey: overdueSupSession,
+                contextKey: `cron:task-overdue:${t.id}`,
+              });
+              requestHeartbeatNow({
+                reason: `task-overdue:${t.id}`,
+                sessionKey: overdueSupSession,
+                agentId: overdueSupId,
+                coalesceMs: 10000,
+              });
+            }
+          }
+        }
         // 不做 projectId 过滤：任务只要分配给该 agent 就直接执行，无论属于哪个项目
         // 按优先级排序，只唤醒最高优先级的 1 条
         const sortedTodos = [...todoTasks].toSorted((a, b) => taskSortKey(b) - taskSortKey(a));

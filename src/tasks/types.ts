@@ -209,6 +209,7 @@ export interface TaskKanban {
 export interface TaskFilter {
   assigneeId?: string; // 执行者ID
   assigneeType?: MemberType; // 执行者类型
+  supervisorId?: string; // 上级管理者ID（查询 coordinator 分配出去的所有任务）
   creatorId?: string; // 创建者ID
   status?: TaskStatus | TaskStatus[]; // 状态
   priority?: TaskPriority | TaskPriority[]; // 优先级
