@@ -156,6 +156,7 @@ const BASE_METHODS = [
   "send",
   "agent",
   "agent.identity.get",
+  "agent.identity.set",
   "agent.wait",
   "browser.request",
   // Groups Management
@@ -384,6 +385,17 @@ const BASE_METHODS = [
   "evolve.skill.list",
   "evolve.skill.use",
   "evolve.stats",
+  "evolve.sharp.evaluate",
+  "evolve.sharp.history",
+  // Projects Management
+  "projects.list",
+  "projects.get",
+  "projects.create",
+  "projects.save",
+  "projects.updateWorkspace",
+  "projects.updateProgress",
+  "projects.completeSprint",
+  "projects.startSprint",
   // Scenarios 自动化协作场景
   "scenarios.list",
   "scenarios.get",

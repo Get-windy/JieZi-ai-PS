@@ -486,6 +486,7 @@ export const tasksRpc: GatewayRequestHandlers = {
           requesterId,
           undefined,
           undefined,
+          task.supervisorId,
         );
         if (!permCheck.allowed) {
           respond(
@@ -619,6 +620,7 @@ export const tasksRpc: GatewayRequestHandlers = {
             requesterId,
             undefined,
             undefined,
+            task.supervisorId,
           );
           return permCheck.allowed;
         });
@@ -877,6 +879,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         authorId,
         undefined,
         undefined,
+        task.supervisorId,
       );
       if (!permCheck.allowed) {
         respond(
@@ -953,6 +956,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         uploadedBy,
         undefined,
         undefined,
+        task.supervisorId,
       );
       if (!permCheck.allowed) {
         respond(
@@ -1110,6 +1114,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         requesterId,
         undefined,
         undefined,
+        parentTask.supervisorId,
       );
       if (!permCheck.allowed) {
         respond(
@@ -1216,6 +1221,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         requesterId,
         undefined,
         undefined,
+        task.supervisorId,
       );
       if (!taskPermCheck.allowed) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "无权限访问主任务"));
@@ -1232,6 +1238,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         requesterId,
         undefined,
         undefined,
+        dependsOnTask.supervisorId,
       );
       if (!depTaskPermCheck.allowed) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "无权限访问依赖任务"));

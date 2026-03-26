@@ -135,6 +135,8 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "evolve.reflect.list",
     "evolve.skill.list",
     "evolve.stats",
+    "evolve.sharp.evaluate",
+    "evolve.sharp.history",
     // Scenarios 场景：查询类
     "scenarios.list",
     "scenarios.get",
@@ -177,6 +179,8 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     // 项目管理：查询类
     "project.team.relations",
     "project.team.my-projects",
+    "projects.list",
+    "projects.get",
     // 组织：查询类（补充缺失）
     "org.list",
   ],
@@ -186,6 +190,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "agent",
     "agent.wait",
     "agent.create",
+    "agent.identity.set",
     "wake",
     "talk.mode",
     "talk.speak",
@@ -321,6 +326,11 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "projects.create",
     "projects.get",
     "projects.updateWorkspace",
+    "projects.updateProgress",
+    "projects.completeSprint",
+    "projects.startSprint",
+    "projects.save",
+    // 项目 SHARP 质量门控：写操作
     // 项目跨团队协作与交付：写操作
     "project.team.assign",
     "project.team.remove",

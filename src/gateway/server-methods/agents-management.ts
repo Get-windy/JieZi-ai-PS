@@ -18,6 +18,7 @@
  */
 
 import { execFile } from "node:child_process";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -4057,5 +4058,90 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         errorShape(ErrorCodes.UNAVAILABLE, `Failed to get team status: ${String(err)}`),
       );
     }
+  },
+
+  // ============================================================================
+  // 三文件身份体系
+  // soul.md   — 性格/价值观/决策原则（注入 prompt）
+  // agent.md  — 模型/工具/沙箱配置（配置元数据，不注入 prompt）
+  // user.md   — 用户上下文/偏好/研究领域（注入 prompt）
+  // ============================================================================
+
+  /**
+   * agent.identity.get — 读取三文件身份（soul/agent/user）
+   */
+  "agent.identity.get": async ({ params, respond }) => {
+    const agentId = (
+      (params as { agentId?: unknown })?.agentId != null
+        ? String((params as { agentId?: unknown }).agentId)
+        : ""
+    ).trim();
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+    const cfg = loadConfig();
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const readFile = (name: string): string => {
+      const filePath = path.join(workspaceDir, name);
+      try {
+        return fsSync.existsSync(filePath) ? fsSync.readFileSync(filePath, "utf-8") : "";
+      } catch {
+        return "";
+      }
+    };
+
+    respond(
+      true,
+      {
+        agentId,
+        soul: readFile("SOUL.md"),
+        agent: readFile("AGENT.md"),
+        user: readFile("USER.md"),
+        workspaceDir,
+      },
+      undefined,
+    );
+  },
+
+  /**
+   * agent.identity.set — 写入三文件身份（soul/agent/user）
+   * 传入哪个字段就写哪个，undefined 表示不修改。
+   */
+  "agent.identity.set": async ({ params, respond }) => {
+    const p = params as { agentId?: unknown; soul?: unknown; agent?: unknown; user?: unknown };
+    const agentId = (p?.agentId != null ? (p.agentId as string) : "").trim();
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+    const cfg = loadConfig();
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    if (!fsSync.existsSync(workspaceDir)) {
+      fsSync.mkdirSync(workspaceDir, { recursive: true });
+    }
+
+    const written: string[] = [];
+    const writeFile = (name: string, content: unknown) => {
+      if (typeof content !== "string") {
+        return;
+      }
+      fsSync.writeFileSync(path.join(workspaceDir, name), content, "utf-8");
+      written.push(name);
+    };
+
+    writeFile("SOUL.md", p.soul);
+    writeFile("AGENT.md", p.agent);
+    writeFile("USER.md", p.user);
+
+    respond(true, { agentId, written, workspaceDir }, undefined);
   },
 };

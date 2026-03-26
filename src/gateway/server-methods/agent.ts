@@ -676,12 +676,8 @@ export const agentHandlers: GatewayRequestHandlers = {
           status: "error" as const,
           summary: String(err),
         };
-        context.dedupe.set(`agent:${idem}`, {
-          ts: Date.now(),
-          ok: false,
-          payload,
-          error,
-        });
+        // 失败时不写入 dedupe 缓存，让 announce queue 等重试机制可以真正重试，
+        // 而不是永远返回缓存的错误结果（cached=true）。
         respond(false, payload, error, {
           runId,
           error: formatForLog(err),

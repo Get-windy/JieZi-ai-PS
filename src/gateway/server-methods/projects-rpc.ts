@@ -166,6 +166,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
           acceptanceCriteria: projectCtx.config?.acceptanceCriteria,
           progressNotes: projectCtx.config?.progressNotes,
           progressUpdatedAt: projectCtx.config?.progressUpdatedAt,
+
           groups: projectGroups.map((g) => ({
             groupId: g.id,
             name: g.name,
@@ -816,6 +817,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
           codeDir: projectCtx.codeDir,
           docsDir: projectCtx.docsDir,
           requirementsDir: projectCtx.config?.requirementsDir,
+
           groups: projectGroups.map((g) => ({
             groupId: g.id,
             name: g.name,
