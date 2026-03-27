@@ -101,9 +101,16 @@ const TaskCreateToolSchema = Type.Object({
    */
   blockedBy: Type.Optional(Type.Array(Type.String({ maxLength: 128 }))),
   /**
-   * 上级管理者ID（可选）
-   * coordinator/parent agent 分配子任务时传入自身的 agentId，使其具备查看和写入此任务工作日志的权限
-   * 适用场景：coordinator 创建子任务并将其分配给 sub-agent，希望后续能追踪进展
+   * 主管 ID（可选，强烈建议填写）
+   *
+   * 必须是该任务所属项目的成员，不能填写项目外人员。
+   * 候选人（根据任务内容自行判断选择）：
+   *   - 你自己（currentAgentId）：你分配给他人但自己负责跟进时
+   *   - 项目负责人（ownerId）：需要项目负责人最终验收或决策时
+   *   - 其他项目成员：任务属于某个专职角色管辖时（如 qa-lead 管测试任务）
+   *
+   * 不填时系统将默认设为你自己（任务创建者），确保任务始终有人负责。
+   * supervisorId 拥有：查看任务详情、写入工作日志、收到任务完成/阻塞通知的权限。
    */
   supervisorId: Type.Optional(Type.String({ maxLength: 128 })),
 });
@@ -296,7 +303,9 @@ export function createTaskCreateTool(opts?: {
         typeof params.estimatedHours === "number" ? params.estimatedHours : undefined;
       const parentTaskId = readStringParam(params, "parentTaskId");
       const blockedBy = Array.isArray(params.blockedBy) ? params.blockedBy.map(String) : undefined;
-      const supervisorId = readStringParam(params, "supervisorId");
+      // supervisorId：若 AI 未显式传入，自动用当前 agent 自身作为主管（主控分配子任务场景）
+      // supervisorId：AI 应根据任务内容从项目成员中选择；未指定时默认为创建者自己
+      const supervisorId = readStringParam(params, "supervisorId") || opts?.currentAgentId;
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
@@ -323,6 +332,9 @@ export function createTaskCreateTool(opts?: {
           estimatedHours,
           blockedBy: blockedBy || undefined,
           supervisorId: supervisorId || undefined,
+          // creatorId：自动填入当前 agent，确保 creatorId 不会变成不存在的 "system"
+          creatorId: opts?.currentAgentId || undefined,
+          creatorType: "agent",
         });
 
         // 如果有子任务关系，更新父任务的 subtasks 列表

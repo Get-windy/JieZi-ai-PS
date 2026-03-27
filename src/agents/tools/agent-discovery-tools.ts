@@ -84,7 +84,9 @@ const AgentCapabilitiesToolSchema = Type.Object({
  * agent_assign_task 工具参数 schema
  */
 const AgentAssignTaskToolSchema = Type.Object({
-  /** 目标智能体ID（必填） */
+  /** 目标智能体ID（必填）。
+   * 注意：如果指定了 projectId，targetAgentId 必须是该项目的成员（即加入了项目群组的成员），
+   * 不得将项目任务派发给项目外部的 agent。 */
   targetAgentId: Type.String({ minLength: 1, maxLength: 64 }),
   /** 任务标题（可选，不填则取 task 的前100字符） */
   title: Type.Optional(Type.String({ maxLength: 200 })),
@@ -103,7 +105,9 @@ const AgentAssignTaskToolSchema = Type.Object({
   deadline: Type.Optional(Type.String()),
   /** 任务上下文数据（可选） */
   context: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
-  /** 所属项目 ID（可选） */
+  /** 所属项目 ID（可选）。设置后任务属于该项目，
+   * 并且系统会校验 targetAgentId 必须是项目成员。如果该 agent 不在项目群组中，
+   * 将被拒绝，请先将其加入项目群组再分配任务。 */
   projectId: Type.Optional(Type.String({ maxLength: 128 })),
   /** 所属团队 ID（可选） */
   teamId: Type.Optional(Type.String({ maxLength: 128 })),
@@ -375,7 +379,10 @@ export function createAgentAssignTaskTool(opts?: {
     label: "Agent Assign Task",
     name: "agent_assign_task",
     description:
-      "Assign a task to another agent. The task will be queued and executed by the target agent. Returns task ID for tracking. Requires task assignment permission.",
+      "Assign a task to another agent. The task will be queued and executed by the target agent. Returns task ID for tracking. Requires task assignment permission." +
+      " IMPORTANT: If projectId is provided, targetAgentId MUST be a member of that project's group. " +
+      "You cannot assign a project task to an agent who is not in the project. " +
+      "If rejected, first add the agent to the project group, then assign the task.",
     parameters: AgentAssignTaskToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;

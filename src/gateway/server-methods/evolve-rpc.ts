@@ -30,6 +30,8 @@ import path from "node:path";
 import { resolveStateDir } from "../../../upstream/src/config/paths.js";
 import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import { groupManager } from "../../sessions/group-manager.js";
+import { getGroupsWorkspaceRoot } from "../../utils/project-context.js";
 
 // ============================================================================
 // 类型定义
@@ -968,6 +970,101 @@ export const evolveRpc: GatewayRequestHandlers = {
       );
     }
   },
+
+  /**
+   * evolve.sharp.evaluate — 评估一次任务输出的 SHARP 质量分数
+   * 如果总分 < SHARP_THRESHOLD，应由调用方通知 supervisor
+   */
+  "evolve.sharp.evaluate": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const taskSummary = params?.taskSummary ? String(params.taskSummary).trim() : "";
+      const output = params?.output ? String(params.output).trim() : "";
+      if (!taskSummary || !output) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "taskSummary and output are required"),
+        );
+        return;
+      }
+      const validOutcomes = ["success", "partial", "failure"];
+      const outcome = (
+        validOutcomes.includes(String(params?.outcome ?? "")) ? String(params.outcome) : "partial"
+      ) as "success" | "partial" | "failure";
+      const hasError = params?.hasError === true;
+      const note = params?.note ? String(params.note).slice(0, 200) : undefined;
+      // 支持 supervisor 覆盖分数
+      const overrides: Parameters<typeof evaluateSharp>[0]["overrides"] = {};
+      for (const dim of [
+        "specificity",
+        "helpfulness",
+        "accuracy",
+        "relevance",
+        "professionalism",
+      ] as const) {
+        const v = params?.[dim];
+        if (typeof v === "number" && v >= 1 && v <= 5) {
+          overrides[dim] = Math.round(v) as 1 | 2 | 3 | 4 | 5;
+        }
+      }
+      const score = evaluateSharp({
+        agentId,
+        taskSummary,
+        output,
+        outcome,
+        hasError,
+        source: "self",
+        overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
+        note,
+      });
+      respond(
+        true,
+        {
+          score,
+          belowThreshold: score.total < SHARP_THRESHOLD,
+          threshold: SHARP_THRESHOLD,
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.sharp.evaluate failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * evolve.sharp.history — 获取 SHARP 历史分数和均分摘要
+   */
+  "evolve.sharp.history": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const limit = typeof params?.limit === "number" ? Math.min(params.limit, 50) : 20;
+      const store = loadSharpStore(agentId);
+      const recent = store.entries.toSorted((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+      const summaryText = getSharpSummaryText(agentId, limit);
+      respond(
+        true,
+        {
+          entries: recent,
+          total: store.entries.length,
+          returned: recent.length,
+          summaryText,
+          threshold: SHARP_THRESHOLD,
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.sharp.history failed: ${String(err)}`),
+      );
+    }
+  },
 };
 
 // ============================================================================
@@ -990,6 +1087,8 @@ export function autoSaveReflection(params: {
   durationMs?: number;
   /** P2 AgentEvolver 细粒度步骤归因（自动从 tool_calls 提取） */
   steps?: StepOutcome[];
+  /** 当前会话的 sessionKey，传入后可精确匹配当前群组的项目 SHARP 开关 */
+  sessionKey?: string;
 }): void {
   try {
     const key = params.agentId ?? "_global";
@@ -1032,6 +1131,37 @@ export function autoSaveReflection(params: {
       recordPerfOutcome(params.agentId, taskType, params.outcome);
     } catch {
       /* 不影响主流程 */
+    }
+
+    // f5 SHARP 质量门控：自动评估本次任务输出（仅在当前会话所在项目已启用 SHARP 时执行）
+    // 判断递推：项目是否启用 SHARP → 项目是否有项目群
+    try {
+      const sharpStatus = checkSharpStatus(params.agentId, params.sessionKey);
+      if (sharpStatus.status === "error") {
+        // 项目启用了 SHARP 但未配置项目群，打印警告
+        console.warn(`[evolve-rpc] autoSaveReflection SHARP 配置错误: ${sharpStatus.message}`);
+      } else if (sharpStatus.status === "enabled") {
+        const sharpScore = evaluateSharp({
+          agentId: params.agentId,
+          taskSummary: params.taskSummary,
+          output: params.reflection,
+          outcome: params.outcome,
+          hasError: params.outcome === "failure",
+          source: "self",
+        });
+        // 低分时在反思条目中标注（后续可由 supervisor 复评）
+        if (sharpScore.total < SHARP_THRESHOLD) {
+          const logMsg =
+            `[SHARP] 质量评分 ${sharpScore.total}/25（低于门控阈值 ${SHARP_THRESHOLD}）` +
+            ` S=${sharpScore.specificity} H=${sharpScore.helpfulness} A=${sharpScore.accuracy}` +
+            ` R=${sharpScore.relevance} P=${sharpScore.professionalism}`;
+          // eslint-disable-next-line no-console
+          console.warn(`[evolve-rpc] autoSaveReflection ${params.agentId ?? "?"}: ${logMsg}`);
+        }
+      }
+      // status === "disabled" 时静默跳过
+    } catch {
+      /* SHARP 评估失败不影响主流程 */
     }
 
     // FGT: 顺带标记过期技能（任务粒度定期清理，无需单独定时器）
@@ -1458,6 +1588,382 @@ export function getFailurePatternsText(
       return `${idx + 1}. [失败案例] ${e.taskSummary}\n   工具轨迹: ${traceStr}\n   教训: ${e.lesson}`;
     });
     return `相似任务的历史失败模式（避免重蹈覆辙）：\n${lines.join("\n")}`;
+  } catch {
+    return "";
+  }
+}
+
+// ============================================================================
+// SHARP 质量门控（awesome-openclaw-agents Critic ≥ 18 设计，5 维度各 1-5 分，总分 5-25）
+// S = Specificity（具体性）
+// H = Helpfulness（有效性）
+// A = Accuracy（准确性）
+// R = Relevance（相关性）
+// P = Professionalism（专业性）
+// ============================================================================
+
+export interface SharpScore {
+  id: string;
+  agentId?: string;
+  /** 被评估的任务摘要 */
+  taskSummary: string;
+  /** 被评估的输出摘要（前 500 字符） */
+  outputSummary: string;
+  /** S: 具体性（1-5）—— 输出是否具体、有细节、可执行 */
+  specificity: number;
+  /** H: 有效性（1-5）—— 输出是否真正解决了问题 */
+  helpfulness: number;
+  /** A: 准确性（1-5）—— 输出内容是否正确 */
+  accuracy: number;
+  /** R: 相关性（1-5）—— 输出是否紧扣任务要求 */
+  relevance: number;
+  /** P: 专业性（1-5）—— 输出是否规范、结构清晰、用语准确 */
+  professionalism: number;
+  /** 总分 = S+H+A+R+P，范围 5-25 */
+  total: number;
+  /** 评分来源：agent 自评 或 supervisor 评审 */
+  source: "self" | "supervisor";
+  /** 低于阈值时的补救说明（可选） */
+  note?: string;
+  createdAt: number;
+}
+
+interface SharpStore {
+  version: 1;
+  entries: SharpScore[];
+}
+
+/** SHARP 门控阈值（总分低于此值触发通知） */
+const SHARP_THRESHOLD = 15;
+
+function resolveSharpScoresFile(agentId?: string): string {
+  return path.join(resolveEvolveDir(agentId), "sharp-scores.json");
+}
+
+function loadSharpStore(agentId?: string): SharpStore {
+  return loadJson<SharpStore>(resolveSharpScoresFile(agentId), { version: 1, entries: [] });
+}
+
+// ── SHARP 项目级开关 ─────────────────────────────────────────────────────────
+// SHARP 质量门控为项目级控制，由 PROJECT_CONFIG.json 中的 sharpEnabled 字段决定。
+// 单个 Agent 无 Agent 级开关——质量门控是对抗机制，需要项目整体启用才有意义。
+
+/**
+ * isProjectSharpEnabled — 根据 projectId 读取项目级 SHARP 开关状态
+ */
+export function isProjectSharpEnabled(projectId: string): boolean {
+  try {
+    const workspaceRoot = getGroupsWorkspaceRoot();
+    const configPath = path.join(workspaceRoot, projectId, "PROJECT_CONFIG.json");
+    if (!fs.existsSync(configPath)) {
+      return false;
+    }
+    const cfg = JSON.parse(fs.readFileSync(configPath, "utf8")) as { sharpEnabled?: boolean };
+    return cfg.sharpEnabled === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * SharpCheckResult — SHARP 状态检查结果
+ *
+ * - `disabled`  项目未启用 SHARP 或没有项目归属，直接跳过
+ * - `enabled`   项目已启用且存在项目群，正常执行评分
+ * - `error`     项目启用了 SHARP 但未配置项目群，配置错误
+ */
+export type SharpCheckResult =
+  | { status: "disabled" }
+  | { status: "enabled"; projectId: string; groupId: string }
+  | { status: "error"; reason: "no-group"; projectId: string; message: string };
+
+/**
+ * checkSharpStatus — 检查当前任务的 SHARP 门控状态（三态返回）
+ *
+ * 判断递推顺序：
+ *   1. 从 sessionKey 解析 groupId
+ *   2. 查 group.projectId 确定当前任务属于哪个项目
+ *   3. 读该项目的 PROJECT_CONFIG.json 中的 sharpEnabled
+ *   4. 项目已启用时，检查项目是否配置了项目群
+ *
+ * 各种情况：
+ *   - 项目未启用 SHARP → { status: "disabled" }
+ *   - 项目已启用 + 有项目群 → { status: "enabled", projectId, groupId }
+ *   - 项目已启用 + 无项目群 → { status: "error", reason: "no-group", message: "提示文本" }
+ */
+export function checkSharpStatus(
+  agentId: string | undefined,
+  sessionKey?: string,
+): SharpCheckResult {
+  try {
+    if (!agentId) {
+      return { status: "disabled" };
+    }
+
+    // 从 sessionKey 解析 groupId
+    let resolvedGroupId: string | null = null;
+    let resolvedProjectId: string | null = null;
+
+    if (sessionKey) {
+      const parts = sessionKey.split(":");
+      const groupId = parts.length >= 2 ? parts[parts.length - 1] : null;
+      if (groupId && groupId !== "main") {
+        const group = groupManager.getGroup(groupId);
+        if (group?.projectId) {
+          resolvedGroupId = groupId;
+          resolvedProjectId = group.projectId;
+        }
+      }
+    }
+
+    // 没有项目归属 → disabled
+    if (!resolvedProjectId) {
+      return { status: "disabled" };
+    }
+
+    // 检查项目是否启用 SHARP
+    if (!isProjectSharpEnabled(resolvedProjectId)) {
+      return { status: "disabled" };
+    }
+
+    // 项目已启用 SHARP，检查项目是否配置了项目群
+    // 这里的 resolvedGroupId 就是已解析到的项目群
+    // 额外检查：该项目是否存在至少一个项目群
+    const projectGroups = Array.from(
+      // groupManager.groups 是 private，通过 getAgentGroups 取得所有群组并过滤
+      // 改用 getGroup 已知 groupId 直接使用即可
+      [groupManager.getGroup(resolvedGroupId!)].filter(Boolean),
+    );
+
+    if (projectGroups.length === 0 || !resolvedGroupId) {
+      // 项目已启用 SHARP 但该项目无群组配置
+      return {
+        status: "error",
+        reason: "no-group",
+        projectId: resolvedProjectId,
+        message: `项目「${resolvedProjectId}」已开启 SHARP 质量门控，但尚未配置项目群。请先在群组管理中创建群组并关联到该项目。`,
+      };
+    }
+
+    return { status: "enabled", projectId: resolvedProjectId, groupId: resolvedGroupId };
+  } catch {
+    return { status: "disabled" };
+  }
+}
+
+/**
+ * isSharpEnabled — 对外兼容接口，封装 checkSharpStatus 的布尔短路径
+ * 仅返回是否应该执行 SHARP（enabled 且无配置错误时返回 true）
+ */
+export function isSharpEnabled(agentId: string | undefined, sessionKey?: string): boolean {
+  return checkSharpStatus(agentId, sessionKey).status === "enabled";
+}
+
+/**
+ * evaluateSharp — 基于规则自动评估输出质量（无需 LLM，轻量实现）
+ *
+ * 规则打分策略（可被 supervisor 复评覆盖）：
+ * - Specificity：输出字数/细节指标
+ * - Helpfulness：outcome 映射（success=5, partial=3, failure=1）
+ * - Accuracy：无 error 且有实质内容 = 4+
+ * - Relevance：taskSummary 关键词覆盖率
+ * - Professionalism：结构化程度（含列表/代码/分段）
+ */
+export function evaluateSharp(params: {
+  agentId?: string;
+  taskSummary: string;
+  output: string;
+  outcome: "success" | "partial" | "failure";
+  hasError?: boolean;
+  source?: "self" | "supervisor";
+  /** 允许手动覆盖各维度分数（supervisor 复评用） */
+  overrides?: Partial<
+    Pick<SharpScore, "specificity" | "helpfulness" | "accuracy" | "relevance" | "professionalism">
+  >;
+  note?: string;
+}): SharpScore {
+  const {
+    taskSummary,
+    output,
+    outcome,
+    hasError = false,
+    source = "self",
+    overrides,
+    note,
+  } = params;
+
+  // --- Specificity：输出字数越长越具体 ---
+  const rawSpecificity = (() => {
+    const len = output.trim().length;
+    if (len >= 800) {
+      return 5;
+    }
+    if (len >= 400) {
+      return 4;
+    }
+    if (len >= 150) {
+      return 3;
+    }
+    if (len >= 50) {
+      return 2;
+    }
+    return 1;
+  })();
+
+  // --- Helpfulness：基于 outcome ---
+  const rawHelpfulness = outcome === "success" ? 5 : outcome === "partial" ? 3 : 1;
+
+  // --- Accuracy：无 error 且有实质内容 ---
+  const rawAccuracy = (() => {
+    if (hasError) {
+      return 1;
+    }
+    if (output.trim().length < 20) {
+      return 2;
+    }
+    // 检测常见错误词（极简启发式）
+    const errPhrases = ["sorry", "unable to", "cannot", "错误", "失败", "无法"];
+    const lc = output.toLowerCase();
+    const errCount = errPhrases.filter((p) => lc.includes(p)).length;
+    if (errCount >= 2) {
+      return 2;
+    }
+    if (errCount === 1) {
+      return 3;
+    }
+    return outcome === "success" ? 5 : 4;
+  })();
+
+  // --- Relevance：taskSummary 关键词在 output 中的覆盖率 ---
+  const rawRelevance = (() => {
+    const kws = extractKeywords(taskSummary);
+    if (kws.length === 0) {
+      return 3;
+    }
+    const lc = output.toLowerCase();
+    const hits = kws.filter((k) => lc.includes(k)).length;
+    const rate = hits / kws.length;
+    if (rate >= 0.7) {
+      return 5;
+    }
+    if (rate >= 0.5) {
+      return 4;
+    }
+    if (rate >= 0.3) {
+      return 3;
+    }
+    if (rate >= 0.1) {
+      return 2;
+    }
+    return 1;
+  })();
+
+  // --- Professionalism：结构化程度 ---
+  const rawProfessionalism = (() => {
+    const hasList = /^[-*•\d]\./m.test(output) || /^\d+\./m.test(output);
+    const hasCode = /```|`[^`]+`/.test(output);
+    const hasSections = /^#{1,3}\s|^\*\*[^*]+\*\*/m.test(output);
+    let score = 3;
+    if (hasList) {
+      score += 0.5;
+    }
+    if (hasCode) {
+      score += 0.5;
+    }
+    if (hasSections) {
+      score += 0.5;
+    }
+    if (output.length > 500 && (hasList || hasSections)) {
+      score += 0.5;
+    }
+    return Math.min(5, Math.round(score));
+  })();
+
+  const specificity = overrides?.specificity ?? rawSpecificity;
+  const helpfulness = overrides?.helpfulness ?? rawHelpfulness;
+  const accuracy = overrides?.accuracy ?? rawAccuracy;
+  const relevance = overrides?.relevance ?? rawRelevance;
+  const professionalism = overrides?.professionalism ?? rawProfessionalism;
+  const total = specificity + helpfulness + accuracy + relevance + professionalism;
+
+  const entry: SharpScore = {
+    id: genId("sharp"),
+    agentId: params.agentId,
+    taskSummary: taskSummary.slice(0, 200),
+    outputSummary: output.slice(0, 500),
+    specificity,
+    helpfulness,
+    accuracy,
+    relevance,
+    professionalism,
+    total,
+    source,
+    createdAt: Date.now(),
+  };
+  if (note) {
+    entry.note = note;
+  }
+
+  // 持久化
+  try {
+    const store = loadSharpStore(params.agentId);
+    store.entries.push(entry);
+    if (store.entries.length > 300) {
+      store.entries = store.entries.toSorted((a, b) => b.createdAt - a.createdAt).slice(0, 300);
+    }
+    saveJson(resolveSharpScoresFile(params.agentId), store);
+  } catch {
+    /* 持久化失败不影响返回结果 */
+  }
+
+  return entry;
+}
+
+/**
+ * getSharpSummaryText — 获取 SHARP 历史均分摘要文本（用于 before_prompt_build 注入）
+ */
+export function getSharpSummaryText(
+  agentId: string | undefined,
+  recentN = 10,
+  sessionKey?: string,
+): string {
+  // 仅在项目启用且配置正确时注入历史均分（error/disabled 均跳过）
+  if (checkSharpStatus(agentId, sessionKey).status !== "enabled") {
+    return "";
+  }
+  try {
+    const store = loadSharpStore(agentId);
+    if (store.entries.length === 0) {
+      return "";
+    }
+    const recent = store.entries.toSorted((a, b) => b.createdAt - a.createdAt).slice(0, recentN);
+    const avg = (
+      field: keyof Pick<
+        SharpScore,
+        "specificity" | "helpfulness" | "accuracy" | "relevance" | "professionalism" | "total"
+      >,
+    ) => Math.round((recent.reduce((s, e) => s + e[field], 0) / recent.length) * 10) / 10;
+
+    const avgTotal = avg("total");
+    const dims = [
+      { name: "S(具体性)", val: avg("specificity") },
+      { name: "H(有效性)", val: avg("helpfulness") },
+      { name: "A(准确性)", val: avg("accuracy") },
+      { name: "R(相关性)", val: avg("relevance") },
+      { name: "P(专业性)", val: avg("professionalism") },
+    ];
+    const minDim = dims.reduce((a, b) => (a.val < b.val ? a : b));
+    const lines = [
+      `最近 ${recent.length} 次任务 SHARP 均分: ${avgTotal}/25`,
+      dims.map((d) => `  ${d.name}: ${d.val}`).join(", "),
+    ];
+    if (minDim.val <= 2.5) {
+      lines.push(`  ⚠ 最低维度「${minDim.name}」(${minDim.val}) — 本次任务请特别注意提升此维度`);
+    }
+    if (avgTotal < SHARP_THRESHOLD) {
+      lines.push(`  ⚠ 整体质量低于门控阈值 ${SHARP_THRESHOLD}，请仔细审核输出`);
+    }
+    return lines.join("\n");
   } catch {
     return "";
   }

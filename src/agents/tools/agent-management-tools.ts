@@ -1,13 +1,16 @@
 /**
  * 智能体管理工具
- * 
+ *
  * 提供创建、更新、删除智能助手的工具
  */
 
 import { Type } from "@sinclair/typebox";
 import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
 import { jsonResult, readStringParam } from "../../../upstream/src/agents/tools/common.js";
-import { callGatewayTool, readGatewayCallOptions } from "../../../upstream/src/agents/tools/gateway.js";
+import {
+  callGatewayTool,
+  readGatewayCallOptions,
+} from "../../../upstream/src/agents/tools/gateway.js";
 
 /**
  * agent_create 工具参数 schema
@@ -46,7 +49,7 @@ const AgentDeleteToolSchema = Type.Object({
 /**
  * 创建智能助手创建工具
  */
-export function createAgentCreateTool(opts?: {
+export function createAgentCreateTool(_opts?: {
   /** 当前操作者的智能助手ID */
   currentAgentId?: string;
 }): AnyAgentTool {
@@ -60,33 +63,18 @@ export function createAgentCreateTool(opts?: {
       const params = args as Record<string, unknown>;
       const agentId = readStringParam(params, "agentId", { required: true });
       const name = readStringParam(params, "name");
-      const workspace = readStringParam(params, "workspace");
-      const gatewayOpts = readGatewayCallOptions(params);
 
-      try {
-        // 调用 agent.create RPC
-        const response = await callGatewayTool("agent.create", gatewayOpts, {
-          id: agentId,
-          name: name || agentId,
-          workspace,
-        });
-
-        return jsonResult({
-          success: true,
-          message: `Agent "${agentId}" created successfully`,
-          agent: {
-            id: agentId,
-            name: name || agentId,
-            workspace: workspace || `default workspace for ${agentId}`,
-            createdAt: Date.now(),
-          },
-        });
-      } catch (error) {
-        return jsonResult({
-          success: false,
-          error: `Failed to create agent: ${error instanceof Error ? error.message : String(error)}`,
-        });
-      }
+      // 严格拦截：创建智能体必须经用户明确批准，不得自行决定
+      return jsonResult({
+        success: false,
+        blocked: true,
+        error:
+          `创建智能体需要用户明确批准。请将以下信息告知用户并等待确认：` +
+          `\n- 想创建的 agentId：${agentId}` +
+          `\n- 名称：${name || agentId}` +
+          `\n- 创建理由：（请说明）` +
+          `\n待用户明确批准后才可执行。严禁未经批准自行创建。`,
+      });
     },
   };
 }
@@ -94,7 +82,7 @@ export function createAgentCreateTool(opts?: {
 /**
  * 创建智能助手更新工具
  */
-export function createAgentUpdateTool(opts?: {
+export function createAgentUpdateTool(_opts?: {
   /** 当前操作者的智能助手ID */
   currentAgentId?: string;
 }): AnyAgentTool {
@@ -120,7 +108,7 @@ export function createAgentUpdateTool(opts?: {
 
       try {
         // 调用 agent.update RPC
-        const response = await callGatewayTool("agent.update", gatewayOpts, {
+        const _response = await callGatewayTool("agent.update", gatewayOpts, {
           id: agentId,
           name,
           workspace,
@@ -149,7 +137,7 @@ export function createAgentUpdateTool(opts?: {
 /**
  * 创建智能助手删除工具
  */
-export function createAgentDeleteTool(opts?: {
+export function createAgentDeleteTool(_opts?: {
   /** 当前操作者的智能助手ID */
   currentAgentId?: string;
 }): AnyAgentTool {
@@ -162,8 +150,6 @@ export function createAgentDeleteTool(opts?: {
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
       const agentId = readStringParam(params, "agentId", { required: true });
-      const deleteWorkspace = typeof params.deleteWorkspace === "boolean" ? params.deleteWorkspace : false;
-      const gatewayOpts = readGatewayCallOptions(params);
 
       // 安全检查：不能删除默认智能体
       if (agentId === "main") {
@@ -173,29 +159,16 @@ export function createAgentDeleteTool(opts?: {
         });
       }
 
-      try {
-        // 调用 agent.delete RPC
-        const response = await callGatewayTool("agent.delete", gatewayOpts, {
-          id: agentId,
-          deleteWorkspace,
-        });
-
-        return jsonResult({
-          success: true,
-          message: `Agent "${agentId}" deleted successfully`,
-          deleted: {
-            agentId,
-            workspaceDeleted: deleteWorkspace,
-            deletedAt: Date.now(),
-          },
-        });
-      } catch (error) {
-        return jsonResult({
-          success: false,
-          error: `Failed to delete agent: ${error instanceof Error ? error.message : String(error)}`,
-        });
-      }
+      // 严格拦截：删除智能体必须经用户明确批准，不得自行决定
+      return jsonResult({
+        success: false,
+        blocked: true,
+        error:
+          `删除智能体需要用户明确批准。请将以下信息告知用户并等待确认：` +
+          `\n- 要删除的 agentId：${agentId}` +
+          `\n- 删除理由：（请说明）` +
+          `\n待用户明确批准后才可执行。严禁未经批准自行删除。`,
+      });
     },
   };
 }
-

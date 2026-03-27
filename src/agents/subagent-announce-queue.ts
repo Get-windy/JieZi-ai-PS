@@ -47,6 +47,8 @@ type AnnounceQueueState = {
   dropPolicy: QueueDropPolicy;
   droppedCount: number;
   summaryLines: string[];
+  /** 连续失败次数，用于指数退避计算 */
+  consecutiveFailures: number;
   send: (item: AnnounceQueueItem) => Promise<void>;
 };
 
@@ -60,6 +62,7 @@ export function resetAnnounceQueuesForTests() {
     queue.summaryLines.length = 0;
     queue.droppedCount = 0;
     queue.lastEnqueuedAt = 0;
+    queue.consecutiveFailures = 0;
   }
   ANNOUNCE_QUEUES.clear();
 }
@@ -88,6 +91,7 @@ function getAnnounceQueue(
     dropPolicy: settings.dropPolicy ?? "summarize",
     droppedCount: 0,
     summaryLines: [],
+    consecutiveFailures: 0,
     send,
   };
   applyQueueRuntimeSettings({
@@ -174,10 +178,17 @@ function scheduleAnnounceDrain(key: string) {
           break;
         }
       }
+      // Drain succeeded — reset failure counter.
+      queue.consecutiveFailures = 0;
     } catch (err) {
-      // Keep items in queue and retry after debounce; avoid hot-loop retries.
-      queue.lastEnqueuedAt = Date.now();
-      defaultRuntime.error?.(`announce queue drain failed for ${key}: ${String(err)}`);
+      queue.consecutiveFailures++;
+      // 指数退避：2s, 4s, 8s, ... 上限 60s，避免 outbound 未配置时的热循环重试
+      const errorBackoffMs = Math.min(1000 * Math.pow(2, queue.consecutiveFailures), 60_000);
+      const retryDelayMs = Math.max(errorBackoffMs, queue.debounceMs);
+      queue.lastEnqueuedAt = Date.now() + retryDelayMs - queue.debounceMs;
+      defaultRuntime.error?.(
+        `announce queue drain failed for ${key} (attempt ${queue.consecutiveFailures}, retry in ${Math.round(retryDelayMs / 1000)}s): ${String(err)}`,
+      );
     } finally {
       queue.draining = false;
       if (queue.items.length === 0 && queue.droppedCount === 0) {

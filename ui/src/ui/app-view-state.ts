@@ -235,7 +235,8 @@ export type AppViewState = {
     | "cron"
     | "modelAccounts"
     | "channelPolicies"
-    | "permissionsConfig";
+    | "permissionsConfig"
+    | "identity";
   // Collaboration 协作管理状态
   collaborationActivePanel:
     | "groups"
@@ -254,6 +255,12 @@ export type AppViewState = {
   agentIdentityLoading: boolean;
   agentIdentityError: string | null;
   agentIdentityById: Record<string, AgentIdentityResult>;
+  /** 三文件身份体系 */
+  agentSoulFiles: { agentId: string; soul: string; agent: string; user: string } | null;
+  agentSoulFilesLoading: boolean;
+  agentSoulFilesError: string | null;
+  agentSoulDrafts: { soul: string; agent: string; user: string };
+  agentSoulSaving: boolean;
   agentSkillsLoading: boolean;
   agentSkillsError: string | null;
   agentSkillsReport: SkillStatusReport | null;

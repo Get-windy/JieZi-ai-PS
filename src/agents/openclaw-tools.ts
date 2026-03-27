@@ -1,4 +1,7 @@
+import { getChannelPlugin } from "../../upstream/src/channels/plugins/index.js";
+import { getPluginToolMeta } from "../../upstream/src/plugins/tools.js";
 import type { OpenClawConfig } from "../config/config.js";
+import type { AgentChannelBindings } from "../config/types.channel-bindings.js";
 import { detectMessageToolExfil } from "../infra/exec-exfil-detect.js";
 import { resolvePluginTools } from "../plugins/tools.js";
 import type { GatewayMessageChannel } from "../utils/message-channel.js";
@@ -781,15 +784,20 @@ export function createOpenClawTools(options?: {
     }),
   ];
 
+  const currentAgentId = resolveSessionAgentId({
+    sessionKey: options?.agentSessionKey,
+    config: options?.config,
+  });
+
+  // 收集当前 agent 绑定的通道账号映射：channelId → Set<accountId>（只含 enabled 绑定）
+  const agentChannelAccountMap = resolveAgentChannelAccountMap(options?.config, currentAgentId);
+
   const pluginTools = resolvePluginTools({
     context: {
       config: options?.config,
       workspaceDir,
       agentDir: options?.agentDir,
-      agentId: resolveSessionAgentId({
-        sessionKey: options?.agentSessionKey,
-        config: options?.config,
-      }),
+      agentId: currentAgentId,
       sessionKey: options?.agentSessionKey,
       sessionId: options?.sessionId,
       messageChannel: options?.agentChannel,
@@ -800,16 +808,90 @@ export function createOpenClawTools(options?: {
     toolAllowlist: options?.pluginToolAllowlist,
   });
 
+  // 通道工具隔离过滤：只保留当前 agent 绑定了对应通道的工具。
+  // 规则：若工具属于某通道插件（pluginId 可被 getChannelPlugin 识别），
+  // 则当前 agent 的 channelBindings 中必须有该 channelId 的启用绑定，否则过滤掉。
+  // 非通道插件工具（如通用能力工具）不受影响。
+  const filteredPluginTools =
+    agentChannelAccountMap.size > 0 || hasAnyChannelBindings(options?.config)
+      ? pluginTools.filter((tool) => {
+          const meta = getPluginToolMeta(tool);
+          if (!meta?.pluginId) {
+            return true;
+          }
+          // 判断是否是通道插件工具
+          const channelPlugin = getChannelPlugin(meta.pluginId as never);
+          if (!channelPlugin) {
+            return true;
+          } // 非通道插件，不过滤
+          // 是通道插件：必须该 agent 有对应 channelId 的启用绑定
+          return agentChannelAccountMap.has(meta.pluginId);
+        })
+      : pluginTools;
+
   // 从自动注册表补充未注册的工具（去重）
-  const agentId = resolveSessionAgentId({
-    sessionKey: options?.agentSessionKey,
-    config: options?.config,
-  });
   const existingNames = new Set(tools.map((t) => t.name));
   const registeredTools = buildRegisteredTools(
-    { agentId, workspaceDir, agentSessionKey: options?.agentSessionKey },
+    { agentId: currentAgentId, workspaceDir, agentSessionKey: options?.agentSessionKey },
     existingNames,
   );
 
-  return [...tools, ...registeredTools, ...pluginTools];
+  return [...tools, ...registeredTools, ...filteredPluginTools];
+}
+
+/**
+ * 从 config 中解析指定 agent 已启用的通道账号映射。
+ * 返回 Map<channelId, Set<accountId>>，仅包含 enabled !== false 的绑定。
+ * 没有任何绑定时返回空 Map（不做过滤）。
+ */
+function resolveAgentChannelAccountMap(
+  config: OpenClawConfig | undefined,
+  agentId: string,
+): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  if (!config) {
+    return map;
+  }
+  const agents = (config.agents?.list ?? []) as Array<{
+    id?: unknown;
+    channelBindings?: AgentChannelBindings;
+  }>;
+  const agent = agents.find(
+    (a) => typeof a.id === "string" && a.id.trim().toLowerCase() === agentId.toLowerCase(),
+  );
+  if (!agent?.channelBindings?.bindings) {
+    return map;
+  }
+  for (const binding of agent.channelBindings.bindings) {
+    if (binding.enabled === false) {
+      continue;
+    }
+    const { channelId, accountId } = binding;
+    if (!channelId) {
+      continue;
+    }
+    let accounts = map.get(channelId);
+    if (!accounts) {
+      accounts = new Set<string>();
+      map.set(channelId, accounts);
+    }
+    if (accountId) {
+      accounts.add(accountId);
+    }
+  }
+  return map;
+}
+
+/**
+ * 判断当前 config 中是否有任何 agent 配置了 channelBindings。
+ * 用于决定是否启用通道工具过滤逻辑（避免未配置绑定的场景误过滤）。
+ */
+function hasAnyChannelBindings(config: OpenClawConfig | undefined): boolean {
+  if (!config) {
+    return false;
+  }
+  const agents = (config.agents?.list ?? []) as Array<{ channelBindings?: AgentChannelBindings }>;
+  return agents.some(
+    (a) => Array.isArray(a.channelBindings?.bindings) && a.channelBindings.bindings.length > 0,
+  );
 }

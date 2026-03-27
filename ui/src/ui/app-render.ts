@@ -169,6 +169,33 @@ import {
 import { loadSuperAdmins } from "./controllers/super-admin.ts";
 
 /**
+ * 加载 agent 三文件身份（SOUL.md / AGENT.md / USER.md）
+ */
+async function loadAgentSoulFiles(state: AppViewState, agentId: string): Promise<void> {
+  if (!state.client) {
+    return;
+  }
+  state.agentSoulFilesLoading = true;
+  state.agentSoulFilesError = null;
+  try {
+    const res = await state.client.request<{
+      agentId: string;
+      soul: string;
+      agent: string;
+      user: string;
+    }>("agent.identity.get", { agentId });
+    if (res) {
+      state.agentSoulFiles = res;
+      state.agentSoulDrafts = { soul: res.soul, agent: res.agent, user: res.user };
+    }
+  } catch (err) {
+    state.agentSoulFilesError = String(err);
+  } finally {
+    state.agentSoulFilesLoading = false;
+  }
+}
+
+/**
  * 加载组织架构数据（调用 org.list RPC）
  */
 async function loadOrganizationData(state: AppViewState): Promise<void> {
@@ -1583,6 +1610,12 @@ export function renderApp(state: AppViewState) {
                 agentIdentityLoading: state.agentIdentityLoading,
                 agentIdentityError: state.agentIdentityError,
                 agentIdentityById: state.agentIdentityById,
+                // 三文件身份体系
+                agentSoulFiles: state.agentSoulFiles,
+                agentSoulFilesLoading: state.agentSoulFilesLoading,
+                agentSoulFilesError: state.agentSoulFilesError,
+                agentSoulDrafts: state.agentSoulDrafts,
+                agentSoulSaving: state.agentSoulSaving,
                 agentSkillsLoading: state.agentSkillsLoading,
                 agentSkillsReport: state.agentSkillsReport,
                 agentSkillsError: state.agentSkillsError,
@@ -1760,6 +1793,10 @@ export function renderApp(state: AppViewState) {
                     void loadApprovalRequests(state);
                     void loadPermissionApprovalStats(state);
                   }
+                  // f3: 加载三文件身份（identity 面板）
+                  if (panel === "identity" && resolvedAgentId) {
+                    void loadAgentSoulFiles(state, resolvedAgentId);
+                  }
                 },
                 onLoadFiles: (agentId) => loadAgentFiles(state, agentId),
                 onSelectFile: (name) => {
@@ -1862,6 +1899,32 @@ export function renderApp(state: AppViewState) {
                 onConfigSave: () => saveConfig(state),
                 onChannelsRefresh: () => loadChannels(state, false),
                 onCronRefresh: () => state.loadCron(),
+                // f3: 三文件身份回调
+                onLoadSoulFiles: (agentId) => {
+                  void loadAgentSoulFiles(state, agentId);
+                },
+                onSoulDraftChange: (file, content) => {
+                  state.agentSoulDrafts = { ...state.agentSoulDrafts, [file]: content };
+                },
+                onSoulFilesSave: async (agentId) => {
+                  if (!state.client) {
+                    return;
+                  }
+                  state.agentSoulSaving = true;
+                  try {
+                    await state.client.request("agent.identity.set", {
+                      agentId,
+                      soul: state.agentSoulDrafts.soul,
+                      agent: state.agentSoulDrafts.agent,
+                      user: state.agentSoulDrafts.user,
+                    });
+                    state.agentSoulFiles = { agentId, ...state.agentSoulDrafts };
+                  } catch (err) {
+                    state.agentSoulFilesError = String(err);
+                  } finally {
+                    state.agentSoulSaving = false;
+                  }
+                },
                 onSkillsFilterChange: (next) => (state.skillsFilter = next),
                 onSkillsRefresh: () => {
                   if (resolvedAgentId) {

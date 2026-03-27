@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
+import { resolveAgentWorkspaceDir } from "../../src/agents/agent-scope.js";
 import {
   createMemorySaveTool,
   createMemoryDeleteTool,
@@ -28,6 +29,9 @@ import {
   findRelevantSharedSkills,
   saveExperienceEntry,
   getFailurePatternsText,
+  evaluateSharp,
+  getSharpSummaryText,
+  checkSharpStatus,
 } from "../../src/gateway/server-methods/evolve-rpc.js";
 import {
   autoSaveMemoryEntry,
@@ -257,6 +261,7 @@ const memoryCorePlugin = {
         lessons,
         durationMs: typeof event.durationMs === "number" ? event.durationMs : undefined,
         steps: steps.length > 0 ? steps : undefined,
+        sessionKey: ctx.sessionKey,
       });
 
       // cer2: 同步写入 CER 经验库
@@ -276,6 +281,50 @@ const memoryCorePlugin = {
         });
       } catch {
         /* 经验写入失败不影响主流程 */
+      }
+
+      // f5 SHARP 质量门控：agent_end 时自动评估本次输出质量
+      // 判断递推：项目是否启用 SHARP → 项目是否有项目群
+      try {
+        const sharpStatus = checkSharpStatus(ctx.agentId, ctx.sessionKey);
+        if (sharpStatus.status === "error") {
+          // 项目启用了 SHARP 但未配置项目群，提示用户
+          console.warn(`[SHARP] ${sharpStatus.message}`);
+          // 向当前会话发送提示（如果 ctx 支持 reply 方法）
+          if (typeof (ctx as Record<string, unknown>).reply === "function") {
+            (ctx as Record<string, unknown>).reply(`⚠️ ${sharpStatus.message}`);
+          }
+        } else if (sharpStatus.status === "enabled") {
+          const sharpScore = evaluateSharp({
+            agentId: ctx.agentId,
+            taskSummary,
+            output: `${reflection} ${lastAssistant}`.trim(),
+            outcome,
+            hasError: outcome === "failure",
+            source: "self",
+          });
+          if (sharpScore.total < 15) {
+            // 低分时将质量问题写入记忆（后续可由 supervisor 查阅）
+            try {
+              const { autoSaveMemoryEntry: saveM } =
+                await import("../../src/gateway/server-methods/memory-rpc.js");
+              saveM({
+                agentId: ctx.agentId,
+                content:
+                  `[SHARP 质量警告] 任务「${taskSummary.slice(0, 80)}」评分 ${sharpScore.total}/25（低于门控 15）。` +
+                  `S=${sharpScore.specificity} H=${sharpScore.helpfulness} A=${sharpScore.accuracy} R=${sharpScore.relevance} P=${sharpScore.professionalism}`,
+                namespace: "quality_alerts",
+                tags: ["sharp", "auto"],
+                importance: 4,
+              });
+            } catch {
+              /* 写入记忆失败不影响 */
+            }
+          }
+        }
+        // status === "disabled" 时静默跳过
+      } catch {
+        /* SHARP 评估失败不影响主流程 */
       }
       // ================================================================
       // A. OpenViking 风格：会话结束自动提取实体记忆
@@ -412,6 +461,30 @@ const memoryCorePlugin = {
         if (rolePrompt) {
           parts.push(`<agent-role>\n${rolePrompt}\n</agent-role>`);
         }
+
+        // ----------------------------------------------------------------
+        // 1.5 三文件身份体系：注入 SOUL.md（性格/价值观/决策原则）和 USER.md（用户偏好/上下文）
+        // AGENT.md 是配置元数据，不注入 prompt
+        // ----------------------------------------------------------------
+        if (agentId) {
+          const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+          const readIdentityFile = (name: string): string => {
+            try {
+              const fp = path.join(workspaceDir, name);
+              return fs.existsSync(fp) ? fs.readFileSync(fp, "utf-8").trim() : "";
+            } catch {
+              return "";
+            }
+          };
+          const soulContent = readIdentityFile("SOUL.md");
+          const userContent = readIdentityFile("USER.md");
+          if (soulContent) {
+            parts.push(`<soul-identity>\n${soulContent}\n</soul-identity>`);
+          }
+          if (userContent) {
+            parts.push(`<user-context>\n${userContent}\n</user-context>`);
+          }
+        }
       } catch {
         // loadConfig 失败时静默跳过
       }
@@ -536,6 +609,21 @@ const memoryCorePlugin = {
         }
       } catch {
         /* 性能画像读取失败时静默跳过 */
+      }
+
+      // ----------------------------------------------------------------
+      // 3.4 f6 SHARP 质量门控历史均分和最低维度警示
+      // 将最近 10 次任务的 SHARP 均分注入提醒，帮助 Agent 了解自身输出质量趋势。
+      // ----------------------------------------------------------------
+      if (agentId) {
+        try {
+          const sharpText = getSharpSummaryText(agentId, 10, ctx.sessionKey);
+          if (sharpText) {
+            parts.push(`<quality-reminder>\n${sharpText}\n</quality-reminder>`);
+          }
+        } catch {
+          /* SHARP 历史读取失败时静默跳过 */
+        }
       }
 
       // ----------------------------------------------------------------

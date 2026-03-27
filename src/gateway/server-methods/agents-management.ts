@@ -18,6 +18,7 @@
  */
 
 import { execFile } from "node:child_process";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -1979,7 +1980,32 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     // 从列表中移除
     const filteredAgents = agents.filter((_, idx) => idx !== agentIndex);
 
-    // channelBindings 存储在 agent 配置内部，随 agent 一起删除，无需单独清理
+    // ── 级联清理任务数据 ──────────────────────────────────────────────
+    // 规则：
+    //   1. 非已完成任务（todo/in-progress/review/blocked/cancelled）→ 直接删除
+    //   2. 已完成任务（done）→ 保留任务记录但从 assignees 中移除该 agent
+    try {
+      const allTasks = await taskStorage.listTasks({});
+      for (const task of allTasks) {
+        const isAssignee = task.assignees?.some((a) => a.id === normalized);
+        if (!isAssignee) {
+          continue;
+        }
+
+        if (task.status === "done") {
+          // 已完成：仅从 assignees 移除，保留任务记录
+          const newAssignees = task.assignees.filter((a) => a.id !== normalized);
+          await taskStorage.updateTask(task.id, { assignees: newAssignees });
+        } else {
+          // 未完成：整条删除
+          await taskStorage.deleteTask(task.id);
+        }
+      }
+    } catch (taskErr) {
+      console.error(`[agent.delete] Failed to clean up tasks for agent ${id}:`, taskErr);
+      // 任务清理失败不阻断 agent 删除，继续执行
+    }
+    // ─────────────────────────────────────────────────────────────────
     const updatedConfig: OpenClawConfig = {
       ...cfg,
       agents: {
@@ -2961,7 +2987,33 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const priority = (p?.priority ?? "medium") as Task["priority"];
     const title = (p?.title ?? task.slice(0, 100)).trim();
 
-    // === 步骤1：写入任务系统，建立可追踪任务记录 ===
+    // === 项目成员校验：如果指定了 projectId， targetAgentId 必须是该项目群组的成员 ===
+    const assignProjectId = p?.projectId ? String(p.projectId).trim() : undefined;
+    if (assignProjectId) {
+      const allGroups = groupManager.getAllGroups();
+      const projectGroup = allGroups.find((g) => g.projectId === assignProjectId);
+      if (projectGroup) {
+        const normalizedTarget = normalizeAgentId(targetAgentId);
+        const isMember = projectGroup.members.some(
+          (m) => normalizeAgentId(m.agentId) === normalizedTarget,
+        );
+        if (!isMember) {
+          respond(
+            false,
+            undefined,
+            errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              `Agent "${targetAgentId}" is not a member of project "${assignProjectId}". ` +
+                `Project tasks can only be assigned to project members. ` +
+                `Current members: [${projectGroup.members.map((m) => m.agentId).join(", ")}]. ` +
+                `Please add "${targetAgentId}" to the project group first.`,
+            ),
+          );
+          return;
+        }
+      }
+      // 注：如果该 projectId 还没有对应群组，则不拦截（允许先创建任务再组建群组的工作流）
+    }
     // 若 agent 当前已有 in-progress 任务，则新任务状态设为 todo（排队等待）
     // 若 agent 当前空闲（无 in-progress），则直接设为 in-progress 并立即推送
     let initialTaskStatus: Task["status"] = "in-progress";
@@ -3675,7 +3727,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           .join("\n");
 
         const leaderSession = `agent:${normalizedLeader}:main`;
-        const wakeReason = `task-report:${taskId}:${reporterId}`;
+        const wakeReason = `cron:task-report:${taskId}:${reporterId}`;
         try {
           enqueueSystemEvent(reportLines, {
             sessionKey: leaderSession,
@@ -3711,9 +3763,47 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     );
 
     // === 步骤 3：任务完成/取消/阻塞后自动驱动下一条 todo 任务 ===
+    // 先执行调度，让下一条任务立即变为 in-progress，
+    // 再把"已自动启动下一任务"的信息追加进给 supervisor 的汇报
     // blocked：当前任务阻塞无法继续，agent 应立即切换到队列中下一条任务
     if (finalStatus === "done" || finalStatus === "cancelled" || finalStatus === "blocked") {
-      await scheduleNextTaskForAgent(normalizeAgentId(reporterId), taskId, task?.projectId);
+      const normalizedReporterId = normalizeAgentId(reporterId);
+      // 先完成调度（同步等待），使下一任务变为 in-progress
+      await scheduleNextTaskForAgent(normalizedReporterId, taskId, task?.projectId);
+
+      // 如果已向 supervisor 发过汇报，追加一条"下一任务已启动"的补充通知
+      if (notifiedSupervisor && resolvedLeaderId) {
+        try {
+          const nextInProgress = await taskStorage.listTasks({
+            assigneeId: normalizedReporterId,
+            status: ["in-progress"],
+          });
+          if (nextInProgress.length > 0) {
+            const next = nextInProgress[0];
+            const cfg = loadConfig();
+            const normalizedLeader = normalizeAgentId(resolvedLeaderId);
+            const allowed = new Set(listAgentIds(cfg));
+            if (allowed.has(normalizedLeader)) {
+              const leaderSession = `agent:${normalizedLeader}:main`;
+              const nextTaskNotice = [
+                `[TASK AUTO-STARTED] ${reporterId} 已自动开始执行下一条任务`,
+                `  Task ID: ${next.id}`,
+                `  标题: ${next.title}`,
+                `  优先级: ${next.priority}`,
+                next.type ? `  类型: ${next.type}` : null,
+              ]
+                .filter(Boolean)
+                .join("\n");
+              enqueueSystemEvent(nextTaskNotice, {
+                sessionKey: leaderSession,
+                contextKey: `cron:task-auto-start:${next.id}`,
+              });
+            }
+          }
+        } catch {
+          // 查询失败不影响主流程
+        }
+      }
     }
   },
 
@@ -3793,7 +3883,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
               ``,
               `Your next queued task (if any) will be started automatically.`,
             ].join("\n"),
-            { sessionKey: agentSession, contextKey: `task-manage:cancel:${taskId}` },
+            { sessionKey: agentSession, contextKey: `cron:task-manage:cancel:${taskId}` },
           );
         }
 
@@ -3838,7 +3928,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
               ``,
               `This task has been moved back to the todo queue. Your next queued task will start now.`,
             ].join("\n"),
-            { sessionKey: agentSession, contextKey: `task-manage:reset:${taskId}` },
+            { sessionKey: agentSession, contextKey: `cron:task-manage:reset:${taskId}` },
           );
           // 重置后驱动队列中的下一条（重置的任务会按优先级重新排入）
           await scheduleNextTaskForAgent(normalizedAssignee, taskId, task.projectId);
@@ -3883,10 +3973,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
               ``,
               `Continue executing this task. Report when complete.`,
             ].join("\n"),
-            { sessionKey: agentSession, contextKey: `task-manage:extend:${taskId}` },
+            { sessionKey: agentSession, contextKey: `cron:task-manage:extend:${taskId}` },
           );
           requestHeartbeatNow({
-            reason: `task-extended:${taskId}`,
+            reason: `cron:task-extended:${taskId}`,
             sessionKey: agentSession,
             agentId: normalizedAssignee,
           });
@@ -3929,6 +4019,12 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       const includeCompleted =
         typeof p?.includeCompleted === "boolean" ? p.includeCompleted : false;
       const limit = typeof p?.limit === "number" ? Math.min(p.limit, 500) : 200;
+
+      // 获取当前存在的 agent ID 集合，用于过滤已删除 agent
+      const existingCfg = loadConfig();
+      const existingAgentIds = new Set(
+        listAgentEntries(existingCfg).map((a) => normalizeAgentId(a.id)),
+      );
 
       // 获取相关任务
       const allTasks = await taskStorage.listTasks({
@@ -3986,6 +4082,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         const assignees = t.assignees ?? [];
         for (const assignee of assignees) {
           const agentId = assignee.id;
+          // 过滤掉已删除的 agent（不在当前 agent 列表中）
+          if (!existingAgentIds.has(normalizeAgentId(agentId))) {
+            continue;
+          }
           if (!agentTaskMap.has(agentId)) {
             agentTaskMap.set(agentId, {
               agentId,
@@ -4057,5 +4157,90 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         errorShape(ErrorCodes.UNAVAILABLE, `Failed to get team status: ${String(err)}`),
       );
     }
+  },
+
+  // ============================================================================
+  // 三文件身份体系
+  // soul.md   — 性格/价值观/决策原则（注入 prompt）
+  // agent.md  — 模型/工具/沙箱配置（配置元数据，不注入 prompt）
+  // user.md   — 用户上下文/偏好/研究领域（注入 prompt）
+  // ============================================================================
+
+  /**
+   * agent.identity.get — 读取三文件身份（soul/agent/user）
+   */
+  "agent.identity.get": async ({ params, respond }) => {
+    const agentId = (
+      (params as { agentId?: unknown })?.agentId != null
+        ? String((params as { agentId?: unknown }).agentId)
+        : ""
+    ).trim();
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+    const cfg = loadConfig();
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const readFile = (name: string): string => {
+      const filePath = path.join(workspaceDir, name);
+      try {
+        return fsSync.existsSync(filePath) ? fsSync.readFileSync(filePath, "utf-8") : "";
+      } catch {
+        return "";
+      }
+    };
+
+    respond(
+      true,
+      {
+        agentId,
+        soul: readFile("SOUL.md"),
+        agent: readFile("AGENT.md"),
+        user: readFile("USER.md"),
+        workspaceDir,
+      },
+      undefined,
+    );
+  },
+
+  /**
+   * agent.identity.set — 写入三文件身份（soul/agent/user）
+   * 传入哪个字段就写哪个，undefined 表示不修改。
+   */
+  "agent.identity.set": async ({ params, respond }) => {
+    const p = params as { agentId?: unknown; soul?: unknown; agent?: unknown; user?: unknown };
+    const agentId = (p?.agentId != null ? (p.agentId as string) : "").trim();
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+      return;
+    }
+    const cfg = loadConfig();
+    if (!validateAgentId(agentId, cfg, respond)) {
+      return;
+    }
+
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    if (!fsSync.existsSync(workspaceDir)) {
+      fsSync.mkdirSync(workspaceDir, { recursive: true });
+    }
+
+    const written: string[] = [];
+    const writeFile = (name: string, content: unknown) => {
+      if (typeof content !== "string") {
+        return;
+      }
+      fsSync.writeFileSync(path.join(workspaceDir, name), content, "utf-8");
+      written.push(name);
+    };
+
+    writeFile("SOUL.md", p.soul);
+    writeFile("AGENT.md", p.agent);
+    writeFile("USER.md", p.user);
+
+    respond(true, { agentId, written, workspaceDir }, undefined);
   },
 };

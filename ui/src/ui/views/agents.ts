@@ -36,6 +36,7 @@ export type AgentsPanel =
   | "cron"
   | "modelAccounts"
   | "channelPolicies"
+  | "identity"
   | "permissionsConfig"; // 改名：权限配置（针对具体助手）
 
 /**
@@ -187,6 +188,12 @@ export type AgentsProps = {
   agentIdentityLoading: boolean;
   agentIdentityError: string | null;
   agentIdentityById: Record<string, AgentIdentityResult>;
+  /** 三文件身份体系：加载结果（soul/agent/user 内容） */
+  agentSoulFiles: { agentId: string; soul: string; agent: string; user: string } | null;
+  agentSoulFilesLoading: boolean;
+  agentSoulFilesError: string | null;
+  agentSoulDrafts: { soul: string; agent: string; user: string };
+  agentSoulSaving: boolean;
   agentSkillsLoading: boolean;
   agentSkillsReport: SkillStatusReport | null;
   agentSkillsError: string | null;
@@ -300,6 +307,10 @@ export type AgentsProps = {
   onAddFile?: (agentId: string, name: string) => void;
   /** 用系统文件管理器打开工作空间文件夹 */
   onOpenFolder?: (folderPath: string) => void;
+  /** 三文件身份体系回调 */
+  onLoadSoulFiles?: (agentId: string) => void;
+  onSoulDraftChange?: (file: "soul" | "agent" | "user", content: string) => void;
+  onSoulFilesSave?: (agentId: string) => void;
 };
 
 // 从 tool-catalog.ts 动态派生 —— 以后只需在 tool-catalog.ts + i18n.ts 添加工具，此处自动同步
@@ -1529,7 +1540,9 @@ function renderAgentChannelPolicies(params: {
             : html`
                 <div class="callout" style="margin-top: 8px">
                   <div style="font-weight: 500; margin-bottom: 4px">⚠️ 尚未绑定任何通道账号</div>
-                  <div style="font-size: 0.875rem">请在下方可绑定账号列表中选择账号绑定给此助手，绑定后即可配置策略。</div>
+                  <div style="font-size: 0.875rem">
+                    请在下方可绑定账号列表中选择账号绑定给此助手，绑定后即可配置策略。
+                  </div>
                 </div>
               `
         }
@@ -1542,9 +1555,15 @@ function renderAgentChannelPolicies(params: {
         </div>
         ${
           params.availableChannelAccountsLoading
-            ? html`<div class="loading" style="margin-top: 8px">加载中...</div>`
+            ? html`
+                <div class="loading" style="margin-top: 8px">加载中...</div>
+              `
             : !params.availableChannelAccounts || params.availableChannelAccounts.length === 0
-              ? html`<div class="muted" style="margin-top: 8px">暂无可绑定的通道账号（所有账号已被绑定或尚未配置任何通道）</div>`
+              ? html`
+                  <div class="muted" style="margin-top: 8px">
+                    暂无可绑定的通道账号（所有账号已被绑定或尚未配置任何通道）
+                  </div>
+                `
               : html`
                 <div class="list" style="margin-top: 8px;">
                   ${params.availableChannelAccounts.map(
@@ -1553,7 +1572,13 @@ function renderAgentChannelPolicies(params: {
                         <div style="flex: 1;">
                           <div class="mono" style="font-weight: 500;">${account.channelId}:${account.accountId}</div>
                           <div class="muted" style="font-size: 0.875rem; margin-top: 2px;">
-                            ${account.label}${!account.configured ? html` &mdash; <span style="color: var(--color-warning)">未完成配置</span>` : nothing}
+                            ${account.label}${
+                              !account.configured
+                                ? html`
+                                    &mdash; <span style="color: var(--color-warning)">未完成配置</span>
+                                  `
+                                : nothing
+                            }
                           </div>
                         </div>
                         <button
@@ -1859,7 +1884,8 @@ export function renderAgents(props: AgentsProps) {
                       saveSuccess: props.channelPoliciesSaveSuccess,
                       boundChannelAccounts: props.boundChannelAccounts || [],
                       availableChannelAccounts: props.availableChannelAccounts || [],
-                      availableChannelAccountsLoading: props.availableChannelAccountsLoading || false,
+                      availableChannelAccountsLoading:
+                        props.availableChannelAccountsLoading || false,
                       onAddAccount: (channelId, accountId) => {
                         if (props.onAddChannelAccount) {
                           props.onAddChannelAccount(channelId, accountId);
@@ -1868,6 +1894,24 @@ export function renderAgents(props: AgentsProps) {
                       onChange: props.onChannelPoliciesChange,
                       onEditPolicyBinding: props.onEditPolicyBinding,
                       onAddPolicyBinding: props.onAddPolicyBinding,
+                    })
+                  : nothing
+              }
+              ${
+                props.activePanel === "identity"
+                  ? renderAgentIdentityPanel({
+                      agentId: selectedAgent.id,
+                      files:
+                        props.agentSoulFiles?.agentId === selectedAgent.id
+                          ? props.agentSoulFiles
+                          : null,
+                      loading: props.agentSoulFilesLoading,
+                      error: props.agentSoulFilesError,
+                      drafts: props.agentSoulDrafts,
+                      saving: props.agentSoulSaving,
+                      onLoad: () => props.onLoadSoulFiles?.(selectedAgent.id),
+                      onDraftChange: (file, content) => props.onSoulDraftChange?.(file, content),
+                      onSave: () => props.onSoulFilesSave?.(selectedAgent.id),
                     })
                   : nothing
               }
@@ -2097,6 +2141,93 @@ function renderAgentHeader(
   `;
 }
 
+/**
+ * 三文件身份面板：展示和编辑 SOUL.md / AGENT.md / USER.md
+ */
+function renderAgentIdentityPanel(params: {
+  agentId: string;
+  files: { soul: string; agent: string; user: string } | null;
+  loading: boolean;
+  error: string | null;
+  drafts: { soul: string; agent: string; user: string };
+  saving: boolean;
+  onLoad: () => void;
+  onDraftChange: (file: "soul" | "agent" | "user", content: string) => void;
+  onSave: () => void;
+}) {
+  const { agentId, files, loading, error, drafts, saving, onLoad, onDraftChange, onSave } = params;
+  if (loading) {
+    return html`
+      <section class="card"><div class="muted">正在加载身份文件...</div></section>
+    `;
+  }
+  if (error) {
+    return html`<section class="card"><div class="error">加载失败: ${error}</div>
+      <button class="btn" @click=${onLoad}>重试</button></section>`;
+  }
+  if (!files) {
+    return html`<section class="card">
+      <div class="card-title">身份文件</div>
+      <div class="card-sub">第一次使用，点击加载</div>
+      <button class="btn" style="margin-top:12px" @click=${onLoad}>加载身份文件</button>
+    </section>`;
+  }
+  const isDirty = (f: "soul" | "agent" | "user") => drafts[f] !== (files[f] ?? "");
+  const anyDirty = isDirty("soul") || isDirty("agent") || isDirty("user");
+  const renderEditor = (label: string, file: "soul" | "agent" | "user", desc: string) => html`
+    <div style="margin-bottom:20px">
+      <div class="label" style="font-weight:600;margin-bottom:4px">${label}${isDirty(file) ? " *" : ""}</div>
+      <div class="muted" style="font-size:12px;margin-bottom:6px">${desc}</div>
+      <textarea
+        class="mono"
+        style="width:100%;min-height:140px;box-sizing:border-box;resize:vertical;"
+        .value=${drafts[file]}
+        ?disabled=${saving}
+        @input=${(e: Event) => onDraftChange(file, (e.target as HTMLTextAreaElement).value)}
+      ></textarea>
+    </div>
+  `;
+  return html`
+    <section class="card">
+      <div class="card-title">身份文件管理</div>
+      <div class="card-sub">配置 Agent 的性格、行为和用户上下文（路径: ${agentId} 工作目录）</div>
+      <div style="margin-top:16px">
+        ${renderEditor(
+          "SOUL.md — 性格/价值观/决策原则",
+          "soul",
+          "定义 Agent 的核心价值观和行为准则，会自动注入到 system prompt。不存在时跟暂无身份文件。",
+        )}
+        ${renderEditor(
+          "AGENT.md — 配置元数据",
+          "agent",
+          "记录模型/工具/沙箋配置等元数据，不注入 prompt（会展示在此面板供参考）。",
+        )}
+        ${renderEditor(
+          "USER.md — 用户上下文/偏好",
+          "user",
+          "记录当前用户的偏好、研究领域、背景信息，会自动注入到 system prompt。",
+        )}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button
+          class="btn btn--primary"
+          ?disabled=${saving || !anyDirty}
+          @click=${onSave}
+        >${saving ? "保存中..." : "保存所有修改"}</button>
+        <button
+          class="btn"
+          ?disabled=${saving || !anyDirty}
+          @click=${() => {
+            onDraftChange("soul", files.soul ?? "");
+            onDraftChange("agent", files.agent ?? "");
+            onDraftChange("user", files.user ?? "");
+          }}
+        >恢复</button>
+      </div>
+    </section>
+  `;
+}
+
 function renderAgentTabs(active: AgentsPanel, onSelect: (panel: AgentsPanel) => void) {
   const tabs: Array<{ id: AgentsPanel; label: () => string }> = [
     { id: "overview", label: () => t("agents.tab.overview") },
@@ -2107,6 +2238,7 @@ function renderAgentTabs(active: AgentsPanel, onSelect: (panel: AgentsPanel) => 
     { id: "cron", label: () => t("agents.tab.cron") },
     { id: "modelAccounts", label: () => t("agents.tab.model_accounts") },
     { id: "channelPolicies", label: () => t("agents.tab.channel_policies") },
+    { id: "identity", label: () => "身份" },
     { id: "permissionsConfig", label: () => t("agents.tab.permissions") },
   ];
   return html`
@@ -2213,18 +2345,6 @@ function renderAgentOverview(params: {
           <div class="label">${t("agents.overview.default")}</div>
           <div>${isDefault ? t("agents.overview.yes") : t("agents.overview.no")}</div>
         </div>
-        <div class="agent-kv">
-          <div class="label">${t("agents.overview.identity_emoji")}</div>
-          <div>${identityEmoji}</div>
-        </div>
-        <div class="agent-kv">
-          <div class="label">${t("agents.overview.skills_filter")}</div>
-          <div>${skillFilter ? t("agents.overview.selected_skills").replace("{count}", String(skillCount)) : t("agents.overview.all_skills")}</div>
-        </div>
-      </div>
-
-      <div class="agent-model-select" style="margin-top: 20px;">
-        <div class="label">${t("agents.overview.model_selection")}</div>
             <span>Primary model${isDefault ? " (default)" : ""}</span>
 >>>>>>> upstream/main
             <select
@@ -2263,6 +2383,18 @@ function renderAgentOverview(params: {
               ${buildModelOptions(configForm, effectivePrimary ?? undefined)}
             </select>
           </label>
+        <div class="agent-kv">
+          <div class="label">${t("agents.overview.identity_emoji")}</div>
+          <div>${identityEmoji}</div>
+        </div>
+        <div class="agent-kv">
+          <div class="label">${t("agents.overview.skills_filter")}</div>
+          <div>${skillFilter ? t("agents.overview.selected_skills").replace("{count}", String(skillCount)) : t("agents.overview.all_skills")}</div>
+        </div>
+      </div>
+
+      <div class="agent-model-select" style="margin-top: 20px;">
+        <div class="label">${t("agents.overview.model_selection")}</div>
         <div class="row" style="gap: 12px; flex-wrap: wrap;">
           <label class="field" style="min-width: 260px; flex: 1;">
             <span>${t("agents.overview.primary_model_label")}</span>

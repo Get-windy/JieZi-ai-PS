@@ -688,7 +688,6 @@ function renderProjectOverview(props: ProjectsProps, project: ProjectInfo) {
           打开工作空间
         </button>
       </div>
-    </div>
   `;
 }
 

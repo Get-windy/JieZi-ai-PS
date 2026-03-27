@@ -609,15 +609,16 @@ export async function spawnSubagentDirect(
       workspaceDir: _workspaceDir,
       ...publicSpawnedMetadata
     } = spawnedMetadata;
+    // 子 agent 作为内部派生会话，不应继承调度者（主控 agent）的用户通道信息。
+    // 组织原则：子 agent 只向父 agent 汇报（announce → 父 session），
+    // 由父 agent 汇总后统一向用户汇报，用户通道账号对子 agent 不可见。
+    // channel/to/accountId/threadId 故意不透传，deliver: false 已确保不投递到通道。
+    // requesterOrigin 继续保留于 registerSubagentRun，用于 announce 回送路径。
     const response = await callGateway<{ runId: string }>({
       method: "agent",
       params: {
         message: childTaskMessage,
         sessionKey: childSessionKey,
-        channel: requesterOrigin?.channel,
-        to: requesterOrigin?.to ?? undefined,
-        accountId: requesterOrigin?.accountId ?? undefined,
-        threadId: requesterOrigin?.threadId != null ? String(requesterOrigin.threadId) : undefined,
         idempotencyKey: childIdem,
         deliver: false,
         lane: AGENT_LANE_SUBAGENT,

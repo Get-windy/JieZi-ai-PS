@@ -206,6 +206,12 @@ export interface ProjectConfig {
     allow?: string[];
     deny?: string[];
   };
+  /**
+   * 是否启用 SHARP 质量门控（项目级开关，默认关闭）。
+   * 适合代码/工程类项目开启，对话/创意类项目建议关闭。
+   * 启用后，本项目内所有 Agent 的任务输出都会被 SHARP 自动评分。
+   */
+  sharpEnabled?: boolean;
 }
 
 /**

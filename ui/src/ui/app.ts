@@ -333,7 +333,8 @@ export class OpenClawApp extends LitElement {
     | "cron"
     | "modelAccounts"
     | "channelPolicies"
-    | "permissionsConfig" = "overview"; // 权限配置tab
+    | "permissionsConfig"
+    | "identity" = "overview"; // 权限配置tab
   // Collaboration 协作管理状态
   @state() collaborationActivePanel:
     | "groups"
@@ -438,6 +439,17 @@ export class OpenClawApp extends LitElement {
   @state() agentIdentityLoading = false;
   @state() agentIdentityError: string | null = null;
   @state() agentIdentityById: Record<string, AgentIdentityResult> = {};
+  // 三文件身份体系
+  @state() agentSoulFiles: { agentId: string; soul: string; agent: string; user: string } | null =
+    null;
+  @state() agentSoulFilesLoading = false;
+  @state() agentSoulFilesError: string | null = null;
+  @state() agentSoulDrafts: { soul: string; agent: string; user: string } = {
+    soul: "",
+    agent: "",
+    user: "",
+  };
+  @state() agentSoulSaving = false;
   @state() agentSkillsLoading = false;
   @state() agentSkillsError: string | null = null;
   @state() agentSkillsReport: SkillStatusReport | null = null;
