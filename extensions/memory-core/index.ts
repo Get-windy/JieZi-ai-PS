@@ -29,6 +29,8 @@ import {
   findRelevantSharedSkills,
   saveExperienceEntry,
   getFailurePatternsText,
+  getSuccessExamplesText,
+  getErrorTaxonomyText,
   evaluateSharp,
   getSharpSummaryText,
   checkSharpStatus,
@@ -154,6 +156,23 @@ const memoryCorePlugin = {
         if (taskSummary) break;
       }
       if (!taskSummary || taskSummary.length < 10) return;
+
+      // 过滤噪声 taskSummary：bootstrap 启动消息、群组共享记忆等无意义内容
+      const NOISE_PATTERNS = [
+        /^\(session bootstrap\)$/i,
+        /^<group-shared-memory>/i,
+        /^You are a member of the following team groups/i,
+        /^\[system\]/i,
+        /^bootstrap/i,
+        /^<self-evolution-reflections>/i,
+        /^<skills-summary>/i,
+        /^<tools-catalog>/i,
+        /^Past task reflections/i,
+        /^##\s*Runtime System Events/i,
+        /^Treat this sect/i,
+        /^\[cron:/i,
+      ];
+      if (NOISE_PATTERNS.some((p) => p.test(taskSummary))) return;
 
       // 提取最后一条 assistant 消息，用于判断是否有实质性内容
       let lastAssistant = "";
@@ -585,6 +604,36 @@ const memoryCorePlugin = {
           }
         } catch {
           /* CER 检索失败不影响主流程 */
+        }
+      }
+
+      // ----------------------------------------------------------------
+      // 2.6 Gap2 成功轨迹 In-Context Example（NeurIPS 2025 Self-Generated ICE）
+      // 检索相关成功案例注入，few-shot 示范显著提升该类任务成功率。
+      // ----------------------------------------------------------------
+      if (agentId) {
+        try {
+          const successText = getSuccessExamplesText(agentId, prompt, 2);
+          if (successText) {
+            parts.push(`<success-examples>\n${successText}\n</success-examples>`);
+          }
+        } catch {
+          /* 成功案例检索失败不影响主流程 */
+        }
+      }
+
+      // ----------------------------------------------------------------
+      // 2.7 Gap1 跨任务错误聚合（ErrorTaxonomy, SaMuLe EMNLP 2025）
+      // 注入该 Agent 历史最高频错误模式，让 Agent 看到自身系统性弱点。
+      // ----------------------------------------------------------------
+      if (agentId) {
+        try {
+          const taxText = getErrorTaxonomyText(agentId, 5);
+          if (taxText) {
+            parts.push(`<error-taxonomy>\n${taxText}\n</error-taxonomy>`);
+          }
+        } catch {
+          /* 错误分类法读取失败不影响主流程 */
         }
       }
 

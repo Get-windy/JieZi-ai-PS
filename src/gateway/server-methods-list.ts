@@ -381,12 +381,30 @@ const BASE_METHODS = [
   // Self-Evolution（Reflexion 反思 + Voyager 技能库）
   "evolve.reflect.save",
   "evolve.reflect.list",
+  "evolve.reflect.gc",
   "evolve.skill.save",
   "evolve.skill.list",
   "evolve.skill.use",
   "evolve.stats",
   "evolve.sharp.evaluate",
   "evolve.sharp.history",
+  // Gap A: 功能需求日志
+  "evolve.feat.save",
+  "evolve.feat.list",
+  "evolve.feat.update",
+  // Gap C: 进化事件溃源
+  "evolve.events.list",
+  // Gap D: 进化策略
+  "evolve.strategy.get",
+  // Gap E: Ontology 知识图谱
+  "ontology.entity.create",
+  "ontology.entity.get",
+  "ontology.entity.update",
+  "ontology.entity.delete",
+  "ontology.entity.list",
+  "ontology.relate",
+  "ontology.unrelate",
+  "ontology.query",
   // Projects Management
   "projects.list",
   "projects.get",
@@ -419,6 +437,9 @@ const BASE_METHODS = [
   "monitor.metrics.record",
   "monitor.metrics.query",
   "monitor.sessions.update",
+  // Workspace Hygiene 工作空间卡生自检
+  "workspace.hygiene.run",
+  "workspace.hygiene.status",
 ];
 
 export function listGatewayMethods(): string[] {

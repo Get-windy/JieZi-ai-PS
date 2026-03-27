@@ -7,8 +7,22 @@
  * includes local extension fields (modelAccounts, permissions, groups).
  */
 
-import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../../upstream/src/agents/agent-scope.js";
+import {
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId,
+} from "../../upstream/src/agents/agent-scope.js";
 import { CHANNEL_IDS, normalizeChatChannelId } from "../../upstream/src/channels/registry.js";
+import {
+  findDuplicateAgentDirs,
+  formatDuplicateAgentDirError,
+} from "../../upstream/src/config/agent-dirs.js";
+import {
+  applyAgentDefaults,
+  applyModelDefaults,
+  applySessionDefaults,
+} from "../../upstream/src/config/defaults.js";
+import { findLegacyConfigIssues } from "../../upstream/src/config/legacy.js";
+import type { OpenClawConfig, ConfigValidationIssue } from "../../upstream/src/config/types.js";
 import {
   normalizePluginsConfig,
   resolveEffectiveEnableState,
@@ -17,10 +31,6 @@ import {
 import { loadPluginManifestRegistry } from "../../upstream/src/plugins/manifest-registry.js";
 import { validateJsonSchemaValue } from "../../upstream/src/plugins/schema-validator.js";
 import { isRecord } from "../../upstream/src/utils.js";
-import { findDuplicateAgentDirs, formatDuplicateAgentDirError } from "../../upstream/src/config/agent-dirs.js";
-import { applyAgentDefaults, applyModelDefaults, applySessionDefaults } from "../../upstream/src/config/defaults.js";
-import { findLegacyConfigIssues } from "../../upstream/src/config/legacy.js";
-import type { OpenClawConfig, ConfigValidationIssue } from "../../upstream/src/config/types.js";
 import { OpenClawSchema } from "./zod-schema.js";
 
 const LEGACY_REMOVED_PLUGIN_IDS = new Set(["google-antigravity-auth", "google-gemini-cli-auth"]);
@@ -58,7 +68,9 @@ export function validateConfigObjectRaw(
   if (!validated.success) {
     return {
       ok: false,
-      issues: validated.error.issues.map((issue) => mapZodIssue(issue as any)),
+      issues: validated.error.issues.map((issue) =>
+        mapZodIssue(issue as unknown as Parameters<typeof mapZodIssue>[0]),
+      ),
     };
   }
   const duplicates = findDuplicateAgentDirs(validated.data as OpenClawConfig);
@@ -171,7 +183,9 @@ function validateConfigObjectWithPluginsBase(
   if (config.channels && isRecord(config.channels)) {
     for (const key of Object.keys(config.channels)) {
       const trimmed = key.trim();
-      if (!trimmed) continue;
+      if (!trimmed) {
+        continue;
+      }
       if (!allowedChannels.has(trimmed)) {
         const { registry } = ensureRegistry();
         for (const record of registry.plugins) {
@@ -192,25 +206,35 @@ function validateConfigObjectWithPluginsBase(
   }
 
   const validateHeartbeatTarget = (target: string | undefined, path: string) => {
-    if (typeof target !== "string") return;
+    if (typeof target !== "string") {
+      return;
+    }
     const trimmed = target.trim();
     if (!trimmed) {
       issues.push({ path, message: "heartbeat target must not be empty" });
       return;
     }
     const normalized = trimmed.toLowerCase();
-    if (normalized === "last" || normalized === "none") return;
-    if (normalizeChatChannelId(trimmed)) return;
+    if (normalized === "last" || normalized === "none") {
+      return;
+    }
+    if (normalizeChatChannelId(trimmed)) {
+      return;
+    }
     if (!heartbeatChannelIds.has(normalized)) {
       const { registry } = ensureRegistry();
       for (const record of registry.plugins) {
         for (const channelId of record.channels) {
           const pluginChannel = channelId.trim();
-          if (pluginChannel) heartbeatChannelIds.add(pluginChannel.toLowerCase());
+          if (pluginChannel) {
+            heartbeatChannelIds.add(pluginChannel.toLowerCase());
+          }
         }
       }
     }
-    if (heartbeatChannelIds.has(normalized)) return;
+    if (heartbeatChannelIds.has(normalized)) {
+      return;
+    }
     issues.push({ path, message: `unknown heartbeat target: ${target}` });
   };
 
@@ -225,7 +249,9 @@ function validateConfigObjectWithPluginsBase(
   }
 
   if (!hasExplicitPluginsConfig) {
-    if (issues.length > 0) return { ok: false, issues, warnings };
+    if (issues.length > 0) {
+      return { ok: false, issues, warnings };
+    }
     return { ok: true, config, warnings };
   }
 
@@ -233,13 +259,23 @@ function validateConfigObjectWithPluginsBase(
   const knownIds = ensureKnownIds();
   const normalizedPlugins = ensureNormalizedPlugins();
 
-  const pushMissingPluginIssue = (path: string, pluginId: string, opts?: { warnOnly?: boolean }) => {
+  const pushMissingPluginIssue = (
+    path: string,
+    pluginId: string,
+    opts?: { warnOnly?: boolean },
+  ) => {
     if (LEGACY_REMOVED_PLUGIN_IDS.has(pluginId)) {
-      warnings.push({ path, message: `plugin removed: ${pluginId} (stale config entry ignored; remove it from plugins config)` });
+      warnings.push({
+        path,
+        message: `plugin removed: ${pluginId} (stale config entry ignored; remove it from plugins config)`,
+      });
       return;
     }
     if (opts?.warnOnly) {
-      warnings.push({ path, message: `plugin not found: ${pluginId} (stale config entry ignored; remove it from plugins config)` });
+      warnings.push({
+        path,
+        message: `plugin not found: ${pluginId} (stale config entry ignored; remove it from plugins config)`,
+      });
       return;
     }
     issues.push({ path, message: `plugin not found: ${pluginId}` });
@@ -257,21 +293,34 @@ function validateConfigObjectWithPluginsBase(
 
   const allow = pluginsConfig?.allow ?? [];
   for (const pluginId of allow) {
-    if (typeof pluginId !== "string" || !pluginId.trim()) continue;
-    if (!knownIds.has(pluginId)) pushMissingPluginIssue("plugins.allow", pluginId);
+    if (typeof pluginId !== "string" || !pluginId.trim()) {
+      continue;
+    }
+    if (!knownIds.has(pluginId)) {
+      pushMissingPluginIssue("plugins.allow", pluginId, { warnOnly: true });
+    }
   }
 
   const deny = pluginsConfig?.deny ?? [];
   for (const pluginId of deny) {
-    if (typeof pluginId !== "string" || !pluginId.trim()) continue;
-    if (!knownIds.has(pluginId)) pushMissingPluginIssue("plugins.deny", pluginId);
+    if (typeof pluginId !== "string" || !pluginId.trim()) {
+      continue;
+    }
+    if (!knownIds.has(pluginId)) {
+      pushMissingPluginIssue("plugins.deny", pluginId);
+    }
   }
 
   const pluginSlots = pluginsConfig?.slots;
   const hasExplicitMemorySlot =
     pluginSlots !== undefined && Object.prototype.hasOwnProperty.call(pluginSlots, "memory");
   const memorySlot = normalizedPlugins.slots.memory;
-  if (hasExplicitMemorySlot && typeof memorySlot === "string" && memorySlot.trim() && !knownIds.has(memorySlot)) {
+  if (
+    hasExplicitMemorySlot &&
+    typeof memorySlot === "string" &&
+    memorySlot.trim() &&
+    !knownIds.has(memorySlot)
+  ) {
     pushMissingPluginIssue("plugins.slots.memory", memorySlot);
   }
 
@@ -279,7 +328,9 @@ function validateConfigObjectWithPluginsBase(
   const seenPlugins = new Set<string>();
   for (const record of registry.plugins) {
     const pluginId = record.id;
-    if (seenPlugins.has(pluginId)) continue;
+    if (seenPlugins.has(pluginId)) {
+      continue;
+    }
     seenPlugins.add(pluginId);
     const entry = normalizedPlugins.entries[pluginId];
     const entryHasConfig = Boolean(entry?.config);
@@ -330,7 +381,10 @@ function validateConfigObjectWithPluginsBase(
       } else if (record.format === "bundle") {
         // Compatible bundles — treat as schema-less.
       } else {
-        issues.push({ path: `plugins.entries.${pluginId}`, message: `plugin schema missing for ${pluginId}` });
+        issues.push({
+          path: `plugins.entries.${pluginId}`,
+          message: `plugin schema missing for ${pluginId}`,
+        });
       }
     }
 
@@ -342,7 +396,9 @@ function validateConfigObjectWithPluginsBase(
     }
   }
 
-  if (issues.length > 0) return { ok: false, issues, warnings };
+  if (issues.length > 0) {
+    return { ok: false, issues, warnings };
+  }
   return { ok: true, config, warnings };
 }
 

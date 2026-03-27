@@ -1095,15 +1095,38 @@ export const tasksRpc: GatewayRequestHandlers = {
         return;
       }
 
-      // 权限检查 - 执行者、上级管理者、任务创建者均可写工作日志
+      // 权限检查 - 以下角色均可写工作日志：
+      // 1. 执行者（assignees）
+      // 2. 上级管理者（supervisorId）
+      // 3. 任务创建者（creatorId）
+      // 4. 子任务的父任务执行者（协作场景：子任务汇报进度）
+      // 5. system 账号（内部自动化操作）
       const isAssignee = (task.assignees ?? []).some((a) => a.id === agentId);
       const isSupervisor = task.supervisorId === agentId;
       const isCreator = task.creatorId === agentId;
-      if (!isAssignee && !isSupervisor && !isCreator) {
+      const isSystem = agentId === "system";
+
+      // 兼容：如果是子任务，父任务的执行者也有权写日志（跨级汇报）
+      let isParentTaskAssignee = false;
+      if (!isAssignee && !isSupervisor && !isCreator && !isSystem && task.parentTaskId) {
+        const parentTask = await storage.getTask(task.parentTaskId);
+        if (parentTask) {
+          isParentTaskAssignee = (parentTask.assignees ?? []).some((a) => a.id === agentId);
+        }
+      }
+
+      if (!isAssignee && !isSupervisor && !isCreator && !isSystem && !isParentTaskAssignee) {
+        // 记录详细信息便于排查，避免 Agent 反复重试导致系统卡顿
+        console.warn(
+          `[task.worklog.add] 权限拒绝: agentId=${agentId} taskId=${taskId} assignees=${(task.assignees ?? []).map((a) => a.id).join(",")} supervisorId=${task.supervisorId ?? "none"} creatorId=${task.creatorId ?? "none"}`,
+        );
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "智能助手不是此任务的执行者或管理者"),
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `智能助手(${agentId})不是此任务的执行者或管理者，无法写入工作日志`,
+          ),
         );
         return;
       }

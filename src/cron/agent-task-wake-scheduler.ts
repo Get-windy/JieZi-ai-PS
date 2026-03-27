@@ -47,6 +47,24 @@ const MAX_STALE_WAKE_BEFORE_PAUSE = 3;
 // 暂停期间（10 分钟，等 heartbeat-runner 的 overflow 清空生效）
 const OVERFLOW_PAUSE_MS = 10 * 60 * 1000;
 
+// 背压保护：记录每个 agent 每个任务的重激活状态
+// 业界参考：Temporal.io 指数退避重试策略
+// 首次空闲 ⇒ 10分钟后重激活
+// 第2次还是空闲 ⇒ 20分钟后重激活
+// 第3次还是空闲 ⇒ 40分钟后重激活，之后饱和于 60 分钟
+const REACTIVATE_BASE_MS = 10 * 60 * 1000; // 基础间隔 10 分钟
+const REACTIVATE_MAX_MS = 60 * 60 * 1000; // 最大间隔 60 分钟
+const agentLastReactivateAt = new Map<string, { lastAt: number; attempts: number }>();
+
+/**
+ * 计算指数退避间隔
+ * 第 n 次重激活的等待时间 = min(base * 2^(n-1), max)
+ */
+function getReactivateBackoffMs(attempts: number): number {
+  const backoff = REACTIVATE_BASE_MS * Math.pow(2, Math.max(0, attempts - 1));
+  return Math.min(backoff, REACTIVATE_MAX_MS);
+}
+
 function taskSortKey(t: { priority: string; weight?: number; createdAt: number }): number {
   // 得分越高越优先：优先级权重 * 1e13 + 任务权重 * 1e6 - 创建时间（越早越高）
   const priorityScore = (PRIORITY_WEIGHT[t.priority] ?? 2) * 1e13;
@@ -126,6 +144,9 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
         // 如果任务在上次扫描后有更新（说明 agent 在执行），重置计数器
         if (staleInfo && taskUpdatedAt > staleInfo.lastAt) {
           agentStaleWakeCount.delete(staleKey);
+          // 任务有进展，同步重置退避计数器，让下次空闲从基础间隔重新计算
+          const reactivateKeyForReset = `reactivate:${normalizedId}:${activeInProgress.id}`;
+          agentLastReactivateAt.delete(reactivateKeyForReset);
         } else if (staleInfo && staleInfo.count >= MAX_STALE_WAKE_BEFORE_PAUSE) {
           const pauseRemaining = staleInfo.lastAt + OVERFLOW_PAUSE_MS - now;
           if (pauseRemaining > 0) {
@@ -437,17 +458,34 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           // === 任务未超时，但需确保 agent 处于活跃状态 ===
           // Bug 修复：服务重启后，历史 in-progress 任务没有 system event 驱动 agent 执行
           // 调度器必须主动唤醒，不能直接 continue 让 agent 永久空闲
-          const REACTIVATE_IDLE_MS = 5 * 60 * 1000; // 5分钟没活动记录 → 主动重激活
+          //
+          // 背压保护：提高重激活阈值到 10 分钟，避免每 2 分钟打扰正常执行的 Agent
+          // Agent 模型单次 run 最多 10 分钟，10 分钟无活动才真正需要干预
           const timeSinceActivity = executionStartedAt != null ? now - executionStartedAt : null;
 
           // 重启立即唤醒：服务重启后首次扫描时，无论活动时间多久，
-          // 都补发 [TASK RESUME] 驱动 agent 恢复执行（跳过5min静默窗口）
+          // 都补发 [TASK RESUME] 驱动 agent 恢复执行（跳过静默窗口）
           const needsRestartResume = isRestartScan;
+
+          // 指数退避背压保护：同一任务的重激活消息，两次之间至少间隔 cooldownMs
+          // 第1次空闲 → 等10分钟，第2次 → 20分钟，第3次 → 40分钟，上限60分钟
+          const lastReactivateKey = `reactivate:${normalizedId}:${activeTask.id}`;
+          const reactivateRecord = agentLastReactivateAt.get(lastReactivateKey);
+          const reactivateAttempts = reactivateRecord?.attempts ?? 0;
+          const cooldownMs = getReactivateBackoffMs(reactivateAttempts);
+          const reactivateCooldownOk = now - (reactivateRecord?.lastAt ?? 0) > cooldownMs;
 
           if (
             needsRestartResume ||
-            (timeSinceActivity !== null && timeSinceActivity > REACTIVATE_IDLE_MS)
+            (timeSinceActivity !== null && timeSinceActivity > cooldownMs && reactivateCooldownOk)
           ) {
+            // 记录本次重激活时间 + 累计次数，用于指数退避限速
+            if (!needsRestartResume) {
+              agentLastReactivateAt.set(lastReactivateKey, {
+                lastAt: now,
+                attempts: reactivateAttempts + 1,
+              });
+            }
             const sessionKey = `agent:${normalizedId}:main`;
             const idleMinutes =
               timeSinceActivity != null ? Math.floor(timeSinceActivity / 60000) : 0;
@@ -505,7 +543,7 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
             });
             stats.wokenAgents++;
           }
-          // else: 最近5分钟内有活动记录，agent 正在正常执行，不打扰
+          // else: 最近10分钟内有活动记录或重激活冷却未结束，agent 正在正常执行，不打扰
         }
         continue;
       }
