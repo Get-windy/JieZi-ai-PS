@@ -30,6 +30,7 @@ import { requestHeartbeatNow } from "../../../upstream/src/infra/heartbeat-wake.
 import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
 import type { MemberType } from "../../organization/types.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
+import { groupManager } from "../../sessions/group-manager.js";
 import {
   checkTaskAccess,
   checkTaskModifyAccess,
@@ -79,10 +80,12 @@ export const tasksRpc: GatewayRequestHandlers = {
     try {
       const title = params?.title ? String(params.title) : "";
       const description = params?.description ? String(params.description) : "";
-      const creatorId = params?.creatorId ? String(params.creatorId) : "system";
+      // creatorId 由工具层传入（当前 agent），不再 fallback 到不存在的 "system"
+      // 使用空串作为 unknown/anonymous 创建者，避免类型错误
+      const creatorId = params?.creatorId ? String(params.creatorId) : "";
       const creatorType = params?.creatorType
         ? (String(params.creatorType) as MemberType)
-        : "human";
+        : "agent";
       // 兼容 assigneeIds 数组 和 assignee 单个字符串
       const assigneeIds: string[] = params?.assigneeIds
         ? (params.assigneeIds as string[])
@@ -103,7 +106,62 @@ export const tasksRpc: GatewayRequestHandlers = {
         undefined;
       const parentTaskId = params?.parentTaskId ? String(params.parentTaskId) : undefined;
       const tags = params?.tags ? (params.tags as string[]) : [];
-      const supervisorId = params?.supervisorId ? String(params.supervisorId) : undefined;
+      // supervisorId 处理：
+      //   - 未传 → 默认用 creatorId（创建者自己）
+      //   - 已传 → 校验必须是该项目成员；无群组数据时无法验证，强制回退到 creatorId
+      const rawSupervisorId = params?.supervisorId ? String(params.supervisorId) : undefined;
+      let supervisorId: string = rawSupervisorId ?? creatorId;
+
+      if (rawSupervisorId && scope === "project") {
+        const projectMemberIds = new Set<string>();
+        const allGroups = groupManager.getAllGroups();
+
+        // 1. 按 projectId 匹配的群组
+        if (projectId) {
+          for (const g of allGroups.filter((g) => g.projectId === projectId)) {
+            if (g.ownerId) {
+              projectMemberIds.add(normalizeAgentId(g.ownerId));
+            }
+            for (const m of g.members) {
+              projectMemberIds.add(normalizeAgentId(m.agentId));
+            }
+          }
+        }
+
+        // 2. 若 projectId 无群组，再按 teamId 找
+        if (projectMemberIds.size === 0 && teamId) {
+          for (const g of allGroups.filter((g) => g.id === teamId || g.projectId === teamId)) {
+            if (g.ownerId) {
+              projectMemberIds.add(normalizeAgentId(g.ownerId));
+            }
+            for (const m of g.members) {
+              projectMemberIds.add(normalizeAgentId(m.agentId));
+            }
+          }
+        }
+
+        if (projectMemberIds.size > 0) {
+          // 有成员数据：校验，不通过则报错让 agent 重新指定
+          if (!projectMemberIds.has(normalizeAgentId(rawSupervisorId))) {
+            const memberList = [...projectMemberIds].join(", ");
+            const scopeLabel = projectId || teamId || "该项目";
+            respond(
+              false,
+              undefined,
+              errorShape(
+                ErrorCodes.INVALID_REQUEST,
+                `supervisorId "${rawSupervisorId}" 不是 "${scopeLabel}" 的成员。` +
+                  `项目成员包括：${memberList}。请从中选择一位作为主管，或不填（默认为创建者自己）。`,
+              ),
+            );
+            return;
+          }
+          supervisorId = rawSupervisorId;
+        } else {
+          // 无群组数据，无法验证，强制使用 creatorId 确保主管真实有效
+          supervisorId = creatorId;
+        }
+      }
 
       // 验证参数
       if (!title || title.length < 1 || title.length > 200) {
@@ -803,11 +861,12 @@ export const tasksRpc: GatewayRequestHandlers = {
         updates.completedAt = Date.now();
       }
 
-      // 如果状态变为in-progress，记录开始时间
-      if (newStatus === "in-progress" && !task.timeTracking.startedAt) {
+      // 如果状态变为in-progress，记录开始时间并刷新活跃度时间戳
+      if (newStatus === "in-progress") {
         updates.timeTracking = {
           ...task.timeTracking,
-          startedAt: Date.now(),
+          startedAt: task.timeTracking.startedAt ?? Date.now(),
+          lastActivityAt: Date.now(), // 每次进入 in-progress 都刷新活跃度，防止被误判为僵尸
         };
       }
 
@@ -1086,7 +1145,8 @@ export const tasksRpc: GatewayRequestHandlers = {
       const parentTaskId = params?.parentTaskId ? String(params.parentTaskId) : "";
       const title = params?.title ? String(params.title) : "";
       const description = params?.description ? String(params.description) : "";
-      const creatorId = params?.creatorId ? String(params.creatorId) : "system";
+      // creatorId 由工具层传入，不再 fallback 到不存在的 "system"
+      const creatorId = params?.creatorId ? String(params.creatorId) : "";
       const assigneeIds = params?.assigneeIds ? (params.assigneeIds as string[]) : [];
       const priority = params?.priority ? (String(params.priority) as TaskPriority) : "medium";
 
@@ -1142,13 +1202,15 @@ export const tasksRpc: GatewayRequestHandlers = {
         description,
         parentTaskId,
         creatorId,
-        creatorType: "human",
+        creatorType: "agent",
         assignees,
         status: "todo",
         priority,
         organizationId: parentTask.organizationId,
         teamId: parentTask.teamId,
         projectId: parentTask.projectId,
+        // 继承父任务的 supervisorId（主控 agent 分配时会自动传入）
+        supervisorId: parentTask.supervisorId,
         timeTracking: {
           timeSpent: 0,
           lastActivityAt: Date.now(),

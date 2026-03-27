@@ -3,14 +3,8 @@
  * 定期检查OAuth认证状态，在Token即将过期时自动刷新
  */
 
+import { ensureAuthProfileStore } from "../../../upstream/src/agents/auth-profiles.js";
 import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
-import { refreshQwenPortalCredentials } from "../../../upstream/extensions/qwen-portal-auth/refresh.js";
-import {
-  ensureAuthProfileStore,
-  saveAuthProfileStore,
-  type AuthProfileStore,
-} from "../../../upstream/src/agents/auth-profiles.js";
-import type { OAuthCredentials } from "../../../upstream/src/agents/auth-profiles/oauth.js";
 
 const log = createSubsystemLogger("oauth-refresh");
 
@@ -102,7 +96,7 @@ class OAuthRefreshDaemon {
       }
 
       try {
-        await this.refreshProfile(profileId, credential, store);
+        await this.refreshProfile(profileId, credential);
 
         // 刷新成功，清除失败记录
         this.refreshAttempts.delete(profileId);
@@ -115,7 +109,10 @@ class OAuthRefreshDaemon {
   /**
    * 判断是否需要刷新Token
    */
-  private shouldRefresh(credential: OAuthCredentials, now: number): boolean {
+  private shouldRefresh(
+    credential: { refresh?: unknown; expires?: unknown },
+    now: number,
+  ): boolean {
     const hasRefreshToken = typeof credential.refresh === "string" && credential.refresh.length > 0;
     if (!hasRefreshToken) {
       return false;
@@ -149,8 +146,7 @@ class OAuthRefreshDaemon {
    */
   private async refreshProfile(
     profileId: string,
-    credential: OAuthCredentials,
-    store: AuthProfileStore,
+    credential: { provider: string; expires: number },
   ): Promise<void> {
     log.info(`Refreshing OAuth token for ${profileId}`, {
       provider: credential.provider,
@@ -164,31 +160,14 @@ class OAuthRefreshDaemon {
       failureCount: (this.refreshAttempts.get(profileId)?.failureCount || 0) + 1,
     });
 
-    // 守护进程只负责 qwen-portal 的提前预刷新。
-    // 其他 OAuth provider（minimax-portal、openai-codex、google-gemini-cli 等）
+    // 守护进程只负责需要主动预刷新的 OAuth provider。
+    // qwen-portal 已从上游移除，其他 OAuth provider（minimax-portal、openai-codex、google-gemini-cli 等）
     // 由调用时的 resolveApiKeyForProfile 通用机制（含文件锁）负责自动刷新，
     // 守护进程无需重复处理，避免并发写入冲突。
-    if (credential.provider !== "qwen-portal") {
-      log.debug(
-        `Provider ${credential.provider}: call-time auto-refresh will handle expiry, skipping daemon pre-refresh`,
-      );
-      return;
-    }
-
-    const newCredentials = await refreshQwenPortalCredentials(credential);
-
-    // 更新 store 并持久化
-    store.profiles[profileId] = {
-      ...credential,
-      ...newCredentials,
-      type: "oauth",
-    };
-    saveAuthProfileStore(store, undefined);
-
-    log.info(`✅ Successfully refreshed OAuth token for ${profileId}`, {
-      provider: credential.provider,
-      newExpiresAt: new Date(newCredentials.expires).toISOString(),
-    });
+    log.debug(
+      `Provider ${credential.provider}: call-time auto-refresh will handle expiry, skipping daemon pre-refresh`,
+    );
+    return;
   }
 
   /**

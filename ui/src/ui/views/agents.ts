@@ -2345,14 +2345,6 @@ function renderAgentOverview(params: {
           <div class="label">${t("agents.overview.default")}</div>
           <div>${isDefault ? t("agents.overview.yes") : t("agents.overview.no")}</div>
         </div>
-        <div class="agent-kv">
-          <div class="label">${t("agents.overview.identity_emoji")}</div>
-          <div>${identityEmoji}</div>
-        </div>
-        <div class="agent-kv">
-          <div class="label">${t("agents.overview.skills_filter")}</div>
-          <div>${skillFilter ? t("agents.overview.selected_skills").replace("{count}", String(skillCount)) : t("agents.overview.all_skills")}</div>
-        </div>
             <span>Primary model${isDefault ? " (default)" : ""}</span>
 >>>>>>> upstream/main
             <select
@@ -2391,6 +2383,14 @@ function renderAgentOverview(params: {
               ${buildModelOptions(configForm, effectivePrimary ?? undefined)}
             </select>
           </label>
+        <div class="agent-kv">
+          <div class="label">${t("agents.overview.identity_emoji")}</div>
+          <div>${identityEmoji}</div>
+        </div>
+        <div class="agent-kv">
+          <div class="label">${t("agents.overview.skills_filter")}</div>
+          <div>${skillFilter ? t("agents.overview.selected_skills").replace("{count}", String(skillCount)) : t("agents.overview.all_skills")}</div>
+        </div>
       </div>
 
       <div class="agent-model-select" style="margin-top: 20px;">

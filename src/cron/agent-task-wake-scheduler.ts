@@ -7,11 +7,13 @@
  * 1. 每个 Agent 同时只能执行 1 条任务（串行执行）
  * 2. 发现多条 in-progress → 保留优先级最高的 1 条，其余重置回 todo 排队
  * 3. 无 in-progress 且有 todo → 取优先级最高的 1 条唤醒执行
- * 4. 有 in-progress（仅 1 条）且超时（>12min）→ 自动重置回 todo 并立即重新派发（避免模型超时死循环）
+ * 4. 有 in-progress（仅 1 条）且超时（>15min 无活动）→ 自动重置回 todo 并立即重新派发（避免模型超时死循环）
  *    4a. 超时 >60min → 强制重置回 todo，等下轮调度器扫描再分配（通知负责人）
  * 5. todo 任务只是排队，不检测超时
- * 6. Context Overflow 防循环：记录连续失败次数，超过阈値则暂停重试并通知 supervisor
+ * 6. Context Overflow 防循环：记录连续失败次数，超过隇値则暂停重试并通知 supervisor
  *    （业界最佳实践：overflow 属于 non-retriable 错误，不应无限重试）
+ * 7. 服务重启后首次扫描：立即对所有 in-progress 任务补发 [TASK RESUME] 唤醒指令
+ *    （不受 5min 静默窗口限制）——修复服务重启后历史任务无驱动消息的根本问题
  */
 
 import path from "node:path";
@@ -57,6 +59,11 @@ let scanInterval: NodeJS.Timeout | null = null;
 
 let startupTimer: NodeJS.Timeout | null = null;
 
+// 是否为服务重启后的首次扫描
+// 首次扫描时对所有 in-progress 任务立即补发 [TASK RESUME]，
+// 跳过 5min 静默窗口——这是服务重启后历史任务无法继续执行的根本修复
+let isFirstScan = true;
+
 // ============================================================================
 // 核心逻辑
 // ============================================================================
@@ -64,7 +71,9 @@ let startupTimer: NodeJS.Timeout | null = null;
 /**
  * 扫描所有 Agent 的待办任务并唤醒有任务的 Agent
  */
-export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
+export async function scanAndWakeAgentsWithPendingTasks(options?: {
+  forceFirstScan?: boolean;
+}): Promise<{
   scannedAgents: number;
   wokenAgents: number;
   pendingTasks: number;
@@ -76,6 +85,12 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
     pendingTasks: 0,
     skippedTasks: 0,
   };
+
+  // 判断是否为重启后首次扫描（含外部强制标记）
+  const isRestartScan = isFirstScan || (options?.forceFirstScan ?? false);
+  if (isFirstScan) {
+    isFirstScan = false;
+  }
 
   try {
     const cfg = loadConfig();
@@ -209,13 +224,20 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
 
         // 有成熟的 in-progress 且只有 1 条，检测执行超时
         const activeTask = matureInProgress[0];
-        // 只用 startedAt 或 updatedAt（都是进入执行后才会设置）
-        const executionStartedAt = activeTask.timeTracking?.startedAt ?? activeTask.updatedAt;
-        // 模型超时是 10 分钟（600s），超时后 surface_error，任务卡在 in-progress
-        // 设置为 12 分钟，略大于模型超时，确保能及时检测到卡住的任务
-        const STALE_IN_PROGRESS_MS = 12 * 60 * 1000; // 12 分钟
-        // 超长任务（>60分钟）认为需要强制重置而非重唤醒
-        const FORCE_RESET_MS = 60 * 60 * 1000; // 60 分钟
+        // 活跃度判断优先级：lastActivityAt > startedAt
+        // 注意：不使用 updatedAt，因为 updatedAt 会被状态以外的操作（如注释、工作日志）刷新
+        // 导致真正空闲的僵尸任务被误判为活跃
+        const lastActivityAt = activeTask.timeTracking?.lastActivityAt;
+        const startedAt = activeTask.timeTracking?.startedAt;
+        // 用于判断任务是否超时的时间戳：优先 lastActivityAt（最近执行活动），其次 startedAt
+        const executionStartedAt = lastActivityAt ?? startedAt;
+        // 活跃度超时：lastActivityAt 超过 15 分钟没更新 → 判定为僵尸任务（agent 未在执行）
+        // 模型单次 run 最多 10 分钟，15 分钟没有任何活跃记录说明 agent 已停止工作
+        const INACTIVE_ZOMBIE_MS = 15 * 60 * 1000; // 15 分钟无活动 → 僵尸
+        // 兜底：从 startedAt 起超过 60 分钟也强制重置（防止长期卡住）
+        const FORCE_RESET_MS = 60 * 60 * 1000; // 60 分钟绝对超时
+        // 向下兼容：若没有 lastActivityAt，退化为原来的 12 分钟 startedAt 超时
+        const STALE_IN_PROGRESS_MS = lastActivityAt ? INACTIVE_ZOMBIE_MS : 12 * 60 * 1000;
 
         // 检查主控是否通过 agent.task.manage action=extend 延长了超时
         const timeoutExtendedUntil =
@@ -233,8 +255,9 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
 
         const isStale =
           executionStartedAt != null && now - executionStartedAt > STALE_IN_PROGRESS_MS;
-        const shouldForceReset =
-          executionStartedAt != null && now - executionStartedAt > FORCE_RESET_MS;
+        // shouldForceReset 基于 startedAt 计算（表示任务持续占用时间超过 60 分钟）
+        // 与 isStale 的基准不同：isStale 用最近活动时间，shouldForceReset 用任务开始时间
+        const shouldForceReset = startedAt != null && now - startedAt > FORCE_RESET_MS;
 
         if (isStale) {
           stats.pendingTasks++;
@@ -280,7 +303,7 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
                 contextKey: `cron:task-autoreset:${activeTask.id}`,
               });
               requestHeartbeatNow({
-                reason: `task-autoreset:${activeTask.id}`,
+                reason: `cron:task-autoreset:${activeTask.id}`,
                 sessionKey: supervisorSession,
                 agentId: normalizedSupervisor,
                 coalesceMs: 10000,
@@ -352,7 +375,7 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
             contextKey: `cron:task-wake:${normalizedId}`,
           });
           requestHeartbeatNow({
-            reason: `task-retry:${activeTask.id}`,
+            reason: `cron:task-retry:${activeTask.id}`,
             sessionKey,
             agentId: normalizedId,
             coalesceMs: 5000,
@@ -403,15 +426,87 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
               contextKey: `cron:task-timeout-alert:${activeTask.id}`,
             });
             requestHeartbeatNow({
-              reason: `task-timeout:${activeTask.id}`,
+              reason: `cron:task-timeout:${activeTask.id}`,
               sessionKey: supervisorSession,
               agentId: normalizedSupervisor,
               coalesceMs: 10000,
             });
           }
           stats.wokenAgents++;
+        } else {
+          // === 任务未超时，但需确保 agent 处于活跃状态 ===
+          // Bug 修复：服务重启后，历史 in-progress 任务没有 system event 驱动 agent 执行
+          // 调度器必须主动唤醒，不能直接 continue 让 agent 永久空闲
+          const REACTIVATE_IDLE_MS = 5 * 60 * 1000; // 5分钟没活动记录 → 主动重激活
+          const timeSinceActivity = executionStartedAt != null ? now - executionStartedAt : null;
+
+          // 重启立即唤醒：服务重启后首次扫描时，无论活动时间多久，
+          // 都补发 [TASK RESUME] 驱动 agent 恢复执行（跳过5min静默窗口）
+          const needsRestartResume = isRestartScan;
+
+          if (
+            needsRestartResume ||
+            (timeSinceActivity !== null && timeSinceActivity > REACTIVATE_IDLE_MS)
+          ) {
+            const sessionKey = `agent:${normalizedId}:main`;
+            const idleMinutes =
+              timeSinceActivity != null ? Math.floor(timeSinceActivity / 60000) : 0;
+            if (needsRestartResume) {
+              console.log(
+                `[Task Wake] Agent ${normalizedId} task ${activeTask.id} in-progress — service restart detected, sending TASK RESUME immediately`,
+              );
+            } else {
+              console.log(
+                `[Task Wake] Agent ${normalizedId} task ${activeTask.id} in-progress but idle ${idleMinutes}min — re-activating`,
+              );
+            }
+            const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(activeTask);
+            const projectGroupKey = activeTask.projectId
+              ? projectGroupCache.get(activeTask.projectId)
+              : undefined;
+            const reactivateMsg = [
+              needsRestartResume
+                ? `[TASK RESUME] Service was restarted. You have an in-progress task — continue executing it now:`
+                : `[TASK RESUME] You have an in-progress task that needs your attention:`,
+              ``,
+              `Task ID: ${activeTask.id}`,
+              `Title: ${activeTask.title}`,
+              `Priority: ${activeTask.priority}`,
+              activeTask.projectId ? `Project: ${activeTask.projectId}` : null,
+              activeTask.type ? `Type: ${activeTask.type}` : null,
+              projectGroupKey ? `Project Group Channel: sessionKey=${projectGroupKey}` : null,
+              activeTask.description
+                ? `Description: ${activeTask.description.slice(0, 200)}`
+                : null,
+              ``,
+              `Working Context:`,
+              `- Working Directory: ${agentWorkspaceDir}`,
+              `- Your Personal Memory (only YOU may write this): ${agentMemoryPath}`,
+              sharedMemoryPath
+                ? `- Project Shared Memory (all team members read/write): ${sharedMemoryPath}`
+                : null,
+              projectGroupSessionKey
+                ? `- Project Group: sessionKey=${projectGroupSessionKey}`
+                : null,
+              ``,
+              `IMPORTANT: This task is already in-progress. Continue executing it NOW. When done, call task_report_to_supervisor with Task ID: ${activeTask.id}`,
+            ]
+              .filter(Boolean)
+              .join("\n");
+            enqueueSystemEvent(reactivateMsg, {
+              sessionKey,
+              contextKey: `cron:task-resume:${activeTask.id}`,
+            });
+            requestHeartbeatNow({
+              reason: `cron:task-resume:${activeTask.id}`,
+              sessionKey,
+              agentId: normalizedId,
+              coalesceMs: 5000,
+            });
+            stats.wokenAgents++;
+          }
+          // else: 最近5分钟内有活动记录，agent 正在正常执行，不打扰
         }
-        // 正常执行中，不打扰
         continue;
       }
 
@@ -450,7 +545,7 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
                 contextKey: `cron:task-overdue:${t.id}`,
               });
               requestHeartbeatNow({
-                reason: `task-overdue:${t.id}`,
+                reason: `cron:task-overdue:${t.id}`,
                 sessionKey: overdueSupSession,
                 agentId: overdueSupId,
                 coalesceMs: 10000,
@@ -554,7 +649,7 @@ export async function scanAndWakeAgentsWithPendingTasks(): Promise<{
           contextKey: `cron:task-wake:${normalizedId}`,
         });
         requestHeartbeatNow({
-          reason: `next-task:${nextTask.id}`,
+          reason: `cron:task-wake:${nextTask.id}`,
           sessionKey,
           agentId: normalizedId,
           coalesceMs: 5000,
@@ -594,6 +689,10 @@ export function startAgentTaskWakeScheduler(options?: { intervalMinutes?: number
   if (startupTimer) {
     clearTimeout(startupTimer);
   }
+
+  // 每次调度器启动（服务重启）都重置首次扫描标志
+  // 确保重启后第一次扫描能立即唤醒所有历史 in-progress 任务
+  isFirstScan = true;
 
   console.log(
     `[Task Wake] Scheduler starting (first scan in ${STARTUP_DELAY_MS / 1000}s, then every ${intervalMinutes}min)`,

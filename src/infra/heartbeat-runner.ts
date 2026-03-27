@@ -608,11 +608,13 @@ function resolveHeartbeatRunPrompt(params: {
     ? pendingEventEntries.map((event) => event.text)
     : [];
 
-  // 任务驱动事件： contextKey 以 cron:task-wake: 或 cron:task-next: 开头
+  // 任务驱动事件： contextKey 以 cron:task-wake: / cron:task-next: / cron:task-resume: / cron:task-retry: 开头
   const taskDrivenEntries = pendingEventEntries.filter(
     (event) =>
       event.contextKey?.startsWith("cron:task-wake:") ||
-      event.contextKey?.startsWith("cron:task-next:"),
+      event.contextKey?.startsWith("cron:task-next:") ||
+      event.contextKey?.startsWith("cron:task-resume:") ||
+      event.contextKey?.startsWith("cron:task-retry:"),
   );
   const hasTaskDrivenEvents = taskDrivenEntries.length > 0;
 
