@@ -1,14 +1,10 @@
 import path from "node:path";
-import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { getActiveEmbeddedRunCount } from "../../upstream/src/agents/pi-embedded-runner/runs.js";
 import { registerSkillsChangeListener } from "../../upstream/src/agents/skills/refresh.js";
-import { initSubagentRegistry } from "../agents/subagent-registry.js";
 import { getTotalPendingReplies } from "../../upstream/src/auto-reply/reply/dispatcher-registry.js";
 import type { CanvasHostServer } from "../../upstream/src/canvas-host/server.js";
 import { type ChannelId, listChannelPlugins } from "../../upstream/src/channels/plugins/index.js";
 import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
-import { createDefaultDeps } from "../cli/deps.js";
-import { isRestartEnabled } from "../config/commands.js";
 import {
   CONFIG_PATH,
   isNixMode,
@@ -18,46 +14,16 @@ import {
   writeConfigFile,
 } from "../../upstream/src/config/config.js";
 import { applyPluginAutoEnable } from "../../upstream/src/config/plugin-auto-enable.js";
-import { startAgentTaskWakeScheduler } from "../cron/agent-task-wake-scheduler.js";
-import { clearAgentRunContext, onAgentEvent } from "../../upstream/src/infra/agent-events.js";
 import {
-  ensureControlUiAssetsBuilt,
-  resolveControlUiRootOverrideSync,
-  resolveControlUiRootSync,
-} from "../../upstream/src/infra/control-ui-assets.js";
-import { isDiagnosticsEnabled } from "../../upstream/src/infra/diagnostic-events.js";
-import { logAcceptedEnvOption } from "../../upstream/src/infra/env.js";
-import { createExecApprovalForwarder } from "../infra/exec-approval-forwarder.js";
-import { onHeartbeatEvent } from "../../upstream/src/infra/heartbeat-events.js";
-import { startHeartbeatRunner, type HeartbeatRunner } from "../infra/heartbeat-runner.js";
-import { getMachineDisplayName } from "../../upstream/src/infra/machine-name.js";
-import { ensureOpenClawCliOnPath } from "../../upstream/src/infra/path-env.js";
-import { setGatewaySigusr1RestartPolicy, setPreRestartDeferralCheck } from "../infra/restart.js";
-import {
-  primeRemoteSkillsCache,
-  refreshRemoteBinsForConnectedNodes,
-  setSkillsRemoteRegistry,
-} from "../../upstream/src/infra/skills-remote.js";
-import { scheduleGatewayUpdateCheck } from "../../upstream/src/infra/update-startup.js";
-import { startDiagnosticHeartbeat, stopDiagnosticHeartbeat } from "../../upstream/src/logging/diagnostic.js";
-import { createSubsystemLogger, runtimeForLogger } from "../../upstream/src/logging/subsystem.js";
-import { getGlobalHookRunner, runGlobalGatewayStopSafely } from "../../upstream/src/plugins/hook-runner-global.js";
-import { createEmptyPluginRegistry } from "../../upstream/src/plugins/registry.js";
-import type { PluginServicesHandle } from "../../upstream/src/plugins/services.js";
-import { getTotalQueueSize } from "../../upstream/src/process/command-queue.js";
-import type { RuntimeEnv } from "../../upstream/src/runtime.js";
-import { runSetupWizard } from "../../upstream/src/wizard/setup.js";
-import { createAuthRateLimiter, type AuthRateLimiter } from "../../upstream/src/gateway/auth-rate-limit.js";
+  createAuthRateLimiter,
+  type AuthRateLimiter,
+} from "../../upstream/src/gateway/auth-rate-limit.js";
 import { startChannelHealthMonitor } from "../../upstream/src/gateway/channel-health-monitor.js";
-import { startGatewayConfigReloader } from "./config-reload.js";
-import type { ControlUiRootState } from "./control-ui.js";
 import {
   GATEWAY_EVENT_UPDATE_AVAILABLE,
   type GatewayUpdateAvailableEventPayload,
 } from "../../upstream/src/gateway/events.js";
-import { ExecApprovalManager } from "./exec-approval-manager.js";
 import { NodeRegistry } from "../../upstream/src/gateway/node-registry.js";
-import type { startBrowserControlServerIfEnabled } from "./server-browser.js";
 import { createChannelManager } from "../../upstream/src/gateway/server-channels.js";
 import {
   createAgentEventHandler,
@@ -65,23 +31,17 @@ import {
   createSessionMessageSubscriberRegistry,
 } from "../../upstream/src/gateway/server-chat.js";
 import { createGatewayCloseHandler } from "../../upstream/src/gateway/server-close.js";
-import { buildGatewayCronService } from "./server-cron.js";
 import { startGatewayDiscovery } from "../../upstream/src/gateway/server-discovery-runtime.js";
 import { applyGatewayLaneConcurrency } from "../../upstream/src/gateway/server-lanes.js";
 import { startGatewayMaintenanceTimers } from "../../upstream/src/gateway/server-maintenance.js";
-import { GATEWAY_EVENTS, listGatewayMethods } from "./server-methods-list.js";
-import { coreGatewayHandlers } from "./server-methods.js";
-import { createExecApprovalHandlers } from "./server-methods/exec-approval.js";
 import { safeParseJson } from "../../upstream/src/gateway/server-methods/nodes.helpers.js";
 import { hasConnectedMobileNode } from "../../upstream/src/gateway/server-mobile-nodes.js";
 import { loadGatewayModelCatalog } from "../../upstream/src/gateway/server-model-catalog.js";
 import { createNodeSubscriptionManager } from "../../upstream/src/gateway/server-node-subscriptions.js";
 import { loadGatewayPlugins } from "../../upstream/src/gateway/server-plugins.js";
 import { createGatewayReloadHandlers } from "../../upstream/src/gateway/server-reload-handlers.js";
-import { resolveGatewayRuntimeConfig } from "./server-runtime-config.js";
 import { createGatewayRuntimeState } from "../../upstream/src/gateway/server-runtime-state.js";
 import { resolveSessionKeyForRun } from "../../upstream/src/gateway/server-session-key.js";
-import { logGatewayStartup } from "./server-startup-log.js";
 import { startGatewaySidecars } from "../../upstream/src/gateway/server-startup.js";
 import { startGatewayTailscaleExposure } from "../../upstream/src/gateway/server-tailscale.js";
 import { createWizardSessionTracker } from "../../upstream/src/gateway/server-wizard-sessions.js";
@@ -95,7 +55,60 @@ import {
 } from "../../upstream/src/gateway/server/health-state.js";
 import { loadGatewayTlsRuntime } from "../../upstream/src/gateway/server/tls.js";
 import { ensureGatewayStartupAuth } from "../../upstream/src/gateway/startup-auth.js";
+import { clearAgentRunContext, onAgentEvent } from "../../upstream/src/infra/agent-events.js";
+import {
+  ensureControlUiAssetsBuilt,
+  resolveControlUiRootOverrideSync,
+  resolveControlUiRootSync,
+} from "../../upstream/src/infra/control-ui-assets.js";
+import { isDiagnosticsEnabled } from "../../upstream/src/infra/diagnostic-events.js";
+import { logAcceptedEnvOption } from "../../upstream/src/infra/env.js";
+import { onHeartbeatEvent } from "../../upstream/src/infra/heartbeat-events.js";
+import { getMachineDisplayName } from "../../upstream/src/infra/machine-name.js";
+import { ensureOpenClawCliOnPath } from "../../upstream/src/infra/path-env.js";
+import {
+  primeRemoteSkillsCache,
+  refreshRemoteBinsForConnectedNodes,
+  setSkillsRemoteRegistry,
+} from "../../upstream/src/infra/skills-remote.js";
+import { scheduleGatewayUpdateCheck } from "../../upstream/src/infra/update-startup.js";
+import {
+  startDiagnosticHeartbeat,
+  stopDiagnosticHeartbeat,
+} from "../../upstream/src/logging/diagnostic.js";
+import { createSubsystemLogger, runtimeForLogger } from "../../upstream/src/logging/subsystem.js";
+import {
+  getGlobalHookRunner,
+  runGlobalGatewayStopSafely,
+} from "../../upstream/src/plugins/hook-runner-global.js";
+import { createEmptyPluginRegistry } from "../../upstream/src/plugins/registry.js";
+import type { PluginServicesHandle } from "../../upstream/src/plugins/services.js";
+import { getTotalQueueSize } from "../../upstream/src/process/command-queue.js";
+import type { RuntimeEnv } from "../../upstream/src/runtime.js";
+import { runSetupWizard } from "../../upstream/src/wizard/setup.js";
+import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { initBenchmarkDB } from "../agents/arena-benchmarks.js";
+import { initSubagentRegistry } from "../agents/subagent-registry.js";
+import { createDefaultDeps } from "../cli/deps.js";
+import { isRestartEnabled } from "../config/commands.js";
+import { startAgentTaskWakeScheduler } from "../cron/agent-task-wake-scheduler.js";
+import {
+  initMemoryHygieneScheduler,
+  stopMemoryHygieneScheduler,
+} from "../cron/memory-hygiene-scheduler.js";
+import { createExecApprovalForwarder } from "../infra/exec-approval-forwarder.js";
+import { startHeartbeatRunner, type HeartbeatRunner } from "../infra/heartbeat-runner.js";
+import { setGatewaySigusr1RestartPolicy, setPreRestartDeferralCheck } from "../infra/restart.js";
+import { startGatewayConfigReloader } from "./config-reload.js";
+import type { ControlUiRootState } from "./control-ui.js";
+import { ExecApprovalManager } from "./exec-approval-manager.js";
+import type { startBrowserControlServerIfEnabled } from "./server-browser.js";
+import { buildGatewayCronService } from "./server-cron.js";
+import { GATEWAY_EVENTS, listGatewayMethods } from "./server-methods-list.js";
+import { coreGatewayHandlers } from "./server-methods.js";
+import { createExecApprovalHandlers } from "./server-methods/exec-approval.js";
+import { resolveGatewayRuntimeConfig } from "./server-runtime-config.js";
+import { logGatewayStartup } from "./server-startup-log.js";
 
 export { __resetModelCatalogCacheForTest } from "../../upstream/src/gateway/server-model-catalog.js";
 
@@ -760,6 +773,16 @@ export async function startGatewayServer(
     }
   }
 
+  // 启动工作空间卫生自检调度器（每 24h 检查 MEMORY 大小/幺灵目录/当前文件等）
+  if (!minimalTestGateway) {
+    try {
+      initMemoryHygieneScheduler();
+      log.info("Memory hygiene scheduler started");
+    } catch (err) {
+      log.warn(`Memory hygiene scheduler failed to start: ${String(err)}`);
+    }
+  }
+
   // 初始化权限中间件：从各 agent 配置加载权限规则和审批流（fire-and-forget）
   if (!minimalTestGateway) {
     try {
@@ -868,6 +891,14 @@ export async function startGatewayServer(
         log.info("Plugin hot-reload watcher stopped");
       } catch (err) {
         log.warn(`Plugin hot-reload failed to stop: ${String(err)}`);
+      }
+
+      // 停止工作空间卫生调度器
+      try {
+        stopMemoryHygieneScheduler();
+        log.info("Memory hygiene scheduler stopped");
+      } catch (err) {
+        log.warn(`Memory hygiene scheduler failed to stop: ${String(err)}`);
       }
 
       // 停止OAuth刷新守护进程

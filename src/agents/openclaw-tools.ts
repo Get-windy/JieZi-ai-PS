@@ -96,7 +96,11 @@ import {
   createPerm_ListTool,
   createPerm_AuditTool,
 } from "./tools/permission-management-tools-impl.js";
-import { createProjectCreateTool } from "./tools/project-management-tools.js";
+import {
+  createProjectCreateTool,
+  createProjectListTool,
+  createProjectUpdateStatusTool,
+} from "./tools/project-management-tools.js";
 // 导入使用自动注册机制的工具文件，加载时注册自动生效
 import "./tools/skill-transfer-tool.js";
 import {
@@ -336,6 +340,8 @@ export function createOpenClawTools(options?: {
       }),
     }),
     createProjectCreateTool(),
+    createProjectListTool(),
+    createProjectUpdateStatusTool(),
     createGroupListTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,

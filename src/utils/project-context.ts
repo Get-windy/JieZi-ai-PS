@@ -35,15 +35,135 @@ export interface ProjectContext {
 
 /** 项目生命周期状态 */
 export type ProjectStatus =
-  | "planning"
-  | "active"
-  | "dev_done"
-  | "operating"
-  | "maintenance"
-  | "paused"
-  | "completed"
-  | "deprecated"
-  | "cancelled";
+  | "requirements" // 需求提炼阶段
+  | "design" // 架构设计阶段
+  | "planning" // 计划/排期阶段
+  | "development" // 开发中
+  | "testing" // 测试阶段
+  | "review" // 评审/验收阶段
+  | "active" // 运行中（已上线，持续迭代）
+  | "dev_done" // 开发完成（待上线）
+  | "operating" // 运营维护
+  | "maintenance" // 维护模式
+  | "paused" // 暂停中
+  | "completed" // 已完成/归档
+  | "deprecated" // 已废弃
+  | "cancelled"; // 已终止
+
+/**
+ * 项目状态元信息：中文标签 + 允许安排的工作类型 + 推荐参与 Agent 角色
+ *
+ * 主控（coordinator）在心跳补充任务时应参考此表决定安排何种工作。
+ */
+export interface ProjectStatusMeta {
+  /** 中文显示标签 */
+  label: string;
+  /** 当前阶段允许安排的工作类型描述 */
+  allowedWork: string[];
+  /** 推荐参与的 Agent 角色（角色名，非 ID） */
+  recommendedRoles: string[];
+  /** 项目是否处于活跃可执行状态（false=暂停/终止，不应再分配新任务） */
+  isActive: boolean;
+}
+
+/** 所有项目状态的元信息映射表 */
+export const PROJECT_STATUS_META: Record<ProjectStatus, ProjectStatusMeta> = {
+  requirements: {
+    label: "需求提炼",
+    allowedWork: ["需求调研与分析", "用户故事编写", "功能列表整理", "竞品分析", "需求文档撰写"],
+    recommendedRoles: ["product-analyst", "doc-writer", "coordinator"],
+    isActive: true,
+  },
+  design: {
+    label: "架构设计",
+    allowedWork: ["系统架构设计", "数据库设计", "API 接口设计", "UI/UX 原型", "技术方案评审"],
+    recommendedRoles: ["team-member", "product-analyst", "doc-writer"],
+    isActive: true,
+  },
+  planning: {
+    label: "计划排期",
+    allowedWork: ["Sprint 规划", "任务拆解", "工作量估算", "里程碑制定", "风险识别"],
+    recommendedRoles: ["coordinator", "product-analyst"],
+    isActive: true,
+  },
+  development: {
+    label: "开发中",
+    allowedWork: ["功能开发", "代码审查", "单元测试编写", "技术文档更新", "Bug 修复"],
+    recommendedRoles: ["team-member", "devops-engineer", "qa-lead"],
+    isActive: true,
+  },
+  testing: {
+    label: "测试阶段",
+    allowedWork: ["功能测试", "集成测试", "性能测试", "Bug 报告与跟踪", "测试报告编写"],
+    recommendedRoles: ["qa-lead", "team-member", "doc-writer"],
+    isActive: true,
+  },
+  review: {
+    label: "评审验收",
+    allowedWork: ["代码复查", "需求验收", "用户验收测试", "上线准备", "发布文档"],
+    recommendedRoles: ["coordinator", "qa-lead", "doc-writer"],
+    isActive: true,
+  },
+  active: {
+    label: "运行中",
+    allowedWork: ["新功能迭代", "线上问题跟踪", "性能优化", "用户反馈处理"],
+    recommendedRoles: ["team-member", "devops-engineer", "qa-lead"],
+    isActive: true,
+  },
+  dev_done: {
+    label: "开发完成",
+    allowedWork: ["上线准备", "环境配置", "部署脚本", "发布文档", "最终测试"],
+    recommendedRoles: ["devops-engineer", "qa-lead", "doc-writer"],
+    isActive: true,
+  },
+  operating: {
+    label: "运营维护",
+    allowedWork: ["监控告警配置", "运营数据分析", "日常维护", "文档完善"],
+    recommendedRoles: ["devops-engineer", "doc-writer"],
+    isActive: true,
+  },
+  maintenance: {
+    label: "维护模式",
+    allowedWork: ["紧急修复", "安全补丁", "依赖升级", "文档更新"],
+    recommendedRoles: ["team-member", "devops-engineer"],
+    isActive: true,
+  },
+  paused: {
+    label: "暂停中",
+    allowedWork: [],
+    recommendedRoles: [],
+    isActive: false,
+  },
+  completed: {
+    label: "已完成",
+    allowedWork: [],
+    recommendedRoles: [],
+    isActive: false,
+  },
+  deprecated: {
+    label: "已废弃",
+    allowedWork: [],
+    recommendedRoles: [],
+    isActive: false,
+  },
+  cancelled: {
+    label: "已终止",
+    allowedWork: [],
+    recommendedRoles: [],
+    isActive: false,
+  },
+};
+
+/**
+ * 获取项目状态元信息（含中文标签和工作建议）
+ * 未知状态回退到 planning 的 meta
+ */
+export function getProjectStatusMeta(status: string | undefined): ProjectStatusMeta {
+  if (!status) {
+    return PROJECT_STATUS_META["planning"];
+  }
+  return PROJECT_STATUS_META[status as ProjectStatus] ?? PROJECT_STATUS_META["planning"];
+}
 
 /** 任务优先级（借鉴 Linear/Jira 标准） */
 export type TaskPriority = "urgent" | "high" | "medium" | "low" | "none";

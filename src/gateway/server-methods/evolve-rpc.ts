@@ -136,6 +136,125 @@ interface SkillStore {
 }
 
 // ============================================================================
+// Gap A: 功能需求日志（self-improving-agent FEATURE_REQUESTS 模式）
+// ============================================================================
+
+type FeatureRequestStatus = "pending" | "in_progress" | "done" | "wont_fix";
+type FeatureRequestPriority = "low" | "medium" | "high" | "critical";
+
+interface FeatureRequestEntry {
+  id: string;
+  agentId?: string;
+  /** 用户希望的能力描述 */
+  capability: string;
+  /** 用户背景/需求原因 */
+  context: string;
+  /** 复杂度估计 */
+  complexity: "simple" | "medium" | "complex";
+  priority: FeatureRequestPriority;
+  status: FeatureRequestStatus;
+  /** 功能出现次数（相同需求重复提出时累加） */
+  recurrenceCount: number;
+  /** 关联的 Agent 工具/能力领域 */
+  area?: string;
+  /** 建议实现方式 */
+  suggestedImpl?: string;
+  createdAt: number;
+  updatedAt: number;
+  /** Pattern-Key: 用于跨 session 识别相同模式 e.g. feat.multi-agent-parallel */
+  patternKey?: string;
+}
+
+interface FeatureRequestStore {
+  version: 1;
+  entries: FeatureRequestEntry[];
+}
+
+// ============================================================================
+// Gap C: 进化事件溯源（Evolver events.jsonl 模式）
+// ============================================================================
+
+type EvolveEventType =
+  | "reflect.save" // 反思保存
+  | "skill.save" // 技能保存
+  | "skill.update" // 技能更新
+  | "feat.save" // 功能需求记录
+  | "lesson.promoted" // Gap B：学习晋升到工作区文件
+  | "gc.run" // GC 清理运行
+  | "strategy.change"; // Gap D：进化策略切换
+
+interface EvolveEvent {
+  /** 事件 ID */
+  id: string;
+  /** 父事件 ID（形成树形溯源链） */
+  parentId?: string;
+  agentId?: string;
+  type: EvolveEventType;
+  /** 关联的资产 ID（reflectionId / skillId / featId） */
+  assetId?: string;
+  /** 事件摘要 */
+  summary: string;
+  /** 额外元数据 */
+  meta?: Record<string, unknown>;
+  createdAt: number;
+}
+
+// ============================================================================
+// Gap D: 进化策略（Evolver EVOLVE_STRATEGY 模式）
+// ============================================================================
+
+type EvolveStrategy = "balanced" | "innovate" | "harden" | "repair-only" | "early-stabilize";
+
+interface EvolveStrategyState {
+  version: 1;
+  agentId?: string;
+  current: EvolveStrategy;
+  reason: string;
+  detectedAt: number;
+  /** 最近一次切换前的策略 */
+  previous?: EvolveStrategy;
+}
+
+// ============================================================================
+// Gap E: Ontology 类型化知识图谱
+// ============================================================================
+
+interface OntologyEntity {
+  id: string;
+  type: string;
+  agentId?: string;
+  properties: Record<string, unknown>;
+  /** 关联的其他实体 ID（快速索引） */
+  relatedIds: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface OntologyRelation {
+  id: string;
+  fromId: string;
+  relationType: string;
+  toId: string;
+  properties?: Record<string, unknown>;
+  createdAt: number;
+}
+
+/** graph.jsonl 中每行的操作记录（追加式，保留历史） */
+type OntologyOp =
+  | { op: "create"; entity: OntologyEntity }
+  | { op: "update"; id: string; patch: Partial<OntologyEntity>; updatedAt: number }
+  | { op: "delete"; id: string; deletedAt: number }
+  | { op: "relate"; relation: OntologyRelation }
+  | { op: "unrelate"; relationId: string; deletedAt: number };
+
+interface OntologyStore {
+  /** 内存中当前实体快照（从 graph.jsonl 重建） */
+  entities: Map<string, OntologyEntity>;
+  /** 内存中当前关系快照 */
+  relations: Map<string, OntologyRelation>;
+}
+
+// ============================================================================
 // 存储层
 // ============================================================================
 
@@ -165,6 +284,26 @@ function resolveSharedExperienceFile(): string {
   return path.join(resolveEvolveDir("_shared"), "experience.json");
 }
 
+// Gap A
+function resolveFeatureRequestsFile(agentId?: string): string {
+  return path.join(resolveEvolveDir(agentId), "feature_requests.json");
+}
+
+// Gap C: 追加式事件日志（jsonl 格式）
+function resolveEventsFile(agentId?: string): string {
+  return path.join(resolveEvolveDir(agentId), "events.jsonl");
+}
+
+// Gap D
+function resolveStrategyFile(agentId?: string): string {
+  return path.join(resolveEvolveDir(agentId), "strategy.json");
+}
+
+// Gap E: Ontology 图谱文件
+function resolveOntologyGraphFile(agentId?: string): string {
+  return path.join(resolveEvolveDir(agentId), "graph.jsonl");
+}
+
 function loadJson<T>(filePath: string, defaultValue: T): T {
   try {
     if (fs.existsSync(filePath)) {
@@ -185,6 +324,329 @@ function saveJson(filePath: string, data: unknown): void {
 
 function genId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// ============================================================================
+// Gap C: 追加式事件写入（Evolver events.jsonl 模式）
+// ============================================================================
+
+function appendEvolveEvent(
+  agentId: string | undefined,
+  event: Omit<EvolveEvent, "id" | "createdAt">,
+): string {
+  const id = genId("evt");
+  const fullEvent: EvolveEvent = { ...event, id, agentId, createdAt: Date.now() };
+  const filePath = resolveEventsFile(agentId);
+  const dir = path.dirname(filePath);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(filePath, JSON.stringify(fullEvent) + "\n", "utf8");
+  } catch {
+    /* 事件写入失败不影响主流程 */
+  }
+  return id;
+}
+
+/** 读取最近 N 条事件（倒序） */
+function loadRecentEvolveEvents(agentId: string | undefined, limit = 20): EvolveEvent[] {
+  try {
+    const filePath = resolveEventsFile(agentId);
+    if (!fs.existsSync(filePath)) {
+      return [];
+    }
+    const lines = fs.readFileSync(filePath, "utf8").trim().split("\n").filter(Boolean);
+    return lines
+      .slice(-Math.max(limit, 1))
+      .map((l) => {
+        try {
+          return JSON.parse(l) as EvolveEvent;
+        } catch {
+          return null;
+        }
+      })
+      .filter((e): e is EvolveEvent => e !== null)
+      .toReversed();
+  } catch {
+    return [];
+  }
+}
+
+// ============================================================================
+// Gap D: 进化策略自动切换（Evolver EVOLVE_STRATEGY 模式）
+// ============================================================================
+
+function loadEvolveStrategy(agentId?: string): EvolveStrategyState {
+  return loadJson<EvolveStrategyState>(resolveStrategyFile(agentId), {
+    version: 1,
+    agentId,
+    current: "balanced",
+    reason: "default",
+    detectedAt: 0,
+  });
+}
+
+/**
+ * detectAndUpdateStrategy — 根据近期成功率自动切换策略
+ *
+ * 策略定义：
+ *   balanced      默认平衡，成功率 40%~70%
+ *   harden        高成功率（>70%）时切换，专注完善和可高度化
+ *   repair-only   低成功率（<35%）时切换，专注修复错误
+ *   innovate      成功率近期持续上升 + 历史成功>80%，可进行创新尝试
+ *   early-stabilize 历史样本不足（<5次）时，采用保守策略
+ */
+export function detectAndUpdateStrategy(agentId: string | undefined): EvolveStrategyState {
+  try {
+    const profile = loadPerfProfile(agentId);
+    const allBuckets = Object.values(profile.buckets);
+    if (allBuckets.length === 0) {
+      return loadEvolveStrategy(agentId);
+    }
+
+    // 汇总所有 bucket 的近期 10 次结果
+    const recentAll = allBuckets.flatMap((b) => b.recentOutcomes);
+    const totalSamples = recentAll.length;
+    const state = loadEvolveStrategy(agentId);
+
+    // 样本不足 5 次：保守策略
+    if (totalSamples < 5) {
+      if (state.current !== "early-stabilize") {
+        const next: EvolveStrategyState = {
+          version: 1,
+          agentId,
+          current: "early-stabilize",
+          previous: state.current,
+          reason: `样本不足 5 次（${totalSamples} 次），采用保守策略`,
+          detectedAt: Date.now(),
+        };
+        saveJson(resolveStrategyFile(agentId), next);
+        appendEvolveEvent(agentId, {
+          type: "strategy.change",
+          summary: `进化策略: ${state.current} → early-stabilize`,
+          meta: { from: state.current, to: "early-stabilize", reason: next.reason },
+        });
+        return next;
+      }
+      return state;
+    }
+
+    const successCount = recentAll.filter((o) => o === "success").length;
+    const recentRate = successCount / totalSamples;
+
+    let newStrategy: EvolveStrategy = "balanced";
+    let reason = "";
+
+    if (recentRate < 0.35) {
+      newStrategy = "repair-only";
+      reason = `近期成功率低（${Math.round(recentRate * 100)}%），切换至修复优先模式`;
+    } else if (recentRate > 0.8 && totalSamples >= 10) {
+      // 历史成功率也要高（所有 bucket 平均成功率）
+      const globalRate =
+        allBuckets.reduce((s, b) => s + b.success, 0) /
+        Math.max(
+          1,
+          allBuckets.reduce((s, b) => s + b.total, 0),
+        );
+      if (globalRate > 0.75) {
+        newStrategy = "innovate";
+        reason = `近期 ${Math.round(recentRate * 100)}% + 历史 ${Math.round(globalRate * 100)}%，可尝试创新优化`;
+      } else {
+        newStrategy = "harden";
+        reason = `近期成功率高（${Math.round(recentRate * 100)}%），切换至巩固模式`;
+      }
+    } else if (recentRate >= 0.7) {
+      newStrategy = "harden";
+      reason = `近期成功率较高（${Math.round(recentRate * 100)}%），巩固已有技能`;
+    } else {
+      newStrategy = "balanced";
+      reason = `成功率中等（${Math.round(recentRate * 100)}%），保持平衡策略`;
+    }
+
+    if (newStrategy !== state.current) {
+      const next: EvolveStrategyState = {
+        version: 1,
+        agentId,
+        current: newStrategy,
+        previous: state.current,
+        reason,
+        detectedAt: Date.now(),
+      };
+      saveJson(resolveStrategyFile(agentId), next);
+      appendEvolveEvent(agentId, {
+        type: "strategy.change",
+        summary: `进化策略: ${state.current} → ${newStrategy}`,
+        meta: { from: state.current, to: newStrategy, reason },
+      });
+      return next;
+    }
+    return state;
+  } catch {
+    return loadEvolveStrategy(agentId);
+  }
+}
+
+// ============================================================================
+// Gap E: Ontology 操作层
+// ============================================================================
+
+/** 从 graph.jsonl 重建内存快照 */
+function loadOntologyStore(agentId?: string): OntologyStore {
+  const store: OntologyStore = { entities: new Map(), relations: new Map() };
+  const filePath = resolveOntologyGraphFile(agentId);
+  if (!fs.existsSync(filePath)) {
+    return store;
+  }
+  try {
+    const lines = fs.readFileSync(filePath, "utf8").trim().split("\n").filter(Boolean);
+    for (const line of lines) {
+      const op = JSON.parse(line) as OntologyOp;
+      if (op.op === "create") {
+        store.entities.set(op.entity.id, op.entity);
+      } else if (op.op === "update") {
+        const existing = store.entities.get(op.id);
+        if (existing) {
+          const updated = {
+            ...existing,
+            properties: { ...existing.properties, ...(op.patch.properties ?? undefined) },
+            updatedAt: op.updatedAt,
+          };
+          store.entities.set(op.id, updated);
+        }
+      } else if (op.op === "delete") {
+        store.entities.delete(op.id);
+      } else if (op.op === "relate") {
+        store.relations.set(op.relation.id, op.relation);
+        // 更新 relatedIds 快速索引
+        const from = store.entities.get(op.relation.fromId);
+        const to = store.entities.get(op.relation.toId);
+        if (from && !from.relatedIds.includes(op.relation.toId)) {
+          from.relatedIds.push(op.relation.toId);
+        }
+        if (to && !to.relatedIds.includes(op.relation.fromId)) {
+          to.relatedIds.push(op.relation.fromId);
+        }
+      } else if (op.op === "unrelate") {
+        store.relations.delete(op.relationId);
+      }
+    }
+  } catch {
+    /* 文件损坏时返回空快照 */
+  }
+  return store;
+}
+
+function appendOntologyOp(agentId: string | undefined, op: OntologyOp): void {
+  const filePath = resolveOntologyGraphFile(agentId);
+  const dir = path.dirname(filePath);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.appendFileSync(filePath, JSON.stringify(op) + "\n", "utf8");
+}
+
+// ============================================================================
+// Gap B: 学习晋升机制（self-improving-agent SOUL.md/AGENTS.md/TOOLS.md 模式）
+//
+// 当 autoSaveReflection 保存了高质量 lesson（outcome=success 且有长 lesson）时，
+// 将 lesson 晋升追加到 Agent 的工作空间文件中，形成长期记忆沉淀。
+// ============================================================================
+
+type LessonPromoteTarget = "SOUL.md" | "AGENTS.md" | "TOOLS.md";
+
+/**
+ * resolveAgentWorkspaceDirFallback — 在不依赖 cfg 的情况下推算 Agent 工作空间路径
+ * 复用 resolveAgentWorkspaceDir 的逻辑：stateDir/workspace-{agentId}
+ */
+function resolveAgentWorkspaceDirFallback(agentId: string): string {
+  const stateDir = resolveStateDir(process.env);
+  return path.join(stateDir, `workspace-${agentId}`);
+}
+
+/**
+ * promoteLesson — 将高质量 lesson 晋升追加到工作区文件
+ *
+ * @param agentId   目标 Agent
+ * @param lessons   本次任务的 lessons（已去重过）
+ * @param outcome   任务结果（只有 success 时晋升到 AGENTS.md，failure 晋升到 TOOLS.md）
+ * @param taskSummary 任务摘要（用于注释）
+ */
+function promoteLesson(
+  agentId: string | undefined,
+  lessons: string[],
+  outcome: ReflectionOutcome,
+  taskSummary: string,
+): void {
+  if (!agentId) {
+    return;
+  }
+  // 只选择长度 >= 20 字符的高价值 lesson
+  const valuable = lessons.filter((l) => l.trim().length >= 20);
+  if (valuable.length === 0) {
+    return;
+  }
+
+  try {
+    const workspaceDir = resolveAgentWorkspaceDirFallback(agentId);
+    if (!fs.existsSync(workspaceDir)) {
+      return;
+    } // 工作区不存在则跳过
+
+    // 确定晋升目标文件
+    let target: LessonPromoteTarget;
+    if (outcome === "success") {
+      target = "AGENTS.md"; // 成功经验 → AGENTS.md（Agent 行为指南）
+    } else if (outcome === "failure") {
+      target = "TOOLS.md"; // 失败教训 → TOOLS.md（工具使用注意）
+    } else {
+      target = "SOUL.md"; // partial → SOUL.md（核心价值观修正）
+    }
+
+    const targetPath = path.join(workspaceDir, target);
+    if (!fs.existsSync(targetPath)) {
+      return;
+    } // 目标文件不存在则跳过（避免创建垃圾文件）
+
+    // 构建追加内容（轻量 Markdown 格式，带日期戳）
+    const date = new Date().toISOString().split("T")[0];
+    const lines = [
+      "",
+      `## 🧠 自动晋升学习（${date}）`,
+      `> 任务：${taskSummary.slice(0, 100)}`,
+      ...valuable.map((l) => `- ${l.trim()}`),
+      "",
+    ];
+    const appendContent = lines.join("\n");
+
+    // 追加到目标文件（文件大小检查：不超过 3000 字符才追加，防止无限膨胀）
+    const existing = fs.readFileSync(targetPath, "utf8");
+    if (existing.length > 8000) {
+      return; // 文件已过大，跳过（文件大小由 file-tools-secure.ts 管理）
+    }
+    fs.appendFileSync(targetPath, appendContent, "utf8");
+
+    // Gap C: 记录晋升事件
+    appendEvolveEvent(agentId, {
+      type: "lesson.promoted",
+      summary: `${valuable.length} 条 lesson 晋升到 ${target}`,
+      meta: {
+        target,
+        lessonsCount: valuable.length,
+        outcome,
+        taskSummary: taskSummary.slice(0, 80),
+      },
+    });
+  } catch {
+    /* 晋升失败不影响主流程 */
+  }
+}
+
+// ============================================================================
+// Gap A: 功能需求日志操作层（self-improving-agent FEATURE_REQUESTS 模式）
+// ============================================================================
+
+function loadFeatureRequestStore(agentId?: string): FeatureRequestStore {
+  return loadJson<FeatureRequestStore>(resolveFeatureRequestsFile(agentId), {
+    version: 1,
+    entries: [],
+  });
 }
 
 // ============================================================================
@@ -315,26 +777,197 @@ function pruneStaleSkills(agentId: string | undefined): void {
 }
 
 // ============================================================================
-// 技能相似度匹配（简单关键词匹配，用于技能检索）
+// FGT 反思有效性评估 + GC（Reflection Quality Scoring & Garbage Collection）
+// 业界依据：Reflexion / OpenManus / MemOS — 低质量记忆不仅无益反而增加 context 干扰
+//
+// 评分维度（满分 10 分，低于 REFLECTION_GC_MIN_SCORE 则标记为待清理）：
+//   +3  有 lessons 且至少一条长度 >= 20 字符（核心学习价值）
+//   +2  outcome 为 failure / partial（失败记录更有学习价值）
+//   +2  reflection 长度 >= 100 字符（内容充实）
+//   +2  taskSummary 长度 >= 15 字符（任务描述有意义）
+//   +1  有 steps 归因（细粒度步骤信息）
+//
+// 时效衰减：30天以上的 success 条目额外扣 2 分（成功经验时效较短）
+// 强制删除：低于阈值 且 超过 REFLECTION_GC_EXPIRE_DAYS 天的条目直接删除
 // ============================================================================
 
-function skillMatchesQuery(skill: SkillEntry, query: string): boolean {
+const REFLECTION_GC_MIN_SCORE = 3; // 低于此分值标记为待清理
+const REFLECTION_GC_EXPIRE_DAYS = 90; // 超过此天数且低分则直接删除
+const REFLECTION_SUCCESS_DECAY_DAYS = 30; // success 条目的时效衰减天数
+
+/**
+ * scoreReflectionValue — 对单条反思进行有效性评分（0~10）
+ */
+export function scoreReflectionValue(entry: ReflectionEntry): number {
+  let score = 0;
+  const now = Date.now();
+
+  // +3 有 lessons 且至少一条 >= 20 字符
+  if (entry.lessons.length > 0 && entry.lessons.some((l) => l.length >= 20)) {
+    score += 3;
+  } else if (entry.lessons.length > 0) {
+    score += 1; // 有 lessons 但太短，只给 1 分
+  }
+
+  // +2 outcome 为 failure / partial（失败经验更珍贵）
+  if (entry.outcome === "failure" || entry.outcome === "partial") {
+    score += 2;
+  }
+
+  // +2 reflection 内容充实（>= 100 字符）
+  if (entry.reflection.length >= 100) {
+    score += 2;
+  } else if (entry.reflection.length >= 40) {
+    score += 1;
+  }
+
+  // +2 taskSummary 有意义（>= 15 字符，且不是纯英文缩写）
+  if (entry.taskSummary.length >= 15) {
+    score += 2;
+  } else if (entry.taskSummary.length >= 8) {
+    score += 1;
+  }
+
+  // +1 有 steps 细粒度归因
+  if (entry.steps && entry.steps.length > 0) {
+    score += 1;
+  }
+
+  // 时效衰减：success 条目超过 30 天扣 2 分
+  if (entry.outcome === "success") {
+    const ageMs = now - entry.createdAt;
+    if (ageMs > REFLECTION_SUCCESS_DECAY_DAYS * 24 * 60 * 60 * 1000) {
+      score = Math.max(0, score - 2);
+    }
+  }
+
+  return score;
+}
+
+/**
+ * pruneStaleReflections — 清理低价值反思
+ *
+ * 策略（两步走）：
+ * 1. 低分（< REFLECTION_GC_MIN_SCORE）且超过 REFLECTION_GC_EXPIRE_DAYS 天的条目直接删除
+ * 2. 若剩余条数仍超过 highWaterMark，则对 success 类按评分从低到高再裁剪
+ *
+ * 返回 GC 报告
+ */
+export function pruneStaleReflections(
+  agentId: string | undefined,
+  highWaterMark = 200, // 超过此数量时触发额外裁剪
+): { before: number; after: number; removed: number; reason: string } {
+  const filePath = resolveReflectionsFile(agentId);
+  const store = loadJson<ReflectionStore>(filePath, { version: 1, entries: [] });
+  const before = store.entries.length;
+
+  if (before === 0) {
+    return { before: 0, after: 0, removed: 0, reason: "empty" };
+  }
+
+  const expireThreshold = Date.now() - REFLECTION_GC_EXPIRE_DAYS * 24 * 60 * 60 * 1000;
+
+  // Step 1: 删除「低分 + 超龄」条目
+  store.entries = store.entries.filter((entry) => {
+    if (entry.createdAt < expireThreshold) {
+      const score = scoreReflectionValue(entry);
+      if (score < REFLECTION_GC_MIN_SCORE) {
+        return false; // 删除
+      }
+    }
+    return true;
+  });
+
+  // Step 2: 若还超 highWaterMark，对低价值 success 条目额外裁剪
+  if (store.entries.length > highWaterMark) {
+    // 按评分升序，优先删除低分的 success 条目
+    const scored = store.entries.map((e) => ({ entry: e, score: scoreReflectionValue(e) }));
+    scored.sort((a, b) => {
+      // failure/partial 优先保留（排在后面）
+      if (a.entry.outcome !== "success" && b.entry.outcome === "success") {
+        return 1;
+      }
+      if (a.entry.outcome === "success" && b.entry.outcome !== "success") {
+        return -1;
+      }
+      return a.score - b.score; // 同类中低分的排前面（优先删除）
+    });
+    const toKeep = store.entries.length - highWaterMark;
+    const keepSet = new Set(scored.slice(toKeep).map((s) => s.entry.id));
+    store.entries = store.entries.filter((e) => keepSet.has(e.id));
+  }
+
+  const after = store.entries.length;
+  const removed = before - after;
+
+  if (removed > 0) {
+    saveJson(filePath, store);
+  }
+
+  return {
+    before,
+    after,
+    removed,
+    reason: removed > 0 ? `GC: 删除 ${removed} 条低价值/超龄反思` : "no-op",
+  };
+}
+
+// ============================================================================
+// Gap3 技能相似度匹配（TF-IDF 风格加权 + 宽松阈值）
+//
+// 改进策略（业界依据：Voyager 技能召回需要对自然语言 prompt 有较高召回率）：
+//   1. 分字段权重：triggers(×3) > name(×2) > description(×2) > tags(×1)
+//   2. 罕见词加权：长度 >= 4 的词视为高信息量词，命中时额外 +0.5 权重
+//   3. 阈值降至 0.3（原来等效 0.5）：让长 prompt 中只命中少数关键词也能召回
+//   4. 中文 bi-gram 拆解：将 2+ 字中文词拆成 bi-gram 对，增加中文召回率
+// ============================================================================
+
+function tokenizeForSkill(text: string): string[] {
+  const lower = text.toLowerCase();
+  // 中文字符以单字 + bi-gram 双模式匹配
+  const cjkChars = lower.match(/[\u4e00-\u9fff]/g) ?? [];
+  const cjkBigrams: string[] = [];
+  for (let i = 0; i < cjkChars.length - 1; i++) {
+    cjkBigrams.push(cjkChars[i] + cjkChars[i + 1]);
+  }
+  const eng = lower.match(/[a-z0-9]{2,}/g) ?? [];
+  return [...new Set([...cjkChars, ...cjkBigrams, ...eng])];
+}
+
+function skillMatchesQuery(skill: SkillEntry | SharedSkillEntry, query: string): boolean {
   if (!query.trim()) {
     return true;
   }
-  const q = query.toLowerCase();
-  const tokens = q.match(/[\u4e00-\u9fff]|[a-z0-9]+/g) ?? [];
-  if (tokens.length === 0) {
+  const queryTokens = tokenizeForSkill(query);
+  if (queryTokens.length === 0) {
     return true;
   }
 
-  const searchText = [skill.name, skill.description, ...skill.triggers, ...skill.tags]
-    .join(" ")
-    .toLowerCase();
+  // 分字段加权文本池
+  const weightedPool: Array<{ text: string; weight: number }> = [
+    { text: skill.name, weight: 2 },
+    { text: skill.description, weight: 2 },
+    ...skill.triggers.map((t) => ({ text: t, weight: 3 })),
+    ...skill.tags.map((t) => ({ text: t, weight: 1 })),
+  ];
 
-  // 至少有一半的查询词命中
-  const matches = tokens.filter((t) => searchText.includes(t));
-  return matches.length >= Math.ceil(tokens.length / 2);
+  let hitScore = 0;
+  let maxScore = 0;
+
+  for (const token of queryTokens) {
+    // 罕见词（长度 >= 4）视为高信息量
+    const tokenWeight = token.length >= 4 ? 1.5 : 1.0;
+    maxScore += tokenWeight;
+    for (const { text, weight } of weightedPool) {
+      if (text.toLowerCase().includes(token)) {
+        hitScore += tokenWeight * (weight / 3); // 归一化权重到 0~1.5 区间
+        break; // 同一 token 只算一次最高权重字段
+      }
+    }
+  }
+
+  // 阈值 0.3（比原来的 0.5 更宽松，提升召回率）
+  return maxScore > 0 && hitScore / maxScore >= 0.3;
 }
 
 // ============================================================================
@@ -417,6 +1050,14 @@ export const evolveRpc: GatewayRequestHandlers = {
       }
 
       saveJson(filePath, store);
+
+      // Gap C: 记录反思保存事件
+      appendEvolveEvent(agentId, {
+        type: "reflect.save",
+        assetId: id,
+        summary: `反思保存: [${outcome}] ${taskSummary.slice(0, 60)}`,
+        meta: { outcome, lessonsCount: lessons.length },
+      });
 
       // P1 HyperAgent: 同步记录到性能画像
       try {
@@ -522,6 +1163,13 @@ export const evolveRpc: GatewayRequestHandlers = {
           existing.tags = Array.from(new Set([...existing.tags, ...tags]));
           store.entries[existingIdx] = existing;
           saveJson(filePath, store);
+          // Gap C: 记录技能更新事件
+          appendEvolveEvent(agentId, {
+            type: "skill.update",
+            assetId: existing.id,
+            summary: `技能更新: ${name}`,
+            meta: { category },
+          });
           respond(true, { id: existing.id, action: "updated" }, undefined);
           return;
         }
@@ -544,6 +1192,15 @@ export const evolveRpc: GatewayRequestHandlers = {
 
       store.entries.push(entry);
       saveJson(filePath, store);
+
+      // Gap C: 记录技能保存事件
+      appendEvolveEvent(agentId, {
+        type: "skill.save",
+        assetId: id,
+        summary: `技能新增: ${name}`,
+        meta: { category, triggersCount: triggers.length },
+      });
+
       respond(true, { id, action: "added" }, undefined);
     } catch (err) {
       respond(
@@ -881,7 +1538,7 @@ export const evolveRpc: GatewayRequestHandlers = {
         skills = skills.filter((s) => s.category === filterCategory);
       }
       if (query) {
-        skills = skills.filter((s) => skillMatchesQuery(s as unknown as SkillEntry, query));
+        skills = skills.filter((s) => skillMatchesQuery(s, query));
       }
       const sorted = skills
         .toSorted((a, b) => b.usageCount + b.importCount * 2 - (a.usageCount + a.importCount * 2))
@@ -967,6 +1624,56 @@ export const evolveRpc: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(ErrorCodes.UNAVAILABLE, `evolve.stats failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * evolve.reflect.gc — 手动触发反思库 GC，返回清理报告
+   * 支持单 Agent 或全量 Agent（agentIds 为数组，不传则仅处理当前 agentId）
+   */
+  "evolve.reflect.gc": async ({ params, respond }) => {
+    try {
+      // 支持传入 agentIds 数组批量处理，或单个 agentId
+      const agentIds: Array<string | undefined> = Array.isArray(params?.agentIds)
+        ? params.agentIds.map((id) => (id ? String(id) : undefined))
+        : [params?.agentId ? String(params.agentId) : undefined];
+
+      const highWaterMark =
+        typeof params?.highWaterMark === "number" ? Math.max(50, params.highWaterMark) : 200;
+
+      const reports: Array<{
+        agentId: string | undefined;
+        before: number;
+        after: number;
+        removed: number;
+        reason: string;
+      }> = [];
+
+      for (const agentId of agentIds) {
+        try {
+          const report = pruneStaleReflections(agentId, highWaterMark);
+          reports.push({ agentId, ...report });
+        } catch {
+          reports.push({ agentId, before: 0, after: 0, removed: 0, reason: "error" });
+        }
+      }
+
+      const totalRemoved = reports.reduce((s, r) => s + r.removed, 0);
+      respond(
+        true,
+        {
+          reports,
+          totalRemoved,
+          agentsProcessed: reports.length,
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.reflect.gc failed: ${String(err)}`),
       );
     }
   },
@@ -1065,6 +1772,632 @@ export const evolveRpc: GatewayRequestHandlers = {
       );
     }
   },
+
+  // ============================================================================
+  // Gap A: 功能需求日志 RPC （self-improving-agent FEATURE_REQUESTS 模式）
+  // ============================================================================
+
+  /**
+   * evolve.feat.save — 记录一条功能需求
+   * 支持相同 patternKey 的需求自动累加 recurrenceCount
+   */
+  "evolve.feat.save": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const capability = params?.capability ? String(params.capability).trim() : "";
+      const context = params?.context ? String(params.context).trim() : "";
+      if (!capability) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "capability is required"));
+        return;
+      }
+
+      const validPriorities: FeatureRequestPriority[] = ["low", "medium", "high", "critical"];
+      const priority = (
+        params?.priority &&
+        validPriorities.includes(String(params.priority) as FeatureRequestPriority)
+          ? String(params.priority)
+          : "medium"
+      ) as FeatureRequestPriority;
+
+      const validComplexities = ["simple", "medium", "complex"];
+      const complexity = (
+        params?.complexity && validComplexities.includes(String(params.complexity))
+          ? String(params.complexity)
+          : "medium"
+      ) as FeatureRequestEntry["complexity"];
+
+      const area = params?.area ? String(params.area).slice(0, 100) : undefined;
+      const suggestedImpl = params?.suggestedImpl
+        ? String(params.suggestedImpl).slice(0, 500)
+        : undefined;
+      const patternKey = params?.patternKey ? String(params.patternKey).slice(0, 100) : undefined;
+
+      const store = loadFeatureRequestStore(agentId);
+      const now = Date.now();
+
+      // 相同 patternKey 的需求自动累加次数
+      if (patternKey) {
+        const existingIdx = store.entries.findIndex(
+          (e) => e.patternKey === patternKey && e.status === "pending",
+        );
+        if (existingIdx !== -1) {
+          const existing = store.entries[existingIdx];
+          if (existing) {
+            existing.recurrenceCount += 1;
+            existing.updatedAt = now;
+            store.entries[existingIdx] = existing;
+            saveJson(resolveFeatureRequestsFile(agentId), store);
+            // Gap C: 记录功能需求增加事件
+            appendEvolveEvent(agentId, {
+              type: "feat.save",
+              assetId: existing.id,
+              summary: `功能需求重复(${existing.recurrenceCount}次): ${capability.slice(0, 50)}`,
+              meta: { patternKey, recurrenceCount: existing.recurrenceCount },
+            });
+            respond(
+              true,
+              { id: existing.id, action: "recurrence", recurrenceCount: existing.recurrenceCount },
+              undefined,
+            );
+            return;
+          }
+        }
+      }
+
+      const id = genId("feat");
+      const entry: FeatureRequestEntry = {
+        id,
+        agentId,
+        capability: capability.slice(0, 500),
+        context: context.slice(0, 1000),
+        complexity,
+        priority,
+        status: "pending",
+        recurrenceCount: 1,
+        area,
+        suggestedImpl,
+        patternKey,
+        createdAt: now,
+        updatedAt: now,
+      };
+      store.entries.push(entry);
+
+      // 保留最近 200 条
+      if (store.entries.length > 200) {
+        // 第一优先级：高优先级的 pending 需求
+        store.entries = store.entries
+          .toSorted((a, b) => {
+            const priorityScore = { critical: 4, high: 3, medium: 2, low: 1 };
+            return (
+              priorityScore[b.priority] - priorityScore[a.priority] ||
+              b.recurrenceCount - a.recurrenceCount ||
+              b.createdAt - a.createdAt
+            );
+          })
+          .slice(0, 200);
+      }
+
+      saveJson(resolveFeatureRequestsFile(agentId), store);
+
+      // Gap C: 记录功能需求保存事件
+      appendEvolveEvent(agentId, {
+        type: "feat.save",
+        assetId: id,
+        summary: `功能需求记录: ${capability.slice(0, 60)}`,
+        meta: { priority, complexity, patternKey },
+      });
+
+      respond(true, { id, action: "added" }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.feat.save failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * evolve.feat.list — 列出功能需求（支持按状态/优先级过滤）
+   */
+  "evolve.feat.list": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const filterStatus = params?.status ? String(params.status) : undefined;
+      const filterPriority = params?.priority ? String(params.priority) : undefined;
+      const limit = typeof params?.limit === "number" ? Math.min(params.limit, 100) : 20;
+
+      const store = loadFeatureRequestStore(agentId);
+      let entries = store.entries;
+
+      if (filterStatus) {
+        entries = entries.filter((e) => e.status === filterStatus);
+      }
+      if (filterPriority) {
+        entries = entries.filter((e) => e.priority === filterPriority);
+      }
+
+      const priorityScore = { critical: 4, high: 3, medium: 2, low: 1 };
+      const sorted = entries
+        .toSorted(
+          (a, b) =>
+            priorityScore[b.priority] - priorityScore[a.priority] ||
+            b.recurrenceCount - a.recurrenceCount ||
+            b.createdAt - a.createdAt,
+        )
+        .slice(0, limit);
+
+      respond(true, { entries: sorted, total: entries.length, returned: sorted.length }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.feat.list failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * evolve.feat.update — 更新功能需求状态
+   */
+  "evolve.feat.update": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const featId = params?.id ? String(params.id) : "";
+      if (!featId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
+        return;
+      }
+
+      const store = loadFeatureRequestStore(agentId);
+      const idx = store.entries.findIndex((e) => e.id === featId);
+      if (idx === -1) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Feature request "${featId}" not found`),
+        );
+        return;
+      }
+
+      const entry = store.entries[idx];
+      const validStatuses: FeatureRequestStatus[] = ["pending", "in_progress", "done", "wont_fix"];
+      if (params?.status && validStatuses.includes(String(params.status) as FeatureRequestStatus)) {
+        entry.status = String(params.status) as FeatureRequestStatus;
+      }
+      const validPriorities: FeatureRequestPriority[] = ["low", "medium", "high", "critical"];
+      if (
+        params?.priority &&
+        validPriorities.includes(String(params.priority) as FeatureRequestPriority)
+      ) {
+        entry.priority = String(params.priority) as FeatureRequestPriority;
+      }
+      if (params?.suggestedImpl) {
+        entry.suggestedImpl = String(params.suggestedImpl).slice(0, 500);
+      }
+      entry.updatedAt = Date.now();
+      store.entries[idx] = entry;
+      saveJson(resolveFeatureRequestsFile(agentId), store);
+
+      respond(true, { id: featId, action: "updated", status: entry.status }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.feat.update failed: ${String(err)}`),
+      );
+    }
+  },
+
+  // ============================================================================
+  // Gap C: 进化事件溃源 RPC
+  // ============================================================================
+
+  /**
+   * evolve.events.list — 列出近期进化事件（倒序）
+   */
+  "evolve.events.list": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const limit = typeof params?.limit === "number" ? Math.min(params.limit, 100) : 20;
+      const filterType = params?.type ? String(params.type) : undefined;
+
+      const events = loadRecentEvolveEvents(agentId, limit * 2);
+      const filtered = filterType ? events.filter((e) => e.type === filterType) : events;
+      const result = filtered.slice(0, limit);
+
+      respond(true, { events: result, total: filtered.length, returned: result.length }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.events.list failed: ${String(err)}`),
+      );
+    }
+  },
+
+  // ============================================================================
+  // Gap D: 进化策略 RPC
+  // ============================================================================
+
+  /**
+   * evolve.strategy.get — 获取当前进化策略状态
+   */
+  "evolve.strategy.get": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      // 如果传入 refresh=true 则重新检测（否则迼入缓存）
+      const refresh = params?.refresh === true;
+      const state = refresh ? detectAndUpdateStrategy(agentId) : loadEvolveStrategy(agentId);
+      respond(true, { strategy: state }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.strategy.get failed: ${String(err)}`),
+      );
+    }
+  },
+
+  // ============================================================================
+  // Gap E: Ontology 知识图谱 RPC
+  // ============================================================================
+
+  /**
+   * ontology.entity.create — 创建一个 Ontology 实体
+   */
+  "ontology.entity.create": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const type = params?.type ? String(params.type).trim() : "";
+      if (!type) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "type is required"));
+        return;
+      }
+      const properties =
+        params?.properties && typeof params.properties === "object"
+          ? (params.properties as Record<string, unknown>)
+          : {};
+      const relatedIds = Array.isArray(params?.relatedIds)
+        ? (params.relatedIds as unknown[]).map(String)
+        : [];
+
+      const now = Date.now();
+      const id = genId("ent");
+      const entity: OntologyEntity = {
+        id,
+        type,
+        agentId,
+        properties,
+        relatedIds,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      appendOntologyOp(agentId, { op: "create", entity });
+      respond(true, { id, action: "created", entity }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `ontology.entity.create failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * ontology.entity.get — 获取一个实体（重建内存快照后返回）
+   */
+  "ontology.entity.get": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const id = params?.id ? String(params.id) : "";
+      if (!id) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
+        return;
+      }
+      const store = loadOntologyStore(agentId);
+      const entity = store.entities.get(id);
+      if (!entity) {
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Entity "${id}" not found`));
+        return;
+      }
+      // 一并返回该实体的直接关系
+      const relations = Array.from(store.relations.values()).filter(
+        (r) => r.fromId === id || r.toId === id,
+      );
+      respond(true, { entity, relations }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `ontology.entity.get failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * ontology.entity.update — 更新实体属性
+   */
+  "ontology.entity.update": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const id = params?.id ? String(params.id) : "";
+      if (!id) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
+        return;
+      }
+      // 验证实体存在
+      const store = loadOntologyStore(agentId);
+      if (!store.entities.has(id)) {
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Entity "${id}" not found`));
+        return;
+      }
+      const patch: Partial<OntologyEntity> = {};
+      if (params?.properties && typeof params.properties === "object") {
+        patch.properties = params.properties as Record<string, unknown>;
+      }
+      if (Array.isArray(params?.relatedIds)) {
+        patch.relatedIds = (params.relatedIds as unknown[]).map(String);
+      }
+      const now = Date.now();
+      appendOntologyOp(agentId, { op: "update", id, patch, updatedAt: now });
+      respond(true, { id, action: "updated", updatedAt: now }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `ontology.entity.update failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * ontology.entity.delete — 删除一个实体
+   */
+  "ontology.entity.delete": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const id = params?.id ? String(params.id) : "";
+      if (!id) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
+        return;
+      }
+      const store = loadOntologyStore(agentId);
+      if (!store.entities.has(id)) {
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Entity "${id}" not found`));
+        return;
+      }
+      appendOntologyOp(agentId, { op: "delete", id, deletedAt: Date.now() });
+      respond(true, { id, action: "deleted" }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `ontology.entity.delete failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * ontology.entity.list — 列出所有实体（支持按 type 过滤）
+   */
+  "ontology.entity.list": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const filterType = params?.type ? String(params.type) : undefined;
+      const limit = typeof params?.limit === "number" ? Math.min(params.limit, 200) : 50;
+      const query = params?.query ? String(params.query).toLowerCase() : undefined;
+
+      const store = loadOntologyStore(agentId);
+      let entities = Array.from(store.entities.values());
+
+      if (filterType) {
+        entities = entities.filter((e) => e.type === filterType);
+      }
+      if (query) {
+        entities = entities.filter((e) => {
+          const text = JSON.stringify(e.properties).toLowerCase() + " " + e.type.toLowerCase();
+          return text.includes(query);
+        });
+      }
+
+      const sorted = entities.toSorted((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
+
+      respond(
+        true,
+        { entities: sorted, total: entities.length, returned: sorted.length },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `ontology.entity.list failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * ontology.relate — 在两个实体之间建立关系
+   */
+  "ontology.relate": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const fromId = params?.fromId ? String(params.fromId) : "";
+      const toId = params?.toId ? String(params.toId) : "";
+      const relationType = params?.relationType ? String(params.relationType).trim() : "";
+      if (!fromId || !toId || !relationType) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "fromId, toId, and relationType are required"),
+        );
+        return;
+      }
+      // 验证实体存在
+      const store = loadOntologyStore(agentId);
+      if (!store.entities.has(fromId)) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Entity fromId "${fromId}" not found`),
+        );
+        return;
+      }
+      if (!store.entities.has(toId)) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Entity toId "${toId}" not found`),
+        );
+        return;
+      }
+      const properties =
+        params?.properties && typeof params.properties === "object"
+          ? (params.properties as Record<string, unknown>)
+          : undefined;
+
+      const now = Date.now();
+      const relation: OntologyRelation = {
+        id: genId("rel"),
+        fromId,
+        relationType,
+        toId,
+        properties,
+        createdAt: now,
+      };
+      appendOntologyOp(agentId, { op: "relate", relation });
+      respond(true, { id: relation.id, action: "related", relation }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `ontology.relate failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * ontology.unrelate — 删除一个关系
+   */
+  "ontology.unrelate": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const relationId = params?.relationId ? String(params.relationId) : "";
+      if (!relationId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "relationId is required"));
+        return;
+      }
+      const store = loadOntologyStore(agentId);
+      if (!store.relations.has(relationId)) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Relation "${relationId}" not found`),
+        );
+        return;
+      }
+      appendOntologyOp(agentId, { op: "unrelate", relationId, deletedAt: Date.now() });
+      respond(true, { relationId, action: "unrelated" }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `ontology.unrelate failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * ontology.query — 按关系类型或节点查询实体子图
+   */
+  "ontology.query": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const entityId = params?.entityId ? String(params.entityId) : undefined;
+      const relationType = params?.relationType ? String(params.relationType) : undefined;
+      const depth = typeof params?.depth === "number" ? Math.min(Math.max(1, params.depth), 3) : 1;
+
+      const store = loadOntologyStore(agentId);
+
+      if (entityId) {
+        // 从指定实体出发进行 BFS 子图查询
+        const visited = new Set<string>();
+        const queue: Array<{ id: string; d: number }> = [{ id: entityId, d: 0 }];
+        const resultEntities: OntologyEntity[] = [];
+        const resultRelations: OntologyRelation[] = [];
+
+        while (queue.length > 0) {
+          const item = queue.shift();
+          if (!item || visited.has(item.id)) {
+            continue;
+          }
+          visited.add(item.id);
+          const entity = store.entities.get(item.id);
+          if (entity) {
+            resultEntities.push(entity);
+          }
+
+          if (item.d < depth) {
+            const rels = Array.from(store.relations.values()).filter((r) => {
+              if (r.fromId !== item.id && r.toId !== item.id) {
+                return false;
+              }
+              if (relationType && r.relationType !== relationType) {
+                return false;
+              }
+              return true;
+            });
+            for (const rel of rels) {
+              resultRelations.push(rel);
+              const nextId = rel.fromId === item.id ? rel.toId : rel.fromId;
+              if (!visited.has(nextId)) {
+                queue.push({ id: nextId, d: item.d + 1 });
+              }
+            }
+          }
+        }
+
+        respond(
+          true,
+          {
+            entities: resultEntities,
+            relations: resultRelations,
+            depth,
+            centerEntityId: entityId,
+          },
+          undefined,
+        );
+      } else {
+        // 返回全局概览（实体数/关系数，类型分布）
+        const typeCount = new Map<string, number>();
+        for (const e of store.entities.values()) {
+          typeCount.set(e.type, (typeCount.get(e.type) ?? 0) + 1);
+        }
+        const relTypeCount = new Map<string, number>();
+        for (const r of store.relations.values()) {
+          relTypeCount.set(r.relationType, (relTypeCount.get(r.relationType) ?? 0) + 1);
+        }
+        respond(
+          true,
+          {
+            totalEntities: store.entities.size,
+            totalRelations: store.relations.size,
+            entityTypes: Object.fromEntries(typeCount),
+            relationTypes: Object.fromEntries(relTypeCount),
+          },
+          undefined,
+        );
+      }
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `ontology.query failed: ${String(err)}`),
+      );
+    }
+  },
 };
 
 // ============================================================================
@@ -1091,6 +2424,25 @@ export function autoSaveReflection(params: {
   sessionKey?: string;
 }): void {
   try {
+    // 双重防护：过滤噪声 taskSummary（session bootstrap / group-shared-memory 等）
+    const NOISE_PATTERNS_RPC = [
+      /^\(session bootstrap\)$/i,
+      /^<group-shared-memory>/i,
+      /^You are a member of the following team groups/i,
+      /^\[system\]/i,
+      /^bootstrap/i,
+      /^<self-evolution-reflections>/i,
+      /^<skills-summary>/i,
+      /^<tools-catalog>/i,
+      /^Past task reflections/i,
+      /^##\s*Runtime System Events/i,
+      /^Treat this sect/i,
+      /^\[cron:/i,
+    ];
+    if (NOISE_PATTERNS_RPC.some((p) => p.test(params.taskSummary.trim()))) {
+      return;
+    }
+
     const key = params.agentId ?? "_global";
     const now = Date.now();
     const lastWrite = autoReflectCooldown.get(key) ?? 0;
@@ -1116,11 +2468,62 @@ export function autoSaveReflection(params: {
       createdAt: now,
     };
 
+    // ----------------------------------------------------------------
+    // Gap5 反思内容最低质量过滤（Reflexion 已知缺陷：无内容反思不如不存）
+    // 规则：
+    //   1. reflection 内容字数 < 10 则丢弃（无实质内容）
+    //   2. reflection 全是纯英文缩写且字数 < 20 则丢弃（ok / done / N/A 等）
+    //   3. 每条 lesson 过短（< 8 字）则丢弃
+    // ----------------------------------------------------------------
+    const reflTrimmed = entry.reflection.trim();
+    if (reflTrimmed.length < 10) {
+      return; // 反思内容无实质，丢弃
+    }
+    // 纯 ASCII 且字数少： 比如 "ok" "done" "N/A" "yes" 等
+    // eslint-disable-next-line no-control-regex
+    if (/^[\x00-\x7F]+$/.test(reflTrimmed) && reflTrimmed.length < 20) {
+      return;
+    }
+    // 过滤无意义 lesson
+    entry.lessons = entry.lessons.filter((l) => l.trim().length >= 8);
+
+    // ----------------------------------------------------------------
+    // Gap4 Lesson 去重合并（Memory Survey 2025：御冒冠误误误误误不如不存）
+    // 策略：与现有最近 50 条反思的每条 lesson 做 Jaccard 相似度，超过 0.65 则认为重复在现有条目上自动合并
+    // （不再重复存储，而是在高相似到的旧条目上增加计数字段）
+    // ----------------------------------------------------------------
+    const recentEntries = store.entries.slice(-50); // 只比较最近 50 条，控制开销
+    const deduped = entry.lessons.filter((newLesson) => {
+      const newKws = extractKeywords(newLesson);
+      if (newKws.length === 0) {
+        return true;
+      }
+      for (const prev of recentEntries) {
+        for (const oldLesson of prev.lessons) {
+          const oldKws = extractKeywords(oldLesson);
+          if (keywordSimilarity(newKws, oldKws) >= 0.65) {
+            // 见过相似 lesson，增加其重复次数而不重复存入
+            const prevIdx = store.entries.indexOf(prev);
+            if (prevIdx !== -1) {
+              const storedEntry = store.entries[prevIdx];
+              if (storedEntry && !storedEntry.tags.includes("merged-lesson")) {
+                storedEntry.tags = [...storedEntry.tags, "merged-lesson"];
+                store.entries[prevIdx] = storedEntry;
+              }
+            }
+            return false; // 滤掉该 lesson
+          }
+        }
+      }
+      return true;
+    });
+    entry.lessons = deduped;
+
     store.entries.push(entry);
 
-    // 保留最近 200 条，按时间倒序截断
-    if (store.entries.length > 200) {
-      store.entries = store.entries.toSorted((a, b) => b.createdAt - a.createdAt).slice(0, 200);
+    // 保留最近 500 条，按时间倒序截断
+    if (store.entries.length > 500) {
+      store.entries = store.entries.toSorted((a, b) => b.createdAt - a.createdAt).slice(0, 500);
     }
 
     saveJson(filePath, store);
@@ -1164,11 +2567,55 @@ export function autoSaveReflection(params: {
       /* SHARP 评估失败不影响主流程 */
     }
 
-    // FGT: 顺带标记过期技能（任务粒度定期清理，无需单独定时器）
+    // FGT: 顺带标记过期技能 + 清理低价値反思（任务粒度定期清理，无需单独定时器）
     try {
       pruneStaleSkills(params.agentId);
     } catch {
       /* 不影响主流程 */
+    }
+    try {
+      pruneStaleReflections(params.agentId);
+    } catch {
+      /* 不影响主流程 */
+    }
+
+    // Gap1 ErrorTaxonomy 增量更新：当本次任务是 failure/partial 时触发
+    // 采用懒触发：只有 outcome 不是 success 才扩展分类法（控制开销）
+    if (params.outcome !== "success") {
+      try {
+        buildErrorTaxonomy(params.agentId);
+      } catch {
+        /* 错误分类失败不影响主流程 */
+      }
+    }
+
+    // Gap B: 学习晋升——将高质量 lesson 追加到工作区文件
+    // 业界依据: self-improving-agent FEATURE_REQUESTS 模式，高频出现的 lesson 沉淀为长期记忆
+    try {
+      if (entry.lessons.length > 0) {
+        promoteLesson(params.agentId, entry.lessons, params.outcome, params.taskSummary);
+      }
+    } catch {
+      /* 晋升失败不影响主流程 */
+    }
+
+    // Gap C: 记录自动反思保存事件
+    try {
+      appendEvolveEvent(params.agentId, {
+        type: "reflect.save",
+        assetId: id,
+        summary: `自动反思: [${params.outcome}] ${params.taskSummary.slice(0, 60)}`,
+        meta: { outcome: params.outcome, lessonsCount: entry.lessons.length, auto: true },
+      });
+    } catch {
+      /* 事件记录失败不影响主流程 */
+    }
+
+    // Gap D: 进化策略切换——根据近期成功率自动判断并持久化当前策略
+    try {
+      detectAndUpdateStrategy(params.agentId);
+    } catch {
+      /* 策略检测失败不影响主流程 */
     }
   } catch {
     // 自动反思写失败不应影响主流程
@@ -1349,7 +2796,7 @@ export function findRelevantSharedSkills(
     const matched = sharedStore.entries
       .filter((s) => !s.stale) // FGT: 共享库也过滤 stale
       .filter((s) => !excludeNames.has(s.name.toLowerCase()))
-      .filter((s) => skillMatchesQuery(s as unknown as SkillEntry, query));
+      .filter((s) => skillMatchesQuery(s, query));
     return matched
       .toSorted((a, b) => b.usageCount + b.importCount * 2 - (a.usageCount + a.importCount * 2))
       .slice(0, limit)
@@ -1588,6 +3035,39 @@ export function getFailurePatternsText(
       return `${idx + 1}. [失败案例] ${e.taskSummary}\n   工具轨迹: ${traceStr}\n   教训: ${e.lesson}`;
     });
     return `相似任务的历史失败模式（避免重蹈覆辙）：\n${lines.join("\n")}`;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Gap2 成功轨迹 In-Context Example（NeurIPS 2025 Self-Generated ICE）
+ *
+ * 按关键词相似度检索相关成功案例，格式化为可注入文本。
+ * 成功案例给 Agent 提供“以前这类任务是怎么做到的”的 few-shot 示范，显著提升成功率。
+ */
+export function getSuccessExamplesText(
+  agentId: string | undefined,
+  prompt: string,
+  limit = 2,
+): string {
+  try {
+    const experiences = queryRelevantExperiences(agentId, prompt, {
+      limit: limit * 2,
+      failureOnly: false,
+    });
+    const successes = experiences.filter((e) => e.outcome === "success").slice(0, limit);
+    if (successes.length === 0) {
+      return "";
+    }
+    const lines = successes.map((e, idx) => {
+      const traceStr =
+        e.toolTrace.length > 0
+          ? e.toolTrace.map((t) => `${t.tool}(${t.result})`).join(" → ")
+          : "(no tool trace)";
+      return `${idx + 1}. [成功案例] ${e.taskSummary}\n   解决方式: ${traceStr}\n   关键教训: ${e.lesson}`;
+    });
+    return `相似任务的历史成功案例（可以借鉴这些方式）：\n${lines.join("\n")}`;
   } catch {
     return "";
   }
@@ -2059,3 +3539,411 @@ export const experienceRpcHandlers: {
     }
   },
 };
+
+// ============================================================================
+// Gap1 跨任务错误聚合（ErrorTaxonomy，业界依据: SaMuLe EMNLP 2025）
+//
+// 设计思路：
+//   1. 扫描全部反思中 outcome=failure/partial 的条目
+//   2. 把其 lessons 和 reflection 拆分为关键词
+//   3. 对关键词进行频率统计，识别出高频出现的错误模式
+//   4. 生成文字摘要并缓存到 error_taxonomy.json
+//   5. bootstrap 注入时直接读缓存，不重复扫描
+// ============================================================================
+
+interface ErrorTaxonomyEntry {
+  /** 错误模式标签（主属关键词） */
+  pattern: string;
+  /** 出现次数 */
+  count: number;
+  /** 代表性 lesson（计数最多的那条） */
+  representativeLesson: string;
+  /** 第一次出现时间 */
+  firstSeen: number;
+  /** 最近一次出现时间 */
+  lastSeen: number;
+}
+
+interface ErrorTaxonomyStore {
+  version: 1;
+  agentId?: string;
+  entries: ErrorTaxonomyEntry[];
+  builtAt: number;
+}
+
+function resolveErrorTaxonomyFile(agentId?: string): string {
+  return path.join(resolveEvolveDir(agentId), "error_taxonomy.json");
+}
+
+/**
+ * buildErrorTaxonomy — 扩展/重建该 Agent 的跨任务错误分类法
+ *
+ * - 增量模式：只扫描 lastBuiltAt 之后的新反思，已有职业词表尢数据缓存
+ * - 每次 autoSaveReflection 后如果新 failure 数量超过 5 条则触发增量更新
+ */
+export function buildErrorTaxonomy(agentId: string | undefined): ErrorTaxonomyStore {
+  const filePath = resolveReflectionsFile(agentId);
+  const store = loadJson<ReflectionStore>(filePath, { version: 1, entries: [] });
+  const taxFile = resolveErrorTaxonomyFile(agentId);
+  const existing = loadJson<ErrorTaxonomyStore>(taxFile, {
+    version: 1,
+    agentId,
+    entries: [],
+    builtAt: 0,
+  });
+
+  // 只处理 builtAt 之后的失败/partial 反思（增量）
+  const failures = store.entries.filter(
+    (e) => (e.outcome === "failure" || e.outcome === "partial") && e.createdAt > existing.builtAt,
+  );
+
+  if (failures.length === 0 && existing.entries.length > 0) {
+    return existing; // 无新数据，返回缓存
+  }
+
+  // 关键词频率统计
+  const kwCounter = new Map<
+    string,
+    { count: number; lessons: string[]; firstSeen: number; lastSeen: number }
+  >();
+
+  // 并入现有分类的计数
+  for (const e of existing.entries) {
+    kwCounter.set(e.pattern, {
+      count: e.count,
+      lessons: [e.representativeLesson],
+      firstSeen: e.firstSeen,
+      lastSeen: e.lastSeen,
+    });
+  }
+
+  for (const entry of failures) {
+    const allText = [entry.reflection, ...entry.lessons, entry.taskSummary].join(" ");
+    const kws = extractKeywords(allText);
+    // 只统计长度 >= 3 且不是止词的关键词
+    const stopKws = new Set([
+      "the",
+      "and",
+      "for",
+      "with",
+      "has",
+      "not",
+      "are",
+      "was",
+      "can",
+      "may",
+    ]);
+    for (const kw of kws) {
+      if (kw.length < 3 || stopKws.has(kw)) {
+        continue;
+      }
+      const existing2 = kwCounter.get(kw);
+      if (existing2) {
+        existing2.count += 1;
+        if (entry.lessons[0]) {
+          existing2.lessons.push(entry.lessons[0]);
+        }
+        if (entry.createdAt < existing2.firstSeen) {
+          existing2.firstSeen = entry.createdAt;
+        }
+        if (entry.createdAt > existing2.lastSeen) {
+          existing2.lastSeen = entry.createdAt;
+        }
+      } else {
+        kwCounter.set(kw, {
+          count: 1,
+          lessons: entry.lessons.length > 0 ? [entry.lessons[0]] : [""],
+          firstSeen: entry.createdAt,
+          lastSeen: entry.createdAt,
+        });
+      }
+    }
+  }
+
+  // 只保留出现 >= 2 次的模式，按频率降序取前 20 条
+  const taxEntries: ErrorTaxonomyEntry[] = Array.from(kwCounter.entries())
+    .filter(([, v]) => v.count >= 2)
+    .toSorted(([, a], [, b]) => b.count - a.count)
+    .slice(0, 20)
+    .map(([kw, v]) => ({
+      pattern: kw,
+      count: v.count,
+      representativeLesson:
+        v.lessons.filter((l) => l.length >= 8).toSorted((a, b) => b.length - a.length)[0] ||
+        v.lessons[0] ||
+        "",
+      firstSeen: v.firstSeen,
+      lastSeen: v.lastSeen,
+    }));
+
+  const result: ErrorTaxonomyStore = {
+    version: 1,
+    agentId,
+    entries: taxEntries,
+    builtAt: Date.now(),
+  };
+
+  try {
+    saveJson(taxFile, result);
+  } catch {
+    /* 写入失败不影响返回结果 */
+  }
+
+  return result;
+}
+
+/**
+ * getErrorTaxonomyText — 将错误分类法格式化为可注入文本
+ *
+ * 轻量读缓存，不重复扩展分类法。
+ * 仅列出最高频 topN 模式并附上代表性 lesson。
+ */
+export function getErrorTaxonomyText(agentId: string | undefined, topN = 5): string {
+  try {
+    const taxFile = resolveErrorTaxonomyFile(agentId);
+    const store = loadJson<ErrorTaxonomyStore>(taxFile, {
+      version: 1,
+      agentId,
+      entries: [],
+      builtAt: 0,
+    });
+    if (store.entries.length === 0) {
+      return "";
+    }
+    const top = store.entries.slice(0, topN);
+    const lines = top.map(
+      (e, i) =>
+        `${i + 1}. 「${e.pattern}」出现 ${e.count} 次` +
+        (e.representativeLesson ? ` — ${e.representativeLesson.slice(0, 80)}` : ""),
+    );
+    return `你的高频错误模式（跨任务自动分析，按出现频率排序）：\n${lines.join("\n")}`;
+  } catch {
+    return "";
+  }
+}
+
+// ============================================================================
+// Bootstrap 注入工具（供 bootstrap-loader.ts 调用）
+// ============================================================================
+
+/**
+ * P0 技能目录摘要（用于 bootstrap 注入）
+ *
+ * 返回该 Agent 所有未标记 stale 的技能的摘要列表。
+ * 内容极小：只有名称+分类+触发词+一行描述，不包含具体内容（避免占用 context）。
+ *
+ * @param agentId - 目标 Agent ID（undefined = _global）
+ * @param maxEntries - 最多返回多少条技能（默认 20）
+ */
+export function getSkillsSummaryForBootstrap(
+  agentId: string | undefined,
+  maxEntries = 20,
+): Array<{ id: string; name: string; category: string; description: string; triggers: string[] }> {
+  try {
+    const filePath = resolveSkillsFile(agentId);
+    const store = loadJson<SkillStore>(filePath, { version: 1, entries: [] });
+    return store.entries
+      .filter((s) => !s.stale)
+      .toSorted((a, b) => b.usageCount - a.usageCount || b.createdAt - a.createdAt)
+      .slice(0, maxEntries)
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        category: s.category,
+        description: s.description,
+        triggers: s.triggers,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * P1 相关反思检索（用于 bootstrap 注入）
+ *
+ * 基于当前任务描述和标签，用 Jaccard 相似度从历史反思中检索最相关的几条。
+ * 用于任务开始时注入历史教训，防止重躈覆辙。
+ *
+ * @param agentId - 目标 Agent ID
+ * @param contextHint - 当前任务/对话描述（用于计算相似度）
+ * @param opts.limit - 最多返回条数（默认 5）
+ * @param opts.minSimilarity - 最低相似度阈值（默认 0.05，较宽松）
+ * @param opts.onlyFailures - 是否只返回失败类反思
+ */
+export function getRelevantReflectionsForBootstrap(
+  agentId: string | undefined,
+  contextHint: string,
+  opts: { limit?: number; minSimilarity?: number; onlyFailures?: boolean } = {},
+): Array<{
+  id: string;
+  taskSummary: string;
+  outcome: string;
+  reflection: string;
+  lessons: string[];
+  createdAt: number;
+}> {
+  try {
+    const { limit = 5, minSimilarity = 0.05, onlyFailures = false } = opts;
+    const filePath = resolveReflectionsFile(agentId);
+    const store = loadJson<ReflectionStore>(filePath, { version: 1, entries: [] });
+    if (store.entries.length === 0) {
+      return [];
+    }
+
+    let entries = store.entries;
+    if (onlyFailures) {
+      entries = entries.filter((e) => e.outcome === "failure" || e.outcome === "partial");
+    }
+
+    // 计算每条反思与当前 context 的相似度
+    const hintKws = extractKeywords(contextHint);
+    const scored = entries
+      .map((e) => ({
+        entry: e,
+        score:
+          hintKws.length > 0
+            ? keywordSimilarity(
+                hintKws,
+                extractKeywords([e.taskSummary, e.reflection, ...e.lessons, ...e.tags].join(" ")),
+              )
+            : 1, // 无 hint 时按时间倒序返回最近的
+      }))
+      .filter((x) => x.score >= minSimilarity)
+      .toSorted((a, b) => b.score - a.score || b.entry.createdAt - a.entry.createdAt)
+      .slice(0, limit);
+
+    return scored.map(({ entry: e }) => ({
+      id: e.id,
+      taskSummary: e.taskSummary,
+      outcome: e.outcome,
+      reflection: e.reflection,
+      lessons: e.lessons,
+      createdAt: e.createdAt,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 工具目录索引（用于 bootstrap 注入）
+ *
+ * 接受当前会话工具列表，按分组归类，返回极简摘要（只含 name + description 首句）。
+ * 用于让 Agent 知道系统有哪些工具可用，减少「工具不知道」的幻觉，同时不占用大量 context。
+ *
+ * @param tools - 已构建的工具列表
+ */
+export function getToolsCatalogForBootstrap(
+  tools: Array<{ name: string; description?: string }>,
+): Array<{ group: string; tools: Array<{ name: string; desc: string }> }> {
+  const groupRules: Array<{ test: (name: string) => boolean; group: string }> = [
+    { test: (n) => n.startsWith("task_"), group: "任务管理" },
+    { test: (n) => n.startsWith("project_"), group: "项目管理" },
+    {
+      test: (n) => n.startsWith("agent_") || n === "agents_list" || n.startsWith("agents_"),
+      group: "Agent 管理",
+    },
+    { test: (n) => n.startsWith("session"), group: "会话管理" },
+    {
+      test: (n) =>
+        n === "message" ||
+        n.startsWith("group_") ||
+        n.startsWith("friend_") ||
+        n === "sessions_send",
+      group: "消息通信",
+    },
+    {
+      test: (n) =>
+        n.startsWith("org_") ||
+        n.startsWith("organization_") ||
+        n.startsWith("recruit_") ||
+        n === "approve_recruit" ||
+        n.startsWith("training_") ||
+        n.startsWith("train_") ||
+        n.startsWith("assess_") ||
+        n === "certify_trainer" ||
+        n === "assign_training" ||
+        n === "deactivate_agent" ||
+        n === "activate_agent" ||
+        n === "configure_agent_role" ||
+        n === "assign_supervisor" ||
+        n === "assign_mentor" ||
+        n === "promote_agent" ||
+        n === "transfer_agent" ||
+        n === "transfer_skill",
+      group: "组织 HR",
+    },
+    { test: (n) => ["read", "write", "edit", "apply_patch"].includes(n), group: "文件系统" },
+    { test: (n) => ["exec", "bash", "process"].includes(n), group: "执行运行" },
+    {
+      test: (n) =>
+        n === "agent_reflect" ||
+        n.startsWith("agent_skill") ||
+        n.startsWith("agent_evolve") ||
+        n === "memory_save" ||
+        n === "memory_search" ||
+        n === "memory_get",
+      group: "进化记忆",
+    },
+    { test: (n) => ["cron", "gateway", "nodes"].includes(n), group: "自动化" },
+    {
+      test: (n) => n === "web_search" || n === "web_fetch" || n === "browser",
+      group: "互联网",
+    },
+    {
+      test: (n) => n.startsWith("image") || n === "tts" || n === "canvas",
+      group: "媒体创作",
+    },
+    {
+      test: (n) =>
+        n.startsWith("perm_") ||
+        n === "list_pending_approvals" ||
+        n === "get_approval_status" ||
+        n === "cancel_approval_request" ||
+        n === "approve_request" ||
+        n === "reject_request",
+      group: "权限审批",
+    },
+  ];
+
+  const groupMap = new Map<string, Array<{ name: string; desc: string }>>();
+
+  for (const tool of tools) {
+    const matched = groupRules.find((r) => r.test(tool.name));
+    const group = matched?.group ?? "其他";
+    if (!groupMap.has(group)) {
+      groupMap.set(group, []);
+    }
+    // 只取 description 的第一句（节省 token）
+    const rawDesc = tool.description ?? "";
+    const firstSentence = rawDesc.split(/[。.\n]/)[0]?.trim() ?? "";
+    const desc = firstSentence.length > 80 ? firstSentence.slice(0, 80) + "…" : firstSentence;
+    groupMap.get(group)!.push({ name: tool.name, desc });
+  }
+
+  const orderedGroups = [
+    "任务管理",
+    "项目管理",
+    "Agent 管理",
+    "会话管理",
+    "消息通信",
+    "组织 HR",
+    "文件系统",
+    "执行运行",
+    "进化记忆",
+    "自动化",
+    "互联网",
+    "媒体创作",
+    "权限审批",
+    "其他",
+  ];
+
+  const result: Array<{ group: string; tools: Array<{ name: string; desc: string }> }> = [];
+  for (const group of orderedGroups) {
+    const entries = groupMap.get(group);
+    if (entries && entries.length > 0) {
+      result.push({ group, tools: entries });
+    }
+  }
+  return result;
+}
