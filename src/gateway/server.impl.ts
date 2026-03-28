@@ -71,6 +71,10 @@ import {
   refreshRemoteBinsForConnectedNodes,
   setSkillsRemoteRegistry,
 } from "../../upstream/src/infra/skills-remote.js";
+import {
+  isTransientNetworkError,
+  registerUnhandledRejectionHandler,
+} from "../../upstream/src/infra/unhandled-rejections.js";
 import { scheduleGatewayUpdateCheck } from "../../upstream/src/infra/update-startup.js";
 import {
   startDiagnosticHeartbeat,
@@ -113,6 +117,31 @@ import { logGatewayStartup } from "./server-startup-log.js";
 export { __resetModelCatalogCacheForTest } from "../../upstream/src/gateway/server-model-catalog.js";
 
 ensureOpenClawCliOnPath();
+
+// 修复：当 unhandled rejection 是数组形式（如 [AxiosError]）时，
+// 上游的 isTransientNetworkError 无法遍历数组元素导致进程崩溃。
+// 此处注册一个前置 handler，展开数组后逐个检查是否为瞬态网络错误。
+registerUnhandledRejectionHandler((reason) => {
+  if (!Array.isArray(reason) || reason.length === 0) {
+    return false;
+  }
+  const allTransient = reason.every(
+    (item) =>
+      isTransientNetworkError(item) ||
+      (item instanceof Error &&
+        ((item as NodeJS.ErrnoException).code === "ECONNABORTED" ||
+          (item as NodeJS.ErrnoException).code === "ECONNRESET" ||
+          (item as NodeJS.ErrnoException).code === "ETIMEDOUT")),
+  );
+  if (allTransient) {
+    console.warn(
+      `[openclaw] 非致命网络错误（数组形式，共 ${reason.length} 个），已忽略，服务继续运行：`,
+      reason.map((e) => (e instanceof Error ? e.message : String(e))).join(" | "),
+    );
+    return true;
+  }
+  return false;
+});
 
 // 初始化 LMSYS Arena 基准数据库（首次实时获取，之后每周刷新）
 void initBenchmarkDB().catch((err) => {
