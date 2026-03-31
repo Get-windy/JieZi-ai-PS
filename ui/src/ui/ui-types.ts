@@ -2,6 +2,8 @@ export type ChatAttachment = {
   id: string;
   dataUrl: string;
   mimeType: string;
+  /** 对抗-P2：附件原始文件名，用于非图片文件的预览显示；图片附件可省略 */
+  fileName?: string;
 };
 
 export type ChatQueueItem = {

@@ -19,7 +19,7 @@
  */
 
 import { agentsHandlers } from "../../../upstream/src/gateway/server-methods/agents.js";
-import { browserHandlers } from "../../../upstream/src/gateway/server-methods/browser.js";
+import { browserHandlers } from "../../../upstream/src/plugin-sdk/browser-runtime.js";
 import { chatHandlers } from "../../../upstream/src/gateway/server-methods/chat.js";
 import { configHandlers } from "../../../upstream/src/gateway/server-methods/config.js";
 import { connectHandlers } from "../../../upstream/src/gateway/server-methods/connect.js";

@@ -10,7 +10,18 @@ import {
   writeBase64ToFile,
   writeUrlToFile,
 } from "../../../upstream/src/cli/nodes-camera.js";
-import { parseEnvPairs, parseTimeoutMs } from "../../../upstream/src/cli/nodes-run.js";
+import { parseTimeoutMs } from "../../../upstream/src/cli/parse-timeout.js";
+
+function parseEnvPairs(env: unknown): Record<string, string> | undefined {
+  if (!Array.isArray(env) || env.length === 0) return undefined;
+  const result: Record<string, string> = {};
+  for (const pair of env) {
+    const s = String(pair);
+    const idx = s.indexOf("=");
+    if (idx > 0) result[s.slice(0, idx)] = s.slice(idx + 1);
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
 import {
   parseScreenRecordPayload,
   screenRecordTempPath,

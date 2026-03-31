@@ -70,6 +70,72 @@ export interface Organization {
     maxTokensPerDay?: number;
   };
 
+  /**
+   * 部门沙箱隔离配置（仅 type=department 时生效）
+   *
+   * 设计原则（对抗机制）：
+   * - containerPrefix 由系统强制派生，包含 departmentId hash，用户不得完全覆盖
+   * - network 不允许 Agent 级配置覆盖（防进攻4）
+   * - crossDeptBindMounts 强制只读（防进攻3）
+   * - 部门删除后 mode 自动为 off（防进攻5）
+   * - scope 不允许 shared（防进攻6）
+   */
+  sandboxConfig?: {
+    /** 是否启用部门沙箱隔离 */
+    enabled?: boolean;
+    /**
+     * 容器前缀（用户可设置前缀段，系统会附加 departmentId hash 确保唯一性）
+     * 例："finance-" → 实际前缀 "openclaw-dept-finance-<hash8>-"
+     */
+    containerPrefixHint?: string;
+    /**
+     * 沙箱工作区根目录（绝对路径）
+     * 例："~/.openclaw/sandboxes/dept-finance"
+     */
+    workspaceRoot?: string;
+    /**
+     * Docker 网络名（部门专属网络，Agent 级配置不得覆盖）
+     * 例："openclaw-net-finance"
+     */
+    network?: string;
+    /**
+     * Docker 镜像（允许部门自定义，Agent 可进一步覆盖）
+     */
+    image?: string;
+    /**
+     * 工具访问策略
+     */
+    toolPolicy?: {
+      /** 额外允许的工具（合并到全局 allow 之上） */
+      allow?: string[];
+      /** 额外禁止的工具（合并到全局 deny 之上） */
+      deny?: string[];
+    };
+    /**
+     * 资源配额
+     */
+    resourceQuota?: {
+      /** 内存限制，如 "512m"、"2g" */
+      memory?: string;
+      /** CPU 核数限制，如 0.5、1.0 */
+      cpus?: number;
+      /** 进程数限制 */
+      pidsLimit?: number;
+    };
+    /**
+     * 跨部门只读挂载（用于董事会类跨部门协调）
+     * 注意：强制只读（access 字段即使设为 rw 也会被降级为 ro）
+     */
+    crossDeptBindMounts?: Array<{
+      /** 源部门 ID */
+      sourceDeptId: string;
+      /** 在容器内的挂载路径 */
+      mountPath: string;
+      /** 访问类型（强制降级为 ro，rw 仅留作未来扩展标记） */
+      access: "ro" | "rw";
+    }>;
+  };
+
   // 元数据
   createdAt: number;
   createdBy: string;

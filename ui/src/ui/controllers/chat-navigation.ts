@@ -27,18 +27,19 @@ import type { Friend } from "./friends.ts";
 // ============ 通道工具函数 ============
 
 const CHANNEL_ICONS: Record<string, string> = {
-  discord: "💬",
-  telegram: "✈️",
-  dingtalk: "📞",
-  slack: "📧",
-  whatsapp: "💚",
-  signal: "🔒",
-  imessage: "💬",
-  nostr: "🟣",
-  googlechat: "💬",
-  msteams: "💼",
-  line: "💚",
-  wechat: "💬",
+  // nav4 修复：每个平台使用独特 emoji，避免多通道无法区分
+  discord: "🎮",      // Discord 游戏社区文化
+  telegram: "✈️",    // Telegram 飞机纸船 logo 对应
+  dingtalk: "📎",    // 钉钉 - 回形针（钉）
+  slack: "#️⃣",       // Slack 井号格子 logo
+  whatsapp: "📞",    // WhatsApp 电话
+  signal: "🔒",      // Signal 加密/锁
+  imessage: "🍎",    // iMessage Apple 平台
+  nostr: "🟣",       // Nostr 紫色协议标志
+  googlechat: "🅖",  // Google Chat G
+  msteams: "🏢",     // Teams 企业/办公
+  line: "🟢",        // LINE 绿色
+  wechat: "💭",      // 微信 - 对话泡
 };
 
 const CHANNEL_NAMES: Record<string, string> = {
@@ -199,17 +200,44 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       .map(makeSessionHistoryNode),
   ];
 
+  // nav1 修复：全部会话根节点本身不可点击跳转（它是容器，不是目标）
+  // 当有子会话时只作为折叠/展开的分组，没有子会话时才 fallback 到 defaultSessionKey
+  // 超出 MAX_SESSION_PREVIEW 时额外追加「还有N条」提示节点（nav3 修复）
+  const remainingCount = activeSessions.length - sessionChildNodes.length;
+  const allSessionChildren: ChatNavigationNode[] =
+    sessionChildNodes.length > 0
+      ? [
+          ...sessionChildNodes,
+          ...(remainingCount > 0
+            ? [
+                {
+                  id: "__all_more__",
+                  label: t("chat.nav.more_sessions", { count: remainingCount }),
+                  icon: "⋯",
+                  nodeType: "item" as const,
+                  context: {
+                    type: "all" as const,
+                    sessionKey: defaultSessionKey,
+                  },
+                },
+              ]
+            : []),
+        ]
+      : [];
+
   rootNodes.push({
     id: "__all__",
     label: t("chat.nav.all_sessions"),
     icon: "📋",
     nodeType: "root",
     unreadCount: sumAllUnread(),
+    // nav1 修复：有子节点时 context 仍保留（用于 isSameContext active 判断），
+    // 但渲染层（renderRootNode）对有子节点的根节点只展开/折叠，不执行 onSelectContext
     context: {
       type: "all",
       sessionKey: defaultSessionKey,
     },
-    children: sessionChildNodes.length > 0 ? sessionChildNodes : undefined,
+    children: allSessionChildren.length > 0 ? allSessionChildren : undefined,
   });
 
   // ---- 每个智能体生成一棵子树 ----
@@ -319,10 +347,14 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
         },
       });
     }
-    // 根节点 context：有子节点时指向第一个 contact，无子节点时 fallback 到 defaultSessionKey
+    // nav1 修复：协作监控根节点无好友时不再 fallback 到「全部会话」同一目标
+    // 无子节点时 context 指向 agent-direct（某个 agent 主会话），行为与「全部会话」不同
+    // 渲染层对有子节点的分类节点只展开/折叠不跳转，所以这里的 context 主要用于 active 判断
+    const monitorAgentId = defaultAgent?.id ?? agentList[0]?.id ?? "main";
     const monitorRootContext: ChatConversationContext = allContactItems[0]?.context ?? {
-      type: "all" as const,
-      sessionKey: defaultSessionKey,
+      type: "agent-direct" as const,
+      agentId: monitorAgentId,
+      sessionKey: `agent:${monitorAgentId}:main`,
     };
     // 计算 agent 间通信的未读数（仅统计 contact 相关的 sessionKey）
     const monitorUnread = (() => {
@@ -366,8 +398,11 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       };
     });
 
-    const groupsRootContext = groupItems[0]?.context ?? {
-      type: "all" as const,
+    // nav1 修复：群聊根节点无群组时不再 fallback 到「全部会话」
+    // 指向 agent-direct 而非 type:"all"，避免三个节点点击后跳转同一地方
+    const groupsRootContext: ChatConversationContext = groupItems[0]?.context ?? {
+      type: "agent-direct" as const,
+      agentId: groupAgentId,
       sessionKey: `agent:${groupAgentId}:main`,
     };
 
@@ -687,6 +722,11 @@ export function findNodeBySessionKey(
 
 /**
  * 导航树节点搜索过滤
+ *
+ * nav2 修复：原实现在 labelMatch 时把全部子节点透传出去（children: node.children），
+ * 可能将与搜索词无关的子会话名称一并暴露（如搜索「全部」命中根节点，则全部 20 条历史会话名都显示出来）。
+ * 修复策略：label 命中时只保留自身节点（无子节点展开），子节点只在有实际 match 时才随父节点一起返回。
+ * 这与 VS Code / Slack 的搜索行为一致：命中父节点只高亮父节点本身，不自动展开所有子节点。
  */
 export function filterNavigationNodes(
   nodes: ChatNavigationNode[],
@@ -701,13 +741,17 @@ export function filterNavigationNodes(
   return nodes
     .map((node) => {
       const labelMatch = node.label.toLowerCase().includes(lowerQuery);
+      // 先递归过滤子节点（只返回子节点中真正命中搜索词的部分）
       const filteredChildren = node.children ? filterNavigationNodes(node.children, query) : [];
 
-      if (labelMatch || filteredChildren.length > 0) {
-        return {
-          ...node,
-          children: filteredChildren.length > 0 ? filteredChildren : node.children,
-        };
+      if (filteredChildren.length > 0) {
+        // 子节点中有命中的：展示父节点 + 命中的子节点（不展示未命中的子节点）
+        return { ...node, children: filteredChildren };
+      }
+      if (labelMatch) {
+        // nav2 修复：仅父节点 label 命中时，只展示该节点本身，
+        // 不暴露其全部子节点（避免搜索「全部」暴露所有历史会话名）
+        return { ...node, children: undefined };
       }
       return null;
     })

@@ -28,10 +28,14 @@ export function detectMentionToken(
   return { token: after.toLowerCase(), start: idx };
 }
 
-/** 关闭 mention 下拉 */
+/** 关闭 mention 下拉，并清理所有相关监听器 */
 export function closeMentionDropdown(container: HTMLElement | Element) {
   const existing = container.querySelector(".chat-mention-dropdown");
   if (existing) {
+    // 对抗-P1：触发自定义事件让 textarea 层的监听器知道要清理自己
+    // 通过 dropdown 上的 dataset 存储清理函数引用
+    const cleanup = (existing as HTMLElement & { _mentionCleanup?: () => void })._mentionCleanup;
+    cleanup?.();
     existing.remove();
   }
 }
@@ -80,6 +84,16 @@ export function openMentionDropdown(
     dropdown.appendChild(item);
   });
 
+  // 对抗-P1：统一在一个 cleanup 函数中移除所有监听器
+  // 原实现 Escape 路径只移除了 keydown，onClickOutside 在 Escape 后继续存活
+  let cleaned = false;
+  const cleanupAll = () => {
+    if (cleaned) return;
+    cleaned = true;
+    textarea.removeEventListener("keydown", onKeydown, true);
+    document.removeEventListener("mousedown", onClickOutside);
+  };
+
   // 键盘导航
   const onKeydown = (e: KeyboardEvent) => {
     const items = dropdown.querySelectorAll<HTMLElement>(".chat-mention-item");
@@ -105,7 +119,7 @@ export function openMentionDropdown(
       }
     } else if (e.key === "Escape") {
       closeMentionDropdown(container);
-      textarea.removeEventListener("keydown", onKeydown, true);
+      cleanupAll(); // 对抗-P1：Escape 时统一清理
     }
   };
   textarea.addEventListener("keydown", onKeydown, true);
@@ -114,11 +128,13 @@ export function openMentionDropdown(
   const onClickOutside = (e: MouseEvent) => {
     if (!dropdown.contains(e.target as Node)) {
       closeMentionDropdown(container);
-      document.removeEventListener("mousedown", onClickOutside);
-      textarea.removeEventListener("keydown", onKeydown, true);
+      cleanupAll(); // 对抗-P1：点击外部时统一清理
     }
   };
   setTimeout(() => document.addEventListener("mousedown", onClickOutside), 0);
+
+  // 对抗-P1：将清理函数挂在 dropdown 元素上，供 closeMentionDropdown 主动调用
+  (dropdown as HTMLElement & { _mentionCleanup?: () => void })._mentionCleanup = cleanupAll;
 
   container.appendChild(dropdown);
 }

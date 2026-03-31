@@ -27,7 +27,7 @@ export function createOrgDepartmentTool(opts?: {
         managerId?: string;
         parentDepartmentId?: string;
       };
-      const response = await callGatewayTool("org.department.create", opts?.currentAgentId ? { agentId: opts.currentAgentId } : undefined, {
+      const response = await callGatewayTool("org.department.create", opts?.currentAgentId ? { agentId: opts.currentAgentId } as unknown as import("./gateway.js").GatewayCallOptions : {}, {
         creatorId: opts?.currentAgentId || "system",
         name,
         description: description || "",
@@ -59,7 +59,7 @@ export function createOrgTeamTool(opts?: {
         departmentId?: string;
         leaderId?: string;
       };
-      const response = await callGatewayTool("org.team.create", opts?.currentAgentId ? { agentId: opts.currentAgentId } : undefined, {
+      const response = await callGatewayTool("org.team.create", opts?.currentAgentId ? { agentId: opts.currentAgentId } as unknown as import("./gateway.js").GatewayCallOptions : {}, {
         creatorId: opts?.currentAgentId || "system",
         name,
         description: description || "",
@@ -84,7 +84,7 @@ export function createOrgAssignToDepartmentTool(opts?: {
     }),
     execute: async (_toolCallId, args) => {
       const { agentId, departmentId } = args as { agentId: string; departmentId: string };
-      const response = await callGatewayTool("org.assign_to_department", opts?.currentAgentId ? { agentId: opts.currentAgentId } : undefined, {
+      const response = await callGatewayTool("org.assign_to_department", opts?.currentAgentId ? { agentId: opts.currentAgentId } as unknown as import("./gateway.js").GatewayCallOptions : {}, {
         operatorId: opts?.currentAgentId || "system",
         agentId,
         departmentId,
@@ -107,7 +107,7 @@ export function createOrgAssignToTeamTool(opts?: {
     }),
     execute: async (_toolCallId, args) => {
       const { agentId, teamId } = args as { agentId: string; teamId: string };
-      const response = await callGatewayTool("org.assign_to_team", opts?.currentAgentId ? { agentId: opts.currentAgentId } : undefined, {
+      const response = await callGatewayTool("org.assign_to_team", opts?.currentAgentId ? { agentId: opts.currentAgentId } as unknown as import("./gateway.js").GatewayCallOptions : {}, {
         operatorId: opts?.currentAgentId || "system",
         agentId,
         teamId,
@@ -135,7 +135,7 @@ export function createOrgSetReportingLineTool(opts?: {
         supervisorId: string;
         effectiveFrom?: number;
       };
-      const response = await callGatewayTool("org.set_reporting_line", opts?.currentAgentId ? { agentId: opts.currentAgentId } : undefined, {
+      const response = await callGatewayTool("org.set_reporting_line", opts?.currentAgentId ? { agentId: opts.currentAgentId } as unknown as import("./gateway.js").GatewayCallOptions : {}, {
         operatorId: opts?.currentAgentId || "system",
         subordinateId,
         supervisorId,
@@ -164,11 +164,180 @@ export function createOrgStructureListTool(opts?: {
         includeTeams?: boolean;
         includeReporting?: boolean;
       };
-      const response = await callGatewayTool("org.list", opts?.currentAgentId ? { agentId: opts.currentAgentId } : undefined, {
+      const response = await callGatewayTool("org.list", opts?.currentAgentId ? { agentId: opts.currentAgentId } as unknown as import("./gateway.js").GatewayCallOptions : {}, {
         includeDepartments,
         includeTeams,
         includeReporting,
       });
+      return jsonResult(response);
+    },
+  };
+}
+
+/**
+ * 创建带 sandboxConfig 的部门工具（部门管理员专用）
+ */
+export function createDeptWithSandboxTool(opts?: {
+  currentAgentId?: string;
+}): AnyAgentTool {
+  return {
+    label: "Create Department with Sandbox",
+    name: "create_department_with_sandbox",
+    description:
+      "Create a new department with Docker sandbox isolation. " +
+      "Each department gets its own container namespace, filesystem, and network. " +
+      "Agents in different departments are strictly isolated from each other.",
+    parameters: Type.Object({
+      name: Type.String({ description: "Department name" }),
+      description: Type.Optional(Type.String({ description: "Department description" })),
+      managerId: Type.Optional(Type.String({ description: "Department manager agent ID" })),
+      parentDepartmentId: Type.Optional(Type.String({ description: "Parent department ID" })),
+      sandboxConfig: Type.Optional(
+        Type.Object({
+          enabled: Type.Optional(Type.Boolean({ description: "Enable sandbox isolation (default: true)" })),
+          containerPrefixHint: Type.Optional(Type.String({
+            description:
+              "Container prefix hint (e.g. 'finance'). System appends dept hash for uniqueness.",
+          })),
+          workspaceRoot: Type.Optional(Type.String({
+            description: "Sandbox workspace root directory (e.g. '~/.openclaw/sandboxes/dept-finance')",
+          })),
+          network: Type.Optional(Type.String({
+            description: "Docker network name for this department (e.g. 'openclaw-net-finance')",
+          })),
+          image: Type.Optional(Type.String({ description: "Docker image for this department" })),
+          resourceQuota: Type.Optional(
+            Type.Object({
+              memory: Type.Optional(Type.String({ description: "Memory limit (e.g. '512m', '2g')" })),
+              cpus: Type.Optional(Type.Number({ description: "CPU limit (e.g. 0.5, 1.0)" })),
+              pidsLimit: Type.Optional(Type.Number({ description: "Process count limit" })),
+            }),
+          ),
+          crossDeptBindMounts: Type.Optional(
+            Type.Array(
+              Type.Object({
+                sourceDeptId: Type.String({ description: "Source department ID to read from" }),
+                mountPath: Type.String({ description: "Mount path inside container" }),
+                access: Type.Literal("ro"),
+              }),
+              { description:
+                "Read-only cross-department mounts (for board-level coordination). " +
+                "Write access is always denied for security.",
+              },
+            ),
+          ),
+        }),
+      ),
+    }),
+    execute: async (_toolCallId, args) => {
+      const {
+        name,
+        description,
+        managerId,
+        parentDepartmentId,
+        sandboxConfig,
+      } = args as {
+        name: string;
+        description?: string;
+        managerId?: string;
+        parentDepartmentId?: string;
+        sandboxConfig?: {
+          enabled?: boolean;
+          containerPrefixHint?: string;
+          workspaceRoot?: string;
+          network?: string;
+          image?: string;
+          resourceQuota?: { memory?: string; cpus?: number; pidsLimit?: number };
+          crossDeptBindMounts?: Array<{ sourceDeptId: string; mountPath: string; access: "ro" }>;
+        };
+      };
+      const response = await callGatewayTool(
+        "org.department.create",
+        opts?.currentAgentId ? { agentId: opts.currentAgentId } as unknown as import("./gateway.js").GatewayCallOptions : {},
+        {
+          creatorId: opts?.currentAgentId || "system",
+          name,
+          description: description || "",
+          managerId,
+          parentDepartmentId,
+          sandboxConfig,
+        },
+      );
+      return jsonResult(response);
+    },
+  };
+}
+
+/**
+ * 更新部门沙箱配置（部门管理员专用）
+ */
+export function createUpdateDeptSandboxTool(opts?: {
+  currentAgentId?: string;
+}): AnyAgentTool {
+  return {
+    label: "Update Department Sandbox Config",
+    name: "update_dept_sandbox",
+    description:
+      "Update the sandbox isolation config of a department. " +
+      "Only the department manager or system admin can call this.",
+    parameters: Type.Object({
+      departmentId: Type.String({ description: "Department ID" }),
+      sandboxConfig: Type.Object({
+        enabled: Type.Optional(Type.Boolean()),
+        containerPrefixHint: Type.Optional(Type.String()),
+        workspaceRoot: Type.Optional(Type.String()),
+        network: Type.Optional(Type.String()),
+        image: Type.Optional(Type.String()),
+        resourceQuota: Type.Optional(
+          Type.Object({
+            memory: Type.Optional(Type.String()),
+            cpus: Type.Optional(Type.Number()),
+            pidsLimit: Type.Optional(Type.Number()),
+          }),
+        ),
+      }),
+    }),
+    execute: async (_toolCallId, args) => {
+      const { departmentId, sandboxConfig } = args as {
+        departmentId: string;
+        sandboxConfig: Record<string, unknown>;
+      };
+      const response = await callGatewayTool(
+        "org.department.update_sandbox",
+        opts?.currentAgentId ? { agentId: opts.currentAgentId } as unknown as import("./gateway.js").GatewayCallOptions : {},
+        {
+          operatorId: opts?.currentAgentId || "system",
+          departmentId,
+          sandboxConfig,
+        },
+      );
+      return jsonResult(response);
+    },
+  };
+}
+
+/**
+ * 查询部门沙箱信息（任意 Agent 可用）
+ */
+export function createGetDeptSandboxInfoTool(opts?: {
+  currentAgentId?: string;
+}): AnyAgentTool {
+  return {
+    label: "Get Department Sandbox Info",
+    name: "get_dept_sandbox_info",
+    description:
+      "Get the sandbox isolation information of a department. " +
+      "Returns container prefix, workspace root, network, and resource quota summary.",
+    parameters: Type.Object({
+      departmentId: Type.String({ description: "Department ID to query" }),
+    }),
+    execute: async (_toolCallId, args) => {
+      const { departmentId } = args as { departmentId: string };
+      const response = await callGatewayTool(
+        "org.department.sandbox_info",
+        opts?.currentAgentId ? { agentId: opts.currentAgentId } as unknown as import("./gateway.js").GatewayCallOptions : {},
+        { departmentId },
+      );
       return jsonResult(response);
     },
   };

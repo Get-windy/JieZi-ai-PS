@@ -635,6 +635,13 @@ export type ModelsStatusSnapshot = {
     custom: boolean;
     createdAt: number;
   }>;
+
+  // 凭据熔断器快照（authId → 冒断状态）
+  circuitBreakers?: Record<string, {
+    cooldownUntil: number;  // 0 = 未冷却
+    errorCount: number;
+    lastError?: string;
+  }>;
 };
 
 /** 模型供应商元信息 */
@@ -655,6 +662,13 @@ export type ProviderAuthSnapshot = {
   enabled: boolean; // 是否启用
   isDefault: boolean; // 是否为默认认证
   createdAt: number; // 创建时间
+
+  // 调度策略
+  dispatchPolicy?: {
+    role: "primary" | "roundrobin" | "fallback";
+    priority: number;
+    cooldownMinutes: number;
+  } | null;
 
   // 认证状态检测
   status?: {
@@ -791,6 +805,28 @@ export type ChatConversationContext =
       type: "session-history";
       sessionKey: string;
       displayName?: string;
+    }
+  // 部门聊天室：部门内所有成员（人类+Agent）的共同会话，属于该部门沙箱
+  | {
+      type: "dept-room";
+      deptId: string;
+      deptName?: string;
+      /** 部门是否已开启沙箱隔离 */
+      sandboxEnabled?: boolean;
+      /** 当前访问者是否是该部门成员（影响发言权限） */
+      isMember?: boolean;
+      /** 部门成员 Agent ID 列表 */
+      memberAgentIds?: string[];
+      sessionKey: string; // 如 "dept:{deptId}:room"
+    }
+  // 部门广播：管理员向部门所有成员推送通知（只写不读，类似公告栏）
+  | {
+      type: "dept-broadcast";
+      deptId: string;
+      deptName?: string;
+      /** 只有管理员可以发送广播 */
+      isAdmin?: boolean;
+      sessionKey: string; // 如 "dept:{deptId}:broadcast"
     };
 
 /**
@@ -917,4 +953,37 @@ export type ChatHistoryAggregateResult = {
   messages: AggregatedMessage[];
   sessionCount: number;
   truncated: boolean;
+};
+
+// ============ 消息可信身份元数据 ============
+
+/**
+ * 消息来源类型：防御 A6 （身份混淆）
+ * - human: 人类管理员直接输入
+ * - agent-auto: Agent 自动回复（未经人类提示）
+ * - agent-prompted: Agent 回复（由人类命令触发）
+ * - system: 系统自动生成（cron/webhook/工具调用）
+ * - cross-dept: 跨部门消息（通过只读挂载路径流入）
+ */
+export type MessageSourceKind =
+  | "human"
+  | "agent-auto"
+  | "agent-prompted"
+  | "system"
+  | "cross-dept";
+
+/**
+ * 消息可信属性（附加在消息元数据中，用于展示层渲染信任徽章）
+ */
+export type MessageTrustMeta = {
+  /** 消息来源类型 */
+  sourceKind: MessageSourceKind;
+  /** 发送者所属部门 ID */
+  senderDeptId?: string;
+  /** 发送者所属部门名称 */
+  senderDeptName?: string;
+  /** 是否经过沙箱隔离容器执行 */
+  sandboxed?: boolean;
+  /** 跨部门防守是否通过（对应 dept-access-guard 防守规则） */
+  guardPassed?: boolean;
 };

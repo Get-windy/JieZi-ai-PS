@@ -1,11 +1,11 @@
 import crypto from "node:crypto";
-import { startBrowserBridgeServer, stopBrowserBridgeServer } from "../../../upstream/src/browser/bridge-server.js";
+import { startBrowserBridgeServer, stopBrowserBridgeServer } from "../../../upstream/extensions/browser/src/browser/bridge-server.js";
 import { type ResolvedBrowserConfig, resolveProfile } from "../../browser/config.js";
 import {
   DEFAULT_BROWSER_EVALUATE_ENABLED,
   DEFAULT_OPENCLAW_BROWSER_COLOR,
   DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME,
-} from "../../../upstream/src/browser/constants.js";
+} from "../../../upstream/extensions/browser/src/browser/constants.js";
 import { defaultRuntime } from "../../../upstream/src/runtime.js";
 import { BROWSER_BRIDGES } from "../../../upstream/src/agents/sandbox/browser-bridges.js";
 import { computeSandboxBrowserConfigHash } from "../../../upstream/src/agents/sandbox/config-hash.js";

@@ -3,8 +3,9 @@
  * 整合：组织架构、权限配置、审批管理、系统管理
  */
 
-import { html, nothing } from "lit";
+import { html, nothing, type TemplateResult } from "lit";
 import { t } from "../i18n.js";
+import type { SandboxFormConfig } from "./organization-dialog.js";
 
 // ============================================================================
 // 类型定义
@@ -60,6 +61,8 @@ export type OrganizationPermissionsProps = {
   onEditTeam: (teamId: string) => void;
   onDeleteTeam: (teamId: string) => void;
   onAssignMember: (teamId: string, memberId: string) => void;
+  /** 配置部门沙箱隔离（打开沙箱配置弹窗） */
+  onConfigSandbox: (deptId: string) => void;
 
   // 权限配置回调
   onSelectOrgForPermission: (orgId: string | null) => void;
@@ -110,6 +113,8 @@ export type Organization = {
   createdAt: number;
   agentCount: number;
   permissions?: string[];
+  /** 部门沙箱隔离是否已启用 */
+  sandboxEnabled?: boolean;
 };
 
 export type Team = {
@@ -470,7 +475,7 @@ function renderOrgTreeNode(
   data: OrganizationData,
   props: OrganizationPermissionsProps,
   depth: number,
-) {
+): TemplateResult {
   const children = data.organizations.filter((o) => o.parentId === org.id);
   const teams = data.teams.filter((t) => t.organizationId === org.id);
   const isSelected = props.selectedNodeId === org.id;
@@ -501,6 +506,16 @@ function renderOrgTreeNode(
               }}
             >
               ✏️ 编辑
+            </button>
+            <button
+              class="btn btn--sm ${org.sandboxEnabled ? 'btn--primary' : ''}"
+              title="${org.sandboxEnabled ? 'Docker沙箱已启用，点击管理' : '点击配置 Docker 沙箱隔离'}"
+              @click=${(e: Event) => {
+                e.stopPropagation();
+                props.onConfigSandbox(org.id);
+              }}
+            >
+              ${org.sandboxEnabled ? '📦 隔离中' : '📦 配置沙箱'}
             </button>
             <button
               class="btn btn--sm btn--danger"

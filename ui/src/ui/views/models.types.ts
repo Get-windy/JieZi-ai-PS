@@ -33,6 +33,11 @@ export type ModelsProps = {
     name: string;
     apiKey: string;
     baseUrl?: string;
+    dispatchPolicy?: {
+      role: "primary" | "roundrobin" | "fallback";
+      priority: number;
+      cooldownMinutes: number;
+    } | null;
   } | null;
   viewingAuth: {
     authId: string;
@@ -89,6 +94,11 @@ export type ModelsProps = {
     name: string;
     apiKey: string;
     baseUrl?: string;
+    dispatchPolicy?: {
+      role: "primary" | "roundrobin" | "fallback";
+      priority: number;
+      cooldownMinutes: number;
+    } | null;
   }) => void; // 保存认证
   onCancelAuthEdit: () => void; // 取消编辑认证
   onTestAuth: (authId: string) => void; // 测试认证连接
@@ -96,6 +106,7 @@ export type ModelsProps = {
   onReauth: (authId: string, provider: string) => void; // OAuth重新认证
   onStartOAuthPolling: (authId: string) => void; // 开始OAuth授权轮询
   onCancelOAuthReauth: () => void; // 取消OAuth重认证
+  onResetAuthCircuit: (authId: string) => void; // 重置凭据熔断状态
 
   // ============ 模型列表操作回调 ============
   onManageModels: (provider: string) => void; // 打开模型列表弹窗

@@ -165,6 +165,11 @@ export type AppViewState = {
     name: string;
     apiKey: string;
     baseUrl?: string;
+    dispatchPolicy?: {
+      role: "primary" | "roundrobin" | "fallback";
+      priority: number;
+      cooldownMinutes: number;
+    } | null;
   } | null;
   viewingAuth: {
     authId: string;
@@ -568,12 +573,50 @@ export type AppViewState = {
   organizationsError: string | null;
   editingOrganization: {
     mode: "create" | "edit";
+    isDepartment: boolean;
     organization: {
       id?: string;
       name: string;
       description: string;
       parentId: string;
     };
+    sandboxConfig: {
+      enabled: boolean;
+      containerPrefixHint: string;
+      workspaceRoot: string;
+      network: string;
+      image: string;
+      memory: string;
+      cpus: string;
+      pidsLimit: string;
+    };
+  } | null;
+  /** 部门沙箱配置弹窗状态 */
+  editingSandbox: {
+    deptId: string;
+    deptName: string;
+    loading: boolean;
+    saving: boolean;
+    error: string | null;
+    config: {
+      enabled: boolean;
+      containerPrefixHint: string;
+      workspaceRoot: string;
+      network: string;
+      image: string;
+      memory: string;
+      cpus: string;
+      pidsLimit: string;
+    };
+    /** 沙箱当前运行摘要（加载自后端） */
+    summary: {
+      enabled: boolean;
+      containerPrefix: string;
+      workspaceRoot: string;
+      network?: string;
+      hasResourceQuota: boolean;
+      crossDeptMountCount: number;
+    } | null;
   } | null;
   // 团队管理状态
   teamsLoading: boolean;

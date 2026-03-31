@@ -195,6 +195,78 @@ export function renderAuthEditModal(props: ModelsProps) {
               }}
             />
           </div>
+
+          <!-- 调度策略 -->
+          <div style="margin-bottom: 8px;">
+            <div style="font-weight: 500; margin-bottom: 8px;">调度策略 <span style="font-size: 11px; color: var(--text-secondary); font-weight: 400;">（多个认证时生效）</span></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+              <!-- 角色 -->
+              <div>
+                <label style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 4px;">调度角色</label>
+                <select
+                  class="input"
+                  style="cursor: pointer; font-size: 13px;"
+                  .value=${auth.dispatchPolicy?.role ?? "primary"}
+                  @change=${(e: Event) => {
+                    const role = (e.target as HTMLSelectElement).value as "primary" | "roundrobin" | "fallback";
+                    auth.dispatchPolicy = {
+                      role,
+                      priority: auth.dispatchPolicy?.priority ?? 0,
+                      cooldownMinutes: auth.dispatchPolicy?.cooldownMinutes ?? 30,
+                    };
+                  }}
+                >
+                  <option value="primary" ?selected=${(auth.dispatchPolicy?.role ?? "primary") === "primary"}>⭐ 优先使用</option>
+                  <option value="roundrobin" ?selected=${auth.dispatchPolicy?.role === "roundrobin"}>🔄 轮询均衡</option>
+                  <option value="fallback" ?selected=${auth.dispatchPolicy?.role === "fallback"}>🛡️ 备用备调</option>
+                </select>
+              </div>
+              <!-- 优先级 -->
+              <div>
+                <label style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 4px;">优先级（0最高）</label>
+                <input
+                  type="number"
+                  class="input"
+                  min="0"
+                  max="99"
+                  style="font-size: 13px;"
+                  .value=${String(auth.dispatchPolicy?.priority ?? 0)}
+                  @input=${(e: Event) => {
+                    const priority = parseInt((e.target as HTMLInputElement).value) || 0;
+                    auth.dispatchPolicy = {
+                      role: auth.dispatchPolicy?.role ?? "primary",
+                      priority,
+                      cooldownMinutes: auth.dispatchPolicy?.cooldownMinutes ?? 30,
+                    };
+                  }}
+                />
+              </div>
+              <!-- 冷却时间 -->
+              <div>
+                <label style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 4px;">冷却时间(分钟)</label>
+                <input
+                  type="number"
+                  class="input"
+                  min="0"
+                  max="1440"
+                  style="font-size: 13px;"
+                  .value=${String(auth.dispatchPolicy?.cooldownMinutes ?? 30)}
+                  @input=${(e: Event) => {
+                    const cooldownMinutes = parseInt((e.target as HTMLInputElement).value) || 0;
+                    auth.dispatchPolicy = {
+                      role: auth.dispatchPolicy?.role ?? "primary",
+                      priority: auth.dispatchPolicy?.priority ?? 0,
+                      cooldownMinutes,
+                    };
+                  }}
+                />
+              </div>
+            </div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; line-height: 1.5;">
+              • <b>优先使用</b>：永远最先尝试此凭据 • <b>轮询均衡</b>：随机轮询，分流负载 • <b>备用备调</b>：仅主凭据全部失败后启用<br/>
+              冷却时间：遇到配额耗尽 / 鉴权错误后自动跳过此凭据的时长（0=不自动冷却）
+            </div>
+          </div>
         </div>
         
         <div class="modal-footer">
@@ -223,6 +295,21 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
     ? formatAgo(Date.now() - auth.status.lastChecked)
     : null;
 
+  // 熔断器状态
+  const circuitState = props.snapshot?.circuitBreakers?.[auth.authId];
+  const isCircuitOpen = circuitState && circuitState.cooldownUntil > Date.now();
+  const circuitRemainingMin = isCircuitOpen
+    ? Math.ceil((circuitState.cooldownUntil - Date.now()) / 60000)
+    : 0;
+
+  // 调度角色标签
+  const dispatchRole = auth.dispatchPolicy?.role ?? (auth.isDefault ? "primary" : "roundrobin");
+  const dispatchRoleLabel: Record<string, string> = {
+    primary: "⭐优先",
+    roundrobin: "🔄轮询",
+    fallback: "🛡️备用",
+  };
+
   // 检测OAuth过期（通过error信息判断）
   const error = auth.status?.error || "";
   const isOAuthExpired =
@@ -237,7 +324,7 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
   const authType = isQwenOAuth ? "oauth" : "api_key";
 
   return html`
-    <div class="card" style="padding: 20px;">
+    <div class="card" style="padding: 20px; ${isCircuitOpen ? "border-left: 3px solid #ff9800;" : ""}">
       <div class="row" style="justify-content: space-between; align-items: center; gap: 16px;">
         <div class="row" style="align-items: center; gap: 16px; flex: 1;">
           <span 
@@ -246,7 +333,7 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
             title="${auth.status?.valid ? t("models.valid") : t("models.unverified")}"
           ></span>
           <div style="flex: 1; min-width: 0;">
-            <div class="card-title" style="font-size: 16px; margin-bottom: 6px;">
+            <div class="card-title" style="font-size: 16px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
               ${auth.name} ${
                 auth.isDefault
                   ? html`
@@ -254,9 +341,18 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
                     `
                   : nothing
               }
+              <!-- 调度角色标签 -->
+              <span style="font-size: 11px; padding: 1px 6px; background: var(--bg-elevated); border-radius: 3px; color: var(--text-secondary);">${dispatchRoleLabel[dispatchRole] ?? dispatchRole}</span>
+              <!-- 熔断状态标签 -->
+              ${
+                isCircuitOpen
+                  ? html`<span style="font-size: 11px; padding: 2px 7px; background: rgba(255,152,0,0.12); color: #ff9800; border-radius: 3px; border: 1px solid rgba(255,152,0,0.3);">⏳ 冷却中 ${circuitRemainingMin}分钟</span>`
+                  : nothing
+              }
             </div>
             <div class="card-sub mono" style="font-size: 12px; opacity: 0.7;">
               ${auth.apiKey.substring(0, 20)}...
+            </div>
             </div>
             ${
               auth.balance
@@ -300,6 +396,20 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
           </div>
         </div>
         <div class="row" style="gap: 10px; flex-shrink: 0;">
+          ${
+            isCircuitOpen
+              ? html`
+            <button
+              class="btn btn--sm"
+              style="padding: 8px 14px; font-size: 13px; background: #ff9800; color: white; border-color: #ff9800;"
+              @click=${() => (props as unknown as { onResetAuthCircuit?: (authId: string) => void }).onResetAuthCircuit?.(auth.authId)}
+              title="手动解除冷却，立即重试此凭据"
+            >
+              ⚡ 立即重试
+            </button>
+          `
+              : nothing
+          }
           ${
             isOAuthExpired && authType === "oauth"
               ? html`

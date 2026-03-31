@@ -73,6 +73,8 @@ export type ChatProps = {
   onQueueRemove: (id: string) => void;
   onNewSession: () => void;
   onDeleteSession?: () => void;
+  /** 对抗-P1：解耦 /compact 命令，直接触发压缩而不修改 draft */
+  onCompact?: () => void;
   onOpenSidebar?: (content: string) => void;
   onCloseSidebar?: () => void;
   onSplitRatioChange?: (ratio: number) => void;

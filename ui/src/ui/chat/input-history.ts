@@ -3,24 +3,30 @@
  *
  * Stores sent messages in a ring buffer (max 50 entries) backed by localStorage.
  * Supports ArrowUp/ArrowDown navigation through history.
+ *
+ * 对抗-P2 修复：原实现使用全局单例，导致跨 sessionKey 历史混用。
+ * 现在通过 getInputHistory(sessionKey) 工厂函数获取按会话隔离的实例。
+ * localStorage key 格式："chat-input-history:{sessionKey}"
  */
 
-const STORAGE_KEY = "chat-input-history";
+const STORAGE_KEY_PREFIX = "chat-input-history:";
 const MAX_ENTRIES = 50;
 
 export class InputHistory {
   private entries: string[] = [];
   private cursor = -1;
   private pendingDraft = "";
+  private readonly storageKey: string;
 
-  constructor() {
+  constructor(sessionKey: string) {
+    this.storageKey = `${STORAGE_KEY_PREFIX}${sessionKey}`;
     this.load();
   }
 
   /** Load history from localStorage */
   private load(): void {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(this.storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
@@ -35,7 +41,7 @@ export class InputHistory {
   /** Persist history to localStorage */
   private save(): void {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.entries));
+      localStorage.setItem(this.storageKey, JSON.stringify(this.entries));
     } catch {
       // localStorage full or unavailable — silently ignore
     }
@@ -109,5 +115,24 @@ export class InputHistory {
   }
 }
 
-/** Singleton instance for the chat input history */
-export const chatInputHistory = new InputHistory();
+/**
+ * 对抗-P2：按 sessionKey 隔离的历史实例缓存。
+ * 同一 sessionKey 在同一页面内复用同一实例（避免重复读取 localStorage）。
+ */
+const _historyCache = new Map<string, InputHistory>();
+
+export function getInputHistory(sessionKey: string): InputHistory {
+  let instance = _historyCache.get(sessionKey);
+  if (!instance) {
+    instance = new InputHistory(sessionKey);
+    _historyCache.set(sessionKey, instance);
+  }
+  return instance;
+}
+
+/**
+ * 向后兼容的全局单例（供未传入 sessionKey 的展示）。
+ * 新代码应优先使用 getInputHistory(sessionKey)。
+ * @deprecated 请使用 getInputHistory(sessionKey)
+ */
+export const chatInputHistory = getInputHistory("__legacy__");

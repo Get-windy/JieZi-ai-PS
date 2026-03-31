@@ -178,6 +178,18 @@ export type ProviderInstance = {
   knownModels?: string[];
 };
 
+// 凭据调度策略
+export type AuthDispatchRole =
+  | "primary"    // 优先使用，永远最先尝试（同 primary 按 priority 排序）
+  | "roundrobin" // 与其他 roundrobin 凭据轮流调用（分摊 RPM/TPM）
+  | "fallback";  // 备用，仅当所有 primary/roundrobin 均熔断时才使用
+
+export type AuthDispatchPolicy = {
+  role: AuthDispatchRole;  // 调度角色
+  priority: number;        // 同角色内的优先级（数字越小越先）
+  cooldownMinutes: number; // 遇到配额/鉴权错误后的冷却时间（分钟，0=不自动冷却）
+};
+
 // 供应商认证配置（导出供其他模块使用）
 export type ProviderAuth = {
   authId: string; // 认证ID（自动生成）
@@ -188,6 +200,9 @@ export type ProviderAuth = {
   enabled: boolean; // 是否启用
   isDefault: boolean; // 是否为默认认证
   createdAt: number; // 创建时间
+
+  // 调度策略（多凭据负载均衡 / 故障转移）
+  dispatchPolicy?: AuthDispatchPolicy;
 
   // 认证状态检测
   status?: {
@@ -514,6 +529,200 @@ function syncToAgentModelsJson(storage: ModelManagementStorage): any {
   }
 
   return result;
+}
+
+// ============ 凭据熔断器（内存态，进程重启后重置）============
+
+/**
+ * 单个凭据的熔断状态
+ */
+type CircuitState = {
+  authId: string;
+  cooldownUntil: number;   // 冷却截止时间戳（ms），0=未冷却
+  errorCount: number;      // 连续错误次数
+  lastError?: string;      // 最后一次错误信息
+};
+
+// authId → CircuitState
+const circuitBreakers = new Map<string, CircuitState>();
+
+/**
+ * 判断某个凭据当前是否处于熔断（冷却中）
+ */
+export function isAuthCircuitOpen(authId: string): boolean {
+  const state = circuitBreakers.get(authId);
+  if (!state) return false;
+  if (state.cooldownUntil === 0) return false;
+  if (Date.now() < state.cooldownUntil) return true;
+  // 冷却期已过，自动重置
+  state.cooldownUntil = 0;
+  state.errorCount = 0;
+  return false;
+}
+
+/**
+ * 获取某凭据的熔断剩余秒数（0=未熔断）
+ */
+export function getAuthCircuitRemainingSeconds(authId: string): number {
+  const state = circuitBreakers.get(authId);
+  if (!state || state.cooldownUntil === 0) return 0;
+  const remaining = Math.max(0, state.cooldownUntil - Date.now());
+  return Math.ceil(remaining / 1000);
+}
+
+/**
+ * 上报某凭据调用失败。
+ * @param authId  - 凭据ID
+ * @param error   - 错误信息
+ * @param isQuotaOrAuth - 是否为配额/鉴权错误（触发熔断冷却）
+ * @param cooldownMinutes - 冷却时间（来自 dispatchPolicy.cooldownMinutes）
+ */
+export function reportAuthFailure(
+  authId: string,
+  error: string,
+  isQuotaOrAuth: boolean,
+  cooldownMinutes: number,
+): void {
+  let state = circuitBreakers.get(authId);
+  if (!state) {
+    state = { authId, cooldownUntil: 0, errorCount: 0 };
+    circuitBreakers.set(authId, state);
+  }
+  state.errorCount += 1;
+  state.lastError = error;
+  if (isQuotaOrAuth && cooldownMinutes > 0) {
+    state.cooldownUntil = Date.now() + cooldownMinutes * 60 * 1000;
+    console.log(
+      `[CredentialCircuitBreaker] Auth ${authId} tripped. Cooling down for ${cooldownMinutes}min (error: ${error})`,
+    );
+  }
+}
+
+/**
+ * 上报某凭据调用成功，清零错误计数
+ */
+export function reportAuthSuccess(authId: string): void {
+  const state = circuitBreakers.get(authId);
+  if (state) {
+    state.errorCount = 0;
+    state.cooldownUntil = 0;
+    state.lastError = undefined;
+  }
+}
+
+/**
+ * 手动重置某凭据的熔断状态（UI "立即重试" 按钮使用）
+ */
+export function resetAuthCircuit(authId: string): void {
+  circuitBreakers.delete(authId);
+}
+
+/**
+ * 获取所有凭据的熔断快照（供 UI 展示）
+ */
+export function getCircuitBreakerSnapshot(): Record<
+  string,
+  { cooldownUntil: number; errorCount: number; lastError?: string }
+> {
+  const result: Record<string, { cooldownUntil: number; errorCount: number; lastError?: string }> =
+    {};
+  for (const [id, state] of circuitBreakers.entries()) {
+    result[id] = {
+      cooldownUntil: state.cooldownUntil,
+      errorCount: state.errorCount,
+      lastError: state.lastError,
+    };
+  }
+  return result;
+}
+
+/**
+ * 判断一个错误是否应触发熔断（配额耗尽 / 鉴权失效 / 账户停用）
+ * 业界标准：只对这些确定性错误熔断，网络超时等瞬时错误不熔断
+ */
+export function isQuotaOrAuthError(errorMsg: string, httpStatus?: number): boolean {
+  if (httpStatus === 401 || httpStatus === 403) return true;
+  if (httpStatus === 429) return true;
+  const lower = errorMsg.toLowerCase();
+  return (
+    lower.includes("quota") ||
+    lower.includes("rate limit") ||
+    lower.includes("insufficient_quota") ||
+    lower.includes("billing") ||
+    lower.includes("exceeded") ||
+    lower.includes("invalid api key") ||
+    lower.includes("unauthorized") ||
+    lower.includes("account disabled") ||
+    lower.includes("access denied")
+  );
+}
+
+// ============ 凭据调度器 ============
+
+/**
+ * 从同一供应商的多个认证中选出本次应使用的那一个。
+ *
+ * 调度顺序（参考 LiteLLM 的 Deployment Ordering + 熔断机制）：
+ *   1. role=primary 且未熔断，按 priority 升序取第一个
+ *   2. 若 primary 全熔断，从 role=roundrobin 未熔断的中轮询（Round-Robin）
+ *   3. 若 primary+roundrobin 全熔断，从 role=fallback 未熔断的中按 priority 取第一个
+ *   4. 全部熔断时返回熔断时间最短的那个（保底降级）
+ *
+ * @param auths - 同一供应商下所有已启用的认证
+ * @returns 选中的认证，以及该认证的 dispatchPolicy（供调用方上报结果）
+ */
+export function pickAuth(
+  auths: ProviderAuth[],
+): { auth: ProviderAuth; isCircuitOpen: boolean } | null {
+  const enabled = auths.filter((a) => a.enabled);
+  if (enabled.length === 0) return null;
+  if (enabled.length === 1) {
+    return { auth: enabled[0], isCircuitOpen: isAuthCircuitOpen(enabled[0].authId) };
+  }
+
+  const roleOf = (a: ProviderAuth): AuthDispatchRole =>
+    a.dispatchPolicy?.role ?? (a.isDefault ? "primary" : "roundrobin");
+  const priorityOf = (a: ProviderAuth): number => a.dispatchPolicy?.priority ?? 0;
+
+  const available = (a: ProviderAuth) => !isAuthCircuitOpen(a.authId);
+
+  // --- 1. primary 组 ---
+  const primaries = enabled
+    .filter((a) => roleOf(a) === "primary")
+    .toSorted((a, b) => priorityOf(a) - priorityOf(b));
+  const availablePrimary = primaries.filter(available);
+  if (availablePrimary.length > 0) {
+    return { auth: availablePrimary[0], isCircuitOpen: false };
+  }
+
+  // --- 2. roundrobin 组（轮询）---
+  const roundrobins = enabled.filter((a) => roleOf(a) === "roundrobin");
+  const availableRR = roundrobins.filter(available);
+  if (availableRR.length > 0) {
+    // 简单轮询：取上次使用时间最早的（无持久化，用随机打散代替）
+    const idx = Math.floor(Math.random() * availableRR.length);
+    return { auth: availableRR[idx], isCircuitOpen: false };
+  }
+
+  // --- 3. fallback 组 ---
+  const fallbacks = enabled
+    .filter((a) => roleOf(a) === "fallback")
+    .toSorted((a, b) => priorityOf(a) - priorityOf(b));
+  const availableFallback = fallbacks.filter(available);
+  if (availableFallback.length > 0) {
+    return { auth: availableFallback[0], isCircuitOpen: false };
+  }
+
+  // --- 4. 全部熔断：选冷却时间最短的保底 ---
+  const allSorted = enabled.toSorted((a, b) => {
+    const ra = getAuthCircuitRemainingSeconds(a.authId);
+    const rb = getAuthCircuitRemainingSeconds(b.authId);
+    return ra - rb;
+  });
+  console.warn(
+    `[CredentialDispatcher] All ${enabled.length} credentials for provider are circuit-open. Falling back to least-cooldown.`,
+  );
+  return { auth: allSorted[0], isCircuitOpen: true };
 }
 
 // ============ 缓存机制 ============
@@ -1274,6 +1483,7 @@ async function addAuth(params: {
   name: string;
   apiKey: string;
   baseUrl?: string;
+  dispatchPolicy?: AuthDispatchPolicy;
 }): Promise<ProviderAuth> {
   const storage = await loadModelManagement();
   const authId = generateId("auth");
@@ -1287,6 +1497,7 @@ async function addAuth(params: {
     enabled: true,
     isDefault: (storage.auths[params.provider] || []).length === 0, // 第一个自动为默认
     createdAt: Date.now(),
+    dispatchPolicy: params.dispatchPolicy,
   };
 
   if (!storage.auths[params.provider]) {
@@ -1310,6 +1521,7 @@ async function updateAuth(params: {
   apiKey?: string;
   baseUrl?: string;
   enabled?: boolean;
+  dispatchPolicy?: AuthDispatchPolicy | null;
 }): Promise<void> {
   const storage = await loadModelManagement();
 
@@ -1327,6 +1539,9 @@ async function updateAuth(params: {
       }
       if (params.enabled !== undefined) {
         auth.enabled = params.enabled;
+      }
+      if (params.dispatchPolicy !== undefined) {
+        auth.dispatchPolicy = params.dispatchPolicy ?? undefined;
       }
 
       await saveModelManagement(storage);
@@ -2095,6 +2310,8 @@ export const modelsHandlers: GatewayRequestHandlers = {
           apiTemplates: API_TEMPLATES,
           // 供应商实例列表（用户添加的 + 内置的）
           providerInstances: storage.providers,
+          // 凭据熔断器快照（用于 UI 展示冷却状态）
+          circuitBreakers: getCircuitBreakerSnapshot(),
         },
         undefined,
       );
@@ -2360,11 +2577,12 @@ export const modelsHandlers: GatewayRequestHandlers = {
   // 添加认证
   "models.auth.add": async ({ params, respond }) => {
     try {
-      const { provider, name, apiKey, baseUrl } = params as {
+      const { provider, name, apiKey, baseUrl, dispatchPolicy } = params as {
         provider: string;
         name: string;
         apiKey: string;
         baseUrl?: string;
+        dispatchPolicy?: AuthDispatchPolicy;
       };
 
       if (!provider || !name || !apiKey) {
@@ -2376,7 +2594,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const auth = await addAuth({ provider, name, apiKey, baseUrl });
+      const auth = await addAuth({ provider, name, apiKey, baseUrl, dispatchPolicy });
       respond(true, { auth }, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
@@ -2386,12 +2604,13 @@ export const modelsHandlers: GatewayRequestHandlers = {
   // 更新认证
   "models.auth.update": async ({ params, respond }) => {
     try {
-      const { authId, name, apiKey, baseUrl, enabled } = params as {
+      const { authId, name, apiKey, baseUrl, enabled, dispatchPolicy } = params as {
         authId: string;
         name?: string;
         apiKey?: string;
         baseUrl?: string;
         enabled?: boolean;
+        dispatchPolicy?: AuthDispatchPolicy | null;
       };
 
       if (!authId) {
@@ -2399,7 +2618,22 @@ export const modelsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      await updateAuth({ authId, name, apiKey, baseUrl, enabled });
+      await updateAuth({ authId, name, apiKey, baseUrl, enabled, dispatchPolicy });
+      respond(true, { success: true }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+    }
+  },
+
+  // 重置凭据熔断状态（手动解除冷却）
+  "models.auth.resetCircuit": async ({ params, respond }) => {
+    try {
+      const { authId } = params as { authId: string };
+      if (!authId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Missing authId"));
+        return;
+      }
+      resetAuthCircuit(authId);
       respond(true, { success: true }, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));

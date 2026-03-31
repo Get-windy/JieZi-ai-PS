@@ -22,12 +22,17 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-width: min(900px, calc(100% - 60px));
+  /* 布局-P2 修复：原 calc(100% - 60px) 在 480px 以下会导致气泡溢出。
+     废弃 min(900px, calc(100% - 60px))，改为 max-width:100% + 大屏下通过 padding 限展。
+     业界最佳实践（Slack / Discord）：宽屏用 max-width，窄屏让容器渎出气泡自然受限。 */
+  max-width: min(900px, 100%);
 }
 
 /* User messages align content right */
 .chat-group.user .chat-group-messages {
   align-items: flex-end;
+  /* 布局-P2 修复：用户消息宽屏下限制展宽以避免占满全宽 */
+  max-width: min(800px, 85%);
 }
 
 .chat-group.user .chat-group-footer {
@@ -264,8 +269,14 @@ img.chat-avatar {
   background: rgba(251, 146, 60, 0.12);
 }
 
+/* 布局-P0 修复：用户消息 hover 色硬编码为 rgba(255,77,77,0.15) 红色，与 accent-subtle 橙色不一致。
+   业界最佳实践：就近使用 CSS 变量而非硬编码颜色，保持主题一致性。 */
 .chat-group.user .chat-bubble:hover {
-  background: rgba(255, 77, 77, 0.15);
+  background: color-mix(in srgb, var(--accent-subtle, rgba(251,146,60,0.12)) 150%, transparent);
+}
+
+:root[data-theme="light"] .chat-group.user .chat-bubble:hover {
+  background: rgba(251, 146, 60, 0.2);
 }
 
 /* Streaming animation */
@@ -451,10 +462,13 @@ img.chat-avatar {
    MESSAGE HOVER ACTION BAR
    ============================================= */
 
+/* 布局-P1 修复：.chat-msg-actions top:-10px 在第一条消息时会被 chat-thread overflow:hidden 裁剪。
+   业界最佳实践（Linear / Notion）：消息操作栏放在消息内部右上角，而非浮在外部。
+   top:-10px 改为 top:4px right:4px 居内部方案，避免溢出裁剪。 */
 .chat-msg-actions {
   position: absolute;
-  top: -10px;
-  right: 8px;
+  top: 4px;
+  right: 4px;
   display: flex;
   gap: 2px;
   opacity: 0;

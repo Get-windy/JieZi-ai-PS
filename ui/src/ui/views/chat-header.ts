@@ -4,7 +4,7 @@
  * Contains conversation info resolution, inline participant rendering,
  * and compaction / fallback indicator toasts.
  */
-import { html, nothing } from "lit";
+import { html, nothing, type TemplateResult } from "lit";
 import { t } from "../i18n.ts";
 import { icons } from "../icons.ts";
 import type { AgentsListResult, ChatConversationContext } from "../types.ts";
@@ -136,6 +136,30 @@ export function resolveConversationInfo(
         participants: [youParticipant],
       };
     }
+    case "dept-room": {
+      const memberIds = context.memberAgentIds ?? [];
+      const participants = memberIds.map((id) => ({
+        id,
+        label: getAgentLabel(id),
+        emoji: getAgentEmoji(id),
+      }));
+      participants.push(youParticipant);
+      const sandboxBadge = context.sandboxEnabled ? " 📦" : "";
+      const deptName = context.deptName ?? context.deptId;
+      return {
+        title: `${deptName}${sandboxBadge}`,
+        icon: context.sandboxEnabled ? "🏢" : "🏛️",
+        participants,
+      };
+    }
+    case "dept-broadcast": {
+      const deptName = context.deptName ?? context.deptId;
+      return {
+        title: `📢 ${deptName} · 广播`,
+        icon: "📢",
+        participants: [youParticipant],
+      };
+    }
     default:
       return { title: assistantName, icon: "🤖", participants: [youParticipant] };
   }
@@ -207,6 +231,55 @@ export function renderCompactionIndicator(status: CompactionIndicatorStatus | nu
         </div>
       `;
     }
+  }
+
+  return nothing;
+}
+
+// ============ 部门隔离警告栏 ============
+
+/**
+ * 渲染部门隔离警告栏（防守 A2：contact 视图跨部门窃听警告）
+ * - dept-room 非成员：显示只读提示
+ * - dept-broadcast 非管理员：显示只读广播提示
+ * - contact 视图：提示观察者模式
+ */
+export function renderDeptIsolationWarning(
+  context: ChatConversationContext | null,
+): TemplateResult | typeof nothing {
+  if (!context) return nothing;
+
+  if (context.type === "dept-room" && context.isMember === false) {
+    const name = context.deptName ?? context.deptId;
+    return html`
+      <div class="chat-readonly-bar" style="background:rgba(234,179,8,0.08);border-color:#eab308;color:#a16207;">
+        <span>🔒 您不是「${name}」的成员，当前为只读观察模式</span>
+      </div>
+    `;
+  }
+
+  if (context.type === "dept-broadcast") {
+    const name = context.deptName ?? context.deptId;
+    if (context.isAdmin) {
+      return html`
+        <div class="chat-force-joined-bar" style="background:rgba(99,102,241,0.08);border-color:#6366f1;color:#4338ca;">
+          <span>📢 您正在向「${name}」发布广播（管理员）</span>
+        </div>
+      `;
+    }
+    return html`
+      <div class="chat-readonly-bar" style="background:rgba(99,102,241,0.06);border-color:#6366f1;color:#4338ca;">
+        <span>📢「${name}」广播频道（只读）</span>
+      </div>
+    `;
+  }
+
+  if (context.type === "contact") {
+    return html`
+      <div class="chat-readonly-bar" style="background:rgba(139,92,246,0.06);border-color:#8b5cf6;color:#6d28d9;">
+        <span>👁 正在观察 Agent 私信（只读），消息来源已经部门守卫验证</span>
+      </div>
+    `;
   }
 
   return nothing;

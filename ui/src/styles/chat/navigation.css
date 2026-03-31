@@ -658,6 +658,9 @@
   }
 
   .chat-nav-badge {
+    /* 布局-P1 修复：改为 absolute 定位后必须确保父元素有 position:relative。
+       已在 @media (max-width: 768px) 下的 .chat-nav-root__header / .chat-nav-item__content
+       添加 position:relative 保护，此处添加 badge 自身的展示属性。 */
     position: absolute;
     top: 0;
     right: 0;
@@ -667,6 +670,7 @@
     padding: 0 3px;
   }
 
+  /* 布局-P1 修复：确保父元素有 position:relative 包裹 badge，避免 badge 溢出 */
   .chat-nav-root__header,
   .chat-nav-item__content {
     position: relative;

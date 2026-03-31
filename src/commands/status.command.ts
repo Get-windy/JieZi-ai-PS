@@ -12,7 +12,7 @@ import {
   resolveMemoryFtsState,
   resolveMemoryVectorState,
   type Tone,
-} from "../memory/status-format.js";
+} from "../../upstream/packages/memory-host-sdk/src/host/status-format.js";
 import {
   formatPluginCompatibilityNotice,
   summarizePluginCompatibility,

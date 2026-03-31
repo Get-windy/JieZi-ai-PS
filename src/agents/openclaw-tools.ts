@@ -40,7 +40,7 @@ import {
   createGetApprovalStatusTool,
   createCancelApprovalRequestTool,
 } from "./tools/approval-tools.js";
-import { createBrowserTool } from "./tools/browser-tool.js";
+import { createBrowserTool } from "../../upstream/src/plugin-sdk/browser-runtime.js";
 import { createCanvasTool } from "./tools/canvas-tool.js";
 import type { AnyAgentTool } from "./tools/common.js";
 import { createCronTool } from "./tools/cron-tool.js";

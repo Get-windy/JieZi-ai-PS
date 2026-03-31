@@ -3,6 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+export { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
+
 function sanitizePrefix(prefix: string): string {
   const normalized = prefix.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
   return normalized || "tmp";
@@ -21,10 +23,38 @@ function sanitizeExtension(extension?: string): string {
   return `.${token}`;
 }
 
-function sanitizeFileName(fileName: string): string {
+export function sanitizeTempFileName(fileName: string): string {
   const base = path.basename(fileName).replace(/[^a-zA-Z0-9._-]+/g, "-");
   const normalized = base.replace(/^-+|-+$/g, "");
   return normalized || "download.bin";
+}
+
+// internal alias kept for backward compat
+function sanitizeFileName(fileName: string): string {
+  return sanitizeTempFileName(fileName);
+}
+
+export type TempDownloadTarget = {
+  dir: string;
+  path: string;
+  cleanup: () => Promise<void>;
+};
+
+export async function createTempDownloadTarget(params: {
+  prefix: string;
+  fileName?: string;
+  tmpDir?: string;
+}): Promise<TempDownloadTarget> {
+  const tempRoot = params.tmpDir ?? os.tmpdir();
+  const prefix = `${sanitizePrefix(params.prefix)}-`;
+  const dir = await mkdtemp(path.join(tempRoot, prefix));
+  return {
+    dir,
+    path: path.join(dir, sanitizeTempFileName(params.fileName ?? "download.bin")),
+    cleanup: async () => {
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+    },
+  };
 }
 
 export function buildRandomTempFilePath(params: {

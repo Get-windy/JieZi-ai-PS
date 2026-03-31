@@ -512,12 +512,16 @@ function renderMessageActions(text: string, onQuote?: (text: string) => void) {
   const handleQuote = onQuote
     ? (e: Event) => {
         e.stopPropagation();
-        // Build markdown quote block
-        const quoted = text
-          .split("\n")
-          .slice(0, 5) // limit to first 5 lines
-          .map((line) => `> ${line}`)
-          .join("\n");
+        const lines = text.split("\n");
+        const MAX_QUOTE_LINES = 5;
+        // 布局-P1 修复：引用超过 5 行时无截断提示，用户无法感知内容被截断。
+        // 现在在引用块末尾附加“...”指示截断（业界实践：GitHub PR review 风格）
+        const truncated = lines.length > MAX_QUOTE_LINES;
+        const quoteLines = lines.slice(0, MAX_QUOTE_LINES).map((line) => `> ${line}`);
+        if (truncated) {
+          quoteLines.push(`> _...\u5171 ${lines.length} \u884c\uff0c\u5df2\u622a\u65ad_`);
+        }
+        const quoted = quoteLines.join("\n");
         onQuote(quoted + "\n\n");
       }
     : null;

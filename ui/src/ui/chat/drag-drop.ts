@@ -61,15 +61,19 @@ export function handleDrop(
   }
 
   const files = Array.from(e.dataTransfer.files);
-  const imageFiles = files.filter((f) => f.type.startsWith("image/"));
 
-  if (imageFiles.length === 0) {
+  // 对抗-P2：只过滤图片是强假设计——拖放的 PDF/文档等也应当被接收
+  // 支持的类型：图片 + PDF + 纯文本 + Markdown
+  const ALLOWED_TYPES = /^(image\/|application\/pdf$|text\/)/;
+  const acceptedFiles = files.filter((f) => ALLOWED_TYPES.test(f.type) || f.name.endsWith(".md"));
+
+  if (acceptedFiles.length === 0) {
     return;
   }
 
   const updatedAttachments = [...currentAttachments];
 
-  for (const file of imageFiles) {
+  for (const file of acceptedFiles) {
     const reader = new FileReader();
     reader.addEventListener("load", () => {
       const dataUrl = reader.result as string;
@@ -77,6 +81,7 @@ export function handleDrop(
         id: generateAttachmentId(),
         dataUrl,
         mimeType: file.type,
+        fileName: file.name,  // 对抗-P2：保留文件名供预览显示
       };
       updatedAttachments.push(newAttachment);
       // Fire callback after each file loads

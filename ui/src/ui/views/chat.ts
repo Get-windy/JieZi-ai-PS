@@ -29,7 +29,7 @@ export type {
 } from "../types/chat-props.ts";
 import { renderContextWarning, getUsageRatio } from "../chat/context-warning.ts";
 import { handleDragOver, handleDragLeave, handleDrop } from "../chat/drag-drop.ts";
-import { chatInputHistory } from "../chat/input-history.ts";
+import { chatInputHistory, getInputHistory } from "../chat/input-history.ts";
 import { initSidebarResize, getSavedSidebarWidth } from "../chat/sidebar-resize.ts";
 import {
   detectSlashToken,
@@ -46,6 +46,7 @@ import {
   renderChatParticipantsInline,
   renderCompactionIndicator,
   renderFallbackIndicator,
+  renderDeptIsolationWarning,
 } from "./chat-header.ts";
 // Sub-module imports
 import { renderMonitorView, isMonitorContext } from "./chat-monitor.ts";
@@ -90,19 +91,42 @@ export function renderChat(props: ChatProps) {
 
   const isChannelObserve = props.navCurrentContext?.type === "channel-observe";
   const isContactView = props.navCurrentContext?.type === "contact";
-  const isReadOnly = (isChannelObserve && !props.navChannelForceJoined) || isContactView;
+  // dept-room 非成员或 dept-broadcast 非管理员 → 只读
+  const isDeptRoom = props.navCurrentContext?.type === "dept-room";
+  const isDeptBroadcast = props.navCurrentContext?.type === "dept-broadcast";
+  const isDeptReadOnly =
+    (isDeptRoom && (props.navCurrentContext as { isMember?: boolean } | null)?.isMember === false) ||
+    (isDeptBroadcast && !(props.navCurrentContext as { isAdmin?: boolean } | null)?.isAdmin);
+  const isReadOnly = (isChannelObserve && !props.navChannelForceJoined) || isContactView || isDeptReadOnly;
 
-  const canCompose = props.connected && !isReadOnly;
+  // canSend 来自后端能力判断（如 agent 未就绪、rate-limit 等），必须和前端 canCompose 同时满足
+  // 对抗-P0：原代码中 props.canSend 存在于 props 但从未被消费，相当于权限字段形同虚设
+  const canCompose = props.connected && !isReadOnly && (props.canSend !== false);
   const isBusy = props.sending || props.stream !== null;
   const canAbort = Boolean(props.canAbort && props.onAbort);
+
+  // 对抗-P7 修复：按 sessionKey 隔离的输入历史，避免跨部门/跨会话历史混用
+  // 原全局单例 chatInputHistory 已废弃，改用 getInputHistory(sessionKey)
+  const inputHistory = getInputHistory(props.sessionKey ?? "__default__");
+
+  // 对抗-P0：节流防抖，防止用户连点发送按钮造成大量重复请求
+  // 使用 data attribute 在 DOM 层面做 300ms 节流（无需引入额外状态）
+  const handleSendThrottled = (e: Event) => {
+    const btn = e.currentTarget as HTMLElement;
+    if (btn.dataset.sending === "1") return;
+    btn.dataset.sending = "1";
+    inputHistory.add(props.draft);
+    props.onSend();
+    setTimeout(() => { delete btn.dataset.sending; }, 300);
+  };
   const activeSession = props.sessions?.sessions?.find((row) => row.key === props.sessionKey);
   const reasoningLevel = activeSession?.reasoningLevel ?? "off";
-  const showReasoning = props.showThinking && reasoningLevel !== "off";
   const assistantIdentity = {
     name: props.assistantName,
     avatar: props.assistantAvatar ?? props.assistantAvatarUrl ?? null,
   };
 
+  const showReasoning = props.showThinking && reasoningLevel !== "off";
   const hasAttachments = (props.attachments?.length ?? 0) > 0;
   const composePlaceholder = props.connected
     ? hasAttachments
@@ -123,9 +147,12 @@ export function renderChat(props: ChatProps) {
             onStop: props.onAbort,
             onClear: props.onDeleteSession,
             onCompact: () => {
-              // Send /compact as a chat command to trigger context compaction
-              props.onDraftChange("/compact");
-              setTimeout(() => props.onSend(), 0);
+              // 对抗-P1 修复：将 /compact 解耦为直接调用回调而非字符串注入 draft
+              // 原实现将 "/compact" 写入 draft 再延迟触发 onSend，存在两个风险：
+              // 1. setTimeout 间隙内如果组件卸载， props.onSend 已失效且不会报错
+              // 2. draft 内容被覆盖，用户如果已经写了一半内容会丢失
+              // 现在：山拥有 onCompact 回调，直接调用而不修改 draft
+              props.onCompact?.();
             },
             onCopy: () => {
               // Copy last assistant message to clipboard
@@ -319,15 +346,7 @@ export function renderChat(props: ChatProps) {
           : nothing
       }
 
-      ${
-        isContactView
-          ? html`
-            <div class="chat-readonly-bar">
-              <span>${t("chat.readonly.contact_bar", { name: (props.navCurrentContext as { contactAgentName?: string } | null)?.contactAgentName ?? "Agent" })}</span>
-            </div>
-          `
-          : nothing
-      }
+      ${renderDeptIsolationWarning(props.navCurrentContext)}
 
       ${
         isReadOnly && isChannelObserve
@@ -435,9 +454,14 @@ export function renderChat(props: ChatProps) {
       ${renderFallbackIndicator(props.fallbackStatus)}
       ${renderCompactionIndicator(props.compactionStatus)}
       ${renderContextWarning(props.contextUsage, () => {
-        // Auto-compact: send /compact as a chat command
-        props.onDraftChange("/compact");
-        setTimeout(() => props.onSend(), 0);
+        // 对抗-P1 修复：优先使用 onCompact 回调，如不存在才列退回字符串注入方式
+        if (props.onCompact) {
+          props.onCompact();
+        } else {
+          // fallback: 字符串注入（将来删除）
+          props.onDraftChange("/compact");
+          setTimeout(() => props.onSend(), 0);
+        }
       })}
 
       ${
@@ -561,10 +585,7 @@ export function renderChat(props: ChatProps) {
             <button
               class="btn primary ${props.sending ? "btn--sending" : ""}"
               ?disabled=${!canCompose}
-              @click=${() => {
-                chatInputHistory.add(props.draft);
-                props.onSend();
-              }}
+              @click=${handleSendThrottled}
             >
               ${isBusy ? t("chat.compose.queue") : t("chat.compose.send")}<kbd class="btn-kbd">↵</kbd>
               ${props.queue.length > 0 ? html`<span class="chat-compose__queue-badge">${props.queue.length}</span>` : nothing}
