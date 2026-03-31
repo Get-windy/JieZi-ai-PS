@@ -229,11 +229,68 @@ async function loadMeetingMessages(): Promise<Map<string, MeetingMessage[]>> {
 // 任务 CRUD 操作
 // ============================================================================
 
+// 单个 agent 最多允许的 todo 任务数（超出时拒绝创建新任务）
+const MAX_TODO_PER_AGENT = 8;
+
 /**
  * 创建任务
+ *
+ * 内置去重检查（程序侧，不依赖 agent 自觉）：
+ * 1. 同 assignee + 同标题 + active 状态（todo/in-progress/blocked）→ 拒绝创建，返回已有任务
+ * 2. 任意 assignee 的 todo 任务已达上限（MAX_TODO_PER_AGENT）→ 拒绝创建并抛出错误
  */
-export async function createTask(task: Task): Promise<Task> {
+export async function createTask(
+  task: Task,
+  options?: { skipDuplicateCheck?: boolean },
+): Promise<Task> {
   const tasks = await loadTasks();
+
+  if (!options?.skipDuplicateCheck) {
+    // title 是必填字段，缺失时立即报错，帮助调用方尽早发现问题
+    if (!task.title || !task.title.trim()) {
+      throw new Error(
+        `[TaskStorage] Task creation rejected: "title" is required and cannot be empty. Please provide a clear, descriptive title for the task.`,
+      );
+    }
+
+    const ACTIVE_STATUSES = ["todo", "in-progress", "blocked"] as const;
+    const titleLower = task.title.trim().toLowerCase();
+    const assigneeIds = (task.assignees ?? []).map((a) => a.id.toLowerCase());
+
+    // 检查同 assignee + 同标题的 active 任务是否已存在
+    if (assigneeIds.length > 0) {
+      for (const existing of tasks.values()) {
+        if (!ACTIVE_STATUSES.includes(existing.status as (typeof ACTIVE_STATUSES)[number]))
+          continue;
+        if ((existing.title ?? "").trim().toLowerCase() !== titleLower) continue;
+        const existingAssigneeIds = (existing.assignees ?? []).map((a) => a.id.toLowerCase());
+        const hasOverlap = assigneeIds.some((id) => existingAssigneeIds.includes(id));
+        if (hasOverlap) {
+          console.warn(
+            `[TaskStorage] Duplicate task rejected: "${task.title}" already exists as ${existing.id} (status=${existing.status})`,
+          );
+          // 返回已有任务（幂等语义），不重复创建
+          return existing;
+        }
+      }
+
+      // 检查 todo 积压上限
+      for (const assigneeId of assigneeIds) {
+        let todoCount = 0;
+        for (const existing of tasks.values()) {
+          if (existing.status !== "todo") continue;
+          if ((existing.assignees ?? []).some((a) => a.id.toLowerCase() === assigneeId))
+            todoCount++;
+        }
+        if (todoCount >= MAX_TODO_PER_AGENT) {
+          throw new Error(
+            `[TaskStorage] Task creation rejected: agent "${assigneeId}" already has ${todoCount} todo tasks (limit: ${MAX_TODO_PER_AGENT}). Complete existing tasks before adding new ones.`,
+          );
+        }
+      }
+    }
+  }
+
   tasks.set(task.id, task);
   await saveToFile(TASKS_FILE, tasks);
   return task;

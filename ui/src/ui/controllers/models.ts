@@ -72,6 +72,7 @@ export async function saveAuth(
     name: string;
     apiKey: string;
     baseUrl?: string;
+    dispatchPolicy?: { role: "primary" | "roundrobin" | "fallback"; priority: number; cooldownMinutes: number } | null;
   },
 ) {
   if (!state.client || !state.connected) {
@@ -85,6 +86,7 @@ export async function saveAuth(
         name: params.name,
         apiKey: params.apiKey,
         baseUrl: params.baseUrl,
+        dispatchPolicy: params.dispatchPolicy,
       });
     } else {
       // 添加新认证
@@ -93,12 +95,28 @@ export async function saveAuth(
         name: params.name,
         apiKey: params.apiKey,
         baseUrl: params.baseUrl,
+        dispatchPolicy: params.dispatchPolicy,
       });
     }
     await loadModels(state, false);
   } catch (err) {
     state.modelsError = String(err);
     throw err;
+  }
+}
+
+/**
+ * 重置凭据熔断状态（手动解除冷却）
+ */
+export async function resetAuthCircuit(state: ModelsState, authId: string) {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  try {
+    await state.client.request("models.auth.resetCircuit", { authId });
+    await loadModels(state, false);
+  } catch (err) {
+    state.modelsError = String(err);
   }
 }
 

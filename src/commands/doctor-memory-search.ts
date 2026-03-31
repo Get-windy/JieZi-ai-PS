@@ -1,14 +1,14 @@
 import fsSync from "node:fs";
-import { resolveAgentDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
-import { resolveMemorySearchConfig } from "../agents/memory-search.js";
-import { resolveApiKeyForProvider } from "../agents/model-auth.js";
-import { formatCliCommand } from "../cli/command-format.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { resolveMemoryBackendConfig } from "../memory/backend-config.js";
-import { DEFAULT_LOCAL_MODEL } from "../memory/embeddings.js";
-import { hasConfiguredMemorySecretInput } from "../memory/secret-input.js";
-import { note } from "../terminal/note.js";
-import { resolveUserPath } from "../utils.js";
+import { resolveAgentDir, resolveDefaultAgentId } from "../../upstream/src/agents/agent-scope.js";
+import { resolveMemorySearchConfig } from "../../upstream/src/agents/memory-search.js";
+import { resolveApiKeyForProvider } from "../../upstream/src/agents/model-auth.js";
+import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { resolveMemoryBackendConfig } from "../../upstream/packages/memory-host-sdk/src/host/backend-config.js";
+import { DEFAULT_LOCAL_MODEL } from "../../upstream/packages/memory-host-sdk/src/host/embeddings.js";
+import { hasConfiguredMemorySecretInput } from "../../upstream/packages/memory-host-sdk/src/host/secret-input.js";
+import { note } from "../../upstream/src/terminal/note.js";
+import { resolveUserPath } from "../../upstream/src/utils.js";
 
 /**
  * Check whether memory search has a usable embedding provider.

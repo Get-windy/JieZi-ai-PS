@@ -18,9 +18,70 @@ function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
+/**
+ * 从 params 安全解析部门沙箱配置（sandboxConfig）
+ * 支持 Agent 通过 RPC 创建/更新部门时携带 sandboxConfig。
+ */
+function parseSandboxConfig(
+  raw: unknown,
+): Organization["sandboxConfig"] | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+
+  const toolPolicy = r.toolPolicy && typeof r.toolPolicy === "object"
+    ? (() => {
+        const tp = r.toolPolicy as Record<string, unknown>;
+        return {
+          allow: Array.isArray(tp.allow) ? (tp.allow as string[]) : undefined,
+          deny: Array.isArray(tp.deny) ? (tp.deny as string[]) : undefined,
+        };
+      })()
+    : undefined;
+
+  const resourceQuota = r.resourceQuota && typeof r.resourceQuota === "object"
+    ? (() => {
+        const rq = r.resourceQuota as Record<string, unknown>;
+        return {
+          memory: rq.memory ? String(rq.memory) : undefined,
+          cpus: typeof rq.cpus === "number" ? rq.cpus : undefined,
+          pidsLimit: typeof rq.pidsLimit === "number" ? rq.pidsLimit : undefined,
+        };
+      })()
+    : undefined;
+
+  const crossDeptBindMounts = Array.isArray(r.crossDeptBindMounts)
+    ? (r.crossDeptBindMounts as unknown[]).reduce<NonNullable<NonNullable<Organization["sandboxConfig"]>["crossDeptBindMounts"]>>((acc, item) => {
+        if (item && typeof item === "object") {
+          const m = item as Record<string, unknown>;
+          if (m.sourceDeptId && m.mountPath) {
+            acc.push({
+              sourceDeptId: String(m.sourceDeptId),
+              mountPath: String(m.mountPath),
+              // 对抗3：即使传 rw 也记录，实际执行时强制降级为 ro
+              access: m.access === "rw" ? "rw" : "ro",
+            });
+          }
+        }
+        return acc;
+      }, [])
+    : undefined;
+
+  return {
+    enabled: r.enabled !== false, // 默认 true
+    containerPrefixHint: r.containerPrefixHint ? String(r.containerPrefixHint) : undefined,
+    workspaceRoot: r.workspaceRoot ? String(r.workspaceRoot) : undefined,
+    network: r.network ? String(r.network) : undefined,
+    image: r.image ? String(r.image) : undefined,
+    toolPolicy,
+    resourceQuota,
+    crossDeptBindMounts,
+  };
+}
+
 export const organizationStructureHandlers: GatewayRequestHandlers = {
   /**
    * org.department.create - 创建部门（届履为组织 type=department）
+   * 支持携带 sandboxConfig 创建隔离部门。
    */
   "org.department.create": async ({ params, respond }) => {
     try {
@@ -31,6 +92,7 @@ export const organizationStructureHandlers: GatewayRequestHandlers = {
       const parentDepartmentId = params.parentDepartmentId
         ? String(params.parentDepartmentId)
         : undefined;
+      const sandboxConfig = parseSandboxConfig(params.sandboxConfig);
 
       if (!creatorId || !name) {
         respond(
@@ -51,6 +113,7 @@ export const organizationStructureHandlers: GatewayRequestHandlers = {
         managerId,
         parentId: parentDepartmentId,
         memberIds: [],
+        sandboxConfig,
         createdAt: Date.now(),
         createdBy: creatorId,
       };
@@ -60,9 +123,98 @@ export const organizationStructureHandlers: GatewayRequestHandlers = {
       respond(true, {
         success: true,
         departmentId,
-        message: `Department "${name}" created`,
+        message: `Department "${name}" created${
+          sandboxConfig?.enabled ? " with sandbox isolation" : ""
+        }`,
         department: org,
       });
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
+    }
+  },
+
+  /**
+   * org.department.update_sandbox - 更新部门沙箱配置
+   */
+  "org.department.update_sandbox": async ({ params, respond }) => {
+    try {
+      const operatorId = normalizeAgentId(String(params.operatorId || ""));
+      const departmentId = String(params.departmentId || "");
+
+      if (!operatorId || !departmentId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "operatorId and departmentId are required"),
+        );
+        return;
+      }
+
+      const dept = await organizationStorage.getOrganization(departmentId);
+      if (!dept) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Department ${departmentId} not found`),
+        );
+        return;
+      }
+      if (dept.type !== "department") {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Organization ${departmentId} is not a department (type=${dept.type})`,
+          ),
+        );
+        return;
+      }
+
+      const sandboxConfig = parseSandboxConfig(params.sandboxConfig);
+      await organizationStorage.updateOrganization(departmentId, {
+        sandboxConfig,
+        updatedBy: operatorId,
+      });
+
+      respond(true, {
+        success: true,
+        departmentId,
+        message: `Sandbox config updated for department "${dept.name}"`,
+        sandboxEnabled: sandboxConfig?.enabled ?? false,
+      });
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
+    }
+  },
+
+  /**
+   * org.department.sandbox_info - 查询部门沙箱配置摘要
+   */
+  "org.department.sandbox_info": async ({ params, respond }) => {
+    try {
+      const departmentId = String(params.departmentId || "");
+      if (!departmentId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "departmentId is required"),
+        );
+        return;
+      }
+
+      const { getDeptSandboxSummary } = await import("../../agents/sandbox/dept-sandbox-resolver.js");
+      const summary = await getDeptSandboxSummary(departmentId);
+      if (!summary) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Department ${departmentId} not found`),
+        );
+        return;
+      }
+
+      respond(true, { success: true, ...summary });
     } catch (error) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(error)));
     }

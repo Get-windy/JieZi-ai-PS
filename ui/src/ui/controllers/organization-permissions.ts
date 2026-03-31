@@ -105,11 +105,21 @@ async function loadMockOrganizationData(state: AppViewState): Promise<void> {
 }
 
 /**
- * 创建组织
+ * 创建组织（支持沙箱隔离配置）
  */
 export async function createOrganization(
   state: AppViewState,
   org: { name: string; description: string; parentId: string },
+  sandboxConfig?: {
+    enabled: boolean;
+    containerPrefixHint: string;
+    workspaceRoot: string;
+    network: string;
+    image: string;
+    memory: string;
+    cpus: string;
+    pidsLimit: string;
+  },
 ): Promise<void> {
   if (state.organizationsSaving) {
     return;
@@ -119,19 +129,37 @@ export async function createOrganization(
   state.organizationsError = null;
 
   try {
-    // 调用后端API创建组织
     if (state.client) {
-      await state.client.request("organization.create", org);
+      const params: Record<string, unknown> = {
+        creatorId: "admin",
+        name: org.name,
+        description: org.description,
+        parentId: org.parentId || undefined,
+      };
+      if (sandboxConfig?.enabled) {
+        params.sandboxConfig = {
+          enabled: true,
+          containerPrefixHint: sandboxConfig.containerPrefixHint || undefined,
+          workspaceRoot: sandboxConfig.workspaceRoot || undefined,
+          network: sandboxConfig.network || undefined,
+          image: sandboxConfig.image || undefined,
+          resourceQuota:
+            sandboxConfig.memory || sandboxConfig.cpus || sandboxConfig.pidsLimit
+              ? {
+                  memory: sandboxConfig.memory || undefined,
+                  cpus: sandboxConfig.cpus ? parseFloat(sandboxConfig.cpus) : undefined,
+                  pidsLimit: sandboxConfig.pidsLimit ? parseInt(sandboxConfig.pidsLimit) : undefined,
+                }
+              : undefined,
+        };
+      }
+      await state.client.request("org.department.create", params);
     } else {
-      // 开发模式：模拟延迟
-      console.log("Creating organization:", org);
+      console.log("Creating organization:", org, sandboxConfig);
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
-    // 重新加载组织数据
     await loadOrganizationData(state);
-
-    // 关闭对话框
     state.editingOrganization = null;
   } catch (err: unknown) {
     const error = err as Error;
@@ -157,19 +185,20 @@ export async function updateOrganization(
   state.organizationsError = null;
 
   try {
-    // 调用后端API更新组织
     if (state.client) {
-      await state.client.request("organization.update", org);
+      await state.client.request("org.department.update", {
+        operatorId: "admin",
+        id: org.id,
+        name: org.name,
+        description: org.description,
+        parentId: org.parentId || undefined,
+      });
     } else {
-      // 开发模式：模拟延迟
       console.log("Updating organization:", org);
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
-    // 重新加载组织数据
     await loadOrganizationData(state);
-
-    // 关闭对话框
     state.editingOrganization = null;
   } catch (err: unknown) {
     const error = err as Error;
@@ -177,6 +206,107 @@ export async function updateOrganization(
     console.error("Failed to update organization:", err);
   } finally {
     state.organizationsSaving = false;
+  }
+}
+
+/**
+ * 保存部门沙箱隔离配置
+ */
+export async function saveSandboxConfig(
+  state: AppViewState,
+  deptId: string,
+  config: {
+    enabled: boolean;
+    containerPrefixHint: string;
+    workspaceRoot: string;
+    network: string;
+    image: string;
+    memory: string;
+    cpus: string;
+    pidsLimit: string;
+  },
+): Promise<void> {
+  if (!state.editingSandbox || state.editingSandbox.saving) {
+    return;
+  }
+
+  state.editingSandbox.saving = true;
+  state.editingSandbox.error = null;
+
+  try {
+    if (state.client) {
+      await state.client.request("org.department.update_sandbox", {
+        operatorId: "admin",
+        departmentId: deptId,
+        sandboxConfig: {
+          enabled: config.enabled,
+          containerPrefixHint: config.containerPrefixHint || undefined,
+          workspaceRoot: config.workspaceRoot || undefined,
+          network: config.network || undefined,
+          image: config.image || undefined,
+          resourceQuota:
+            config.memory || config.cpus || config.pidsLimit
+              ? {
+                  memory: config.memory || undefined,
+                  cpus: config.cpus ? parseFloat(config.cpus) : undefined,
+                  pidsLimit: config.pidsLimit ? parseInt(config.pidsLimit) : undefined,
+                }
+              : undefined,
+        },
+      });
+    } else {
+      console.log("Saving sandbox config:", deptId, config);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    await loadOrganizationData(state);
+    state.editingSandbox = null;
+  } catch (err: unknown) {
+    const error = err as Error;
+    if (state.editingSandbox) {
+      state.editingSandbox.error = error.message || "保存沙箱配置失败";
+    }
+    console.error("Failed to save sandbox config:", err);
+  } finally {
+    if (state.editingSandbox) {
+      state.editingSandbox.saving = false;
+    }
+  }
+}
+
+/**
+ * 加载部门沙箱摘要信息
+ */
+export async function loadSandboxSummary(
+  state: AppViewState,
+  deptId: string,
+): Promise<void> {
+  if (!state.editingSandbox) {
+    return;
+  }
+
+  state.editingSandbox.loading = true;
+
+  try {
+    if (state.client) {
+      const summary = await state.client.request<{
+        enabled: boolean;
+        containerPrefix: string;
+        workspaceRoot: string;
+        network?: string;
+        hasResourceQuota: boolean;
+        crossDeptMountCount: number;
+      } | null>("org.department.sandbox_info", { departmentId: deptId });
+      if (state.editingSandbox) {
+        state.editingSandbox.summary = summary ?? null;
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to load sandbox summary:", err);
+  } finally {
+    if (state.editingSandbox) {
+      state.editingSandbox.loading = false;
+    }
   }
 }
 

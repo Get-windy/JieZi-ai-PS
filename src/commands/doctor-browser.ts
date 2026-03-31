@@ -2,9 +2,9 @@ import {
   parseBrowserMajorVersion,
   readBrowserVersion,
   resolveGoogleChromeExecutableForPlatform,
-} from "../browser/chrome.executables.js";
-import type { OpenClawConfig } from "../config/config.js";
-import { note } from "../terminal/note.js";
+} from "../../upstream/src/plugin-sdk/browser-runtime.js";
+import type { OpenClawConfig } from "../../upstream/src/config/config.js";
+import { note } from "../../upstream/src/terminal/note.js";
 
 const CHROME_MCP_MIN_MAJOR = 144;
 const REMOTE_DEBUGGING_PAGES = [

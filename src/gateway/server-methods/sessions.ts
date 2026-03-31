@@ -7,7 +7,7 @@ import { clearBootstrapSnapshot } from "../../../upstream/src/agents/bootstrap-c
 import { abortEmbeddedPiRun, waitForEmbeddedPiRunEnd } from "../../../upstream/src/agents/pi-embedded.js";
 import { stopSubagentsForRequester } from "../../auto-reply/reply/abort.js";
 import { clearSessionQueues } from "../../../upstream/src/auto-reply/reply/queue.js";
-import { closeTrackedBrowserTabsForSessions } from "../../../upstream/src/browser/session-tab-registry.js";
+import { closeTrackedBrowserTabsForSessions } from "../../../upstream/src/plugin-sdk/browser-runtime.js";
 import { loadConfig } from "../../../upstream/src/config/config.js";
 import {
   loadSessionStore,

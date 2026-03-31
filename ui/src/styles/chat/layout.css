@@ -139,16 +139,21 @@
 }
 
 /* Chat compose - sticky at bottom */
+/* 布局-P0 修复：position:sticky 在 flex 容器 overflow:hidden 下无效。
+   业界最佳实践：改为 flex-shrink:0 贴靠父容器底部，不依赖 sticky。
+   chat-main-area 是 flex-direction:column + overflow:hidden，chat-compose 已是最后一个元素，自然被按到底部。
+   保留 sticky 作为兼容安全网，同时加 flex-shrink:0 为主要锁底机制。 */
 .chat-compose {
-  position: sticky;
-  bottom: 0;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: auto; /* Push to bottom of flex container */
   padding: 12px 4px 4px;
-  background: linear-gradient(to bottom, transparent, var(--bg) 20%);
+  /* sticky 不在 overflow:hidden 内生效，但保留作为额外兼容手段 */
+  position: sticky;
+  bottom: 0;
+  /* 布局-P2 修复：渐变起点提前到 30%，避免 20% 处突变闪烁 */
+  background: linear-gradient(to bottom, transparent, var(--bg) 30%);
   z-index: 10;
 }
 
@@ -218,6 +223,44 @@
   stroke-width: 2px;
 }
 
+/* 布局-P1 修复：非图片附件预览样式（PDF/文本类型）
+   对应 chat-compose.ts 中 renderAttachmentPreview 新增的 chat-attachment--file 元素 */
+.chat-attachment--file {
+  width: auto;
+  min-width: 80px;
+  max-width: 180px;
+  height: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 12px;
+  overflow: hidden;
+}
+
+.chat-attachment__file-icon {
+  font-size: 24px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.chat-attachment__file-name {
+  font-size: 11px;
+  color: var(--text);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+  line-height: 1.3;
+}
+
+:root[data-theme="light"] .chat-attachment--file {
+  background: #f8fafc;
+  border-color: rgba(16, 24, 40, 0.12);
+}
+
 /* Light theme attachment overrides */
 :root[data-theme="light"] .chat-attachments {
   background: #f8fafc;
@@ -268,7 +311,7 @@
 }
 
 :root[data-theme="light"] .chat-compose {
-  background: linear-gradient(to bottom, transparent, var(--bg-content) 20%);
+  background: linear-gradient(to bottom, transparent, var(--bg-content) 30%);
 }
 
 .chat-compose__field {
@@ -284,11 +327,14 @@
 }
 
 /* Override .field textarea min-height (180px) from components.css */
+/* 布局-P0 修复：CSS max-height: 150px 与 JS adjustTextareaHeight(viewport*30%) 冲突。
+   CSS 层不设置 max-height，全局由 JS 控制上限应当是单一责任方。
+   业界最佳实践（Linear / Cursor）：CSS 只定义最小高度和基础行为，动态高度由 JS resize observer 控制。 */
 .chat-compose .chat-compose__field textarea {
   width: 100%;
   height: 40px;
   min-height: 40px;
-  max-height: 150px;
+  /* 删除 max-height 硬编码，由 adjustTextareaHeight() JS 函数动态控制上限 */
   padding: 9px 12px;
   border-radius: 8px;
   overflow-y: auto;

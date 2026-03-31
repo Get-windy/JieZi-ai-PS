@@ -6,7 +6,7 @@
  */
 import { html, nothing } from "lit";
 import { t } from "../i18n.ts";
-import type { ChatConversationContext } from "../types.ts";
+import type { ChatConversationContext, MessageTrustMeta, MessageSourceKind } from "../types.ts";
 import type { ChatProps } from "../types/chat-props.ts";
 
 // ============ 监控视图工具函数 ============
@@ -37,6 +37,74 @@ function getMonitorColor(index: number, isDark = false): MonitorColorScheme {
   return palette[index % palette.length];
 }
 
+/** 提取消息中的可信元数据（防守 A4/A5/A6） */
+function extractTrustMeta(msg: unknown): MessageTrustMeta | null {
+  const m = msg as Record<string, unknown>;
+  const trust = m.__trustMeta as MessageTrustMeta | undefined;
+  if (trust) {
+    return trust;
+  }
+  // 尝试从字段推断来源类型
+  const role = typeof m.role === "string" ? m.role.toLowerCase() : "";
+  if (role === "user") {
+    return { sourceKind: "human" };
+  }
+  if (role === "system" || role === "toolresult") {
+    return { sourceKind: "system" };
+  }
+  // interagent 信号
+  const interagent = m.__interagent as Record<string, unknown> | undefined;
+  if (interagent) {
+    return {
+      sourceKind: "agent-auto",
+      senderDeptId: typeof interagent.senderDeptId === "string" ? interagent.senderDeptId : undefined,
+      senderDeptName: typeof interagent.senderDeptName === "string" ? interagent.senderDeptName : undefined,
+      sandboxed: typeof interagent.sandboxed === "boolean" ? interagent.sandboxed : undefined,
+      guardPassed: typeof interagent.guardPassed === "boolean" ? interagent.guardPassed : undefined,
+    };
+  }
+  return { sourceKind: "agent-auto" };
+}
+
+/** 渲染消息来源类型标识（防守 A6） */
+function renderSourceKindBadge(kind: MessageSourceKind, sandboxed?: boolean) {
+  const labels: Record<MessageSourceKind, string> = {
+    "human": "👤 人类",
+    "agent-auto": "🤖 Agent自动",
+    "agent-prompted": "🤖 Agent回复",
+    "system": "⚙️ 系统",
+    "cross-dept": "🔗 跨部门",
+  };
+  const colors: Record<MessageSourceKind, string> = {
+    "human": "#3b82f6",
+    "agent-auto": "#8b5cf6",
+    "agent-prompted": "#6366f1",
+    "system": "#6b7280",
+    "cross-dept": "#f59e0b",
+  };
+  const label = labels[kind] ?? kind;
+  const color = colors[kind] ?? "#6b7280";
+  return html`
+    <span
+      style="font-size:0.65em; padding:1px 4px; border-radius:3px; border:1px solid ${color}; color:${color}; opacity:0.85; margin-left:4px; white-space:nowrap;"
+    >${label}${sandboxed ? " 📦" : ""}</span>
+  `;
+}
+
+/** 渲染部门隔离徽章（防守 A4） */
+function renderDeptBadge(deptName?: string, guardPassed?: boolean) {
+  if (!deptName) {
+    return nothing;
+  }
+  const guardIcon = guardPassed === false
+    ? html`<span title="跨部门防守未通过" style="color:#ef4444;"> ⚠️</span>`
+    : nothing;
+  return html`
+    <span
+      style="font-size:0.65em; padding:1px 4px; border-radius:3px; background:rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.3); color:#6366f1; margin-left:3px; white-space:nowrap;"
+    >🏢 ${deptName}${guardIcon}</span>
+  `;
+}
 /** 提取消息中的发送者 id（支持 __interagent / provenance / __group_sender_id） */
 function extractMonitorSenderId(msg: unknown): string | null {
   const m = msg as Record<string, unknown>;
@@ -74,6 +142,9 @@ function renderMonitorBubble(
   if (isSystem) {
     return nothing;
   }
+
+  // 提取可信元数据（防守 A4/A5/A6）
+  const trust = extractTrustMeta(m);
 
   const color =
     senderId && agentColorMap.has(senderId)
@@ -121,6 +192,8 @@ function renderMonitorBubble(
     <div class="monitor-bubble ${alignRight ? "monitor-bubble--right" : "monitor-bubble--left"}">
       <div class="monitor-bubble__meta" style="color:${color.label}">
         <span class="monitor-bubble__sender">${senderLabel}</span>
+        ${trust ? renderSourceKindBadge(trust.sourceKind, trust.sandboxed) : nothing}
+        ${trust ? renderDeptBadge(trust.senderDeptName, trust.guardPassed) : nothing}
         <span class="monitor-bubble__time">${timeStr}</span>
       </div>
       <div
@@ -138,10 +211,11 @@ export function renderMonitorView(props: ChatProps) {
   const context = props.navCurrentContext;
   const allAgents = props.agentsList?.agents ?? [];
 
-  // 建立 sender → 颜色/名称 映射
+  // 对抗-P1 修复：将 agentColorMap/agentNameMap 构建提升到渲染之前，且只构建一次
+  // 原实现在消息气泡内部每条消息渲染时都会 find()—O(N) 的毅性配色逻辑
+  // 现在：统一在 renderMonitorView 构建 Map，传入气泡渲染器—O(1) 查询
   const agentColorMap = new Map<string, MonitorColorScheme>();
   const agentNameMap = new Map<string, string>();
-  // user 始终占最后一个颜色
   allAgents.forEach((a, i) => {
     agentColorMap.set(a.id, getMonitorColor(i));
     agentNameMap.set(a.id, a.identity?.name || a.name || a.id);
@@ -154,7 +228,8 @@ export function renderMonitorView(props: ChatProps) {
   });
   agentNameMap.set("user", t("chat.monitor.user"));
 
-  // 解析对话主题
+  // 对抗-P1 修复：补齐 dept-room/dept-broadcast 的 monitorTitle/monitorDesc
+  // 原实现对这两种 context 没有处理，导致内容显示默认文本（监控视图标题）
   let monitorTitle = t("chat.monitor.title");
   let monitorDesc = "";
   if (context?.type === "contact") {
@@ -172,6 +247,21 @@ export function renderMonitorView(props: ChatProps) {
       (context as { agentId: string }).agentId;
     monitorTitle = t("chat.monitor.agent_all_title", { agent: agentName });
     monitorDesc = t("chat.monitor.agent_all_desc");
+  } else if (context?.type === "dept-room") {
+    // 对抗-P1：补齐部门聊天室的监控标题
+    const deptName = context.deptName ?? context.deptId;
+    const sandboxNote = context.sandboxEnabled ? " (Docker 沙笲隔离已启用)" : "";
+    monitorTitle = `🏢 ${deptName}${sandboxNote}`;
+    monitorDesc = context.isMember === false
+      ? "您不是该部门成员，只读观察模式"
+      : `部门聊天室 · 共 ${context.memberAgentIds?.length ?? 0} 个 Agent 成员`;
+  } else if (context?.type === "dept-broadcast") {
+    // 对抗-P1：补齐部门广播频道的监控标题
+    const deptName = context.deptName ?? context.deptId;
+    monitorTitle = `📢 ${deptName} · 广播频道`;
+    monitorDesc = context.isAdmin
+      ? "您是管理员，可发布广播消息"
+      : "只读广播，只有管理员可发言";
   }
 
   const messages = Array.isArray(props.messages) ? props.messages : [];
@@ -257,5 +347,12 @@ export function isMonitorContext(context: ChatConversationContext | null): boole
   if (!context) {
     return false;
   }
-  return context.type === "contact" || context.type === "all" || context.type === "agent-all";
+  return (
+    context.type === "contact" ||
+    context.type === "all" ||
+    context.type === "agent-all" ||
+    // 部门广播和非成员的部门聊天室也进监控视图
+    context.type === "dept-broadcast" ||
+    (context.type === "dept-room" && context.isMember === false)
+  );
 }

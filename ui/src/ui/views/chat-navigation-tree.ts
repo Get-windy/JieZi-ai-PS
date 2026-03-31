@@ -109,6 +109,10 @@ function renderRootNode(node: ChatNavigationNode, props: ChatNavigationTreeProps
   const totalUnread = computeTotalUnread(node);
   const isActive = isSameContext(node.context, props.currentContext);
 
+  // nav5 修复：父节点已展开时不显示聚合 badge（子节点各自展示）
+  // 只有折叠时才在父节点显示汇总未读数（与 Slack 行为一致）
+  const showBadge = totalUnread > 0 && (!hasChildren || !expanded);
+
   return html`
     <div class="chat-nav-root">
       <div
@@ -133,7 +137,7 @@ function renderRootNode(node: ChatNavigationNode, props: ChatNavigationTreeProps
         <span class="chat-nav-root__icon">${node.icon}</span>
         <span class="chat-nav-root__label">${node.label}</span>
         ${
-          totalUnread > 0
+          showBadge
             ? html`<span class="chat-nav-badge">${totalUnread > 99 ? "99+" : totalUnread}</span>`
             : nothing
         }
@@ -159,6 +163,11 @@ function renderChildNode(
   props: ChatNavigationTreeProps,
   level: number,
 ): TemplateResult {
+  // 部门聊天室 / 部门广播 节点路由到专属渲染器
+  if (node.context.type === "dept-room" || node.context.type === "dept-broadcast") {
+    return renderDeptNavNode(node, props, level);
+  }
+
   const expanded = props.expandedNodeIds.has(node.id);
   const hasChildren = node.children && node.children.length > 0;
   const isActive = isSameContext(node.context, props.currentContext);
@@ -263,6 +272,56 @@ function computeTotalUnread(node: ChatNavigationNode): number {
     }
   }
   return total;
+}
+
+// ============ 部门节点渲染 ============
+
+/**
+ * 渲染部门聊天室入口节点（导航树内嵌入）
+ * 防守 A3：跨部门节点加 🔒 锁图标
+ */
+export function renderDeptNavNode(
+  node: ChatNavigationNode,
+  props: ChatNavigationTreeProps,
+  depth: number = 0,
+): TemplateResult {
+  const ctx = node.context;
+  const isDeptRoom = ctx.type === "dept-room";
+  const isDeptBroadcast = ctx.type === "dept-broadcast";
+  const isActive = isSameContext(ctx, props.currentContext);
+
+  // 部门成员身份
+  const isMember = isDeptRoom && (ctx as { isMember?: boolean }).isMember;
+  const isAdmin = isDeptBroadcast && (ctx as { isAdmin?: boolean }).isAdmin;
+  const sandboxEnabled = isDeptRoom && (ctx as { sandboxEnabled?: boolean }).sandboxEnabled;
+
+  // 权限标识：非成员显示锁
+  const accessIcon = (!isMember && !isAdmin && (isDeptRoom || isDeptBroadcast))
+    ? html`<span title="无权访问（非成员）" style="font-size:0.75em; opacity:0.6; margin-left:2px;">🔒</span>`
+    : nothing;
+
+  // 沙箱标识
+  const sandboxBadge = sandboxEnabled
+    ? html`<span title="Docker 沙箱隔离已启用" style="font-size:0.65em; color:var(--success, #22c55e); margin-left:2px;">📦</span>`
+    : nothing;
+
+  return html`
+    <div class="chat-nav-item chat-nav-item--level-${Math.min(depth, 3)} chat-nav-item--dept">
+      <div
+        class="chat-nav-item__content ${isActive ? "chat-nav-item--active" : ""}"
+        @click=${() => props.onSelectContext(ctx)}
+      >
+        <span class="chat-nav-item__icon">${node.icon}</span>
+        <span class="chat-nav-item__label">${node.label}</span>
+        ${accessIcon}
+        ${sandboxBadge}
+        ${node.unreadCount && node.unreadCount > 0
+          ? html`<span class="chat-nav-badge">${node.unreadCount > 99 ? "99+" : node.unreadCount}</span>`
+          : nothing
+        }
+      </div>
+    </div>
+  `;
 }
 
 // ============ 空状态渲染 ============

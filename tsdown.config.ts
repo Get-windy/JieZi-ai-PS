@@ -124,7 +124,11 @@ function upstreamOverlayPlugin() {
           }
           return localResult; // 本地有覆盖版本，使用它
         }
-        // 无本地覆盖，让默认解析处理 upstream 文件
+        // 无本地覆盖：显式解析 upstream 路径（处理 .js → .ts 映射），避免默认解析失败
+        const upstreamResult = tryResolveFile(absTarget);
+        if (upstreamResult) {
+          return upstreamResult;
+        }
       }
 
       // Case 4: 目标在 upstream/extensions/ 下 → 检查 extensions/ 是否有本地覆盖

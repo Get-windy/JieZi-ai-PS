@@ -5,11 +5,12 @@
  * 基于业界最佳实践（Jira Automation、Scrum Backlog Grooming）
  */
 
-import { chatHandlers } from "../../upstream/src/gateway/server-methods/chat.js";
-import type { GatewayRequestHandlerOptions } from "../../upstream/src/gateway/server-methods/types.js";
+import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
+import { requestHeartbeatNow } from "../../upstream/src/infra/heartbeat-wake.js";
 import { t } from "../i18n/index.js";
+import { normalizeAgentId } from "../routing/session-key.js";
 import * as storage from "./storage.js";
-import type { Task, TaskPriority } from "./types.js";
+import type { Task } from "./types.js";
 
 // ============================================================================
 // 配置参数
@@ -37,6 +38,63 @@ export const AGING_THRESHOLDS = {
   /** 阻塞状态超过 30 分钟无响应升级 */
   BLOCKED_ESCALATE: 30 * 60 * 1000,
 } as const;
+
+/**
+ * 按优先级差异化老化阈值（毫秒）
+ *
+ * 高优先级任务要求更激进的跟进策略，低优先级任务给予更宽松的处理时间
+ *
+ * 提醒阈值（remind）：
+ *   - urgent/high：20 分钟无活动即提醒
+ *   - medium：60 分钟（默认）
+ *   - low：3 小时
+ *
+ * 升级阈值（escalate）：
+ *   - urgent：30 分钟强制升级
+ *   - high：2 小时
+ *   - medium：6 小时（默认）
+ *   - low：12 小时
+ *
+ * 归档阈值（archive）：
+ *   - urgent/high：不自动归档（人工处理）
+ *   - medium：48 小时
+ *   - low：24 小时（低优先级任务更积极清理）
+ *
+ * 阻塞升级（blocked-escalate）：
+ *   - urgent：10 分钟即升级
+ *   - high：20 分钟
+ *   - medium：30 分钟（默认）
+ *   - low：60 分钟
+ */
+export const PRIORITY_AGING_THRESHOLDS: Record<
+  string,
+  { remind: number; escalate: number; archive: number | null; blockedEscalate: number }
+> = {
+  urgent: {
+    remind: 20 * 60 * 1000,
+    escalate: 30 * 60 * 1000,
+    archive: null, // urgent 不自动归档
+    blockedEscalate: 10 * 60 * 1000,
+  },
+  high: {
+    remind: 20 * 60 * 1000,
+    escalate: 2 * 60 * 60 * 1000,
+    archive: null, // high 不自动归档
+    blockedEscalate: 20 * 60 * 1000,
+  },
+  medium: {
+    remind: 60 * 60 * 1000,
+    escalate: 6 * 60 * 60 * 1000,
+    archive: 48 * 60 * 60 * 1000,
+    blockedEscalate: 30 * 60 * 1000,
+  },
+  low: {
+    remind: 3 * 60 * 60 * 1000,
+    escalate: 12 * 60 * 60 * 1000,
+    archive: 24 * 60 * 60 * 1000, // 低优先级任务积极清理
+    blockedEscalate: 60 * 60 * 1000,
+  },
+};
 
 /**
  * 任务老化级别
@@ -104,32 +162,60 @@ export function getAgingLevel(task: Task): AgingLevel {
 }
 
 /**
- * 检查任务是否应该触发自动操作
+ * 检查任务是否应该触发自动操作（按优先级差异化阈值）
+ *
+ * urgent/high 使用更激进的触发时间，low 使用更宽松的时间
  */
 export function shouldTriggerAutoAction(task: Task, actionType: string): boolean {
   const agingLevel = getAgingLevel(task);
   const now = Date.now();
+  // 获取优先级对应的差异化阈值，无匹配则退化到全局阈值
+  const pThresholds = PRIORITY_AGING_THRESHOLDS[task.priority];
+  // 任务无活动时间（相对于最后活动或创建时间）
+  const lastActivity = task.timeTracking.lastActivityAt ?? task.updatedAt ?? task.createdAt;
+  const inactiveDuration = now - lastActivity;
 
   switch (actionType) {
     case "remind":
-      // 提醒：aging 级别以上且超过阈值
+      // 按优先级差异化提醒阈值
+      if (pThresholds) {
+        return agingLevel !== "fresh" && inactiveDuration >= pThresholds.remind;
+      }
+      // 兜底：aging 级别以上且超过默认阈值
       return agingLevel === "aging" && now - task.createdAt >= AGING_THRESHOLDS.UNASSIGNED_REMIND;
 
     case "escalate":
-      // 升级：stale 级别以上且超过阈值
+      // 按优先级差异化升级阈值
+      if (pThresholds) {
+        return (
+          (agingLevel === "stale" || agingLevel === "critical") &&
+          inactiveDuration >= pThresholds.escalate
+        );
+      }
       return (
         (agingLevel === "stale" || agingLevel === "critical") &&
         now - task.createdAt >= AGING_THRESHOLDS.UNASSIGNED_ESCALATE
       );
 
     case "archive":
-      // 归档：critical 级别且超过阈值
+      // urgent/high 不自动归档（需人工介入）
+      if (pThresholds) {
+        if (pThresholds.archive === null) return false;
+        return agingLevel === "critical" && inactiveDuration >= pThresholds.archive;
+      }
       return (
         agingLevel === "critical" && now - task.createdAt >= AGING_THRESHOLDS.UNASSIGNED_ARCHIVE
       );
 
     case "blocked-escalate":
-      // 阻塞升级
+      // 阻塞升级按优先级差异化
+      if (pThresholds) {
+        return (
+          task.status === "blocked" &&
+          now - (task.timeTracking.lastActivityAt ?? task.createdAt) >=
+            pThresholds.blockedEscalate
+        );
+      }
       return (
         task.status === "blocked" &&
         now - (task.timeTracking.lastActivityAt ?? task.createdAt) >=
@@ -146,42 +232,46 @@ export function shouldTriggerAutoAction(task: Task, actionType: string): boolean
 // ============================================================================
 
 /**
- * 发送老化任务提醒
+ * 发送老化任务提醒（程序直接注入系统事件，不依赖 agent 执行聊天）
  */
-export async function sendAgingReminder(task: Task, supervisorId: string): Promise<void> {
+export function sendAgingReminder(task: Task, supervisorId: string): void {
   try {
     const ageInDays = getTaskAgeInDays(task);
     const daysInactive = getDaysSinceLastActivity(task);
+    const assigneeList = task.assignees?.length
+      ? task.assignees.map((a) => a.id).join(", ")
+      : "unassigned";
 
     const reminderMessage = [
-      `⚠️ 任务老化提醒`,
+      `[TASK AGING REMINDER] A task has had no activity for ${daysInactive} day(s) and requires attention:`,
       ``,
-      `**任务**: ${task.title}`,
-      `**ID**: ${task.id}`,
-      `**年龄**: ${ageInDays} 天`,
-      `**最后活动**: ${daysInactive} 天前`,
-      `**当前状态**: ${task.status}`,
-      `**执行者**: ${task.assignees?.length ? task.assignees.map((a) => a.id).join(", ") : "未分配"}`,
+      `Task ID: ${task.id}`,
+      `Title: ${task.title}`,
+      `Status: ${task.status}`,
+      `Priority: ${task.priority}`,
+      `Age: ${ageInDays} day(s)`,
+      `Inactive: ${daysInactive} day(s)`,
+      `Assigned to: ${assigneeList}`,
+      task.projectId ? `Project: ${task.projectId}` : null,
       ``,
-      `该任务已经长时间没有进展，请及时处理：`,
-      `- 如果是重要任务，请立即分配给合适的执行者`,
-      `- 如果不再需要，请标记为 cancelled`,
-      `- 如果需要更多信息，请先更新任务描述`,
+      `Recommended actions:`,
+      `- If this task is important, assign it to an available agent immediately`,
+      `- If it is no longer needed, cancel it`,
+      `- If it is blocked, update the blockedBy field and escalate`,
     ]
       .filter(Boolean)
       .join("\n");
 
-    // 通过 chat.send 发送提醒
     const sessionKey = `agent:${supervisorId}:main`;
-    await new Promise<void>((resolve) => {
-      (chatHandlers["chat.send"] as unknown as (opts: GatewayRequestHandlerOptions) => void)({
-        params: {
-          sessionKey,
-          message: reminderMessage,
-          idempotencyKey: `aging-reminder-${task.id}-${Date.now()}`,
-        },
-        respond: () => resolve(),
-      } as unknown as GatewayRequestHandlerOptions);
+    enqueueSystemEvent(reminderMessage, {
+      sessionKey,
+      contextKey: `cron:task-aging-reminder:${task.id}`,
+    });
+    requestHeartbeatNow({
+      reason: `cron:task-aging-reminder:${task.id}`,
+      sessionKey,
+      agentId: supervisorId,
+      coalesceMs: 15000,
     });
 
     console.log(t("task.aging.reminder_sent", { taskId: task.id }));
@@ -191,45 +281,52 @@ export async function sendAgingReminder(task: Task, supervisorId: string): Promi
 }
 
 /**
- * 自动升级任务给主管
+ * 自动升级任务给主管（程序直接注入系统事件，不依赖 agent 执行聊天）
  */
-export async function escalateTask(task: Task, supervisorId: string): Promise<void> {
+export function escalateTask(task: Task, supervisorId: string): void {
   try {
     const ageInDays = getTaskAgeInDays(task);
     const daysInactive = getDaysSinceLastActivity(task);
+    const assigneeList = task.assignees?.length
+      ? task.assignees.map((a) => a.id).join(", ")
+      : "none";
+    const isHighPriority = task.priority === "urgent" || task.priority === "high";
 
     const escalationMessage = [
-      `🔴 任务升级通知`,
+      isHighPriority
+        ? `[TASK ESCALATION 🔴] High-priority task has been inactive for ${daysInactive} day(s) — immediate action required:`
+        : `[TASK ESCALATION] Task has been inactive for ${daysInactive} day(s) — action required:`,
       ``,
-      `**紧急**: 有任务长期未得到处理，需要立即关注！`,
+      `Task ID: ${task.id}`,
+      `Title: ${task.title}`,
+      `Priority: ${task.priority}`,
+      `Status: ${task.status}`,
+      `Age: ${ageInDays} day(s)`,
+      `Last activity: ${daysInactive} day(s) ago`,
+      `Creator: ${task.creatorId}`,
+      `Assigned to: ${assigneeList}`,
+      task.projectId ? `Project: ${task.projectId}` : null,
       ``,
-      `**任务**: ${task.title}`,
-      `**ID**: ${task.id}`,
-      `**年龄**: ${ageInDays} 天（已超过 14 天）`,
-      `**最后活动**: ${daysInactive} 天前`,
-      `**创建者**: ${task.creatorId}`,
-      `**当前执行者**: ${task.assignees?.length ? task.assignees.map((a) => a.id).join(", ") : "无人认领"}`,
+      `Required actions:`,
+      `1. Review whether this task is still necessary`,
+      `2. Reassign to an available agent if needed`,
+      `3. Cancel it if no longer required`,
       ``,
-      `**建议行动**:`,
-      `1. 立即审查该任务的必要性`,
-      `2. 分配给合适的团队成员`,
-      `3. 或者标记为不再需要`,
-      ``,
-      `请在 24 小时内处理此任务，否则将自动降低优先级或归档。`,
+      `Note: If no action is taken within the escalation window, the task will be automatically cancelled.`,
     ]
       .filter(Boolean)
       .join("\n");
 
     const sessionKey = `agent:${supervisorId}:main`;
-    await new Promise<void>((resolve) => {
-      (chatHandlers["chat.send"] as unknown as (opts: GatewayRequestHandlerOptions) => void)({
-        params: {
-          sessionKey,
-          message: escalationMessage,
-          idempotencyKey: `aging-escalation-${task.id}-${Date.now()}`,
-        },
-        respond: () => resolve(),
-      } as unknown as GatewayRequestHandlerOptions);
+    enqueueSystemEvent(escalationMessage, {
+      sessionKey,
+      contextKey: `cron:task-escalation:${task.id}`,
+    });
+    requestHeartbeatNow({
+      reason: `cron:task-escalation:${task.id}`,
+      sessionKey,
+      agentId: supervisorId,
+      coalesceMs: 10000,
     });
 
     console.log(t("task.aging.escalated", { taskId: task.id }));
@@ -239,22 +336,57 @@ export async function escalateTask(task: Task, supervisorId: string): Promise<vo
 }
 
 /**
- * 自动归档过期任务
+ * 自动取消长期无人处理的过期任务
+ *
+ * 直接由程序修改任务状态为 cancelled，无需 agent 介入。
+ * urgent/high 任务不自动取消（已在 PRIORITY_AGING_THRESHOLDS 中 archive=null）。
  */
 export async function archiveStaleTask(task: Task): Promise<void> {
   try {
-    // 降低优先级并标记为待归档
-    const newPriority: TaskPriority = "low";
-
+    const ageInDays = getTaskAgeInDays(task);
     await storage.updateTask(task.id, {
-      priority: newPriority,
+      status: "cancelled",
+      cancelReason: `Auto-cancelled: no activity for ${ageInDays} day(s)`,
+      cancelledAt: Date.now(),
       metadata: {
         ...task.metadata,
         autoArchived: true,
-        archivedReason: `长期未处理（${getTaskAgeInDays(task)} 天）`,
+        archivedReason: `Auto-cancelled after ${ageInDays} days of inactivity`,
         archivedAt: Date.now(),
       },
     });
+
+    // 通知 supervisor（纯系统事件，不依赖 agent 执行）
+    const supervisorRaw =
+      (task.metadata?.supervisorId as string | undefined) ?? task.supervisorId ?? task.creatorId;
+    if (supervisorRaw && supervisorRaw !== "system") {
+      const supervisorId = normalizeAgentId(supervisorRaw);
+      const sessionKey = `agent:${supervisorId}:main`;
+      const msg = [
+        `[TASK AUTO-CANCELLED] A stale task has been automatically cancelled due to prolonged inactivity:`,
+        ``,
+        `Task ID: ${task.id}`,
+        `Title: ${task.title}`,
+        `Priority: ${task.priority}`,
+        `Age: ${ageInDays} day(s)`,
+        task.assignees?.length ? `Was assigned to: ${task.assignees.map((a) => a.id).join(", ")}` : null,
+        task.projectId ? `Project: ${task.projectId}` : null,
+        ``,
+        `If this task should NOT have been cancelled, use agent_task_manage to restore it.`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+      enqueueSystemEvent(msg, {
+        sessionKey,
+        contextKey: `cron:task-auto-cancelled:${task.id}`,
+      });
+      requestHeartbeatNow({
+        reason: `cron:task-auto-cancelled:${task.id}`,
+        sessionKey,
+        agentId: supervisorId,
+        coalesceMs: 15000,
+      });
+    }
 
     console.log(t("task.aging.archived", { taskId: task.id }));
   } catch (error) {
@@ -264,6 +396,12 @@ export async function archiveStaleTask(task: Task): Promise<void> {
 
 /**
  * 自动重新分配阻塞任务
+ *
+ * 查找空闲 Agent，将阻塞任务通知给 supervisor 并请求协助。
+ * 由于 agent_discover 是 RPC 工具（需通过 agent 调用），此处改为：
+ * 1. 将任务状态标记为 blocked（已有）并更新 metadata 中的阻塞次数
+ * 2. 向 supervisor 发送告警，附带诊断信息和建议行动
+ * 3. 若任务优先级为 urgent/high 且阻塞超过阈值，同时向所有 assignee 重发提醒
  */
 export async function reassignBlockedTask(task: Task, _projectId?: string): Promise<void> {
   try {
@@ -271,12 +409,97 @@ export async function reassignBlockedTask(task: Task, _projectId?: string): Prom
       return; // 未分配的任务不处理
     }
 
-    // 尝试找到其他可用的执行者
-    // 这里可以集成能力发现系统
-    console.log(t("task.aging.blocked_reassign", { taskId: task.id }));
+    const now = Date.now();
+    const blockedSinceMs = now - (task.timeTracking.lastActivityAt ?? task.createdAt);
+    const blockedMinutes = Math.floor(blockedSinceMs / 60000);
 
-    // TODO: 调用 agent_discover 查找有相关能力的 Agent
-    // TODO: 自动重新分配或添加协作者
+    console.log(
+      `[Task Aging] Reassigning blocked task ${task.id} (${task.priority}) — blocked for ${blockedMinutes}min`,
+    );
+
+    // 更新 metadata：记录阻塞次数与最近阻塞时间，方便后续决策
+    const blockCount = ((task.metadata?.blockCount as number | undefined) ?? 0) + 1;
+    await storage.updateTask(task.id, {
+      metadata: {
+        ...task.metadata,
+        blockCount,
+        lastBlockedAt: now,
+      },
+    });
+
+    // 向 supervisor 发送告警
+    const supervisorRaw =
+      (task.metadata?.supervisorId as string | undefined) ?? task.supervisorId ?? task.creatorId;
+    if (supervisorRaw && supervisorRaw !== "system") {
+      const supervisorId = normalizeAgentId(supervisorRaw);
+      const supervisorSession = `agent:${supervisorId}:main`;
+      const assigneeList = task.assignees.map((a) => a.id).join(", ");
+      const isHighPriority = task.priority === "urgent" || task.priority === "high";
+
+      const alertLines = [
+        isHighPriority
+          ? `[BLOCKED TASK ALERT 🔴] High-priority task is blocked and requires immediate action:`
+          : `[BLOCKED TASK ALERT] A task is blocked and needs your attention:`,
+        ``,
+        `Task ID: ${task.id}`,
+        `Title: ${task.title}`,
+        `Priority: ${task.priority}`,
+        `Assigned to: ${assigneeList}`,
+        task.projectId ? `Project: ${task.projectId}` : null,
+        `Blocked for: ${blockedMinutes} minutes (blocked count: ${blockCount})`,
+        task.description ? `Description: ${task.description.slice(0, 200)}` : null,
+        ``,
+        `Suggested actions:`,
+        `1. Check why the assignee is blocked — ask them directly via chat`,
+        `2. Use agent_task_manage to reassign to another available agent`,
+        `3. Use agent_task_manage action=unblock if the blocker has been resolved`,
+        `4. If no one can help, cancel the task with a clear reason`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      enqueueSystemEvent(alertLines, {
+        sessionKey: supervisorSession,
+        contextKey: `cron:task-blocked-alert:${task.id}`,
+      });
+      requestHeartbeatNow({
+        reason: `cron:task-blocked:${task.id}`,
+        sessionKey: supervisorSession,
+        agentId: supervisorId,
+        coalesceMs: 10000,
+      });
+    }
+
+    // urgent/high 且多次阻塞：同时重发提醒给所有 assignee，要求主动汇报阻塞原因
+    const blockCount2 = (task.metadata?.blockCount as number | undefined) ?? blockCount;
+    if ((task.priority === "urgent" || task.priority === "high") && blockCount2 >= 2) {
+      for (const assignee of task.assignees) {
+        const assigneeId = normalizeAgentId(assignee.id);
+        const assigneeSession = `agent:${assigneeId}:main`;
+        const unblockMsg = [
+          `[TASK UNBLOCK REQUEST] Your task has been blocked for ${blockedMinutes} minutes. Please report the blocker reason immediately:`,
+          ``,
+          `Task ID: ${task.id}`,
+          `Title: ${task.title}`,
+          `Priority: ${task.priority}`,
+          ``,
+          `If you cannot continue, use task_report_to_supervisor to explain the blocker.`,
+          `If the blocker is resolved, update the task status back to in-progress.`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        enqueueSystemEvent(unblockMsg, {
+          sessionKey: assigneeSession,
+          contextKey: `cron:task-unblock-request:${task.id}`,
+        });
+        requestHeartbeatNow({
+          reason: `cron:task-unblock:${task.id}`,
+          sessionKey: assigneeSession,
+          agentId: assigneeId,
+          coalesceMs: 10000,
+        });
+      }
+    }
   } catch (error) {
     console.error(t("task.aging.reassign_failed", { taskId: task.id }), error);
   }
@@ -289,7 +512,10 @@ export async function reassignBlockedTask(task: Task, _projectId?: string): Prom
 /**
  * 扫描所有项目中的老化任务并执行自动操作
  *
- * Agent 系统建议配置为每 10-30 分钟运行一次，确保任务不会积压！
+ * 所有可自动化的操作均由程序直接执行，不依赖 agent ：
+ * - 优先级升级、状态变更、归档取消均由程序写 storage
+ * - 通知/提醒将通过 enqueueSystemEvent 直接推送，不过 chatHandlers
+ * - 阻塞任务的依赖检测（blockedBy）由程序自动识别并解除
  */
 export async function scanAndProcessAgingTasks(options?: {
   projectId?: string;
@@ -300,18 +526,20 @@ export async function scanAndProcessAgingTasks(options?: {
   reminded: number;
   escalated: number;
   archived: number;
+  autoUnblocked: number;
 }> {
   const {
     projectId,
     enableReminders = true,
     enableEscalation = true,
-    enableArchive = false, // 默认不启用自动归档，需手动确认
+    enableArchive = true, // 程序直接执行，默认开启
   } = options ?? {};
 
   const stats = {
     reminded: 0,
     escalated: 0,
     archived: 0,
+    autoUnblocked: 0,
   };
 
   try {
@@ -327,49 +555,120 @@ export async function scanAndProcessAgingTasks(options?: {
 
     console.log(t("task.aging.scanning", { count: String(allTasks.length) }));
 
+    // 构建已完成任务的快速查找表，用于自动解除 blockedBy 依赖
+    const doneTasks = await storage.listTasks({ projectId, status: ["done"] });
+    const doneTaskIds = new Set(doneTasks.map((t) => t.id));
+
     for (const task of allTasks) {
       try {
-        // 检查是否需要提醒
-        if (enableReminders && shouldTriggerAutoAction(task, "remind")) {
-          const supervisorId = (task.metadata?.supervisorId as string) ?? task.creatorId;
-          if (supervisorId) {
-            await sendAgingReminder(task, supervisorId);
-            stats.reminded++;
-
-            // 记录已提醒，避免重复
+        // === 自动解除阻塞：程序检测依赖任务是否已全部完成 ===
+        // 这一部分完全由程序自动完成，不依赖 agent
+        if (task.status === "blocked" && task.blockedBy && task.blockedBy.length > 0) {
+          const allBlockersResolved = task.blockedBy.every((blockerId) =>
+            doneTaskIds.has(blockerId),
+          );
+          if (allBlockersResolved) {
             await storage.updateTask(task.id, {
+              status: "todo",
+              blockedBy: [],
+              timeTracking: {
+                ...task.timeTracking,
+                lastActivityAt: Date.now(),
+              },
               metadata: {
                 ...task.metadata,
-                lastRemindedAt: Date.now(),
+                autoUnblockedAt: Date.now(),
               },
+            });
+            console.log(
+              `[Task Aging] Auto-unblocked task ${task.id} (all ${task.blockedBy.length} blocker(s) resolved)`,
+            );
+            stats.autoUnblocked++;
+            // 通知相关人员
+            const notifyRaw =
+              (task.metadata?.supervisorId as string | undefined) ??
+              task.supervisorId ??
+              task.creatorId;
+            if (notifyRaw && notifyRaw !== "system") {
+              const notifyId = normalizeAgentId(notifyRaw);
+              const sessionKey = `agent:${notifyId}:main`;
+              enqueueSystemEvent(
+                [
+                  `[TASK AUTO-UNBLOCKED] A blocked task has been automatically unblocked as all its dependencies are now done:`,
+                  ``,
+                  `Task ID: ${task.id}`,
+                  `Title: ${task.title}`,
+                  `Priority: ${task.priority}`,
+                  task.projectId ? `Project: ${task.projectId}` : null,
+                  `Resolved blockers: ${task.blockedBy.join(", ")}`,
+                  ``,
+                  `The task has been reset to todo and will be picked up by the next scheduling cycle.`,
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+                { sessionKey, contextKey: `cron:task-auto-unblocked:${task.id}` },
+              );
+              requestHeartbeatNow({
+                reason: `cron:task-auto-unblocked:${task.id}`,
+                sessionKey,
+                agentId: notifyId,
+                coalesceMs: 10000,
+              });
+            }
+            continue; // 解除提醒后不再老化扫描
+          }
+        }
+
+        // 记录上次提醒/升级时间，避免同一轮内重复操作
+        const lastRemindedAt = (task.metadata?.lastRemindedAt as number | undefined) ?? 0;
+        const lastEscalatedAt = (task.metadata?.lastEscalatedAt as number | undefined) ?? 0;
+        const now = Date.now();
+        // 提醒冷却 30 分钟（避免当局内重复提醒）
+        const REMIND_COOLDOWN = 30 * 60 * 1000;
+        // 升级冷却 60 分钟
+        const ESCALATE_COOLDOWN = 60 * 60 * 1000;
+
+        // 检查是否需要提醒
+        if (
+          enableReminders &&
+          now - lastRemindedAt > REMIND_COOLDOWN &&
+          shouldTriggerAutoAction(task, "remind")
+        ) {
+          const supervisorId = (task.metadata?.supervisorId as string) ?? task.supervisorId ?? task.creatorId;
+          if (supervisorId && supervisorId !== "system") {
+            sendAgingReminder(task, normalizeAgentId(supervisorId));
+            stats.reminded++;
+            // 程序直接更新元数据，不依赖 agent
+            await storage.updateTask(task.id, {
+              metadata: { ...task.metadata, lastRemindedAt: now },
             });
           }
         }
 
         // 检查是否需要升级
-        if (enableEscalation && shouldTriggerAutoAction(task, "escalate")) {
-          const supervisorId = (task.metadata?.supervisorId as string) ?? task.creatorId;
-          if (supervisorId) {
-            await escalateTask(task, supervisorId);
+        if (
+          enableEscalation &&
+          now - lastEscalatedAt > ESCALATE_COOLDOWN &&
+          shouldTriggerAutoAction(task, "escalate")
+        ) {
+          const supervisorId = (task.metadata?.supervisorId as string) ?? task.supervisorId ?? task.creatorId;
+          if (supervisorId && supervisorId !== "system") {
+            escalateTask(task, normalizeAgentId(supervisorId));
             stats.escalated++;
-
-            // 记录已升级
             await storage.updateTask(task.id, {
-              metadata: {
-                ...task.metadata,
-                lastEscalatedAt: Date.now(),
-              },
+              metadata: { ...task.metadata, lastEscalatedAt: now },
             });
           }
         }
 
-        // 检查是否需要归档
+        // 检查是否需要自动取消（程序直接执行）
         if (enableArchive && shouldTriggerAutoAction(task, "archive")) {
           await archiveStaleTask(task);
           stats.archived++;
+          continue; // 已取消，跳过后续检测
         }
 
-        // 检查阻塞任务
+        // 检查阻塞任务（输出系统提醒 + 更新阻塞记录）
         if (shouldTriggerAutoAction(task, "blocked-escalate")) {
           await reassignBlockedTask(task, projectId);
         }
@@ -378,13 +677,15 @@ export async function scanAndProcessAgingTasks(options?: {
       }
     }
 
-    console.log(
-      t("task.aging.scan_complete", {
-        reminded: String(stats.reminded),
-        escalated: String(stats.escalated),
-        archived: String(stats.archived),
-      }),
-    );
+    if (stats.reminded > 0 || stats.escalated > 0 || stats.archived > 0 || stats.autoUnblocked > 0) {
+      console.log(
+        t("task.aging.scan_complete", {
+          reminded: String(stats.reminded),
+          escalated: String(stats.escalated),
+          archived: String(stats.archived),
+        }) + ` (auto-unblocked: ${stats.autoUnblocked})`,
+      );
+    }
   } catch (error) {
     console.error(t("task.aging.scan_failed"), error);
   }

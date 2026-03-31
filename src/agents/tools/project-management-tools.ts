@@ -192,7 +192,7 @@ export function createProjectCreateTool(): AnyAgentTool {
           `- Project ID: ${finalProjectId}`,
           `- Owner: ${ownerId}`,
           `- Workspace: ${workspacePath}`,
-          `- Code Directory: ${finalCodeDir}`,
+          `- Code Directory: ${finalCodeDir ?? ""}`,
           ``,
         ];
 

@@ -71,6 +71,8 @@ export function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup>
   const tools = Array.isArray(props.toolMessages) ? props.toolMessages : [];
   const historyStart = Math.max(0, history.length - CHAT_HISTORY_RENDER_LIMIT);
   if (historyStart > 0) {
+    // 对抗-P0 修复：截断提示明确显示「共N条，当前仅显示最新200条」
+    // 原版只显示「显示最新200条」，用户不知道有多少条被隐藏，无法判断是否需要刷新/导出
     items.push({
       kind: "message",
       key: "chat:history:notice",
@@ -79,6 +81,7 @@ export function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup>
         content: t("chat.history.showing", {
           count: CHAT_HISTORY_RENDER_LIMIT,
           hidden: historyStart,
+          total: history.length,
         }),
         timestamp: Date.now(),
       },
@@ -142,6 +145,12 @@ export function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup>
   return groupMessages(items);
 }
 
+/**
+ * 对抗-P0：messageKey 生成策略强化
+ * 原实现在无 id/toolCallId/timestamp 时降级为纯 index，导致消息列表在流式更新时
+ * repeat() 产生大量错误的 DOM 复用（新消息复用旧节点）。
+ * 改进：用 role+content摘要+index 三重兜底，大幅降低冲突概率。
+ */
 function messageKey(message: unknown, index: number): string {
   const m = message as Record<string, unknown>;
   const toolCallId = typeof m.toolCallId === "string" ? m.toolCallId : "";
@@ -161,5 +170,17 @@ function messageKey(message: unknown, index: number): string {
   if (timestamp != null) {
     return `msg:${role}:${timestamp}:${index}`;
   }
-  return `msg:${role}:${index}`;
+  // 对抗-P0 修复：用内容摘要（前32字符hash-like替换）作为最后兜底，避免纯 index
+  const content = m.content;
+  let contentSnippet = "";
+  if (typeof content === "string") {
+    contentSnippet = content.slice(0, 32).replace(/\s+/g, "");
+  } else if (Array.isArray(content) && content.length > 0) {
+    const first = content[0] as Record<string, unknown>;
+    contentSnippet = typeof first.text === "string" ? first.text.slice(0, 32).replace(/\s+/g, "") : "";
+  }
+  if (contentSnippet) {
+    return `msg:${role}:cs:${contentSnippet}:${index}`;
+  }
+  return `msg:${role}:idx:${index}`;
 }

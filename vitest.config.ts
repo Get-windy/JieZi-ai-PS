@@ -99,6 +99,11 @@ function vitestOverlayPlugin() {
         if (localResult && importer && path.normalize(localResult) !== path.normalize(importer)) {
           return localResult;
         }
+        // No local override: explicitly resolve upstream path (handles .js → .ts mapping)
+        const upstreamResult = tryResolveFile(absTarget);
+        if (upstreamResult) {
+          return upstreamResult;
+        }
       }
       // Case 4: target under upstream/extensions/ → prefer local extensions/ override
       if (absTarget.startsWith(UP_EXT_DIR + SEP) || absTarget === UP_EXT_DIR) {

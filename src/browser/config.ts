@@ -13,8 +13,8 @@ import {
   DEFAULT_BROWSER_EVALUATE_ENABLED,
   DEFAULT_BROWSER_DEFAULT_PROFILE_NAME,
   DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME,
-} from "../../upstream/src/browser/constants.js";
-import { CDP_PORT_RANGE_START, getUsedPorts } from "../../upstream/src/browser/profiles.js";
+} from "../../upstream/extensions/browser/src/browser/constants.js";
+import { CDP_PORT_RANGE_START, getUsedPorts } from "../../upstream/extensions/browser/src/browser/profiles.js";
 
 export type ResolvedBrowserConfig = {
   enabled: boolean;

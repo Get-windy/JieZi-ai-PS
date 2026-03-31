@@ -54,6 +54,7 @@ import {
   refreshGatewayHealthSnapshot,
 } from "../../upstream/src/gateway/server/health-state.js";
 import { loadGatewayTlsRuntime } from "../../upstream/src/gateway/server/tls.js";
+import { resolveHookClientIpConfig } from "../../upstream/src/gateway/server/hooks.js"; // upstream-only, no local override needed
 import { ensureGatewayStartupAuth } from "../../upstream/src/gateway/startup-auth.js";
 import { clearAgentRunContext, onAgentEvent } from "../../upstream/src/infra/agent-events.js";
 import {
@@ -95,13 +96,16 @@ import { initBenchmarkDB } from "../agents/arena-benchmarks.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
 import { createDefaultDeps } from "../cli/deps.js";
 import { isRestartEnabled } from "../config/commands.js";
-import { startAgentTaskWakeScheduler } from "../cron/agent-task-wake-scheduler.js";
+import { startAgentTaskWakeScheduler, stopAgentTaskWakeScheduler } from "../cron/agent-task-wake-scheduler.js";
+import { initTaskAgingScheduler } from "../cron/task-aging-scheduler.js";
+import { stopAgingTaskScheduler } from "../tasks/task-aging.js";
 import {
   initMemoryHygieneScheduler,
   stopMemoryHygieneScheduler,
 } from "../cron/memory-hygiene-scheduler.js";
 import { createExecApprovalForwarder } from "../infra/exec-approval-forwarder.js";
 import { startHeartbeatRunner, type HeartbeatRunner } from "../infra/heartbeat-runner.js";
+import { setActivePluginApprovalManager } from "./server-methods/approval.js";
 import { setGatewaySigusr1RestartPolicy, setPreRestartDeferralCheck } from "../infra/restart.js";
 import { startGatewayConfigReloader } from "./config-reload.js";
 import type { ControlUiRootState } from "./control-ui.js";
@@ -111,6 +115,7 @@ import { buildGatewayCronService } from "./server-cron.js";
 import { GATEWAY_EVENTS, listGatewayMethods } from "./server-methods-list.js";
 import { coreGatewayHandlers } from "./server-methods.js";
 import { createExecApprovalHandlers } from "./server-methods/exec-approval.js";
+import { createPluginApprovalHandlers } from "../../upstream/src/gateway/server-methods/plugin-approval.js";
 import { resolveGatewayRuntimeConfig } from "./server-runtime-config.js";
 import { logGatewayStartup } from "./server-startup-log.js";
 
@@ -333,7 +338,7 @@ export async function startGatewayServer(
   ) as Record<ChannelId, ReturnType<typeof createSubsystemLogger>>;
   const channelRuntimeEnvs = Object.fromEntries(
     Object.entries(channelLogs).map(([id, logger]) => [id, runtimeForLogger(logger)]),
-  ) as Record<ChannelId, RuntimeEnv>;
+  ) as unknown as Record<ChannelId, RuntimeEnv>;
   const channelMethods = listChannelPlugins().flatMap((plugin) => plugin.gatewayMethods ?? []);
   const gatewayMethods = Array.from(new Set([...baseGatewayMethods, ...channelMethods]));
   let pluginServices: PluginServicesHandle | null = null;
@@ -362,6 +367,7 @@ export async function startGatewayServer(
     tailscaleMode,
   } = runtimeConfig;
   let hooksConfig = runtimeConfig.hooksConfig;
+  let hookClientIpConfig = resolveHookClientIpConfig(cfgAtStart);
   const canvasHostEnabled = runtimeConfig.canvasHostEnabled;
 
   // Create auth rate limiter only when explicitly configured.
@@ -425,6 +431,7 @@ export async function startGatewayServer(
     chatRunState,
     chatRunBuffers,
     chatDeltaSentAt,
+    chatDeltaLastBroadcastLen,
     addChatRun,
     removeChatRun,
     chatAbortControllers,
@@ -444,6 +451,7 @@ export async function startGatewayServer(
     rateLimiter: authRateLimiter,
     gatewayTls,
     hooksConfig: () => hooksConfig,
+    getHookClientIpConfig: () => hookClientIpConfig,
     pluginRegistry,
     deps,
     canvasRuntime,
@@ -454,6 +462,9 @@ export async function startGatewayServer(
     logHooks,
     logPlugins,
   });
+  let transcriptUnsub: (() => void) | null = null;
+  let lifecycleUnsub: (() => void) | null = null;
+  let channelHealthMonitor: ReturnType<typeof startChannelHealthMonitor> | null = null;
   let bonjourStop: (() => Promise<void>) | null = null;
   const nodeRegistry = new NodeRegistry();
   const nodePresenceTimers = new Map<string, ReturnType<typeof setInterval>>();
@@ -551,6 +562,7 @@ export async function startGatewayServer(
       chatRunState,
       chatRunBuffers,
       chatDeltaSentAt,
+      chatDeltaLastBroadcastLen,
       removeChatRun,
       agentRunSeq,
       nodeSendToSession,
@@ -569,6 +581,7 @@ export async function startGatewayServer(
           resolveSessionKeyForRun,
           clearAgentRunContext,
           toolEventRecipients,
+          sessionEventSubscribers,
         }),
       );
 
@@ -587,7 +600,7 @@ export async function startGatewayServer(
 
   const healthCheckMinutes = cfgAtStart.gateway?.channelHealthCheckMinutes;
   const healthCheckDisabled = healthCheckMinutes === 0;
-  const channelHealthMonitor = healthCheckDisabled
+  channelHealthMonitor = healthCheckDisabled
     ? null
     : startChannelHealthMonitor({
         channelManager,
@@ -617,6 +630,14 @@ export async function startGatewayServer(
   const execApprovalHandlers = createExecApprovalHandlers(execApprovalManager, {
     forwarder: execApprovalForwarder,
   });
+  const pluginApprovalManager = new ExecApprovalManager<
+    import("../../upstream/src/infra/plugin-approvals.js").PluginApprovalRequestPayload
+  >();
+  const pluginApprovalHandlers = createPluginApprovalHandlers(pluginApprovalManager, {
+    forwarder: execApprovalForwarder,
+  });
+  // 暴露给 approval.ts 桥接层（模块级单例，server 启动后立即注入）
+  setActivePluginApprovalManager(pluginApprovalManager);
 
   const canvasHostServerPort = (canvasHostServer as CanvasHostServer | null)?.port;
 
@@ -637,6 +658,7 @@ export async function startGatewayServer(
     extraHandlers: {
       ...pluginRegistry.gatewayHandlers,
       ...execApprovalHandlers,
+      ...pluginApprovalHandlers,
     },
     broadcast,
     context: {
@@ -676,6 +698,7 @@ export async function startGatewayServer(
       chatAbortedRuns: chatRunState.abortedRuns,
       chatRunBuffers: chatRunState.buffers,
       chatDeltaSentAt: chatRunState.deltaSentAt,
+      chatDeltaLastBroadcastLen: chatRunState.deltaLastBroadcastLen,
       addChatRun,
       removeChatRun,
       subscribeSessionEvents: sessionEventSubscribers.subscribe,
@@ -802,6 +825,16 @@ export async function startGatewayServer(
     }
   }
 
+  // 启动任务老化检测调度器（每 10 分钟扫描待办池，防止任务沉淀）
+  if (!minimalTestGateway) {
+    try {
+      initTaskAgingScheduler();
+      log.info("Task aging scheduler started");
+    } catch (err) {
+      log.warn(`Task aging scheduler failed to start: ${String(err)}`);
+    }
+  }
+
   // 启动工作空间卫生自检调度器（每 24h 检查 MEMORY 大小/幺灵目录/当前文件等）
   if (!minimalTestGateway) {
     try {
@@ -850,17 +883,21 @@ export async function startGatewayServer(
           broadcast,
           getState: () => ({
             hooksConfig,
+            hookClientIpConfig,
             heartbeatRunner,
             cronState,
             browserControl,
+            channelHealthMonitor,
           }),
           setState: (nextState) => {
             hooksConfig = nextState.hooksConfig;
+            hookClientIpConfig = nextState.hookClientIpConfig;
             heartbeatRunner = nextState.heartbeatRunner;
             cronState = nextState.cronState;
             cron = cronState.cron;
             cronStorePath = cronState.storePath;
             browserControl = nextState.browserControl;
+            channelHealthMonitor = nextState.channelHealthMonitor;
           },
           startChannel,
           stopChannel,
@@ -869,6 +906,13 @@ export async function startGatewayServer(
           logChannels,
           logCron,
           logReload,
+          createHealthMonitor: ({ checkIntervalMs, staleEventThresholdMs, maxRestartsPerHour }) =>
+            startChannelHealthMonitor({
+              channelManager,
+              checkIntervalMs,
+              staleEventThresholdMs,
+              maxRestartsPerHour,
+            }),
         });
 
         return startGatewayConfigReloader({
@@ -900,8 +944,11 @@ export async function startGatewayServer(
     tickInterval,
     healthInterval,
     dedupeCleanup,
+    mediaCleanup: null,
     agentUnsub,
     heartbeatUnsub,
+    transcriptUnsub: transcriptUnsub ?? null,
+    lifecycleUnsub: lifecycleUnsub ?? null,
     chatRunState,
     clients,
     configReloader,
@@ -928,6 +975,15 @@ export async function startGatewayServer(
         log.info("Memory hygiene scheduler stopped");
       } catch (err) {
         log.warn(`Memory hygiene scheduler failed to stop: ${String(err)}`);
+      }
+
+      // 停止任务老化检测调度器
+      try {
+        stopAgingTaskScheduler();
+        stopAgentTaskWakeScheduler();
+        log.info("Task schedulers stopped");
+      } catch (err) {
+        log.warn(`Task schedulers failed to stop: ${String(err)}`);
       }
 
       // 停止OAuth刷新守护进程

@@ -168,7 +168,10 @@ export const tasksRpc: GatewayRequestHandlers = {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "任务标题必须为1-200个字符"),
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `"title" is required (1-200 characters). Please provide a clear, concise task title that describes what needs to be done. Example: task.create({ title: "实现用户登录功能", ... })`,
+          ),
         );
         return;
       }
@@ -1174,7 +1177,17 @@ export const tasksRpc: GatewayRequestHandlers = {
       const priority = params?.priority ? (String(params.priority) as TaskPriority) : "medium";
 
       if (!parentTaskId || !title) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"));
+        const missing = [];
+        if (!parentTaskId) missing.push('"parentTaskId" (parent task ID)');
+        if (!title) missing.push('"title" (subtask title, required, 1-200 characters)');
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Missing required parameters: ${missing.join(", ")}. Example: task.subtask.create({ parentTaskId: "task_xxx", title: "子任务标题", assigneeIds: ["agent-id"] })`,
+          ),
+        );
         return;
       }
 

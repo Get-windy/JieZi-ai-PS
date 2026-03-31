@@ -127,6 +127,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "chat.nav.monitor": "Agent Communication",
     "chat.nav.groups": "Groups",
     "chat.nav.sessions_count": "{count} sessions",
+    "chat.nav.more_sessions": "{count} more…",
     // Chat monitor view
     "chat.monitor.user": "👤 User",
     "chat.monitor.title": "Collaboration Monitor",
@@ -3196,6 +3197,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "chat.nav.monitor": "Agent 间通信",
     "chat.nav.groups": "群聊",
     "chat.nav.sessions_count": "{count} 个会话",
+    "chat.nav.more_sessions": "还有 {count} 条未展示…",
     // 聊天监控视图
     "chat.monitor.user": "👤 用户",
     "chat.monitor.title": "协作监控",

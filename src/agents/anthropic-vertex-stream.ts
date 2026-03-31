@@ -8,7 +8,7 @@ import { streamAnthropic, type AnthropicOptions, type Model } from "@mariozechne
 import {
   resolveAnthropicVertexClientRegion,
   resolveAnthropicVertexProjectId,
-} from "../../upstream/src/agents/anthropic-vertex-provider.js";
+} from "../../upstream/src/plugin-sdk/anthropic-vertex.js";
 
 type AnthropicVertexEffort = NonNullable<AnthropicOptions["effort"]>;
 

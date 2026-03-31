@@ -335,25 +335,25 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
             continue;
           }
 
-          // 任务卡住 12-60 分钟：先尝试重置回 todo 再立即重新派发
-          // 这样避免重唤醒时模型再次超时导致死循环
+          // 任务卡住 15-60 分钟：程序直接重激活为 in-progress，不走 todo 中转
+          // 避免中转 todo 导致 agent 需要自己改状态（有随机失败风险）
           console.log(
-            `[Task Wake] Agent ${normalizedId} task ${activeTask.id} stuck for ${stuckMinutes}min — resetting to todo and re-dispatching`,
+            `[Task Wake] Agent ${normalizedId} task ${activeTask.id} stuck for ${stuckMinutes}min — auto-re-activating to in-progress`,
           );
           await taskStorage.updateTask(activeTask.id, {
-            status: "todo",
+            status: "in-progress",
             timeTracking: {
               ...activeTask.timeTracking,
-              startedAt: undefined,
+              startedAt: now,
+              lastActivityAt: now,
             },
           });
 
-          // 重置后立即重新派发（走情况 B 逻辑：立即唤醒 todo 任务）
           const projectGroupKey = activeTask.projectId
             ? projectGroupCache.get(activeTask.projectId)
             : undefined;
           const taskLines = [
-            `1. [TODO] ${activeTask.title}`,
+            `1. [IN-PROGRESS] ${activeTask.title}`,
             `   Task ID: ${activeTask.id}`,
             `   Priority: ${activeTask.priority}`,
             activeTask.projectId ? `   Project: ${activeTask.projectId}` : null,
@@ -369,7 +369,7 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           const wakeMessage = (() => {
             const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(activeTask);
             return [
-              `[TASK RETRY] Your previous task attempt timed out after ${stuckMinutes} minutes. Retrying now:`,
+              `[TASK RETRY] Your task timed out after ${stuckMinutes} minutes. It has been automatically re-activated to in-progress — execute it now:`,
               ``,
               taskLines,
               ``,
@@ -385,7 +385,7 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
               ``,
               `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
               ``,
-              `IMPORTANT: Execute this task now. If you cannot complete it, update its status to "blocked" and explain why. Do NOT let it time out again.`,
+              `IMPORTANT: This task is already in-progress. Execute it NOW. Do NOT change its status — just work on it and call task_report_to_supervisor when done.`,
             ]
               .filter(Boolean)
               .join("\n");
@@ -621,8 +621,25 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           }
           return scoreB - scoreA;
         });
-        const nextTask = sortedTodos[0];
-        const queueRemaining = sortedTodos.length - 1;
+        // 决策：top1 与 top2 优先级相同时取 2 条，否则取 1 条（防止 medium 任务堆积）
+        const top1 = sortedTodos[0];
+        const top2 = sortedTodos[1];
+        const tasksToActivate =
+          top2 && top2.priority === top1.priority ? [top1, top2] : [top1];
+
+        // 批量将选中任务程序直接更新为 in-progress，不依赖 agent 自己改状态
+        const activatedTasks: typeof tasksToActivate = [];
+        for (const t of tasksToActivate) {
+          const updated = await taskStorage.updateTask(t.id, {
+            status: "in-progress",
+            timeTracking: { ...t.timeTracking, startedAt: now, lastActivityAt: now },
+          });
+          if (updated) activatedTasks.push(updated);
+        }
+        if (activatedTasks.length === 0) continue;
+
+        const nextTask = activatedTasks[0];
+        const queueRemaining = sortedTodos.length - tasksToActivate.length;
 
         stats.pendingTasks++;
         const sessionKey = `agent:${normalizedId}:main`;
@@ -630,20 +647,20 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           ? projectGroupCache.get(nextTask.projectId)
           : undefined;
 
-        const taskLines = [
-          `1. [TODO] ${nextTask.title}`,
-          `   Task ID: ${nextTask.id}`,
-          `   Priority: ${nextTask.priority}`,
-          nextTask.projectId ? `   Project: ${nextTask.projectId}` : null,
-          nextTask.teamId ? `   Team: ${nextTask.teamId}` : null,
-          nextTask.organizationId ? `   Organization: ${nextTask.organizationId}` : null,
-          nextTask.type ? `   Type: ${nextTask.type}` : null,
-          nextTask.dueDate ? `   Due: ${new Date(nextTask.dueDate).toISOString()}` : null,
-          projectGroupKey ? `   Project Group Channel: sessionKey=${projectGroupKey}` : null,
-          nextTask.description ? `   Description: ${nextTask.description.slice(0, 200)}` : null,
-        ]
-          .filter(Boolean)
-          .join("\n");
+        const taskLines = activatedTasks
+          .map((t, i) => [
+            `${i + 1}. [IN-PROGRESS] ${t.title}`,
+            `   Task ID: ${t.id}`,
+            `   Priority: ${t.priority}`,
+            t.projectId ? `   Project: ${t.projectId}` : null,
+            t.teamId ? `   Team: ${t.teamId}` : null,
+            t.organizationId ? `   Organization: ${t.organizationId}` : null,
+            t.type ? `   Type: ${t.type}` : null,
+            t.dueDate ? `   Due: ${new Date(t.dueDate).toISOString()}` : null,
+            projectGroupKey ? `   Project Group Channel: sessionKey=${projectGroupKey}` : null,
+            t.description ? `   Description: ${t.description.slice(0, 200)}` : null,
+          ].filter(Boolean).join("\n"))
+          .join("\n\n");
 
         const wakeMessage = (() => {
           const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(nextTask);
@@ -661,7 +678,7 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
             /* 不影响主流程 */
           }
           return [
-            `[TASK WAKE] You have 1 task to execute now${queueRemaining > 0 ? ` (${queueRemaining} more waiting in queue)` : ""}:`,
+            `[TASK WAKE] You have ${activatedTasks.length} task(s) activated now${queueRemaining > 0 ? ` (${queueRemaining} more waiting in queue)` : ""}. Tasks are already set to in-progress:`,
             ``,
             taskLines,
             ``,
@@ -676,7 +693,7 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
             ``,
             `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
             ``,
-            `IMPORTANT: Set this task to "in-progress" and execute it NOW. Complete it fully before starting the next queued task. After completion, call task_report_to_supervisor to report.`,
+            `IMPORTANT: These tasks are already set to in-progress by the system. Execute them NOW. Do NOT change their status to in-progress again — just work on them and call task_report_to_supervisor when each one is done.`,
           ]
             .filter(Boolean)
             .join("\n");
@@ -693,6 +710,42 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           coalesceMs: 5000,
         });
         stats.wokenAgents++;
+
+        // 積压告警：todo 队列超过 5 条时，通知 supervisor 任务过多
+        // 这是纯程序侧检测，不依赖 agent 自觉报告
+        const BACKLOG_ALERT_THRESHOLD = 5;
+        if (queueRemaining >= BACKLOG_ALERT_THRESHOLD) {
+          // 找到任务的 supervisor
+          const firstTask = activatedTasks[0];
+          const backlogSupRaw = firstTask.supervisorId ?? firstTask.creatorId;
+          if (backlogSupRaw && backlogSupRaw !== "system") {
+            const backlogSupId = normalizeAgentId(backlogSupRaw);
+            const backlogSupSession = `agent:${backlogSupId}:main`;
+            const backlogMsg = [
+              `[TASK BACKLOG ALERT] Agent ${normalizedId} has ${queueRemaining + tasksToActivate.length} pending tasks (${queueRemaining} waiting in queue). This may indicate task assignment is outpacing execution.`,
+              ``,
+              `Agent: ${normalizedId}`,
+              `Total active tasks: ${queueRemaining + tasksToActivate.length}`,
+              `Currently activated: ${tasksToActivate.length}`,
+              `Waiting in queue: ${queueRemaining}`,
+              ``,
+              `Recommendation: Review if some tasks can be cancelled, reassigned to other agents, or if the assignment rate needs to slow down.`,
+              `Use agent_task_manage to manage tasks if needed.`,
+            ]
+              .filter(Boolean)
+              .join("\n");
+            enqueueSystemEvent(backlogMsg, {
+              sessionKey: backlogSupSession,
+              contextKey: `cron:task-backlog:${normalizedId}`,
+            });
+            requestHeartbeatNow({
+              reason: `cron:task-backlog:${normalizedId}`,
+              sessionKey: backlogSupSession,
+              agentId: backlogSupId,
+              coalesceMs: 30000, // 合并尽量减少打扰
+            });
+          }
+        }
       }
     }
 

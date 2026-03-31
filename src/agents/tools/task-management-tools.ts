@@ -44,32 +44,67 @@ const TaskStatus = Type.Union([
  * task_create 工具参数 schema
  */
 const TaskCreateToolSchema = Type.Object({
-  /** 任务标题（必填） */
-  title: Type.String({ minLength: 1, maxLength: 256 }),
+  /**
+   * 任务标题（必填）
+   * 简洁描述任务目标，1-200字符。
+   * 好的标题示例："实现用户登录页面"、"修复支付模块空指针异常"、"编写 API 接口文档"
+   * 不合格示例：空字符串、仅填"任务"、超过200字的长句
+   */
+  title: Type.String({
+    minLength: 1,
+    maxLength: 200,
+    description:
+      "[REQUIRED] Task title (1-200 chars). Must be a clear, actionable summary of what needs to be done. Example: \"Implement user login page\", \"Fix null pointer in payment module\"",
+  }),
   /**
    * 任务描述（必填）
-   * 任务驱动工作模式的前提是任务定义清晰，必须描述：做什么、为什么做、完成标准是什么
+   * 必须包含：做什么、为什么做、完成标准是什么。
+   * 任务驱动模式的前提是任务定义清晰，模糊的描述会导致执行者无法正确完成任务。
    */
-  description: Type.String({ minLength: 1, maxLength: 4000 }),
+  description: Type.String({
+    minLength: 1,
+    maxLength: 4000,
+    description:
+      "[REQUIRED] Detailed task description. Must cover: (1) What to do, (2) Why it's needed, (3) Definition of done / acceptance criteria. Vague descriptions cause task failures.",
+  }),
   /**
    * 任务作用域（必填）
    * - personal: 私人任务（个人待办、学习计划、个人事项）— 无需 project，结果写入自身私有记忆
    * - project:  项目任务（团队协作、功能开发、交付物）— 必须传入 project，结果写入项目共享记忆
    */
-  scope: Type.Union([Type.Literal("personal"), Type.Literal("project")]),
+  scope: Type.Union([Type.Literal("personal"), Type.Literal("project")], {
+    description:
+      '[REQUIRED] "personal" = private todo (no project needed) | "project" = team task (must provide project ID)',
+  }),
   /** 任务优先级（可选，默认medium） */
   priority: Type.Optional(TaskPriority),
   /** 截止时间（可选，ISO 8601格式） */
   dueDate: Type.Optional(Type.String()),
-  /** 负责人/执行者（可选） */
-  assignee: Type.Optional(Type.String({ maxLength: 64 })),
+  /**
+   * 负责人/执行者（可选）
+   * 必须是系统中已注册的 agent ID（如 "doc-writer"、"test-agent-1"）。
+   * 不填时默认为创建者自己。不可填写不存在的 agent 或人名。
+   */
+  assignee: Type.Optional(
+    Type.String({
+      maxLength: 64,
+      description:
+        'Assignee agent ID (must be a valid registered agent, e.g. "doc-writer", "test-agent-1"). Defaults to self if omitted.',
+    }),
+  ),
   /** 任务标签（可选） */
   tags: Type.Optional(Type.Array(Type.String({ maxLength: 32 }))),
   /**
    * 所属项目 ID（scope=project 时必填）
    * scope=personal 时可不传，项目任务必须传入正确的项目 ID
    */
-  project: Type.Optional(Type.String({ maxLength: 128 })),
+  project: Type.Optional(
+    Type.String({
+      maxLength: 128,
+      description:
+        '[REQUIRED when scope="project"] The project ID this task belongs to. Must be an existing project ID.',
+    }),
+  ),
   /** 所属团队ID（可选） */
   teamId: Type.Optional(Type.String({ maxLength: 128 })),
   /** 所属组织ID（可选） */
@@ -284,7 +319,21 @@ export function createTaskCreateTool(opts?: {
     label: "Task Create",
     name: "task_create",
     description:
-      'Create a new task. REQUIRED: title, description, scope ("personal" for private todos | "project" for team work). scope=project REQUIRES project (project ID). Results of personal tasks go to agent private memory; project tasks go to project shared memory.',
+      'Create a new task.\n\n' +
+      'REQUIRED fields:\n' +
+      '  - title: Clear task title (1-200 chars), e.g. "Implement login page"\n' +
+      '  - description: What to do + why + done criteria (cannot be empty or vague)\n' +
+      '  - scope: "personal" (private todo, no project needed) | "project" (team task, must provide project ID)\n\n' +
+      'CONDITIONAL:\n' +
+      '  - project: REQUIRED when scope="project". Must be a valid existing project ID.\n\n' +
+      'OPTIONAL:\n' +
+      '  - assignee: Must be a valid registered agent ID (e.g. "doc-writer"). Defaults to self.\n' +
+      '  - priority: low | medium (default) | high | urgent\n' +
+      '  - supervisorId: Must be a project member. Defaults to self (creator).\n\n' +
+      'RULES:\n' +
+      '  - Do NOT omit title. A task with no title will be rejected.\n' +
+      '  - Do NOT create duplicate tasks (same title + same assignee already exists as active).\n' +
+      '  - Personal task results → agent private memory. Project task results → project shared memory.',
     parameters: TaskCreateToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;

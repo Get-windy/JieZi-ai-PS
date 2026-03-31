@@ -2,7 +2,7 @@ import { isIP } from "node:net";
 import { resolveSandboxConfigForAgent } from "../../upstream/src/agents/sandbox.js";
 import { execDockerRaw } from "../../upstream/src/agents/sandbox/docker.js";
 import { resolveBrowserConfig, resolveProfile } from "../browser/config.js";
-import { resolveBrowserControlAuth } from "../../upstream/src/browser/control-auth.js";
+import { resolveBrowserControlAuth } from "../../upstream/src/plugin-sdk/browser-runtime.js";
 import { listChannelPlugins } from "../../upstream/src/channels/plugins/index.js";
 import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
 import type { OpenClawConfig } from "../../upstream/src/config/config.js";
