@@ -260,11 +260,16 @@ export async function createTask(
     // 检查同 assignee + 同标题的 active 任务是否已存在
     if (assigneeIds.length > 0) {
       for (const existing of tasks.values()) {
-        if (!ACTIVE_STATUSES.includes(existing.status as (typeof ACTIVE_STATUSES)[number]))
+        if (!ACTIVE_STATUSES.includes(existing.status as (typeof ACTIVE_STATUSES)[number])) {
           continue;
-        if ((existing.title ?? "").trim().toLowerCase() !== titleLower) continue;
-        const existingAssigneeIds = (existing.assignees ?? []).map((a) => a.id.toLowerCase());
-        const hasOverlap = assigneeIds.some((id) => existingAssigneeIds.includes(id));
+        }
+        if ((existing.title ?? "").trim().toLowerCase() !== titleLower) {
+          continue;
+        }
+        const existingAssigneeIds = new Set(
+          (existing.assignees ?? []).map((a) => a.id.toLowerCase()),
+        );
+        const hasOverlap = assigneeIds.some((id) => existingAssigneeIds.has(id));
         if (hasOverlap) {
           console.warn(
             `[TaskStorage] Duplicate task rejected: "${task.title}" already exists as ${existing.id} (status=${existing.status})`,
@@ -278,9 +283,12 @@ export async function createTask(
       for (const assigneeId of assigneeIds) {
         let todoCount = 0;
         for (const existing of tasks.values()) {
-          if (existing.status !== "todo") continue;
-          if ((existing.assignees ?? []).some((a) => a.id.toLowerCase() === assigneeId))
+          if (existing.status !== "todo") {
+            continue;
+          }
+          if ((existing.assignees ?? []).some((a) => a.id.toLowerCase() === assigneeId)) {
             todoCount++;
+          }
         }
         if (todoCount >= MAX_TODO_PER_AGENT) {
           throw new Error(

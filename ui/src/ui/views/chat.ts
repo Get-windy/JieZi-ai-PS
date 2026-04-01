@@ -95,13 +95,15 @@ export function renderChat(props: ChatProps) {
   const isDeptRoom = props.navCurrentContext?.type === "dept-room";
   const isDeptBroadcast = props.navCurrentContext?.type === "dept-broadcast";
   const isDeptReadOnly =
-    (isDeptRoom && (props.navCurrentContext as { isMember?: boolean } | null)?.isMember === false) ||
+    (isDeptRoom &&
+      (props.navCurrentContext as { isMember?: boolean } | null)?.isMember === false) ||
     (isDeptBroadcast && !(props.navCurrentContext as { isAdmin?: boolean } | null)?.isAdmin);
-  const isReadOnly = (isChannelObserve && !props.navChannelForceJoined) || isContactView || isDeptReadOnly;
+  const isReadOnly =
+    (isChannelObserve && !props.navChannelForceJoined) || isContactView || isDeptReadOnly;
 
   // canSend 来自后端能力判断（如 agent 未就绪、rate-limit 等），必须和前端 canCompose 同时满足
   // 对抗-P0：原代码中 props.canSend 存在于 props 但从未被消费，相当于权限字段形同虚设
-  const canCompose = props.connected && !isReadOnly && (props.canSend !== false);
+  const canCompose = props.connected && !isReadOnly && props.canSend;
   const isBusy = props.sending || props.stream !== null;
   const canAbort = Boolean(props.canAbort && props.onAbort);
 
@@ -113,11 +115,15 @@ export function renderChat(props: ChatProps) {
   // 使用 data attribute 在 DOM 层面做 300ms 节流（无需引入额外状态）
   const handleSendThrottled = (e: Event) => {
     const btn = e.currentTarget as HTMLElement;
-    if (btn.dataset.sending === "1") return;
+    if (btn.dataset.sending === "1") {
+      return;
+    }
     btn.dataset.sending = "1";
     inputHistory.add(props.draft);
     props.onSend();
-    setTimeout(() => { delete btn.dataset.sending; }, 300);
+    setTimeout(() => {
+      delete btn.dataset.sending;
+    }, 300);
   };
   const activeSession = props.sessions?.sessions?.find((row) => row.key === props.sessionKey);
   const reasoningLevel = activeSession?.reasoningLevel ?? "off";

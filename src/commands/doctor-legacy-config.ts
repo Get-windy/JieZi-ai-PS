@@ -9,7 +9,7 @@ import {
   resolveTelegramPreviewStreamMode,
 } from "../config/discord-preview-streaming.js";
 import { migrateLegacyWebSearchConfig } from "../config/legacy-web-search.js";
-import { DEFAULT_TALK_PROVIDER, normalizeTalkSection } from "../config/talk.js";
+import { LEGACY_TALK_PROVIDER_ID, normalizeTalkSection } from "../config/talk.js";
 import { DEFAULT_ACCOUNT_ID } from "../routing/session-key.js";
 
 export function normalizeCompatibilityConfigValues(cfg: OpenClawConfig): {
@@ -634,7 +634,7 @@ export function normalizeCompatibilityConfigValues(cfg: OpenClawConfig): {
     }
 
     changes.push(
-      `Moved legacy talk flat fields → talk.provider/talk.providers.${DEFAULT_TALK_PROVIDER}.`,
+      `Moved legacy talk flat fields → talk.provider/talk.providers.${LEGACY_TALK_PROVIDER_ID}.`,
     );
   };
 

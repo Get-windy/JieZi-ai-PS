@@ -180,13 +180,13 @@ export type ProviderInstance = {
 
 // 凭据调度策略
 export type AuthDispatchRole =
-  | "primary"    // 优先使用，永远最先尝试（同 primary 按 priority 排序）
+  | "primary" // 优先使用，永远最先尝试（同 primary 按 priority 排序）
   | "roundrobin" // 与其他 roundrobin 凭据轮流调用（分摊 RPM/TPM）
-  | "fallback";  // 备用，仅当所有 primary/roundrobin 均熔断时才使用
+  | "fallback"; // 备用，仅当所有 primary/roundrobin 均熔断时才使用
 
 export type AuthDispatchPolicy = {
-  role: AuthDispatchRole;  // 调度角色
-  priority: number;        // 同角色内的优先级（数字越小越先）
+  role: AuthDispatchRole; // 调度角色
+  priority: number; // 同角色内的优先级（数字越小越先）
   cooldownMinutes: number; // 遇到配额/鉴权错误后的冷却时间（分钟，0=不自动冷却）
 };
 
@@ -538,9 +538,9 @@ function syncToAgentModelsJson(storage: ModelManagementStorage): any {
  */
 type CircuitState = {
   authId: string;
-  cooldownUntil: number;   // 冷却截止时间戳（ms），0=未冷却
-  errorCount: number;      // 连续错误次数
-  lastError?: string;      // 最后一次错误信息
+  cooldownUntil: number; // 冷却截止时间戳（ms），0=未冷却
+  errorCount: number; // 连续错误次数
+  lastError?: string; // 最后一次错误信息
 };
 
 // authId → CircuitState
@@ -551,9 +551,15 @@ const circuitBreakers = new Map<string, CircuitState>();
  */
 export function isAuthCircuitOpen(authId: string): boolean {
   const state = circuitBreakers.get(authId);
-  if (!state) return false;
-  if (state.cooldownUntil === 0) return false;
-  if (Date.now() < state.cooldownUntil) return true;
+  if (!state) {
+    return false;
+  }
+  if (state.cooldownUntil === 0) {
+    return false;
+  }
+  if (Date.now() < state.cooldownUntil) {
+    return true;
+  }
   // 冷却期已过，自动重置
   state.cooldownUntil = 0;
   state.errorCount = 0;
@@ -565,7 +571,9 @@ export function isAuthCircuitOpen(authId: string): boolean {
  */
 export function getAuthCircuitRemainingSeconds(authId: string): number {
   const state = circuitBreakers.get(authId);
-  if (!state || state.cooldownUntil === 0) return 0;
+  if (!state || state.cooldownUntil === 0) {
+    return 0;
+  }
   const remaining = Math.max(0, state.cooldownUntil - Date.now());
   return Math.ceil(remaining / 1000);
 }
@@ -641,8 +649,12 @@ export function getCircuitBreakerSnapshot(): Record<
  * 业界标准：只对这些确定性错误熔断，网络超时等瞬时错误不熔断
  */
 export function isQuotaOrAuthError(errorMsg: string, httpStatus?: number): boolean {
-  if (httpStatus === 401 || httpStatus === 403) return true;
-  if (httpStatus === 429) return true;
+  if (httpStatus === 401 || httpStatus === 403) {
+    return true;
+  }
+  if (httpStatus === 429) {
+    return true;
+  }
   const lower = errorMsg.toLowerCase();
   return (
     lower.includes("quota") ||
@@ -675,7 +687,9 @@ export function pickAuth(
   auths: ProviderAuth[],
 ): { auth: ProviderAuth; isCircuitOpen: boolean } | null {
   const enabled = auths.filter((a) => a.enabled);
-  if (enabled.length === 0) return null;
+  if (enabled.length === 0) {
+    return null;
+  }
   if (enabled.length === 1) {
     return { auth: enabled[0], isCircuitOpen: isAuthCircuitOpen(enabled[0].authId) };
   }

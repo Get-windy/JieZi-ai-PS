@@ -4,7 +4,7 @@
  * Contains conversation info resolution, inline participant rendering,
  * and compaction / fallback indicator toasts.
  */
-import { html, nothing, type TemplateResult } from "lit";
+import { html, nothing } from "lit";
 import { t } from "../i18n.ts";
 import { icons } from "../icons.ts";
 import type { AgentsListResult, ChatConversationContext } from "../types.ts";
@@ -244,10 +244,10 @@ export function renderCompactionIndicator(status: CompactionIndicatorStatus | nu
  * - dept-broadcast 非管理员：显示只读广播提示
  * - contact 视图：提示观察者模式
  */
-export function renderDeptIsolationWarning(
-  context: ChatConversationContext | null,
-): TemplateResult | typeof nothing {
-  if (!context) return nothing;
+export function renderDeptIsolationWarning(context: ChatConversationContext | null) {
+  if (!context) {
+    return nothing;
+  }
 
   if (context.type === "dept-room" && context.isMember === false) {
     const name = context.deptName ?? context.deptId;
@@ -276,7 +276,10 @@ export function renderDeptIsolationWarning(
 
   if (context.type === "contact") {
     return html`
-      <div class="chat-readonly-bar" style="background:rgba(139,92,246,0.06);border-color:#8b5cf6;color:#6d28d9;">
+      <div
+        class="chat-readonly-bar"
+        style="background: rgba(139, 92, 246, 0.06); border-color: #8b5cf6; color: #6d28d9"
+      >
         <span>👁 正在观察 Agent 私信（只读），消息来源已经部门守卫验证</span>
       </div>
     `;

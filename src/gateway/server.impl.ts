@@ -35,6 +35,7 @@ import { startGatewayDiscovery } from "../../upstream/src/gateway/server-discove
 import { applyGatewayLaneConcurrency } from "../../upstream/src/gateway/server-lanes.js";
 import { startGatewayMaintenanceTimers } from "../../upstream/src/gateway/server-maintenance.js";
 import { safeParseJson } from "../../upstream/src/gateway/server-methods/nodes.helpers.js";
+import { createPluginApprovalHandlers } from "../../upstream/src/gateway/server-methods/plugin-approval.js";
 import { hasConnectedMobileNode } from "../../upstream/src/gateway/server-mobile-nodes.js";
 import { loadGatewayModelCatalog } from "../../upstream/src/gateway/server-model-catalog.js";
 import { createNodeSubscriptionManager } from "../../upstream/src/gateway/server-node-subscriptions.js";
@@ -53,8 +54,8 @@ import {
   incrementPresenceVersion,
   refreshGatewayHealthSnapshot,
 } from "../../upstream/src/gateway/server/health-state.js";
-import { loadGatewayTlsRuntime } from "../../upstream/src/gateway/server/tls.js";
 import { resolveHookClientIpConfig } from "../../upstream/src/gateway/server/hooks.js"; // upstream-only, no local override needed
+import { loadGatewayTlsRuntime } from "../../upstream/src/gateway/server/tls.js";
 import { ensureGatewayStartupAuth } from "../../upstream/src/gateway/startup-auth.js";
 import { clearAgentRunContext, onAgentEvent } from "../../upstream/src/infra/agent-events.js";
 import {
@@ -96,17 +97,19 @@ import { initBenchmarkDB } from "../agents/arena-benchmarks.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
 import { createDefaultDeps } from "../cli/deps.js";
 import { isRestartEnabled } from "../config/commands.js";
-import { startAgentTaskWakeScheduler, stopAgentTaskWakeScheduler } from "../cron/agent-task-wake-scheduler.js";
-import { initTaskAgingScheduler } from "../cron/task-aging-scheduler.js";
-import { stopAgingTaskScheduler } from "../tasks/task-aging.js";
+import {
+  startAgentTaskWakeScheduler,
+  stopAgentTaskWakeScheduler,
+} from "../cron/agent-task-wake-scheduler.js";
 import {
   initMemoryHygieneScheduler,
   stopMemoryHygieneScheduler,
 } from "../cron/memory-hygiene-scheduler.js";
+import { initTaskAgingScheduler } from "../cron/task-aging-scheduler.js";
 import { createExecApprovalForwarder } from "../infra/exec-approval-forwarder.js";
 import { startHeartbeatRunner, type HeartbeatRunner } from "../infra/heartbeat-runner.js";
-import { setActivePluginApprovalManager } from "./server-methods/approval.js";
 import { setGatewaySigusr1RestartPolicy, setPreRestartDeferralCheck } from "../infra/restart.js";
+import { stopAgingTaskScheduler } from "../tasks/task-aging.js";
 import { startGatewayConfigReloader } from "./config-reload.js";
 import type { ControlUiRootState } from "./control-ui.js";
 import { ExecApprovalManager } from "./exec-approval-manager.js";
@@ -114,8 +117,8 @@ import type { startBrowserControlServerIfEnabled } from "./server-browser.js";
 import { buildGatewayCronService } from "./server-cron.js";
 import { GATEWAY_EVENTS, listGatewayMethods } from "./server-methods-list.js";
 import { coreGatewayHandlers } from "./server-methods.js";
+import { setActivePluginApprovalManager } from "./server-methods/approval.js";
 import { createExecApprovalHandlers } from "./server-methods/exec-approval.js";
-import { createPluginApprovalHandlers } from "../../upstream/src/gateway/server-methods/plugin-approval.js";
 import { resolveGatewayRuntimeConfig } from "./server-runtime-config.js";
 import { logGatewayStartup } from "./server-startup-log.js";
 
@@ -424,6 +427,7 @@ export async function startGatewayServer(
     httpBindHosts,
     wss,
     clients,
+    preauthConnectionBudget,
     broadcast,
     broadcastToConnIds,
     agentRunSeq,
@@ -644,6 +648,7 @@ export async function startGatewayServer(
   attachGatewayWsHandlers({
     wss,
     clients,
+    preauthConnectionBudget,
     port,
     gatewayHost: bindHost ?? undefined,
     canvasHostEnabled: Boolean(canvasHost),

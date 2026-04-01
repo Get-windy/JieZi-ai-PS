@@ -15,11 +15,11 @@
 
 import crypto from "node:crypto";
 import path from "node:path";
-import { resolveUserPath } from "../../../upstream/src/utils.js";
-import { organizationStorage } from "../../organization/storage.js";
 import { resolveSandboxConfigForAgent } from "../../../upstream/src/agents/sandbox/config.js";
 import type { SandboxConfig } from "../../../upstream/src/agents/sandbox/types.js";
 import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
+import { resolveUserPath } from "../../../upstream/src/utils.js";
+import { organizationStorage } from "../../organization/storage.js";
 
 // ============================================================================
 // 内部工具函数
@@ -62,7 +62,9 @@ function mergeDeptToolPolicy(
   base: SandboxConfig["tools"],
   deptPolicy?: { allow?: string[]; deny?: string[] },
 ): SandboxConfig["tools"] {
-  if (!deptPolicy) return base;
+  if (!deptPolicy) {
+    return base;
+  }
 
   const allow = deptPolicy.allow ? [...(base.allow ?? []), ...deptPolicy.allow] : base.allow;
   const deny = deptPolicy.deny ? [...(base.deny ?? []), ...deptPolicy.deny] : base.deny;
@@ -168,9 +170,10 @@ export async function resolveSandboxConfigWithDept(params: {
     // 防进攻4：network 由部门配置决定，Agent 无权修改
     network: deptSandbox.network ?? baseCfg.docker.network,
     // 镜像：部门 < Agent（允许 Agent 在部门镜像基础上进一步定制）
-    image: baseCfg.docker.image !== "openclaw-sandbox:bookworm-slim"
-      ? baseCfg.docker.image  // Agent 有显式配置则优先
-      : (deptSandbox.image ?? baseCfg.docker.image),
+    image:
+      baseCfg.docker.image !== "openclaw-sandbox:bookworm-slim"
+        ? baseCfg.docker.image // Agent 有显式配置则优先
+        : (deptSandbox.image ?? baseCfg.docker.image),
     // 资源配额：部门设置的作为上限
     memory: deptSandbox.resourceQuota?.memory ?? baseCfg.docker.memory,
     cpus: deptSandbox.resourceQuota?.cpus ?? baseCfg.docker.cpus,
@@ -215,7 +218,9 @@ export async function getDeptSandboxSummary(departmentId: string): Promise<{
   crossDeptMountCount: number;
 } | null> {
   const dept = await organizationStorage.getOrganization(departmentId);
-  if (!dept) return null;
+  if (!dept) {
+    return null;
+  }
 
   const cfg = dept.sandboxConfig;
   if (!cfg || cfg.enabled === false) {

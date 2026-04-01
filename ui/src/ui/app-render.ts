@@ -210,23 +210,35 @@ async function loadOrganizationData(state: AppViewState): Promise<void> {
       includeDepartments: true,
       includeTeams: true,
       includeReporting: true,
-    }) as unknown as Record<string, unknown>;
+    });
 
     const cfg = state.agentsList;
     const agentsList = cfg?.agents || [];
 
-    const departments = (result?.departments as Array<{
-      id: string; name: string; description?: string; parentId?: string;
-      createdAt?: number; memberIds?: string[];
-      sandboxConfig?: { enabled?: boolean };
-    }>) || [];
-    const teams = (result?.teams as Array<{
-      id: string; name: string; parentId?: string; managerId?: string;
-      memberIds?: string[]; createdAt?: number;
-    }>) || [];
-    const reportingLines = (result?.reportingLines as Array<{
-      subordinateId: string; supervisorId: string;
-    }>) || [];
+    const departments =
+      (result?.departments as Array<{
+        id: string;
+        name: string;
+        description?: string;
+        parentId?: string;
+        createdAt?: number;
+        memberIds?: string[];
+        sandboxConfig?: { enabled?: boolean };
+      }>) || [];
+    const teams =
+      (result?.teams as Array<{
+        id: string;
+        name: string;
+        parentId?: string;
+        managerId?: string;
+        memberIds?: string[];
+        createdAt?: number;
+      }>) || [];
+    const reportingLines =
+      (result?.reportingLines as Array<{
+        subordinateId: string;
+        supervisorId: string;
+      }>) || [];
 
     // 构建 AgentNode 列表
     const agentNodes = agentsList.map((a: { id: string; name?: string }) => ({
@@ -367,6 +379,12 @@ const debouncedLoadUsage = (state: UsageState) => {
   }
   usageDateDebounceTimeout = window.setTimeout(() => void loadUsage(state), 400);
 };
+import {
+  createOrganization,
+  updateOrganization,
+  saveSandboxConfig,
+  loadSandboxSummary,
+} from "./controllers/organization-permissions.ts";
 import { renderAgents } from "./views/agents.ts";
 import { renderChannelPolicyDialog } from "./views/channel-policy-dialog.ts";
 import { renderChannels } from "./views/channels.ts";
@@ -382,18 +400,8 @@ import { renderLogs } from "./views/logs.ts";
 import { renderMessageQueue } from "./views/message-queue.ts";
 import { renderModels } from "./views/models.ts";
 import { renderNodes } from "./views/nodes.ts";
+import { renderOrganizationDialog, DEFAULT_SANDBOX_FORM } from "./views/organization-dialog.ts";
 import { renderOrganizationPermissions } from "./views/organization-permissions.ts";
-import {
-  renderOrganizationDialog,
-  DEFAULT_SANDBOX_FORM,
-  type SandboxFormConfig,
-} from "./views/organization-dialog.ts";
-import {
-  createOrganization,
-  updateOrganization,
-  saveSandboxConfig,
-  loadSandboxSummary,
-} from "./controllers/organization-permissions.ts";
 import { renderOverview } from "./views/overview.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
@@ -4407,8 +4415,13 @@ export function renderApp(state: AppViewState) {
                 onEditOrganization: (orgId) => {
                   // 找到当前部门数据并打开编辑对话框
                   const orgData = state.organizationData;
-                  const orgs: Array<{ id: string; name: string; description?: string; parentId?: string; sandboxEnabled?: boolean }>
-                    = orgData?.organizations || [];
+                  const orgs: Array<{
+                    id: string;
+                    name: string;
+                    description?: string;
+                    parentId?: string;
+                    sandboxEnabled?: boolean;
+                  }> = orgData?.organizations || [];
                   const found = orgs.find((o) => o.id === orgId);
                   state.editingOrganization = {
                     mode: "edit",
@@ -4427,10 +4440,11 @@ export function renderApp(state: AppViewState) {
                   if (!window.confirm("确定要删除该组织/部门吗？")) {
                     return;
                   }
-                  void state.client!.request("org.department.delete", {
-                    operatorId: "admin",
-                    id: orgId,
-                  })
+                  void state
+                    .client!.request("org.department.delete", {
+                      operatorId: "admin",
+                      id: orgId,
+                    })
                     .then(() => void loadOrganizationData(state))
                     .catch((err: unknown) => console.error("Delete organization failed:", err));
                 },
@@ -4573,92 +4587,101 @@ export function renderApp(state: AppViewState) {
       ${renderChannelPolicyDialog(state)}
 
       <!-- 组织创建/编辑对话框 -->
-      ${state.editingOrganization
-        ? renderOrganizationDialog({
-            isOpen: true,
-            mode: state.editingOrganization.mode,
-            isDepartment: state.editingOrganization.isDepartment,
-            organization: state.editingOrganization.organization,
-            organizations: (state.organizationData?.organizations || []).map(
-              (o: { id: string; name: string; level: number }) => ({
-                id: o.id,
-                name: o.name,
-                level: o.level,
-              }),
-            ),
-            saving: state.organizationsSaving,
-            error: state.organizationsError,
-            sandboxConfig: state.editingOrganization.sandboxConfig,
-            onSave: (org) => {
-              if (state.editingOrganization?.mode === "create") {
-                void createOrganization(
-                  state,
-                  org as { name: string; description: string; parentId: string },
-                  state.editingOrganization.sandboxConfig,
-                );
-              } else {
-                void updateOrganization(
-                  state,
-                  org as { id: string; name: string; description: string; parentId: string },
-                );
-              }
-            },
-            onCancel: () => {
-              state.editingOrganization = null;
-              state.organizationsError = null;
-            },
-            onChange: (field, value) => {
-              if (state.editingOrganization) {
-                (state.editingOrganization.organization as Record<string, string>)[field] = value;
-              }
-            },
-            onSandboxChange: (field, value) => {
-              if (state.editingOrganization) {
-                (state.editingOrganization.sandboxConfig as Record<string, unknown>)[field] = value;
-              }
-            },
-          })
-        : nothing
+      ${
+        state.editingOrganization
+          ? renderOrganizationDialog({
+              isOpen: true,
+              mode: state.editingOrganization.mode,
+              isDepartment: state.editingOrganization.isDepartment,
+              organization: state.editingOrganization.organization,
+              organizations: (state.organizationData?.organizations || []).map(
+                (o: { id: string; name: string; level: number }) => ({
+                  id: o.id,
+                  name: o.name,
+                  level: o.level,
+                }),
+              ),
+              saving: state.organizationsSaving,
+              error: state.organizationsError,
+              sandboxConfig: state.editingOrganization.sandboxConfig,
+              onSave: (org) => {
+                if (state.editingOrganization?.mode === "create") {
+                  void createOrganization(
+                    state,
+                    org as { name: string; description: string; parentId: string },
+                    state.editingOrganization.sandboxConfig,
+                  );
+                } else {
+                  void updateOrganization(
+                    state,
+                    org as { id: string; name: string; description: string; parentId: string },
+                  );
+                }
+              },
+              onCancel: () => {
+                state.editingOrganization = null;
+                state.organizationsError = null;
+              },
+              onChange: (field, value) => {
+                if (state.editingOrganization) {
+                  (state.editingOrganization.organization as Record<string, string>)[field] = value;
+                }
+              },
+              onSandboxChange: (field, value) => {
+                if (state.editingOrganization) {
+                  (state.editingOrganization.sandboxConfig as Record<string, unknown>)[field] =
+                    value;
+                }
+              },
+            })
+          : nothing
       }
 
       <!-- 部门沙箱隔离配置弹窗 -->
-      ${state.editingSandbox
-        ? renderOrganizationDialog({
-            isOpen: true,
-            mode: "edit",
-            isDepartment: true,
-            organization: {
-              id: state.editingSandbox.deptId,
-              name: state.editingSandbox.deptName,
-              description: "",
-              parentId: "",
-            },
-            organizations: (state.organizationData?.organizations || []).map(
-              (o: { id: string; name: string; level: number }) => ({
-                id: o.id,
-                name: o.name,
-                level: o.level,
-              }),
-            ),
-            saving: state.editingSandbox.saving,
-            error: state.editingSandbox.error,
-            sandboxConfig: state.editingSandbox.config,
-            onSave: () => {
-              if (state.editingSandbox) {
-                void saveSandboxConfig(state, state.editingSandbox.deptId, state.editingSandbox.config);
-              }
-            },
-            onCancel: () => {
-              state.editingSandbox = null;
-            },
-            onChange: () => { /* 沙箱弹窗不需要改名称 */ },
-            onSandboxChange: (field, value) => {
-              if (state.editingSandbox) {
-                (state.editingSandbox.config as Record<string, unknown>)[field] = value;
-              }
-            },
-          })
-        : nothing
+      ${
+        state.editingSandbox
+          ? renderOrganizationDialog({
+              isOpen: true,
+              mode: "edit",
+              isDepartment: true,
+              organization: {
+                id: state.editingSandbox.deptId,
+                name: state.editingSandbox.deptName,
+                description: "",
+                parentId: "",
+              },
+              organizations: (state.organizationData?.organizations || []).map(
+                (o: { id: string; name: string; level: number }) => ({
+                  id: o.id,
+                  name: o.name,
+                  level: o.level,
+                }),
+              ),
+              saving: state.editingSandbox.saving,
+              error: state.editingSandbox.error,
+              sandboxConfig: state.editingSandbox.config,
+              onSave: () => {
+                if (state.editingSandbox) {
+                  void saveSandboxConfig(
+                    state,
+                    state.editingSandbox.deptId,
+                    state.editingSandbox.config,
+                  );
+                }
+              },
+              onCancel: () => {
+                state.editingSandbox = null;
+              },
+              onChange: () => {
+                /* 沙箱弹窗不需要改名称 */
+              },
+              onSandboxChange: (field, value) => {
+                if (state.editingSandbox) {
+                  (state.editingSandbox.config as Record<string, unknown>)[field] = value;
+                }
+              },
+            })
+          : nothing
       }
     </div>
   `;

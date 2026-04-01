@@ -8,11 +8,11 @@
 
 import { listAgentEntries } from "../../../upstream/src/commands/agents.config.js";
 import { loadConfig } from "../../../upstream/src/config/config.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { organizationStorage } from "../../organization/storage.js";
 import type { Organization, OrganizationMember } from "../../organization/types.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
-import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
-import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -22,35 +22,39 @@ function generateId(prefix: string): string {
  * 从 params 安全解析部门沙箱配置（sandboxConfig）
  * 支持 Agent 通过 RPC 创建/更新部门时携带 sandboxConfig。
  */
-function parseSandboxConfig(
-  raw: unknown,
-): Organization["sandboxConfig"] | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
+function parseSandboxConfig(raw: unknown): Organization["sandboxConfig"] | undefined {
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
   const r = raw as Record<string, unknown>;
 
-  const toolPolicy = r.toolPolicy && typeof r.toolPolicy === "object"
-    ? (() => {
-        const tp = r.toolPolicy as Record<string, unknown>;
-        return {
-          allow: Array.isArray(tp.allow) ? (tp.allow as string[]) : undefined,
-          deny: Array.isArray(tp.deny) ? (tp.deny as string[]) : undefined,
-        };
-      })()
-    : undefined;
+  const toolPolicy =
+    r.toolPolicy && typeof r.toolPolicy === "object"
+      ? (() => {
+          const tp = r.toolPolicy as Record<string, unknown>;
+          return {
+            allow: Array.isArray(tp.allow) ? (tp.allow as string[]) : undefined,
+            deny: Array.isArray(tp.deny) ? (tp.deny as string[]) : undefined,
+          };
+        })()
+      : undefined;
 
-  const resourceQuota = r.resourceQuota && typeof r.resourceQuota === "object"
-    ? (() => {
-        const rq = r.resourceQuota as Record<string, unknown>;
-        return {
-          memory: rq.memory ? String(rq.memory) : undefined,
-          cpus: typeof rq.cpus === "number" ? rq.cpus : undefined,
-          pidsLimit: typeof rq.pidsLimit === "number" ? rq.pidsLimit : undefined,
-        };
-      })()
-    : undefined;
+  const resourceQuota =
+    r.resourceQuota && typeof r.resourceQuota === "object"
+      ? (() => {
+          const rq = r.resourceQuota as Record<string, unknown>;
+          return {
+            memory: rq.memory ? String(rq.memory) : undefined,
+            cpus: typeof rq.cpus === "number" ? rq.cpus : undefined,
+            pidsLimit: typeof rq.pidsLimit === "number" ? rq.pidsLimit : undefined,
+          };
+        })()
+      : undefined;
 
   const crossDeptBindMounts = Array.isArray(r.crossDeptBindMounts)
-    ? (r.crossDeptBindMounts as unknown[]).reduce<NonNullable<NonNullable<Organization["sandboxConfig"]>["crossDeptBindMounts"]>>((acc, item) => {
+    ? (r.crossDeptBindMounts as unknown[]).reduce<
+        NonNullable<NonNullable<Organization["sandboxConfig"]>["crossDeptBindMounts"]>
+      >((acc, item) => {
         if (item && typeof item === "object") {
           const m = item as Record<string, unknown>;
           if (m.sourceDeptId && m.mountPath) {
@@ -203,7 +207,8 @@ export const organizationStructureHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const { getDeptSandboxSummary } = await import("../../agents/sandbox/dept-sandbox-resolver.js");
+      const { getDeptSandboxSummary } =
+        await import("../../agents/sandbox/dept-sandbox-resolver.js");
       const summary = await getDeptSandboxSummary(departmentId);
       if (!summary) {
         respond(

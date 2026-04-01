@@ -16,7 +16,9 @@ type AnthropicVertexEffort = NonNullable<AnthropicOptions["effort"]>;
 let AnthropicVertexClass: (new (opts: Record<string, unknown>) => unknown) | undefined;
 
 async function loadAnthropicVertex(): Promise<new (opts: Record<string, unknown>) => unknown> {
-  if (AnthropicVertexClass) return AnthropicVertexClass;
+  if (AnthropicVertexClass) {
+    return AnthropicVertexClass;
+  }
   try {
     const mod = await import("@anthropic-ai/vertex-sdk");
     AnthropicVertexClass = mod.AnthropicVertex as new (opts: Record<string, unknown>) => unknown;

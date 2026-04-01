@@ -88,7 +88,9 @@ export function openMentionDropdown(
   // 原实现 Escape 路径只移除了 keydown，onClickOutside 在 Escape 后继续存活
   let cleaned = false;
   const cleanupAll = () => {
-    if (cleaned) return;
+    if (cleaned) {
+      return;
+    }
     cleaned = true;
     textarea.removeEventListener("keydown", onKeydown, true);
     document.removeEventListener("mousedown", onClickOutside);

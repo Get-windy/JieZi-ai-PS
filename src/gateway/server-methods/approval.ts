@@ -27,12 +27,12 @@
 import { existsSync } from "node:fs";
 import { readFile, appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { normalizeAgentId } from "../../routing/session-key.js";
 import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
-import type { ExecApprovalManager } from "../exec-approval-manager.js";
 import type { PluginApprovalRequestPayload } from "../../../upstream/src/infra/plugin-approvals.js";
 import { DEFAULT_PLUGIN_APPROVAL_TIMEOUT_MS } from "../../../upstream/src/infra/plugin-approvals.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
+import type { ExecApprovalManager } from "../exec-approval-manager.js";
 
 // ===== 模块级单例：由 server.impl.ts 在启动时注入 =====
 let _pluginApprovalManager: ExecApprovalManager<PluginApprovalRequestPayload> | null = null;
@@ -111,17 +111,25 @@ async function ensureDataDir(): Promise<void> {
 }
 
 async function loadApprovalStore(): Promise<void> {
-  if (storeLoaded) return;
+  if (storeLoaded) {
+    return;
+  }
   storeLoaded = true;
   try {
-    if (!existsSync(APPROVAL_STORE_PATH)) return;
+    if (!existsSync(APPROVAL_STORE_PATH)) {
+      return;
+    }
     const content = await readFile(APPROVAL_STORE_PATH, "utf-8");
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
-      if (!trimmed) continue;
+      if (!trimmed) {
+        continue;
+      }
       try {
         const record = JSON.parse(trimmed) as ApprovalAuditRecord;
-        if (record?.id) approvalCache.set(record.id, record);
+        if (record?.id) {
+          approvalCache.set(record.id, record);
+        }
       } catch {
         // 跳过损坏行
       }
@@ -149,11 +157,13 @@ async function upsertRecord(record: ApprovalAuditRecord): Promise<void> {
 /**
  * 将 upstream 决策值映射为业务状态
  */
-function decisionToStatus(
-  decision: string | null | undefined,
-): Exclude<ApprovalStatus, "pending"> {
-  if (decision === "allow-once" || decision === "allow-always") return "approved";
-  if (decision === "deny") return "rejected";
+function decisionToStatus(decision: string | null | undefined): Exclude<ApprovalStatus, "pending"> {
+  if (decision === "allow-once" || decision === "allow-always") {
+    return "approved";
+  }
+  if (decision === "deny") {
+    return "rejected";
+  }
   return "expired";
 }
 
@@ -267,7 +277,9 @@ export const approvalHandlers: GatewayRequestHandlers = {
       const reason = String(params.reason || "");
       const approvalLevel = typeof params.approvalLevel === "number" ? params.approvalLevel : 5;
       const timeoutMs =
-        typeof params.timeoutMs === "number" ? params.timeoutMs : DEFAULT_PLUGIN_APPROVAL_TIMEOUT_MS;
+        typeof params.timeoutMs === "number"
+          ? params.timeoutMs
+          : DEFAULT_PLUGIN_APPROVAL_TIMEOUT_MS;
 
       if (!requesterId || !toolName) {
         respond(
@@ -329,7 +341,16 @@ export const approvalHandlers: GatewayRequestHandlers = {
         request: record.request,
         createdAtMs: record.createdAtMs,
         expiresAtMs: record.expiresAtMs,
-        meta: { requesterId, requesterName, approverId, approverName, toolName, toolArgs, reason, approvalLevel },
+        meta: {
+          requesterId,
+          requesterName,
+          approverId,
+          approverName,
+          toolName,
+          toolArgs,
+          reason,
+          approvalLevel,
+        },
       }).catch((err) => console.error("[Approval] audit write failed:", err));
 
       // 立即返回 accepted（twoPhase 模式），agent 可通过 approval.get_status 轮询或等待事件
@@ -389,7 +410,10 @@ export const approvalHandlers: GatewayRequestHandlers = {
           respond(
             false,
             undefined,
-            errorShape(ErrorCodes.INVALID_REQUEST, `Approval ${approvalId} not found or already resolved`),
+            errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              `Approval ${approvalId} not found or already resolved`,
+            ),
           );
           return;
         }
@@ -411,7 +435,13 @@ export const approvalHandlers: GatewayRequestHandlers = {
       if (ok) {
         context.broadcast(
           "plugin.approval.resolved",
-          { id: targetId, decision: "allow-once", resolvedBy: approverId, ts: Date.now(), request: snapshot?.request },
+          {
+            id: targetId,
+            decision: "allow-once",
+            resolvedBy: approverId,
+            ts: Date.now(),
+            request: snapshot?.request,
+          },
           { dropIfSlow: true },
         );
       }
@@ -470,7 +500,10 @@ export const approvalHandlers: GatewayRequestHandlers = {
           respond(
             false,
             undefined,
-            errorShape(ErrorCodes.INVALID_REQUEST, `Approval ${approvalId} not found or already resolved`),
+            errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              `Approval ${approvalId} not found or already resolved`,
+            ),
           );
           return;
         }
@@ -492,7 +525,13 @@ export const approvalHandlers: GatewayRequestHandlers = {
       if (ok) {
         context.broadcast(
           "plugin.approval.resolved",
-          { id: targetId, decision: "deny", resolvedBy: approverId, ts: Date.now(), request: snapshot?.request },
+          {
+            id: targetId,
+            decision: "deny",
+            resolvedBy: approverId,
+            ts: Date.now(),
+            request: snapshot?.request,
+          },
           { dropIfSlow: true },
         );
       }
@@ -558,9 +597,8 @@ export const approvalHandlers: GatewayRequestHandlers = {
       }
 
       const resolvedId = manager.lookupPendingId(approvalId);
-      const targetId = resolvedId.kind !== "none" && resolvedId.kind !== "ambiguous"
-        ? resolvedId.id
-        : approvalId;
+      const targetId =
+        resolvedId.kind !== "none" && resolvedId.kind !== "ambiguous" ? resolvedId.id : approvalId;
 
       const snapshot = manager.getSnapshot(targetId);
       const ok = manager.resolve(targetId, "deny", `cancelled-by:${requesterId}`);
@@ -568,7 +606,13 @@ export const approvalHandlers: GatewayRequestHandlers = {
       if (ok) {
         context.broadcast(
           "plugin.approval.resolved",
-          { id: targetId, decision: "deny", resolvedBy: requesterId, ts: Date.now(), request: snapshot?.request },
+          {
+            id: targetId,
+            decision: "deny",
+            resolvedBy: requesterId,
+            ts: Date.now(),
+            request: snapshot?.request,
+          },
           { dropIfSlow: true },
         );
       }
@@ -675,8 +719,12 @@ export const approvalHandlers: GatewayRequestHandlers = {
 
       const pending = Array.from(approvalCache.values())
         .filter((req) => {
-          if (req.status !== "pending") return false;
-          if (approverId && req.approverId && req.approverId !== approverId) return false;
+          if (req.status !== "pending") {
+            return false;
+          }
+          if (approverId && req.approverId && req.approverId !== approverId) {
+            return false;
+          }
           return true;
         })
         .toSorted((a, b) => b.createdAt - a.createdAt);

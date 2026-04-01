@@ -624,8 +624,7 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
         // 决策：top1 与 top2 优先级相同时取 2 条，否则取 1 条（防止 medium 任务堆积）
         const top1 = sortedTodos[0];
         const top2 = sortedTodos[1];
-        const tasksToActivate =
-          top2 && top2.priority === top1.priority ? [top1, top2] : [top1];
+        const tasksToActivate = top2 && top2.priority === top1.priority ? [top1, top2] : [top1];
 
         // 批量将选中任务程序直接更新为 in-progress，不依赖 agent 自己改状态
         const activatedTasks: typeof tasksToActivate = [];
@@ -634,9 +633,13 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
             status: "in-progress",
             timeTracking: { ...t.timeTracking, startedAt: now, lastActivityAt: now },
           });
-          if (updated) activatedTasks.push(updated);
+          if (updated) {
+            activatedTasks.push(updated);
+          }
         }
-        if (activatedTasks.length === 0) continue;
+        if (activatedTasks.length === 0) {
+          continue;
+        }
 
         const nextTask = activatedTasks[0];
         const queueRemaining = sortedTodos.length - tasksToActivate.length;
@@ -648,18 +651,22 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           : undefined;
 
         const taskLines = activatedTasks
-          .map((t, i) => [
-            `${i + 1}. [IN-PROGRESS] ${t.title}`,
-            `   Task ID: ${t.id}`,
-            `   Priority: ${t.priority}`,
-            t.projectId ? `   Project: ${t.projectId}` : null,
-            t.teamId ? `   Team: ${t.teamId}` : null,
-            t.organizationId ? `   Organization: ${t.organizationId}` : null,
-            t.type ? `   Type: ${t.type}` : null,
-            t.dueDate ? `   Due: ${new Date(t.dueDate).toISOString()}` : null,
-            projectGroupKey ? `   Project Group Channel: sessionKey=${projectGroupKey}` : null,
-            t.description ? `   Description: ${t.description.slice(0, 200)}` : null,
-          ].filter(Boolean).join("\n"))
+          .map((t, i) =>
+            [
+              `${i + 1}. [IN-PROGRESS] ${t.title}`,
+              `   Task ID: ${t.id}`,
+              `   Priority: ${t.priority}`,
+              t.projectId ? `   Project: ${t.projectId}` : null,
+              t.teamId ? `   Team: ${t.teamId}` : null,
+              t.organizationId ? `   Organization: ${t.organizationId}` : null,
+              t.type ? `   Type: ${t.type}` : null,
+              t.dueDate ? `   Due: ${new Date(t.dueDate).toISOString()}` : null,
+              projectGroupKey ? `   Project Group Channel: sessionKey=${projectGroupKey}` : null,
+              t.description ? `   Description: ${t.description.slice(0, 200)}` : null,
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          )
           .join("\n\n");
 
         const wakeMessage = (() => {

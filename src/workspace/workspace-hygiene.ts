@@ -16,6 +16,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { archiveMemoryOverflow } from "./file-tools-secure.js";
 
 // ============================================================================
 // 类型定义
@@ -138,7 +139,7 @@ function loadRegisteredProjectIds(): Set<string> {
 }
 
 /**
- * 检查1：MEMORY.md 大小
+ * 检查1：MEMORY.md 大小（超限时自动归档）
  */
 function checkMemorySize(agentWorkspaceDir: string, agentId: string): HygieneIssue[] {
   const issues: HygieneIssue[] = [];
@@ -149,12 +150,33 @@ function checkMemorySize(agentWorkspaceDir: string, agentId: string): HygieneIss
   try {
     const size = fs.statSync(memPath).size;
     if (size >= MEMORY_ERROR_BYTES) {
+      // 自动归档：将旧内容转移到 memory/ 子目录
+      let autoFixed = false;
+      try {
+        const content = fs.readFileSync(memPath, "utf-8");
+        const result = archiveMemoryOverflow(content, memPath);
+        if (result.archived) {
+          const archiveDir = path.dirname(result.archiveFilePath);
+          if (!fs.existsSync(archiveDir)) {
+            fs.mkdirSync(archiveDir, { recursive: true });
+          }
+          fs.writeFileSync(result.archiveFilePath, result.archiveContent, "utf-8");
+          fs.writeFileSync(memPath, result.newMainContent, "utf-8");
+          autoFixed = true;
+          console.log(`  → 已自动归档 Agent [${agentId}] MEMORY.md → ${result.archiveFilePath}`);
+        }
+      } catch {
+        // 归档失败不影响报告
+      }
       issues.push({
         level: "error",
         category: "memory-size",
         path: memPath,
         message: `Agent [${agentId}] MEMORY.md 超过 10KB 上限，当前 ${(size / 1024).toFixed(1)}KB，需要立即归档`,
-        suggestion: "系统将在下次 bootstrap 时自动归档，或手动运行 workspace.hygiene.archive",
+        suggestion: autoFixed
+          ? "已自动归档"
+          : "系统将在下次 bootstrap 时自动归档，或手动运行 workspace.hygiene.archive",
+        autoFixed,
       });
     } else if (size >= MEMORY_WARN_BYTES) {
       issues.push({
@@ -172,7 +194,7 @@ function checkMemorySize(agentWorkspaceDir: string, agentId: string): HygieneIss
 }
 
 /**
- * 检查3：个人工作空间根目录杂项文件
+ * 检查3：个人工作空间根目录杂项文件（自动移动到 docs/ 子目录）
  */
 function checkStrayFiles(agentWorkspaceDir: string, agentId: string): HygieneIssue[] {
   const issues: HygieneIssue[] = [];
@@ -186,12 +208,26 @@ function checkStrayFiles(agentWorkspaceDir: string, agentId: string): HygieneIss
         if (!SYSTEM_FILES_WHITELIST.has(entry.name.toLowerCase())) {
           const filePath = path.join(agentWorkspaceDir, entry.name);
           const size = fs.statSync(filePath).size;
+          const docsDir = path.join(agentWorkspaceDir, "docs");
+          const destPath = path.join(docsDir, entry.name);
+          let autoFixed = false;
+          try {
+            if (!fs.existsSync(docsDir)) {
+              fs.mkdirSync(docsDir, { recursive: true });
+            }
+            fs.renameSync(filePath, destPath);
+            autoFixed = true;
+            console.log(`  → 移动到 docs/ 子目录: ${destPath}`);
+          } catch {
+            // 移动失败（如目标已存在），仅报告
+          }
           issues.push({
             level: "warn",
             category: "stray-file",
             path: filePath,
             message: `Agent [${agentId}] 个人工作空间根目录存在非系统文件 "${entry.name}" (${(size / 1024).toFixed(1)}KB)`,
-            suggestion: `移动到 docs/ 子目录: ${path.join(agentWorkspaceDir, "docs", entry.name)}`,
+            suggestion: `移动到 docs/ 子目录: ${destPath}`,
+            autoFixed,
           });
         }
       }
