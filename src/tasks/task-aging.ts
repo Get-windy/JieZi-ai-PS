@@ -5,8 +5,8 @@
  * 基于业界最佳实践（Jira Automation、Scrum Backlog Grooming）
  */
 
-import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
 import { requestHeartbeatNow } from "../../upstream/src/infra/heartbeat-wake.js";
+import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
 import { t } from "../i18n/index.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import * as storage from "./storage.js";
@@ -200,7 +200,9 @@ export function shouldTriggerAutoAction(task: Task, actionType: string): boolean
     case "archive":
       // urgent/high 不自动归档（需人工介入）
       if (pThresholds) {
-        if (pThresholds.archive === null) return false;
+        if (pThresholds.archive === null) {
+          return false;
+        }
         return agingLevel === "critical" && inactiveDuration >= pThresholds.archive;
       }
       return (
@@ -212,8 +214,7 @@ export function shouldTriggerAutoAction(task: Task, actionType: string): boolean
       if (pThresholds) {
         return (
           task.status === "blocked" &&
-          now - (task.timeTracking.lastActivityAt ?? task.createdAt) >=
-            pThresholds.blockedEscalate
+          now - (task.timeTracking.lastActivityAt ?? task.createdAt) >= pThresholds.blockedEscalate
         );
       }
       return (
@@ -369,7 +370,9 @@ export async function archiveStaleTask(task: Task): Promise<void> {
         `Title: ${task.title}`,
         `Priority: ${task.priority}`,
         `Age: ${ageInDays} day(s)`,
-        task.assignees?.length ? `Was assigned to: ${task.assignees.map((a) => a.id).join(", ")}` : null,
+        task.assignees?.length
+          ? `Was assigned to: ${task.assignees.map((a) => a.id).join(", ")}`
+          : null,
         task.projectId ? `Project: ${task.projectId}` : null,
         ``,
         `If this task should NOT have been cancelled, use agent_task_manage to restore it.`,
@@ -634,7 +637,8 @@ export async function scanAndProcessAgingTasks(options?: {
           now - lastRemindedAt > REMIND_COOLDOWN &&
           shouldTriggerAutoAction(task, "remind")
         ) {
-          const supervisorId = (task.metadata?.supervisorId as string) ?? task.supervisorId ?? task.creatorId;
+          const supervisorId =
+            (task.metadata?.supervisorId as string) ?? task.supervisorId ?? task.creatorId;
           if (supervisorId && supervisorId !== "system") {
             sendAgingReminder(task, normalizeAgentId(supervisorId));
             stats.reminded++;
@@ -651,7 +655,8 @@ export async function scanAndProcessAgingTasks(options?: {
           now - lastEscalatedAt > ESCALATE_COOLDOWN &&
           shouldTriggerAutoAction(task, "escalate")
         ) {
-          const supervisorId = (task.metadata?.supervisorId as string) ?? task.supervisorId ?? task.creatorId;
+          const supervisorId =
+            (task.metadata?.supervisorId as string) ?? task.supervisorId ?? task.creatorId;
           if (supervisorId && supervisorId !== "system") {
             escalateTask(task, normalizeAgentId(supervisorId));
             stats.escalated++;
@@ -677,7 +682,12 @@ export async function scanAndProcessAgingTasks(options?: {
       }
     }
 
-    if (stats.reminded > 0 || stats.escalated > 0 || stats.archived > 0 || stats.autoUnblocked > 0) {
+    if (
+      stats.reminded > 0 ||
+      stats.escalated > 0 ||
+      stats.archived > 0 ||
+      stats.autoUnblocked > 0
+    ) {
       console.log(
         t("task.aging.scan_complete", {
           reminded: String(stats.reminded),

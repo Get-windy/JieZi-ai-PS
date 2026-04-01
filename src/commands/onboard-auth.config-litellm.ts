@@ -1,5 +1,5 @@
 import type { OpenClawConfig } from "../config/config.js";
-import { LITELLM_DEFAULT_MODEL_REF } from "../plugins/provider-auth-storage.js";
+import { LITELLM_DEFAULT_MODEL_REF } from "../plugin-sdk/litellm.js";
 import {
   applyAgentDefaultModelPrimary,
   applyProviderConfigWithDefaultModel,

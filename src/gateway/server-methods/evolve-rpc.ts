@@ -507,7 +507,7 @@ function loadOntologyStore(agentId?: string): OntologyStore {
         if (existing) {
           const updated = {
             ...existing,
-            properties: { ...existing.properties, ...(op.patch.properties ?? {}) },
+            properties: { ...existing.properties, ...op.patch.properties },
             updatedAt: op.updatedAt,
           };
           store.entities.set(op.id, updated);
@@ -2480,7 +2480,7 @@ export function autoSaveReflection(params: {
       return; // 反思内容无实质，丢弃
     }
     // 纯 ASCII 且字数少： 比如 "ok" "done" "N/A" "yes" 等
-    if (/^[\u0020-\u007E\u0009\u000A\u000D]+$/.test(reflTrimmed) && reflTrimmed.length < 20) {
+    if (/^[\u0020-\u007E\t\n\r]+$/.test(reflTrimmed) && reflTrimmed.length < 20) {
       return;
     }
     // 过滤无意义 lesson

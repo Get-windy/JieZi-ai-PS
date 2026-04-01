@@ -182,16 +182,10 @@ const inputOptions = {
 // 将这三个文件固定到命名 chunk 后，所有调用方共享同一个缓存实例。
 const pluginLoaderManualChunks = (id: string): string | undefined => {
   const norm = id.replace(/\\/g, "/");
-  if (
-    norm.includes("upstream/src/plugins/loader") ||
-    norm.includes("src/plugins/loader")
-  ) {
+  if (norm.includes("upstream/src/plugins/loader") || norm.includes("src/plugins/loader")) {
     return "plugin-loader";
   }
-  if (
-    norm.includes("upstream/src/plugins/discovery") ||
-    norm.includes("src/plugins/discovery")
-  ) {
+  if (norm.includes("upstream/src/plugins/discovery") || norm.includes("src/plugins/discovery")) {
     return "plugin-loader";
   }
   if (
@@ -392,26 +386,32 @@ export default defineConfig([
     "src/plugin-sdk/qwen-portal-auth.ts",
     "src/plugin-sdk/synology-chat.ts",
     "src/plugin-sdk/device-pair.ts",
-  ].map((entry) => {
-    // Apply overlay: if the local src/ entry doesn't exist, use upstream/src/ path
-    const absEntry = path.resolve(ROOT_DIR, entry);
-    const resolvedEntry = existsSync(absEntry) ? entry : (() => {
-      const rel = path.relative(SRC_DIR, absEntry);
-      const upPath = path.join(UP_SRC_DIR, rel);
-      return existsSync(upPath) ? upPath : null;
-    })();
-    if (!resolvedEntry) return null; // skip entries where neither local nor upstream file exists
-    return ({
-      entry: resolvedEntry,
-      outDir: "dist/plugin-sdk",
-      env,
-      external,
-      plugins: [overlayPlugin],
-      fixedExtension: false,
-      platform: "node" as const,
-      inputOptions: pluginSdkInputOptions,
-    });
-  }).filter((config): config is NonNullable<typeof config> => config !== null),
+  ]
+    .map((entry) => {
+      // Apply overlay: if the local src/ entry doesn't exist, use upstream/src/ path
+      const absEntry = path.resolve(ROOT_DIR, entry);
+      const resolvedEntry = existsSync(absEntry)
+        ? entry
+        : (() => {
+            const rel = path.relative(SRC_DIR, absEntry);
+            const upPath = path.join(UP_SRC_DIR, rel);
+            return existsSync(upPath) ? upPath : null;
+          })();
+      if (!resolvedEntry) {
+        return null;
+      } // skip entries where neither local nor upstream file exists
+      return {
+        entry: resolvedEntry,
+        outDir: "dist/plugin-sdk",
+        env,
+        external,
+        plugins: [overlayPlugin],
+        fixedExtension: false,
+        platform: "node" as const,
+        inputOptions: pluginSdkInputOptions,
+      };
+    })
+    .filter((config): config is NonNullable<typeof config> => config !== null),
   {
     entry: "src/extensionAPI.ts",
     env,

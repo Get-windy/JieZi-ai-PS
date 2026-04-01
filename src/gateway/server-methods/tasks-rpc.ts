@@ -1178,8 +1178,12 @@ export const tasksRpc: GatewayRequestHandlers = {
 
       if (!parentTaskId || !title) {
         const missing = [];
-        if (!parentTaskId) missing.push('"parentTaskId" (parent task ID)');
-        if (!title) missing.push('"title" (subtask title, required, 1-200 characters)');
+        if (!parentTaskId) {
+          missing.push('"parentTaskId" (parent task ID)');
+        }
+        if (!title) {
+          missing.push('"title" (subtask title, required, 1-200 characters)');
+        }
         respond(
           false,
           undefined,

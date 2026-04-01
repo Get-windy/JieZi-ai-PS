@@ -79,7 +79,9 @@ export async function verifyAgentDeptMembership(
  * @returns 最匹配的部门 ID，或 null（无匹配）
  */
 export async function resolveAgentDepartment(agentId: string): Promise<string | null> {
-  if (!agentId) return null;
+  if (!agentId) {
+    return null;
+  }
 
   const allOrgs = await organizationStorage.listOrganizations({ type: "department" });
 
@@ -99,11 +101,15 @@ export async function resolveAgentDepartment(agentId: string): Promise<string | 
     }
   }
 
-  if (memberDepts.length === 0) return null;
+  if (memberDepts.length === 0) {
+    return null;
+  }
 
   // 优先返回配置了 sandboxConfig 的部门
   const withSandbox = memberDepts.find((d) => d.hasSandboxConfig);
-  if (withSandbox) return withSandbox.deptId;
+  if (withSandbox) {
+    return withSandbox.deptId;
+  }
 
   // 否则返回第一个部门
   return memberDepts[0]?.deptId ?? null;
@@ -126,7 +132,9 @@ export async function guardedResolveDeptId(
   agentId: string,
   requestedDeptId?: string | null,
 ): Promise<string | null> {
-  if (!agentId) return null;
+  if (!agentId) {
+    return null;
+  }
 
   if (requestedDeptId) {
     // 显式指定了部门，进行成员验证

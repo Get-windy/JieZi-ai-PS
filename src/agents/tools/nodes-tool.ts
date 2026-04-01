@@ -13,15 +13,35 @@ import {
 import { parseTimeoutMs } from "../../../upstream/src/cli/parse-timeout.js";
 
 function parseEnvPairs(env: unknown): Record<string, string> | undefined {
-  if (!Array.isArray(env) || env.length === 0) return undefined;
+  if (!Array.isArray(env) || env.length === 0) {
+    return undefined;
+  }
   const result: Record<string, string> = {};
   for (const pair of env) {
     const s = String(pair);
     const idx = s.indexOf("=");
-    if (idx > 0) result[s.slice(0, idx)] = s.slice(idx + 1);
+    if (idx > 0) {
+      result[s.slice(0, idx)] = s.slice(idx + 1);
+    }
   }
   return Object.keys(result).length > 0 ? result : undefined;
 }
+import { resolveImageSanitizationLimits } from "../../../upstream/src/agents/image-sanitization.js";
+import { optionalStringEnum, stringEnum } from "../../../upstream/src/agents/schema/typebox.js";
+import {
+  type AnyAgentTool,
+  jsonResult,
+  readStringParam,
+} from "../../../upstream/src/agents/tools/common.js";
+import {
+  callGatewayTool,
+  readGatewayCallOptions,
+} from "../../../upstream/src/agents/tools/gateway.js";
+import {
+  listNodes,
+  resolveNodeIdFromList,
+  resolveNodeId,
+} from "../../../upstream/src/agents/tools/nodes-utils.js";
 import {
   parseScreenRecordPayload,
   screenRecordTempPath,
@@ -31,12 +51,7 @@ import { parseDurationMs } from "../../../upstream/src/cli/parse-duration.js";
 import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import { imageMimeFromFormat } from "../../../upstream/src/media/mime.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
-import { resolveImageSanitizationLimits } from "../../../upstream/src/agents/image-sanitization.js";
-import { optionalStringEnum, stringEnum } from "../../../upstream/src/agents/schema/typebox.js";
 import { sanitizeToolResultImages } from "../tool-images.js";
-import { type AnyAgentTool, jsonResult, readStringParam } from "../../../upstream/src/agents/tools/common.js";
-import { callGatewayTool, readGatewayCallOptions } from "../../../upstream/src/agents/tools/gateway.js";
-import { listNodes, resolveNodeIdFromList, resolveNodeId } from "../../../upstream/src/agents/tools/nodes-utils.js";
 
 const NODES_TOOL_ACTIONS = [
   "status",

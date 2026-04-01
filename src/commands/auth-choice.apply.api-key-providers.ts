@@ -1,6 +1,7 @@
 import { ensureAuthProfileStore, resolveAuthProfileOrder } from "../agents/auth-profiles.js";
+import { LITELLM_DEFAULT_MODEL_REF } from "../plugin-sdk/litellm.js";
 import { applyAuthProfileConfig } from "../plugins/provider-auth-helpers.js";
-import { LITELLM_DEFAULT_MODEL_REF, setLitellmApiKey } from "../plugins/provider-auth-storage.js";
+import { setLitellmApiKey } from "../plugins/provider-auth-storage.js";
 import { normalizeApiKeyInput, validateApiKeyInput } from "./auth-choice.api-key.js";
 import { ensureApiKeyFromOptionEnvOrPrompt } from "./auth-choice.apply-helpers.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";

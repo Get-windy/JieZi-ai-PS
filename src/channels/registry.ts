@@ -220,6 +220,19 @@ export function listRegisteredChannelPluginAliases(): string[] {
   return registry.channels.flatMap((entry) => entry.plugin.meta?.aliases ?? []);
 }
 
+export function getRegisteredChannelPluginMeta(
+  id: string,
+): Pick<ChannelMeta, "aliases" | "markdownCapable"> | null {
+  const registry = requireActivePluginRegistry();
+  const hit = registry.channels.find((entry) => {
+    const entryId = String(entry.plugin.id ?? "")
+      .trim()
+      .toLowerCase();
+    return entryId && entryId === id.trim().toLowerCase();
+  });
+  return hit?.plugin.meta ?? null;
+}
+
 export function formatChannelPrimerLine(meta: ChatChannelMeta): string {
   return `${meta.label}: ${meta.blurb}`;
 }

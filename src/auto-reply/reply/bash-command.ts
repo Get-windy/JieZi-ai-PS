@@ -1,16 +1,20 @@
-import { resolveSessionAgentId } from "../../agents/agent-scope.js";
-import { getFinishedSession, getSession, markExited } from "../../../upstream/src/agents/bash-process-registry.js";
+import {
+  getFinishedSession,
+  getSession,
+  markExited,
+} from "../../../upstream/src/agents/bash-process-registry.js";
 import { createExecTool } from "../../../upstream/src/agents/bash-tools.js";
 import { resolveSandboxRuntimeStatus } from "../../../upstream/src/agents/sandbox.js";
-import { killProcessTree } from "../../agents/shell-utils.js";
-import { isCommandFlagEnabled } from "../../config/commands.js";
+import { buildDisabledCommandReply } from "../../../upstream/src/auto-reply/reply/command-gates.js";
+import { formatElevatedUnavailableMessage } from "../../../upstream/src/auto-reply/reply/elevated-unavailable.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import { logVerbose } from "../../../upstream/src/globals.js";
 import { clampInt } from "../../../upstream/src/utils.js";
+import { resolveSessionAgentId } from "../../agents/agent-scope.js";
+import { isCommandFlagEnabled } from "../../config/commands.js";
+import { killProcessTree } from "../../process/kill-tree.js";
 import type { MsgContext } from "../templating.js";
-import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
-import { buildDisabledCommandReply } from "../../../upstream/src/auto-reply/reply/command-gates.js";
-import { formatElevatedUnavailableMessage } from "../../../upstream/src/auto-reply/reply/elevated-unavailable.js";
 import { stripMentions, stripStructuralPrefixes } from "./mentions.js";
 
 const CHAT_BASH_SCOPE_KEY = "chat:bash";
@@ -335,7 +339,6 @@ export async function handleBashChatCommand(params: {
     const shouldBackgroundImmediately = foregroundMs <= 0;
     const timeoutSec = params.cfg.tools?.exec?.timeoutSec;
     const notifyOnExit = params.cfg.tools?.exec?.notifyOnExit;
-    const notifyOnExitEmptySuccess = params.cfg.tools?.exec?.notifyOnExitEmptySuccess;
     const execTool = createExecTool({
       scopeKey: CHAT_BASH_SCOPE_KEY,
       allowBackground: true,

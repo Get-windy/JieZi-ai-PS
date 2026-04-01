@@ -16,8 +16,8 @@
 
 import { resolveSessionAgentId } from "../../../upstream/src/agents/agent-scope.js";
 import { resolveSandboxContext } from "../../../upstream/src/agents/sandbox/context.js";
-import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import type { SandboxContext } from "../../../upstream/src/agents/sandbox/types.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
 import { guardedResolveDeptId } from "./dept-access-guard.js";
 import { resolveSandboxConfigWithDept } from "./dept-sandbox-resolver.js";
 
@@ -52,9 +52,7 @@ export async function resolveSandboxContextWithDept(params: {
     : undefined;
 
   // 2. 对抗层：验证 agentId 的部门归属，获取已验证的 departmentId
-  const verifiedDeptId = agentId
-    ? await guardedResolveDeptId(agentId, params.departmentId)
-    : null;
+  const verifiedDeptId = agentId ? await guardedResolveDeptId(agentId, params.departmentId) : null;
 
   // 3. 如果没有部门归属，直接走原始路径
   if (!verifiedDeptId) {
@@ -106,7 +104,9 @@ export async function resolveSandboxContextWithDept(params: {
 function injectSandboxConfig(
   config: OpenClawConfig | undefined,
   agentId: string | undefined,
-  deptCfg: ReturnType<typeof import("../../../upstream/src/agents/sandbox/config.js")["resolveSandboxConfigForAgent"]>,
+  deptCfg: ReturnType<
+    (typeof import("../../../upstream/src/agents/sandbox/config.js"))["resolveSandboxConfigForAgent"]
+  >,
 ): OpenClawConfig {
   const base: OpenClawConfig = config ? { ...config } : {};
 
@@ -116,7 +116,7 @@ function injectSandboxConfig(
     scope: deptCfg.scope,
     workspaceRoot: deptCfg.workspaceRoot,
     docker: {
-      ...(base.agents?.defaults?.sandbox?.docker ?? {}),
+      ...base.agents?.defaults?.sandbox?.docker,
       // 防进攻4：部门强制参数覆盖
       containerPrefix: deptCfg.docker.containerPrefix,
       network: deptCfg.docker.network,
@@ -142,18 +142,19 @@ function injectSandboxConfig(
       sandbox: mergeAgentSandbox((existingAgent as any)?.sandbox, injectedSandbox),
     };
 
-    const updatedList = existingAgentIndex >= 0
-      ? [
-          ...existingList.slice(0, existingAgentIndex),
-          updatedAgent,
-          ...existingList.slice(existingAgentIndex + 1),
-        ]
-      : [...existingList, updatedAgent];
+    const updatedList =
+      existingAgentIndex >= 0
+        ? [
+            ...existingList.slice(0, existingAgentIndex),
+            updatedAgent,
+            ...existingList.slice(existingAgentIndex + 1),
+          ]
+        : [...existingList, updatedAgent];
 
     return {
       ...base,
       agents: {
-        ...(base.agents ?? {}),
+        ...base.agents,
         list: updatedList,
       },
     };
@@ -163,9 +164,9 @@ function injectSandboxConfig(
   return {
     ...base,
     agents: {
-      ...(base.agents ?? {}),
+      ...base.agents,
       defaults: {
-        ...(base.agents?.defaults ?? {}),
+        ...base.agents?.defaults,
         sandbox: injectedSandbox,
       },
     },
@@ -184,7 +185,9 @@ function mergeAgentSandbox(
   deptInjected: Record<string, any>,
   // oxlint-disable-next-line typescript/no-explicit-any
 ): Record<string, any> {
-  if (!existingSandbox) return deptInjected;
+  if (!existingSandbox) {
+    return deptInjected;
+  }
 
   return {
     ...existingSandbox,
@@ -193,7 +196,7 @@ function mergeAgentSandbox(
     scope: deptInjected.scope,
     workspaceRoot: deptInjected.workspaceRoot,
     docker: {
-      ...(existingSandbox.docker ?? {}),
+      ...existingSandbox.docker,
       // 部门强制参数（防进攻4）
       containerPrefix: deptInjected.docker.containerPrefix,
       network: deptInjected.docker.network,
@@ -210,6 +213,8 @@ function mergeBuildBinds(
   existing: string[] | undefined,
   deptBinds: string[] | undefined,
 ): string[] | undefined {
-  if (!existing?.length && !deptBinds?.length) return undefined;
+  if (!existing?.length && !deptBinds?.length) {
+    return undefined;
+  }
   return [...(existing ?? []), ...(deptBinds ?? [])];
 }

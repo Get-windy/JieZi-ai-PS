@@ -3,23 +3,26 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Command } from "commander";
-import { resolveDefaultAgentId } from "../agents/agent-scope.js";
+import type { MemorySearchManagerResult } from "../../upstream/extensions/memory-core/src/memory/search-manager.js";
+import {
+  listMemoryFiles,
+  normalizeExtraMemoryPaths,
+} from "../../upstream/packages/memory-host-sdk/src/host/internal.js";
+import { formatErrorMessage, withManager } from "../../upstream/src/cli/cli-utils.js";
+import { formatHelpExamples } from "../../upstream/src/cli/help-format.js";
+import { withProgress, withProgressTotals } from "../../upstream/src/cli/progress.js";
 import { loadConfig } from "../../upstream/src/config/config.js";
 import { resolveStateDir } from "../../upstream/src/config/paths.js";
 import { resolveSessionTranscriptsDirForAgent } from "../../upstream/src/config/sessions/paths.js";
 import { setVerbose } from "../../upstream/src/globals.js";
 import { getMemorySearchManager } from "../../upstream/src/plugin-sdk/memory-core-engine-runtime.js";
-import type { MemorySearchManagerResult } from "../../upstream/extensions/memory-core/src/memory/search-manager.js";
-import { listMemoryFiles, normalizeExtraMemoryPaths } from "../../upstream/packages/memory-host-sdk/src/host/internal.js";
 import { defaultRuntime } from "../../upstream/src/runtime.js";
 import { formatDocsLink } from "../../upstream/src/terminal/links.js";
 import { colorize, isRich, theme } from "../../upstream/src/terminal/theme.js";
 import { shortenHomeInString, shortenHomePath } from "../../upstream/src/utils.js";
-import { formatErrorMessage, withManager } from "../../upstream/src/cli/cli-utils.js";
+import { resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { resolveCommandSecretRefsViaGateway } from "./command-secret-gateway.js";
-import { getMemoryCommandSecretTargetIds } from "./command-secret-targets.js";
-import { formatHelpExamples } from "../../upstream/src/cli/help-format.js";
-import { withProgress, withProgressTotals } from "../../upstream/src/cli/progress.js";
+import { getAgentRuntimeCommandSecretTargetIds } from "./command-secret-targets.js";
 
 type MemoryCommandOptions = {
   agent?: string;
@@ -52,11 +55,11 @@ type LoadedMemoryCommandConfig = {
   diagnostics: string[];
 };
 
-async function loadMemoryCommandConfig(commandName: string): Promise<LoadedMemoryCommandConfig> {
+async function _loadMemoryCommandConfig(commandName: string): Promise<LoadedMemoryCommandConfig> {
   const { resolvedConfig, diagnostics } = await resolveCommandSecretRefsViaGateway({
     config: loadConfig(),
     commandName,
-    targetIds: getMemoryCommandSecretTargetIds(),
+    targetIds: getAgentRuntimeCommandSecretTargetIds(),
   });
   return {
     config: resolvedConfig,
@@ -64,7 +67,7 @@ async function loadMemoryCommandConfig(commandName: string): Promise<LoadedMemor
   };
 }
 
-function emitMemorySecretResolveDiagnostics(
+function _emitMemorySecretResolveDiagnostics(
   diagnostics: string[],
   params?: { json?: boolean },
 ): void {

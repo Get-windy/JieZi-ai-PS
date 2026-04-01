@@ -415,3 +415,5 @@ export function validateConfigObjectRawWithPlugins(
 ): ValidateConfigWithPluginsResult {
   return validateConfigObjectWithPluginsBase(raw, { applyDefaults: false, env: params?.env });
 }
+
+export { collectUnsupportedSecretRefPolicyIssues } from "../../upstream/src/config/validation.js";

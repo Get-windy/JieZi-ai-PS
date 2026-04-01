@@ -32,7 +32,7 @@ import type { ResolvedMessagingTarget } from "../../../upstream/src/infra/outbou
 import {
   isWhatsAppGroupJid,
   normalizeWhatsAppTarget,
-} from "../../../upstream/src/plugin-sdk/whatsapp-shared.js";
+} from "../../../upstream/src/plugin-sdk/whatsapp-targets.js";
 import type { MsgContext } from "../../auto-reply/templating.js";
 import { buildAgentSessionKey, type RoutePeer } from "../../routing/resolve-route.js";
 import { resolveThreadSessionKeys } from "../../routing/session-key.js";
