@@ -1163,8 +1163,10 @@ export function isProviderUsableSync(providerId: string): boolean | undefined {
     // → 可能是旧数据/未纳管，不拦截（返回 undefined 让上层用旧逻辑）
     return undefined;
   }
-  // 只要有一个启用的认证，provider 就是 healthy
-  return authList.some((a) => a.enabled);
+  // 有至少一个「启用 + 未熔断 + 未周期耗尽」的认证，provider 才算 healthy
+  return authList.some(
+    (a) => a.enabled && !isAuthCircuitOpen(a.authId) && !isQuotaCycleExhausted(a.authId),
+  );
 }
 
 /**
@@ -1203,9 +1205,12 @@ export function isModelIdUsableSync(modelId: string): boolean | undefined {
   if (!authList || authList.length === 0) {
     return false; // provider 没有任何认证，不可用
   }
-  const hasUsableAuth = authList.some((a) => a.enabled);
+  // 需要「启用 + 未熔断 + 未周期耗尽」三个条件同时满足
+  const hasUsableAuth = authList.some(
+    (a) => a.enabled && !isAuthCircuitOpen(a.authId) && !isQuotaCycleExhausted(a.authId),
+  );
   if (!hasUsableAuth) {
-    return false; // provider 下所有认证均已停用，不可路由
+    return false; // provider 下所有认证均已停用/冷却/配额耗尽，不可路由
   }
   return true;
 }
