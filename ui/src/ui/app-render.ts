@@ -126,6 +126,7 @@ import {
   updateProvider,
   deleteProvider,
   resetAuthCircuit,
+  toggleAuthEnabled,
 } from "./controllers/models.ts";
 import {
   loadActiveSessions,
@@ -184,7 +185,7 @@ async function loadAgentSoulFiles(state: AppViewState, agentId: string): Promise
       soul: string;
       agent: string;
       user: string;
-    }>("agent.identity.get", { agentId });
+    }>("agent.identity.files", { agentId });
     if (res) {
       state.agentSoulFiles = res;
       state.agentSoulDrafts = { soul: res.soul, agent: res.agent, user: res.user };
@@ -873,6 +874,7 @@ export function renderApp(state: AppViewState) {
                       apiKey: "",
                       baseUrl: auth.baseUrl ?? undefined,
                       dispatchPolicy: auth.dispatchPolicy ?? undefined,
+                      quotaCycle: auth.quotaCycle ?? undefined,
                     };
                   }
                 },
@@ -985,6 +987,14 @@ export function renderApp(state: AppViewState) {
                 },
                 onResetAuthCircuit: async (authId) => {
                   await resetAuthCircuit(state, authId);
+                },
+                onToggleAuthEnabled: async (authId, enabled) => {
+                  try {
+                    await toggleAuthEnabled(state, authId, enabled);
+                  } catch (err) {
+                    // 配额耗尽时后端会返回错误，明确提示用户
+                    alert(`⚠️ 无法启用认证\n\n${String(err)}`);
+                  }
                 },
                 onManageModels: (provider) => {
                   state.managingModelsProvider = provider;

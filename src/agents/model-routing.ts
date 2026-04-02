@@ -10,6 +10,7 @@
  */
 
 import type { AgentModelAccountsConfig } from "../config/types.agents.js";
+import { isProviderUsableSync } from "../gateway/server-methods/models.js";
 import { normalizeEloScore } from "./arena-benchmarks.js";
 
 // ==================== 类型定义 ====================
@@ -799,6 +800,7 @@ export async function routeToOptimalModelAccount(
   modelInfoGetter: (accountId: string) => Promise<ModelInfo | undefined>,
 ): Promise<RoutingResult> {
   // 0. 先过滤仅保留已绑定且已启用的模型账号（核心检查）
+  const skippedDueToAuth: string[] = []; // 记录因 provider 认证全停用被跳过的账号
   const boundAndEnabledAccounts = config.accounts.filter((accountId: string) => {
     // 查找账号配置
     // oxlint-disable-next-line typescript/no-explicit-any
@@ -808,20 +810,49 @@ export async function routeToOptimalModelAccount(
     // 但只要它在 accounts 列表里，就说明它是绑定的，默认应该是启用的
     if (!accountConfig) {
       // 已绑定但未配置的账号，默认启用
-      return true;
+      // 但仍然需要检查 provider 认证健康状态
+    } else {
+      // 检查是否启用（enabled 字段，默认为 true）
+      const enabled = accountConfig.enabled !== false;
+      if (!enabled) {
+        return false;
+      }
     }
 
-    // 检查是否启用（enabled 字段，默认为 true）
-    const enabled = accountConfig.enabled !== false;
-    if (!enabled) {
-      return false;
+    // Provider-level health gate：检查该模型账号对应的 provider 下是否有可用认证
+    // 业界做法（LiteLLM/OpenRouter/Portkey）：provider 认证全停用 → 不可路由，静默跳过
+    const slashIdx = accountId.indexOf("/");
+    if (slashIdx > 0) {
+      const providerId = accountId.substring(0, slashIdx);
+      const providerUsable = isProviderUsableSync(providerId);
+      if (providerUsable === false) {
+        // provider 认证确定全部停用，静默跳过（不报错，让路由层选择其他账号）
+        skippedDueToAuth.push(accountId);
+        return false;
+      }
+      // providerUsable === undefined 表示缓存未就绪或未在新系统管理，不拦截
     }
 
     return true;
   });
 
+  // 如果有因 provider 认证停用而被跳过的账号，记录日志（不报错，用户无感）
+  if (skippedDueToAuth.length > 0) {
+    console.log(
+      `[ModelRouting] Silently skipped ${skippedDueToAuth.length} account(s) due to provider auth disabled: ${skippedDueToAuth.join(", ")}. Routing to remaining available accounts.`,
+    );
+  }
+
   // 如果没有任何可用账号，抛出错误
   if (boundAndEnabledAccounts.length === 0) {
+    if (skippedDueToAuth.length > 0 && skippedDueToAuth.length === config.accounts.length) {
+      // 所有绑定账号均因 provider 认证停用而被跳过
+      // 业界做法：这种情况不该报错中断流程，而应该提示用户配置认证
+      throw new Error(
+        `All model accounts for this agent have their provider credentials disabled. ` +
+          `Please enable at least one authentication credential for the provider(s): ${[...new Set(skippedDueToAuth.map((id) => id.substring(0, id.indexOf("/"))))].join(", ")}.`,
+      );
+    }
     throw new Error(
       "No bound and enabled model accounts available for this agent. Please bind and enable at least one model account.",
     );

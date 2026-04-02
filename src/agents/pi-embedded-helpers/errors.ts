@@ -942,3 +942,53 @@ export function isFailoverAssistantError(msg: AssistantMessage | undefined): boo
   }
   return isFailoverErrorMessage(msg.errorMessage ?? "");
 }
+
+export type FailoverSignal = {
+  status?: number;
+  code?: string;
+  message?: string;
+};
+
+export type FailoverClassification =
+  | { kind: "reason"; reason: FailoverReason }
+  | { kind: "context_overflow" };
+
+export function classifyFailoverSignal(signal: FailoverSignal): FailoverClassification | null {
+  const message = signal.message ?? "";
+  // Try HTTP status first
+  if (typeof signal.status === "number" && Number.isFinite(signal.status)) {
+    const s = signal.status;
+    if (s === 402) {
+      return {
+        kind: "reason",
+        reason: isBillingErrorMessage(message) || !message ? "billing" : "rate_limit",
+      };
+    }
+    if (s === 429) {
+      return { kind: "reason", reason: "rate_limit" };
+    }
+    if (s === 401 || s === 403) {
+      return {
+        kind: "reason",
+        reason: isAuthPermanentErrorMessage(message) ? "auth_permanent" : "auth",
+      };
+    }
+    if (s === 408 || s === 502 || s === 503 || s === 504) {
+      return { kind: "reason", reason: "timeout" };
+    }
+    if (s === 529) {
+      return { kind: "reason", reason: "rate_limit" };
+    }
+  }
+  // Try message classification
+  if (message) {
+    if (isContextOverflowError(message)) {
+      return { kind: "context_overflow" };
+    }
+    const reason = classifyFailoverReason(message);
+    if (reason) {
+      return { kind: "reason", reason };
+    }
+  }
+  return null;
+}

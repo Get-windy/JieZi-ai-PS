@@ -16,17 +16,27 @@
  * - permissions.history - 获取权限变更历史
  */
 
+import {
+  listAgentEntries,
+  findAgentEntryIndex,
+} from "../../../upstream/src/commands/agents.config.js";
+import {
+  loadConfig,
+  readConfigFileSnapshot,
+  writeConfigFile,
+} from "../../../upstream/src/config/config.js";
+import type { OpenClawConfig } from "../../../upstream/src/config/types.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type {
+  GatewayRequestHandlers,
+  RespondFn,
+} from "../../../upstream/src/gateway/server-methods/types.js";
 import { advancedApprovalSystem } from "../../admin/advanced-approval.js";
 import { listAgentIds } from "../../agents/agent-scope.js";
-import { listAgentEntries, findAgentEntryIndex } from "../../../upstream/src/commands/agents.config.js";
-import { loadConfig, readConfigFileSnapshot, writeConfigFile } from "../../../upstream/src/config/config.js";
-import type { OpenClawConfig } from "../../../upstream/src/config/types.js";
-import type { AgentPermissionsConfig, PermissionSubject } from "../../config/types.permissions.js";
-import type { ApprovalAction } from "../../permissions/approval.js";
+import type { AgentPermissionsConfig } from "../../config/types.permissions.js";
 import { ApprovalWorkflow } from "../../permissions/approval.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
-import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
-import type { GatewayRequestHandlers, RespondFn } from "../../../upstream/src/gateway/server-methods/types.js";
+import { approvalHandlers } from "./approval.js";
 
 /**
  * 全局审批工作流实例（按智能助手ID索引）
@@ -314,138 +324,14 @@ export const permissionsManagementHandlers: GatewayRequestHandlers = {
   },
 
   /**
-   * approval.approve - 批准审批请求
+   * approval.approve - 批准审批请求（统一使用新版实现，与 approval.ts 完全一致）
    */
-  "approval.approve": async ({ params, respond }) => {
-    const requestId = ((params.requestId as string | undefined) ?? "").trim();
-    if (!requestId) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "requestId is required"));
-      return;
-    }
-
-    const approver = (params as { approver?: PermissionSubject }).approver;
-    if (!approver || !approver.type || !approver.id) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "approver is required with type and id"),
-      );
-      return;
-    }
-
-    const comment = ((params as { comment?: string }).comment ?? "").trim() || undefined;
-
-    // 查找包含此请求的工作流
-    let targetWorkflow: ApprovalWorkflow | null = null;
-    let targetAgentId: string | null = null;
-
-    for (const [agentId, workflow] of approvalWorkflows.entries()) {
-      const request = workflow.getRequest(requestId);
-      if (request) {
-        targetWorkflow = workflow;
-        targetAgentId = agentId;
-        break;
-      }
-    }
-
-    if (!targetWorkflow || !targetAgentId) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `Approval request not found: ${requestId}`),
-      );
-      return;
-    }
-
-    const action: ApprovalAction = {
-      requestId,
-      approver,
-      approved: true,
-      comment,
-      timestamp: Date.now(),
-    };
-
-    try {
-      const result = await targetWorkflow.processAction(action);
-      respond(true, { result }, undefined);
-    } catch (err) {
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.UNAVAILABLE,
-          `Failed to process approval: ${String(err instanceof Error ? err.message : err)}`,
-        ),
-      );
-    }
-  },
+  "approval.approve": approvalHandlers["approval.approve"],
 
   /**
-   * approval.deny - 拒绝审批请求
+   * approval.deny - 拒绝审批请求（转发到新版 approval.reject，与 approval.ts 完全一致）
    */
-  "approval.deny": async ({ params, respond }) => {
-    const requestId = ((params.requestId as string | undefined) ?? "").trim();
-    if (!requestId) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "requestId is required"));
-      return;
-    }
-
-    const approver = (params as { approver?: PermissionSubject }).approver;
-    if (!approver || !approver.type || !approver.id) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "approver is required with type and id"),
-      );
-      return;
-    }
-
-    const comment = ((params as { comment?: string }).comment ?? "").trim() || undefined;
-
-    // 查找包含此请求的工作流
-    let targetWorkflow: ApprovalWorkflow | null = null;
-    let targetAgentId: string | null = null;
-
-    for (const [agentId, workflow] of approvalWorkflows.entries()) {
-      const request = workflow.getRequest(requestId);
-      if (request) {
-        targetWorkflow = workflow;
-        targetAgentId = agentId;
-        break;
-      }
-    }
-
-    if (!targetWorkflow || !targetAgentId) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `Approval request not found: ${requestId}`),
-      );
-      return;
-    }
-
-    const action: ApprovalAction = {
-      requestId,
-      approver,
-      approved: false,
-      comment,
-      timestamp: Date.now(),
-    };
-
-    try {
-      const result = await targetWorkflow.processAction(action);
-      respond(true, { result }, undefined);
-    } catch (err) {
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.UNAVAILABLE,
-          `Failed to process denial: ${String(err instanceof Error ? err.message : err)}`,
-        ),
-      );
-    }
-  },
+  "approval.deny": approvalHandlers["approval.reject"],
 
   // ========== 新的审批管理 RPC 方法 ==========
 

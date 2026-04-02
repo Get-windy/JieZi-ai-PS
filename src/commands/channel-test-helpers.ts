@@ -2,7 +2,7 @@ import { matrixPlugin, setMatrixRuntime } from "../../extensions/matrix/index.js
 import { msteamsPlugin } from "../../extensions/msteams/index.js";
 import { nostrPlugin } from "../../extensions/nostr/index.js";
 import { tlonPlugin } from "../../extensions/tlon/index.js";
-import { bundledChannelPlugins } from "../channels/plugins/bundled.js";
+import { listBundledChannelPlugins } from "../channels/plugins/bundled.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
 import { createTestRegistry } from "../test-utils/channel-plugins.js";
 import { getChannelSetupWizardAdapter } from "./channel-setup/registry.js";
@@ -35,7 +35,7 @@ export function setDefaultChannelPluginRegistryForTests(): void {
     },
   } as Parameters<typeof setMatrixRuntime>[0]);
   const channels = [
-    ...bundledChannelPlugins,
+    ...listBundledChannelPlugins(),
     matrixPlugin,
     msteamsPlugin,
     nostrPlugin,

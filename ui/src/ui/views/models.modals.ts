@@ -208,7 +208,10 @@ export function renderAuthEditModal(props: ModelsProps) {
                   style="cursor: pointer; font-size: 13px;"
                   .value=${auth.dispatchPolicy?.role ?? "primary"}
                   @change=${(e: Event) => {
-                    const role = (e.target as HTMLSelectElement).value as "primary" | "roundrobin" | "fallback";
+                    const role = (e.target as HTMLSelectElement).value as
+                      | "primary"
+                      | "roundrobin"
+                      | "fallback";
                     auth.dispatchPolicy = {
                       role,
                       priority: auth.dispatchPolicy?.priority ?? 0,
@@ -267,6 +270,9 @@ export function renderAuthEditModal(props: ModelsProps) {
               冷却时间：遇到配额耗尽 / 鉴权错误后自动跳过此凭据的时长（0=不自动冷却）
             </div>
           </div>
+
+          <!-- 套餐周期配额配置 -->
+          ${renderQuotaCycleSection(auth)}
         </div>
         
         <div class="modal-footer">
@@ -297,10 +303,19 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
 
   // 熔断器状态
   const circuitState = props.snapshot?.circuitBreakers?.[auth.authId];
+  const isQuotaCycle = circuitState?.isQuotaCycle === true;
+  const quotaExhaustedUntil = circuitState?.quotaExhaustedUntil ?? 0;
+  const isQuotaExhausted = quotaExhaustedUntil > Date.now();
   const isCircuitOpen = circuitState && circuitState.cooldownUntil > Date.now();
   const circuitRemainingMin = isCircuitOpen
     ? Math.ceil((circuitState.cooldownUntil - Date.now()) / 60000)
     : 0;
+  // 周期配额耗尽倒计时
+  const quotaResetHours = isQuotaExhausted
+    ? Math.ceil((quotaExhaustedUntil - Date.now()) / 3600000)
+    : 0;
+  const quotaResetLabel =
+    quotaResetHours > 24 ? `${Math.ceil(quotaResetHours / 24)}天后` : `${quotaResetHours}小时后`;
 
   // 调度角色标签
   const dispatchRole = auth.dispatchPolicy?.role ?? (auth.isDefault ? "primary" : "roundrobin");
@@ -323,8 +338,23 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
   // 判断认证类型
   const authType = isQwenOAuth ? "oauth" : "api_key";
 
+  // 周期配额配置
+  const cycleType = auth.quotaCycle?.type;
+  const cycleTypeLabel: Record<string, string> = {
+    weekly: "每周",
+    monthly: "每月",
+    quarterly: "每季度",
+    custom: "自定义",
+  };
+
+  const cardBorderStyle = isQuotaExhausted
+    ? "border-left: 3px solid #9c27b0;"
+    : isCircuitOpen
+      ? "border-left: 3px solid #ff9800;"
+      : "";
+
   return html`
-    <div class="card" style="padding: 20px; ${isCircuitOpen ? "border-left: 3px solid #ff9800;" : ""}">
+    <div class="card" style="padding: 20px; ${cardBorderStyle}">
       <div class="row" style="justify-content: space-between; align-items: center; gap: 16px;">
         <div class="row" style="align-items: center; gap: 16px; flex: 1;">
           <span 
@@ -343,10 +373,48 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
               }
               <!-- 调度角色标签 -->
               <span style="font-size: 11px; padding: 1px 6px; background: var(--bg-elevated); border-radius: 3px; color: var(--text-secondary);">${dispatchRoleLabel[dispatchRole] ?? dispatchRole}</span>
-              <!-- 熔断状态标签 -->
+              <!-- 周期配额耗尽标签（优先于普通熔断展示） -->
               ${
-                isCircuitOpen
-                  ? html`<span style="font-size: 11px; padding: 2px 7px; background: rgba(255,152,0,0.12); color: #ff9800; border-radius: 3px; border: 1px solid rgba(255,152,0,0.3);">⏳ 冷却中 ${circuitRemainingMin}分钟</span>`
+                isQuotaExhausted
+                  ? html`<span style="font-size: 11px; padding: 2px 7px; background: rgba(156,33,176,0.12); color: #9c27b0; border-radius: 3px; border: 1px solid rgba(156,33,176,0.3);">📚 本周期已耗尽 · ${quotaResetLabel}自动恢复</span>`
+                  : isCircuitOpen && !isQuotaCycle
+                    ? html`<span style="font-size: 11px; padding: 2px 7px; background: rgba(255,152,0,0.12); color: #ff9800; border-radius: 3px; border: 1px solid rgba(255,152,0,0.3);">⏳ 冷却中 ${circuitRemainingMin}分钟</span>`
+                    : (auth as unknown as { autoDisabledReason?: string }).autoDisabledReason ===
+                        "billing_exhausted"
+                      ? html`
+                          <span
+                            style="
+                              font-size: 11px;
+                              padding: 2px 7px;
+                              background: rgba(255, 152, 0, 0.12);
+                              color: #ff9800;
+                              border-radius: 3px;
+                              border: 1px solid rgba(255, 152, 0, 0.3);
+                            "
+                            >⚠️ 余额耗尽 · 已自动禁用</span
+                          >
+                        `
+                      : (auth as unknown as { autoDisabledReason?: string }).autoDisabledReason ===
+                          "auth_failure"
+                        ? html`
+                            <span
+                              style="
+                                font-size: 11px;
+                                padding: 2px 7px;
+                                background: rgba(244, 67, 54, 0.12);
+                                color: #f44336;
+                                border-radius: 3px;
+                                border: 1px solid rgba(244, 67, 54, 0.3);
+                              "
+                              >⚠️ Key失效 · 已自动禁用</span
+                            >
+                          `
+                        : nothing
+              }
+              <!-- 周期配置标识 -->
+              ${
+                cycleType
+                  ? html`<span style="font-size: 11px; padding: 1px 6px; background: rgba(33,150,243,0.1); color: #1976d2; border-radius: 3px; border: 1px solid rgba(33,150,243,0.2);">📅 ${cycleTypeLabel[cycleType] ?? cycleType}周期</span>`
                   : nothing
               }
             </div>
@@ -388,10 +456,65 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
                       "
                     >
                       <div style="font-weight: 600; color: #ff5c5c; margin-bottom: 4px">⚠️ OAuth 认证已过期</div>
-                      <div style="color: var(--text-secondary); margin-bottom: 8px">点击下方"重新认证"按钮刷新授权</div>
+                      <div style="color: var(--text-secondary); margin-bottom: 8px">点击下方“重新认证”按鈕刷新授权</div>
                     </div>
                   `
                 : nothing
+            }
+            <!-- 自动禁用/配额耗尽 详细提示 -->
+            ${
+              isQuotaExhausted
+                ? html`
+                    <div class="card-sub" style="margin-top: 6px; padding: 8px; background: rgba(156,33,176,0.08); border-left: 3px solid #9c27b0; font-size: 12px; border-radius: 4px;">
+                      <div style="font-weight: 600; color: #9c27b0; margin-bottom: 2px">📚 本周期套餐配额已耗尽</div>
+                      <div style="color: var(--text-secondary);">已自动路由到其他认证 · ${quotaResetLabel}后自动恢复（${new Date(quotaExhaustedUntil).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })})。</div>
+                    </div>
+                  `
+                : (auth as unknown as { autoDisabledReason?: string }).autoDisabledReason ===
+                    "billing_exhausted"
+                  ? html`
+                      <div
+                        class="card-sub"
+                        style="
+                          margin-top: 6px;
+                          padding: 8px;
+                          background: rgba(255, 152, 0, 0.08);
+                          border-left: 3px solid #ff9800;
+                          font-size: 12px;
+                          border-radius: 4px;
+                        "
+                      >
+                        <div style="font-weight: 600; color: #ff9800; margin-bottom: 2px">
+                          ⚠️ 系统自动禁用 · 余额已耗尽
+                        </div>
+                        <div style="color: var(--text-secondary)">
+                          API 调用返回余额耗尽错误，系统已自动禁用此认证。请续费购买新额度后点击「启用」重新激活。
+                        </div>
+                      </div>
+                    `
+                  : (auth as unknown as { autoDisabledReason?: string }).autoDisabledReason ===
+                      "auth_failure"
+                    ? html`
+                        <div
+                          class="card-sub"
+                          style="
+                            margin-top: 6px;
+                            padding: 8px;
+                            background: rgba(244, 67, 54, 0.08);
+                            border-left: 3px solid #f44336;
+                            font-size: 12px;
+                            border-radius: 4px;
+                          "
+                        >
+                          <div style="font-weight: 600; color: #f44336; margin-bottom: 2px">
+                            ⚠️ 系统自动禁用 · API Key 失效
+                          </div>
+                          <div style="color: var(--text-secondary)">
+                            API 调用返回鉴权失效错误，系统已自动禁用此认证。请在编辑中更换新的 API Key 后重新启用。
+                          </div>
+                        </div>
+                      `
+                    : nothing
             }
           </div>
         </div>
@@ -401,11 +524,11 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
               ? html`
             <button
               class="btn btn--sm"
-              style="padding: 8px 14px; font-size: 13px; background: #ff9800; color: white; border-color: #ff9800;"
+              style="padding: 8px 14px; font-size: 13px; background: ${isQuotaExhausted ? "#9c27b0" : "#ff9800"}; color: white; border-color: ${isQuotaExhausted ? "#9c27b0" : "#ff9800"};"
               @click=${() => (props as unknown as { onResetAuthCircuit?: (authId: string) => void }).onResetAuthCircuit?.(auth.authId)}
-              title="手动解除冷却，立即重试此凭据"
+              title="${isQuotaExhausted ? "强制解除周期耗尽，立即重试（周期重置前可能继续出错）" : "手动解除冷却，立即重试此凭据"}"
             >
-              ⚡ 立即重试
+              ${isQuotaExhausted ? "🔓 强制解除" : "⚡ 立即重试"}
             </button>
           `
               : nothing
@@ -450,6 +573,41 @@ function renderAuthCard(auth: ProviderAuthSnapshot, props: ModelsProps) {
           >
             ${isTesting ? "🔄 " + t("models.testing") : "✅ " + t("models.test")}
           </button>
+          <!-- 快速启用/禁用开关 -->
+          ${
+            isQuotaExhausted && auth.enabled
+              ? html`
+                  <button
+                    class="btn btn--sm"
+                    style="
+                      padding: 8px 14px;
+                      font-size: 13px;
+                      color: #9c27b0;
+                      border-color: #9c27b0;
+                      cursor: not-allowed;
+                      opacity: 0.7;
+                    "
+                    disabled
+                    title="本周期配额已耗尽，无法手动启用。请等周期自动恢复，或在编辑中修改套餐配置重置周期。"
+                  >
+                    📚 配额耗尽 · 等待重置
+                  </button>
+                `
+              : html`
+            <button
+              class="btn btn--sm"
+              style="padding: 8px 14px; font-size: 13px; ${
+                auth.enabled
+                  ? "background: rgba(34,197,94,0.1); color: #22c55e; border-color: rgba(34,197,94,0.4);"
+                  : "background: var(--bg-elevated); color: var(--text-secondary);"
+              }"
+              @click=${() => (props as unknown as { onToggleAuthEnabled?: (authId: string, enabled: boolean) => void }).onToggleAuthEnabled?.(auth.authId, !auth.enabled)}
+              title="${auth.enabled ? "点击禁用此认证" : "点击启用此认证"}"
+            >
+              ${auth.enabled ? "✓ 已启用" : "○ 已禁用"}
+            </button>
+          `
+          }
           <button 
             class="btn btn--sm" 
             style="padding: 8px 14px; font-size: 13px;"
@@ -955,6 +1113,113 @@ export function renderModelConfigModal(props: ModelsProps) {
 function resolveProviderLabel(snapshot: ModelsStatusSnapshot | null, providerId: string): string {
   const meta = snapshot?.providerMeta?.find((m) => m.id === providerId);
   return meta?.label ?? snapshot?.providerLabels?.[providerId] ?? providerId;
+}
+
+/**
+ * 套餐周期配额配置区块（认证编辑弹框内嵌入）
+ */
+function renderQuotaCycleSection(auth: {
+  quotaCycle?: { type?: string; resetDay?: number; cycleStartMs?: number | null } | null;
+}) {
+  const cycle = auth.quotaCycle;
+  const hasQuotaCycle = !!cycle;
+  const cycleType = cycle?.type ?? "monthly";
+  const resetDay = cycle?.resetDay ?? 1;
+
+  const weekDayNames = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+  const nextResetLabel = !hasQuotaCycle
+    ? ""
+    : cycleType === "weekly"
+      ? `每周${weekDayNames[Math.max(0, Math.min(6, resetDay)) || 0] ?? "一"} 00:00 UTC 自动重置配额`
+      : cycleType === "monthly"
+        ? `每月 ${resetDay} 日 00:00 UTC 自动重置配额`
+        : cycleType === "quarterly"
+          ? `每季度首月 ${resetDay} 日（1/4/7/10月）自动重置配额`
+          : `自配置日起，每 ${resetDay} 天重置一次`;
+
+  return html`
+    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+        <div style="font-weight: 500; font-size: 14px;">
+          📅 套餐周期配额
+          <span style="font-size: 11px; color: var(--text-secondary); font-weight: 400;">（Coding Plan 等固定周期套餐）</span>
+        </div>
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--text-secondary);">
+          <input
+            type="checkbox"
+            style="width: 15px; height: 15px; cursor: pointer;"
+            .checked=${hasQuotaCycle}
+            @change=${(e: Event) => {
+              const checked = (e.target as HTMLInputElement).checked;
+              if (checked) {
+                auth.quotaCycle = { type: "monthly", resetDay: 1, cycleStartMs: Date.now() };
+              } else {
+                auth.quotaCycle = null;
+              }
+            }}
+          />
+          启用
+        </label>
+      </div>
+      <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 10px; line-height: 1.5;">
+        配置后，当该认证配额耗尽时，系统自动计算周期重置时间并路由到其他认证——周期到后自动恢复，用户无感。
+      </div>
+      ${
+        hasQuotaCycle
+          ? html`
+      <div style="padding: 12px; background: var(--bg-elevated); border-radius: 6px; border: 1px solid var(--border);">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <!-- 周期类型 -->
+          <div>
+            <label style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 4px;">周期类型</label>
+            <select
+              class="input"
+              style="cursor: pointer; font-size: 13px;"
+              .value=${cycleType}
+              @change=${(e: Event) => {
+                const type = (e.target as HTMLSelectElement).value;
+                const prev = auth.quotaCycle;
+                auth.quotaCycle = {
+                  ...prev,
+                  type,
+                  resetDay: type === "weekly" ? 1 : type === "custom" ? 30 : 1,
+                };
+              }}
+            >
+              <option value="weekly" ?selected=${cycleType === "weekly"}>每周重置</option>
+              <option value="monthly" ?selected=${cycleType === "monthly" || !cycleType}>每月重置</option>
+              <option value="quarterly" ?selected=${cycleType === "quarterly"}>每季度重置</option>
+              <option value="custom" ?selected=${cycleType === "custom"}>自定义天数</option>
+            </select>
+          </div>
+          <!-- 重置基准日 -->
+          <div>
+            <label style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 4px;">
+              ${cycleType === "weekly" ? "每周几（0=周日,1=周一...）" : cycleType === "custom" ? "周期天数（如 30）" : "每月/季度几号重置（1-28）"}
+            </label>
+            <input
+              type="number"
+              class="input"
+              style="font-size: 13px;"
+              min=${cycleType === "weekly" ? "0" : "1"}
+              max=${cycleType === "weekly" ? "6" : cycleType === "custom" ? "365" : "28"}
+              .value=${String(resetDay)}
+              @input=${(e: Event) => {
+                const val = parseInt((e.target as HTMLInputElement).value) || 1;
+                const prev = auth.quotaCycle;
+                auth.quotaCycle = { ...prev, resetDay: val };
+              }}
+            />
+          </div>
+        </div>
+        <div style="font-size: 11px; color: var(--accent); margin-top: 8px;">📅 ${nextResetLabel}</div>
+      </div>
+      `
+          : nothing
+      }
+    </div>
+  `;
 }
 
 // ============ 导入模型模态框 ============

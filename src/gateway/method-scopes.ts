@@ -191,6 +191,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "agent.wait",
     "agent.create",
     "agent.identity.set",
+    "agent.identity.files",
     "wake",
     "talk.mode",
     "talk.speak",
@@ -311,6 +312,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "friends.remove",
     // 招募：写操作
     "organization.agent.recruit",
+    "organization.agent.recruit.request",
     "organization.agent.recruit.approve",
     "organization.agent.recruit.list",
     // 组织：写操作（补充缺失）

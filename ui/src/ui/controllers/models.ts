@@ -72,7 +72,16 @@ export async function saveAuth(
     name: string;
     apiKey: string;
     baseUrl?: string;
-    dispatchPolicy?: { role: "primary" | "roundrobin" | "fallback"; priority: number; cooldownMinutes: number } | null;
+    dispatchPolicy?: {
+      role: "primary" | "roundrobin" | "fallback";
+      priority: number;
+      cooldownMinutes: number;
+    } | null;
+    quotaCycle?: {
+      type: "weekly" | "monthly" | "quarterly" | "custom";
+      resetDay: number;
+      cycleStartMs?: number | null;
+    } | null;
   },
 ) {
   if (!state.client || !state.connected) {
@@ -87,6 +96,7 @@ export async function saveAuth(
         apiKey: params.apiKey,
         baseUrl: params.baseUrl,
         dispatchPolicy: params.dispatchPolicy,
+        quotaCycle: params.quotaCycle,
       });
     } else {
       // 添加新认证
@@ -96,8 +106,26 @@ export async function saveAuth(
         apiKey: params.apiKey,
         baseUrl: params.baseUrl,
         dispatchPolicy: params.dispatchPolicy,
+        quotaCycle: params.quotaCycle,
       });
     }
+    await loadModels(state, false);
+  } catch (err) {
+    state.modelsError = String(err);
+    throw err;
+  }
+}
+
+/**
+ * 快速切换认证的启用/禁用状态
+ * 注意：配额耗尽时后端会拒绝 enabled=true，调用方需处理异常
+ */
+export async function toggleAuthEnabled(state: ModelsState, authId: string, enabled: boolean) {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  try {
+    await state.client.request("models.auth.update", { authId, enabled });
     await loadModels(state, false);
   } catch (err) {
     state.modelsError = String(err);

@@ -51,8 +51,7 @@ const MEETING_MESSAGES_FILE = join(TASKS_DIR, "meeting-messages.json");
 const ARCHIVE_AFTER_DAYS = 7;
 const ARCHIVE_AFTER_MS = ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000;
 
-// 异步锁
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// 异步锁：保护所有写操作，防止 Windows 下并发 rename 导致 EPERM
 const _lock = createAsyncLock();
 
 // 内存缓存（仅热存储，不含归档）
@@ -131,38 +130,40 @@ async function loadArchivedTasks(): Promise<Map<string, Task>> {
  * 参考 GTD：完成即归档，活跃清单保持精简
  */
 export async function archiveOldTasks(): Promise<{ archived: number }> {
-  const tasks = await loadTasks();
-  const archive = await loadArchivedTasks();
-  const now = Date.now();
-  const toArchive: string[] = [];
+  return _lock(async () => {
+    const tasks = await loadTasks();
+    const archive = await loadArchivedTasks();
+    const now = Date.now();
+    const toArchive: string[] = [];
 
-  for (const [id, task] of tasks) {
-    if (task.status !== "done" && task.status !== "cancelled") {
-      continue;
+    for (const [id, task] of tasks) {
+      if (task.status !== "done" && task.status !== "cancelled") {
+        continue;
+      }
+      // 用 completedAt / cancelledAt / updatedAt 判断完成时间
+      const finishedAt = task.completedAt ?? task.cancelledAt ?? task.updatedAt ?? task.createdAt;
+      if (now - finishedAt >= ARCHIVE_AFTER_MS) {
+        toArchive.push(id);
+      }
     }
-    // 用 completedAt / cancelledAt / updatedAt 判断完成时间
-    const finishedAt = task.completedAt ?? task.cancelledAt ?? task.updatedAt ?? task.createdAt;
-    if (now - finishedAt >= ARCHIVE_AFTER_MS) {
-      toArchive.push(id);
+
+    if (toArchive.length === 0) {
+      return { archived: 0 };
     }
-  }
 
-  if (toArchive.length === 0) {
-    return { archived: 0 };
-  }
+    for (const id of toArchive) {
+      const task = tasks.get(id)!;
+      archive.set(id, task);
+      tasks.delete(id);
+    }
 
-  for (const id of toArchive) {
-    const task = tasks.get(id)!;
-    archive.set(id, task);
-    tasks.delete(id);
-  }
+    await Promise.all([saveToFile(TASKS_FILE, tasks), saveToFile(TASKS_ARCHIVE_FILE, archive)]);
 
-  await Promise.all([saveToFile(TASKS_FILE, tasks), saveToFile(TASKS_ARCHIVE_FILE, archive)]);
-
-  console.log(
-    `[TaskStorage] Archived ${toArchive.length} old task(s) to cold storage (>${ARCHIVE_AFTER_DAYS}d after completion)`,
-  );
-  return { archived: toArchive.length };
+    console.log(
+      `[TaskStorage] Archived ${toArchive.length} old task(s) to cold storage (>${ARCHIVE_AFTER_DAYS}d after completion)`,
+    );
+    return { archived: toArchive.length };
+  });
 }
 
 /**
@@ -243,65 +244,67 @@ export async function createTask(
   task: Task,
   options?: { skipDuplicateCheck?: boolean },
 ): Promise<Task> {
-  const tasks = await loadTasks();
+  return _lock(async () => {
+    const tasks = await loadTasks();
 
-  if (!options?.skipDuplicateCheck) {
-    // title 是必填字段，缺失时立即报错，帮助调用方尽早发现问题
-    if (!task.title || !task.title.trim()) {
-      throw new Error(
-        `[TaskStorage] Task creation rejected: "title" is required and cannot be empty. Please provide a clear, descriptive title for the task.`,
-      );
-    }
-
-    const ACTIVE_STATUSES = ["todo", "in-progress", "blocked"] as const;
-    const titleLower = task.title.trim().toLowerCase();
-    const assigneeIds = (task.assignees ?? []).map((a) => a.id.toLowerCase());
-
-    // 检查同 assignee + 同标题的 active 任务是否已存在
-    if (assigneeIds.length > 0) {
-      for (const existing of tasks.values()) {
-        if (!ACTIVE_STATUSES.includes(existing.status as (typeof ACTIVE_STATUSES)[number])) {
-          continue;
-        }
-        if ((existing.title ?? "").trim().toLowerCase() !== titleLower) {
-          continue;
-        }
-        const existingAssigneeIds = new Set(
-          (existing.assignees ?? []).map((a) => a.id.toLowerCase()),
+    if (!options?.skipDuplicateCheck) {
+      // title 是必填字段，缺失时立即报错，帮助调用方尽早发现问题
+      if (!task.title || !task.title.trim()) {
+        throw new Error(
+          `[TaskStorage] Task creation rejected: "title" is required and cannot be empty. Please provide a clear, descriptive title for the task.`,
         );
-        const hasOverlap = assigneeIds.some((id) => existingAssigneeIds.has(id));
-        if (hasOverlap) {
-          console.warn(
-            `[TaskStorage] Duplicate task rejected: "${task.title}" already exists as ${existing.id} (status=${existing.status})`,
-          );
-          // 返回已有任务（幂等语义），不重复创建
-          return existing;
-        }
       }
 
-      // 检查 todo 积压上限
-      for (const assigneeId of assigneeIds) {
-        let todoCount = 0;
+      const ACTIVE_STATUSES = ["todo", "in-progress", "blocked"] as const;
+      const titleLower = task.title.trim().toLowerCase();
+      const assigneeIds = (task.assignees ?? []).map((a) => a.id.toLowerCase());
+
+      // 检查同 assignee + 同标题的 active 任务是否已存在
+      if (assigneeIds.length > 0) {
         for (const existing of tasks.values()) {
-          if (existing.status !== "todo") {
+          if (!ACTIVE_STATUSES.includes(existing.status as (typeof ACTIVE_STATUSES)[number])) {
             continue;
           }
-          if ((existing.assignees ?? []).some((a) => a.id.toLowerCase() === assigneeId)) {
-            todoCount++;
+          if ((existing.title ?? "").trim().toLowerCase() !== titleLower) {
+            continue;
+          }
+          const existingAssigneeIds = new Set(
+            (existing.assignees ?? []).map((a) => a.id.toLowerCase()),
+          );
+          const hasOverlap = assigneeIds.some((id) => existingAssigneeIds.has(id));
+          if (hasOverlap) {
+            console.warn(
+              `[TaskStorage] Duplicate task rejected: "${task.title}" already exists as ${existing.id} (status=${existing.status})`,
+            );
+            // 返回已有任务（幂等语义），不重复创建
+            return existing;
           }
         }
-        if (todoCount >= MAX_TODO_PER_AGENT) {
-          throw new Error(
-            `[TaskStorage] Task creation rejected: agent "${assigneeId}" already has ${todoCount} todo tasks (limit: ${MAX_TODO_PER_AGENT}). Complete existing tasks before adding new ones.`,
-          );
+
+        // 检查 todo 积压上限
+        for (const assigneeId of assigneeIds) {
+          let todoCount = 0;
+          for (const existing of tasks.values()) {
+            if (existing.status !== "todo") {
+              continue;
+            }
+            if ((existing.assignees ?? []).some((a) => a.id.toLowerCase() === assigneeId)) {
+              todoCount++;
+            }
+          }
+          if (todoCount >= MAX_TODO_PER_AGENT) {
+            throw new Error(
+              `[TaskStorage] Task creation rejected: agent "${assigneeId}" already has ${todoCount} todo tasks (limit: ${MAX_TODO_PER_AGENT}). Complete existing tasks before adding new ones.`,
+            );
+          }
         }
       }
     }
-  }
 
-  tasks.set(task.id, task);
-  await saveToFile(TASKS_FILE, tasks);
-  return task;
+    tasks.set(task.id, task);
+    await saveToFile(TASKS_FILE, tasks);
+    return task;
+  });
 }
 
 /**
@@ -325,54 +328,58 @@ export async function updateTask(
   taskId: string,
   updates: Partial<Task>,
 ): Promise<Task | undefined> {
-  const tasks = await loadTasks();
-  const task = tasks.get(taskId);
+  return _lock(async () => {
+    const tasks = await loadTasks();
+    const task = tasks.get(taskId);
 
-  if (!task) {
-    return undefined;
-  }
+    if (!task) {
+      return undefined;
+    }
 
-  const updatedTask = {
-    ...task,
-    ...updates,
-    id: taskId, // 确保ID不被修改
-    updatedAt: Date.now(),
-  };
+    const updatedTask = {
+      ...task,
+      ...updates,
+      id: taskId, // 确保ID不被修改
+      updatedAt: Date.now(),
+    };
 
-  tasks.set(taskId, updatedTask);
-  await saveToFile(TASKS_FILE, tasks);
-  return updatedTask;
+    tasks.set(taskId, updatedTask);
+    await saveToFile(TASKS_FILE, tasks);
+    return updatedTask;
+  });
 }
 
 /**
  * 删除任务
  */
 export async function deleteTask(taskId: string): Promise<boolean> {
-  const tasks = await loadTasks();
-  const deleted = tasks.delete(taskId);
+  return _lock(async () => {
+    const tasks = await loadTasks();
+    const deleted = tasks.delete(taskId);
 
-  if (deleted) {
-    await saveToFile(TASKS_FILE, tasks);
+    if (deleted) {
+      await saveToFile(TASKS_FILE, tasks);
 
-    // 清理关联数据
-    const comments = await loadComments();
-    comments.delete(taskId);
-    await saveArrayToFile(COMMENTS_FILE, comments);
+      // 清理关联数据
+      const comments = await loadComments();
+      comments.delete(taskId);
+      await saveArrayToFile(COMMENTS_FILE, comments);
 
-    const attachments = await loadAttachments();
-    attachments.delete(taskId);
-    await saveArrayToFile(ATTACHMENTS_FILE, attachments);
+      const attachments = await loadAttachments();
+      attachments.delete(taskId);
+      await saveArrayToFile(ATTACHMENTS_FILE, attachments);
 
-    const worklogs = await loadWorklogs();
-    worklogs.delete(taskId);
-    await saveArrayToFile(WORKLOGS_FILE, worklogs);
+      const worklogs = await loadWorklogs();
+      worklogs.delete(taskId);
+      await saveArrayToFile(WORKLOGS_FILE, worklogs);
 
-    const dependencies = await loadDependencies();
-    dependencies.delete(taskId);
-    await saveArrayToFile(DEPENDENCIES_FILE, dependencies);
-  }
+      const dependencies = await loadDependencies();
+      dependencies.delete(taskId);
+      await saveArrayToFile(DEPENDENCIES_FILE, dependencies);
+    }
 
-  return deleted;
+    return deleted;
+  });
 }
 
 /**
@@ -597,21 +604,28 @@ export async function getTaskStats(filter?: TaskFilter): Promise<TaskStats> {
  * 添加任务评论
  */
 export async function addTaskComment(comment: TaskComment): Promise<TaskComment> {
-  const comments = await loadComments();
-  const taskComments = comments.get(comment.taskId) || [];
-  taskComments.push(comment);
-  comments.set(comment.taskId, taskComments);
-  await saveArrayToFile(COMMENTS_FILE, comments);
+  return _lock(async () => {
+    const comments = await loadComments();
+    const taskComments = comments.get(comment.taskId) || [];
+    taskComments.push(comment);
+    comments.set(comment.taskId, taskComments);
+    await saveArrayToFile(COMMENTS_FILE, comments);
 
-  // 更新任务的最后活动时间
-  await updateTask(comment.taskId, {
-    timeTracking: {
-      ...(await getTask(comment.taskId))!.timeTracking,
-      lastActivityAt: Date.now(),
-    },
+    // 更新任务的最后活动时间（在锁内直接操作，避免嵌套锁）
+    const tasks = await loadTasks();
+    const task = tasks.get(comment.taskId);
+    if (task) {
+      const updatedTask = {
+        ...task,
+        updatedAt: Date.now(),
+        timeTracking: { ...task.timeTracking, lastActivityAt: Date.now() },
+      };
+      tasks.set(comment.taskId, updatedTask);
+      await saveToFile(TASKS_FILE, tasks);
+    }
+
+    return comment;
   });
-
-  return comment;
 }
 
 /**
@@ -626,12 +640,14 @@ export async function getTaskComments(taskId: string): Promise<TaskComment[]> {
  * 添加任务附件
  */
 export async function addTaskAttachment(attachment: TaskAttachment): Promise<TaskAttachment> {
-  const attachments = await loadAttachments();
-  const taskAttachments = attachments.get(attachment.taskId) || [];
-  taskAttachments.push(attachment);
-  attachments.set(attachment.taskId, taskAttachments);
-  await saveArrayToFile(ATTACHMENTS_FILE, attachments);
-  return attachment;
+  return _lock(async () => {
+    const attachments = await loadAttachments();
+    const taskAttachments = attachments.get(attachment.taskId) || [];
+    taskAttachments.push(attachment);
+    attachments.set(attachment.taskId, taskAttachments);
+    await saveArrayToFile(ATTACHMENTS_FILE, attachments);
+    return attachment;
+  });
 }
 
 /**
@@ -646,25 +662,32 @@ export async function getTaskAttachments(taskId: string): Promise<TaskAttachment
  * 添加工作日志
  */
 export async function addWorklog(worklog: AgentWorkLog): Promise<AgentWorkLog> {
-  const worklogs = await loadWorklogs();
-  const taskWorklogs = worklogs.get(worklog.taskId) || [];
-  taskWorklogs.push(worklog);
-  worklogs.set(worklog.taskId, taskWorklogs);
-  await saveArrayToFile(WORKLOGS_FILE, worklogs);
+  return _lock(async () => {
+    const worklogs = await loadWorklogs();
+    const taskWorklogs = worklogs.get(worklog.taskId) || [];
+    taskWorklogs.push(worklog);
+    worklogs.set(worklog.taskId, taskWorklogs);
+    await saveArrayToFile(WORKLOGS_FILE, worklogs);
 
-  // 更新任务的时间追踪
-  const task = await getTask(worklog.taskId);
-  if (task && worklog.duration) {
-    await updateTask(worklog.taskId, {
-      timeTracking: {
-        ...task.timeTracking,
-        timeSpent: task.timeTracking.timeSpent + worklog.duration,
-        lastActivityAt: Date.now(),
-      },
-    });
-  }
+    // 更新任务的时间追踪（在锁内直接操作，避免嵌套锁）
+    const tasks = await loadTasks();
+    const task = tasks.get(worklog.taskId);
+    if (task && worklog.duration) {
+      const updatedTask = {
+        ...task,
+        updatedAt: Date.now(),
+        timeTracking: {
+          ...task.timeTracking,
+          timeSpent: task.timeTracking.timeSpent + worklog.duration,
+          lastActivityAt: Date.now(),
+        },
+      };
+      tasks.set(worklog.taskId, updatedTask);
+      await saveToFile(TASKS_FILE, tasks);
+    }
 
-  return worklog;
+    return worklog;
+  });
 }
 
 /**
@@ -679,12 +702,14 @@ export async function getTaskWorklogs(taskId: string): Promise<AgentWorkLog[]> {
  * 添加任务依赖
  */
 export async function addTaskDependency(dependency: TaskDependency): Promise<TaskDependency> {
-  const dependencies = await loadDependencies();
-  const taskDependencies = dependencies.get(dependency.taskId) || [];
-  taskDependencies.push(dependency);
-  dependencies.set(dependency.taskId, taskDependencies);
-  await saveArrayToFile(DEPENDENCIES_FILE, dependencies);
-  return dependency;
+  return _lock(async () => {
+    const dependencies = await loadDependencies();
+    const taskDependencies = dependencies.get(dependency.taskId) || [];
+    taskDependencies.push(dependency);
+    dependencies.set(dependency.taskId, taskDependencies);
+    await saveArrayToFile(DEPENDENCIES_FILE, dependencies);
+    return dependency;
+  });
 }
 
 /**
@@ -737,10 +762,12 @@ export async function checkCircularDependency(
  * 创建会议
  */
 export async function createMeeting(meeting: Meeting): Promise<Meeting> {
-  const meetings = await loadMeetings();
-  meetings.set(meeting.id, meeting);
-  await saveToFile(MEETINGS_FILE, meetings);
-  return meeting;
+  return _lock(async () => {
+    const meetings = await loadMeetings();
+    meetings.set(meeting.id, meeting);
+    await saveToFile(MEETINGS_FILE, meetings);
+    return meeting;
+  });
 }
 
 /**
@@ -758,42 +785,46 @@ export async function updateMeeting(
   meetingId: string,
   updates: Partial<Meeting>,
 ): Promise<Meeting | undefined> {
-  const meetings = await loadMeetings();
-  const meeting = meetings.get(meetingId);
+  return _lock(async () => {
+    const meetings = await loadMeetings();
+    const meeting = meetings.get(meetingId);
 
-  if (!meeting) {
-    return undefined;
-  }
+    if (!meeting) {
+      return undefined;
+    }
 
-  const updatedMeeting = {
-    ...meeting,
-    ...updates,
-    id: meetingId,
-    updatedAt: Date.now(),
-  };
+    const updatedMeeting = {
+      ...meeting,
+      ...updates,
+      id: meetingId,
+      updatedAt: Date.now(),
+    };
 
-  meetings.set(meetingId, updatedMeeting);
-  await saveToFile(MEETINGS_FILE, meetings);
-  return updatedMeeting;
+    meetings.set(meetingId, updatedMeeting);
+    await saveToFile(MEETINGS_FILE, meetings);
+    return updatedMeeting;
+  });
 }
 
 /**
  * 删除会议
  */
 export async function deleteMeeting(meetingId: string): Promise<boolean> {
-  const meetings = await loadMeetings();
-  const deleted = meetings.delete(meetingId);
+  return _lock(async () => {
+    const meetings = await loadMeetings();
+    const deleted = meetings.delete(meetingId);
 
-  if (deleted) {
-    await saveToFile(MEETINGS_FILE, meetings);
+    if (deleted) {
+      await saveToFile(MEETINGS_FILE, meetings);
 
-    // 清理会议消息
-    const messages = await loadMeetingMessages();
-    messages.delete(meetingId);
-    await saveArrayToFile(MEETING_MESSAGES_FILE, messages);
-  }
+      // 清理会议消息
+      const messages = await loadMeetingMessages();
+      messages.delete(meetingId);
+      await saveArrayToFile(MEETING_MESSAGES_FILE, messages);
+    }
 
-  return deleted;
+    return deleted;
+  });
 }
 
 /**
@@ -944,12 +975,14 @@ export async function getMeetingStats(filter?: MeetingFilter): Promise<MeetingSt
  * 添加会议消息
  */
 export async function addMeetingMessage(message: MeetingMessage): Promise<MeetingMessage> {
-  const messages = await loadMeetingMessages();
-  const meetingMessages = messages.get(message.meetingId) || [];
-  meetingMessages.push(message);
-  messages.set(message.meetingId, meetingMessages);
-  await saveArrayToFile(MEETING_MESSAGES_FILE, messages);
-  return message;
+  return _lock(async () => {
+    const messages = await loadMeetingMessages();
+    const meetingMessages = messages.get(message.meetingId) || [];
+    meetingMessages.push(message);
+    messages.set(message.meetingId, meetingMessages);
+    await saveArrayToFile(MEETING_MESSAGES_FILE, messages);
+    return message;
+  });
 }
 
 /**
