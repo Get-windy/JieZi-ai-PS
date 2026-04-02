@@ -48,9 +48,11 @@ import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js
 import { addAgentToAllowList } from "../../agents/agent-config-manager.js";
 import {
   listAgentIds,
+  resolveAgentDir,
   resolveAgentModelAccounts,
   resolveAgentWorkspaceDir,
 } from "../../agents/agent-scope.js";
+import { resolveSessionTranscriptsDirForAgent } from "../../config/sessions/paths.js";
 import type { AgentConfig } from "../../config/types.agents.js";
 import type { AgentChannelBindings } from "../../config/types.channel-bindings.js";
 import { organizationStorage } from "../../organization/storage.js";
@@ -1975,6 +1977,21 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         console.error(`Failed to delete workspace for agent ${id}:`, err);
         // 工作区删除失败不影响助手配置删除，继续执行
       }
+    }
+
+    // 始终清理 agentDir（.openclaw/agents/{id}/agent）和 sessionsDir（.../sessions）
+    // 无论用户是否勾选"清空工作区"，这两个目录都应随 agent 删除而清理（与 CLI 行为对齐）
+    try {
+      const agentDir = resolveAgentDir(cfg, normalized);
+      await fs.rm(agentDir, { recursive: true, force: true });
+    } catch (err) {
+      console.error(`[agent.delete] Failed to remove agentDir for ${id}:`, err);
+    }
+    try {
+      const sessionsDir = resolveSessionTranscriptsDirForAgent(normalized);
+      await fs.rm(sessionsDir, { recursive: true, force: true });
+    } catch (err) {
+      console.error(`[agent.delete] Failed to remove sessionsDir for ${id}:`, err);
     }
 
     // 从列表中移除
@@ -4167,9 +4184,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
   // ============================================================================
 
   /**
-   * agent.identity.get — 读取三文件身份（soul/agent/user）
+   * agent.identity.files — 读取三文件身份（soul/agent/user）
    */
-  "agent.identity.get": async ({ params, respond }) => {
+  "agent.identity.files": async ({ params, respond }) => {
     const agentId = (
       (params as { agentId?: unknown })?.agentId != null
         ? String((params as { agentId?: unknown }).agentId)

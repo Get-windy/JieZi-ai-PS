@@ -38,6 +38,11 @@ export type ModelsProps = {
       priority: number;
       cooldownMinutes: number;
     } | null;
+    quotaCycle?: {
+      type: "weekly" | "monthly" | "quarterly" | "custom";
+      resetDay: number;
+      cycleStartMs?: number | null;
+    } | null;
   } | null;
   viewingAuth: {
     authId: string;
@@ -99,6 +104,11 @@ export type ModelsProps = {
       priority: number;
       cooldownMinutes: number;
     } | null;
+    quotaCycle?: {
+      type: "weekly" | "monthly" | "quarterly" | "custom";
+      resetDay: number;
+      cycleStartMs?: number | null;
+    } | null;
   }) => void; // 保存认证
   onCancelAuthEdit: () => void; // 取消编辑认证
   onTestAuth: (authId: string) => void; // 测试认证连接
@@ -107,6 +117,7 @@ export type ModelsProps = {
   onStartOAuthPolling: (authId: string) => void; // 开始OAuth授权轮询
   onCancelOAuthReauth: () => void; // 取消OAuth重认证
   onResetAuthCircuit: (authId: string) => void; // 重置凭据熔断状态
+  onToggleAuthEnabled: (authId: string, enabled: boolean) => void; // 快速启用/禁用认证
 
   // ============ 模型列表操作回调 ============
   onManageModels: (provider: string) => void; // 打开模型列表弹窗

@@ -3,7 +3,7 @@
  *
  * 提供组织架构相关的RPC方法：
  * - organization.data.get - 获取完整的组织架构数据
- * 
+ *
  * P0.2 新增 RPC 方法：
  * - organization.create - 创建新组织
  * - organization.update - 更新组织信息
@@ -15,14 +15,33 @@
  * - organization.relation.delete - 删除关系
  * - organization.list - 列出所有组织
  * - organization.tree.get - 获取组织树结构
- * 
+ *
  * P0.3 新增 RPC 方法：
  * - organization.agent.recruit.request - 发起招聘请求
  * - organization.agent.recruit.approve - 审批招聘
  * - organization.agent.onboard - 智能助手入职
  */
 
+/** 从 unknown params 安全提取字符串字段 */
+function p(params: unknown, key: string, fallback: string): string;
+function p(params: unknown, key: string, fallback?: undefined): string | undefined;
+function p(params: unknown, key: string, fallback?: string): string | undefined {
+  const val = (params as Record<string, unknown> | null)?.[key];
+  if (val == null) {
+    return fallback;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-base-to-string
+  return String(val);
+}
+
+import { listAgentEntries } from "../../../upstream/src/commands/agents.config.js";
+import { loadConfig } from "../../../upstream/src/config/config.js";
 import type { OpenClawConfig } from "../../../upstream/src/config/types.js";
+import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import type { PermissionSubject } from "../../config/types.permissions.js";
+import { callGateway } from "../../gateway/call.js";
+import { organizationStorage } from "../../organization/storage.js";
 import type {
   Organization,
   Team,
@@ -34,14 +53,9 @@ import type {
   AgentRecruitRequest,
   AgentOnboardingInfo,
 } from "../../organization/types.js";
-import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
-import type { PermissionSubject } from "../../config/types.permissions.js";
-import { listAgentEntries } from "../../../upstream/src/commands/agents.config.js";
-import { loadConfig } from "../../../upstream/src/config/config.js";
-import { normalizeAgentId } from "../../routing/session-key.js";
-import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
-import { organizationStorage } from "../../organization/storage.js";
 import { permissionMiddleware } from "../../permissions/middleware.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../utils/message-channel.js";
 
 /**
  * 从配置中提取组织数据
@@ -62,7 +76,7 @@ function extractOrganizationData(cfg: OpenClawConfig): {
 
   // 遍历所有智能助手，提取组织信息
   for (const agent of agents) {
-    const agentConfig = agent as any;
+    const agentConfig = agent as Record<string, unknown>;
 
     // 提取组织配置
     if (agentConfig.organization) {
@@ -255,9 +269,10 @@ function extractOrganizationData(cfg: OpenClawConfig): {
 /**
  * 构建组织架构树形结构
  */
-function buildOrganizationTree(organizations: Organization[]): any[] {
+type OrgTreeNode = Organization & { children: OrgTreeNode[] };
+function buildOrganizationTree(organizations: Organization[]): OrgTreeNode[] {
   // 创建索引
-  const orgMap = new Map<string, any>();
+  const orgMap = new Map<string, OrgTreeNode>();
   organizations.forEach((org) => {
     orgMap.set(org.id, {
       ...org,
@@ -266,7 +281,7 @@ function buildOrganizationTree(organizations: Organization[]): any[] {
   });
 
   // 构建树形结构
-  const roots: any[] = [];
+  const roots: OrgTreeNode[] = [];
   orgMap.forEach((org) => {
     if (org.parentId && orgMap.has(org.parentId)) {
       orgMap.get(org.parentId).children.push(org);
@@ -319,15 +334,13 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
    */
   "organization.create": async ({ params, respond, ctx }) => {
     try {
-      const name = params?.name ? String(params.name) : "";
-      const type = params?.type
-        ? String(params.type)
-        : ("" as "company" | "department" | "team" | "project");
-      const parentId = params?.parentId ? String(params.parentId) : undefined;
-      const description = params?.description ? String(params.description) : undefined;
-      const industry = params?.industry ? String(params.industry) : undefined;
-      const location = params?.location ? String(params.location) : undefined;
-      const createdBy = params?.createdBy ? String(params.createdBy) : "system";
+      const name = p(params, "name", "");
+      const type = p(params, "type", "") as "company" | "department" | "team" | "project" | "";
+      const parentId = p(params, "parentId");
+      const description = p(params, "description");
+      const industry = p(params, "industry");
+      const location = p(params, "location");
+      const createdBy = p(params, "createdBy", "system");
 
       // 验证参数
       if (!name || name.length < 1 || name.length > 100) {
@@ -340,11 +353,7 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
       }
 
       if (!type || !["company", "department", "team", "project"].includes(type)) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "无效的组织类型"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "无效的组织类型"));
         return;
       }
 
@@ -379,7 +388,7 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
         id: orgId,
         name,
         level: type === "company" ? "company" : type === "department" ? "department" : "team",
-        type: type as "company" | "department" | "team" | "project",
+        type: type,
         parentId,
         description,
         industry,
@@ -418,19 +427,15 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
    */
   "organization.update": async ({ params, respond, ctx }) => {
     try {
-      const organizationId = params?.organizationId ? String(params.organizationId) : "";
-      const name = params?.name ? String(params.name) : undefined;
-      const description = params?.description ? String(params.description) : undefined;
-      const industry = params?.industry ? String(params.industry) : undefined;
-      const location = params?.location ? String(params.location) : undefined;
-      const updatedBy = params?.updatedBy ? String(params.updatedBy) : "system";
+      const organizationId = p(params, "organizationId", "");
+      const name = p(params, "name");
+      const description = p(params, "description");
+      const industry = p(params, "industry");
+      const location = p(params, "location");
+      const updatedBy = p(params, "updatedBy", "system");
 
       if (!organizationId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "组织ID不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "组织ID不能为空"));
         return;
       }
 
@@ -504,14 +509,10 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
    */
   "organization.delete": async ({ params, respond, ctx }) => {
     try {
-      const organizationId = params?.organizationId ? String(params.organizationId) : "";
+      const organizationId = p(params, "organizationId", "");
 
       if (!organizationId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "组织ID不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "组织ID不能为空"));
         return;
       }
 
@@ -597,19 +598,15 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
    */
   "organization.member.add": async ({ params, respond, ctx }) => {
     try {
-      const organizationId = params?.organizationId ? String(params.organizationId) : "";
-      const memberId = params?.memberId ? String(params.memberId) : "";
-      const memberType = params?.memberType ? (String(params.memberType) as MemberType) : ("" as MemberType);
-      const role = params?.role ? (String(params.role) as MemberRole) : ("" as MemberRole);
-      const title = params?.title ? String(params.title) : undefined;
-      const reportTo = params?.reportTo ? String(params.reportTo) : undefined;
+      const organizationId = p(params, "organizationId", "");
+      const memberId = p(params, "memberId", "");
+      const memberType = p(params, "memberType", "") as MemberType | "";
+      const role = p(params, "role", "") as MemberRole | "";
+      const title = p(params, "title");
+      const reportTo = p(params, "reportTo");
 
       if (!organizationId || !memberId || !memberType || !role) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"));
         return;
       }
 
@@ -657,7 +654,7 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
       };
 
       // 添加到组织成员列表
-      const updatedOrg = await organizationStorage.addMember(organizationId, newMember);
+      await organizationStorage.addMember(organizationId, newMember);
 
       respond(true, newMember, undefined);
     } catch (err) {
@@ -677,18 +674,14 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
    */
   "organization.member.update": async ({ params, respond, ctx }) => {
     try {
-      const organizationId = params?.organizationId ? String(params.organizationId) : "";
-      const memberId = params?.memberId ? String(params.memberId) : "";
-      const role = params?.role ? (String(params.role) as MemberRole) : undefined;
-      const title = params?.title ? String(params.title) : undefined;
-      const reportTo = params?.reportTo ? String(params.reportTo) : undefined;
+      const organizationId = p(params, "organizationId", "");
+      const memberId = p(params, "memberId", "");
+      const role = p(params, "role") as MemberRole | undefined;
+      const title = p(params, "title");
+      const reportTo = p(params, "reportTo");
 
       if (!organizationId || !memberId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "组织ID和成员ID不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "组织ID和成员ID不能为空"));
         return;
       }
 
@@ -752,15 +745,11 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
    */
   "organization.member.remove": async ({ params, respond, ctx }) => {
     try {
-      const organizationId = params?.organizationId ? String(params.organizationId) : "";
-      const memberId = params?.memberId ? String(params.memberId) : "";
+      const organizationId = p(params, "organizationId", "");
+      const memberId = p(params, "memberId", "");
 
       if (!organizationId || !memberId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "组织ID和成员ID不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "组织ID和成员ID不能为空"));
         return;
       }
 
@@ -808,20 +797,18 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
    */
   "organization.relation.create": async ({ params, respond, ctx }) => {
     try {
-      const fromMemberId = params?.fromMemberId ? String(params.fromMemberId) : "";
-      const toMemberId = params?.toMemberId ? String(params.toMemberId) : "";
-      const relationType = params?.relationType
-        ? (String(params.relationType) as "supervisor" | "colleague" | "project")
-        : ("" as "supervisor" | "colleague" | "project");
-      const organizationId = params?.organizationId ? String(params.organizationId) : undefined;
-      const createdBy = params?.createdBy ? String(params.createdBy) : "system";
+      const fromMemberId = p(params, "fromMemberId", "");
+      const toMemberId = p(params, "toMemberId", "");
+      const relationType = p(params, "relationType", "") as
+        | "supervisor"
+        | "colleague"
+        | "project"
+        | "";
+      const organizationId = p(params, "organizationId");
+      const createdBy = p(params, "createdBy", "system");
 
       if (!fromMemberId || !toMemberId || !relationType) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "缺少必需参数"));
         return;
       }
 
@@ -883,11 +870,7 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
       const { relationId } = payload as { relationId: string };
 
       if (!relationId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.BAD_REQUEST, "关系ID不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.BAD_REQUEST, "关系ID不能为空"));
         return;
       }
 
@@ -935,7 +918,8 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
    */
   "organization.list": async ({ payload, respond }) => {
     try {
-      const { type, parentId, level } = (payload as { type?: string; parentId?: string; level?: string }) || {};
+      const { type, parentId, level } =
+        (payload as { type?: string; parentId?: string; level?: string }) || {};
 
       // 从数据库获取组织列表
       const organizations = await organizationStorage.listOrganizations({
@@ -962,7 +946,7 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
    */
   "organization.tree.get": ({ params, respond }) => {
     try {
-      const rootOrgId = params?.rootOrgId ? String(params.rootOrgId) : undefined;
+      const rootOrgId = p(params, "rootOrgId");
 
       const cfg = loadConfig();
       const data = extractOrganizationData(cfg);
@@ -970,12 +954,16 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
 
       // 如果指定了根组织，只返回该子树
       if (rootOrgId) {
-        const findSubtree = (nodes: any[]): any | null => {
+        const findSubtree = (nodes: OrgTreeNode[]): OrgTreeNode | null => {
           for (const node of nodes) {
-            if (node.id === rootOrgId) return node;
+            if (node.id === rootOrgId) {
+              return node;
+            }
             if (node.children?.length) {
               const found = findSubtree(node.children);
-              if (found) return found;
+              if (found) {
+                return found;
+              }
             }
           }
           return null;
@@ -1002,31 +990,23 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
    */
   "organization.agent.recruit.request": async ({ params, respond, ctx }) => {
     try {
-      const organizationId = params?.organizationId ? String(params.organizationId) : "";
-      const agentTemplate = params?.agentTemplate ? String(params.agentTemplate) : undefined;
+      const organizationId = p(params, "organizationId", "");
+      const agentTemplate = p(params, "agentTemplate");
       const agentConfig = params?.agentConfig || undefined;
-      const position = params?.position ? String(params.position) : "";
-      const role = params?.role ? String(params.role) : "member";
-      const title = params?.title ? String(params.title) : undefined;
-      const requesterId = params?.requesterId ? String(params.requesterId) : "system";
-      const requesterType = params?.requesterType ? String(params.requesterType) : "human";
+      const position = p(params, "position", "");
+      const role = p(params, "role", "member");
+      const title = p(params, "title");
+      const requesterId = p(params, "requesterId", "system");
+      const requesterType = p(params, "requesterType", "human");
 
       // 验证参数
       if (!organizationId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "组织ID不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "组织ID不能为空"));
         return;
       }
 
       if (!position || position.length < 1) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "职位名称不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "职位名称不能为空"));
         return;
       }
 
@@ -1092,22 +1072,18 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
    */
   "organization.agent.recruit.approve": async ({ params, respond, ctx }) => {
     try {
-      const requestId = params?.requestId ? String(params.requestId) : "";
-      const decision = params?.decision ? String(params.decision) : "";
-      const approverId = params?.approverId ? String(params.approverId) : "system";
-      const rejectionReason = params?.rejectionReason ? String(params.rejectionReason) : undefined;
+      const requestId = p(params, "requestId", "");
+      const decision = p(params, "decision", "");
+      const approverId = p(params, "approverId", "system");
+      const rejectionReason = p(params, "rejectionReason");
 
       // 验证参数
       if (!requestId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "招聘请求ID不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "招聘请求ID不能为空"));
         return;
       }
 
-      if (!decision || !['approved', 'rejected'].includes(decision)) {
+      if (!decision || !["approved", "rejected"].includes(decision)) {
         respond(
           false,
           undefined,
@@ -1152,20 +1128,59 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
 
       // 更新招聘请求状态
       const updates: Partial<AgentRecruitRequest> = {
-        status: decision === 'approved' ? 'approved' : 'rejected',
+        status: decision === "approved" ? "approved" : "rejected",
         approvedBy: approverId,
         approvedAt: Date.now(),
-        rejectionReason: decision === 'rejected' ? rejectionReason : undefined,
+        rejectionReason: decision === "rejected" ? rejectionReason : undefined,
       };
 
       // 如果审批通过，创建智能助手
-      if (decision === 'approved') {
-        // TODO: 实际创建智能助手
-        const agentId = `agent-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+      if (decision === "approved") {
+        // 生成语义化的 agentId（基于职位名称）
+        const positionSlug = (request.position || "agent")
+          .toLowerCase()
+          .replace(/[\s\W]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .substring(0, 32);
+        const agentId = `${positionSlug}-${Date.now().toString(36)}`;
         updates.agentId = agentId;
-        
-        // TODO: 将助手添加到组织
-        // TODO: 发送入职通知
+        const agentName = request.position || agentId;
+
+        // 尝试通过 agent.create 创建真实的智能助手
+        try {
+          await callGateway({
+            method: "agent.create",
+            params: { id: agentId, name: agentName },
+            clientName: GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT,
+            clientDisplayName: `recruit-approve (${approverId})`,
+            mode: GATEWAY_CLIENT_MODES.BACKEND,
+            scopes: ["operator.admin", "operator.write"],
+            timeoutMs: 30_000,
+          });
+          console.log(`[Recruit] Created agent: ${agentId} for position: ${request.position}`);
+        } catch (createErr) {
+          console.error(`[Recruit] Failed to create agent ${agentId}:`, createErr);
+          // agent 创建失败不阻断审批结果写入，但记录错误
+        }
+
+        // 尝试将新 agent 加入对应组织
+        if (request.organizationId) {
+          try {
+            const newMember: OrganizationMember = {
+              id: agentId,
+              type: "agent",
+              role: request.role || "member",
+              title: request.title || request.position,
+              joinedAt: Date.now(),
+            };
+            await organizationStorage.addMember(request.organizationId, newMember);
+            console.log(
+              `[Recruit] Added agent ${agentId} to organization ${request.organizationId}`,
+            );
+          } catch (memberErr) {
+            console.error(`[Recruit] Failed to add agent ${agentId} to org:`, memberErr);
+          }
+        }
       }
 
       const updatedRequest = await organizationStorage.updateRecruitRequest(requestId, updates);
@@ -1184,29 +1199,92 @@ export const organizationChartHandlers: GatewayRequestHandlers = {
   },
 
   /**
+   * organization.agent.recruit - organization.agent.recruit.request 的简短别名
+   * agent 通过工具调用此方法时可省略 .request 后缀
+   */
+  "organization.agent.recruit": async ({ params, respond, ctx }) => {
+    // 转发到 recruit.request 处理逻辑（内层复用不依赖自引用）
+    const organizationId = p(params, "organizationId", "");
+    const position = p(params, "position", "");
+    const role = p(params, "role", "member");
+    const title = p(params, "title");
+    const requesterId = p(params, "requesterId", "system");
+    const requesterType = p(params, "requesterType", "human");
+    const agentTemplate = p(params, "agentTemplate");
+    const agentConfig = params?.agentConfig || undefined;
+
+    if (!organizationId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "组织ID不能为空"));
+      return;
+    }
+    if (!position) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "职位名称不能为空"));
+      return;
+    }
+
+    const operator = ctx?.operator as PermissionSubject | undefined;
+    if (operator) {
+      const verification = await permissionMiddleware.verify({
+        subject: operator,
+        toolName: "organization.agent.recruit",
+        toolParams: { organizationId, position, role },
+        metadata: { action: "recruit_request" },
+      });
+      if (!verification.allowed) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.PERMISSION_DENIED, verification.reason || "Permission denied"),
+        );
+        return;
+      }
+    }
+
+    const requestId = `recruit-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+    const recruitRequest: AgentRecruitRequest = {
+      id: requestId,
+      organizationId,
+      requesterId,
+      requesterType: requesterType as MemberType,
+      agentTemplate,
+      agentConfig,
+      position,
+      role: role as MemberRole,
+      title,
+      status: "pending",
+      createdAt: Date.now(),
+    };
+    try {
+      const created = await organizationStorage.createRecruitRequest(recruitRequest);
+      respond(true, created, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to create recruit request: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
+  /**
    * organization.agent.onboard - 智能助手入职 (P0.3)
    */
   "organization.agent.onboard": async ({ params, respond, ctx }) => {
     try {
-      const agentId = params?.agentId ? String(params.agentId) : "";
-      const organizationId = params?.organizationId ? String(params.organizationId) : "";
+      const agentId = p(params, "agentId", "");
+      const organizationId = p(params, "organizationId", "");
 
       // 验证参数
       if (!agentId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "智能助手ID不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "智能助手ID不能为空"));
         return;
       }
 
       if (!organizationId) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "组织ID不能为空"),
-        );
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "组织ID不能为空"));
         return;
       }
 

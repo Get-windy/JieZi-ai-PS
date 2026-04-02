@@ -5,6 +5,11 @@ import {
   ensureContextEnginesInitialized,
   resolveContextEngine,
 } from "../../context-engine/index.js";
+import {
+  findAuthByApiKey,
+  reportAuthFailure,
+  disableAuthOnBillingOrAuthError,
+} from "../../gateway/server-methods/models.js";
 import { computeBackoff, sleepWithAbort, type BackoffPolicy } from "../../infra/backoff.js";
 import { generateSecureToken } from "../../infra/secure-random.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
@@ -1472,6 +1477,54 @@ export async function runEmbeddedPiAgent(
           const rateLimitFailure = isRateLimitAssistantError(lastAssistant);
           const billingFailure = isBillingAssistantError(lastAssistant);
           const failoverFailure = isFailoverAssistantError(lastAssistant);
+
+          // 周期性配额管理：仅对配置了 quotaCycle 的认证，将实际 API 返回的错误码触发周期耗尽。
+          // 设计原则：
+          //   - 是否使用周期配额管理由认证本身决定（quotaCycle 字段是否配置）
+          //   - 有 quotaCycle：
+          //       billingFailure → 周期耗尽（整个周期不路由，等周期自动恢复）
+          //       rateLimitFailure → 短期熔断冷却（不触发周期耗尽，只是临时限流）
+          //       authFailure → 熔断（key 失效，需人工修复）
+          //   - 无 quotaCycle：
+          //       billingFailure/authFailure → 将认证标记为不可用（enabled=false），用户手动解决后重新启用
+          //       rateLimitFailure → 不干预，交由 upstream authStore 原有机制处理
+          if (apiKeyInfo?.apiKey) {
+            const matchedAuth = findAuthByApiKey(provider, apiKeyInfo.apiKey);
+            if (matchedAuth) {
+              if (matchedAuth.quotaCycle) {
+                // 周期配额管理：按周期耗尽逻辑处理
+                if (billingFailure || rateLimitFailure || authFailure) {
+                  const isBillingOrAuth = billingFailure || authFailure;
+                  const cooldown = matchedAuth.dispatchPolicy?.cooldownMinutes ?? 60;
+                  reportAuthFailure(
+                    matchedAuth.authId,
+                    lastAssistant?.errorMessage ??
+                      (billingFailure
+                        ? "quota_exceeded"
+                        : rateLimitFailure
+                          ? "rate_limited"
+                          : "auth_failure"),
+                    isBillingOrAuth, // billing/auth 触发 quotaCycle 周期耗尽；rateLimitFailure 只做普通冷却
+                    cooldown,
+                    matchedAuth,
+                  );
+                }
+              } else {
+                // 非周期配额：billing/auth 错误说明认证无法使用，直接标记为 disabled
+                // 用户续费购买新额度或解决问题后可手动重新启用
+                if (billingFailure || authFailure) {
+                  disableAuthOnBillingOrAuthError(
+                    matchedAuth.authId,
+                    billingFailure ? "billing_exhausted" : "auth_failure",
+                  );
+                  // 标记该认证已被我们的系统处理，防止后续 maybeRefreshRuntimeAuth 误操作
+                  // （OAuth runtime refresh 对普通 API Key 无意义，且可能导致已禁用的认证被重新使用）
+                  authRetryPending = false;
+                }
+                // rateLimitFailure 不干预，交由 upstream 机制处理
+              }
+            }
+          }
           const assistantFailoverReason = classifyFailoverReason(lastAssistant?.errorMessage ?? "");
           const assistantProfileFailureReason =
             resolveAuthProfileFailureReason(assistantFailoverReason);

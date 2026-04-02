@@ -637,11 +637,16 @@ export type ModelsStatusSnapshot = {
   }>;
 
   // 凭据熔断器快照（authId → 冒断状态）
-  circuitBreakers?: Record<string, {
-    cooldownUntil: number;  // 0 = 未冷却
-    errorCount: number;
-    lastError?: string;
-  }>;
+  circuitBreakers?: Record<
+    string,
+    {
+      cooldownUntil: number; // 0 = 未冷却
+      errorCount: number;
+      lastError?: string;
+      quotaExhaustedUntil?: number; // 周期配额耗尽截止时间（0=未耗尽）
+      isQuotaCycle?: boolean; // 是否为周期配额耗尽类型
+    }
+  >;
 };
 
 /** 模型供应商元信息 */
@@ -655,7 +660,7 @@ export type ModelProviderMetaEntry = {
 /** 供应商认证快照 */
 export type ProviderAuthSnapshot = {
   authId: string; // 认证ID
-  name: string; // 认证昵称（如"公司主账号"、"个人测试账号"）
+  name: string; // 认证昵称（如“公司主账号”、“个人测试账号”）
   provider: string; // 所属供应商
   apiKey: string; // API Key
   baseUrl?: string | null; // Base URL
@@ -668,6 +673,16 @@ export type ProviderAuthSnapshot = {
     role: "primary" | "roundrobin" | "fallback";
     priority: number;
     cooldownMinutes: number;
+  } | null;
+
+  /**
+   * 周期性套餐配额配置（可选）。
+   * 配置后，当此认证触发 quota exceeded 时自动计算周期重置时间并展示倒计时。
+   */
+  quotaCycle?: {
+    type: "weekly" | "monthly" | "quarterly" | "custom";
+    resetDay: number;
+    cycleStartMs?: number | null;
   } | null;
 
   // 认证状态检测
@@ -965,12 +980,7 @@ export type ChatHistoryAggregateResult = {
  * - system: 系统自动生成（cron/webhook/工具调用）
  * - cross-dept: 跨部门消息（通过只读挂载路径流入）
  */
-export type MessageSourceKind =
-  | "human"
-  | "agent-auto"
-  | "agent-prompted"
-  | "system"
-  | "cross-dept";
+export type MessageSourceKind = "human" | "agent-auto" | "agent-prompted" | "system" | "cross-dept";
 
 /**
  * 消息可信属性（附加在消息元数据中，用于展示层渲染信任徽章）

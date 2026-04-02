@@ -31,7 +31,9 @@ import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/i
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import type { PluginApprovalRequestPayload } from "../../../upstream/src/infra/plugin-approvals.js";
 import { DEFAULT_PLUGIN_APPROVAL_TIMEOUT_MS } from "../../../upstream/src/infra/plugin-approvals.js";
+import { callGateway } from "../../gateway/call.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
+import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../utils/message-channel.js";
 import type { ExecApprovalManager } from "../exec-approval-manager.js";
 
 // ===== 模块级单例：由 server.impl.ts 在启动时注入 =====
@@ -363,16 +365,80 @@ export const approvalHandlers: GatewayRequestHandlers = {
         message: `Approval request submitted: ${record.id}`,
       });
 
-      // 后台等待决策，决策完成后写审计日志
+      // 后台等待决策，决策完成后写审计日志，并在通过时自动执行被审批的操作
       void decisionPromise
-        .then((decision) => {
-          void onApprovalResolved({
+        .then(async (decision) => {
+          await onApprovalResolved({
             id: record.id,
             decision,
             resolvedBy: null,
             ts: Date.now(),
             request: record.request,
           }).catch((err) => console.error("[Approval] audit resolve failed:", err));
+
+          // 审批通过时，自动执行 toolName + toolArgs 描述的操作
+          if (
+            (decision === "allow-once" || decision === "allow-always") &&
+            toolName &&
+            toolName !== "create_approval_request"
+          ) {
+            // agent tool 名（下划线）→ Gateway RPC 方法名（点号）映射表
+            // agent 调用工具时使用下划线命名（如 agent_create），Gateway RPC 使用点号命名（如 agent.create）
+            const TOOL_NAME_TO_RPC_METHOD: Record<string, string> = {
+              agent_create: "agent.create",
+              agent_spawn: "agent.create",
+              agent_create_batch: "agent.create", // 批量创建：逐一执行（见下方特殊处理）
+              agent_delete: "agent.delete",
+              agent_update: "agent.update",
+              organization_agent_recruit: "organization.agent.recruit",
+              org_create: "organization.create",
+              org_create_team: "organization.team.create",
+            };
+            const rpcMethod = TOOL_NAME_TO_RPC_METHOD[toolName] ?? toolName.replace(/_/g, ".");
+            console.log(
+              `[Approval] Auto-executing approved tool: ${toolName} → RPC: ${rpcMethod} for requester: ${requesterId}`,
+            );
+
+            // 批量创建 agent 的特殊处理：将 agents 数组拆分为逐一调用
+            const isBatchCreate =
+              toolName === "agent_create_batch" &&
+              Array.isArray((toolArgs as { agents?: unknown }).agents);
+            const batchItems = isBatchCreate
+              ? (toolArgs as { agents: Record<string, unknown>[] }).agents
+              : null;
+
+            const callItems = batchItems
+              ? batchItems.map((item) => ({
+                  ...item,
+                  _approvedBy: record.id,
+                  _requesterId: requesterId,
+                }))
+              : [{ ...toolArgs, _approvedBy: record.id, _requesterId: requesterId }];
+
+            for (const callParams of callItems) {
+              try {
+                await callGateway({
+                  method: rpcMethod,
+                  params: callParams,
+                  clientName: GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT,
+                  clientDisplayName: `approval-auto-exec (${requesterId})`,
+                  mode: GATEWAY_CLIENT_MODES.BACKEND,
+                  // 显式指定足够的 scope，避免 least-privilege 因方法未分类而拒绝
+                  scopes: ["operator.admin", "operator.write", "operator.read"],
+                  timeoutMs: 60_000,
+                });
+                const label =
+                  (callParams as { id?: string }).id ?? JSON.stringify(callParams).substring(0, 80);
+                console.log(`[Approval] Auto-execution of ${rpcMethod} succeeded (${label})`);
+              } catch (execErr) {
+                const label = (callParams as { id?: string }).id ?? rpcMethod;
+                console.error(
+                  `[Approval] Auto-execution of ${rpcMethod} failed (${label}):`,
+                  execErr,
+                );
+              }
+            }
+          }
         })
         .catch(() => {});
     } catch (error) {

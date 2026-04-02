@@ -19,7 +19,6 @@
  */
 
 import { agentsHandlers } from "../../../upstream/src/gateway/server-methods/agents.js";
-import { browserHandlers } from "../../../upstream/src/plugin-sdk/browser-runtime.js";
 import { chatHandlers } from "../../../upstream/src/gateway/server-methods/chat.js";
 import { configHandlers } from "../../../upstream/src/gateway/server-methods/config.js";
 import { connectHandlers } from "../../../upstream/src/gateway/server-methods/connect.js";
@@ -41,6 +40,7 @@ import { usageHandlers } from "../../../upstream/src/gateway/server-methods/usag
 import { voicewakeHandlers } from "../../../upstream/src/gateway/server-methods/voicewake.js";
 import { webHandlers } from "../../../upstream/src/gateway/server-methods/web.js";
 import { wizardHandlers } from "../../../upstream/src/gateway/server-methods/wizard.js";
+import { browserHandlers } from "../../../upstream/src/plugin-sdk/browser-runtime.js";
 import { agentHandlers } from "./agent.js";
 import { agentsManagementHandlers } from "./agents-management.js";
 import { approvalHandlers } from "./approval.js";
@@ -165,9 +165,6 @@ const hardcodedHandlers: GatewayRequestHandlers = {
   ...agentsManagementHandlers,
   ...lifecycleHandlers,
 
-  // 审批流程
-  ...approvalHandlers,
-
   // HR 管理
   ...hrManagementHandlers,
 
@@ -180,6 +177,9 @@ const hardcodedHandlers: GatewayRequestHandlers = {
   ...permissionManagementHandlers,
   ...permissionsManagementHandlers,
   ...permissionHandlers,
+
+  // 审批流程（新版，必须在 permissionsManagementHandlers 之后展开以覆盖旧版 approval.approve/reject 处理器）
+  ...approvalHandlers,
 
   // 组织架构
   ...organizationStructureHandlers,

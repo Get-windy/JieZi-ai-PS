@@ -156,6 +156,7 @@ const BASE_METHODS = [
   "send",
   "agent",
   "agent.identity.get",
+  "agent.identity.files",
   "agent.identity.set",
   "agent.wait",
   "browser.request",

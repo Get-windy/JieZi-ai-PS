@@ -190,6 +190,39 @@ export type AuthDispatchPolicy = {
   cooldownMinutes: number; // 遇到配额/鉴权错误后的冷却时间（分钟，0=不自动冷却）
 };
 
+/**
+ * 周期性套餐配额配置（Subscription-based Quota Cycle）
+ * 适用于按周/月/季度计费的 Coding Plan 等固定周期套餐：
+ *   - 每个周期有固定用量，耗尽后当前周期内不可调用
+ *   - 下一个周期开始时自动重置，无需用户手动操作
+ *   - 多账号多套餐 → 多认证轮询，单个耗尽自动切换其他
+ */
+export type AuthQuotaCycle = {
+  /**
+   * 周期类型
+   * - weekly: 每周重置（如每周一 0:00）
+   * - monthly: 每月重置（如每月 1 日 0:00）
+   * - quarterly: 每季度重置（1/4/7/10 月的 1 日）
+   * - custom: 自定义天数（resetDay = 周期天数，如 30 = 每 30 天）
+   */
+  type: "weekly" | "monthly" | "quarterly" | "custom";
+  /**
+   * 重置基准日（含义随 type 变化）：
+   * - weekly: 星期几重置（0=周日，1=周一...6=周六，默认 1=周一）
+   * - monthly: 每月几号重置（1-28，默认 1=每月 1 日）
+   * - quarterly: 季度首月几号重置（1-28，默认 1=每季度 1 日）
+   * - custom: 周期天数（如 30=每 30 天，从 cycleStartMs 起算）
+   */
+  resetDay: number;
+  /**
+   * 本周期开始时间戳（ms）。
+   * custom 模式下用于推算下一次重置时间。
+   * 其他模式下可用于 UI 展示「本周期已用 X 天」。
+   * 创建认证时自动设为当前时间，每次重置后自动更新。
+   */
+  cycleStartMs?: number;
+};
+
 // 供应商认证配置（导出供其他模块使用）
 export type ProviderAuth = {
   authId: string; // 认证ID（自动生成）
@@ -201,8 +234,25 @@ export type ProviderAuth = {
   isDefault: boolean; // 是否为默认认证
   createdAt: number; // 创建时间
 
+  /**
+   * 系统自动禁用原因（非用户主动禁用时填写）。
+   * 用于 UI 区分「用户手动禁用」与「系统因错误自动禁用」，并向用户展示原因提示。
+   * - "billing_exhausted": 余额/配额耗尽，需续费
+   * - "auth_failure": API Key 失效，需更换
+   * - undefined: 用户主动禁用
+   */
+  autoDisabledReason?: "billing_exhausted" | "auth_failure";
+
   // 调度策略（多凭据负载均衡 / 故障转移）
   dispatchPolicy?: AuthDispatchPolicy;
+
+  /**
+   * 周期性套餐配额配置（可选）。
+   * 配置后，当此认证触发 quota exceeded 时，系统自动计算到下一个
+   * 周期重置时间，在此期间跳过此认证路由到其他可用认证，周期到后
+   * 自动恢复——用户无感，不需要手动重新启用。
+   */
+  quotaCycle?: AuthQuotaCycle;
 
   // 认证状态检测
   status?: {
@@ -531,6 +581,218 @@ function syncToAgentModelsJson(storage: ModelManagementStorage): any {
   return result;
 }
 
+// ============ 周期配额重置时间计算 ============
+
+/**
+ * 计算某认证下一次周期配额重置的时间戳（ms）。
+ * 调用时机：quota exceeded 触发熔断时，用于计算 cooldownUntil。
+ *
+ * 计算规则（业界标准——以服务器本地 UTC 时间为基准）：
+ *   - weekly: 找下一个 resetDay 星期几的 00:00 UTC
+ *   - monthly: 找下一个 resetDay 号的 00:00 UTC
+ *   - quarterly: 找下一个季首月 resetDay 号的 00:00 UTC
+ *   - custom: 从 cycleStartMs 起每 resetDay 天一个周期，找下一个周期起始
+ *
+ * @param cycle - 周期配置
+ * @param now   - 当前时间戳（ms），默认 Date.now()
+ * @returns 下一次重置时间戳（ms）
+ */
+export function computeQuotaResetTime(cycle: AuthQuotaCycle, now: number = Date.now()): number {
+  const d = new Date(now);
+
+  switch (cycle.type) {
+    case "weekly": {
+      // 目标星期几（0-6），默认 1（周一）
+      const targetDay = Math.max(0, Math.min(6, Math.floor(cycle.resetDay ?? 1)));
+      const currentDay = d.getUTCDay();
+      let daysUntil = (targetDay - currentDay + 7) % 7;
+      if (daysUntil === 0) {
+        // 今天就是重置日，但当前周期用完了说明已过今日重置点，等下周
+        daysUntil = 7;
+      }
+      const reset = new Date(d);
+      reset.setUTCDate(d.getUTCDate() + daysUntil);
+      reset.setUTCHours(0, 0, 0, 0);
+      return reset.getTime();
+    }
+
+    case "monthly": {
+      // 目标月份日（1-28），默认 1
+      const targetDate = Math.max(1, Math.min(28, Math.floor(cycle.resetDay ?? 1)));
+      const reset = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), targetDate, 0, 0, 0, 0));
+      if (reset.getTime() <= now) {
+        // 本月的重置日已过，取下月同日
+        reset.setUTCMonth(reset.getUTCMonth() + 1);
+      }
+      return reset.getTime();
+    }
+
+    case "quarterly": {
+      // 季度首月：1/4/7/10，取当前月份对应季度的下一个季首月
+      const targetDate = Math.max(1, Math.min(28, Math.floor(cycle.resetDay ?? 1)));
+      const currentMonth = d.getUTCMonth(); // 0-11
+      // 当前季度首月（0-indexed）
+      const currentQStart = Math.floor(currentMonth / 3) * 3;
+      // 本季度重置点
+      let reset = new Date(Date.UTC(d.getUTCFullYear(), currentQStart, targetDate, 0, 0, 0, 0));
+      if (reset.getTime() <= now) {
+        // 已过，取下一季度
+        reset = new Date(Date.UTC(d.getUTCFullYear(), currentQStart + 3, targetDate, 0, 0, 0, 0));
+      }
+      return reset.getTime();
+    }
+
+    case "custom": {
+      // 自定义周期天数（resetDay = 天数）
+      const cycleDays = Math.max(1, Math.floor(cycle.resetDay ?? 30));
+      const cycleMs = cycleDays * 24 * 60 * 60 * 1000;
+      const start = cycle.cycleStartMs ?? now;
+      // 从 start 起，找第一个 > now 的周期起始点
+      const elapsed = now - start;
+      if (elapsed < 0) {
+        return start; // 周期还没开始（异常情况），直接返回开始时间
+      }
+      const cyclesPassed = Math.floor(elapsed / cycleMs);
+      return start + (cyclesPassed + 1) * cycleMs;
+    }
+  }
+}
+
+// ============ 周期配额持久化（进程重启后恢复耗尽状态）============
+
+type QuotaExhaustedRecord = {
+  authId: string;
+  exhaustedUntil: number; // 耗尽截止时间戳（ms），即下一个周期重置时间
+  exhaustedAt: number; // 首次耗尽时间戳（ms）
+};
+
+type QuotaExhaustedStore = {
+  records: QuotaExhaustedRecord[];
+};
+
+// 内存态（热路径快速查询，无需每次读文件）
+const quotaExhaustedMap = new Map<string, QuotaExhaustedRecord>();
+let quotaStoreLoaded = false;
+
+function getQuotaExhaustedFile(): string {
+  // 与 model-management.json 同目录
+  return MODEL_MANAGEMENT_FILE.replace(/model-management\.json$/, "quota-exhausted.json");
+}
+
+async function loadQuotaExhaustedStore(): Promise<void> {
+  if (quotaStoreLoaded) {
+    return;
+  }
+  quotaStoreLoaded = true;
+  try {
+    const filePath = getQuotaExhaustedFile();
+    const fs = await import("fs/promises");
+    const content = await fs.readFile(filePath, "utf-8").catch(() => null);
+    if (!content) {
+      return;
+    }
+    const store: QuotaExhaustedStore = JSON.parse(content);
+    const now = Date.now();
+    for (const record of store.records ?? []) {
+      if (record.exhaustedUntil > now) {
+        // 还在耗尽期内，恢复到内存 + 熔断器
+        quotaExhaustedMap.set(record.authId, record);
+        const existing = circuitBreakers.get(record.authId);
+        if (!existing || existing.cooldownUntil < record.exhaustedUntil) {
+          circuitBreakers.set(record.authId, {
+            authId: record.authId,
+            cooldownUntil: record.exhaustedUntil,
+            errorCount: 1,
+            lastError: "quota_cycle_exhausted (restored from disk)",
+          });
+        }
+      }
+      // 已过期的记录直接丢弃（不写回，下次 save 时自动清理）
+    }
+  } catch {
+    // 读取失败不影响运行
+  }
+}
+
+async function saveQuotaExhaustedStore(): Promise<void> {
+  try {
+    const filePath = getQuotaExhaustedFile();
+    const now = Date.now();
+    // 只保存还未过期的记录
+    const records: QuotaExhaustedRecord[] = [];
+    for (const record of quotaExhaustedMap.values()) {
+      if (record.exhaustedUntil > now) {
+        records.push(record);
+      }
+    }
+    const store: QuotaExhaustedStore = { records };
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(store, null, 2), "utf-8");
+  } catch {
+    // 写入失败不影响运行
+  }
+}
+
+/**
+ * 标记某认证因套餐周期配额耗尽，持久化到文件，恢复时间为下一个周期重置点。
+ * 由 reportAuthFailure 在检测到 isQuotaOrAuthError + 该认证有 quotaCycle 配置时调用。
+ */
+async function markQuotaCycleExhausted(auth: ProviderAuth, resetTime: number): Promise<void> {
+  const record: QuotaExhaustedRecord = {
+    authId: auth.authId,
+    exhaustedUntil: resetTime,
+    exhaustedAt: Date.now(),
+  };
+  quotaExhaustedMap.set(auth.authId, record);
+  console.log(
+    `[QuotaCycle] Auth "${auth.name}" (${auth.authId}) quota exhausted for current cycle. ` +
+      `Will auto-recover at ${new Date(resetTime).toISOString()} (${Math.ceil((resetTime - Date.now()) / 3600000)}h).`,
+  );
+  await saveQuotaExhaustedStore();
+}
+
+/**
+ * 清除某认证的周期配额耗尽记录（用于手动重置或周期到期后自动清理）
+ */
+export async function clearQuotaCycleExhausted(authId: string): Promise<void> {
+  quotaExhaustedMap.delete(authId);
+  await saveQuotaExhaustedStore();
+}
+
+/**
+ * 判断某认证是否当前处于周期配额耗尽状态
+ */
+export function isQuotaCycleExhausted(authId: string): boolean {
+  const record = quotaExhaustedMap.get(authId);
+  if (!record) {
+    return false;
+  }
+  if (record.exhaustedUntil <= Date.now()) {
+    // 已过期，自动清理内存（异步写文件）
+    quotaExhaustedMap.delete(authId);
+    saveQuotaExhaustedStore().catch(() => {});
+    return false;
+  }
+  return true;
+}
+
+/**
+ * 获取某认证的周期配额耗尽截止时间（ms），0=未耗尽
+ */
+export function getQuotaExhaustedUntil(authId: string): number {
+  const record = quotaExhaustedMap.get(authId);
+  if (!record) {
+    return 0;
+  }
+  if (record.exhaustedUntil <= Date.now()) {
+    quotaExhaustedMap.delete(authId);
+    return 0;
+  }
+  return record.exhaustedUntil;
+}
+
 // ============ 凭据熔断器（内存态，进程重启后重置）============
 
 /**
@@ -580,16 +842,18 @@ export function getAuthCircuitRemainingSeconds(authId: string): number {
 
 /**
  * 上报某凭据调用失败。
- * @param authId  - 凭据ID
+ * @param authId  - 凭据 ID
  * @param error   - 错误信息
  * @param isQuotaOrAuth - 是否为配额/鉴权错误（触发熔断冷却）
  * @param cooldownMinutes - 冷却时间（来自 dispatchPolicy.cooldownMinutes）
+ * @param auth - 完整的 ProviderAuth 对象（如果有 quotaCycle 配置，用于自动计算周期重置时间）
  */
 export function reportAuthFailure(
   authId: string,
   error: string,
   isQuotaOrAuth: boolean,
   cooldownMinutes: number,
+  auth?: ProviderAuth,
 ): void {
   let state = circuitBreakers.get(authId);
   if (!state) {
@@ -598,42 +862,89 @@ export function reportAuthFailure(
   }
   state.errorCount += 1;
   state.lastError = error;
-  if (isQuotaOrAuth && cooldownMinutes > 0) {
-    state.cooldownUntil = Date.now() + cooldownMinutes * 60 * 1000;
-    console.log(
-      `[CredentialCircuitBreaker] Auth ${authId} tripped. Cooling down for ${cooldownMinutes}min (error: ${error})`,
-    );
+
+  if (isQuotaOrAuth) {
+    // 如果该认证配置了 quotaCycle，优先用周期重置时间作为导火截止时间
+    const quotaAuth =
+      auth ??
+      (cachedStorage
+        ? Object.values(cachedStorage.auths)
+            .flat()
+            .find((a) => a.authId === authId)
+        : undefined);
+
+    if (quotaAuth?.quotaCycle) {
+      const resetTime = computeQuotaResetTime(quotaAuth.quotaCycle);
+      state.cooldownUntil = resetTime;
+      console.log(
+        `[QuotaCycle] Auth "${quotaAuth.name}" quota exhausted. ` +
+          `Auto-routing to other credentials until cycle reset at ${new Date(resetTime).toISOString()}.`,
+      );
+      // 异步持乇化周期耗尽状态（进程重启后仍有效）
+      markQuotaCycleExhausted(quotaAuth, resetTime).catch(() => {});
+    } else if (cooldownMinutes > 0) {
+      // 普通熔断冷却
+      state.cooldownUntil = Date.now() + cooldownMinutes * 60 * 1000;
+      console.log(
+        `[CredentialCircuitBreaker] Auth ${authId} tripped. Cooling down for ${cooldownMinutes}min (error: ${error})`,
+      );
+    }
   }
 }
 
 /**
  * 上报某凭据调用成功，清零错误计数
+ * 注意：成功不会自动清除周期配额耗尽状态（周期收益已屌岞，需周期到期自动恢复）
  */
 export function reportAuthSuccess(authId: string): void {
   const state = circuitBreakers.get(authId);
   if (state) {
     state.errorCount = 0;
-    state.cooldownUntil = 0;
-    state.lastError = undefined;
+    // 只清普通熔断（非周期耗尽类），周期耗尽必须等周期到期
+    if (!isQuotaCycleExhausted(authId)) {
+      state.cooldownUntil = 0;
+      state.lastError = undefined;
+    }
   }
 }
 
 /**
- * 手动重置某凭据的熔断状态（UI "立即重试" 按钮使用）
+ * 手动重置某凭据的熔断状态（UI "立即重试" 按鈕使用）
+ * 如果是周期配额耗尽类型，同时清除持乇化记录（允许用户强制解除）
  */
 export function resetAuthCircuit(authId: string): void {
   circuitBreakers.delete(authId);
+  // 同时清除周期耗尽持乇化记录
+  if (quotaExhaustedMap.has(authId)) {
+    clearQuotaCycleExhausted(authId).catch(() => {});
+  }
 }
 
 /**
  * 获取所有凭据的熔断快照（供 UI 展示）
+ * 包括普通熔断和周期配额耗尽两种状态
  */
 export function getCircuitBreakerSnapshot(): Record<
   string,
-  { cooldownUntil: number; errorCount: number; lastError?: string }
+  {
+    cooldownUntil: number;
+    errorCount: number;
+    lastError?: string;
+    quotaExhaustedUntil?: number;
+    isQuotaCycle?: boolean;
+  }
 > {
-  const result: Record<string, { cooldownUntil: number; errorCount: number; lastError?: string }> =
-    {};
+  const result: Record<
+    string,
+    {
+      cooldownUntil: number;
+      errorCount: number;
+      lastError?: string;
+      quotaExhaustedUntil?: number;
+      isQuotaCycle?: boolean;
+    }
+  > = {};
+  // 普通熔断器状态
   for (const [id, state] of circuitBreakers.entries()) {
     result[id] = {
       cooldownUntil: state.cooldownUntil,
@@ -641,7 +952,62 @@ export function getCircuitBreakerSnapshot(): Record<
       lastError: state.lastError,
     };
   }
+  // 周期配额耗尽状态（可能在熔断器之外持久化状态中存在）
+  for (const [id, record] of quotaExhaustedMap.entries()) {
+    if (record.exhaustedUntil > Date.now()) {
+      if (!result[id]) {
+        result[id] = {
+          cooldownUntil: record.exhaustedUntil,
+          errorCount: 1,
+          lastError: "quota_cycle_exhausted",
+        };
+      }
+      result[id].quotaExhaustedUntil = record.exhaustedUntil;
+      result[id].isQuotaCycle = true;
+    }
+  }
   return result;
+}
+
+/**
+ * 通过供应商 ID + 明文 API Key 反查对应的 ProviderAuth。
+ *
+ * 用于将 run.ts 实际调用路径（使用明文 apiKey）与我们的认证管理层（authId）桥接：
+ * - 当 API 调用返回 billing/quota 错误时，通过此函数找到对应的 ProviderAuth
+ * - 然后调用 reportAuthFailure 触发配额耗尽状态（包括 quotaCycle 周期耗尽持久化）
+ *
+ * 匹配策略（按优先级）：
+ *   1. 完整精确匹配（apiKey === stored.apiKey）
+ *   2. 前缀匹配（apiKey 前缀与存储的 key 前 8 位相同）——防御运行时截断
+ *
+ * @param provider - 供应商 ID（如 "openai"、"anthropic"）
+ * @param apiKey   - 实际使用的 API Key 明文
+ * @returns 匹配到的 ProviderAuth，未找到时返回 undefined
+ */
+export function findAuthByApiKey(provider: string, apiKey: string): ProviderAuth | undefined {
+  if (!cachedStorage || !apiKey) {
+    return undefined;
+  }
+  const auths = cachedStorage.auths[provider] ?? [];
+  // 1. 精确匹配（最优先）
+  const exact = auths.find((a) => a.apiKey === apiKey);
+  if (exact) {
+    return exact;
+  }
+  // 2. 前缀匹配（防御 runtime 截断）：只有两个 key 都足够长时才尝试
+  // 取前 16 位匹配，减小前缀相同但实质不同 key 的误匹配风险
+  const PREFIX_LEN = 16;
+  if (apiKey.length >= PREFIX_LEN) {
+    const prefix = apiKey.slice(0, PREFIX_LEN);
+    const candidates = auths.filter(
+      (a) => a.apiKey.length >= PREFIX_LEN && a.apiKey.slice(0, PREFIX_LEN) === prefix,
+    );
+    // 前缀匹配到唯一一个才返回，多个前缀相同的则放弃（不冒險误匹）
+    if (candidates.length === 1) {
+      return candidates[0];
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -675,10 +1041,13 @@ export function isQuotaOrAuthError(errorMsg: string, httpStatus?: number): boole
  * 从同一供应商的多个认证中选出本次应使用的那一个。
  *
  * 调度顺序（参考 LiteLLM 的 Deployment Ordering + 熔断机制）：
- *   1. role=primary 且未熔断，按 priority 升序取第一个
- *   2. 若 primary 全熔断，从 role=roundrobin 未熔断的中轮询（Round-Robin）
- *   3. 若 primary+roundrobin 全熔断，从 role=fallback 未熔断的中按 priority 取第一个
+ *   1. role=primary 且未熔断且周期配额未耗尽，按 priority 升序取第一个
+ *   2. 若 primary 全熔断/耗尽，从 role=roundrobin 未熔断且未耗尽的中轮询
+ *   3. 若 primary+roundrobin 全熔断/耗尽，从 role=fallback 未熔断且未耗尽中按 priority 取第一个
  *   4. 全部熔断时返回熔断时间最短的那个（保底降级）
+ *
+ * 周期配额逐耗尽的认证会被排除在前 3 组之外，它们在周期内等同于“不存在”，
+ * 只有当所有其他认证都熔断后才会被“保底”选中。
  *
  * @param auths - 同一供应商下所有已启用的认证
  * @returns 选中的认证，以及该认证的 dispatchPolicy（供调用方上报结果）
@@ -698,7 +1067,9 @@ export function pickAuth(
     a.dispatchPolicy?.role ?? (a.isDefault ? "primary" : "roundrobin");
   const priorityOf = (a: ProviderAuth): number => a.dispatchPolicy?.priority ?? 0;
 
-  const available = (a: ProviderAuth) => !isAuthCircuitOpen(a.authId);
+  // 可用判断：未熔断且周期配额未耗尽
+  const available = (a: ProviderAuth) =>
+    !isAuthCircuitOpen(a.authId) && !isQuotaCycleExhausted(a.authId);
 
   // --- 1. primary 组 ---
   const primaries = enabled
@@ -727,16 +1098,34 @@ export function pickAuth(
     return { auth: availableFallback[0], isCircuitOpen: false };
   }
 
-  // --- 4. 全部熔断：选冷却时间最短的保底 ---
+  // --- 4. 全部熔断/耗尽：选冷却时间最短的保底 ---
+  // 周期配额耗尽的认证需要周期到期才能恢复，保底时首选普通熔断的
   const allSorted = enabled.toSorted((a, b) => {
+    const aIsQuota = isQuotaCycleExhausted(a.authId);
+    const bIsQuota = isQuotaCycleExhausted(b.authId);
+    // 周期耗尽的排后面
+    if (aIsQuota !== bIsQuota) {
+      return aIsQuota ? 1 : -1;
+    }
     const ra = getAuthCircuitRemainingSeconds(a.authId);
     const rb = getAuthCircuitRemainingSeconds(b.authId);
     return ra - rb;
   });
-  console.warn(
-    `[CredentialDispatcher] All ${enabled.length} credentials for provider are circuit-open. Falling back to least-cooldown.`,
-  );
-  return { auth: allSorted[0], isCircuitOpen: true };
+  const hasNonQuota = allSorted.some((a) => !isQuotaCycleExhausted(a.authId));
+  if (hasNonQuota) {
+    console.warn(
+      `[CredentialDispatcher] All non-quota credentials for provider are circuit-open. Falling back to least-cooldown.`,
+    );
+    // 尚有普通熔断的，选冷却时间最短的保底
+    return { auth: allSorted[0], isCircuitOpen: true };
+  } else {
+    // 所有认证均周期耗尽：不应再发请求（发了也会报错，浪费 quota 且会再次触发熔断）
+    // 返回 null 让调用方知道该供应商当前完全不可用
+    console.warn(
+      `[CredentialDispatcher] All ${enabled.length} credentials for provider have quota cycle exhausted. Returning null to prevent wasted requests.`,
+    );
+    return null;
+  }
 }
 
 // ============ 缓存机制 ============
@@ -759,9 +1148,31 @@ export function getModelManagementCacheSync(): ModelManagementStorage | null {
 }
 
 /**
+ * 同步检测指定 provider 下是否有至少一个启用的认证（Provider-level health gate）。
+ * 业界标准：provider 认证全停用 = provider unhealthy，其下所有模型均不可路由。
+ * 若缓存未就绪则返回 undefined（调用方应 fallback 到宽松策略）。
+ */
+export function isProviderUsableSync(providerId: string): boolean | undefined {
+  const storage = cachedStorage;
+  if (!storage) {
+    return undefined; // 缓存未就绪
+  }
+  const authList = storage.auths[providerId];
+  if (!authList || authList.length === 0) {
+    // 该 provider 在新系统里没有任何认证配置
+    // → 可能是旧数据/未纳管，不拦截（返回 undefined 让上层用旧逻辑）
+    return undefined;
+  }
+  // 只要有一个启用的认证，provider 就是 healthy
+  return authList.some((a) => a.enabled);
+}
+
+/**
  * 同步检测 modelId（格式：providerId/modelName）在新数据链中是否可用：
- *   - 对应的 ModelConfig.enabled === true && !deprecated
- *   - 关联的 ProviderAuth.enabled === true
+ *   1. ModelConfig.enabled === true && !deprecated
+ *   2. provider 下至少有一个启用的认证（provider-level health gate）
+ *      - 注意：不要求直接绑定的 authId 启用，只要 provider 下有可用认证
+ *        即可，因为 pickAuth() 会自动选到可用的那个
  * 若缓存未就绪则返回 undefined（调用方应 fallback 到旧逻辑）。
  */
 export function isModelIdUsableSync(modelId: string): boolean | undefined {
@@ -786,17 +1197,24 @@ export function isModelIdUsableSync(modelId: string): boolean | undefined {
   if (!modelConfig.enabled || modelConfig.deprecated) {
     return false; // 模型已禁用或已废弃
   }
-  // 检查关联认证是否启用
+  // Provider-level health gate：该供应商下是否有任意启用的认证
+  // 业界做法（LiteLLM/OpenRouter）：provider 无可用凭据 → 整个 provider 不可路由
   const authList = storage.auths[providerId];
-  if (!authList) {
-    return false;
+  if (!authList || authList.length === 0) {
+    return false; // provider 没有任何认证，不可用
   }
-  const auth = authList.find((a) => a.authId === modelConfig.authId);
-  return auth?.enabled === true;
+  const hasUsableAuth = authList.some((a) => a.enabled);
+  if (!hasUsableAuth) {
+    return false; // provider 下所有认证均已停用，不可路由
+  }
+  return true;
 }
 
 // 加载模型管理配置（导出供其他模块使用）
 export async function loadModelManagement(): Promise<ModelManagementStorage> {
+  // 首次加载时，同时初始化周期配额耗尽持久化数据（进程重启后恢复）
+  loadQuotaExhaustedStore().catch(() => {});
+
   // 检查缓存是否有效
   const now = Date.now();
   if (cachedStorage && now - cacheTimestamp < CACHE_TTL_MS) {
@@ -1498,6 +1916,7 @@ async function addAuth(params: {
   apiKey: string;
   baseUrl?: string;
   dispatchPolicy?: AuthDispatchPolicy;
+  quotaCycle?: AuthQuotaCycle | null;
 }): Promise<ProviderAuth> {
   const storage = await loadModelManagement();
   const authId = generateId("auth");
@@ -1512,6 +1931,8 @@ async function addAuth(params: {
     isDefault: (storage.auths[params.provider] || []).length === 0, // 第一个自动为默认
     createdAt: Date.now(),
     dispatchPolicy: params.dispatchPolicy,
+    // 周期配置：自动设置 cycleStartMs 为当前时间
+    quotaCycle: params.quotaCycle ? { ...params.quotaCycle, cycleStartMs: Date.now() } : undefined,
   };
 
   if (!storage.auths[params.provider]) {
@@ -1536,32 +1957,140 @@ async function updateAuth(params: {
   baseUrl?: string;
   enabled?: boolean;
   dispatchPolicy?: AuthDispatchPolicy | null;
+  quotaCycle?: AuthQuotaCycle | null;
+  autoDisabledReason?: "billing_exhausted" | "auth_failure" | null;
 }): Promise<void> {
   const storage = await loadModelManagement();
 
   for (const provider in storage.auths) {
     const auth = storage.auths[provider]?.find((a) => a.authId === params.authId);
     if (auth) {
+      // 周期配额耗尽时禁止手动启用
+      // 逐辑：如果用户要求启用（enabled=true）且该认证当前周期配额耗尽，拒绝操作
+      // 除非同时传了新的 quotaCycle（用户更改了套餐配置，重新计算周期）
+      const quotaCycleChanged = params.quotaCycle !== undefined;
+      if (params.enabled === true && isQuotaCycleExhausted(params.authId) && !quotaCycleChanged) {
+        throw new Error(
+          `该认证当前周期套餐配额已耗尽，无法手动启用。` +
+            `请等周期自动恢复，或修改套餐配置重新计算周期。`,
+        );
+      }
+
       if (params.name !== undefined) {
         auth.name = params.name;
       }
       if (params.apiKey !== undefined && params.apiKey !== "") {
         auth.apiKey = params.apiKey;
+        // 用户更换了新的 API Key，自动清除自动禁用原因（新 key 应被视为有效）
+        if (auth.autoDisabledReason) {
+          delete auth.autoDisabledReason;
+        }
       }
       if (params.baseUrl !== undefined) {
         auth.baseUrl = params.baseUrl;
       }
       if (params.enabled !== undefined) {
         auth.enabled = params.enabled;
+        // 用户手动启用时，同时清除自动禁用原因（表示用户已知晓并解决了问题）
+        if (params.enabled && auth.autoDisabledReason && params.autoDisabledReason === undefined) {
+          delete auth.autoDisabledReason;
+        }
+      }
+      if (params.autoDisabledReason !== undefined) {
+        if (params.autoDisabledReason === null) {
+          delete auth.autoDisabledReason;
+        } else {
+          auth.autoDisabledReason = params.autoDisabledReason;
+        }
       }
       if (params.dispatchPolicy !== undefined) {
         auth.dispatchPolicy = params.dispatchPolicy ?? undefined;
+      }
+
+      // 周期配额配置更新：将新配置保存，并清除当前耗尽状态重新计算周期
+      if (quotaCycleChanged) {
+        if (params.quotaCycle === null) {
+          // 用户关闭周期配置，清除耗尽状态
+          delete auth.quotaCycle;
+          if (isQuotaCycleExhausted(params.authId)) {
+            await clearQuotaCycleExhausted(params.authId);
+            // 同时重置熔断器（如果周期耗尽导致熔断）
+            resetAuthCircuit(params.authId);
+            console.log(
+              `[QuotaCycle] Auth "${auth.name}" quota cycle config removed. Clearing exhausted state.`,
+            );
+          }
+        } else {
+          // 用户更改了周期配置，重置 cycleStartMs 为当前时间（新周期开始）
+          const newCycle: AuthQuotaCycle = {
+            ...params.quotaCycle,
+            cycleStartMs: Date.now(), // 重置周期起始点
+          };
+          auth.quotaCycle = newCycle;
+
+          if (isQuotaCycleExhausted(params.authId)) {
+            await clearQuotaCycleExhausted(params.authId);
+            resetAuthCircuit(params.authId);
+            console.log(
+              `[QuotaCycle] Auth "${auth.name}" quota cycle config changed. ` +
+                `Clearing exhausted state. New cycle: ${newCycle.type}, resetDay=${newCycle.resetDay}.`,
+            );
+          }
+
+          // 如果该认证当前处于耗尽状态，更改周期配置后允许并启用
+          if (params.enabled === undefined && !auth.enabled) {
+            // 不自动启用，但解除耗尽锁定
+          }
+        }
       }
 
       await saveModelManagement(storage);
       return;
     }
   }
+}
+
+/**
+ * 因 billing/auth 错误将无周期配额的认证标记为不可用（enabled=false）并持久化。
+ *
+ * 适用场景：该认证没有配置 quotaCycle（非周期性管理），但实际 API 调用返回了
+ * billing 耗尽或鉴权失效错误，说明该 key 当前无法使用。
+ * 系统将其持久化为 enabled=false，使其从路由中完全退出，直到用户手动重新启用。
+ *
+ * 注意：这是异步操作（写磁盘），使用 .catch() 防止影响主调用路径。
+ */
+export function disableAuthOnBillingOrAuthError(
+  authId: string,
+  reason: "billing_exhausted" | "auth_failure",
+): void {
+  if (!cachedStorage) {
+    return;
+  }
+  // 找到该认证
+  let foundAuth: ProviderAuth | undefined;
+  for (const auths of Object.values(cachedStorage.auths)) {
+    foundAuth = auths.find((a) => a.authId === authId);
+    if (foundAuth) {
+      break;
+    }
+  }
+  if (!foundAuth || !foundAuth.enabled) {
+    return;
+  } // 已经禁用则跳过
+
+  console.log(
+    `[AuthDisable] Auth "${foundAuth.name}" (${authId}) disabled due to ${reason}. ` +
+      `User must manually re-enable after resolving the issue.`,
+  );
+
+  // 立即更新内存缓存（确保本进程后续请求不再路由到此 key）
+  foundAuth.enabled = false;
+  foundAuth.autoDisabledReason = reason;
+
+  // 异步持久化到磁盘（不阻塞调用方）
+  updateAuth({ authId, enabled: false, autoDisabledReason: reason }).catch((err) => {
+    console.error(`[AuthDisable] Failed to persist disabled state for auth ${authId}:`, err);
+  });
 }
 
 // 删除认证
@@ -2618,13 +3147,14 @@ export const modelsHandlers: GatewayRequestHandlers = {
   // 更新认证
   "models.auth.update": async ({ params, respond }) => {
     try {
-      const { authId, name, apiKey, baseUrl, enabled, dispatchPolicy } = params as {
+      const { authId, name, apiKey, baseUrl, enabled, dispatchPolicy, quotaCycle } = params as {
         authId: string;
         name?: string;
         apiKey?: string;
         baseUrl?: string;
         enabled?: boolean;
         dispatchPolicy?: AuthDispatchPolicy | null;
+        quotaCycle?: AuthQuotaCycle | null;
       };
 
       if (!authId) {
@@ -2632,7 +3162,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      await updateAuth({ authId, name, apiKey, baseUrl, enabled, dispatchPolicy });
+      await updateAuth({ authId, name, apiKey, baseUrl, enabled, dispatchPolicy, quotaCycle });
       respond(true, { success: true }, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
