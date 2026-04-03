@@ -728,6 +728,9 @@ const ERROR_PATTERNS = {
     "credit balance",
     "plans & billing",
     "insufficient balance",
+    "month allocated quota exceeded", // ali-bailian 月度配额耗尽
+    "monthly quota exceeded",
+    "month quota exceeded",
   ],
   auth: [
     /invalid[_ ]?api[_ ]?key/,
