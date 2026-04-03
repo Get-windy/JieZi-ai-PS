@@ -1,6 +1,6 @@
 /**
  * 智能体生命周期管理工具
- * 
+ *
  * 提供创建、启动、停止、销毁智能体的完整生命周期管理
  * 仅限有管理员权限的智能体使用
  */
@@ -8,24 +8,27 @@
 import { Type } from "@sinclair/typebox";
 import type { AnyAgentTool } from "../../../upstream/src/agents/tools/common.js";
 import { jsonResult, readStringParam } from "../../../upstream/src/agents/tools/common.js";
-import { callGatewayTool, readGatewayCallOptions } from "../../../upstream/src/agents/tools/gateway.js";
+import {
+  callGatewayTool,
+  readGatewayCallOptions,
+} from "../../../upstream/src/agents/tools/gateway.js";
 
 /**
  * 智能体角色/职能枚举
  */
 const AgentRole = Type.Union([
-  Type.Literal("coordinator"),       // 项目协调员
-  Type.Literal("developer"),         // 开发工程师
-  Type.Literal("backend-dev"),       // 后端开发
-  Type.Literal("frontend-dev"),      // 前端开发
-  Type.Literal("qa-engineer"),       // 质量工程师
-  Type.Literal("devops"),            // 运维工程师
-  Type.Literal("product-manager"),   // 产品经理
-  Type.Literal("analyst"),           // 分析师
-  Type.Literal("designer"),          // 设计师
-  Type.Literal("writer"),            // 文档撰写
-  Type.Literal("assistant"),         // 通用助手
-  Type.Literal("custom"),            // 自定义角色
+  Type.Literal("coordinator"), // 项目协调员
+  Type.Literal("developer"), // 开发工程师
+  Type.Literal("backend-dev"), // 后端开发
+  Type.Literal("frontend-dev"), // 前端开发
+  Type.Literal("qa-engineer"), // 质量工程师
+  Type.Literal("devops"), // 运维工程师
+  Type.Literal("product-manager"), // 产品经理
+  Type.Literal("analyst"), // 分析师
+  Type.Literal("designer"), // 设计师
+  Type.Literal("writer"), // 文档撰写
+  Type.Literal("assistant"), // 通用助手
+  Type.Literal("custom"), // 自定义角色
 ]);
 
 /**
@@ -171,31 +174,20 @@ export function createAgentSpawnTool(opts?: {
       const description = readStringParam(params, "description");
       const workspace = readStringParam(params, "workspace");
       const model = readStringParam(params, "model");
-      const systemPrompt = readStringParam(params, "systemPrompt");
+      const _systemPrompt = readStringParam(params, "systemPrompt");
       const skills = Array.isArray(params.skills) ? params.skills.map(String) : [];
-      const config = typeof params.config === "object" ? params.config : {};
+      const _config = typeof params.config === "object" ? params.config : {};
       const tags = Array.isArray(params.tags) ? params.tags.map(String) : [];
       const autoStart = typeof params.autoStart === "boolean" ? params.autoStart : true;
       const parentAgentId = readStringParam(params, "parentAgentId");
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
-        // 调用 agent.spawn RPC
-        const response = await callGatewayTool("agent.spawn", gatewayOpts, {
-          agentId,
+        // 调用 agent.create RPC（gateway 只注册了 agent.create，无 agent.spawn）
+        await callGatewayTool("agent.create", gatewayOpts, {
+          id: agentId,
           name,
-          role,
-          description,
           workspace: workspace || `agents/${agentId}`,
-          model,
-          systemPrompt,
-          skills,
-          config,
-          tags,
-          autoStart,
-          parentAgentId,
-          createdBy: opts?.currentAgentId,
-          createdAt: Date.now(),
         });
 
         return jsonResult({
@@ -247,7 +239,7 @@ export function createAgentStartTool(opts?: {
 
       try {
         // 调用 agent.start RPC
-        const response = await callGatewayTool("agent.start", gatewayOpts, {
+        await callGatewayTool("agent.start", gatewayOpts, {
           targetAgentId,
           startupParams,
           startedBy: opts?.currentAgentId,
@@ -296,7 +288,7 @@ export function createAgentStopTool(opts?: {
 
       try {
         // 调用 agent.stop RPC
-        const response = await callGatewayTool("agent.stop", gatewayOpts, {
+        await callGatewayTool("agent.stop", gatewayOpts, {
           targetAgentId,
           force,
           reason,
@@ -347,7 +339,7 @@ export function createAgentRestartTool(opts?: {
 
       try {
         // 调用 agent.restart RPC
-        const response = await callGatewayTool("agent.restart", gatewayOpts, {
+        await callGatewayTool("agent.restart", gatewayOpts, {
           targetAgentId,
           delay,
           reason,
@@ -398,14 +390,29 @@ export function createAgentConfigureTool(opts?: {
       const model = readStringParam(params, "model");
       const systemPrompt = readStringParam(params, "systemPrompt");
       const addSkills = Array.isArray(params.addSkills) ? params.addSkills.map(String) : undefined;
-      const removeSkills = Array.isArray(params.removeSkills) ? params.removeSkills.map(String) : undefined;
-      const configUpdates = typeof params.configUpdates === "object" ? params.configUpdates : undefined;
+      const removeSkills = Array.isArray(params.removeSkills)
+        ? params.removeSkills.map(String)
+        : undefined;
+      const configUpdates =
+        typeof params.configUpdates === "object" ? params.configUpdates : undefined;
       const addTags = Array.isArray(params.addTags) ? params.addTags.map(String) : undefined;
-      const removeTags = Array.isArray(params.removeTags) ? params.removeTags.map(String) : undefined;
+      const removeTags = Array.isArray(params.removeTags)
+        ? params.removeTags.map(String)
+        : undefined;
       const gatewayOpts = readGatewayCallOptions(params);
 
       // 检查是否至少提供了一个更新字段
-      if (!name && !description && !model && !systemPrompt && !addSkills && !removeSkills && !configUpdates && !addTags && !removeTags) {
+      if (
+        !name &&
+        !description &&
+        !model &&
+        !systemPrompt &&
+        !addSkills &&
+        !removeSkills &&
+        !configUpdates &&
+        !addTags &&
+        !removeTags
+      ) {
         return jsonResult({
           success: false,
           error: "At least one configuration field must be provided",
@@ -468,9 +475,12 @@ export function createAgentDestroyTool(opts?: {
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
       const targetAgentId = readStringParam(params, "targetAgentId", { required: true });
-      const deleteWorkspace = typeof params.deleteWorkspace === "boolean" ? params.deleteWorkspace : false;
-      const deleteSessions = typeof params.deleteSessions === "boolean" ? params.deleteSessions : false;
-      const confirmDestroy = typeof params.confirmDestroy === "boolean" ? params.confirmDestroy : false;
+      const deleteWorkspace =
+        typeof params.deleteWorkspace === "boolean" ? params.deleteWorkspace : false;
+      const deleteSessions =
+        typeof params.deleteSessions === "boolean" ? params.deleteSessions : false;
+      const confirmDestroy =
+        typeof params.confirmDestroy === "boolean" ? params.confirmDestroy : false;
       const gatewayOpts = readGatewayCallOptions(params);
 
       // 安全检查：必须确认
@@ -499,7 +509,7 @@ export function createAgentDestroyTool(opts?: {
 
       try {
         // 调用 agent.destroy RPC
-        const response = await callGatewayTool("agent.destroy", gatewayOpts, {
+        await callGatewayTool("agent.destroy", gatewayOpts, {
           targetAgentId,
           deleteWorkspace,
           deleteSessions,
@@ -546,14 +556,16 @@ export function createAgentCloneTool(opts?: {
       const sourceAgentId = readStringParam(params, "sourceAgentId", { required: true });
       const newAgentId = readStringParam(params, "newAgentId", { required: true });
       const newName = readStringParam(params, "newName");
-      const cloneWorkspace = typeof params.cloneWorkspace === "boolean" ? params.cloneWorkspace : false;
+      const cloneWorkspace =
+        typeof params.cloneWorkspace === "boolean" ? params.cloneWorkspace : false;
       const cloneSkills = typeof params.cloneSkills === "boolean" ? params.cloneSkills : true;
-      const cloneSystemPrompt = typeof params.cloneSystemPrompt === "boolean" ? params.cloneSystemPrompt : true;
+      const cloneSystemPrompt =
+        typeof params.cloneSystemPrompt === "boolean" ? params.cloneSystemPrompt : true;
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
         // 调用 agent.clone RPC
-        const response = await callGatewayTool("agent.clone", gatewayOpts, {
+        await callGatewayTool("agent.clone", gatewayOpts, {
           sourceAgentId,
           newAgentId,
           newName: newName || `${sourceAgentId} (Clone)`,
@@ -587,4 +599,3 @@ export function createAgentCloneTool(opts?: {
     },
   };
 }
-

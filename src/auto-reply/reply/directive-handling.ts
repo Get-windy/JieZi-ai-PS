@@ -29,7 +29,11 @@ import {
   type ModelAliasIndex,
 } from "../../../upstream/src/agents/model-selection.js";
 import type { OpenClawConfig } from "../../../upstream/src/config/config.js";
-import { resolveAgentEffectiveModelPrimary } from "../../agents/agent-scope.js";
+import {
+  resolveAgentEffectiveModelPrimary,
+  resolveAgentExplicitModelPrimary,
+  resolveAgentModelAccounts,
+} from "../../agents/agent-scope.js";
 
 export function resolveDefaultModel(params: {
   cfg: OpenClawConfig;
@@ -85,8 +89,18 @@ export function resolveDefaultModel(params: {
   }
 
   // 非系统任务且 agent 未配置模型：返回 noModelConfigured=true，让上层提示用户
+  // 注意区分「未配置模型」和「已配置但全部不可用」：
+  //   未配置 → agentModelOverride=undefined 且 agent 本身也没有任何模型字符串 → 提示用户配置
+  //   已配置但不可用 → agentModelOverride=undefined 但 agent 有配置 → 降级走全局 fallback（让智能路由处理）
+  const hasAnyModelConfig =
+    params.agentId !== undefined &&
+    (resolveAgentExplicitModelPrimary(params.cfg, params.agentId) !== undefined ||
+      resolveAgentModelAccounts(params.cfg, params.agentId) !== undefined);
   const agentHasNoModel =
-    params.agentId !== undefined && agentModelOverride === undefined && !params.isSystemTask;
+    params.agentId !== undefined &&
+    agentModelOverride === undefined &&
+    !params.isSystemTask &&
+    !hasAnyModelConfig;
 
   if (agentHasNoModel) {
     // 返回一个占位结构（防止类型错误），同时带上 noModelConfigured 标志
