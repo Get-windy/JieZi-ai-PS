@@ -45,6 +45,7 @@ import type {
 } from "../../../upstream/src/gateway/server-methods/types.js";
 import { requestHeartbeatNow } from "../../../upstream/src/infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
+import { resolveUserPath } from "../../../upstream/src/utils.js";
 import { addAgentToAllowList } from "../../agents/agent-config-manager.js";
 import {
   listAgentIds,
@@ -1634,7 +1635,23 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     };
 
     if (workspace) {
-      newAgent.workspace = workspace;
+      // 如果 workspace 是相对路径（非 ~ 开头、非绝对路径），则相对于配置的工作空间根目录解析
+      // 这样 agent.create 传入 "agents/xxx" 时，会落在用户配置的根目录下，而不是进程 cwd
+      const isAbsolute = path.isAbsolute(workspace) || workspace.startsWith("~");
+      if (isAbsolute) {
+        newAgent.workspace = workspace;
+      } else {
+        const defaultsWorkspace = cfg.agents?.defaults?.workspace?.trim();
+        if (defaultsWorkspace) {
+          // 相对于配置的根目录拼接
+          const resolvedRoot = resolveUserPath(defaultsWorkspace);
+          newAgent.workspace = path.join(resolvedRoot, workspace);
+        } else {
+          // 没有配置根目录，相对于系统默认工作空间根目录
+          const resolvedRoot = resolveDefaultAgentWorkspaceDir(process.env);
+          newAgent.workspace = path.join(resolvedRoot, workspace);
+        }
+      }
     }
 
     // 添加到agents.list

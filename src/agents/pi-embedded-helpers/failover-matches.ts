@@ -49,6 +49,9 @@ const ERROR_PATTERNS = {
     "credit balance",
     "plans & billing",
     "insufficient balance",
+    "month allocated quota exceeded", // ali-bailian 月度配额耗尽
+    "monthly quota exceeded",
+    "month quota exceeded",
   ],
   authPermanent: [
     /api[_ ]?key[_ ]?(?:revoked|invalid|deactivated|deleted)/i,
@@ -111,6 +114,10 @@ export function matchesFormatErrorPattern(raw: string): boolean {
 }
 
 export function isRateLimitErrorMessage(raw: string): boolean {
+  // 月度配额耗尽应归类为 billing，不是 rateLimit
+  if (isBillingErrorMessage(raw)) {
+    return false;
+  }
   return matchesErrorPatterns(raw, ERROR_PATTERNS.rateLimit);
 }
 

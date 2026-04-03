@@ -1,11 +1,12 @@
 import { getChannelPlugin } from "../../upstream/src/channels/plugins/index.js";
+import { createBrowserTool } from "../../upstream/src/plugin-sdk/browser-runtime.js";
 import { getPluginToolMeta } from "../../upstream/src/plugins/tools.js";
 import type { OpenClawConfig } from "../config/config.js";
 import type { AgentChannelBindings } from "../config/types.channel-bindings.js";
 import { detectMessageToolExfil } from "../infra/exec-exfil-detect.js";
 import { resolvePluginTools } from "../plugins/tools.js";
 import type { GatewayMessageChannel } from "../utils/message-channel.js";
-import { resolveSessionAgentId } from "./agent-scope.js";
+import { resolveSessionAgentId, resolveAgentConfig } from "./agent-scope.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import {
   createAgentDiscoverTool,
@@ -40,7 +41,6 @@ import {
   createGetApprovalStatusTool,
   createCancelApprovalRequestTool,
 } from "./tools/approval-tools.js";
-import { createBrowserTool } from "../../upstream/src/plugin-sdk/browser-runtime.js";
 import { createCanvasTool } from "./tools/canvas-tool.js";
 import type { AnyAgentTool } from "./tools/common.js";
 import { createCronTool } from "./tools/cron-tool.js";
@@ -626,6 +626,15 @@ export function createOpenClawTools(options?: {
         sessionKey: options?.agentSessionKey,
         config: options?.config,
       }),
+      currentAgentName: (() => {
+        const agentId = resolveSessionAgentId({
+          sessionKey: options?.agentSessionKey,
+          config: options?.config,
+        });
+        return options?.config
+          ? (resolveAgentConfig(options.config, agentId)?.name ?? agentId)
+          : agentId;
+      })(),
     }),
     createApproveRequestTool({
       currentAgentId: resolveSessionAgentId({

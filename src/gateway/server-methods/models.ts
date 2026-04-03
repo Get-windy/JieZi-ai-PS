@@ -673,6 +673,7 @@ type QuotaExhaustedStore = {
 // 内存态（热路径快速查询，无需每次读文件）
 const quotaExhaustedMap = new Map<string, QuotaExhaustedRecord>();
 let quotaStoreLoaded = false;
+let quotaStoreLoadPromise: Promise<void> | null = null;
 
 function getQuotaExhaustedFile(): string {
   // 与 model-management.json 同目录
@@ -681,38 +682,50 @@ function getQuotaExhaustedFile(): string {
 
 async function loadQuotaExhaustedStore(): Promise<void> {
   if (quotaStoreLoaded) {
-    return;
+    return quotaStoreLoadPromise ?? undefined;
   }
-  quotaStoreLoaded = true;
-  try {
-    const filePath = getQuotaExhaustedFile();
-    const fs = await import("fs/promises");
-    const content = await fs.readFile(filePath, "utf-8").catch(() => null);
-    if (!content) {
-      return;
-    }
-    const store: QuotaExhaustedStore = JSON.parse(content);
-    const now = Date.now();
-    for (const record of store.records ?? []) {
-      if (record.exhaustedUntil > now) {
-        // 还在耗尽期内，恢复到内存 + 熔断器
-        quotaExhaustedMap.set(record.authId, record);
-        const existing = circuitBreakers.get(record.authId);
-        if (!existing || existing.cooldownUntil < record.exhaustedUntil) {
-          circuitBreakers.set(record.authId, {
-            authId: record.authId,
-            cooldownUntil: record.exhaustedUntil,
-            errorCount: 1,
-            lastError: "quota_cycle_exhausted (restored from disk)",
-          });
-        }
+  if (quotaStoreLoadPromise) {
+    // 已经在加载中，等待同一个 Promise
+    return quotaStoreLoadPromise;
+  }
+  quotaStoreLoadPromise = (async () => {
+    try {
+      const filePath = getQuotaExhaustedFile();
+      const fs = await import("fs/promises");
+      const content = await fs.readFile(filePath, "utf-8").catch(() => null);
+      if (!content) {
+        return;
       }
-      // 已过期的记录直接丢弃（不写回，下次 save 时自动清理）
+      const store: QuotaExhaustedStore = JSON.parse(content);
+      const now = Date.now();
+      for (const record of store.records ?? []) {
+        if (record.exhaustedUntil > now) {
+          // 还在耗尽期内，恢复到内存 + 熔断器
+          quotaExhaustedMap.set(record.authId, record);
+          const existing = circuitBreakers.get(record.authId);
+          if (!existing || existing.cooldownUntil < record.exhaustedUntil) {
+            circuitBreakers.set(record.authId, {
+              authId: record.authId,
+              cooldownUntil: record.exhaustedUntil,
+              errorCount: 1,
+              lastError: "quota_cycle_exhausted (restored from disk)",
+            });
+          }
+        }
+        // 已过期的记录直接丢弃（不写回，下次 save 时自动清理）
+      }
+    } catch {
+      // 读取失败不影响运行
+    } finally {
+      quotaStoreLoaded = true;
     }
-  } catch {
-    // 读取失败不影响运行
-  }
+  })();
+  return quotaStoreLoadPromise;
 }
+
+// 模块加载时立即触发，确保第一个路由请求到来前已完成加载
+// 不 await，让它在后台异步执行；loadModelManagement 会 await 完成
+void loadQuotaExhaustedStore();
 
 async function saveQuotaExhaustedStore(): Promise<void> {
   try {
@@ -1218,7 +1231,8 @@ export function isModelIdUsableSync(modelId: string): boolean | undefined {
 // 加载模型管理配置（导出供其他模块使用）
 export async function loadModelManagement(): Promise<ModelManagementStorage> {
   // 首次加载时，同时初始化周期配额耗尽持久化数据（进程重启后恢复）
-  loadQuotaExhaustedStore().catch(() => {});
+  // 必须 await，确保 quota 状态在缓存命中时也已就绪
+  await loadQuotaExhaustedStore();
 
   // 检查缓存是否有效
   const now = Date.now();

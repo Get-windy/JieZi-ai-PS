@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DEFAULT_PROVIDER } from "../../upstream/src/agents/defaults.js";
+import { hasUsableCustomProviderApiKey } from "../../upstream/src/agents/model-auth.js";
 import {
   resolveModelRefFromString,
   buildModelAliasIndex,
@@ -20,7 +21,6 @@ import {
   parseAgentSessionKey,
   resolveAgentIdFromSessionKey,
 } from "../routing/session-key.js";
-import { hasUsableCustomProviderApiKey } from "../../upstream/src/agents/model-auth.js";
 const log = createSubsystemLogger("agent-scope");
 
 export { resolveAgentIdFromSessionKey };
@@ -235,6 +235,7 @@ function isModelStringProviderUsable(cfg: OpenClawConfig, modelStr: string): boo
  * allowFallbackToDefault=false（默认，普通会话模式）：
  *   1. agent 自身 modelAccounts.defaultAccountId → provider 可用时采用
  *   2. agent 自身 model.primary → provider 可用时采用
+ *   2.5. agent 自身 modelAccounts.accounts 列表中其他可用账号（不算跨agent）
  *   返回 undefined 表示「未配置模型」，上层应提示用户配置
  *
  * allowFallbackToDefault=true（系统任务模式，如心跳任务驱动）：
@@ -266,7 +267,24 @@ export function resolveAgentEffectiveModelPrimary(
     return explicit;
   }
 
-  // 自身无模型配置，且不允许跨 agent fallback → 返回 undefined，让上层提示用户
+  // 2.5. agent 自身 modelAccounts.accounts 列表中的其他可用账号
+  // 这不属于「跨 agent fallback」，是该 agent 自己配置的备选账号
+  const allOwnAccounts = ownAccounts?.accounts ?? [];
+  for (const accountId of allOwnAccounts) {
+    const candidate = accountId.trim();
+    if (!candidate || candidate === ownDefault || candidate === explicit) {
+      continue; // 已在步骤 1/2 判过了
+    }
+    if (isModelStringProviderUsable(cfg, candidate)) {
+      log.info(
+        `[model-fallback] agentId=${agentId}: primary/default unavailable, ` +
+          `falling back to own accounts candidate="${candidate}"`,
+      );
+      return candidate;
+    }
+  }
+
+  // 自身无可用模型，且不允许跨 agent fallback → 返回 undefined，让上层提示用户
   if (!allowFallback) {
     return undefined;
   }

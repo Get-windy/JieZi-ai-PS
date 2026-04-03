@@ -415,7 +415,21 @@ export const approvalHandlers: GatewayRequestHandlers = {
                 }))
               : [{ ...toolArgs, _approvedBy: record.id, _requesterId: requesterId }];
 
-            for (const callParams of callItems) {
+            // agent_spawn / agent_create 工具传的是 agentId，但 agent.create RPC 需要 id
+            // 审批通过后自动执行时需要做参数名转换
+            const normalizedCallItems = callItems.map((item) => {
+              if (
+                rpcMethod === "agent.create" &&
+                (item as Record<string, unknown>).agentId &&
+                !(item as Record<string, unknown>).id
+              ) {
+                const { agentId, ...rest } = item as Record<string, unknown>;
+                return { ...rest, id: agentId };
+              }
+              return item;
+            });
+
+            for (const callParams of normalizedCallItems) {
               try {
                 await callGateway({
                   method: rpcMethod,
