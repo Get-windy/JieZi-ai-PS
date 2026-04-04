@@ -314,3 +314,10 @@ export const ToolsEffectiveResultSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+export {
+  SkillsSearchParamsSchema,
+  SkillsSearchResultSchema,
+  SkillsDetailParamsSchema,
+  SkillsDetailResultSchema,
+} from "../../../../upstream/src/gateway/protocol/schema/agents-models-skills.js";

@@ -1,9 +1,5 @@
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type } from "@sinclair/typebox";
-import { formatDurationCompact } from "../infra/format-time/format-duration.ts";
-import { getDiagnosticSessionState } from "../../upstream/src/logging/diagnostic-session-state.js";
-import { killProcessTree } from "../../upstream/src/process/kill-tree.js";
-import { getProcessSupervisor } from "../../upstream/src/process/supervisor/index.js";
 import {
   type ProcessSession,
   deleteSession,
@@ -15,9 +11,21 @@ import {
   markExited,
   setJobTtlMs,
 } from "../../upstream/src/agents/bash-process-registry.js";
-import { deriveSessionName, pad, sliceLogLines, truncateMiddle } from "../../upstream/src/agents/bash-tools.shared.js";
-import { recordCommandPoll, resetCommandPollCount } from "../../upstream/src/agents/command-poll-backoff.js";
+import {
+  deriveSessionName,
+  pad,
+  sliceLogLines,
+  truncateMiddle,
+} from "../../upstream/src/agents/bash-tools.shared.js";
+import {
+  recordCommandPoll,
+  resetCommandPollCount,
+} from "../../upstream/src/agents/command-poll-backoff.js";
 import { encodeKeySequence, encodePaste } from "../../upstream/src/agents/pty-keys.js";
+import { getDiagnosticSessionState } from "../../upstream/src/logging/diagnostic-session-state.js";
+import { killProcessTree } from "../../upstream/src/process/kill-tree.js";
+import { getProcessSupervisor } from "../../upstream/src/process/supervisor/index.js";
+import { formatDurationCompact } from "../infra/format-time/format-duration.ts";
 
 export type ProcessToolDefaults = {
   cleanupMs?: number;
@@ -653,3 +661,5 @@ export function createProcessTool(
 }
 
 export const processTool = createProcessTool();
+
+export { describeProcessTool } from "../../upstream/src/agents/bash-tools.process.js";

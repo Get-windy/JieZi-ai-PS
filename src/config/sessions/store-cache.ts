@@ -79,3 +79,20 @@ export function writeSessionStoreCache(params: {
     SESSION_STORE_SERIALIZED_CACHE.set(params.storePath, params.serialized);
   }
 }
+
+const DEFAULT_SESSION_STORE_TTL_MS = 60_000;
+
+export function getSessionStoreTtl(): number {
+  const envValue = process.env.OPENCLAW_SESSION_CACHE_TTL_MS;
+  if (envValue) {
+    const parsed = Number.parseInt(envValue, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+  return DEFAULT_SESSION_STORE_TTL_MS;
+}
+
+export function isSessionStoreCacheEnabled(): boolean {
+  return getSessionStoreTtl() > 0;
+}
