@@ -391,6 +391,10 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "agent.clone",
     "agent.update",
     "agent.delete",
+    // 群组：数据修复（仅管理员）
+    "groups.purgeGhosts",
+    // Agent 配置冲突修复（仅管理员）
+    "agent.deduplicateConflicts",
   ],
 };
 

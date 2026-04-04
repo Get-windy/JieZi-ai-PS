@@ -555,18 +555,62 @@ function renderGroupMembers(group: GroupInfo, props: GroupsProps) {
     return html`<span class="chip" style="background: ${badge.color};">${badge.text}</span>`;
   };
 
+  // 计算当前群组已有成员的 agentId 集合
+  const existingMemberIds = new Set(group.members.map((m) => m.agentId));
+
+  // 过滤出不在群组中的可选 agent 列表
+  const availableAgents = (props.agentsList?.agents ?? []).filter(
+    (a) => !existingMemberIds.has(a.id),
+  );
+
+  // 构建 agentId -> name 的查找 Map，方便成员列表显示名称
+  const agentNameMap = new Map((props.agentsList?.agents ?? []).map((a) => [a.id, a.name]));
+  const getAgentLabel = (agentId: string) => {
+    const name = agentNameMap.get(agentId);
+    return name ? name : agentId;
+  };
+
   return html`
     <section class="card" style="margin-top: 16px;">
       <div class="row" style="justify-content: space-between; margin-bottom: 16px;">
         <div class="card-title">成员管理</div>
-        <button class="btn btn--sm" @click=${() => {
-          const agentId = prompt("请输入要添加的智能助手ID：");
-          if (agentId) {
-            props.onAddMember(group.id, agentId.trim(), "member");
-          }
-        }}>
-          添加成员
-        </button>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <select
+            id="add-member-select-${group.id}"
+            class="form-control"
+            style="min-width: 200px;"
+            ?disabled=${availableAgents.length === 0}
+          >
+            <option value="">
+              ${availableAgents.length === 0 ? "无可添加的成员" : "选择要添加的成员..."}
+            </option>
+            ${availableAgents.map(
+              (agent) => html`
+                <option value="${agent.id}">
+                  ${agent.name ? `${agent.name} (${agent.id})` : agent.id}
+                </option>
+              `,
+            )}
+          </select>
+          <button
+            class="btn btn--sm btn--primary"
+            ?disabled=${availableAgents.length === 0}
+            @click=${() => {
+              const sel = document.getElementById(
+                `add-member-select-${group.id}`,
+              ) as HTMLSelectElement | null;
+              const agentId = sel?.value;
+              if (agentId) {
+                props.onAddMember(group.id, agentId, "member");
+                if (sel) {
+                  sel.value = "";
+                }
+              }
+            }}
+          >
+            添加成员
+          </button>
+        </div>
       </div>
 
       <div class="list">
@@ -574,7 +618,8 @@ function renderGroupMembers(group: GroupInfo, props: GroupsProps) {
           (member) => html`
             <div class="list-item">
               <div style="flex: 1;">
-                <div class="list-title mono">${member.agentId}</div>
+                <div class="list-title">${getAgentLabel(member.agentId)}</div>
+                <div class="list-sub mono" style="font-size: 11px;">${member.agentId}</div>
                 ${member.nickname ? html`<div class="list-sub">${member.nickname}</div>` : nothing}
                 <div class="chip-row" style="margin-top: 6px;">
                   ${getRoleBadge(member.role)}
@@ -608,7 +653,7 @@ function renderGroupMembers(group: GroupInfo, props: GroupsProps) {
                         <button
                           class="btn btn--sm btn--danger"
                           @click=${() => {
-                            if (confirm(`确定要移除成员 ${member.agentId} 吗？`)) {
+                            if (confirm(`确定要移除成员 ${getAgentLabel(member.agentId)} 吗？`)) {
                               props.onRemoveMember(group.id, member.agentId);
                             }
                           }}

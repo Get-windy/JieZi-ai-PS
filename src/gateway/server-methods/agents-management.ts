@@ -65,6 +65,122 @@ import type { Task } from "../../tasks/types.js";
 import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
 
 /**
+ * agent.create / agent.delete 的串行锁
+ * 防止并发调用同时通过去重检测后各自写入，产生 ID 冲突的重复条目
+ */
+let _agentWriteLock: Promise<void> = Promise.resolve();
+function withAgentWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = _agentWriteLock.then(() => fn());
+  // 无论成功或失败都释放锁，避免锁死
+  _agentWriteLock = next.then(
+    () => {},
+    () => {},
+  );
+  return next;
+}
+
+/**
+ * 扫描 agents.list，检测同一 normalizedId 存在多条冲突记录，并自动合并清理。
+ *
+ * 合并策略：
+ * - 同一 normalizedId 的所有条目中，保留 id 已是合法形式（等于 normalizedId）的那条作为主条目
+ * - 若没有合法条目，保留第一条并将其 id 修正为 normalized
+ * - 将其他条目的有效字段（name、identity 等）合并到主条目（不覆盖主条目已有的非空值）
+ * - 删除多余条目
+ *
+ * @returns 清理统计：{ removed: 被删除的非法条目 id 列表, mergedCount: 合并的字段数 }
+ */
+async function deduplicateAgentEntries(): Promise<{
+  conflicts: Array<{ normalizedId: string; kept: string; removed: string[] }>;
+} | null> {
+  const snapshot = await readConfigFileSnapshot();
+  if (!snapshot.valid) {
+    return null;
+  }
+  const cfg = snapshot.config;
+  const list = listAgentEntries(cfg);
+
+  // 按 normalizedId 分组
+  const byNormalized = new Map<string, typeof list>();
+  for (const entry of list) {
+    if (!entry?.id) {
+      continue;
+    }
+    const nid = normalizeAgentId(entry.id);
+    if (!byNormalized.has(nid)) {
+      byNormalized.set(nid, []);
+    }
+    byNormalized.get(nid)!.push(entry);
+  }
+
+  // 找出有冲突的 normalizedId
+  const conflicts: Array<{ normalizedId: string; kept: string; removed: string[] }> = [];
+  let dirty = false;
+  let mergedList = [...list];
+
+  for (const [nid, entries] of byNormalized) {
+    if (entries.length <= 1) {
+      continue;
+    }
+
+    // 优先选择 id 已经是合法形式的条目作为主条目
+    const canonical = entries.find((e) => e.id === nid) ?? entries[0];
+    const others = entries.filter((e) => e !== canonical);
+
+    // 合并其他条目的有效字段到主条目（不覆盖已有非空值）
+    let merged = { ...canonical, id: nid };
+    for (const other of others) {
+      if (!merged.name && other.name) {
+        merged = { ...merged, name: other.name };
+      }
+      if (!merged.identity && other.identity) {
+        merged = { ...merged, identity: other.identity };
+      }
+      if (!merged.model && other.model) {
+        merged = { ...merged, model: other.model };
+      }
+      if (!merged.workspace && other.workspace) {
+        merged = { ...merged, workspace: other.workspace };
+      }
+    }
+
+    // 从列表中移除所有冲突条目，替换为合并后的主条目
+    const otherIds = new Set(entries.map((e) => e.id));
+    mergedList = mergedList.filter((e) => !otherIds.has(e.id));
+    mergedList.push(merged);
+
+    conflicts.push({
+      normalizedId: nid,
+      kept: nid,
+      removed: others.map((e) => e.id),
+    });
+    dirty = true;
+  }
+
+  if (!dirty) {
+    return null; // 无冲突，无需写入
+  }
+
+  // 写回配置（保持原顺序：先按原 list 顺序排合法条目，新合并的追加在原位置）
+  const updatedConfig: OpenClawConfig = {
+    ...cfg,
+    agents: {
+      ...cfg.agents,
+      list: mergedList,
+    },
+  };
+  await writeConfigFile(updatedConfig);
+
+  for (const c of conflicts) {
+    console.log(
+      `[agent.dedup] Merged conflict for "${c.normalizedId}": removed [${c.removed.join(", ")}]`,
+    );
+  }
+
+  return { conflicts };
+}
+
+/**
  * 获取某 agent 可管理/调度的下属 agent ID 集合（normalized）。
  *
  * 合并两个来源：
@@ -579,7 +695,14 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
   /**
    * agent.list - 列出所有智能助手
    */
-  "agent.list": ({ respond }) => {
+  "agent.list": async ({ respond }) => {
+    // 懒去重：返回前先扫描并清理冲突条目，对存量数据实现自感知修复
+    try {
+      await deduplicateAgentEntries();
+    } catch (dedupErr) {
+      console.error("[agent.list] deduplication failed (non-fatal):", dedupErr);
+    }
+
     const cfg = loadConfig();
     const agents = listAgentEntries(cfg);
 
@@ -598,6 +721,35 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     }));
 
     respond(true, { agents: result }, undefined);
+  },
+
+  /**
+   * agent.deduplicateConflicts - 主动触发清理 agents.list 中的冲突重复条目。
+   * 同一 normalizedId 的多条条目将被合并为一条，错误条目被删除。
+   */
+  "agent.deduplicateConflicts": async ({ respond }) => {
+    try {
+      const result = await deduplicateAgentEntries();
+      if (!result) {
+        respond(true, { success: true, conflicts: [], message: "No conflicts found" }, undefined);
+        return;
+      }
+      respond(
+        true,
+        {
+          success: true,
+          conflicts: result.conflicts,
+          message: `Resolved ${result.conflicts.length} conflict(s)`,
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to deduplicate agents: ${String(err)}`),
+      );
+    }
   },
 
   /**
@@ -1613,75 +1765,90 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const cfg = snapshot.config;
     const normalized = normalizeAgentId(id);
-    const agents = listAgentEntries(cfg);
 
-    // 检查ID是否已存在
-    const existing = agents.find((a) => normalizeAgentId(a.id) === normalized);
-    if (existing) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `Agent ID already exists: ${id}`),
-      );
-      return;
-    }
+    // 使用串行锁保护「去重检测 + 写入」的原子性，防止并发请求同时通过检测后各自写入产生冲突条目
+    await withAgentWriteLock(async () => {
+      // 锁内重新读取最新快照，确保看到上一次写入的结果
+      const lockedSnapshot = await readConfigFileSnapshot();
+      if (!lockedSnapshot.valid) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "Invalid config; fix before creating agent"),
+        );
+        return;
+      }
 
-    // 创建新助手
-    const newAgent: Record<string, unknown> = {
-      id,
-      name: name || id,
-    };
+      const cfg = lockedSnapshot.config;
+      const agents = listAgentEntries(cfg);
 
-    if (workspace) {
-      // 如果 workspace 是相对路径（非 ~ 开头、非绝对路径），则相对于配置的工作空间根目录解析
-      // 这样 agent.create 传入 "agents/xxx" 时，会落在用户配置的根目录下，而不是进程 cwd
-      const isAbsolute = path.isAbsolute(workspace) || workspace.startsWith("~");
-      if (isAbsolute) {
-        newAgent.workspace = workspace;
-      } else {
-        const defaultsWorkspace = cfg.agents?.defaults?.workspace?.trim();
-        if (defaultsWorkspace) {
-          // 相对于配置的根目录拼接
-          const resolvedRoot = resolveUserPath(defaultsWorkspace);
-          newAgent.workspace = path.join(resolvedRoot, workspace);
+      // 检查ID是否已存在
+      const existing = agents.find((a) => normalizeAgentId(a.id) === normalized);
+      if (existing) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Agent ID already exists: ${id}`),
+        );
+        return;
+      }
+
+      // 创建新助手（使用规范化后的 ID，防止非法 ID 写入配置）
+      const newAgent: Record<string, unknown> = {
+        id: normalized,
+        name: name || normalized,
+      };
+
+      if (workspace) {
+        // 如果 workspace 是相对路径（非 ~ 开头、非绝对路径），则相对于配置的工作空间根目录解析
+        // 这样 agent.create 传入 "agents/xxx" 时，会落在用户配置的根目录下，而不是进程 cwd
+        const isAbsolute = path.isAbsolute(workspace) || workspace.startsWith("~");
+        if (isAbsolute) {
+          newAgent.workspace = workspace;
         } else {
-          // 没有配置根目录，相对于系统默认工作空间根目录
-          const resolvedRoot = resolveDefaultAgentWorkspaceDir(process.env);
-          newAgent.workspace = path.join(resolvedRoot, workspace);
+          const defaultsWorkspace = cfg.agents?.defaults?.workspace?.trim();
+          if (defaultsWorkspace) {
+            // 相对于配置的根目录拼接
+            const resolvedRoot = resolveUserPath(defaultsWorkspace);
+            newAgent.workspace = path.join(resolvedRoot, workspace);
+          } else {
+            // 没有配置根目录，相对于系统默认工作空间根目录
+            const resolvedRoot = resolveDefaultAgentWorkspaceDir(process.env);
+            newAgent.workspace = path.join(resolvedRoot, workspace);
+          }
         }
       }
-    }
 
-    // 添加到agents.list
-    const updatedConfig: OpenClawConfig = {
-      ...cfg,
-      agents: {
-        ...cfg.agents,
-        list: [...agents, newAgent as AgentConfig],
-      },
-    };
+      // 添加到agents.list
+      const updatedConfig: OpenClawConfig = {
+        ...cfg,
+        agents: {
+          ...cfg.agents,
+          list: [...agents, newAgent as AgentConfig],
+        },
+      };
 
-    // 创建工作区目录（在保存配置之前）
-    try {
-      const workspaceDir = resolveAgentWorkspaceDir(updatedConfig, id);
-      await fs.mkdir(workspaceDir, { recursive: true });
-    } catch (err) {
-      console.error(`Failed to create workspace directory for agent ${id}:`, err);
-      // 工作区创建失败不影响配置保存，继续执行
-    }
+      // 创建工作区目录（在保存配置之前）
+      try {
+        const workspaceDir = resolveAgentWorkspaceDir(updatedConfig, normalized);
+        await fs.mkdir(workspaceDir, { recursive: true });
+      } catch (err) {
+        console.error(`Failed to create workspace directory for agent ${normalized}:`, err);
+        // 工作区创建失败不影响配置保存，继续执行
+      }
 
-    try {
-      await writeConfigFile(updatedConfig);
-      respond(true, { success: true, agent: newAgent }, undefined);
-    } catch (err) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, `Failed to save config: ${String(err)}`),
-      );
-    }
+      try {
+        await writeConfigFile(updatedConfig);
+        respond(true, { success: true, agent: newAgent }, undefined);
+      } catch (err) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Failed to save config: ${String(err)}`),
+        );
+      }
+    });
   },
 
   /**
@@ -1693,6 +1860,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       name?: string | number;
       workspace?: string | number;
     };
+    console.log(`[agent.update] received params=${JSON.stringify(params)}`);
     const id = String((params as UpdateParams)?.id ?? "").trim();
     const name =
       (params as UpdateParams)?.name !== undefined
@@ -1720,16 +1888,47 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
     const cfg = snapshot.config;
     const normalized = normalizeAgentId(id);
-    const agents = listAgentEntries(cfg);
-    const agentIndex = findAgentEntryIndex(agents, normalized);
+    const rawAgents = listAgentEntries(cfg);
 
+    console.log(
+      `[agent.update] id=${id} normalized=${normalized} name=${JSON.stringify(name)} agents.ids=${rawAgents.map((a) => a.id).join(",")}`,
+    );
+
+    // ── 第一步：对整个 agents.list 全量合并去重 ──────────────────────────────
+    // 按 normalizedId 分组，将所有重复条目的字段合并为一条唯一记录
+    const mergedMap = new Map<string, Record<string, unknown>>();
+    for (const entry of rawAgents) {
+      if (!entry?.id) {
+        continue;
+      }
+      const nid = normalizeAgentId(entry.id);
+      if (!mergedMap.has(nid)) {
+        // 首次出现：以 normalizedId 作为 id 存入
+        mergedMap.set(nid, { ...entry, id: nid });
+      } else {
+        // 重复出现：把当前条目的非空字段补充到已有记录中（不覆盖已有非空值）
+        const existing = mergedMap.get(nid)!;
+        for (const [k, v] of Object.entries(entry)) {
+          if (k === "id") {
+            continue;
+          } // id 始终用 normalizedId
+          if (existing[k] == null || existing[k] === "") {
+            existing[k] = v;
+          }
+        }
+      }
+    }
+    const agents = Array.from(mergedMap.values()) as typeof rawAgents;
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const agentIndex = findAgentEntryIndex(agents, normalized);
     if (agentIndex < 0) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Agent not found: ${id}`));
       return;
     }
 
-    // 更新助手信息
-    const updatedAgent = { ...agents[agentIndex] };
+    // ── 第二步：在去重后的 list 上更新目标 agent ──────────────────────────────
+    const updatedAgent = { ...agents[agentIndex], id: normalized };
     if (name !== undefined) {
       updatedAgent.name = name;
     }
@@ -1740,8 +1939,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         delete (updatedAgent as Record<string, unknown>).workspace;
       }
     }
-
     agents[agentIndex] = updatedAgent;
+    // ─────────────────────────────────────────────────────────────────────────
 
     const updatedConfig: OpenClawConfig = {
       ...cfg,
@@ -1753,6 +1952,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
     try {
       await writeConfigFile(updatedConfig);
+      console.log(
+        `[agent.update] success: id=${normalized} name=${JSON.stringify(updatedAgent.name)}`,
+      );
       respond(true, { success: true, agent: updatedAgent }, undefined);
     } catch (err) {
       respond(
@@ -2038,6 +2240,44 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     } catch (taskErr) {
       console.error(`[agent.delete] Failed to clean up tasks for agent ${id}:`, taskErr);
       // 任务清理失败不阻断 agent 删除，继续执行
+    }
+    // ── 级联清理群组成员 ─────────────────────────────────────────────────
+    // 规则：删除 agent 时，将其从所有群组中移除，源头上消灰僵尸成员
+    //   - 不干预正常群组逻辑（期山不降，将 owner 也连群删除）
+    //   - owner 的情况：不移除，不強制（群组将失去 owner，但不删群）
+    try {
+      const allGroups = groupManager.getAllGroups();
+      for (const group of allGroups) {
+        const isMember = group.members.some((m) => m.agentId === normalized);
+        if (!isMember) {
+          continue;
+        }
+        // owner 不能被常规 removeMember，直接操作成员列表
+        if (group.ownerId === normalized) {
+          // 仅记录日志，不強制处理（避免破坏群组数据完整性）
+          console.warn(
+            `[agent.delete] Agent "${normalized}" is owner of group "${group.id}"; skipping group cleanup for owner`,
+          );
+          continue;
+        }
+        try {
+          await groupManager.removeMember(group.id, normalized);
+          console.log(
+            `[agent.delete] Removed deleted agent "${normalized}" from group "${group.id}"`,
+          );
+        } catch (removeErr) {
+          console.error(
+            `[agent.delete] Failed to remove agent "${normalized}" from group "${group.id}":`,
+            removeErr,
+          );
+        }
+      }
+    } catch (groupErr) {
+      console.error(
+        `[agent.delete] Failed to clean up group memberships for agent ${id}:`,
+        groupErr,
+      );
+      // 群组清理失败不阻断 agent 删除，继续执行
     }
     // ─────────────────────────────────────────────────────────────────
     const updatedConfig: OpenClawConfig = {

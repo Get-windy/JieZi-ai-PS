@@ -1,5 +1,6 @@
 import { html, nothing } from "lit";
 import type { AgentsListResult } from "../types.ts";
+import type { GroupInfo, GroupsListResult } from "./groups.ts";
 
 // ===== 跨团队协作类型 =====
 
@@ -225,6 +226,8 @@ export type ProjectsProps = {
   creatingProject: boolean;
   editingProject: ProjectInfo | null;
   agentsList: AgentsListResult | null;
+  /** 群组列表，用于渲染项目成员（项目成员存储在绑定群组里） */
+  groupsList: GroupsListResult | null;
   /** 项目代码根目录（全局设置，如 I:\\ 或 D:\\Projects\\） */
   projectCodeRoot: string;
   onCodeRootChange: (root: string) => void;
@@ -804,93 +807,200 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
 function renderProjectMembers(props: ProjectsProps, project: ProjectInfo) {
   const agents = props.agentsList?.agents ?? [];
 
+  // 找到绑定该项目的所有群组，汇总成员（去重）
+  const boundGroups = (props.groupsList?.groups ?? []).filter(
+    (g) => g.projectId === project.projectId,
+  );
+  const memberMap = new Map<string, { agentId: string; role: string; groupId: string }>();
+  for (const g of boundGroups) {
+    for (const m of g.members) {
+      if (!memberMap.has(m.agentId)) {
+        memberMap.set(m.agentId, { agentId: m.agentId, role: m.role, groupId: g.id });
+      }
+    }
+    // owner 也算成员
+    if (g.ownerId && !memberMap.has(g.ownerId)) {
+      memberMap.set(g.ownerId, { agentId: g.ownerId, role: "owner", groupId: g.id });
+    }
+  }
+  const currentMembers = Array.from(memberMap.values());
+  const currentMemberIds = new Set(currentMembers.map((m) => m.agentId));
+
+  // 可选 agents：过滤掉已是成员的
+  const availableAgents = agents.filter((a) => !currentMemberIds.has(a.id));
+
+  // agentId -> name 查找
+  const agentNameMap = new Map(agents.map((a) => [a.id, a.name]));
+  const getAgentLabel = (agentId: string) => {
+    const name = agentNameMap.get(agentId);
+    return name ? name : agentId;
+  };
+
+  // 主群组（第一个绑定群组）用于 addMember
+  const primaryGroup: GroupInfo | undefined = boundGroups[0];
+
+  const roleBadge = (role: string) => {
+    const map: Record<string, { text: string; color: string }> = {
+      owner: { text: "负责人", color: "var(--color-primary)" },
+      admin: { text: "管理员", color: "var(--color-info)" },
+      member: { text: "成员", color: "var(--color-muted)" },
+    };
+    const b = map[role] ?? map.member;
+    return html`<span class="chip" style="background: ${b.color};">${b.text}</span>`;
+  };
+
   return html`
     <div class="project-members">
       <h3>成员管理</h3>
-      
+
       <div class="callout info" style="margin-bottom: 16px;">
         管理项目组成员和权限。项目管理员可以管理项目配置、分配任务和审批变更。
       </div>
 
+      <!-- 当前成员列表 -->
       <div class="member-section">
-        <h4>添加成员</h4>
-        <div class="form-group">
-          <label>选择智能助手</label>
-          <select 
-            class="form-control"
-            @change=${(e: Event) => {
-              const target = e.target as HTMLSelectElement;
-              if (target.value) {
-                props.onAddMember(project.projectId, target.value, "member");
-              }
-            }}
-          >
-            <option value="">请选择智能助手</option>
-            ${agents.map(
-              (agent) => html`
-                <option value="${agent.id}">${agent.name || agent.id}</option>
-              `,
-            )}
-          </select>
-        </div>
+        <h4>当前成员 (${currentMembers.length})</h4>
+        ${
+          currentMembers.length === 0
+            ? html`
+                <div class="muted" style="padding: 12px 0">暂无成员，请通过下方绑定项目群后添加</div>
+              `
+            : html`
+              <div class="list" style="margin-top: 8px;">
+                ${currentMembers.map(
+                  (m) => html`
+                    <div class="list-item">
+                      <div style="flex: 1;">
+                        <div class="list-title">${getAgentLabel(m.agentId)}</div>
+                        <div class="list-sub mono" style="font-size: 11px;">${m.agentId}</div>
+                        <div class="chip-row" style="margin-top: 4px;">
+                          ${roleBadge(m.role)}
+                        </div>
+                      </div>
+                      ${
+                        m.role !== "owner"
+                          ? html`
+                            <button
+                              class="btn btn--sm btn--danger"
+                              @click=${() => {
+                                if (confirm(`确定要移除成员 ${getAgentLabel(m.agentId)} 吗？`)) {
+                                  props.onRemoveMember(m.groupId, m.agentId);
+                                }
+                              }}
+                            >
+                              移除
+                            </button>
+                          `
+                          : nothing
+                      }
+                    </div>
+                  `,
+                )}
+              </div>
+            `
+        }
       </div>
 
+      <!-- 添加成员 -->
+      ${
+        primaryGroup
+          ? html`
+          <div class="member-section" style="margin-top: 24px;">
+            <h4>添加成员</h4>
+            <div class="form-group">
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <select
+                  id="add-project-member-select-${project.projectId}"
+                  class="form-control"
+                  ?disabled=${availableAgents.length === 0}
+                >
+                  <option value="">
+                    ${availableAgents.length === 0 ? "无可添加的成员" : "选择要添加的成员..."}
+                  </option>
+                  ${availableAgents.map(
+                    (agent) => html`
+                      <option value="${agent.id}">
+                        ${agent.name ? `${agent.name} (${agent.id})` : agent.id}
+                      </option>
+                    `,
+                  )}
+                </select>
+                <button
+                  class="btn btn--sm btn--primary"
+                  ?disabled=${availableAgents.length === 0}
+                  @click=${() => {
+                    const sel = document.getElementById(
+                      `add-project-member-select-${project.projectId}`,
+                    ) as HTMLSelectElement | null;
+                    const agentId = sel?.value;
+                    if (agentId && primaryGroup) {
+                      props.onAddMember(primaryGroup.id, agentId, "member");
+                      if (sel) {
+                        sel.value = "";
+                      }
+                    }
+                  }}
+                >
+                  添加成员
+                </button>
+              </div>
+            </div>
+          </div>
+        `
+          : html`
+              <div class="callout warn" style="margin-top: 16px">
+                该项目尚未绑定群组，请先在群组管理页将群组升级为项目群，或创建群组时指定项目 ID。
+              </div>
+            `
+      }
+
+      <!-- 更换负责人 -->
       <div style="margin-top: 24px;">
-        <h4>项目管理员设置</h4>
+        <h4>项目负责人</h4>
         <div class="form-group">
-          <label>项目负责人 (Owner)</label>
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="mono" style="flex: 1; padding: 8px; background: var(--color-bg-secondary, #f5f5f5); border-radius: 4px;">
-              ${project.ownerId || "未设置"}
+            <span style="flex: 1; padding: 8px; background: var(--color-bg-secondary, #f5f5f5); border-radius: 4px;">
+              ${project.ownerId ? getAgentLabel(project.ownerId) : "未设置"}
+              ${project.ownerId ? html`<span class="mono" style="font-size: 11px; color: var(--color-muted); margin-left: 4px;">(${project.ownerId})</span>` : nothing}
             </span>
             <button
               class="btn btn--sm btn--primary"
+              ?disabled=${agents.length === 0}
               @click=${() => {
-                const newOwner =
-                  agents.length > 0
-                    ? prompt(
-                        `请输入新负责人 ID（当前：${project.ownerId || "未设置"}\n可选内容：${agents.map((a) => a.id).join(", ")})`,
-                      )
-                    : prompt(`请输入新负责人 ID（当前：${project.ownerId || "未设置"})`);
-                if (newOwner && newOwner.trim() && newOwner.trim() !== project.ownerId) {
-                  props.onTransferProjectOwner(project.projectId, newOwner.trim());
+                const sel = document.getElementById(
+                  `transfer-owner-select-${project.projectId}`,
+                ) as HTMLSelectElement | null;
+                const newOwner = sel?.value;
+                if (newOwner && newOwner !== project.ownerId) {
+                  props.onTransferProjectOwner(project.projectId, newOwner);
+                  if (sel) {
+                    sel.value = "";
+                  }
                 }
               }}
             >
               🔄 更换负责人
             </button>
           </div>
-          <small>项目负责人持有所有项目群的群主权限，更换将自动在所有项目群中生效</small>
-        </div>
-        
-        <div class="form-group" style="margin-top: 16px;">
-          <label>授予 Agent 管理员权限</label>
           <div style="margin-top: 8px;">
-            ${agents
-              .filter((a) => a.id !== project.ownerId)
-              .map(
-                (agent) => html`
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                  <input 
-                    type="checkbox" 
-                    id="admin-${agent.id}"
-                    ?checked=${false}
-                    @change=${(e: Event) => {
-                      const target = e.target as HTMLInputElement;
-                      if (target.checked) {
-                        props.onUpdateMemberRole(project.projectId, agent.id, "admin");
-                      } else {
-                        props.onUpdateMemberRole(project.projectId, agent.id, "member");
-                      }
-                    }}
-                  />
-                  <label for="admin-${agent.id}" style="cursor: pointer;">
-                    ${agent.name || agent.id} - 授予管理员权限
-                  </label>
-                </div>
-              `,
-              )}
+            <select
+              id="transfer-owner-select-${project.projectId}"
+              class="form-control"
+              ?disabled=${agents.length === 0}
+            >
+              <option value="">选择新负责人...</option>
+              ${agents
+                .filter((a) => a.id !== project.ownerId)
+                .map(
+                  (agent) => html`
+                    <option value="${agent.id}">
+                      ${agent.name ? `${agent.name} (${agent.id})` : agent.id}
+                    </option>
+                  `,
+                )}
+            </select>
           </div>
+          <small>项目负责人持有所有项目群的群主权限，更换将自动在所有项目群中生效</small>
         </div>
       </div>
     </div>

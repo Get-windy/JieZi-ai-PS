@@ -4,11 +4,61 @@
  * 群组管理的 RPC 方法处理器
  */
 
+import { listAgentEntries } from "../../../upstream/src/commands/agents.config.js";
+import { readConfigFileSnapshot } from "../../../upstream/src/config/config.js";
 import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
 import type { GroupMemberRole } from "../../sessions/group-manager.js";
 import { groupManager } from "../../sessions/group-manager.js";
 import { groupMessageStorage } from "../../sessions/group-message-storage.js";
+
+/**
+ * 获取当前系统中所有有效的 normalizedAgentId 集合。
+ * 配置读取失败时返回空集合（安全退化：不做清理）。
+ */
+async function getValidAgentIdSet(): Promise<Set<string>> {
+  const snapshot = await readConfigFileSnapshot();
+  if (!snapshot.valid) {
+    return new Set<string>();
+  }
+  return new Set(listAgentEntries(snapshot.config).map((a) => normalizeAgentId(a.id)));
+}
+
+/**
+ * 验证 agentId 在配置中真实存在（防止僵尸成员入群）
+ * @returns 错误信息，无错误则返回 null
+ */
+async function validateAgentExists(agentId: string): Promise<string | null> {
+  const validIds = await getValidAgentIdSet();
+  if (validIds.size === 0) {
+    // 配置无效时不拒绝，避免配置异常时把所有操作都卡死
+    return null;
+  }
+  const normalized = normalizeAgentId(agentId);
+  if (!validIds.has(normalized)) {
+    return `Agent "${agentId}" does not exist in the system`;
+  }
+  return null;
+}
+
+/**
+ * 懒清理：检测群组中的僵尸成员并立即移除。
+ * 在式第返回群组数据之前调用，保证返回内容常远不含僵尸成员。
+ * 失败时静默吃错，不阻断主流程。
+ */
+async function lazyPurgeGhosts(): Promise<void> {
+  try {
+    const validIds = await getValidAgentIdSet();
+    // 配置读取失败时不执行清理，避免把所有成员误删
+    if (validIds.size === 0) {
+      return;
+    }
+    groupManager.purgeGhostMembers(validIds);
+  } catch (err) {
+    console.error("[groups] lazyPurgeGhosts error:", err);
+  }
+}
 
 /**
  * 群组管理 RPC 方法处理器
@@ -19,6 +69,9 @@ export const groupsHandlers: GatewayRequestHandlers = {
    */
   "groups.list": async ({ params, respond }) => {
     try {
+      // 懒清理：返回数据前先移除所有群组中的僵尸成员
+      await lazyPurgeGhosts();
+
       // 获取所有群组
       const allGroups = groupManager.getAllGroups();
 
@@ -59,6 +112,9 @@ export const groupsHandlers: GatewayRequestHandlers = {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "groupId is required"));
         return;
       }
+
+      // 懒清理：返回详情前先移除僵尸成员
+      await lazyPurgeGhosts();
 
       const group = groupManager.getGroup(groupId);
       if (!group) {
@@ -101,6 +157,31 @@ export const groupsHandlers: GatewayRequestHandlers = {
         return;
       }
 
+      // 验证 ownerId 存在
+      const ownerError = await validateAgentExists(ownerId);
+      if (ownerError) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, ownerError));
+        return;
+      }
+
+      // 过滤 initialMembers：只保留系统中真实存在的 agentId
+      const rawInitialMembers = Array.isArray(params?.initialMembers)
+        ? params.initialMembers.map(String)
+        : [];
+      const snapshot = await readConfigFileSnapshot();
+      const validAgentIds = snapshot.valid
+        ? new Set(listAgentEntries(snapshot.config).map((a) => normalizeAgentId(a.id)))
+        : new Set<string>();
+      const filteredInitialMembers = rawInitialMembers.filter((id) =>
+        validAgentIds.has(normalizeAgentId(id)),
+      );
+      if (filteredInitialMembers.length < rawInitialMembers.length) {
+        const ghosts = rawInitialMembers.filter((id) => !validAgentIds.has(normalizeAgentId(id)));
+        console.warn(
+          `[groups.create] Filtered out ${ghosts.length} non-existent initialMember(s): ${ghosts.join(", ")}`,
+        );
+      }
+
       const group = await groupManager.createGroup({
         id,
         name,
@@ -108,9 +189,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
         description: params?.description ? String(params.description) : undefined,
         isPublic: typeof params?.isPublic === "boolean" ? params.isPublic : false,
         maxMembers: typeof params?.maxMembers === "number" ? params.maxMembers : 500,
-        initialMembers: Array.isArray(params?.initialMembers)
-          ? params.initialMembers.map(String)
-          : [],
+        initialMembers: filteredInitialMembers,
         projectId: params?.projectId ? String(params.projectId) : undefined,
         workspacePath: params?.workspacePath ? String(params.workspacePath) : undefined,
       });
@@ -208,6 +287,13 @@ export const groupsHandlers: GatewayRequestHandlers = {
           undefined,
           errorShape(ErrorCodes.INVALID_REQUEST, "groupId and agentId are required"),
         );
+        return;
+      }
+
+      // 验证 agentId 在系统中真实存在，防止僵尸成员写入群组
+      const agentError = await validateAgentExists(agentId);
+      if (agentError) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, agentError));
         return;
       }
 
@@ -1069,6 +1155,44 @@ export const groupsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(ErrorCodes.UNAVAILABLE, `Failed to upgrade group to project: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 主动清理所有群组中的僵尸成员（不存在于 agents.list 中的成员）。
+   * 可由管理员或主控 AI 主动调用以修复历史存量僵尸数据。
+   */
+  "groups.purgeGhosts": async ({ respond }) => {
+    try {
+      const validIds = await getValidAgentIdSet();
+      if (validIds.size === 0) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.UNAVAILABLE,
+            "Failed to read agent config; aborting purge to avoid data loss",
+          ),
+        );
+        return;
+      }
+      const result = groupManager.purgeGhostMembers(validIds);
+      respond(
+        true,
+        {
+          success: true,
+          groupsAffected: result.groupsAffected,
+          membersRemoved: result.membersRemoved,
+          details: result.details,
+        },
+        undefined,
+      );
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to purge ghost members: ${String(error)}`),
       );
     }
   },

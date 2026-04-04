@@ -217,6 +217,48 @@ export class GroupManager {
     }
   }
 
+  /**
+   * 清理所有群组中的僵尸成员（agentId 不在 validAgentIds 集合中的成员）。
+   * 不移除各群组的 owner，owner 的清理需人工干预。
+   * @param validAgentIds 当前系统中真实存在的 normalizedAgentId 集合
+   * @returns 清理统计信息
+   */
+  purgeGhostMembers(validAgentIds: Set<string>): {
+    groupsAffected: number;
+    membersRemoved: number;
+    details: Array<{ groupId: string; removed: string[] }>;
+  } {
+    let groupsAffected = 0;
+    let membersRemoved = 0;
+    const details: Array<{ groupId: string; removed: string[] }> = [];
+
+    for (const group of this.groups.values()) {
+      const ghosts = group.members.filter(
+        (m) => m.role !== "owner" && !validAgentIds.has(m.agentId),
+      );
+      if (ghosts.length === 0) {
+        continue;
+      }
+
+      const ghostIds = ghosts.map((m) => m.agentId);
+      group.members = group.members.filter((m) => !ghostIds.includes(m.agentId));
+
+      groupsAffected++;
+      membersRemoved += ghostIds.length;
+      details.push({ groupId: group.id, removed: ghostIds });
+
+      console.log(
+        `[Group Manager] Purged ${ghostIds.length} ghost member(s) from group "${group.id}": ${ghostIds.join(", ")}`,
+      );
+    }
+
+    if (membersRemoved > 0) {
+      this._saveToDisk();
+    }
+
+    return { groupsAffected, membersRemoved, details };
+  }
+
   /** 将群组数据保存到磁盘 */
   private _saveToDisk(): void {
     try {
