@@ -1,3 +1,4 @@
+import { toWhatsappJid } from "../../upstream/extensions/whatsapp/src/targets-runtime.js";
 import { loadConfig } from "../../upstream/src/config/config.js";
 import { resolveMarkdownTableMode } from "../../upstream/src/config/markdown-tables.js";
 import { generateSecureUuid } from "../../upstream/src/infra/secure-random.js";
@@ -6,8 +7,7 @@ import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
 import { convertMarkdownTables } from "../../upstream/src/markdown/tables.js";
 import { markdownToWhatsApp } from "../../upstream/src/markdown/whatsapp.js";
 import { normalizePollInput, type PollInput } from "../../upstream/src/polls.js";
-import { toWhatsappJid } from "../../upstream/src/utils.js";
-import { type ActiveWebSendOptions, requireActiveWebListener } from "./active-listener.js";
+import { requireActiveWebListener } from "./active-listener.js";
 import { loadWebMedia } from "./media.js";
 
 const outboundLog = createSubsystemLogger("gateway/channels/whatsapp").child("outbound");
@@ -74,7 +74,7 @@ export async function sendMessageWhatsApp(
     await active.sendComposingTo(to);
     const hasExplicitAccountId = Boolean(options.accountId?.trim());
     const accountId = hasExplicitAccountId ? resolvedAccountId : undefined;
-    const sendOptions: ActiveWebSendOptions | undefined =
+    const sendOptions =
       options.gifPlayback || accountId || documentFileName
         ? {
             ...(options.gifPlayback ? { gifPlayback: true } : {}),
