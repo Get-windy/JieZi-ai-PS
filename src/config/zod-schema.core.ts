@@ -729,3 +729,4 @@ export const ProviderCommandsSchema = z
   })
   .strict()
   .optional();
+export const ContextVisibilityModeSchema = z.enum(["all", "allowlist", "allowlist_quote"]);

@@ -2523,6 +2523,10 @@ export function renderApp(state: AppViewState) {
                     return;
                   }
 
+                  console.log(
+                    `[agent-form] onSaveAgent editingAgent=${JSON.stringify(state.editingAgent)}`,
+                  );
+
                   try {
                     if (state.isNewAgent) {
                       // 创建新助手
@@ -2534,6 +2538,9 @@ export function renderApp(state: AppViewState) {
                       alert("创建成功");
                     } else {
                       // 更新助手
+                      console.log(
+                        `[agent-form] calling updateAgent id=${state.editingAgent.id} name=${JSON.stringify(state.editingAgent.name)}`,
+                      );
                       await updateAgent(state, {
                         id: state.editingAgent.id,
                         name: state.editingAgent.name,
@@ -2556,11 +2563,17 @@ export function renderApp(state: AppViewState) {
                 },
                 onAgentFormChange: (field, value) => {
                   // 更新表单字段
+                  console.log(
+                    `[agent-form] onAgentFormChange field=${field} value=${JSON.stringify(value)} editingAgent=${JSON.stringify(state.editingAgent)}`,
+                  );
                   if (state.editingAgent) {
-                    state.editingAgent = {
+                    (state as unknown as Record<string, unknown>).editingAgent = {
                       ...state.editingAgent,
                       [field]: value,
                     };
+                    console.log(
+                      `[agent-form] after update editingAgent=${JSON.stringify(state.editingAgent)}`,
+                    );
                   }
                 },
                 onMigrateWorkspace: async (agentId) => {
@@ -3222,6 +3235,7 @@ export function renderApp(state: AppViewState) {
                   creatingProject: state.creatingProject,
                   editingProject: state.editingProject,
                   agentsList: state.agentsList,
+                  groupsList: state.groupsList,
                   projectCodeRoot: state.projectCodeRoot,
                   onCodeRootChange: (root) => {
                     state.projectCodeRoot = root;
@@ -3335,12 +3349,32 @@ export function renderApp(state: AppViewState) {
                     }
                     void state.client.request("workspace.openFolder", { path }).catch(() => {});
                   },
-                  // 成员管理
-                  onAddMember: (projectId, agentId, role) => {
-                    state.handleProjectAddMember(projectId, agentId, role);
+                  // 成员管理 - 通过群组 RPC 实现
+                  onAddMember: (groupId, agentId, role) => {
+                    void (async () => {
+                      try {
+                        await addGroupMember(
+                          state,
+                          state.client!,
+                          groupId,
+                          agentId,
+                          role === "owner" ? "admin" : (role as "member" | "admin"),
+                        );
+                        await loadGroups(state, state.client!);
+                      } catch (err) {
+                        alert(`添加成员失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
                   },
-                  onRemoveMember: (projectId, agentId) => {
-                    state.handleProjectRemoveMember(projectId, agentId);
+                  onRemoveMember: (groupId, agentId) => {
+                    void (async () => {
+                      try {
+                        await removeGroupMember(state, state.client!, groupId, agentId);
+                        await loadGroups(state, state.client!);
+                      } catch (err) {
+                        alert(`移除成员失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
                   },
                   onUpdateMemberRole: (projectId, agentId, role) => {
                     state.handleProjectUpdateMemberRole(projectId, agentId, role);

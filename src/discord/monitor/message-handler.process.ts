@@ -1,16 +1,19 @@
 import { ChannelType } from "@buape/carbon";
-import { resolveAckReaction, resolveHumanDelayConfig } from "../../../upstream/src/agents/identity.js";
+import {
+  resolveAckReaction,
+  resolveHumanDelayConfig,
+} from "../../../upstream/src/agents/identity.js";
 import { EmbeddedBlockChunker } from "../../../upstream/src/agents/pi-embedded-block-chunker.js";
-import { resolveChunkMode } from "../../auto-reply/chunk.js";
 import { dispatchInboundMessage } from "../../../upstream/src/auto-reply/dispatch.js";
-import { getReplyFromConfig } from "../../auto-reply/reply/get-reply.js";
-import { formatInboundEnvelope, resolveEnvelopeFormatOptions } from "../../../upstream/src/auto-reply/envelope.js";
+import {
+  formatInboundEnvelope,
+  resolveEnvelopeFormatOptions,
+} from "../../../upstream/src/auto-reply/envelope.js";
 import {
   buildPendingHistoryContextFromMap,
   clearHistoryEntriesIfEnabled,
 } from "../../../upstream/src/auto-reply/reply/history.js";
 import { finalizeInboundContext } from "../../../upstream/src/auto-reply/reply/inbound-context.js";
-import { createReplyDispatcherWithTyping } from "../../auto-reply/reply/reply-dispatcher.js";
 import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import { shouldAckReaction as shouldAckReactionGate } from "../../../upstream/src/channels/ack-reactions.js";
 import { logTypingFailure, logAckFailure } from "../../../upstream/src/channels/logging.js";
@@ -21,16 +24,36 @@ import {
   DEFAULT_TIMING,
   type StatusReactionAdapter,
 } from "../../../upstream/src/channels/status-reactions.js";
-import { createTypingCallbacks } from "../../channels/typing.js";
-import { resolveDiscordPreviewStreamMode } from "../../../upstream/src/config/discord-preview-streaming.js";
 import { resolveMarkdownTableMode } from "../../../upstream/src/config/markdown-tables.js";
+import { resolveChunkMode } from "../../auto-reply/chunk.js";
+import { getReplyFromConfig } from "../../auto-reply/reply/get-reply.js";
+import { createReplyDispatcherWithTyping } from "../../auto-reply/reply/reply-dispatcher.js";
+import { createTypingCallbacks } from "../../channels/typing.js";
+
+type DiscordPreviewStreamMode = "off" | "partial" | "block";
+function resolveDiscordPreviewStreamMode(
+  params: { streamMode?: unknown; streaming?: unknown } = {},
+): DiscordPreviewStreamMode {
+  const s = params.streaming;
+  if (s === "off" || s === "partial" || s === "block") {
+    return s;
+  }
+  const m = params.streamMode;
+  if (m === "off" || m === "partial" || m === "block") {
+    return m;
+  }
+  if (typeof s === "boolean") {
+    return s ? "partial" : "off";
+  }
+  return "off";
+}
 import { readSessionUpdatedAt, resolveStorePath } from "../../../upstream/src/config/sessions.js";
 import { danger, logVerbose, shouldLogVerbose } from "../../../upstream/src/globals.js";
 import { convertMarkdownTables } from "../../../upstream/src/markdown/tables.js";
-import { buildAgentSessionKey } from "../../routing/resolve-route.js";
-import { resolveThreadSessionKeys } from "../../routing/session-key.js";
 import { buildUntrustedChannelMetadata } from "../../../upstream/src/security/channel-metadata.js";
 import { truncateUtf16Safe } from "../../../upstream/src/utils.js";
+import { buildAgentSessionKey } from "../../routing/resolve-route.js";
+import { resolveThreadSessionKeys } from "../../routing/session-key.js";
 import { chunkDiscordTextWithMode } from "../chunk.js";
 import { resolveDiscordDraftStreamingChunking } from "../draft-chunking.js";
 import { createDiscordDraftStream } from "../draft-stream.js";

@@ -1,4 +1,16 @@
 import { CHAT_SESSIONS_ACTIVE_MINUTES, flushChatQueueForEvent } from "./app-chat.ts";
+
+// 防抖定时器：防止 final 事件连续触发导致 loadChatHistory 请求风暴
+let _loadChatHistoryDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+function debouncedLoadChatHistory(host: GatewayHost, delayMs = 300) {
+  if (_loadChatHistoryDebounceTimer !== null) {
+    clearTimeout(_loadChatHistoryDebounceTimer);
+  }
+  _loadChatHistoryDebounceTimer = setTimeout(() => {
+    _loadChatHistoryDebounceTimer = null;
+    void loadChatHistory(host as unknown as OpenClawApp);
+  }, delayMs);
+}
 import type { EventLogEntry } from "./app-events.ts";
 import {
   applySettings,
@@ -258,7 +270,7 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
       }
     }
     if (state === "final") {
-      void loadChatHistory(host as unknown as OpenClawApp);
+      debouncedLoadChatHistory(host);
       // Z4: 外部通道产生了新消息（未读），刷新 sessions 列表使导航树能显示最新 session
       if (
         payload?.sessionKey &&
