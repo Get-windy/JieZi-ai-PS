@@ -9,6 +9,32 @@ export function parseProcCmdline(raw: string): string[] {
     .filter(Boolean);
 }
 
+export function parseWindowsCmdline(raw: string): string[] {
+  if (!raw.trim()) {
+    return [];
+  }
+  const args: string[] = [];
+  let current = "";
+  let inQuote = false;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (ch === '"') {
+      inQuote = !inQuote;
+    } else if (ch === " " && !inQuote) {
+      if (current) {
+        args.push(current);
+        current = "";
+      }
+    } else {
+      current += ch;
+    }
+  }
+  if (current) {
+    args.push(current);
+  }
+  return args;
+}
+
 export function isGatewayArgv(args: string[], opts?: { allowGatewayBinary?: boolean }): boolean {
   const normalized = args.map(normalizeProcArg);
   if (!normalized.includes("gateway")) {
