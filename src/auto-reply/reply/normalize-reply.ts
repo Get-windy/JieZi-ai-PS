@@ -1,17 +1,16 @@
 import { sanitizeUserFacingText } from "../../../upstream/src/agents/pi-embedded-helpers.js";
 import { stripHeartbeatToken } from "../../../upstream/src/auto-reply/heartbeat.js";
 import {
+  resolveResponsePrefixTemplate,
+  type ResponsePrefixContext,
+} from "../../../upstream/src/auto-reply/reply/response-prefix-template.js";
+import {
   HEARTBEAT_TOKEN,
   isSilentReplyText,
   SILENT_REPLY_TOKEN,
   stripSilentToken,
 } from "../../../upstream/src/auto-reply/tokens.js";
 import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
-import { hasLineDirectives, parseLineDirectives } from "../../../upstream/src/auto-reply/reply/line-directives.js";
-import {
-  resolveResponsePrefixTemplate,
-  type ResponsePrefixContext,
-} from "../../../upstream/src/auto-reply/reply/response-prefix-template.js";
 import { hasSlackDirectives, parseSlackDirectives } from "./slack-directives.js";
 
 export type NormalizeReplySkipReason = "empty" | "silent" | "heartbeat";
@@ -86,12 +85,7 @@ export function normalizeReplyPayload(
     return null;
   }
 
-  // Parse LINE-specific directives from text (quick_replies, location, confirm, buttons)
   let enrichedPayload: ReplyPayload = { ...payload, text };
-  if (text && hasLineDirectives(text)) {
-    enrichedPayload = parseLineDirectives(enrichedPayload);
-    text = enrichedPayload.text;
-  }
 
   // Resolve template variables in responsePrefix if context is provided
   const effectivePrefix = opts.responsePrefixContext

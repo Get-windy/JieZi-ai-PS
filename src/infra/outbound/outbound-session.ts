@@ -20,6 +20,10 @@ import { buildTelegramGroupPeerId } from "../../../upstream/extensions/telegram/
 import { resolveTelegramTargetChatType } from "../../../upstream/extensions/telegram/src/inline-buttons.js";
 import { parseTelegramThreadId } from "../../../upstream/extensions/telegram/src/outbound-params.js";
 import { parseTelegramTarget } from "../../../upstream/extensions/telegram/src/targets.js";
+import {
+  isWhatsAppGroupJid,
+  normalizeWhatsAppTarget,
+} from "../../../upstream/extensions/whatsapp/contract-api.js";
 import type { ChatType } from "../../../upstream/src/channels/chat-type.js";
 import { getChannelPlugin } from "../../../upstream/src/channels/plugins/index.js";
 import type { ChannelId } from "../../../upstream/src/channels/plugins/types.js";
@@ -29,10 +33,6 @@ import {
   resolveStorePath,
 } from "../../../upstream/src/config/sessions.js";
 import type { ResolvedMessagingTarget } from "../../../upstream/src/infra/outbound/target-resolver.js";
-import {
-  isWhatsAppGroupJid,
-  normalizeWhatsAppTarget,
-} from "../../../upstream/src/plugin-sdk/whatsapp-targets.js";
 import type { MsgContext } from "../../auto-reply/templating.js";
 import { buildAgentSessionKey, type RoutePeer } from "../../routing/resolve-route.js";
 import { resolveThreadSessionKeys } from "../../routing/session-key.js";
