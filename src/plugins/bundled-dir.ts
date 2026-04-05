@@ -43,10 +43,11 @@ export function resolveBundledPluginsDir(env: NodeJS.ProcessEnv = process.env): 
       const sourceExtensionsDir = path.join(packageRoot, "extensions");
       const builtExtensionsDir = path.join(packageRoot, "dist", "extensions");
 
-      if (
-        (preferSourceCheckout || isSourceCheckoutRoot(packageRoot)) &&
-        fs.existsSync(upstreamExtensionsDir)
-      ) {
+      // Always prefer upstream/extensions over local extensions/ in overlay mode.
+      // Local extensions/ only contains stub index.ts files without the actual src/
+      // subdirectory, so loading from upstream/extensions ensures relative imports
+      // like "./src/channel.js" resolve correctly.
+      if (fs.existsSync(upstreamExtensionsDir)) {
         return upstreamExtensionsDir;
       }
       if (
@@ -105,4 +106,3 @@ export function resolveBundledPluginsDir(env: NodeJS.ProcessEnv = process.env): 
 
   return undefined;
 }
-
