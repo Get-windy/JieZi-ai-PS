@@ -116,6 +116,42 @@ export function createDiscordRetryRunner(params: {
     });
 }
 
+export const CHANNEL_API_RETRY_DEFAULTS = {
+  attempts: 3,
+  minDelayMs: 400,
+  maxDelayMs: 30_000,
+  jitter: 0.1,
+};
+
+export function createChannelApiRetryRunner(params: {
+  retry?: RetryConfig;
+  configRetry?: RetryConfig;
+  verbose?: boolean;
+  shouldRetry?: (err: unknown) => boolean;
+  strictShouldRetry?: boolean;
+  logLabel?: string;
+}): RetryRunner {
+  const retryConfig = resolveRetryConfig(CHANNEL_API_RETRY_DEFAULTS, {
+    ...params.configRetry,
+    ...params.retry,
+  });
+  const shouldRetry = params.shouldRetry ?? (() => true);
+  return <T>(fn: () => Promise<T>, label?: string) =>
+    retryAsync(fn, {
+      ...retryConfig,
+      label,
+      shouldRetry,
+      onRetry: params.verbose
+        ? (info) => {
+            const maxRetries = Math.max(1, info.maxAttempts - 1);
+            log.warn(
+              `${params.logLabel ?? "channel"} retry ${info.attempt}/${maxRetries} for ${info.label ?? label ?? "request"} in ${info.delayMs}ms: ${formatErrorMessage(info.err)}`,
+            );
+          }
+        : undefined,
+    });
+}
+
 export function createTelegramRetryRunner(params: {
   retry?: RetryConfig;
   configRetry?: RetryConfig;

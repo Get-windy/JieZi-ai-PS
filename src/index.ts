@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import {
+  assertWebChannel,
+  toWhatsappJid,
+} from "../upstream/extensions/whatsapp/src/targets-runtime.js";
 import { getReplyFromConfig } from "../upstream/src/auto-reply/reply.js";
-import { applyTemplate } from "./auto-reply/templating.js";
 import { monitorWebChannel } from "../upstream/src/channel-web.js";
-import { createDefaultDeps } from "./cli/deps.js";
 import { promptYesNo } from "../upstream/src/cli/prompt.js";
 import { waitForever } from "../upstream/src/cli/wait.js";
 import { loadConfig } from "../upstream/src/config/config.js";
@@ -31,7 +33,9 @@ import { assertSupportedRuntime } from "../upstream/src/infra/runtime-guard.js";
 import { installUnhandledRejectionHandler } from "../upstream/src/infra/unhandled-rejections.js";
 import { enableConsoleCapture } from "../upstream/src/logging.js";
 import { runCommandWithTimeout, runExec } from "../upstream/src/process/exec.js";
-import { assertWebChannel, normalizeE164, toWhatsappJid } from "../upstream/src/utils.js";
+import { normalizeE164 } from "../upstream/src/utils.js";
+import { applyTemplate } from "./auto-reply/templating.js";
+import { createDefaultDeps } from "./cli/deps.js";
 
 loadDotEnv({ quiet: true });
 normalizeEnv();

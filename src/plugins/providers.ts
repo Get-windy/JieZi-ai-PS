@@ -9,6 +9,7 @@ export {
   resolveBundledProviderCompatPluginIds,
   resolveEnabledProviderPluginIds,
   resolveOwningPluginIdsForProvider,
+  resolveOwningPluginIdsForModelRefs,
   resolveNonBundledProviderPluginIds,
   resolveCatalogHookProviderPluginIds,
 } from "../../upstream/src/plugins/providers.js";

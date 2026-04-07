@@ -245,6 +245,20 @@ export function payloadTextResult<TDetails>(payload: TDetails): AgentToolResult<
   };
 }
 
+export function textResult<TDetails>(text: string, details: TDetails): AgentToolResult<TDetails> {
+  return {
+    content: [{ type: "text", text }],
+    details,
+  };
+}
+
+export function failedTextResult<TDetails extends { status: "failed" }>(
+  text: string,
+  details: TDetails,
+): AgentToolResult<TDetails> {
+  return textResult(text, details);
+}
+
 export function jsonResult(payload: unknown): AgentToolResult<unknown> {
   return {
     content: [

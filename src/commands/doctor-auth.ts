@@ -368,3 +368,41 @@ export async function noteAuthProfileHealth(params: {
     );
   }
 }
+
+export async function maybeRepairLegacyOAuthProfileIds(
+  cfg: OpenClawConfig,
+  prompter: DoctorPrompter,
+): Promise<OpenClawConfig> {
+  const store = ensureAuthProfileStore();
+  let nextCfg = cfg;
+  const providers = resolvePluginProviders({
+    config: cfg,
+    env: process.env,
+    bundledProviderAllowlistCompat: true,
+    bundledProviderVitestCompat: true,
+  });
+  for (const provider of providers) {
+    for (const repairSpec of provider.oauthProfileIdRepairs ?? []) {
+      const repair = repairOAuthProfileIdMismatch({
+        cfg: nextCfg,
+        store,
+        provider: provider.id,
+        legacyProfileId: repairSpec.legacyProfileId,
+      });
+      if (!repair.migrated || repair.changes.length === 0) {
+        continue;
+      }
+
+      note(repair.changes.map((c) => `- ${c}`).join("\n"), "Auth profiles");
+      const apply = await prompter.confirm({
+        message: `Update ${repairSpec.promptLabel ?? provider.label} OAuth profile id in config now?`,
+        initialValue: true,
+      });
+      if (!apply) {
+        continue;
+      }
+      nextCfg = repair.config;
+    }
+  }
+  return nextCfg;
+}

@@ -52,7 +52,9 @@ function zodV3ToJsonSchemaProperties(
   schema: ZodTypeAny,
 ): Record<string, Record<string, unknown>> | undefined {
   const s = schema as ZodV3Object;
-  if (!s._def) return undefined;
+  if (!s._def) {
+    return undefined;
+  }
   const typeName = s._def.typeName;
 
   // Unwrap ZodOptional / ZodDefault / ZodEffects / ZodBranded
@@ -70,16 +72,22 @@ function zodV3ToJsonSchemaProperties(
     return inner ? zodV3ToJsonSchemaProperties(inner) : undefined;
   }
 
-  if (typeName !== "ZodObject") return undefined;
+  if (typeName !== "ZodObject") {
+    return undefined;
+  }
 
   const shape = typeof s._def.shape === "function" ? s._def.shape() : undefined;
-  if (!shape) return undefined;
+  if (!shape) {
+    return undefined;
+  }
 
   const properties: Record<string, Record<string, unknown>> = {};
   for (const [key, fieldSchema] of Object.entries(shape)) {
     const fieldDef = (fieldSchema as ZodV3Object)._def;
-    if (!fieldDef) continue;
-    properties[key] = zodV3FieldToJsonSchema(fieldSchema as ZodTypeAny);
+    if (!fieldDef) {
+      continue;
+    }
+    properties[key] = zodV3FieldToJsonSchema(fieldSchema);
   }
   return properties;
 }
@@ -100,9 +108,15 @@ function zodV3FieldToJsonSchema(schema: ZodTypeAny): Record<string, unknown> {
     const inner = s._def.schema;
     return inner ? zodV3FieldToJsonSchema(inner) : {};
   }
-  if (typeName === "ZodString") return { type: "string" };
-  if (typeName === "ZodNumber") return { type: "number" };
-  if (typeName === "ZodBoolean") return { type: "boolean" };
+  if (typeName === "ZodString") {
+    return { type: "string" };
+  }
+  if (typeName === "ZodNumber") {
+    return { type: "number" };
+  }
+  if (typeName === "ZodBoolean") {
+    return { type: "boolean" };
+  }
   if (typeName === "ZodEnum") {
     const values = (s._def as { values?: string[] }).values ?? [];
     return { type: "string", enum: values };
@@ -143,7 +157,9 @@ function zodV3FieldToJsonSchema(schema: ZodTypeAny): Record<string, unknown> {
       ? { type: "object", properties: props }
       : { type: "object" };
   }
-  if (typeName === "ZodArray") return { type: "array" };
+  if (typeName === "ZodArray") {
+    return { type: "array" };
+  }
   if (typeName === "ZodRecord") {
     // ZodRecord<string, T> — extract value type as additionalProperties
     const valueType = (s._def as { valueType?: ZodTypeAny }).valueType;
@@ -189,6 +205,16 @@ export function buildChannelConfigSchema(schema: ZodTypeAny): ChannelConfigSchem
     schema: {
       type: "object",
       additionalProperties: true,
+    },
+  };
+}
+
+export function emptyChannelConfigSchema(): ChannelConfigSchema {
+  return {
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
     },
   };
 }

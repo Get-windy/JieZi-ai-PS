@@ -1,17 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
-import { type ExecHost, maxAsk, minSecurity } from "../../upstream/src/infra/exec-approvals.js";
-import { resolveExecSafeBinRuntimePolicy } from "../../upstream/src/infra/exec-safe-bin-runtime-policy.js";
-import {
-  getShellPathFromLoginShell,
-  resolveShellEnvFallbackTimeoutMs,
-} from "../../upstream/src/infra/shell-env.js";
-import { logInfo } from "../../upstream/src/logger.js";
-import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 import { markBackgrounded } from "../../upstream/src/agents/bash-process-registry.js";
-import { processGatewayAllowlist } from "./bash-tools.exec-host-gateway.js";
-import { executeNodeHostCommand } from "./bash-tools.exec-host-node.js";
 import {
   DEFAULT_MAX_OUTPUT,
   DEFAULT_PATH,
@@ -42,6 +32,16 @@ import {
   resolveWorkdir,
   truncateMiddle,
 } from "../../upstream/src/agents/bash-tools.shared.js";
+import { type ExecHost, maxAsk, minSecurity } from "../../upstream/src/infra/exec-approvals.js";
+import { resolveExecSafeBinRuntimePolicy } from "../../upstream/src/infra/exec-safe-bin-runtime-policy.js";
+import {
+  getShellPathFromLoginShell,
+  resolveShellEnvFallbackTimeoutMs,
+} from "../../upstream/src/infra/shell-env.js";
+import { logInfo } from "../../upstream/src/logger.js";
+import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
+import { processGatewayAllowlist } from "./bash-tools.exec-host-gateway.js";
+import { executeNodeHostCommand } from "./bash-tools.exec-host-node.js";
 import { assertSandboxPath } from "./sandbox-paths.js";
 
 export type { BashSandboxConfig } from "../../upstream/src/agents/bash-tools.shared.js";
@@ -582,3 +582,5 @@ export function createExecTool(
 }
 
 export const execTool = createExecTool();
+
+export { describeExecTool } from "../../upstream/src/agents/bash-tools.exec.js";

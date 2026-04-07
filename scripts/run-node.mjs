@@ -7,7 +7,27 @@ import process from "node:process";
 const args = process.argv.slice(2);
 const env = { ...process.env };
 const cwd = process.cwd();
-const compiler = "tsdown";
+
+// In overlay mode the local extensions/ only has stub index.ts files without
+// src/ subdirectories. Force all bundled channel discovery to use upstream/extensions/
+// so that relative imports like "./src/channel.js" resolve correctly at runtime.
+if (!env.OPENCLAW_BUNDLED_PLUGINS_DIR) {
+  const upstreamExtensions = path.join(cwd, "upstream", "extensions");
+  if (fs.existsSync(upstreamExtensions)) {
+    env.OPENCLAW_BUNDLED_PLUGINS_DIR = upstreamExtensions;
+  }
+}
+
+// Disable jiti's tryNative mode so all plugin module loading (including dynamic
+// import() inside bundled extension .ts files) stays on the jiti CJS transpile
+// path where alias maps (openclaw/plugin-sdk/*) are fully honoured. Without this,
+// jiti falls into async-ESM mode for files with .js extensions, which causes
+// "await jitiImport" calls to bypass alias resolution and makes exports like
+// buildAnthropicCliBackend appear as undefined.
+if (!env.JITI_TRY_NATIVE) {
+  env.JITI_TRY_NATIVE = "false";
+}
+
 const compilerArgs = ["node_modules/tsdown/dist/run.mjs", "--no-clean"];
 
 const distRoot = path.join(cwd, "dist");
@@ -183,11 +203,15 @@ const logRunner = (message) => {
 };
 
 const runNode = () => {
-  const nodeProcess = spawn(process.execPath, ["openclaw.mjs", ...args], {
-    cwd,
-    env,
-    stdio: "inherit",
-  });
+  const nodeProcess = spawn(
+    process.execPath,
+    ["--max-old-space-size=8192", "openclaw.mjs", ...args],
+    {
+      cwd,
+      env,
+      stdio: "inherit",
+    },
+  );
 
   nodeProcess.on("exit", (exitCode, exitSignal) => {
     if (exitSignal) {
@@ -215,7 +239,7 @@ if (!shouldBuild()) {
   runNode();
 } else {
   logRunner("Building TypeScript (dist is stale).");
-  const build = spawn(process.execPath, compilerArgs, {
+  const build = spawn(process.execPath, ["--max-old-space-size=8192", ...compilerArgs], {
     cwd,
     env,
     stdio: "inherit",

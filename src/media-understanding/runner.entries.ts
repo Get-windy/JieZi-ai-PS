@@ -15,9 +15,16 @@ import { logVerbose, shouldLogVerbose } from "../../upstream/src/globals.js";
 import { MediaAttachmentCache } from "../../upstream/src/media-understanding/attachments.js";
 import {
   CLI_OUTPUT_MAX_BUFFER,
-  DEFAULT_AUDIO_MODELS,
   DEFAULT_TIMEOUT_SECONDS,
 } from "../../upstream/src/media-understanding/defaults.js";
+
+/** 各 provider 的默认音频转录模型（上游已移除此常量，本地保留） */
+const DEFAULT_AUDIO_MODELS: Record<string, string> = {
+  openai: "whisper-1",
+  "openai-compatible": "whisper-1",
+  groq: "whisper-large-v3",
+  deepgram: "nova-3",
+};
 import { MediaUnderstandingSkipError } from "../../upstream/src/media-understanding/errors.js";
 import { fileExists } from "../../upstream/src/media-understanding/fs.js";
 import { describeImageWithModel } from "../../upstream/src/media-understanding/image.js";
