@@ -455,6 +455,16 @@ export function createExecTool(
       // before we execute and burn tokens in cron loops.
       await validateScriptFileForShellBleed({ command: params.command, workdir });
 
+      // Wrap onUpdate to prevent calling it after the run has completed.
+      // This guards against the pi-agent-core "Agent listener invoked outside active run"
+      // crash caused by async supervisor stdout events arriving after the run ends.
+      let activeOnUpdate = onUpdate;
+      const safeOnUpdate = activeOnUpdate
+        ? (partialResult: Parameters<NonNullable<typeof onUpdate>>[0]) => {
+            activeOnUpdate?.(partialResult);
+          }
+        : undefined;
+
       const run = await runExecProcess({
         command: params.command,
         execCommand: execCommandOverride,
@@ -471,7 +481,13 @@ export function createExecTool(
         scopeKey: defaults?.scopeKey,
         sessionKey: notifySessionKey,
         timeoutSec: effectiveTimeout,
-        onUpdate,
+        onUpdate: safeOnUpdate,
+      });
+
+      // Clear the onUpdate reference once the process exits so late stdout
+      // events from the supervisor do not trigger the agent callback after run end.
+      void run.promise.finally(() => {
+        activeOnUpdate = undefined;
       });
 
       let yielded = false;
