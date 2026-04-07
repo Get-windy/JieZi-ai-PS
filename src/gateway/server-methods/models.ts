@@ -660,6 +660,44 @@ export function computeQuotaResetTime(cycle: AuthQuotaCycle, now: number = Date.
 
 // ============ 周期配额持久化（进程重启后恢复耗尽状态）============
 
+/**
+ * 根据 API 错误消息计算精确的冷却截止时间（阶段性时间窗口配额）。
+ * 优先级：小时窗口 > 周度窗口 > 月度周期（月度用 quotaCycle 计算）
+ *
+ * - hour allocated quota exceeded：Coding Plan 每 5 小时窗口，冷却 5 小时
+ * - week allocated quota exceeded：Coding Plan 每周窗口，冷却到下周一 00:00:00 UTC+8
+ *
+ * 返回 null 表示不是阶段性窗口错误，应由调用方回落到 quotaCycle 月度重置逻辑。
+ */
+export function computeStagedQuotaCooldownFromError(
+  errorMessage: string,
+  now: number = Date.now(),
+): number | null {
+  const lower = errorMessage.toLowerCase();
+
+  // 每 5 小时窗口：冷却 5 小时
+  if (lower.includes("hour allocated quota exceeded")) {
+    return now + 5 * 60 * 60 * 1000;
+  }
+
+  // 每周窗口：冷却到下周一 00:00:00 UTC+8（UTC+8 = UTC+480min）
+  if (lower.includes("week allocated quota exceeded")) {
+    // 使用 UTC+8 计算下周一零点
+    const UTC8_OFFSET_MS = 8 * 60 * 60 * 1000;
+    const nowUtc8 = new Date(now + UTC8_OFFSET_MS);
+    const currentDay = nowUtc8.getUTCDay(); // 0=Sun, 1=Mon...6=Sat
+    // 距离下周一的天数
+    const daysUntilMonday = currentDay === 1 ? 7 : (8 - currentDay) % 7 || 7;
+    const nextMondayUtc8 = new Date(nowUtc8);
+    nextMondayUtc8.setUTCDate(nowUtc8.getUTCDate() + daysUntilMonday);
+    nextMondayUtc8.setUTCHours(0, 0, 0, 0);
+    // 转回 UTC 时间戳
+    return nextMondayUtc8.getTime() - UTC8_OFFSET_MS;
+  }
+
+  return null; // 非阶段性窗口错误
+}
+
 type QuotaExhaustedRecord = {
   authId: string;
   exhaustedUntil: number; // 耗尽截止时间戳（ms），即下一个周期重置时间
@@ -857,7 +895,7 @@ export function getAuthCircuitRemainingSeconds(authId: string): number {
  * 上报某凭据调用失败。
  * @param authId  - 凭据 ID
  * @param error   - 错误信息
- * @param isQuotaOrAuth - 是否为配额/鉴权错误（触发熔断冷却）
+ * @param isQuotaOrAuth - 是否为配额/鉴权错误（触发燐断冷却）
  * @param cooldownMinutes - 冷却时间（来自 dispatchPolicy.cooldownMinutes）
  * @param auth - 完整的 ProviderAuth 对象（如果有 quotaCycle 配置，用于自动计算周期重置时间）
  */
@@ -877,7 +915,7 @@ export function reportAuthFailure(
   state.lastError = error;
 
   if (isQuotaOrAuth) {
-    // 如果该认证配置了 quotaCycle，优先用周期重置时间作为导火截止时间
+    // 如果该认证配置了 quotaCycle，优先用周期重置时间作为燐断截止时间
     const quotaAuth =
       auth ??
       (cachedStorage
@@ -887,16 +925,33 @@ export function reportAuthFailure(
         : undefined);
 
     if (quotaAuth?.quotaCycle) {
-      const resetTime = computeQuotaResetTime(quotaAuth.quotaCycle);
-      state.cooldownUntil = resetTime;
-      console.log(
-        `[QuotaCycle] Auth "${quotaAuth.name}" quota exhausted. ` +
-          `Auto-routing to other credentials until cycle reset at ${new Date(resetTime).toISOString()}.`,
-      );
-      // 异步持乇化周期耗尽状态（进程重启后仍有效）
-      markQuotaCycleExhausted(quotaAuth, resetTime).catch(() => {});
+      // 优先尝试从错误消息中解析阶段性时间窗口配额冷却时间
+      // （5小时窗口 / 周度窗口），这类错误不应锁到整个月度周期
+      const stagedCooldown = computeStagedQuotaCooldownFromError(error);
+      if (stagedCooldown !== null) {
+        // 阶段性窗口配额：仅做短期燐断，不持久化到 quota-exhausted.json
+        // （这类冷却进程重启后即自动清除，够短不需持久化）
+        state.cooldownUntil = stagedCooldown;
+        const cooldownHours = Math.ceil((stagedCooldown - Date.now()) / 3600000);
+        const windowType = error.toLowerCase().includes("hour") ? "5小时" : "本周";
+        console.log(
+          `[StagedQuota] Auth "${quotaAuth.name}" (${authId}) ${windowType}窗口配额耗尽，` +
+            `冷却 ${cooldownHours}h 到 ${new Date(stagedCooldown).toISOString()}。` +
+            `（不持久化，进程重启后自动清除）`,
+        );
+      } else {
+        // 月度配额耗尽：用整个周期重置时间作为燐断，并持久化
+        const resetTime = computeQuotaResetTime(quotaAuth.quotaCycle);
+        state.cooldownUntil = resetTime;
+        console.log(
+          `[QuotaCycle] Auth "${quotaAuth.name}" (${authId}) 月度配额耗尽。` +
+            `周期重置时间：${new Date(resetTime).toISOString()} (约 ${Math.ceil((resetTime - Date.now()) / 3600000)}h)。`,
+        );
+        // 异步持久化周期耗尽状态（进程重启后仍有效）
+        markQuotaCycleExhausted(quotaAuth, resetTime).catch(() => {});
+      }
     } else if (cooldownMinutes > 0) {
-      // 普通熔断冷却
+      // 普通燐断冷却
       state.cooldownUntil = Date.now() + cooldownMinutes * 60 * 1000;
       console.log(
         `[CredentialCircuitBreaker] Auth ${authId} tripped. Cooling down for ${cooldownMinutes}min (error: ${error})`,

@@ -8,18 +8,22 @@ import {
   isAuthErrorMessage,
   isAuthPermanentErrorMessage,
   isBillingErrorMessage,
+  isHourQuotaErrorMessage,
   isOverloadedErrorMessage,
   isRateLimitErrorMessage,
   isTimeoutErrorMessage,
+  isWeekQuotaErrorMessage,
 } from "./failover-matches.js";
 
 export {
   isAuthErrorMessage,
   isAuthPermanentErrorMessage,
   isBillingErrorMessage,
+  isHourQuotaErrorMessage,
   isOverloadedErrorMessage,
   isRateLimitErrorMessage,
   isTimeoutErrorMessage,
+  isWeekQuotaErrorMessage,
 } from "./failover-matches.js";
 
 const log = createSubsystemLogger("errors");

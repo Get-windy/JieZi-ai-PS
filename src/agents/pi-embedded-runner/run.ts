@@ -1482,9 +1482,12 @@ export async function runEmbeddedPiAgent(
           // 设计原则：
           //   - 是否使用周期配额管理由认证本身决定（quotaCycle 字段是否配置）
           //   - 有 quotaCycle：
-          //       billingFailure → 周期耗尽（整个周期不路由，等周期自动恢复）
-          //       rateLimitFailure → 短期熔断冷却（不触发周期耗尽，只是临时限流）
-          //       authFailure → 熔断（key 失效，需人工修复）
+          //       billingFailure → 按错误消息区分处理：
+          //         「 hour allocated quota exceeded 」 → 5小时冷却（不持久化）
+          //         「 week allocated quota exceeded 」 → 冷却到下周一（不持久化）
+          //         「 month allocated quota exceeded 」 → 月度周期耗尽（持久化，周期到期自动恢复）
+          //       rateLimitFailure → 短期燐断冷却（不触发周期耗尽，只是临时限流）
+          //       authFailure → 燐断（key 失效，需人工修复）
           //   - 无 quotaCycle：
           //       billingFailure/authFailure → 将认证标记为不可用（enabled=false），用户手动解决后重新启用
           //       rateLimitFailure → 不干预，交由 upstream authStore 原有机制处理

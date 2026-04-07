@@ -49,9 +49,18 @@ const ERROR_PATTERNS = {
     "credit balance",
     "plans & billing",
     "insufficient balance",
-    "month allocated quota exceeded", // ali-bailian 月度配额耗尽
+    "hour allocated quota exceeded", // ali-bailian/alayanew Coding Plan 每5小时配额耗尽
+    "week allocated quota exceeded", // ali-bailian/alayanew Coding Plan 每周配额耗尽
+    "month allocated quota exceeded", // ali-bailian/alayanew Coding Plan 月度配额耗尽
     "monthly quota exceeded",
     "month quota exceeded",
+  ],
+  // 阶段性时间窗口配额（用于精确计算冷却时间，按最小窗口优先）
+  hourQuota: [
+    "hour allocated quota exceeded", // ali-bailian/alayanew Coding Plan 每5小时窗口
+  ],
+  weekQuota: [
+    "week allocated quota exceeded", // ali-bailian/alayanew Coding Plan 每周窗口
   ],
   authPermanent: [
     /api[_ ]?key[_ ]?(?:revoked|invalid|deactivated|deleted)/i,
@@ -158,4 +167,20 @@ export function isAuthErrorMessage(raw: string): boolean {
 
 export function isOverloadedErrorMessage(raw: string): boolean {
   return matchesErrorPatterns(raw, ERROR_PATTERNS.overloaded);
+}
+
+/**
+ * 判断错误是否为阶段性小时窗口配额耗尽（如 ali-bailian Coding Plan 每5小时窗口）
+ * 这类错误属于 billing 类型，但冷却时间应为5小时而非整个月度周期
+ */
+export function isHourQuotaErrorMessage(raw: string): boolean {
+  return matchesErrorPatterns(raw, ERROR_PATTERNS.hourQuota);
+}
+
+/**
+ * 判断错误是否为阶段性周度窗口配额耗尽（如 ali-bailian Coding Plan 每周窗口）
+ * 这类错误属于 billing 类型，但冷却时间应为到下周一（UTC+8）而非整个月度周期
+ */
+export function isWeekQuotaErrorMessage(raw: string): boolean {
+  return matchesErrorPatterns(raw, ERROR_PATTERNS.weekQuota);
 }
