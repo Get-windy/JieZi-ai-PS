@@ -10,7 +10,9 @@ import {
   isBillingErrorMessage,
   isHourQuotaErrorMessage,
   isOverloadedErrorMessage,
+  isPeriodicUsageLimitErrorMessage,
   isRateLimitErrorMessage,
+  isServerErrorMessage,
   isTimeoutErrorMessage,
   isWeekQuotaErrorMessage,
 } from "./failover-matches.js";
@@ -21,7 +23,9 @@ export {
   isBillingErrorMessage,
   isHourQuotaErrorMessage,
   isOverloadedErrorMessage,
+  isPeriodicUsageLimitErrorMessage,
   isRateLimitErrorMessage,
+  isServerErrorMessage,
   isTimeoutErrorMessage,
   isWeekQuotaErrorMessage,
 } from "./failover-matches.js";
