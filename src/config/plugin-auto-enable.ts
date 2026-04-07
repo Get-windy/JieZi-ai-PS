@@ -25,6 +25,7 @@ type PluginEnableChange = {
 export type PluginAutoEnableResult = {
   config: OpenClawConfig;
   changes: string[];
+  autoEnabledReasons: Record<string, string[]>;
 };
 
 const PROVIDER_PLUGIN_IDS: Array<{ pluginId: string; providerId: string }> = [
@@ -482,15 +483,38 @@ export function applyPluginAutoEnable(params: {
   const registry =
     params.manifestRegistry ?? loadPluginManifestRegistry({ config: params.config, env });
   const configured = resolveConfiguredPlugins(params.config, env, registry);
+
+  // Helper: ensure all bundled enabledByDefault plugins are in the allowlist
+  // when an explicit allow-list is present. This must run regardless of whether
+  // any plugins were auto-configured, because the allowlist check in
+  // resolvePluginActivationState runs BEFORE the enabledByDefault check.
+  function applyBundledAllowlist(cfg: OpenClawConfig): OpenClawConfig {
+    if (!Array.isArray(cfg.plugins?.allow) || cfg.plugins.allow.length === 0) {
+      return cfg;
+    }
+    let updated = cfg;
+    for (const record of registry.plugins) {
+      if (record.origin === "bundled" && record.enabledByDefault === true) {
+        if (
+          !isPluginDenied(updated, record.id) &&
+          !isPluginExplicitlyDisabled(updated, record.id)
+        ) {
+          updated = ensurePluginAllowlisted(updated, record.id);
+        }
+      }
+    }
+    return updated;
+  }
+
   if (configured.length === 0) {
-    return { config: params.config, changes: [] };
+    return { config: applyBundledAllowlist(params.config), changes: [], autoEnabledReasons: {} };
   }
 
   let next = params.config;
   const changes: string[] = [];
 
   if (next.plugins?.enabled === false) {
-    return { config: next, changes };
+    return { config: applyBundledAllowlist(next), changes, autoEnabledReasons: {} };
   }
 
   for (const entry of configured) {
@@ -531,5 +555,5 @@ export function applyPluginAutoEnable(params: {
     changes.push(formatAutoEnableChange(entry));
   }
 
-  return { config: next, changes };
+  return { config: applyBundledAllowlist(next), changes, autoEnabledReasons: {} };
 }

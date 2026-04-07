@@ -307,8 +307,27 @@ export function resolveAgentEffectiveModelPrimary(
       return defaultAgentModelPrimary;
     }
 
-    // 5. 主控 agent 的 modelAccounts.accounts[0]
-    const firstAccount = defaultAgentAccounts?.accounts?.[0]?.trim();
+    // 5. 主控 agent 的 modelAccounts.accounts 中逐个遍历，找第一个通过 provider 检测的账号
+    const allDefaultAccounts = defaultAgentAccounts?.accounts ?? [];
+    for (const accountId of allDefaultAccounts) {
+      const candidate = accountId.trim();
+      if (
+        !candidate ||
+        candidate === defaultAgentAccountId ||
+        candidate === defaultAgentModelPrimary
+      ) {
+        continue; // 已在步骤 3/4 判过了
+      }
+      if (isModelStringProviderUsable(cfg, candidate)) {
+        log.info(
+          `[model-fallback] agentId=${agentId}: primary provider unavailable, ` +
+            `falling back to defaultAgent "${defaultAgentId}" usable account="${candidate}"`,
+        );
+        return candidate;
+      }
+    }
+    // 5.5. 主控 agent 所有账号均不可用，最后无条件返回第一个（不做 provider 检测，交运行时处理）
+    const firstAccount = allDefaultAccounts[0]?.trim();
     if (firstAccount) {
       log.info(
         `[model-fallback] agentId=${agentId}: primary provider unavailable, ` +
@@ -328,7 +347,25 @@ export function resolveAgentEffectiveModelPrimary(
     }
   }
 
-  // 6. 最终兜底：agents.defaults.model.primary（不做 provider 检测，交运行时处理）
+  // 6. 最终兜底：动态查找主控 agent（或全局 accounts）中第一个可用模型
+  //    优先级：主控 agent accounts 中第一个通过 provider 检测的账号
+  //    → 避免依赖 agents.defaults.model.primary 这个静态配置值（容易残留过期模型）
+  const fallbackAgentId = resolveDefaultAgentId(cfg);
+  const fallbackAgentAccounts = resolveAgentModelAccounts(cfg, fallbackAgentId);
+  const allFallbackAccounts = fallbackAgentAccounts?.accounts ?? [];
+  for (const accountId of allFallbackAccounts) {
+    const candidate = accountId.trim();
+    if (!candidate) {
+      continue;
+    }
+    if (isModelStringProviderUsable(cfg, candidate)) {
+      log.info(
+        `[model-fallback] agentId=${agentId}: ultimate fallback to defaultAgent "${fallbackAgentId}" first usable account="${candidate}"`,
+      );
+      return candidate;
+    }
+  }
+  // 所有动态路径均失败，最后退化到静态配置值（不做 provider 检测，交运行时处理）
   return resolveModelPrimary(cfg.agents?.defaults?.model);
 }
 

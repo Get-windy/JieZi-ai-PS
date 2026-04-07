@@ -2,30 +2,11 @@ import type { IncomingMessage } from "node:http";
 import os from "node:os";
 import type { WebSocket } from "ws";
 import { loadConfig } from "../../../../upstream/src/config/config.js";
-import {
-  deriveDeviceIdFromPublicKey,
-  normalizeDevicePublicKeyBase64Url,
-  verifyDeviceSignature,
-} from "../../../../upstream/src/infra/device-identity.js";
-import {
-  approveDevicePairing,
-  ensureDeviceToken,
-  getPairedDevice,
-  requestDevicePairing,
-  updatePairedDeviceMetadata,
-  verifyDeviceToken,
-} from "../../../infra/device-pairing.js";
-import { updatePairedNodeMetadata } from "../../../../upstream/src/infra/node-pairing.js";
-import { recordRemoteNodeInfo, refreshRemoteNodeBins } from "../../../../upstream/src/infra/skills-remote.js";
-import { upsertPresence } from "../../../../upstream/src/infra/system-presence.js";
-import { loadVoiceWakeConfig } from "../../../../upstream/src/infra/voicewake.js";
-import { rawDataToString } from "../../../../upstream/src/infra/ws.js";
-import type { createSubsystemLogger } from "../../../../upstream/src/logging/subsystem.js";
-import { roleScopesAllow } from "../../../../upstream/src/shared/operator-scope-compat.js";
-import { isGatewayCliClient, isWebchatClient } from "../../../../upstream/src/utils/message-channel.js";
-import { resolveRuntimeServiceVersion } from "../../../../upstream/src/version.js";
 import type { AuthRateLimiter } from "../../../../upstream/src/gateway/auth-rate-limit.js";
-import type { GatewayAuthResult, ResolvedGatewayAuth } from "../../../../upstream/src/gateway/auth.js";
+import type {
+  GatewayAuthResult,
+  ResolvedGatewayAuth,
+} from "../../../../upstream/src/gateway/auth.js";
 import { isLocalDirectRequest } from "../../../../upstream/src/gateway/auth.js";
 import {
   buildCanvasScopedHostUrl,
@@ -40,7 +21,6 @@ import {
   resolveClientIp,
 } from "../../../../upstream/src/gateway/net.js";
 import { resolveNodeCommandAllowlist } from "../../../../upstream/src/gateway/node-command-policy.js";
-import { checkBrowserOrigin } from "../../origin-check.js";
 import { GATEWAY_CLIENT_IDS } from "../../../../upstream/src/gateway/protocol/client-info.js";
 import {
   ConnectErrorDetailCodes,
@@ -57,11 +37,16 @@ import {
   validateRequestFrame,
 } from "../../../../upstream/src/gateway/protocol/index.js";
 import { parseGatewayRole } from "../../../../upstream/src/gateway/role-policy.js";
-import { MAX_BUFFERED_BYTES, MAX_PAYLOAD_BYTES, TICK_INTERVAL_MS } from "../../../../upstream/src/gateway/server-constants.js";
-import { handleGatewayRequest } from "../../server-methods.js";
-import type { GatewayRequestContext, GatewayRequestHandlers } from "../../../../upstream/src/gateway/server-methods/types.js";
+import {
+  MAX_BUFFERED_BYTES,
+  MAX_PAYLOAD_BYTES,
+  TICK_INTERVAL_MS,
+} from "../../../../upstream/src/gateway/server-constants.js";
+import type {
+  GatewayRequestContext,
+  GatewayRequestHandlers,
+} from "../../../../upstream/src/gateway/server-methods/types.js";
 import { formatError } from "../../../../upstream/src/gateway/server-utils.js";
-import { formatForLog, logWs } from "../../../../upstream/src/gateway/ws-log.js";
 import { truncateCloseReason } from "../../../../upstream/src/gateway/server/close-reason.js";
 import {
   buildGatewaySnapshot,
@@ -70,15 +55,52 @@ import {
   incrementPresenceVersion,
   refreshGatewayHealthSnapshot,
 } from "../../../../upstream/src/gateway/server/health-state.js";
+import {
+  formatGatewayAuthFailureMessage,
+  type AuthProvidedKind,
+} from "../../../../upstream/src/gateway/server/ws-connection/auth-messages.js";
+import {
+  isUnauthorizedRoleError,
+  UnauthorizedFloodGuard,
+} from "../../../../upstream/src/gateway/server/ws-connection/unauthorized-flood-guard.js";
 import type { GatewayWsClient } from "../../../../upstream/src/gateway/server/ws-types.js";
+import { formatForLog, logWs } from "../../../../upstream/src/gateway/ws-log.js";
+import {
+  deriveDeviceIdFromPublicKey,
+  normalizeDevicePublicKeyBase64Url,
+  verifyDeviceSignature,
+} from "../../../../upstream/src/infra/device-identity.js";
+import { updatePairedNodeMetadata } from "../../../../upstream/src/infra/node-pairing.js";
+import {
+  recordRemoteNodeInfo,
+  refreshRemoteNodeBins,
+} from "../../../../upstream/src/infra/skills-remote.js";
+import { upsertPresence } from "../../../../upstream/src/infra/system-presence.js";
+import { loadVoiceWakeConfig } from "../../../../upstream/src/infra/voicewake.js";
+import { rawDataToString } from "../../../../upstream/src/infra/ws.js";
+import type { createSubsystemLogger } from "../../../../upstream/src/logging/subsystem.js";
+import { roleScopesAllow } from "../../../../upstream/src/shared/operator-scope-compat.js";
+import {
+  isGatewayCliClient,
+  isWebchatClient,
+} from "../../../../upstream/src/utils/message-channel.js";
+import { resolveRuntimeServiceVersion } from "../../../../upstream/src/version.js";
+import {
+  approveDevicePairing,
+  ensureDeviceToken,
+  getPairedDevice,
+  requestDevicePairing,
+  updatePairedDeviceMetadata,
+  verifyDeviceToken,
+} from "../../../infra/device-pairing.js";
+import { checkBrowserOrigin } from "../../origin-check.js";
+import { handleGatewayRequest } from "../../server-methods.js";
 import { resolveConnectAuthDecision, resolveConnectAuthState } from "./auth-context.js";
-import { formatGatewayAuthFailureMessage, type AuthProvidedKind } from "../../../../upstream/src/gateway/server/ws-connection/auth-messages.js";
 import {
   evaluateMissingDeviceIdentity,
   resolveControlUiAuthPolicy,
   shouldSkipControlUiPairing,
 } from "./connect-policy.js";
-import { isUnauthorizedRoleError, UnauthorizedFloodGuard } from "../../../../upstream/src/gateway/server/ws-connection/unauthorized-flood-guard.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -96,7 +118,7 @@ export function attachGatewayWsMessageHandler(params: {
   requestUserAgent?: string;
   canvasHostUrl?: string;
   connectNonce: string;
-  resolvedAuth: ResolvedGatewayAuth;
+  getResolvedAuth: () => ResolvedGatewayAuth;
   /** Optional rate limiter for auth brute-force protection. */
   rateLimiter?: AuthRateLimiter;
   gatewayMethods: string[];
@@ -128,7 +150,7 @@ export function attachGatewayWsMessageHandler(params: {
     requestUserAgent,
     canvasHostUrl,
     connectNonce,
-    resolvedAuth,
+    getResolvedAuth,
     rateLimiter,
     gatewayMethods,
     events,
@@ -360,6 +382,9 @@ export function attachGatewayWsMessageHandler(params: {
           deviceRaw,
         });
         const device = controlUiAuthPolicy.device;
+
+        // 懒加载 resolvedAuth（与 upstream 保持一致：在握手时才调用，避免初始化顺序问题）
+        const resolvedAuth = getResolvedAuth();
 
         let {
           authResult,
