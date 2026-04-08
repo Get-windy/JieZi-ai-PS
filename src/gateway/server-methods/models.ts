@@ -237,11 +237,19 @@ export type ProviderAuth = {
   /**
    * 系统自动禁用原因（非用户主动禁用时填写）。
    * 用于 UI 区分「用户手动禁用」与「系统因错误自动禁用」，并向用户展示原因提示。
-   * - "billing_exhausted": 余额/配额耗尽，需续费
-   * - "auth_failure": API Key 失效，需更换
+   * - "billing_exhausted": 余额/配额耗尽，需续费（永久禁用，需手动处理）
+   * - "auth_failure": API Key 临时失效（带自动恢复窗口，超时后自动重试）
    * - undefined: 用户主动禁用
    */
   autoDisabledReason?: "billing_exhausted" | "auth_failure";
+
+  /**
+   * auth_failure 自动禁用时间戳（毫秒）。
+   * 配合 AUTH_FAILURE_RESET_WINDOW_MS 实现带重置窗口的熔断：
+   * 超过重置窗口后，系统自动将认证恢复为 enabled=true 进行重试。
+   * 借鉴 Hermes Agent v0.7.0 "credential pool rotation" 设计。
+   */
+  autoDisabledAt?: number;
 
   // 调度策略（多凭据负载均衡 / 故障转移）
   dispatchPolicy?: AuthDispatchPolicy;
@@ -847,8 +855,13 @@ export function getQuotaExhaustedUntil(authId: string): number {
 // ============ 凭据熔断器（内存态，进程重启后重置）============
 
 /**
- * 单个凭据的熔断状态
+ * auth_failure 自动熔断的重置窗口（毫秒）。
+ * 借鉴 Hermes Agent v0.7.0 "credential pool rotation" 设计：
+ * - auth_failure 通常是临时网络问题、Token 刷新延迟等，30分钟后重试就可恢复
+ * - billing_exhausted 是永久性问题，不做自动恢复，必须用户手动处理
  */
+const AUTH_FAILURE_RESET_WINDOW_MS = 30 * 60 * 1000; // 30 分钟
+
 type CircuitState = {
   authId: string;
   cooldownUntil: number; // 冷却截止时间戳（ms），0=未冷却
@@ -1230,6 +1243,30 @@ export function isProviderUsableSync(providerId: string): boolean | undefined {
     // 该 provider 在新系统里没有任何认证配置
     // → 可能是旧数据/未纳管，不拦截（返回 undefined 让上层用旧逻辑）
     return undefined;
+  }
+  // 检查前先尝试自动恢复 auth_failure 熔断窗口到期的认证
+  // 借鉴 Hermes Agent v0.7.0 credential pool rotation：带重置窗口的熔断，到期自动恢复
+  const now = Date.now();
+  for (const auth of authList) {
+    if (
+      !auth.enabled &&
+      auth.autoDisabledReason === "auth_failure" &&
+      auth.autoDisabledAt !== undefined &&
+      now - auth.autoDisabledAt >= AUTH_FAILURE_RESET_WINDOW_MS
+    ) {
+      // 重置窗口已到期：自动恢复认证，让路由重新尝试
+      console.log(
+        `[AuthAutoRecover] Auth "${auth.name}" (${auth.authId}) auth_failure reset window expired ` +
+          `(${Math.round((now - auth.autoDisabledAt) / 60000)}min elapsed). Auto-recovering to enabled.`,
+      );
+      auth.enabled = true;
+      delete auth.autoDisabledReason;
+      delete auth.autoDisabledAt;
+      // 异步持久化恢复状态（不阻塞路由）
+      updateAuth({ authId: auth.authId, enabled: true, autoDisabledReason: null }).catch((err) => {
+        console.error(`[AuthAutoRecover] Failed to persist recovery for auth ${auth.authId}:`, err);
+      });
+    }
   }
   // 有至少一个「启用 + 未熔断 + 未周期耗尽」的认证，provider 才算 healthy
   return authList.some(
@@ -2033,6 +2070,7 @@ async function updateAuth(params: {
   dispatchPolicy?: AuthDispatchPolicy | null;
   quotaCycle?: AuthQuotaCycle | null;
   autoDisabledReason?: "billing_exhausted" | "auth_failure" | null;
+  autoDisabledAt?: number | null;
 }): Promise<void> {
   const storage = await loadModelManagement();
 
@@ -2068,6 +2106,7 @@ async function updateAuth(params: {
         // 用户手动启用时，同时清除自动禁用原因（表示用户已知晓并解决了问题）
         if (params.enabled && auth.autoDisabledReason && params.autoDisabledReason === undefined) {
           delete auth.autoDisabledReason;
+          delete auth.autoDisabledAt;
         }
       }
       if (params.autoDisabledReason !== undefined) {
@@ -2075,6 +2114,14 @@ async function updateAuth(params: {
           delete auth.autoDisabledReason;
         } else {
           auth.autoDisabledReason = params.autoDisabledReason;
+        }
+      }
+      // autoDisabledAt 处理：自动恢复时清除，熔断时设置
+      if (params.autoDisabledAt !== undefined) {
+        if (params.autoDisabledAt === null) {
+          delete auth.autoDisabledAt;
+        } else {
+          auth.autoDisabledAt = params.autoDisabledAt;
         }
       }
       if (params.dispatchPolicy !== undefined) {
@@ -2152,19 +2199,35 @@ export function disableAuthOnBillingOrAuthError(
     return;
   } // 已经禁用则跳过
 
-  console.log(
-    `[AuthDisable] Auth "${foundAuth.name}" (${authId}) disabled due to ${reason}. ` +
-      `User must manually re-enable after resolving the issue.`,
-  );
-
-  // 立即更新内存缓存（确保本进程后续请求不再路由到此 key）
-  foundAuth.enabled = false;
-  foundAuth.autoDisabledReason = reason;
-
-  // 异步持久化到磁盘（不阻塞调用方）
-  updateAuth({ authId, enabled: false, autoDisabledReason: reason }).catch((err) => {
-    console.error(`[AuthDisable] Failed to persist disabled state for auth ${authId}:`, err);
-  });
+  if (reason === "auth_failure") {
+    // === 借鉴 Hermes v0.7.0 credential pool rotation ===
+    // auth_failure 通常是临时性问题（网络波动、Token 刷新延迟等）
+    // 采用带重置窗口的熔断：禁用 + 记录时间，30分钟后 isProviderUsableSync 自动尝试恢复
+    console.log(
+      `[AuthAutoDisable] Auth "${foundAuth.name}" (${authId}) temporarily disabled due to auth_failure. ` +
+        `Will auto-recover in ${AUTH_FAILURE_RESET_WINDOW_MS / 60000}min (reset window). ` +
+        `No manual action required unless issue persists.`,
+    );
+    foundAuth.enabled = false;
+    foundAuth.autoDisabledReason = reason;
+    foundAuth.autoDisabledAt = Date.now();
+    // 异步持久化（包括 autoDisabledAt 时间戳）
+    updateAuth({ authId, enabled: false, autoDisabledReason: reason }).catch((err) => {
+      console.error(`[AuthAutoDisable] Failed to persist disabled state for auth ${authId}:`, err);
+    });
+  } else {
+    // billing_exhausted: 余额/配额耗尽，永久禁用，需用户手动续费后重新启用
+    console.log(
+      `[AuthAutoDisable] Auth "${foundAuth.name}" (${authId}) permanently disabled due to ${reason}. ` +
+        `User must manually re-enable after resolving the billing issue.`,
+    );
+    foundAuth.enabled = false;
+    foundAuth.autoDisabledReason = reason;
+    // billing_exhausted 不记录 autoDisabledAt，防止自动恢复逐免货
+    updateAuth({ authId, enabled: false, autoDisabledReason: reason }).catch((err) => {
+      console.error(`[AuthAutoDisable] Failed to persist disabled state for auth ${authId}:`, err);
+    });
+  }
 }
 
 // 删除认证

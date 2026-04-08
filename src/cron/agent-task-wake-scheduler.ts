@@ -48,7 +48,7 @@ const MAX_STALE_WAKE_BEFORE_PAUSE = 3;
 const OVERFLOW_PAUSE_MS = 10 * 60 * 1000;
 
 // 背压保护：记录每个 agent 每个任务的重激活状态
-// 业界参考：Temporal.io 指数退避重试策略
+// 业界参考：Temporal.io 指数退而重试策略
 // 首次空闲 ⇒ 10分钟后重激活
 // 第2次还是空闲 ⇒ 20分钟后重激活
 // 第3次还是空闲 ⇒ 40分钟后重激活，之后饱和于 60 分钟
@@ -57,12 +57,82 @@ const REACTIVATE_MAX_MS = 60 * 60 * 1000; // 最大间隔 60 分钟
 const agentLastReactivateAt = new Map<string, { lastAt: number; attempts: number }>();
 
 /**
- * 计算指数退避间隔
+ * 计算指数退而间隔
  * 第 n 次重激活的等待时间 = min(base * 2^(n-1), max)
  */
 function getReactivateBackoffMs(attempts: number): number {
   const backoff = REACTIVATE_BASE_MS * Math.pow(2, Math.max(0, attempts - 1));
   return Math.min(backoff, REACTIVATE_MAX_MS);
+}
+
+// ============================================================================
+// 任务卡顿根因推断
+// 借鉴业界MAST论文（UC Berkeley 2025）对 1642 条 MAS 失败轨迹分析：
+// API超时/Context溢出/工具失败 是三大主要卡顿原因
+// ============================================================================
+
+/**
+ * 推断任务卡顿的根本原因，用于生成差异化唤醒消息
+ */
+function inferStuckReason(
+  stuckMinutes: number,
+  task: { metadata?: Record<string, unknown> },
+): {
+  type: "api_timeout" | "context_overflow" | "tool_failure" | "unknown";
+  hint: string;
+} {
+  const meta = task.metadata ?? {};
+
+  // 从任务元数据中检测 context overflow 记录
+  if (meta.lastFailReason === "context_overflow" || meta.contextOverflowCount) {
+    return {
+      type: "context_overflow",
+      hint:
+        `Context 话术已过长导致工作中断。请先执行 /compress 压缩上下文，再继续任务。` +
+        `如果性能承诺内容过多，可将任务拆分为更小的子任务处理。`,
+    };
+  }
+
+  // 从元数据中检测工具调用失败记录
+  if (meta.lastFailReason === "tool_failure" || meta.lastToolError) {
+    const toolName =
+      meta.lastToolName && typeof meta.lastToolName === "string" ? `(${meta.lastToolName}) ` : "";
+    const toolError =
+      meta.lastToolError && typeof meta.lastToolError === "string"
+        ? `: "${meta.lastToolError.slice(0, 80)}"`
+        : "";
+    return {
+      type: "tool_failure",
+      hint:
+        `工具调用 ${toolName}失败${toolError}。请确认所需资源/路径存在再执行，` +
+        `或考虑用其他方式完成任务。`,
+    };
+  }
+
+  // 根据卡顿时间推断：>小题 15 分钟多为 API 超时（模型单次 run 最多 10 分钟）
+  if (stuckMinutes <= 30) {
+    return {
+      type: "api_timeout",
+      hint:
+        `上次任务可能因 API 响应超时或网络报错中断。` +
+        `如果遇到相同错误，请尝试 /model 切换备用模型，或等待几分钟后重试。`,
+    };
+  }
+
+  // > 30 分钟卡顿：可能 context overflow 或任务本身过小题
+  if (stuckMinutes > 30) {
+    return {
+      type: "context_overflow",
+      hint:
+        `任务持续卡顿较长（${stuckMinutes}分钟），可能是 Context 话术过长导致执行循环。` +
+        `建议：1) 先尝试执行部分成果并检查点，2) 将任务拆分为更小的子任务，3) 确实无法完成则用 task_report_to_supervisor 请求帮助。`,
+    };
+  }
+
+  return {
+    type: "unknown",
+    hint: "请检查任务描述和工作目录，确保资源可用后继续执行。",
+  };
 }
 
 function taskSortKey(t: { priority: string; weight?: number; createdAt: number }): number {
@@ -368,10 +438,20 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
 
           const wakeMessage = (() => {
             const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(activeTask);
+            // 推断卡顿根因，生成差异化唤醒消息（借鉴业界 MAST 论文分析）
+            const stuckReason = inferStuckReason(stuckMinutes, activeTask);
+            const reasonTag = {
+              api_timeout: "[API超时]",
+              context_overflow: "[Context溢出]",
+              tool_failure: "[工具失败]",
+              unknown: "",
+            }[stuckReason.type];
             return [
-              `[TASK RETRY] Your task timed out after ${stuckMinutes} minutes. It has been automatically re-activated to in-progress — execute it now:`,
+              `[TASK RETRY] ${reasonTag} Your task timed out after ${stuckMinutes} minutes. It has been automatically re-activated to in-progress — execute it now:`,
               ``,
               taskLines,
+              ``,
+              `⚠️ Failure Analysis: ${stuckReason.hint}`,
               ``,
               `Working Context:`,
               `- Working Directory: ${agentWorkspaceDir}`,
@@ -435,6 +515,8 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
               activeTask.description
                 ? `Description: ${activeTask.description.slice(0, 150)}`
                 : null,
+              ``,
+              `⚠️ Root Cause Analysis: ${inferStuckReason(stuckMinutes, activeTask).hint}`,
               ``,
               `The task has been reset to todo and the agent has been re-woken. If this keeps happening, you can use agent_task_manage to:`,
               `- cancel: Cancel the task (if deemed unresolvable)`,
