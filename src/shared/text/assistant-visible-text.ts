@@ -45,3 +45,47 @@ export function stripAssistantInternalScaffolding(text: string): string {
   const withoutReasoning = stripReasoningTagsFromText(text, { mode: "preserve", trim: "start" });
   return stripRelevantMemoriesTags(withoutReasoning).trimStart();
 }
+
+export function sanitizeAssistantVisibleTextWithProfile(
+  text: string,
+  profile: "delivery" | "history" | "internal-scaffolding" = "delivery",
+): string {
+  if (profile === "internal-scaffolding") {
+    return stripAssistantInternalScaffolding(text);
+  }
+  // For "history" and "delivery": strip reasoning tags fully and memories tags
+  const withoutReasoning = stripReasoningTagsFromText(text, { mode: "strict", trim: "start" });
+  return stripRelevantMemoriesTags(withoutReasoning).trimStart();
+}
+
+export function sanitizeAssistantVisibleText(text: string): string {
+  return sanitizeAssistantVisibleTextWithProfile(text, "delivery");
+}
+
+/**
+ * Strip malformed Minimax tool invocations that leak into text content.
+ */
+export function stripMinimaxToolCallXml(text: string): string {
+  if (!text || !/minimax:tool_call/i.test(text)) {
+    return text;
+  }
+  let cleaned = text.replace(/<invoke\b[^>]*>[\s\S]*?<\/invoke>/gi, "");
+  cleaned = cleaned.replace(/<\/?minimax:tool_call>/gi, "");
+  return cleaned;
+}
+
+/**
+ * Strip downgraded tool call text representations.
+ */
+export function stripDowngradedToolCallText(text: string): string {
+  if (!text) {
+    return text;
+  }
+  if (!/\[Tool (?:Call|Result)/i.test(text) && !/\[Historical context/i.test(text)) {
+    return text;
+  }
+  let cleaned = text.replace(/\[Tool Call:[^\]]*\][\s\S]*?(?=\n*\[Tool |\n*$)/gi, "");
+  cleaned = cleaned.replace(/\[Tool Result for ID[^\]]*\]\n?[\s\S]*?(?=\n*\[Tool |\n*$)/gi, "");
+  cleaned = cleaned.replace(/\[Historical context:[^\]]*\]\n?/gi, "");
+  return cleaned.trim();
+}

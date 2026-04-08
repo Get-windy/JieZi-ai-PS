@@ -5,6 +5,15 @@ import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { createEditTool, createReadTool, createWriteTool } from "@mariozechner/pi-coding-agent";
 import type { ImageSanitizationLimits } from "../../upstream/src/agents/image-sanitization.js";
 import { toRelativeWorkspacePath } from "../../upstream/src/agents/path-policy.js";
+import type { AnyAgentTool } from "../../upstream/src/agents/pi-tools.types.js";
+import {
+  appendFileWithinRoot,
+  readFileWithinRoot,
+  writeFileWithinRoot,
+} from "../../upstream/src/infra/fs-safe.js";
+import { detectMime } from "../../upstream/src/media/mime.js";
+import { sniffMimeFromBase64 } from "../../upstream/src/media/sniff-mime-from-base64.js";
+import { redactSensitiveContent } from "../infra/sensitive-content-redact.js";
 // Import from upstream pi-tools.params for use in this overlay module.
 // The upstream version supports edits[] arrays, more param aliases, and validator callbacks.
 // NOTE: Must use import + re-export (not just re-export) so the symbols are available
@@ -16,16 +25,7 @@ import {
   patchToolSchemaForClaudeCompatibility,
   assertRequiredParams,
   wrapToolParamNormalization,
-} from "../../upstream/src/agents/pi-tools.params.js";
-import type { AnyAgentTool } from "../../upstream/src/agents/pi-tools.types.js";
-import {
-  appendFileWithinRoot,
-  readFileWithinRoot,
-  writeFileWithinRoot,
-} from "../../upstream/src/infra/fs-safe.js";
-import { detectMime } from "../../upstream/src/media/mime.js";
-import { sniffMimeFromBase64 } from "../../upstream/src/media/sniff-mime-from-base64.js";
-import { redactSensitiveContent } from "../infra/sensitive-content-redact.js";
+} from "./pi-tools.params.js";
 import { assertSandboxPath } from "./sandbox-paths.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import { sanitizeToolResultImages } from "./tool-images.js";

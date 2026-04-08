@@ -3,7 +3,7 @@ import { LITELLM_DEFAULT_MODEL_REF } from "../plugin-sdk/litellm.js";
 import {
   applyAgentDefaultModelPrimary,
   applyProviderConfigWithDefaultModel,
-} from "../plugins/provider-onboarding-config.js";
+} from "./onboard-auth.config-shared.js";
 
 export const LITELLM_BASE_URL = "http://localhost:4000";
 export const LITELLM_DEFAULT_MODEL_ID = "claude-opus-4-6";

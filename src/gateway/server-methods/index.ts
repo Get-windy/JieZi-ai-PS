@@ -18,6 +18,7 @@
  *   由调用方通过 handleGatewayRequest 的 extraHandlers 参数传入，不在此处注册。
  */
 
+import { browserHandlers } from "../../../upstream/extensions/browser/runtime-api.js";
 import { agentsHandlers } from "../../../upstream/src/gateway/server-methods/agents.js";
 import { chatHandlers } from "../../../upstream/src/gateway/server-methods/chat.js";
 import { configHandlers } from "../../../upstream/src/gateway/server-methods/config.js";
@@ -40,7 +41,6 @@ import { usageHandlers } from "../../../upstream/src/gateway/server-methods/usag
 import { voicewakeHandlers } from "../../../upstream/src/gateway/server-methods/voicewake.js";
 import { webHandlers } from "../../../upstream/src/gateway/server-methods/web.js";
 import { wizardHandlers } from "../../../upstream/src/gateway/server-methods/wizard.js";
-import { browserHandlers } from "../../../upstream/src/plugin-sdk/browser-runtime.js";
 import { agentHandlers } from "./agent.js";
 import { agentsManagementHandlers } from "./agents-management.js";
 import { approvalHandlers } from "./approval.js";

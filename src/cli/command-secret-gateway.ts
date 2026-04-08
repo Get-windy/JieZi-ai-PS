@@ -12,12 +12,15 @@ import { collectConfigAssignments } from "../../upstream/src/secrets/runtime-con
 import { createResolverContext } from "../../upstream/src/secrets/runtime-shared.js";
 import { resolveRuntimeWebTools } from "../../upstream/src/secrets/runtime-web-tools.js";
 import { assertExpectedResolvedSecretValue } from "../../upstream/src/secrets/secret-value.js";
-import { describeUnknownError } from "../../upstream/src/secrets/shared.js";
 import {
   discoverConfigSecretTargetsByIds,
   type DiscoveredConfigSecretTarget,
 } from "../../upstream/src/secrets/target-registry.js";
-import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../upstream/src/utils/message-channel.js";
+import {
+  GATEWAY_CLIENT_MODES,
+  GATEWAY_CLIENT_NAMES,
+} from "../../upstream/src/utils/message-channel.js";
+import { describeUnknownError } from "./gateway-cli/shared.js";
 
 type ResolveCommandSecretsResult = {
   resolvedConfig: OpenClawConfig;

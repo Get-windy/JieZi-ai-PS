@@ -25,6 +25,10 @@ const PREEMPTIVE_OVERFLOW_RATIO = 0.9;
 export const CONTEXT_LIMIT_TRUNCATION_NOTICE = "[truncated: output exceeded context limit]";
 const CONTEXT_LIMIT_TRUNCATION_SUFFIX = `\n${CONTEXT_LIMIT_TRUNCATION_NOTICE}`;
 
+export function formatContextLimitTruncationNotice(params?: { reason?: string }): string {
+  return params?.reason ? `[truncated: ${params.reason}]` : CONTEXT_LIMIT_TRUNCATION_NOTICE;
+}
+
 export const PREEMPTIVE_TOOL_RESULT_COMPACTION_PLACEHOLDER =
   "[compacted: tool output removed to free context]";
 

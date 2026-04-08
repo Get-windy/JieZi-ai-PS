@@ -1,6 +1,14 @@
 import crypto from "node:crypto";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import {
+  DEFAULT_APPROVAL_TIMEOUT_MS,
+  createApprovalSlug,
+  emitExecSystemEvent,
+} from "../../upstream/src/agents/bash-tools.exec-runtime.js";
+import type { ExecToolDetails } from "../../upstream/src/agents/bash-tools.exec-types.js";
+import { callGatewayTool } from "../../upstream/src/agents/tools/gateway.js";
+import { listNodes, resolveNodeIdFromList } from "../../upstream/src/agents/tools/nodes-utils.js";
+import {
   type ExecApprovalsFile,
   type ExecAsk,
   type ExecSecurity,
@@ -11,19 +19,11 @@ import {
   resolveExecApprovals,
   resolveExecApprovalsFromFile,
 } from "../../upstream/src/infra/exec-approvals.js";
-import { detectCommandObfuscation } from "../../upstream/src/infra/exec-obfuscation-detect.js";
-import { detectSelfProtectViolation } from "../infra/exec-self-protect-detect.js";
 import { buildNodeShellCommand } from "../../upstream/src/infra/node-shell.js";
 import { logInfo } from "../../upstream/src/logger.js";
+import { detectCommandObfuscation } from "../infra/exec-obfuscation-detect.js";
+import { detectSelfProtectViolation } from "../infra/exec-self-protect-detect.js";
 import { requestExecApprovalDecisionForHost } from "./bash-tools.exec-approval-request.js";
-import {
-  DEFAULT_APPROVAL_TIMEOUT_MS,
-  createApprovalSlug,
-  emitExecSystemEvent,
-} from "../../upstream/src/agents/bash-tools.exec-runtime.js";
-import type { ExecToolDetails } from "../../upstream/src/agents/bash-tools.exec-types.js";
-import { callGatewayTool } from "../../upstream/src/agents/tools/gateway.js";
-import { listNodes, resolveNodeIdFromList } from "../../upstream/src/agents/tools/nodes-utils.js";
 
 export type ExecuteNodeHostCommandParams = {
   command: string;

@@ -59,7 +59,7 @@ function formatRateLimitOrOverloadedErrorCopy(raw: string): string | undefined {
   return undefined;
 }
 
-function isReasoningConstraintErrorMessage(raw: string): boolean {
+export function isReasoningConstraintErrorMessage(raw: string): boolean {
   if (!raw) {
     return false;
   }

@@ -18,10 +18,12 @@ import path from "node:path";
 export {
   buildPluginLoaderAliasMap,
   buildPluginLoaderJitiOptions,
+  isBundledPluginExtensionPath,
   listPluginSdkAliasCandidates,
   listPluginSdkExportedSubpaths,
   resolveExtensionApiAlias,
   resolveLoaderPackageRoot,
+  resolvePluginLoaderJitiConfig,
   resolvePluginRuntimeModulePath,
   resolvePluginSdkAliasCandidateOrder,
   resolvePluginSdkAliasFile,

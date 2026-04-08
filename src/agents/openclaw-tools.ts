@@ -1,5 +1,5 @@
+import { createBrowserTool } from "../../upstream/extensions/browser/src/browser-tool.js";
 import { getChannelPlugin } from "../../upstream/src/channels/plugins/index.js";
-import { createBrowserTool } from "../../upstream/src/plugin-sdk/browser-runtime.js";
 import { getPluginToolMeta } from "../../upstream/src/plugins/tools.js";
 import type { OpenClawConfig } from "../config/config.js";
 import type { AgentChannelBindings } from "../config/types.channel-bindings.js";
