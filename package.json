@@ -1076,6 +1076,178 @@
     "./plugin-sdk/zod": {
       "types": "./dist/plugin-sdk/zod.d.ts",
       "default": "./dist/plugin-sdk/zod.js"
+    },
+    "./plugin-sdk/runtime-doctor": {
+      "types": "./dist/plugin-sdk/runtime-doctor.d.ts",
+      "default": "./dist/plugin-sdk/runtime-doctor.js"
+    },
+    "./plugin-sdk/runtime-secret-resolution": {
+      "types": "./dist/plugin-sdk/runtime-secret-resolution.d.ts",
+      "default": "./dist/plugin-sdk/runtime-secret-resolution.js"
+    },
+    "./plugin-sdk/channel-streaming": {
+      "types": "./dist/plugin-sdk/channel-streaming.d.ts",
+      "default": "./dist/plugin-sdk/channel-streaming.js"
+    },
+    "./plugin-sdk/media-generation-runtime": {
+      "types": "./dist/plugin-sdk/media-generation-runtime.d.ts",
+      "default": "./dist/plugin-sdk/media-generation-runtime.js"
+    },
+    "./plugin-sdk/conversation-binding-runtime": {
+      "types": "./dist/plugin-sdk/conversation-binding-runtime.d.ts",
+      "default": "./dist/plugin-sdk/conversation-binding-runtime.js"
+    },
+    "./plugin-sdk/simple-completion-runtime": {
+      "types": "./dist/plugin-sdk/simple-completion-runtime.d.ts",
+      "default": "./dist/plugin-sdk/simple-completion-runtime.js"
+    },
+    "./plugin-sdk/channel-secret-basic-runtime": {
+      "types": "./dist/plugin-sdk/channel-secret-basic-runtime.d.ts",
+      "default": "./dist/plugin-sdk/channel-secret-basic-runtime.js"
+    },
+    "./plugin-sdk/channel-secret-runtime": {
+      "types": "./dist/plugin-sdk/channel-secret-runtime.d.ts",
+      "default": "./dist/plugin-sdk/channel-secret-runtime.js"
+    },
+    "./plugin-sdk/channel-secret-tts-runtime": {
+      "types": "./dist/plugin-sdk/channel-secret-tts-runtime.d.ts",
+      "default": "./dist/plugin-sdk/channel-secret-tts-runtime.js"
+    },
+    "./plugin-sdk/secret-ref-runtime": {
+      "types": "./dist/plugin-sdk/secret-ref-runtime.d.ts",
+      "default": "./dist/plugin-sdk/secret-ref-runtime.js"
+    },
+    "./plugin-sdk/acp-binding-runtime": {
+      "types": "./dist/plugin-sdk/acp-binding-runtime.d.ts",
+      "default": "./dist/plugin-sdk/acp-binding-runtime.js"
+    },
+    "./plugin-sdk/browser-cdp": {
+      "types": "./dist/plugin-sdk/browser-cdp.d.ts",
+      "default": "./dist/plugin-sdk/browser-cdp.js"
+    },
+    "./plugin-sdk/browser-config": {
+      "types": "./dist/plugin-sdk/browser-config.d.ts",
+      "default": "./dist/plugin-sdk/browser-config.js"
+    },
+    "./plugin-sdk/browser-config-runtime": {
+      "types": "./dist/plugin-sdk/browser-config-runtime.d.ts",
+      "default": "./dist/plugin-sdk/browser-config-runtime.js"
+    },
+    "./plugin-sdk/browser-control-auth": {
+      "types": "./dist/plugin-sdk/browser-control-auth.d.ts",
+      "default": "./dist/plugin-sdk/browser-control-auth.js"
+    },
+    "./plugin-sdk/browser-node-runtime": {
+      "types": "./dist/plugin-sdk/browser-node-runtime.d.ts",
+      "default": "./dist/plugin-sdk/browser-node-runtime.js"
+    },
+    "./plugin-sdk/browser-profiles": {
+      "types": "./dist/plugin-sdk/browser-profiles.d.ts",
+      "default": "./dist/plugin-sdk/browser-profiles.js"
+    },
+    "./plugin-sdk/browser-security-runtime": {
+      "types": "./dist/plugin-sdk/browser-security-runtime.d.ts",
+      "default": "./dist/plugin-sdk/browser-security-runtime.js"
+    },
+    "./plugin-sdk/browser-setup-tools": {
+      "types": "./dist/plugin-sdk/browser-setup-tools.d.ts",
+      "default": "./dist/plugin-sdk/browser-setup-tools.js"
+    },
+    "./plugin-sdk/channel-entry-contract": {
+      "types": "./dist/plugin-sdk/channel-entry-contract.d.ts",
+      "default": "./dist/plugin-sdk/channel-entry-contract.js"
+    },
+    "./plugin-sdk/googlechat-runtime-shared": {
+      "types": "./dist/plugin-sdk/googlechat-runtime-shared.d.ts",
+      "default": "./dist/plugin-sdk/googlechat-runtime-shared.js"
+    },
+    "./plugin-sdk/media-generation-runtime-shared": {
+      "types": "./dist/plugin-sdk/media-generation-runtime-shared.d.ts",
+      "default": "./dist/plugin-sdk/media-generation-runtime-shared.js"
+    },
+    "./plugin-sdk/image-generation-runtime": {
+      "types": "./dist/plugin-sdk/image-generation-runtime.d.ts",
+      "default": "./dist/plugin-sdk/image-generation-runtime.js"
+    },
+    "./plugin-sdk/music-generation": {
+      "types": "./dist/plugin-sdk/music-generation.d.ts",
+      "default": "./dist/plugin-sdk/music-generation.js"
+    },
+    "./plugin-sdk/music-generation-core": {
+      "types": "./dist/plugin-sdk/music-generation-core.d.ts",
+      "default": "./dist/plugin-sdk/music-generation-core.js"
+    },
+    "./plugin-sdk/video-generation": {
+      "types": "./dist/plugin-sdk/video-generation.d.ts",
+      "default": "./dist/plugin-sdk/video-generation.js"
+    },
+    "./plugin-sdk/video-generation-runtime": {
+      "types": "./dist/plugin-sdk/video-generation-runtime.d.ts",
+      "default": "./dist/plugin-sdk/video-generation-runtime.js"
+    },
+    "./plugin-sdk/video-generation-core": {
+      "types": "./dist/plugin-sdk/video-generation-core.d.ts",
+      "default": "./dist/plugin-sdk/video-generation-core.js"
+    },
+    "./plugin-sdk/memory-core-host-events": {
+      "types": "./dist/plugin-sdk/memory-core-host-events.d.ts",
+      "default": "./dist/plugin-sdk/memory-core-host-events.js"
+    },
+    "./plugin-sdk/memory-host-core": {
+      "types": "./dist/plugin-sdk/memory-host-core.d.ts",
+      "default": "./dist/plugin-sdk/memory-host-core.js"
+    },
+    "./plugin-sdk/memory-host-events": {
+      "types": "./dist/plugin-sdk/memory-host-events.d.ts",
+      "default": "./dist/plugin-sdk/memory-host-events.js"
+    },
+    "./plugin-sdk/memory-host-files": {
+      "types": "./dist/plugin-sdk/memory-host-files.d.ts",
+      "default": "./dist/plugin-sdk/memory-host-files.js"
+    },
+    "./plugin-sdk/memory-host-markdown": {
+      "types": "./dist/plugin-sdk/memory-host-markdown.d.ts",
+      "default": "./dist/plugin-sdk/memory-host-markdown.js"
+    },
+    "./plugin-sdk/memory-host-search": {
+      "types": "./dist/plugin-sdk/memory-host-search.d.ts",
+      "default": "./dist/plugin-sdk/memory-host-search.js"
+    },
+    "./plugin-sdk/memory-host-status": {
+      "types": "./dist/plugin-sdk/memory-host-status.d.ts",
+      "default": "./dist/plugin-sdk/memory-host-status.js"
+    },
+    "./plugin-sdk/qa-channel": {
+      "types": "./dist/plugin-sdk/qa-channel.d.ts",
+      "default": "./dist/plugin-sdk/qa-channel.js"
+    },
+    "./plugin-sdk/provider-model-types": {
+      "types": "./dist/plugin-sdk/provider-model-types.d.ts",
+      "default": "./dist/plugin-sdk/provider-model-types.js"
+    },
+    "./plugin-sdk/volc-model-catalog-shared": {
+      "types": "./dist/plugin-sdk/volc-model-catalog-shared.d.ts",
+      "default": "./dist/plugin-sdk/volc-model-catalog-shared.js"
+    },
+    "./plugin-sdk/provider-stream-family": {
+      "types": "./dist/plugin-sdk/provider-stream-family.d.ts",
+      "default": "./dist/plugin-sdk/provider-stream-family.js"
+    },
+    "./plugin-sdk/provider-stream-shared": {
+      "types": "./dist/plugin-sdk/provider-stream-shared.d.ts",
+      "default": "./dist/plugin-sdk/provider-stream-shared.js"
+    },
+    "./plugin-sdk/provider-web-fetch-contract": {
+      "types": "./dist/plugin-sdk/provider-web-fetch-contract.d.ts",
+      "default": "./dist/plugin-sdk/provider-web-fetch-contract.js"
+    },
+    "./plugin-sdk/provider-web-search-contract": {
+      "types": "./dist/plugin-sdk/provider-web-search-contract.d.ts",
+      "default": "./dist/plugin-sdk/provider-web-search-contract.js"
+    },
+    "./plugin-sdk/telegram-command-config": {
+      "types": "./dist/plugin-sdk/telegram-command-config.d.ts",
+      "default": "./dist/plugin-sdk/telegram-command-config.js"
     }
   },
   "scripts": {
@@ -1133,6 +1305,7 @@
     "openclaw": "node scripts/run-node.mjs",
     "openclaw:rpc": "node scripts/run-node.mjs agent --mode rpc --json",
     "plugins:sync": "node --import tsx scripts/sync-plugin-versions.ts",
+    "postinstall": "node -e \"const{existsSync}=require('fs');const{execSync}=require('child_process');if(existsSync('upstream/package.json')&&!process.env.UPSTREAM_INSTALL){try{execSync('pnpm install',{cwd:'upstream',stdio:'inherit',env:{...process.env,UPSTREAM_INSTALL:'1'}})}catch(e){}}\" ",
     "prepack": "pnpm build && pnpm ui:build",
     "prepare": "command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git config core.hooksPath git-hooks || exit 0",
     "protocol:check": "pnpm protocol:gen && pnpm protocol:gen:swift && git diff --exit-code -- dist/protocol.schema.json apps/macos/Sources/OpenClawProtocol/GatewayModels.swift",
