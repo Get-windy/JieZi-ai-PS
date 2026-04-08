@@ -48,6 +48,24 @@ function resolveProviderBlockStreamingCoalesce(params: {
   return accountCfg?.blockStreamingCoalesce ?? typed.blockStreamingCoalesce;
 }
 
+export function clampPositiveInteger(
+  value: unknown,
+  fallback: number,
+  bounds: { min: number; max: number },
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  const rounded = Math.round(value);
+  if (rounded < bounds.min) {
+    return bounds.min;
+  }
+  if (rounded > bounds.max) {
+    return bounds.max;
+  }
+  return rounded;
+}
+
 export type BlockStreamingCoalescing = {
   minChars: number;
   maxChars: number;
@@ -161,4 +179,69 @@ export function resolveBlockStreamingCoalescing(
     joiner,
     flushOnEnqueue: chunkMode === "newline",
   };
+}
+
+export function resolveEffectiveBlockStreamingConfig(params: {
+  cfg: OpenClawConfig | undefined;
+  provider?: string;
+  accountId?: string | null;
+  chunking?: {
+    minChars: number;
+    maxChars: number;
+    breakPreference: "paragraph" | "newline" | "sentence";
+    flushOnParagraph?: boolean;
+  };
+  maxChunkChars?: number;
+  coalesceIdleMs?: number;
+}): {
+  chunking: {
+    minChars: number;
+    maxChars: number;
+    breakPreference: "paragraph" | "newline" | "sentence";
+    flushOnParagraph?: boolean;
+  };
+  coalescing: BlockStreamingCoalescing;
+} {
+  const chunkingDefaults =
+    params.chunking ?? resolveBlockStreamingChunking(params.cfg, params.provider, params.accountId);
+  const DEFAULT_MAX = 4096;
+  const chunkingMax = clampPositiveInteger(params.maxChunkChars, chunkingDefaults.maxChars, {
+    min: 1,
+    max: DEFAULT_MAX,
+  });
+  const chunking = {
+    ...chunkingDefaults,
+    minChars: Math.min(chunkingDefaults.minChars, chunkingMax),
+    maxChars: chunkingMax,
+  };
+  const coalescingDefaults = resolveBlockStreamingCoalescing(
+    params.cfg,
+    params.provider,
+    params.accountId,
+    chunking,
+  );
+  const coalescingMax = Math.max(
+    1,
+    Math.min(coalescingDefaults?.maxChars ?? chunking.maxChars, chunking.maxChars),
+  );
+  const coalescingMin = Math.min(coalescingDefaults?.minChars ?? chunking.minChars, coalescingMax);
+  const coalescingIdleMs = clampPositiveInteger(
+    params.coalesceIdleMs,
+    coalescingDefaults?.idleMs ?? DEFAULT_BLOCK_STREAM_COALESCE_IDLE_MS,
+    { min: 0, max: 5_000 },
+  );
+  const coalescing: BlockStreamingCoalescing = {
+    minChars: coalescingMin,
+    maxChars: coalescingMax,
+    idleMs: coalescingIdleMs,
+    joiner:
+      coalescingDefaults?.joiner ??
+      (chunking.breakPreference === "sentence"
+        ? " "
+        : chunking.breakPreference === "newline"
+          ? "\n"
+          : "\n\n"),
+    ...(coalescingDefaults?.flushOnEnqueue === true ? { flushOnEnqueue: true } : {}),
+  };
+  return { chunking, coalescing };
 }

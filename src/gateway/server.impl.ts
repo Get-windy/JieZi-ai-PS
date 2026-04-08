@@ -5,11 +5,11 @@ import { getTotalPendingReplies } from "../../upstream/src/auto-reply/reply/disp
 import type { CanvasHostServer } from "../../upstream/src/canvas-host/server.js";
 import { type ChannelId, listChannelPlugins } from "../../upstream/src/channels/plugins/index.js";
 import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
+import { migrateLegacyConfig } from "../../upstream/src/commands/doctor/shared/legacy-config-migrate.js";
 import {
   CONFIG_PATH,
   isNixMode,
   loadConfig,
-  migrateLegacyConfig,
   readConfigFileSnapshot,
   writeConfigFile,
 } from "../../upstream/src/config/config.js";

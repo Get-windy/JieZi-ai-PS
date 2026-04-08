@@ -1,5 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import { NonEmptyString } from "../../../../upstream/src/gateway/protocol/schema/primitives.js";
+export { ExecApprovalGetParamsSchema } from "../../../../upstream/src/gateway/protocol/schema/exec-approvals.js";
 
 export const ExecApprovalsAllowlistEntrySchema = Type.Object(
   {

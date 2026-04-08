@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { unbindThreadBindingsBySessionKey } from "../../../extensions/discord/src/monitor/thread-bindings.js";
+import { closeTrackedBrowserTabsForSessions } from "../../../upstream/extensions/browser/src/browser-runtime.js";
 import { getAcpSessionManager } from "../../../upstream/src/acp/control-plane/manager.js";
-import { resolveDefaultAgentId } from "../../agents/agent-scope.js";
 import { clearBootstrapSnapshot } from "../../../upstream/src/agents/bootstrap-cache.js";
-import { abortEmbeddedPiRun, waitForEmbeddedPiRunEnd } from "../../../upstream/src/agents/pi-embedded.js";
-import { stopSubagentsForRequester } from "../../auto-reply/reply/abort.js";
+import {
+  abortEmbeddedPiRun,
+  waitForEmbeddedPiRunEnd,
+} from "../../../upstream/src/agents/pi-embedded.js";
 import { clearSessionQueues } from "../../../upstream/src/auto-reply/reply/queue.js";
-import { closeTrackedBrowserTabsForSessions } from "../../../upstream/src/plugin-sdk/browser-runtime.js";
 import { loadConfig } from "../../../upstream/src/config/config.js";
 import {
   loadSessionStore,
@@ -16,14 +17,6 @@ import {
   type SessionEntry,
   updateSessionStore,
 } from "../../../upstream/src/config/sessions.js";
-import { logVerbose } from "../../../upstream/src/globals.js";
-import { createInternalHookEvent, triggerInternalHook } from "../../../upstream/src/hooks/internal-hooks.js";
-import { getGlobalHookRunner } from "../../../upstream/src/plugins/hook-runner-global.js";
-import {
-  isSubagentSessionKey,
-  normalizeAgentId,
-  parseAgentSessionKey,
-} from "../../routing/session-key.js";
 import { GATEWAY_CLIENT_IDS } from "../../../upstream/src/gateway/protocol/client-info.js";
 import {
   ErrorCodes,
@@ -36,6 +29,25 @@ import {
   validateSessionsResetParams,
   validateSessionsResolveParams,
 } from "../../../upstream/src/gateway/protocol/index.js";
+import type {
+  GatewayClient,
+  GatewayRequestHandlers,
+  RespondFn,
+} from "../../../upstream/src/gateway/server-methods/types.js";
+import { assertValidParams } from "../../../upstream/src/gateway/server-methods/validation.js";
+import { logVerbose } from "../../../upstream/src/globals.js";
+import {
+  createInternalHookEvent,
+  triggerInternalHook,
+} from "../../../upstream/src/hooks/internal-hooks.js";
+import { getGlobalHookRunner } from "../../../upstream/src/plugins/hook-runner-global.js";
+import { resolveDefaultAgentId } from "../../agents/agent-scope.js";
+import { stopSubagentsForRequester } from "../../auto-reply/reply/abort.js";
+import {
+  isSubagentSessionKey,
+  normalizeAgentId,
+  parseAgentSessionKey,
+} from "../../routing/session-key.js";
 import {
   archiveFileOnDisk,
   archiveSessionTranscripts,
@@ -53,8 +65,6 @@ import {
 } from "../session-utils.js";
 import { applySessionsPatchToStore } from "../sessions-patch.js";
 import { resolveSessionKeyFromResolveParams } from "../sessions-resolve.js";
-import type { GatewayClient, GatewayRequestHandlers, RespondFn } from "../../../upstream/src/gateway/server-methods/types.js";
-import { assertValidParams } from "../../../upstream/src/gateway/server-methods/validation.js";
 
 function requireSessionKey(key: unknown, respond: RespondFn): string | null {
   const raw =

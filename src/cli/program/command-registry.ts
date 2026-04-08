@@ -211,7 +211,8 @@ const coreEntries: CoreCliEntry[] = [
       },
     ],
     register: async ({ program }) => {
-      const { registerBrowserCli } = await import("../../../upstream/src/plugin-sdk/browser-runtime.js");
+      const { registerBrowserCli } =
+        await import("../../../upstream/extensions/browser/runtime-api.js");
       registerBrowserCli(program);
     },
   },

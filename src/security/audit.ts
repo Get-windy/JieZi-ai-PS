@@ -1,8 +1,7 @@
 import { isIP } from "node:net";
+import { resolveBrowserControlAuth } from "../../upstream/extensions/browser/src/browser-runtime.js";
 import { resolveSandboxConfigForAgent } from "../../upstream/src/agents/sandbox.js";
 import { execDockerRaw } from "../../upstream/src/agents/sandbox/docker.js";
-import { resolveBrowserConfig, resolveProfile } from "../browser/config.js";
-import { resolveBrowserControlAuth } from "../../upstream/src/plugin-sdk/browser-runtime.js";
 import { listChannelPlugins } from "../../upstream/src/channels/plugins/index.js";
 import { formatCliCommand } from "../../upstream/src/cli/command-format.js";
 import type { OpenClawConfig } from "../../upstream/src/config/config.js";
@@ -15,6 +14,13 @@ import {
   listInterpreterLikeSafeBins,
   resolveMergedSafeBinProfileFixtures,
 } from "../../upstream/src/infra/exec-safe-bin-runtime-policy.js";
+import {
+  formatPermissionDetail,
+  formatPermissionRemediation,
+  inspectPathPermissions,
+} from "../../upstream/src/security/audit-fs.js";
+import type { ExecFn } from "../../upstream/src/security/windows-acl.js";
+import { resolveBrowserConfig, resolveProfile } from "../browser/config.js";
 import { collectChannelSecurityFindings } from "./audit-channel.js";
 import {
   collectAttackSurfaceSummaryFindings,
@@ -39,14 +45,8 @@ import {
   collectSyncedFolderFindings,
   readConfigSnapshotForAudit,
 } from "./audit-extra.js";
-import {
-  formatPermissionDetail,
-  formatPermissionRemediation,
-  inspectPathPermissions,
-} from "../../upstream/src/security/audit-fs.js";
 import { collectEnabledInsecureOrDangerousFlags } from "./dangerous-config-flags.js";
 import { DEFAULT_GATEWAY_HTTP_TOOL_DENY } from "./dangerous-tools.js";
-import type { ExecFn } from "../../upstream/src/security/windows-acl.js";
 
 export type SecurityAuditSeverity = "info" | "warn" | "critical";
 

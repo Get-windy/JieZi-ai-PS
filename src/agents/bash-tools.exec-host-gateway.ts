@@ -1,5 +1,15 @@
 import crypto from "node:crypto";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import { markBackgrounded, tail } from "../../upstream/src/agents/bash-process-registry.js";
+import {
+  DEFAULT_APPROVAL_TIMEOUT_MS,
+  DEFAULT_NOTIFY_TAIL_CHARS,
+  createApprovalSlug,
+  emitExecSystemEvent,
+  normalizeNotifyOutput,
+  runExecProcess,
+} from "../../upstream/src/agents/bash-tools.exec-runtime.js";
+import type { ExecToolDetails } from "../../upstream/src/agents/bash-tools.exec-types.js";
 import {
   addAllowlistEntry,
   type ExecAsk,
@@ -14,22 +24,12 @@ import {
   resolveAllowAlwaysPatterns,
   resolveExecApprovals,
 } from "../../upstream/src/infra/exec-approvals.js";
-import { detectExfilAttempt } from "../infra/exec-exfil-detect.js";
-import { detectCommandObfuscation } from "../../upstream/src/infra/exec-obfuscation-detect.js";
 import type { SafeBinProfile } from "../../upstream/src/infra/exec-safe-bin-policy.js";
-import { detectSelfProtectViolation } from "../infra/exec-self-protect-detect.js";
 import { logInfo } from "../../upstream/src/logger.js";
-import { markBackgrounded, tail } from "../../upstream/src/agents/bash-process-registry.js";
+import { detectExfilAttempt } from "../infra/exec-exfil-detect.js";
+import { detectCommandObfuscation } from "../infra/exec-obfuscation-detect.js";
+import { detectSelfProtectViolation } from "../infra/exec-self-protect-detect.js";
 import { requestExecApprovalDecisionForHost } from "./bash-tools.exec-approval-request.js";
-import {
-  DEFAULT_APPROVAL_TIMEOUT_MS,
-  DEFAULT_NOTIFY_TAIL_CHARS,
-  createApprovalSlug,
-  emitExecSystemEvent,
-  normalizeNotifyOutput,
-  runExecProcess,
-} from "../../upstream/src/agents/bash-tools.exec-runtime.js";
-import type { ExecToolDetails } from "../../upstream/src/agents/bash-tools.exec-types.js";
 
 export type ProcessGatewayAllowlistParams = {
   command: string;

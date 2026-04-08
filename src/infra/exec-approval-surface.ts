@@ -3,7 +3,16 @@ import { isDiscordExecApprovalClientEnabled } from "../../extensions/discord/src
 import { listEnabledTelegramAccounts } from "../../extensions/telegram/src/accounts.js";
 import { isTelegramExecApprovalClientEnabled } from "../../extensions/telegram/src/exec-approvals.js";
 import { loadConfig, type OpenClawConfig } from "../../upstream/src/config/config.js";
-import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../../upstream/src/utils/message-channel.js";
+import {
+  INTERNAL_MESSAGE_CHANNEL,
+  normalizeMessageChannel,
+} from "../../upstream/src/utils/message-channel.js";
+
+export {
+  describeNativeExecApprovalClientSetup,
+  listNativeExecApprovalClientLabels,
+  supportsNativeExecApprovalClient,
+} from "../../upstream/src/infra/exec-approval-surface.js";
 
 export type ExecApprovalInitiatingSurfaceState =
   | { kind: "enabled"; channel: string | undefined; channelLabel: string }

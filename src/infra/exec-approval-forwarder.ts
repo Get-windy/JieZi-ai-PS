@@ -1,5 +1,29 @@
-import { buildTelegramExecApprovalButtons } from "../../extensions/telegram/src/approval-buttons.js";
-import { sendTypingTelegram } from "../../extensions/telegram/src/send.js";
+import { sendTypingTelegram } from "../../upstream/extensions/telegram/src/send.js";
+
+type TelegramInlineButton = {
+  text: string;
+  callback_data: string;
+};
+
+type TelegramInlineButtons = ReadonlyArray<ReadonlyArray<TelegramInlineButton>>;
+
+/**
+ * Builds Telegram inline keyboard buttons for exec approval requests.
+ * Returns three buttons: Allow Once / Allow Always / Deny.
+ */
+function buildTelegramExecApprovalButtons(approvalId: string): TelegramInlineButtons | undefined {
+  if (!approvalId) {
+    return undefined;
+  }
+  const slug = approvalId.slice(0, 8);
+  return [
+    [
+      { text: "✅ Allow Once", callback_data: `exec_approval:allow_once:${slug}` },
+      { text: "🔓 Allow Always", callback_data: `exec_approval:allow_always:${slug}` },
+      { text: "❌ Deny", callback_data: `exec_approval:deny:${slug}` },
+    ],
+  ];
+}
 import type { ReplyPayload } from "../../upstream/src/auto-reply/types.js";
 import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import { loadConfig } from "../../upstream/src/config/config.js";
@@ -7,14 +31,6 @@ import type {
   ExecApprovalForwardingConfig,
   ExecApprovalForwardTarget,
 } from "../../upstream/src/config/types.approvals.js";
-import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
-import { normalizeAccountId, parseAgentSessionKey } from "../routing/session-key.js";
-import { compileSafeRegex, testRegexWithBoundedInput } from "../security/safe-regex.js";
-import {
-  isDeliverableMessageChannel,
-  normalizeMessageChannel,
-  type DeliverableMessageChannel,
-} from "../../upstream/src/utils/message-channel.js";
 import { resolveExecApprovalCommandDisplay } from "../../upstream/src/infra/exec-approval-command-display.js";
 import { buildExecApprovalPendingReplyPayload } from "../../upstream/src/infra/exec-approval-reply.js";
 import { resolveExecApprovalSessionTarget } from "../../upstream/src/infra/exec-approval-session-target.js";
@@ -23,6 +39,14 @@ import type {
   ExecApprovalRequest,
   ExecApprovalResolved,
 } from "../../upstream/src/infra/exec-approvals.js";
+import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
+import {
+  isDeliverableMessageChannel,
+  normalizeMessageChannel,
+  type DeliverableMessageChannel,
+} from "../../upstream/src/utils/message-channel.js";
+import { normalizeAccountId, parseAgentSessionKey } from "../routing/session-key.js";
+import { compileSafeRegex, testRegexWithBoundedInput } from "../security/safe-regex.js";
 import { deliverOutboundPayloads } from "./outbound/deliver.js";
 
 const log = createSubsystemLogger("gateway/exec-approvals");
