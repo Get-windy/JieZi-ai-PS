@@ -842,13 +842,114 @@ export async function runHeartbeatOnce(opts: {
     delivery.channel !== "none" && delivery.to && visibility.showAlerts,
   );
   const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
-  const { prompt, hasExecCompletion, hasCronEvents } = resolveHeartbeatRunPrompt({
+  const {
+    prompt: rawPrompt,
+    hasExecCompletion,
+    hasCronEvents,
+  } = resolveHeartbeatRunPrompt({
     cfg,
     heartbeat,
     preflight,
     canRelayToUser,
     workspaceDir,
   });
+
+  // ── DoD 门禁摘要注入（仅对默认 agent / coordinator）────────────────
+  // 每次心跳时，将所有活跃项目的验收标准完成状态注入到消息体中，
+  // 让 coordinator 明确知道哪些项目已完成（禁止继续分配），哪些存在差距（应补充任务）。
+  let prompt = rawPrompt;
+  // 任务驱动事件（task-wake/next/resume/retry）跳过 DoD 注入，避免干扰具体任务流程
+  const hasTaskDrivenEvents = preflight.pendingEventEntries.some(
+    (event) =>
+      event.contextKey?.startsWith("cron:task-wake:") ||
+      event.contextKey?.startsWith("cron:task-next:") ||
+      event.contextKey?.startsWith("cron:task-resume:") ||
+      event.contextKey?.startsWith("cron:task-retry:"),
+  );
+  if (isDefaultAgent && !hasExecCompletion && !hasCronEvents && !hasTaskDrivenEvents) {
+    try {
+      const { listAvailableProjects, buildProjectContext, checkCompletionGate } =
+        await import("../utils/project-context.js");
+      const projectIds = listAvailableProjects();
+      const activeProjects = projectIds
+        .map((id) => {
+          try {
+            return { id, ctx: buildProjectContext(id) };
+          } catch {
+            return null;
+          }
+        })
+        .filter(
+          (p): p is { id: string; ctx: import("../utils/project-context.js").ProjectContext } =>
+            p !== null &&
+            p.ctx.config?.status !== "completed" &&
+            p.ctx.config?.status !== "cancelled" &&
+            p.ctx.config?.status !== "deprecated",
+        );
+
+      if (activeProjects.length > 0) {
+        const lines: string[] = [
+          "",
+          "---",
+          "## [DoD 门禁] 当前活跃项目完成状态（Project Definition-of-Done Status）",
+          "▶ 主控规则：在补充任何新任务前，必须先核查以下每个项目的验收标准完成情况。",
+          "  - scopeFrozen=true：该项目已完成/冻结，严禁继续创建新任务！",
+          "  - canClose=true：所有标准已满足，请立即调用 projects.updateProgress 将状态设为 completed。",
+          "  - 存在差距时：仅补充差距对应的任务，不要重复开发已满足的部分。",
+          "",
+        ];
+
+        for (const { id, ctx } of activeProjects) {
+          const name = ctx.config?.name || id;
+          const status = ctx.config?.status ?? "unknown";
+          const gate = ctx.config?.completionGate;
+
+          if (!gate || gate.criteria.length === 0) {
+            lines.push(
+              `⚠️  项目: ${name} (${id})  状态: ${status}`,
+              `   [DoD 缺失] 未定义验收标准（completionGate）。`,
+              `   建议：调用 projects.create 或 projects.updateProgress 补充 completionGate.criteria。`,
+              "",
+            );
+            continue;
+          }
+
+          const gateResult = checkCompletionGate(gate);
+          const statusIcon = gate.scopeFrozen ? "🔒" : gateResult.canClose ? "✅" : "🛠️";
+
+          lines.push(
+            `${statusIcon} 项目: ${name} (${id})  状态: ${status}  进度: ${gateResult.progress.satisfied}/${gateResult.progress.total} (${gateResult.progress.percent}%)`,
+          );
+
+          if (gate.scopeFrozen) {
+            lines.push(
+              `   🔒 范围已冻结（原因: ${gate.scopeFrozenReason ?? "unknown"}）— 严禁创建新任务！`,
+            );
+          } else if (gateResult.canClose) {
+            lines.push(
+              `   ✅ 所有验收标准已满足。请立即调用 projects.updateProgress(projectId="${id}", status="completed")。`,
+            );
+          } else if (gateResult.gaps.length > 0) {
+            lines.push(`   🔍 待补齐的差距（仅补这些，不要重复开发其他部分）:`);
+            for (const gap of gateResult.gaps.slice(0, 5)) {
+              lines.push(`     • ${gap}`);
+            }
+            if (gateResult.gaps.length > 5) {
+              lines.push(`     ... 还有 ${gateResult.gaps.length - 5} 项`);
+            }
+          }
+          lines.push("");
+        }
+
+        prompt = prompt + "\n" + lines.join("\n");
+      }
+    } catch (dodErr) {
+      // DoD 摘要生成失败不影响心跳主流程
+      log.warn(`heartbeat: failed to build DoD summary for coordinator: ${String(dodErr)}`);
+    }
+  }
+  // ────────────────────────────────────────────────────────────────────
+
   const ctx = {
     Body: appendCronStyleCurrentTimeLine(prompt, cfg, startedAt),
     From: sender,

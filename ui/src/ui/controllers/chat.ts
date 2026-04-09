@@ -1,5 +1,8 @@
+import { resetToolStream } from "../app-tool-stream.ts";
 import { extractText } from "../chat/message-extract.ts";
+import { formatConnectError } from "../connect-error.ts";
 import type { GatewayBrowserClient } from "../gateway.ts";
+import { normalizeLowercaseStringOrEmpty } from "../string-coerce.ts";
 import type {
   AggregatedMessage,
   ChatConversationContext,
@@ -7,6 +10,33 @@ import type {
 } from "../types.ts";
 import type { ChatAttachment } from "../ui-types.ts";
 import { generateUUID } from "../uuid.ts";
+import {
+  formatMissingOperatorReadScopeMessage,
+  isMissingOperatorReadScopeError,
+} from "./scope-errors.ts";
+
+const SILENT_REPLY_PATTERN = /^\s*NO_REPLY\s*$/;
+
+function isSilentReplyStream(text: string): boolean {
+  return SILENT_REPLY_PATTERN.test(text);
+}
+/** Client-side defense-in-depth: detect assistant messages whose text is purely NO_REPLY. */
+function isAssistantSilentReply(message: unknown): boolean {
+  if (!message || typeof message !== "object") {
+    return false;
+  }
+  const entry = message as Record<string, unknown>;
+  const role = normalizeLowercaseStringOrEmpty(entry.role);
+  if (role !== "assistant") {
+    return false;
+  }
+  // entry.text takes precedence — matches gateway extractAssistantTextForSilentCheck
+  if (typeof entry.text === "string") {
+    return isSilentReplyStream(entry.text);
+  }
+  const text = extractText(message);
+  return typeof text === "string" && isSilentReplyStream(text);
+}
 
 export type ChatState = {
   client: GatewayBrowserClient | null;
@@ -25,6 +55,18 @@ export type ChatState = {
   /** 聚合视图的消息列表（只在 type=all 时使用） */
   chatAggregatedMessages?: AggregatedMessage[] | null;
 };
+
+function maybeResetToolStream(state: ChatState) {
+  const toolHost = state as ChatState & Partial<Parameters<typeof resetToolStream>[0]>;
+  if (
+    toolHost.toolStreamById instanceof Map &&
+    Array.isArray(toolHost.toolStreamOrder) &&
+    Array.isArray(toolHost.chatToolMessages) &&
+    Array.isArray(toolHost.chatStreamSegments)
+  ) {
+    resetToolStream(toolHost as Parameters<typeof resetToolStream>[0]);
+  }
+}
 
 export type ChatEventPayload = {
   runId: string;
@@ -49,18 +91,9 @@ function extractGroupIdFromSessionKey(sessionKey: string): string | null {
 
 export async function loadChatHistory(state: ChatState) {
   if (!state.client || !state.connected) {
-    console.warn(
-      "[Chat:调试] loadChatHistory 跳过：client=",
-      !!state.client,
-      "connected=",
-      state.connected,
-    );
     return;
   }
   const requestId = ++_chatLoadRequestId;
-  console.log(
-    `[Chat:调试] loadChatHistory 开始请求 sessionKey="${state.sessionKey}" requestId=${requestId}`,
-  );
   state.chatLoading = true;
   state.lastError = null;
   try {
@@ -72,17 +105,15 @@ export async function loadChatHistory(state: ChatState) {
         { groupId, limit: 200 },
       );
       if (requestId !== _chatLoadRequestId) {
-        console.warn(
-          `[Chat:调试] loadChatHistory 竜态丢弃 requestId=${requestId}，当前=${_chatLoadRequestId}`,
-        );
         return;
       }
-      const msgCount = Array.isArray(res.messages) ? res.messages.length : 0;
-      console.log(
-        `[Chat:调试] loadChatHistory [群聊] 响应 groupId="${groupId}" 消息数=${msgCount}`,
-      );
-      state.chatMessages = Array.isArray(res.messages) ? res.messages : [];
+      state.chatMessages = Array.isArray(res.messages)
+        ? res.messages.filter((m) => !isAssistantSilentReply(m))
+        : [];
       state.chatThinkingLevel = null;
+      maybeResetToolStream(state);
+      state.chatStream = null;
+      state.chatStreamStartedAt = null;
       return;
     }
 
@@ -95,24 +126,27 @@ export async function loadChatHistory(state: ChatState) {
     );
     // Z5: 竜态保护 — 如果在请求期间 sessionKey 已切换，丢弃过期响应
     if (requestId !== _chatLoadRequestId) {
-      console.warn(
-        `[Chat:调试] loadChatHistory 竞态丢弃 requestId=${requestId}，当前=${_chatLoadRequestId}`,
-      );
       return;
     }
-    const msgCount = Array.isArray(res.messages) ? res.messages.length : 0;
-    console.log(
-      `[Chat:调试] loadChatHistory 响应 sessionKey="${state.sessionKey}" 消息数=${msgCount}`,
-      res,
-    );
-    state.chatMessages = Array.isArray(res.messages) ? res.messages : [];
+    const messages = Array.isArray(res.messages) ? res.messages : [];
+    state.chatMessages = messages.filter((m) => !isAssistantSilentReply(m));
     state.chatThinkingLevel = res.thinkingLevel ?? null;
+    // Clear all streaming state — history includes tool results and text
+    // inline, so keeping streaming artifacts would cause duplicates.
+    maybeResetToolStream(state);
+    state.chatStream = null;
+    state.chatStreamStartedAt = null;
   } catch (err) {
     if (requestId !== _chatLoadRequestId) {
       return;
     }
-    console.error("[Chat:调试] loadChatHistory 错误:", err);
-    state.lastError = String(err);
+    if (isMissingOperatorReadScopeError(err)) {
+      state.chatMessages = [];
+      state.chatThinkingLevel = null;
+      state.lastError = formatMissingOperatorReadScopeMessage("existing chat history");
+    } else {
+      state.lastError = String(err);
+    }
   } finally {
     // Only clear loading if this is still the latest request
     if (requestId === _chatLoadRequestId) {
@@ -162,29 +196,23 @@ export async function loadAggregatedHistory(state: ChatState): Promise<void> {
  * 通道 sessionKey 后端已支持（如 "main:channel:discord:account123"），直接使用。
  */
 export function resolveBackendSessionKey(context: ChatConversationContext): string {
-  const key = (() => {
-    switch (context.type) {
-      case "agent-direct":
-      case "channel-observe":
-        return context.sessionKey;
-      case "all":
-      case "agent-all":
-      case "channels-all":
-        return context.sessionKey;
-      case "group":
-        return context.sessionKey;
-      case "contact":
-        // 好友对话：直接读取目标 agent 的 main session
-        // agent_communicate 工具产生的消息存储在目标 agent 的 main session 里
-        return `agent:${context.contactAgentId}:main`;
-      case "session-history":
-        return context.sessionKey;
-    }
-  })();
-  console.log(
-    `[Chat:调试] resolveBackendSessionKey type="${context.type}" context.sessionKey="${context.sessionKey}" → 解析后="${key}"`,
-  );
-  return key;
+  switch (context.type) {
+    case "agent-direct":
+    case "channel-observe":
+      return context.sessionKey;
+    case "all":
+    case "agent-all":
+    case "channels-all":
+      return context.sessionKey;
+    case "group":
+      return context.sessionKey;
+    case "contact":
+      // 好友对话：直接读取目标 agent 的 main session
+      // agent_communicate 工具产生的消息存储在目标 agent 的 main session 里
+      return `agent:${context.contactAgentId}:main`;
+    case "session-history":
+      return context.sessionKey;
+  }
 }
 
 /**
@@ -255,7 +283,7 @@ function normalizeAssistantMessage(
   const candidate = message as Record<string, unknown>;
   const roleValue = candidate.role;
   if (typeof roleValue === "string") {
-    const role = options.roleCaseSensitive ? roleValue : roleValue.toLowerCase();
+    const role = options.roleCaseSensitive ? roleValue : normalizeLowercaseStringOrEmpty(roleValue);
     if (role !== "assistant") {
       return null;
     }
@@ -374,8 +402,7 @@ export async function sendChatMessage(
     });
     return runId;
   } catch (err) {
-    const error = String(err);
-    console.error("[Chat] sendChatMessage error:", err);
+    const error = formatConnectError(err);
     state.chatRunId = null;
     state.chatStream = null;
     state.chatStreamStartedAt = null;
@@ -406,7 +433,7 @@ export async function abortChatRun(state: ChatState): Promise<boolean> {
     );
     return true;
   } catch (err) {
-    state.lastError = String(err);
+    state.lastError = formatConnectError(err);
     return false;
   }
 }
@@ -435,7 +462,7 @@ export function handleChatEvent(
   if (payload.runId && state.chatRunId && payload.runId !== state.chatRunId) {
     if (payload.state === "final") {
       const finalMessage = normalizeFinalAssistantMessage(payload.message);
-      if (finalMessage) {
+      if (finalMessage && !isAssistantSilentReply(finalMessage)) {
         state.chatMessages = [...state.chatMessages, finalMessage];
         return null;
       }
@@ -446,27 +473,33 @@ export function handleChatEvent(
 
   if (payload.state === "delta") {
     const next = extractText(payload.message);
-    if (typeof next === "string") {
-      const current = state.chatStream ?? "";
-      if (!current || next.length >= current.length) {
-        state.chatStream = next;
-      }
+    if (typeof next === "string" && !isSilentReplyStream(next)) {
+      state.chatStream = next;
     }
   } else if (payload.state === "final") {
     const finalMessage = normalizeFinalAssistantMessage(payload.message);
-    if (finalMessage) {
+    if (finalMessage && !isAssistantSilentReply(finalMessage)) {
       state.chatMessages = [...state.chatMessages, finalMessage];
+    } else if (state.chatStream?.trim() && !isSilentReplyStream(state.chatStream)) {
+      state.chatMessages = [
+        ...state.chatMessages,
+        {
+          role: "assistant",
+          content: [{ type: "text", text: state.chatStream }],
+          timestamp: Date.now(),
+        },
+      ];
     }
     state.chatStream = null;
     state.chatRunId = null;
     state.chatStreamStartedAt = null;
   } else if (payload.state === "aborted") {
     const normalizedMessage = normalizeAbortedAssistantMessage(payload.message);
-    if (normalizedMessage) {
+    if (normalizedMessage && !isAssistantSilentReply(normalizedMessage)) {
       state.chatMessages = [...state.chatMessages, normalizedMessage];
     } else {
       const streamedText = state.chatStream ?? "";
-      if (streamedText.trim()) {
+      if (streamedText.trim() && !isSilentReplyStream(streamedText)) {
         state.chatMessages = [
           ...state.chatMessages,
           {

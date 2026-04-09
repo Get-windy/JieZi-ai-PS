@@ -1,93 +1,46 @@
-import { formatDurationHuman } from "../../../upstream/src/infra/format-time/format-duration.ts";
-import { formatRelativeTimestamp } from "../../../upstream/src/infra/format-time/format-relative.ts";
-import { stripReasoningTagsFromText } from "../../../upstream/src/shared/text/reasoning-tags.js";
+import { formatDurationHuman } from "../../../src/infra/format-time/format-duration.ts";
+import { formatRelativeTimestamp } from "../../../src/infra/format-time/format-relative.ts";
+import { stripAssistantInternalScaffolding } from "../../../src/shared/text/assistant-visible-text.ts";
+import { t } from "../i18n/index.ts";
 
-// 导出上游新增的工具函数
 export { formatRelativeTimestamp, formatDurationHuman };
 
-/**
- * 获取用户设置的时区（从 localStorage）
- */
-function getUserTimezone(): string {
+export function formatUnknownText(
+  value: unknown,
+  opts: { fallback?: string; pretty?: boolean } = {},
+): string {
+  const fallback = opts.fallback ?? "";
+  if (value == null) {
+    return fallback;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+    return String(value);
+  }
+  if (typeof value === "symbol") {
+    return value.description ? `Symbol(${value.description})` : "Symbol()";
+  }
   try {
-    const settings = localStorage.getItem("openclaw.control.settings.v1");
-    if (settings) {
-      const parsed = JSON.parse(settings);
-      if (parsed.timezone && parsed.timezone !== "auto") {
-        return parsed.timezone;
-      }
+    const serialized = JSON.stringify(value, null, opts.pretty ? 2 : undefined);
+    if (serialized !== undefined) {
+      return serialized;
     }
   } catch {
-    // 忽略错误，使用默认值
+    // Fall back when value is not JSON-serializable.
   }
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (value instanceof Error) {
+    return value.message || value.name;
+  }
+  return Object.prototype.toString.call(value);
 }
 
 export function formatMs(ms?: number | null): string {
   if (!ms && ms !== 0) {
-    return "n/a";
+    return t("common.na");
   }
-  const timezone = getUserTimezone();
-  try {
-    return new Date(ms).toLocaleString(undefined, {
-      timeZone: timezone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  } catch {
-    // 如果时区无效，回退到默认
-    return new Date(ms).toLocaleString();
-  }
-}
-
-export function formatAgo(ms?: number | null): string {
-  if (!ms && ms !== 0) {
-    return "n/a";
-  }
-  const diff = Date.now() - ms;
-  const absDiff = Math.abs(diff);
-  const suffix = diff < 0 ? "from now" : "ago";
-  const sec = Math.round(absDiff / 1000);
-  if (sec < 60) {
-    return diff < 0 ? "in <1m" : `${sec}s ago`;
-  }
-  const min = Math.round(sec / 60);
-  if (min < 60) {
-    return `${min}m ${suffix}`;
-  }
-  const hr = Math.round(min / 60);
-  if (hr < 48) {
-    return `${hr}h ${suffix}`;
-  }
-  const day = Math.round(hr / 24);
-  return `${day}d ${suffix}`;
-}
-
-export function formatDurationMs(ms?: number | null): string {
-  if (!ms && ms !== 0) {
-    return "n/a";
-  }
-  if (ms < 1000) {
-    return `${ms}ms`;
-  }
-  const sec = Math.round(ms / 1000);
-  if (sec < 60) {
-    return `${sec}s`;
-  }
-  const min = Math.round(sec / 60);
-  if (min < 60) {
-    return `${min}m`;
-  }
-  const hr = Math.round(min / 60);
-  if (hr < 48) {
-    return `${hr}h`;
-  }
-  const day = Math.round(hr / 24);
-  return `${day}d`;
+  return new Date(ms).toLocaleString();
 }
 
 export function formatList(values?: Array<string | null | undefined>): string {
@@ -127,13 +80,60 @@ export function toNumber(value: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-export function parseList(input: string): string[] {
-  return input
-    .split(/[,\n]/)
-    .map((v) => v.trim())
-    .filter((v) => v.length > 0);
+export function formatAgo(ms?: number | null): string {
+  if (!ms && ms !== 0) {
+    return "n/a";
+  }
+  const diff = Date.now() - ms;
+  const absDiff = Math.abs(diff);
+  const suffix = diff < 0 ? "from now" : "ago";
+  const sec = Math.round(absDiff / 1000);
+  if (sec < 60) {
+    return diff < 0 ? "in <1m" : `${sec}s ago`;
+  }
+  const min = Math.round(sec / 60);
+  if (min < 60) {
+    return `${min}m ${suffix}`;
+  }
+  const hr = Math.round(min / 60);
+  if (hr < 48) {
+    return `${hr}h ${suffix}`;
+  }
+  const day = Math.round(hr / 24);
+  return `${day}d ${suffix}`;
 }
 
 export function stripThinkingTags(value: string): string {
-  return stripReasoningTagsFromText(value, { mode: "preserve", trim: "start" });
+  return stripAssistantInternalScaffolding(value);
+}
+
+export function formatCost(cost: number | null | undefined, fallback = "$0.00"): string {
+  if (cost == null || !Number.isFinite(cost)) {
+    return fallback;
+  }
+  if (cost === 0) {
+    return "$0.00";
+  }
+  if (cost < 0.01) {
+    return `$${cost.toFixed(4)}`;
+  }
+  if (cost < 1) {
+    return `$${cost.toFixed(3)}`;
+  }
+  return `$${cost.toFixed(2)}`;
+}
+
+export function formatTokens(tokens: number | null | undefined, fallback = "0"): string {
+  if (tokens == null || !Number.isFinite(tokens)) {
+    return fallback;
+  }
+  if (tokens < 1000) {
+    return String(Math.round(tokens));
+  }
+  if (tokens < 1_000_000) {
+    const k = tokens / 1000;
+    return k < 10 ? `${k.toFixed(1)}k` : `${Math.round(k)}k`;
+  }
+  const m = tokens / 1_000_000;
+  return m < 10 ? `${m.toFixed(1)}M` : `${Math.round(m)}M`;
 }

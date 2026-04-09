@@ -1,8 +1,25 @@
 /**
- * Phase 3: 审批流程系统
+ * Phase 3: 审批流程系统（AI 自治组织版）
  *
- * 为需要审批的操作提供完整的审批流程：
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║  风险分级的人类介入门控（Human-in-the-loop Gating）                     ║
+ * ║                                                                          ║
+ * ║  设计原则（OWASP LLM06 Excessive Agency / DIF AI Trust WG）：           ║
+ * ║                                                                          ║
+ * ║  风险等级 → 审批者层次（委托衰减链）：                                   ║
+ * ║    low      → Agent 自我批准（无需等待，立即执行）                        ║
+ * ║    medium   → 直接上级 Agent（supervisor / org manager）批准             ║
+ * ║    high     → 组织 admin Agent 批准（并通知人类）                        ║
+ * ║    critical → 必须人类批准（human-owner），不可绕过                      ║
+ * ║                                                                          ║
+ * ║  默认超时降级策略：                                                      ║
+ * ║    medium/high：超时后降级为上级 Agent 自动批准（避免阻塞）              ║
+ * ║    critical：超时后保持 pending，不降级，持续通知人类                    ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ *
+ * 功能：
  * - 审批请求创建和管理
+ * - 按风险等级自动路由审批者
  * - 多级审批流程
  * - 审批通知
  * - 审批历史记录
@@ -11,6 +28,90 @@
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
+
+// ============================================================================
+// 风险等级定义
+// ============================================================================
+
+/**
+ * 操作风险等级
+ *
+ * low      → Agent 自行决策，无需等待审批
+ * medium   → 需要直接上级 Agent（supervisor / org manager）确认
+ * high     → 需要 org admin Agent 确认，同时通知人类存档
+ * critical → 必须人类（human-owner）亲自批准，任何 Agent 无法代替
+ */
+export type OperationRisk = "low" | "medium" | "high" | "critical";
+
+/**
+ * 预定义的高风险操作类型
+ *
+ * 调用方可以直接使用这些常量，确保风险等级一致性。
+ */
+export const OPERATION_RISK_MAP: Record<string, OperationRisk> = {
+  // ── 任务操作 ──────────────────────────────────────────────────────────────
+  "task.create": "low", // 创建任务：Agent 自主决策
+  "task.update": "low", // 更新任务内容/状态：Agent 自主决策
+  "task.assign": "medium", // 分配任务给其他 Agent：需上级确认
+  "task.delete": "medium", // 删除任务：需上级确认
+  "task.reassign": "medium", // 重新分配：需上级确认
+  "task.batch_delete": "high", // 批量删除：需 admin 确认
+
+  // ── 组织/团队操作 ─────────────────────────────────────────────────────────
+  "org.create": "high", // 创建组织：需 admin 确认
+  "org.update": "medium", // 更新组织信息：需上级确认
+  "org.delete": "critical", // 删除组织：必须人类批准
+  "org.member.add": "medium", // 添加成员：需上级确认
+  "org.member.remove": "high", // 移除成员：需 admin 确认
+  "org.member.promote": "high", // 提升角色：需 admin 确认
+
+  // ── 团队操作 ──────────────────────────────────────────────────────────────
+  "team.create": "medium", // 创建团队：需上级确认
+  "team.delete": "high", // 删除团队：需 admin 确认
+  "team.leader.change": "high", // 更换团队 lead：需 admin 确认
+
+  // ── 权限操作 ──────────────────────────────────────────────────────────────
+  "permission.grant": "high", // 授权：需 admin 确认
+  "permission.revoke": "high", // 撤权：需 admin 确认
+  "permission.config": "critical", // 修改权限配置文件：必须人类批准
+
+  // ── 项目操作 ──────────────────────────────────────────────────────────────
+  "project.create": "medium", // 创建项目：需上级确认
+  "project.delete": "critical", // 删除项目：必须人类批准
+  "project.archive": "high", // 归档项目：需 admin 确认
+  "project.budget": "critical", // 预算变更：必须人类批准
+
+  // ── 代理/系统操作 ─────────────────────────────────────────────────────────
+  "agent.spawn": "medium", // 创建新 Agent：需上级确认
+  "agent.terminate": "high", // 终止 Agent：需 admin 确认
+  "agent.config": "critical", // 修改 Agent 配置：必须人类批准
+  "system.config": "critical", // 修改系统配置：必须人类批准
+};
+
+/**
+ * 根据操作类型获取风险等级，未知操作默认 medium（保守策略）
+ */
+export function getOperationRisk(actionType: string): OperationRisk {
+  return OPERATION_RISK_MAP[actionType] ?? "medium";
+}
+
+/**
+ * 根据风险等级获取默认超时时间（毫秒）
+ *
+ * critical 操作不自动超时（null = 永不过期，必须人类响应）
+ */
+export function getDefaultExpiryMs(risk: OperationRisk): number | null {
+  switch (risk) {
+    case "low":
+      return 0; // 立即执行，不进入审批队列
+    case "medium":
+      return 30 * 60 * 1000; // 30 分钟
+    case "high":
+      return 2 * 60 * 60 * 1000; // 2 小时
+    case "critical":
+      return null; // 永不自动过期，必须人类响应
+  }
+}
 
 /**
  * 审批状态
@@ -50,6 +151,7 @@ export interface ApprovalRequest {
   description: string;
 
   /** 操作参数 */
+  // oxlint-disable-next-line typescript/no-explicit-any
   params: any;
 
   /** 优先级 */
@@ -77,7 +179,18 @@ export interface ApprovalRequest {
   history: ApprovalHistoryEntry[];
 
   /** 元数据 */
+  // oxlint-disable-next-line typescript/no-explicit-any
   metadata?: Record<string, any>;
+
+  /** 操作风险等级（自动路由审批者的依据） */
+  risk?: OperationRisk;
+
+  /**
+   * 是否需要人类介入
+   * true  → critical 级别，审批者列表必须包含 human-owner
+   * false → 可由 Agent 自主审批
+   */
+  requiresHuman?: boolean;
 }
 
 /**
@@ -116,6 +229,7 @@ export interface ApprovalConfig {
   /** 自动批准条件 */
   autoApproveConditions?: Array<{
     condition: string;
+    // oxlint-disable-next-line typescript/no-explicit-any
     value: any;
   }>;
 }
@@ -140,6 +254,56 @@ export interface ApprovalStats {
   avgApprovalTime: number;
 }
 
+// ============================================================================
+// 审批路由辅助
+// ============================================================================
+
+/**
+ * 根据风险等级和上下文，自动推导审批者列表
+ *
+ * 委托衰减链规则：
+ *   low      → [requesterId]（自我批准）
+ *   medium   → [supervisorId ?? orgManagerId ?? requesterId]（向上一级）
+ *   high     → [orgAdminId ?? "human-owner"]（需通知 org admin 或人类）
+ *   critical → ["human-owner"]（必须人类）
+ *
+ * @param risk         - 操作风险等级
+ * @param requesterId  - 发起操作的 Agent ID
+ * @param supervisorId - 直接上级 Agent ID（可选）
+ * @param orgAdminId   - 组织 admin Agent ID（可选）
+ */
+export function resolveApprovers(
+  risk: OperationRisk,
+  requesterId: string,
+  supervisorId?: string,
+  orgAdminId?: string,
+): string[] {
+  switch (risk) {
+    case "low":
+      // 低风险：Agent 自我批准，直接放行
+      return [requesterId];
+
+    case "medium": {
+      // 中风险：直接上级 Agent 批准
+      const approver = supervisorId ?? orgAdminId;
+      if (!approver || approver === requesterId) {
+        // 无上级：降级为 org admin 或通知人类
+        return [orgAdminId ?? "human-owner"];
+      }
+      return [approver];
+    }
+
+    case "high": {
+      // 高风险：org admin Agent 批准（同时通知人类存档）
+      return [orgAdminId ?? "human-owner"];
+    }
+
+    case "critical":
+      // 极高风险：必须人类批准，任何 Agent 均无权审批
+      return ["human-owner"];
+  }
+}
+
 /**
  * 审批系统
  */
@@ -159,7 +323,7 @@ export class ApprovalSystem {
       allowAutoApprove: false,
       ...config,
     };
-    this.ensureStorageDir();
+    void this.ensureStorageDir();
   }
 
   /**
@@ -175,24 +339,108 @@ export class ApprovalSystem {
 
   /**
    * 创建审批请求
+   *
+   * 支持两种使用模式：
+   *
+   * 模式A（推荐）：传入 risk，由系统自动路由审批者
+   *   await approvalSystem.createRequest({
+   *     requesterId: "agent-pm",
+   *     actionType: "org.member.remove",
+   *     risk: "high",
+   *     supervisorId: "agent-ceo",
+   *     orgAdminId: "agent-admin",
+   *     ...
+   *   })
+   *
+   * 模式B（向后兼容）：手动指定 approvers 列表
+   *   await approvalSystem.createRequest({
+   *     requesterId: "agent-pm",
+   *     approvers: ["agent-ceo"],
+   *     actionType: "task.delete",
+   *     ...
+   *   })
    */
   async createRequest(params: {
     requesterId: string;
-    approvers: string[];
+    /** 模式B：手动指定审批者列表（与 risk 二选一，risk 优先） */
+    approvers?: string[];
     actionType: string;
     description: string;
+    // oxlint-disable-next-line typescript/no-explicit-any
     actionParams: any;
     priority?: ApprovalPriority;
     expiresIn?: number; // 过期时间（毫秒）
+    // oxlint-disable-next-line typescript/no-explicit-any
     metadata?: Record<string, any>;
+    // ── 模式A 新增参数 ────────────────────────────────────────────
+    /** 操作风险等级（指定后自动路由审批者，忽略 approvers 参数） */
+    risk?: OperationRisk;
+    /** 直接上级 Agent ID（用于 medium 级别路由） */
+    supervisorId?: string;
+    /** 组织 admin Agent ID（用于 high 级别路由） */
+    orgAdminId?: string;
   }): Promise<ApprovalRequest> {
     const requestId = `approval-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const now = Date.now();
 
+    // ── 风险等级路由 ──────────────────────────────────────────────────────────
+    const risk: OperationRisk = params.risk ?? getOperationRisk(params.actionType);
+    const requiresHuman = risk === "critical";
+
+    // 优先使用 risk 自动路由；无 risk 时退回 approvers；都没有则用保守默认
+    const resolvedApprovers: string[] =
+      params.risk !== undefined
+        ? resolveApprovers(risk, params.requesterId, params.supervisorId, params.orgAdminId)
+        : (params.approvers ?? ["human-owner"]);
+
+    // ── 计算过期时间 ──────────────────────────────────────────────────────────
+    let expiresAt: number | undefined;
+    if (params.expiresIn !== undefined) {
+      expiresAt = now + params.expiresIn;
+    } else {
+      const defaultMs = getDefaultExpiryMs(risk);
+      expiresAt = defaultMs !== null ? now + defaultMs : undefined; // critical: 不过期
+    }
+
+    // ── 低风险：直接自批准，跳过审批队列 ─────────────────────────────────────
+    if (risk === "low") {
+      const autoApproved: ApprovalRequest = {
+        id: requestId,
+        requesterId: params.requesterId,
+        approvers: resolvedApprovers,
+        approvedBy: [params.requesterId],
+        actionType: params.actionType,
+        description: params.description,
+        params: params.actionParams,
+        priority: params.priority ?? "normal",
+        status: "approved",
+        createdAt: now,
+        approvedAt: now,
+        history: [
+          { timestamp: now, actor: params.requesterId, action: "created" },
+          {
+            timestamp: now,
+            actor: "system",
+            action: "approved",
+            comment: "Auto-approved (low risk)",
+          },
+        ],
+        metadata: params.metadata,
+        risk,
+        requiresHuman: false,
+      };
+      this.requests.set(requestId, autoApproved);
+      await this.saveRequest(autoApproved);
+      console.log(
+        `[Approval System] Low-risk action auto-approved: ${params.actionType} by ${params.requesterId}`,
+      );
+      return autoApproved;
+    }
+
     const request: ApprovalRequest = {
       id: requestId,
       requesterId: params.requesterId,
-      approvers: params.approvers,
+      approvers: resolvedApprovers,
       approvedBy: [],
       actionType: params.actionType,
       description: params.description,
@@ -200,7 +448,7 @@ export class ApprovalSystem {
       priority: params.priority || "normal",
       status: "pending",
       createdAt: now,
-      expiresAt: params.expiresIn ? now + params.expiresIn : now + this.config.defaultExpiryMs!,
+      expiresAt,
       history: [
         {
           timestamp: now,
@@ -209,10 +457,19 @@ export class ApprovalSystem {
         },
       ],
       metadata: params.metadata,
+      risk,
+      requiresHuman,
     };
 
-    // 检查自动批准
-    if (this.config.allowAutoApprove && this.checkAutoApprove(request)) {
+    if (requiresHuman) {
+      console.warn(
+        `[Approval System] ⚠️  CRITICAL operation requires HUMAN approval: "${params.actionType}" requested by ${params.requesterId}. ` +
+          `This request will NOT auto-expire and MUST be reviewed by human-owner.`,
+      );
+    }
+
+    // 检查自动批准（向后兼容旧配置，不覆盖 critical 级别）
+    if (!requiresHuman && this.config.allowAutoApprove && this.checkAutoApprove(request)) {
       request.status = "approved";
       request.approvedAt = now;
       request.approvedBy = ["auto"];
@@ -271,6 +528,9 @@ export class ApprovalSystem {
 
   /**
    * 批准请求
+   *
+   * 对 critical 级别的请求，只有 "human-owner" 身份才能批准。
+   * 若 approverId 为普通 Agent ID 且请求的 requiresHuman=true，则拒绝。
    */
   async approve(requestId: string, approverId: string, comment?: string): Promise<void> {
     const request = this.requests.get(requestId);
@@ -280,6 +540,14 @@ export class ApprovalSystem {
 
     if (request.status !== "pending") {
       throw new Error(`Request ${requestId} is not pending (status: ${request.status})`);
+    }
+
+    // ── Critical 操作：必须人类审批 ──────────────────────────────────────────
+    if (request.requiresHuman && approverId !== "human-owner") {
+      throw new Error(
+        `[ApprovalSystem] ⛔ Cannot approve critical operation "${request.actionType}" with agent identity "${approverId}". ` +
+          `This operation requires human-owner approval. Agents CANNOT bypass this restriction.`,
+      );
     }
 
     // 检查是否为有效审批者
@@ -426,13 +694,35 @@ export class ApprovalSystem {
 
   /**
    * 检查过期请求
+   *
+   * critical 级别（requiresHuman=true）的请求永不自动过期，
+   * 会持续保持 pending 并记录告警，直到人类手动处理。
    */
   async checkExpiredRequests(): Promise<void> {
     const now = Date.now();
     const expiredIds: string[] = [];
+    const criticalPending: string[] = [];
 
     for (const [requestId, request] of this.requests) {
-      if (request.status === "pending" && request.expiresAt && request.expiresAt < now) {
+      if (request.status !== "pending") {
+        continue;
+      }
+
+      // critical 操作：不自动过期，持续告警
+      if (request.requiresHuman) {
+        const waitMinutes = Math.round((now - request.createdAt) / 60_000);
+        if (waitMinutes > 0 && waitMinutes % 30 === 0) {
+          // 每 30 分钟重复告警一次
+          console.warn(
+            `[Approval System] ⚠️  CRITICAL approval still pending: "${request.actionType}" (ID: ${requestId}) ` +
+              `has been waiting ${waitMinutes} minutes. human-owner action required.`,
+          );
+        }
+        criticalPending.push(requestId);
+        continue;
+      }
+
+      if (request.expiresAt && request.expiresAt < now) {
         request.status = "expired";
         request.history.push({
           timestamp: now,
@@ -446,6 +736,11 @@ export class ApprovalSystem {
 
     if (expiredIds.length > 0) {
       console.log(`[Approval System] Marked ${expiredIds.length} requests as expired`);
+    }
+    if (criticalPending.length > 0) {
+      console.warn(
+        `[Approval System] ${criticalPending.length} CRITICAL approval(s) still pending human review: [${criticalPending.join(", ")}]`,
+      );
     }
   }
 
@@ -522,7 +817,7 @@ export class ApprovalSystem {
       const filePath = path.join(this.storageDir, `${requestId}.json`);
       try {
         await fs.unlink(filePath);
-      } catch (error) {
+      } catch {
         // 忽略文件不存在的错误
       }
     }
@@ -537,3 +832,71 @@ export class ApprovalSystem {
  * 全局审批系统实例
  */
 export const approvalSystem = new ApprovalSystem();
+
+// ============================================================================
+// 便捷函数：一行代码发起风险感知的审批请求
+// ============================================================================
+
+/**
+ * 发起一个风险感知的审批请求（推荐 API）
+ *
+ * 系统自动根据 actionType 判断风险等级并路由审批者。
+ * 低风险操作立即返回已批准的请求，无需等待。
+ *
+ * 使用示例：
+ * ```typescript
+ * const req = await requestApproval({
+ *   requesterId: "agent-pm-01",
+ *   actionType: "org.member.remove",
+ *   description: "移除过期合同工 agent-contractor-07",
+ *   actionParams: { orgId: "dept-eng", memberId: "agent-contractor-07" },
+ *   supervisorId: "agent-ceo-01",
+ *   orgAdminId:   "agent-admin-01",
+ * });
+ *
+ * if (req.status === "approved") {
+ *   // 执行操作
+ * } else {
+ *   // 等待审批，操作已进入审批队列
+ * }
+ * ```
+ */
+export async function requestApproval(params: {
+  requesterId: string;
+  actionType: string;
+  description: string;
+  actionParams: unknown;
+  priority?: ApprovalPriority;
+  supervisorId?: string;
+  orgAdminId?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<ApprovalRequest> {
+  return approvalSystem.createRequest({
+    requesterId: params.requesterId,
+    actionType: params.actionType,
+    description: params.description,
+    actionParams: params.actionParams,
+    priority: params.priority,
+    supervisorId: params.supervisorId,
+    orgAdminId: params.orgAdminId,
+    metadata: params.metadata,
+    // risk 由 getOperationRisk(actionType) 自动推导
+  });
+}
+
+/**
+ * 检查操作是否需要审批（不实际创建请求）
+ *
+ * 用于在执行前快速判断是否需要走审批流程。
+ * 返回 false 表示低风险操作，可直接执行，无需审批等待。
+ */
+export function requiresApproval(actionType: string): boolean {
+  return getOperationRisk(actionType) !== "low";
+}
+
+/**
+ * 检查操作是否必须由人类批准（critical 级别）
+ */
+export function requiresHumanApproval(actionType: string): boolean {
+  return getOperationRisk(actionType) === "critical";
+}

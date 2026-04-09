@@ -1,5 +1,5 @@
 import type { EventLogEntry } from "./app-events.ts";
-import type { CompactionStatus } from "./app-tool-stream.ts";
+import type { CompactionStatus, FallbackStatus } from "./app-tool-stream.ts";
 import type { DevicePairingList } from "./controllers/devices.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
@@ -16,6 +16,7 @@ import type {
   AgentIdentityResult,
   ChannelsStatusSnapshot,
   ChatConversationContext,
+  ChatModelOverride,
   ConfigSnapshot,
   ConfigUiHints,
   CronJob,
@@ -24,6 +25,7 @@ import type {
   HealthSnapshot,
   LogEntry,
   LogLevel,
+  ModelCatalogEntry,
   NostrProfile,
   PresenceEntry,
   SessionsUsageResult,
@@ -65,8 +67,12 @@ export type AppViewState = {
   chatStreamStartedAt: number | null;
   chatRunId: string | null;
   compactionStatus: CompactionStatus | null;
+  fallbackStatus: FallbackStatus | null;
   chatAvatarUrl: string | null;
   chatThinkingLevel: string | null;
+  chatModelOverrides: Record<string, ChatModelOverride | null>;
+  chatModelsLoading: boolean;
+  chatModelCatalog: ModelCatalogEntry[];
   chatQueue: ChatQueueItem[];
   chatManualRefreshInFlight: boolean;
   nodesLoading: boolean;
@@ -436,8 +442,11 @@ export type AppViewState = {
   sessionsFilterLimit: string;
   sessionsIncludeGlobal: boolean;
   sessionsIncludeUnknown: boolean;
+  sessionsHideCron: boolean;
   usageLoading: boolean;
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
   usageResult: SessionsUsageResult | null;
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
   usageCostSummary: CostUsageSummary | null;
   usageError: string | null;
   usageStartDate: string;
@@ -451,6 +460,7 @@ export type AppViewState = {
   usageTimeSeriesBreakdownMode: "total" | "by-type";
   usageTimeSeriesCursorStart: number | null;
   usageTimeSeriesCursorEnd: number | null;
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
   usageTimeSeries: SessionUsageTimeSeries | null;
   usageTimeSeriesLoading: boolean;
   usageSessionLogs: SessionLogEntry[] | null;
@@ -855,4 +865,14 @@ export type AppViewState = {
     workspacePath?: string;
   }) => Promise<void>;
   handleDeleteGroup: (groupId: string) => Promise<void>;
+
+  // Dreaming（梦境/记忆整合）状态
+  dreamingStatusLoading: boolean;
+  dreamingStatusError: string | null;
+  dreamingStatus: import("./controllers/dreaming.js").DreamingStatus | null;
+  dreamingModeSaving: boolean;
+  dreamDiaryLoading: boolean;
+  dreamDiaryError: string | null;
+  dreamDiaryPath: string | null;
+  dreamDiaryContent: string | null;
 };

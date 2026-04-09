@@ -1,5 +1,6 @@
 import { html, nothing } from "lit";
 import type { AppViewState } from "../app-view-state.ts";
+import type { AgentPhase5State } from "../controllers/agent-phase5.ts";
 import { loadChannelPolicies, saveChannelPolicies } from "../controllers/agent-phase5.ts";
 
 /**
@@ -79,6 +80,7 @@ export function renderChannelPolicyDialog(state: AppViewState) {
 
   const handleSave = async (selectedValue: string) => {
     try {
+      // oxlint-disable-next-line typescript/no-explicit-any
       const config = state.channelPoliciesConfig as any;
       if (!config) {
         return;
@@ -86,6 +88,7 @@ export function renderChannelPolicyDialog(state: AppViewState) {
 
       const bindings = Array.isArray(config.bindings) ? [...config.bindings] : [];
       const existingIndex = bindings.findIndex(
+        // oxlint-disable-next-line typescript/no-explicit-any
         (b: any) => b.channelId === channelId && b.accountId === accountId,
       );
 
@@ -104,13 +107,13 @@ export function renderChannelPolicyDialog(state: AppViewState) {
         });
       }
 
-      await saveChannelPolicies(state, agentId, {
+      await saveChannelPolicies(state as unknown as AgentPhase5State, agentId, {
         ...config,
         bindings,
-      } as any);
+      });
 
       // 重新加载配置
-      await loadChannelPolicies(state, agentId);
+      await loadChannelPolicies(state as unknown as AgentPhase5State, agentId);
 
       // 关闭对话框
       state.configuringChannelPolicy = null;

@@ -36,6 +36,17 @@ export const en: TranslationMap = {
     config: "Config",
     debug: "Debug",
     logs: "Logs",
+    // Local-only tabs
+    collaboration: "Collaboration",
+    "organization-permissions": "Organization & Permissions",
+    models: "Models",
+    "message-queue": "Message Queue",
+    communications: "Communications",
+    appearance: "Appearance",
+    automation: "Automation",
+    infrastructure: "Infrastructure",
+    aiAgents: "AI & Agents",
+    dreams: "Dreams",
   },
   subtitles: {
     agents: "Manage agent workspaces, tools, and identities.",
@@ -51,6 +62,18 @@ export const en: TranslationMap = {
     config: "Edit ~/.openclaw/openclaw.json safely.",
     debug: "Gateway snapshots, events, and manual RPC calls.",
     logs: "Live tail of the gateway file logs.",
+    // Local-only tab subtitles
+    collaboration: "Manage groups, friends, and workspace collaboration.",
+    "organization-permissions":
+      "Unified management of organization structure, permissions, approvals, and system settings.",
+    models: "Manage model accounts, providers, and intelligent routing.",
+    "message-queue": "Monitor queue status, view statistics, and configure batch processing.",
+    communications: "Configure notification channels and messaging settings.",
+    appearance: "Customize theme, layout, and visual preferences.",
+    automation: "Manage automation rules, scripts, and scheduled tasks.",
+    infrastructure: "Gateway, network, and infrastructure configuration.",
+    aiAgents: "AI models, skills, tools, memory, and session configuration.",
+    dreams: "AI memory consolidation and dream diary.",
   },
   overview: {
     access: {

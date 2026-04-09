@@ -8,6 +8,7 @@ export * from "./prompt-cache.js";
 export * from "./smart-router.js";
 export * from "./context-optimizer.js";
 export * from "./budget-manager.js";
+export * from "./context-entropy.js";
 
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { BudgetManager, type BudgetStatus } from "./budget-manager.js";
@@ -18,6 +19,13 @@ import {
   type TokenOptimizationConfig,
   type TokenUsageStats,
 } from "./config.js";
+import {
+  ContextEntropyManager,
+  buildPrefixSnapshot,
+  getContextEntropyManager,
+  type CacheDecision,
+  type EntropyAnalysis,
+} from "./context-entropy.js";
 import { ContextOptimizer } from "./context-optimizer.js";
 import { PromptCacheManager, getPromptCacheManager } from "./prompt-cache.js";
 import { SmartModelRouter, type TaskAnalysis } from "./smart-router.js";
@@ -31,6 +39,7 @@ export class TokenOptimizationSystem {
   private router: SmartModelRouter;
   private optimizer: ContextOptimizer;
   private budgetManager: BudgetManager;
+  private entropyManager: ContextEntropyManager;
 
   constructor(config?: TokenOptimizationConfig) {
     this.config = config ?? DEFAULT_TOKEN_OPTIMIZATION;
@@ -38,6 +47,7 @@ export class TokenOptimizationSystem {
     this.router = new SmartModelRouter(this.config);
     this.optimizer = new ContextOptimizer(this.config);
     this.budgetManager = new BudgetManager(this.config);
+    this.entropyManager = getContextEntropyManager();
   }
 
   /**
@@ -147,6 +157,77 @@ export class TokenOptimizationSystem {
    */
   async recordTokenUsage(usage: TokenUsageStats, modelId: string): Promise<void> {
     await this.budgetManager.recordUsage(usage, modelId);
+  }
+
+  /**
+   * 使用 Context Entropy 管理器进行缓存决策
+   * 在每次请求前调用，判断是否需要 BREAK 缓存前缀
+   */
+  checkCacheDecision(params: {
+    systemPrompt: string;
+    toolSchemas: Record<string, unknown>;
+    modelId: string;
+    providerId: string;
+    promptMode: string;
+    workspaceDir: string;
+    ownerNumbers?: string[];
+    channelId?: string;
+  }): { decision: CacheDecision; report: string } {
+    const snapshot = buildPrefixSnapshot(params);
+    const vectors = this.entropyManager.detectChanges({
+      systemPromptHash: snapshot.systemPromptHash,
+      toolSchemasHash: snapshot.toolSchemasHash,
+      modelId: snapshot.modelId,
+      providerId: snapshot.providerId,
+      promptMode: snapshot.promptMode,
+      workspaceDir: snapshot.workspaceDir,
+      ownerHash: snapshot.ownerHash,
+      channelId: snapshot.channelId,
+    });
+
+    if (vectors.length === 0) {
+      // 无变化，锁定（如果还没锁定）
+      if (this.entropyManager.getLatchState() === "unlocked") {
+        this.entropyManager.lockPrefix(snapshot);
+      }
+      return { decision: "KEEP", report: "缓存前缀无变化，维持 KEEP" };
+    }
+
+    const decision = this.entropyManager.processInvalidation(vectors, {
+      previousValues: {},
+      newValues: {},
+      estimatedCacheTokens: Math.ceil(params.systemPrompt.length / 4),
+    });
+
+    if (decision === "BREAK") {
+      // 重新锁定新快照
+      this.entropyManager.lockPrefix(snapshot);
+    }
+
+    return {
+      decision,
+      report: `触发 ${vectors.length} 个失效向量: ${vectors.join(", ")} → 决策: ${decision}`,
+    };
+  }
+
+  /**
+   * 分析当前 context 的熵值，返回驱逐建议
+   */
+  analyzeContextEntropy(blocks: {
+    systemPrompt?: string;
+    toolSchemas?: string;
+    messageHistory?: string;
+    memoryContext?: string;
+    skillContext?: string;
+  }): EntropyAnalysis {
+    return this.entropyManager.analyzeEntropy(blocks);
+  }
+
+  /**
+   * 获取 Context Entropy 报告
+   */
+  getEntropyReport(): string {
+    return this.entropyManager.generateReport();
   }
 
   /**

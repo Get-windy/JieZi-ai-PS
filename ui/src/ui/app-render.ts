@@ -85,6 +85,12 @@ import {
   rotateDeviceToken,
 } from "./controllers/devices.ts";
 import {
+  loadDreamingStatus,
+  loadDreamDiary,
+  resolveConfiguredDreaming,
+  updateDreamingEnabled,
+} from "./controllers/dreaming.ts";
+import {
   loadExecApprovals,
   removeExecApprovalsFormValue,
   saveExecApprovals,
@@ -152,7 +158,7 @@ import {
   loadScenarioRuns,
   loadRecommendations,
 } from "./controllers/scenarios.ts";
-import { deleteSession, loadSessions, patchSession } from "./controllers/sessions.ts";
+import { deleteSessionsAndRefresh, loadSessions, patchSession } from "./controllers/sessions.ts";
 import {
   installSkill,
   loadSkills,
@@ -169,6 +175,56 @@ import {
   changeFilterSource,
 } from "./controllers/skills.ts";
 import { loadSuperAdmins } from "./controllers/super-admin.ts";
+
+type LazyState<T> = { mod: T | null; promise: Promise<T> | null };
+let _pendingUpdate: (() => void) | undefined = undefined;
+
+function createLazy<T>(loader: () => Promise<T>): () => T | null {
+  const s: LazyState<T> = { mod: null, promise: null };
+  return () => {
+    if (s.mod) {
+      return s.mod;
+    }
+    if (!s.promise) {
+      s.promise = loader().then((m) => {
+        s.mod = m;
+        _pendingUpdate?.();
+        return m;
+      });
+    }
+    return null;
+  };
+}
+
+function lazyRender<M>(getter: () => M | null, render: (mod: M) => unknown) {
+  const mod = getter();
+  return mod ? render(mod) : nothing;
+}
+
+const lazyDreamingView = createLazy(() => import("./views/dreaming.ts"));
+
+function formatDreamNextCycle(nextRunAtMs: number | undefined): string | null {
+  if (typeof nextRunAtMs !== "number" || !Number.isFinite(nextRunAtMs)) {
+    return null;
+  }
+  return new Date(nextRunAtMs).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function resolveDreamingNextCycle(
+  status: { phases: Record<string, { enabled: boolean; nextRunAtMs?: number }> } | null,
+): string | null {
+  if (!status) {
+    return null;
+  }
+  const nextRunAtMs = Object.values(status.phases)
+    .filter((phase) => phase.enabled && typeof phase.nextRunAtMs === "number")
+    .map((phase) => phase.nextRunAtMs as number)
+    .toSorted((a, b) => a - b)[0];
+  return formatDreamNextCycle(nextRunAtMs);
+}
 
 /**
  * 加载 agent 三文件身份（SOUL.md / AGENT.md / USER.md）
@@ -428,6 +484,13 @@ function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
 }
 
 export function renderApp(state: AppViewState) {
+  const updatableState = state as AppViewState & { requestUpdate?: () => void };
+  const requestHostUpdate =
+    typeof updatableState.requestUpdate === "function"
+      ? () => updatableState.requestUpdate?.()
+      : undefined;
+  _pendingUpdate = requestHostUpdate;
+
   const presenceCount = state.presenceEntries.length;
   const sessionsCount = state.sessionsResult?.count ?? null;
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
@@ -1322,7 +1385,11 @@ export function renderApp(state: AppViewState) {
                 },
                 onRefresh: () => loadSessions(state),
                 onPatch: (key, patch) => patchSession(state, key, patch),
-                onDelete: (key) => deleteSession(state, key),
+                onDelete: (key) =>
+                  deleteSessionsAndRefresh(
+                    state as unknown as Parameters<typeof deleteSessionsAndRefresh>[0],
+                    [key],
+                  ),
               })
             : nothing
         }
@@ -4338,6 +4405,69 @@ export function renderApp(state: AppViewState) {
                 onExport: (lines, label) => state.exportLogs(lines, label),
                 onScroll: (event) => state.handleLogsScroll(event),
               })
+            : nothing
+        }
+
+        ${
+          state.tab === "dreams"
+            ? lazyRender(lazyDreamingView, (m) =>
+                m.renderDreaming({
+                  active: (() => {
+                    const configValue =
+                      state.configForm ??
+                      (state.configSnapshot?.config as Record<string, unknown> | null);
+                    const configuredDreaming = resolveConfiguredDreaming(configValue);
+                    return state.dreamingStatus?.enabled ?? configuredDreaming.enabled;
+                  })(),
+                  shortTermCount: state.dreamingStatus?.shortTermCount ?? 0,
+                  totalSignalCount: state.dreamingStatus?.totalSignalCount ?? 0,
+                  phaseSignalCount: state.dreamingStatus?.phaseSignalCount ?? 0,
+                  promotedCount: state.dreamingStatus?.promotedToday ?? 0,
+                  dreamingOf: null,
+                  nextCycle: resolveDreamingNextCycle(state.dreamingStatus),
+                  timezone: state.dreamingStatus?.timezone ?? null,
+                  statusLoading: state.dreamingStatusLoading,
+                  statusError: state.dreamingStatusError,
+                  modeSaving: state.dreamingModeSaving,
+                  dreamDiaryLoading: state.dreamDiaryLoading,
+                  dreamDiaryError: state.dreamDiaryError,
+                  dreamDiaryPath: state.dreamDiaryPath,
+                  dreamDiaryContent: state.dreamDiaryContent,
+                  onRefresh: () => {
+                    void Promise.all([
+                      loadDreamingStatus(
+                        state as unknown as Parameters<typeof loadDreamingStatus>[0],
+                      ),
+                      loadDreamDiary(state as unknown as Parameters<typeof loadDreamDiary>[0]),
+                    ]);
+                  },
+                  onRefreshDiary: () =>
+                    loadDreamDiary(state as unknown as Parameters<typeof loadDreamDiary>[0]),
+                  onToggleEnabled: (enabled: boolean) => {
+                    const configValue =
+                      state.configForm ??
+                      (state.configSnapshot?.config as Record<string, unknown> | null);
+                    const configuredDreaming = resolveConfiguredDreaming(configValue);
+                    const dreamingOn = state.dreamingStatus?.enabled ?? configuredDreaming.enabled;
+                    if (state.dreamingModeSaving || dreamingOn === enabled) {
+                      return;
+                    }
+                    void (async () => {
+                      const updated = await updateDreamingEnabled(
+                        state as unknown as Parameters<typeof updateDreamingEnabled>[0],
+                        enabled,
+                      );
+                      if (!updated) {
+                        return;
+                      }
+                      await loadConfig(state);
+                      await loadDreamingStatus(
+                        state as unknown as Parameters<typeof loadDreamingStatus>[0],
+                      );
+                    })();
+                  },
+                }),
+              )
             : nothing
         }
 

@@ -1,8 +1,18 @@
 /**
- * Phase 5: 任务与会议系统 - 类型定义
+ * 任务与会议系统 - 类型定义（唯一数据源）
+ *
+ * ╔══════════════════════════════════════════════════════════════╗
+ * ║  SINGLE SOURCE OF TRUTH — 任务系统唯一类型定义文件          ║
+ * ║                                                              ║
+ * ║  本系统只维护一套 Task 类型，请勿在其他文件中重新定义        ║
+ * ║  ProjectTask / Sprint 任务 全部使用本文件的 Task 接口        ║
+ * ║                                                              ║
+ * ║  历史说明：原 utils/project-context.ts 中存在独立的          ║
+ * ║  ProjectTask 接口（状态用下划线：in_progress/in_review），   ║
+ * ║  已于统一重构时废弃并移除，所有引用已迁移至此。              ║
+ * ╚══════════════════════════════════════════════════════════════╝
  *
  * 定义任务协作、会议管理等核心类型
- * P2.1: 任务协作系统数据模型
  */
 
 import type { MemberType } from "../organization/types.js";
@@ -13,18 +23,76 @@ import type { MemberType } from "../organization/types.js";
 
 /**
  * 任务状态
+ *
+ * backlog     = 已记录但尚未排入 Sprint（Backlog 池）
+ * todo        = 已排入 Sprint，待开始
+ * in-progress = 执行中（注意：连字符，不是下划线）
+ * review      = 待评审
+ * blocked     = 被阻塞
+ * done        = 已完成（终态）
+ * cancelled   = 已取消（终态）
+ *
+ * 注意：历史 ProjectTask 使用 "in_progress" / "in_review"（下划线），
+ * 统一后一律使用连字符形式，读取旧数据时通过 normalizeTaskStatus() 自动转换。
  */
-export type TaskStatus = "todo" | "in-progress" | "review" | "blocked" | "done" | "cancelled";
+export type TaskStatus =
+  | "backlog"
+  | "todo"
+  | "in-progress"
+  | "review"
+  | "blocked"
+  | "done"
+  | "cancelled";
 
 /**
  * 任务优先级
+ * none = 未分配优先级（规划层 Backlog 任务常用）
  */
-export type TaskPriority = "low" | "medium" | "high" | "urgent";
+export type TaskPriority = "low" | "medium" | "high" | "urgent" | "none";
+
+/**
+ * 将旧版 ProjectTask 的下划线状态标识符统一转换为当前连字符形式。
+ * 读取 PROJECT_CONFIG.json 中的历史 Sprint 任务数据时调用此函数。
+ *
+ * 映射关系：
+ *   in_progress → in-progress
+ *   in_review   → review
+ *   backlog     → backlog（保持不变）
+ *   其余值      → 原样返回（已是正确格式）
+ */
+export function normalizeTaskStatus(raw: string): TaskStatus {
+  const map: Record<string, TaskStatus> = {
+    in_progress: "in-progress",
+    in_review: "review",
+  };
+  return map[raw] ?? raw;
+}
+
+/**
+ * 任务层次（借鉴 SAFe / Linear / Jira 工作层次）
+ *
+ * Initiative → Epic → Feature → Story → Task
+ *
+ * 层级约束：
+ * - epic:    跨多个 Sprint 的大价値块，必须关联 projectId
+ * - feature: 属于 Epic 的功能块，必须关联 epicId
+ * - story:   用户故事，属于 Feature，必须关联 featureId
+ * - task:    技术实现单元，可属于 story / feature / epic / 独立
+ */
+export type WorkItemLevel = "epic" | "feature" | "story" | "task";
 
 /**
  * 任务类型
  */
-export type TaskType = "feature" | "bugfix" | "research" | "documentation" | "meeting" | "other";
+export type TaskType =
+  | "epic" // 巧屙上线的大块工作（跨周期）
+  | "feature" // 用户可感知的功能模块
+  | "story" // 用户故事（一个 feature 内的可交付单元）
+  | "bugfix" // 缺陷修复
+  | "research" // 技术调研 / Spike
+  | "documentation" // 文档编写
+  | "meeting" // 会议
+  | "other"; // 其他
 
 /**
  * 任务作用域
@@ -130,11 +198,28 @@ export interface Task {
   assignees: TaskAssignee[]; // 执行者列表（支持人类和智能助手）
   supervisorId?: string; // 上级管理者ID（coordinator/parent agent）—— 可以读写此任务的工作日志，但不参与执行
 
-  // 任务属性
+  // 流程属性
   status: TaskStatus;
   priority: TaskPriority;
   weight?: number; // 任务权重，默认 0，越大越优先（同优先级内细分排序）
   type?: TaskType;
+  /**
+   * 工作层次（对应 WorkItemLevel）
+   * 层次约束：
+   * - epic    必须关联 projectId
+   * - feature 必须关联 epicId
+   * - story   必须关联 featureId
+   * - task    可独立、可属下任意上级
+   */
+  level?: WorkItemLevel;
+  /**
+   * 所属 Epic ID（level=feature 或 level=story 时填写）
+   */
+  epicId?: string;
+  /**
+   * 所属 Feature ID（level=story 时填写）
+   */
+  featureId?: string;
   /**
    * 任务作用域（默认 project）
    * - personal: 私人任务，不需要 projectId，结果写入 agent 私有记忆
@@ -153,6 +238,12 @@ export interface Task {
   blockedBy?: string[]; // 阻塞此任务的任务ID列表
   subtasks?: string[]; // 子任务ID列表
 
+  /**
+   * Story Point 估算（Fibonacci: 1,2,3,5,8,13）
+   * Sprint 进度计算（calcSprintProgress）依赖此字段，缺失时按 1 计算。
+   */
+  storyPoints?: number;
+
   // 时间管理
   dueDate?: number; // 截止时间
   timeTracking: TaskTimeTracking; // 时间追踪
@@ -165,6 +256,12 @@ export interface Task {
   // 标签与分类
   tags?: string[]; // 标签
   labels?: string[]; // 标签（颜色编码）
+
+  // OKR 对齐
+  /** 关联的 OKR 目标 ID（小任务通过此字段对齐上级目标） */
+  objectiveId?: string;
+  /** 关联的 OKR 关键结果 ID */
+  keyResultId?: string;
 
   // 元数据
   createdAt: number;
@@ -217,11 +314,24 @@ export interface TaskFilter {
   organizationId?: string; // 组织ID
   teamId?: string; // 团队ID
   projectId?: string; // 项目ID
+  /** 层次过滤：epic/feature/story/task */
+  level?: WorkItemLevel | WorkItemLevel[];
+  /** 过滤特定 epic 下的所有子任务 */
+  epicId?: string;
+  /** 过滤特定 feature 下的所有子任务 */
+  featureId?: string;
   tags?: string[]; // 标签
   dueDateBefore?: number; // 截止日期之前
-  dueDateAfter?: number; // 截止日期之后
+  dueDateAfter?: number; // 截止日期之局
   keyword?: string; // 关键词搜索
-  limit?: number; // 最多返回条数（分页截断）
+  limit?: number; // 最多返回条数（兴趣截断，建议用 first 代替）
+  /**
+   * Cursor-based 分页（Linear/GitHub GraphQL 标准模式）
+   * after: 上一页最后一条的 taskId，从它之后开始返回
+   * first: 返回条数（与 limit 相互兼容，优先级更高）
+   */
+  after?: string;
+  first?: number;
 }
 
 /**

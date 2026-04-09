@@ -31,6 +31,7 @@ import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js
 import type { MemberType } from "../../organization/types.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
 import { groupManager } from "../../sessions/group-manager.js";
+import { validateRealProgress } from "../../tasks/accountability.js";
 import {
   checkTaskAccess,
   checkTaskModifyAccess,
@@ -50,6 +51,7 @@ import type {
   TaskDependency,
 } from "../../tasks/types.js";
 import { scheduleNextTaskForAgent } from "./agents-management.js";
+import { inferTaskType, recordPerfOutcome } from "./evolve-rpc.js";
 
 /**
  * 向 supervisor 发送任务系统事件通知（公共工具函数）
@@ -418,6 +420,21 @@ export const tasksRpc: GatewayRequestHandlers = {
         storage.archiveOldTasks().catch((archErr) => {
           console.warn(`[task.update] archiveOldTasks failed: ${String(archErr)}`);
         });
+
+        // === KPI 写回闭环（Hermes v0.8.0 cron KPI 借鉴）===
+        // 任务完成/取消时，自动将结果记录到执行 Agent 的性能画像，
+        // 供调度器下次做 KPI 择优分配时使用。
+        const kpiAssigneeId = (updatedTask?.assignees ?? [])[0]?.id || task.creatorId || undefined;
+        if (kpiAssigneeId) {
+          const kpiTitle = updatedTask?.title ?? task.title ?? "";
+          const kpiDesc = updatedTask?.description ?? task.description ?? "";
+          const kpiTaskType = inferTaskType(
+            kpiTitle + " " + kpiDesc.slice(0, 100),
+            updatedTask?.tags ?? task.tags ?? [],
+          );
+          const kpiOutcome = normalizedStatus === "done" ? "success" : "failure";
+          recordPerfOutcome(kpiAssigneeId, kpiTaskType, kpiOutcome);
+        }
       }
     } catch (err) {
       respond(
@@ -1412,6 +1429,45 @@ export const tasksRpc: GatewayRequestHandlers = {
       const completedAt = typeof params?.completedAt === "number" ? params.completedAt : Date.now();
       const completedBy = params?.completedBy ? String(params.completedBy) : undefined;
       const note = params?.note ? String(params.note) : undefined;
+      // force=true 允许管理员/人类绕过质量门禁（用于手动覆盖）
+      const force = params?.force === true || params?.force === "true";
+
+      // === Harness Feedback Sensor（P1）: 计算型产出物验证 ===
+      // 在写入 done 之前，验证任务是否有真实可验证产出。
+      // 参考 Harness Engineering：Computational Feedback Sensor，在任务生命周期左侧拦截低质量交付。
+      if (!force) {
+        // 补充关联数据（workLogs/attachments/comments）以供验证器使用
+        const worklogs = await storage.getTaskWorklogs(taskId);
+        const attachments = await storage.getTaskAttachments(taskId);
+        const comments = await storage.getTaskComments(taskId);
+        const taskWithData = {
+          ...task,
+          workLogs: worklogs,
+          attachments,
+          comments,
+        };
+        const progressCheck = validateRealProgress(taskWithData);
+        if (progressCheck.quality === "fake") {
+          const issueLines = [
+            `[TASK COMPLETION BLOCKED — Harness Quality Gate]`,
+            ``,
+            `Task "${task.title}" cannot be marked as done because no verifiable output was detected.`,
+            ``,
+            `Quality: ${progressCheck.quality}`,
+            `Evidence found: ${progressCheck.evidence.length === 0 ? "none" : progressCheck.evidence.join(", ")}`,
+            ``,
+            `To complete this task, you MUST first provide at least one of:`,
+            `  1. A worklog entry (task.worklog.add) with result=success and specific details`,
+            `  2. An attachment (task.attachment.add) proving deliverable exists`,
+            `  3. A comment (task.comment.add) with concrete outcome description`,
+            ``,
+            `After adding evidence, call task.complete again.`,
+            `If you believe this is a false positive (e.g. task was exploratory/recon), pass force=true to override.`,
+          ].join("\n");
+          respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, issueLines));
+          return;
+        }
+      }
 
       const updatedTask = await storage.updateTask(taskId, {
         status: "done" as TaskStatus,
@@ -1441,6 +1497,22 @@ export const tasksRpc: GatewayRequestHandlers = {
             console.warn(`[task.complete] scheduleNextTask failed: ${String(schedErr)}`);
           },
         );
+      }
+
+      // === KPI 写回闭环（Hermes v0.8.0 cron KPI 借鉴）===
+      // 任务完成时，自动将 success 结果写入执行 Agent 的性能画像。
+      // 这是 KPI 闭环的入口，供调度器下次择优时使用。
+      {
+        const kpiAssigneeId = primaryAssignee ?? task.creatorId ?? undefined;
+        if (kpiAssigneeId) {
+          const kpiTitle = updatedTask?.title ?? task.title ?? "";
+          const kpiDesc = updatedTask?.description ?? task.description ?? "";
+          const kpiTaskType = inferTaskType(
+            kpiTitle + " " + kpiDesc.slice(0, 100),
+            updatedTask?.tags ?? task.tags ?? [],
+          );
+          recordPerfOutcome(kpiAssigneeId, kpiTaskType, "success");
+        }
       }
 
       // === 任务完成后通知 supervisor ===
@@ -1629,6 +1701,79 @@ export const tasksRpc: GatewayRequestHandlers = {
         errorShape(
           ErrorCodes.UNAVAILABLE,
           `Failed to block task: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
+  /**
+   * task.ping — 刷新任务活跃度时间戳（Hermes v0.8.0 活动感知超时借鉴）
+   *
+   * Agent 在执行长时间任务时，应定期调用此接口刷新 lastActivityAt，
+   * 避免被调度器误判为僵尸任务而重新活化。
+   *
+   * 如实现 Hermes 的设计语义：只要有工具调用活动就不超时。
+   */
+  "task.ping": async ({ params, respond }) => {
+    try {
+      const taskId =
+        (params?.taskId ? String(params.taskId) : "") || (params?.id ? String(params.id) : "");
+      const agentId = params?.agentId ? String(params.agentId) : "";
+
+      if (!taskId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId 不能为空"));
+        return;
+      }
+
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
+        return;
+      }
+
+      // 权限检查：仅执行者、主管或创建者可刺激活跃度
+      if (agentId) {
+        const isAssignee = (task.assignees ?? []).some((a) => a.id === agentId);
+        const isSupervisor = task.supervisorId === agentId;
+        const isCreator = task.creatorId === agentId;
+        const isSystem = agentId === "system";
+        if (!isAssignee && !isSupervisor && !isCreator && !isSystem) {
+          respond(
+            false,
+            undefined,
+            errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              `Agent(${agentId}) 没有权限刺激任务 ${taskId} 的活跃度`,
+            ),
+          );
+          return;
+        }
+      }
+
+      const now = Date.now();
+      await storage.updateTask(taskId, {
+        timeTracking: {
+          ...task.timeTracking,
+          lastActivityAt: now,
+        },
+      });
+
+      respond(
+        true,
+        {
+          taskId,
+          lastActivityAt: now,
+          message: "Task activity refreshed — inactivity timeout reset.",
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to ping task: ${String(err instanceof Error ? err.message : err)}`,
         ),
       );
     }

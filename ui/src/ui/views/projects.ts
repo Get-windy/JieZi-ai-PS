@@ -38,21 +38,31 @@ export interface HandoffFormState {
 }
 
 /**
- * 项目生命周期状态（参考业界标准）
+ * 项目生命周期状态（与后端 project-context.ts 保持一致）
  *
- * planning    → 立项规划中
- * active      → 开发进行中
- * dev_done    → 开发完成（测试/验收阶段）
- * operating   → 运营中（已上线正常运营）
- * maintenance → 维护模式（只做保活，无新需求）
- * paused      → 暂停（临时暂停，后续继续）
- * completed   → 已完成（正常收尾关闭）
- * deprecated  → 已废弃（不再维护）
- * cancelled   → 已取消（中途放弃）
+ * requirements → 需求提炼阶段
+ * design       → 架构设计阶段
+ * planning     → 立项规划/计划排期
+ * development  → 开发中（后端标准名）
+ * active       → 开发/运行中（前端兼容名）
+ * testing      → 测试阶段
+ * review       → 评审验收阶段
+ * dev_done     → 开发完成（待上线）
+ * operating    → 运营中（已上线正常运营）
+ * maintenance  → 维护模式（只做保活，无新需求）
+ * paused       → 暂停（临时暂停，后续继续）
+ * completed    → 已完成（正常收尾关闭）
+ * deprecated   → 已废弃（不再维护）
+ * cancelled    → 已取消（中途放弃）
  */
 export type ProjectStatus =
+  | "requirements"
+  | "design"
   | "planning"
+  | "development"
   | "active"
+  | "testing"
+  | "review"
   | "dev_done"
   | "operating"
   | "maintenance"
@@ -66,8 +76,13 @@ export const PROJECT_STATUS_META: Record<
   ProjectStatus,
   { label: string; icon: string; color: string; bg: string }
 > = {
-  planning: { label: "立项规划", icon: "📍", color: "#6b7280", bg: "#f3f4f6" },
-  active: { label: "开发中", icon: "🟢", color: "#16a34a", bg: "#f0fdf4" },
+  requirements: { label: "需求提炼", icon: "📋", color: "#6366f1", bg: "#eef2ff" },
+  design: { label: "架构设计", icon: "🎨", color: "#8b5cf6", bg: "#f5f3ff" },
+  planning: { label: "计划排期", icon: "📍", color: "#6b7280", bg: "#f3f4f6" },
+  development: { label: "开发中", icon: "🟢", color: "#16a34a", bg: "#f0fdf4" },
+  active: { label: "进行中", icon: "🔵", color: "#2563eb", bg: "#eff6ff" },
+  testing: { label: "测试中", icon: "🧪", color: "#0891b2", bg: "#ecfeff" },
+  review: { label: "评审验收", icon: "🔍", color: "#7c3aed", bg: "#f5f3ff" },
   dev_done: { label: "开发完成", icon: "📦", color: "#0891b2", bg: "#ecfeff" },
   operating: { label: "运营中", icon: "🚀", color: "#7c3aed", bg: "#f5f3ff" },
   maintenance: { label: "维护模式", icon: "🔧", color: "#d97706", bg: "#fffbeb" },
@@ -83,8 +98,13 @@ export type ProjectStatusFilter = "all" | ProjectStatus;
 /** 默认展示各状态（均显示）*/
 export const STATUS_FILTER_OPTIONS: { value: ProjectStatusFilter; label: string }[] = [
   { value: "all", label: "📂 全部项目" },
-  { value: "active", label: "🟢 开发中" },
-  { value: "planning", label: "📍 立项规划" },
+  { value: "requirements", label: "📋 需求提炼" },
+  { value: "design", label: "🎨 架构设计" },
+  { value: "planning", label: "📍 计划排期" },
+  { value: "development", label: "🟢 开发中" },
+  { value: "active", label: "🔵 进行中" },
+  { value: "testing", label: "🧪 测试中" },
+  { value: "review", label: "🔍 评审验收" },
   { value: "dev_done", label: "📦 开发完成" },
   { value: "operating", label: "🚀 运营中" },
   { value: "maintenance", label: "🔧 维护模式" },
@@ -93,16 +113,39 @@ export const STATUS_FILTER_OPTIONS: { value: ProjectStatusFilter; label: string 
   { value: "deprecated", label: "🗑️ 已废弃" },
   { value: "cancelled", label: "❌ 已取消" },
 ];
+/**
+ * 任务状态「唯一数据源」
+ *
+ * 注意：小心将这里定义替换或覆盖。
+ * 本文件的任务相关类型必须与后端 tasks/types.ts 保持一致：
+ *   - 状态值使用连字符（in-progress、review），不是下划线（in_progress、in_review）
+ *   - 创建新 Sprint 任务时状态默认为 "backlog" 或 "todo"
+ */
 export type TaskPriority = "urgent" | "high" | "medium" | "low" | "none";
-export type TaskStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done" | "cancelled";
+export type TaskStatus =
+  | "backlog"
+  | "todo"
+  | "in-progress"
+  | "review"
+  | "blocked"
+  | "done"
+  | "cancelled";
 
+/**
+ * Sprint / Backlog 任务对象（与后端 tasks/types.ts Task 接口对齐）
+ *
+ * 注意：小心不要在此处增加后端 Task 没有的字段。
+ * 如需新字段，先修改 src/tasks/types.ts 里的 Task 接口。
+ */
 export interface ProjectTask {
   id: string;
   title: string;
   description?: string;
   status: TaskStatus;
   priority: TaskPriority;
+  /** 主要执行人 ID（对应后端 Task.assignees[0].id） */
   assigneeId?: string;
+  /** Story Point 估算（Fibonacci: 1,2,3,5,8,13） */
   storyPoints?: number;
   labels?: string[];
   dueDate?: number;
@@ -163,6 +206,39 @@ export function calcProjectProgress(sprints: ProjectSprint[]): number {
   return total === 0 ? 0 : Math.round((done / total) * 100);
 }
 
+// ===== DoD 完成门禁类型（与后端 project-context.ts 一致）=====
+
+/** 单条验收标准 */
+export interface AcceptanceCriterion {
+  id: string;
+  description: string;
+  verificationType: "manual" | "automated" | "evidence";
+  satisfied: boolean;
+  satisfiedAt?: number;
+  evidence?: string;
+  satisfiedBy?: string;
+}
+
+/** 完成门禁 */
+export interface ProjectCompletionGate {
+  criteria: AcceptanceCriterion[];
+  /**
+   * 是否需要 Agent 签收确认（默认 true）。
+   * true  = 所有标准满足后，由项目 ownerId 对应的 Agent（coordinator）签收才关闭
+   * false = 所有标准满足后自动关闭
+   */
+  requireHumanSignOff: boolean;
+  /** Agent 签收时间戳 */
+  humanSignOffAt?: number;
+  /** 签收 Agent ID（通常为 coordinator 或项目 ownerId） */
+  humanSignOffBy?: string;
+  /** 签收备注（Agent 可填写验收总结） */
+  humanSignOffNote?: string;
+  scopeFrozen: boolean;
+  scopeFrozenAt?: number;
+  scopeFrozenReason?: "completed" | "cancelled" | "human_decision";
+}
+
 /**
  * 项目信息
  */
@@ -193,8 +269,10 @@ export interface ProjectInfo {
   milestones?: ProjectSprint[];
   /** Backlog：未分配到 Sprint 的任务 */
   backlog?: ProjectTask[];
-  /** 验收标准 */
+  /** 旧版验收标准（字符串，向后兼容） */
   acceptanceCriteria?: string;
+  /** 结构化 DoD 完成门禁 */
+  completionGate?: ProjectCompletionGate;
   /** 进度备注 */
   progressNotes?: string;
   /** 进度最后更新时间 */
@@ -289,6 +367,15 @@ export type ProjectsProps = {
   ) => void;
   /** 开始 Sprint */
   onStartSprint: (projectId: string, sprintId: string) => void;
+  /** 标记单条验收标准状态 */
+  onMarkCriterionSatisfied: (
+    projectId: string,
+    criterionId: string,
+    satisfied: boolean,
+    evidence?: string,
+  ) => void;
+  /** Agent 签收项目（最终确认，由项目 ownerId 对应的 Agent 完成） */
+  onHumanSignOff: (projectId: string, signOffBy: string, note?: string) => void;
   // 跨团队协作 Handoff Props
   projectTeamRelations: ProjectTeamRelation[];
   projectTeamRelationsLoading: boolean;
@@ -359,7 +446,13 @@ export function renderProjects(props: ProjectsProps) {
                 ${(
                   [
                     "all",
+                    "requirements",
+                    "design",
+                    "planning",
+                    "development",
                     "active",
+                    "testing",
+                    "review",
                     "dev_done",
                     "operating",
                     "maintenance",
@@ -1012,8 +1105,9 @@ function renderProjectMembers(props: ProjectsProps, project: ProjectInfo) {
 const TASK_STATUS_CONFIG: Record<TaskStatus, { label: string; color: string; bg: string }> = {
   backlog: { label: "Backlog", color: "#9ca3af", bg: "#f9fafb" },
   todo: { label: "待处理", color: "#6b7280", bg: "#f3f4f6" },
-  in_progress: { label: "进行中", color: "#2563eb", bg: "#eff6ff" },
-  in_review: { label: "审阅中", color: "#7c3aed", bg: "#f5f3ff" },
+  "in-progress": { label: "进行中", color: "#2563eb", bg: "#eff6ff" },
+  review: { label: "审阅中", color: "#7c3aed", bg: "#f5f3ff" },
+  blocked: { label: "被阻塞", color: "#f59e0b", bg: "#fffbeb" },
   done: { label: "已完成", color: "#16a34a", bg: "#f0fdf4" },
   cancelled: { label: "已取消", color: "#dc2626", bg: "#fef2f2" },
 };
@@ -1027,8 +1121,13 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; icon: string; color
 };
 
 const PROJECT_STATUS_CONFIG: { value: ProjectStatus; label: string; color: string }[] = [
-  { value: "planning", label: "📍 立项规划", color: "#6b7280" },
-  { value: "active", label: "🟢 开发中", color: "#16a34a" },
+  { value: "requirements", label: "📋 需求提炼", color: "#6366f1" },
+  { value: "design", label: "🎨 架构设计", color: "#8b5cf6" },
+  { value: "planning", label: "📍 计划排期", color: "#6b7280" },
+  { value: "development", label: "🟢 开发中", color: "#16a34a" },
+  { value: "active", label: "🔵 进行中", color: "#2563eb" },
+  { value: "testing", label: "🧪 测试中", color: "#0891b2" },
+  { value: "review", label: "🔍 评审验收", color: "#7c3aed" },
   { value: "dev_done", label: "📦 开发完成", color: "#0891b2" },
   { value: "operating", label: "🚀 运营中", color: "#7c3aed" },
   { value: "maintenance", label: "🔧 维护模式", color: "#d97706" },
@@ -1052,8 +1151,8 @@ const SPRINT_STATUS_META: Record<
 /** 列看板列项：Todo / In Progress / In Review / Done */
 const KANBAN_COLUMNS: { status: TaskStatus; label: string }[] = [
   { status: "todo", label: "待处理" },
-  { status: "in_progress", label: "进行中" },
-  { status: "in_review", label: "审阅中" },
+  { status: "in-progress", label: "进行中" },
+  { status: "review", label: "审阅中" },
   { status: "done", label: "已完成" },
 ];
 
@@ -1137,8 +1236,8 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
               : nothing
           }
 
-          <!-- 进度数字 -->
-          <span style="margin-left:auto; font-size:20px; font-weight:700; color:${progressColor};">${computedProgress}%</span>
+          <!-- 进度数字（由 Sprint 任务完成情况自动计算，不可手动修改） -->
+          <span style="margin-left:auto; font-size:20px; font-weight:700; color:${progressColor};" title="进度由 Sprint 任务自动计算">${computedProgress}%</span>
           <button
             class="btn btn--primary btn--sm"
             @click=${() =>
@@ -1160,7 +1259,7 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
             <div style="height:100%; width:${computedProgress}%; background:${progressColor}; border-radius:4px; transition:width 0.4s;"></div>
           </div>
           <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:3px;">
-            <span>${sprints.length} 个 Sprint · ${sprints.flatMap((s) => s.tasks).length} 个任务 · ${completedSprints.length} 已完成</span>
+            <span>${sprints.length} 个 Sprint · ${sprints.flatMap((s) => s.tasks).length} 个任务 · ${completedSprints.length} 已完成 · <em>进度自动计算</em></span>
             ${
               project.progressUpdatedAt
                 ? html`<span>最后更新: ${new Date(project.progressUpdatedAt).toLocaleString("zh-CN")}</span>`
@@ -1639,9 +1738,9 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
       <!-- 验收标准 & 备注 -->
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
         <div class="card" style="padding:12px;">
-          <strong style="font-size:12px; display:block; margin-bottom:6px;">✅ 验收标准</strong>
+          <strong style="font-size:12px; display:block; margin-bottom:6px;">✅ 旧版验收标准（备注）</strong>
           <textarea class="form-control" rows="4"
-            placeholder="描述验收标准，Markdown 格式…"
+            placeholder="描述验收标准，Markdown 格式…（新项目建议改用下方结构化 DoD 门禁）"
             .value=${project.acceptanceCriteria ?? ""}
             @input=${(e: InputEvent) => {
               props.onUpdateProgress(project.projectId, {
@@ -1653,7 +1752,7 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
         <div class="card" style="padding:12px;">
           <strong style="font-size:12px; display:block; margin-bottom:6px;">📝 进度备注</strong>
           <textarea class="form-control" rows="4"
-            placeholder="记录餴点、风险、下一步计划…"
+            placeholder="记录奕点、风险、下一步计划…"
             .value=${project.progressNotes ?? ""}
             @input=${(e: InputEvent) => {
               props.onUpdateProgress(project.projectId, {
@@ -1664,6 +1763,236 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
         </div>
       </div>
 
+      <!-- DoD 完成门禁可视化 -->
+      ${renderCompletionGate(props, project)}
+
+    </div>
+  `;
+}
+
+/**
+ * DoD 完成门禁可视化区域
+ *
+ * 展示结构化验收标准列表，支持逐条标记满足和 Agent 签收。
+ * 在 AI 自主开发系统中，签收由 coordinator（项目 ownerId Agent）完成，而非人工输入。
+ * 这是解决“无尽开发”问题的核心 UI 入口。
+ */
+function renderCompletionGate(props: ProjectsProps, project: ProjectInfo) {
+  const gate = project.completionGate;
+  const isScopeFrozen = gate?.scopeFrozen ?? false;
+
+  // 计算 DoD 进度
+  const total = gate?.criteria.length ?? 0;
+  const satisfied = gate?.criteria.filter((c) => c.satisfied).length ?? 0;
+  const dodPercent = total === 0 ? 0 : Math.round((satisfied / total) * 100);
+  const allSatisfied = total > 0 && satisfied === total;
+  const canSignOff = allSatisfied && (gate?.requireHumanSignOff ?? true) && !gate?.humanSignOffAt;
+  const isCompleted = Boolean(gate?.humanSignOffAt) || (allSatisfied && !gate?.requireHumanSignOff);
+
+  const gateBorderColor = isScopeFrozen
+    ? "#2563eb"
+    : isCompleted
+      ? "#16a34a"
+      : allSatisfied
+        ? "#d97706"
+        : "#e5e7eb";
+
+  // 项目 ownerId 对应的 Agent（优先作为签收人）
+  const ownerAgent = project.ownerId
+    ? (props.agentsList?.agents ?? []).find((a) => a.id === project.ownerId)
+    : undefined;
+  const agentsList = props.agentsList?.agents ?? [];
+
+  const VERIF_LABEL: Record<string, string> = {
+    manual: "🤖 Agent 确认",
+    automated: "⚙️ 自动化",
+    evidence: "📄 证据",
+  };
+
+  return html`
+    <div class="card" style="padding:14px 16px; margin-bottom:14px; border-left:3px solid ${gateBorderColor};">
+      <!-- 标题行 -->
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <strong style="font-size:13px;">
+            ${isScopeFrozen ? "🔒" : isCompleted ? "✅" : allSatisfied ? "⏳" : "🛡️"}
+            DoD 完成门禁（Definition of Done）
+          </strong>
+          ${
+            isScopeFrozen
+              ? html`
+                  <span class="chip" style="color: #2563eb; border-color: #2563eb; font-size: 11px"
+                    >🔒 范围已冻结</span
+                  >
+                `
+              : isCompleted
+                ? html`
+                    <span class="chip" style="color: #16a34a; border-color: #16a34a; font-size: 11px"
+                      >✅ 已签收完成</span
+                    >
+                  `
+                : allSatisfied
+                  ? html`
+                      <span class="chip" style="color: #d97706; border-color: #d97706; font-size: 11px"
+                        >⏳ 待 Agent 签收</span
+                      >
+                    `
+                  : nothing
+          }
+        </div>
+        <span style="font-size:16px; font-weight:700; color:${gateBorderColor};">${dodPercent}%</span>
+      </div>
+
+      <!-- DoD 进度条 -->
+      <div style="height:6px; background:var(--border); border-radius:3px; overflow:hidden; margin-bottom:10px;">
+        <div style="height:100%; width:${dodPercent}%; background:${gateBorderColor}; border-radius:3px; transition:width 0.4s;"></div>
+      </div>
+      <div style="font-size:11px; color:var(--muted); margin-bottom:12px;">
+        ${satisfied}/${total} 验收标准已满足
+        ${
+          gate?.requireHumanSignOff
+            ? html`
+                · 需要 Agent 签收
+              `
+            : html`
+                · 全自动可关闭
+              `
+        }
+        ${
+          gate?.humanSignOffAt
+            ? html` · 签收 Agent: ${gate.humanSignOffBy ?? "coordinator"} · ${new Date(gate.humanSignOffAt).toLocaleString("zh-CN")}`
+            : nothing
+        }
+      </div>
+
+      ${
+        !gate || gate.criteria.length === 0
+          ? html`
+              <div class="callout" style="font-size: 12px; margin-bottom: 12px">
+                ⚠️ 未定义验收标准。请让 AI 调用 <code>projects.updateProgress</code> 传入
+                <code>completionGate</code> 参数， 或者向 coordinator 发消息要求它为该项目定义验收标准。
+              </div>
+            `
+          : html`
+            <!-- 验收标准列表 -->
+            <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
+              ${gate.criteria.map(
+                (c) => html`
+                <div style="
+                  display:flex; align-items:flex-start; gap:8px;
+                  padding:8px 10px; border-radius:6px;
+                  background:${c.satisfied ? "#f0fdf4" : "#f9fafb"};
+                  border:1px solid ${c.satisfied ? "#86efac" : "var(--border)"};
+                ">
+                  <!-- 满足开关 -->
+                  <button
+                    title=${c.satisfied ? "点击取消满足" : "点击标记为已满足"}
+                    style="
+                      width:20px; height:20px; border-radius:4px; flex-shrink:0;
+                      border:2px solid ${c.satisfied ? "#16a34a" : "#d1d5db"};
+                      background:${c.satisfied ? "#16a34a" : "transparent"};
+                      cursor:${isScopeFrozen ? "not-allowed" : "pointer"};
+                      display:flex; align-items:center; justify-content:center;
+                      font-size:12px; color:white; padding:0;
+                    "
+                    ?disabled=${isScopeFrozen}
+                    @click=${() => {
+                      if (isScopeFrozen) {
+                        return;
+                      }
+                      props.onMarkCriterionSatisfied(project.projectId, c.id, !c.satisfied);
+                    }}
+                  >${c.satisfied ? "✓" : ""}</button>
+
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-size:12px; font-weight:${c.satisfied ? "400" : "500"}; color:${c.satisfied ? "var(--muted)" : "var(--text)"}; text-decoration:${c.satisfied ? "line-through" : "none"}; word-break:break-word;">
+                      ${c.description}
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap;">
+                      <span style="font-size:10px; color:var(--muted);">${VERIF_LABEL[c.verificationType] ?? c.verificationType}</span>
+                      ${
+                        c.satisfied && c.satisfiedAt
+                          ? html`<span style="font-size:10px; color:#16a34a;">✓ ${c.satisfiedBy ?? ""} ${new Date(c.satisfiedAt).toLocaleDateString("zh-CN")}</span>`
+                          : nothing
+                      }
+                      ${
+                        c.evidence
+                          ? html`<span style="font-size:10px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px;" title=${c.evidence}>📄 ${c.evidence}</span>`
+                          : nothing
+                      }
+                    </div>
+                  </div>
+                </div>
+              `,
+              )}
+            </div>
+          `
+      }
+
+      <!-- Agent 签收区域 -->
+      ${
+        canSignOff
+          ? html`
+            <div style="border-top:1px solid var(--border); padding-top:10px; margin-top:4px;">
+              <div style="font-size:12px; font-weight:600; margin-bottom:6px; color:#d97706;">⏳ 所有验收标准已满足，请 Agent 确认签收</div>
+              <div style="font-size:11px; color:var(--muted); margin-bottom:8px;">
+                在 AI 自主开发系统中，签收由项目负责 Agent（coordinator）完成。
+                ${
+                  ownerAgent
+                    ? html`当前项目负责 Agent：<strong>${ownerAgent.name ?? ownerAgent.id}</strong>`
+                    : project.ownerId
+                      ? html`当前项目 Agent ID：<code>${project.ownerId}</code>`
+                      : html`
+                          未设置项目负责 Agent
+                        `
+                }
+              </div>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <select
+                  id="sign-off-agent-${project.projectId}"
+                  class="form-control"
+                  style="flex:1; min-width:120px; font-size:12px;"
+                >
+                  ${
+                    ownerAgent
+                      ? html`<option value=${ownerAgent.id} selected>${ownerAgent.name ?? ownerAgent.id}（项目负责人）</option>`
+                      : project.ownerId
+                        ? html`<option value=${project.ownerId} selected>${project.ownerId}（项目负责人）</option>`
+                        : html`
+                            <option value="coordinator" selected>coordinator（默认）</option>
+                          `
+                  }
+                  ${agentsList
+                    .filter((a) => a.id !== project.ownerId)
+                    .map((a) => html`<option value=${a.id}>${a.name ?? a.id}</option>`)}
+                </select>
+                <button
+                  class="btn btn--primary btn--sm"
+                  @click=${() => {
+                    const sel = document.getElementById(
+                      `sign-off-agent-${project.projectId}`,
+                    ) as HTMLSelectElement | null;
+                    const agentId = sel?.value?.trim() || project.ownerId || "coordinator";
+                    if (
+                      confirm(
+                        `确认由 Agent「${agentId}」签收项目「${project.name}」？\n\n签收后项目状态将自动设为“已完成”，AI 不再被允许为该项目创建新任务。`,
+                      )
+                    ) {
+                      props.onHumanSignOff(project.projectId, agentId);
+                    }
+                  }}
+                >🤖 Agent 签收</button>
+              </div>
+            </div>
+          `
+          : isScopeFrozen
+            ? html`
+              <div style="font-size:12px; color:var(--muted); border-top:1px solid var(--border); padding-top:8px;">
+                🔒 项目已完成并冻结，不再接受新任务。
+                ${gate?.scopeFrozenAt ? html`冻结时间: ${new Date(gate.scopeFrozenAt).toLocaleString("zh-CN")}` : nothing}
+              </div>`
+            : nothing
+      }
     </div>
   `;
 }
@@ -2030,6 +2359,38 @@ function renderProjectEditModal(props: ProjectsProps) {
                   `
             }
           </div>
+
+          ${
+            isCreating
+              ? html`
+            <!-- DoD 完成门禁引导（仅新建项目时显示） -->
+            <div
+              class="callout"
+              style="
+                margin-top: 16px;
+                border-left: 3px solid #2563eb;
+                background: #eff6ff;
+                padding: 12px 14px;
+              "
+            >
+              <strong style="font-size: 13px;">🛡️ 建议：在创建后立即定义完成门禁（DoD）</strong>
+              <div style="font-size: 12px; margin-top: 8px; color: #1d4ed8; line-height: 1.6;">
+                项目创建后，请到「项目进度 → DoD 完成门禁」区域定义验收标准。
+                每条标准应包含:
+                <ul style="margin: 6px 0 0 16px; padding: 0;">
+                  <li>具体可验证的完成条件（禁止模糊表述如“功能完善”）</li>
+                  <li>验证方式（人工 / 自动化测试 / 可检查产出物）</li>
+                  <li>是否需要人工最终签收（强烈建议保持开启）</li>
+                </ul>
+                <div style="margin-top: 8px; color: #374151; font-size: 11px;">
+                  也可以让 AI coordinator 帮助：发送「请为项目 ${project.name || project.projectId || "XXX"}
+                  定义验收标准，调用 projects.updateProgress 设置 completionGate」
+                </div>
+              </div>
+            </div>
+          `
+              : nothing
+          }
         </div>
         
         <div class="modal-footer">

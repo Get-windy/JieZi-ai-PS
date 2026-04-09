@@ -149,13 +149,87 @@ export interface Organization {
 export type TeamType = "permanent" | "project" | "temporary";
 
 /**
+ * OKR 目标（Objective）
+ *
+ * 业界最佳实践：目标应该具有激励性、时间限制，并与团队 / 组织对齐
+ */
+export interface OkrObjective {
+  /** 目标 ID */
+  id: string;
+  /** 目标描述（应该具有激励性，非量化） */
+  title: string;
+  /** 目标截止期 */
+  quarter?: string; // 如 "2025-Q2"
+  /** 目标属于的组织 ID */
+  organizationId?: string;
+  /** 目标属于的团队 ID */
+  teamId?: string;
+  /** 目标状态 */
+  status: "active" | "completed" | "paused" | "cancelled";
+  /** 关键结果列表 */
+  keyResults: OkrKeyResult[];
+  /** 创建时间 */
+  createdAt: number;
+  /** 创建者 ID */
+  createdBy: string;
+  /** 更新时间 */
+  updatedAt?: number;
+}
+
+/**
+ * OKR 关键结果（Key Result）
+ *
+ * 必须可量化、可验证。不允许模糊表述。
+ */
+export interface OkrKeyResult {
+  /** KR ID */
+  id: string;
+  /** KR 描述（必须可量化，如“单元测试覆盖率 ≥ 80%”） */
+  description: string;
+  /** 起始值 */
+  startValue: number;
+  /** 目标值 */
+  targetValue: number;
+  /** 当前值 */
+  currentValue: number;
+  /** 单位（如 "%"、"件"、"h"） */
+  unit?: string;
+  /** 该 KR 的完成百分比（0-100） */
+  progress: number;
+  /** 更新时间 */
+  updatedAt?: number;
+  /** 更新者 ID */
+  updatedBy?: string;
+}
+
+/**
+ * 团队速度记录（用于容量预测 / Sprint 规划）
+ */
+export interface TeamVelocityRecord {
+  /** Sprint 或迭代周期 ID */
+  sprintId: string;
+  /** Sprint 标题 */
+  sprintTitle: string;
+  /** 完成的 Story Points */
+  completedPoints: number;
+  /** 规划的 Story Points */
+  plannedPoints: number;
+  /** 完成率（0-100） */
+  completionRate: number;
+  /** Sprint 完成时间 */
+  completedAt: number;
+  /** 对应的项目 ID */
+  projectId?: string;
+}
+
+/**
  * 团队结构
  */
 export interface Team {
   id: string;
   name: string;
   organizationId: string; // 所属组织
-  leaderId: string; // 组长助手ID
+  leaderId: string; // 组长助手 ID
   memberIds: string[]; // 成员列表
 
   // 团队类型
@@ -163,6 +237,12 @@ export interface Team {
 
   // 团队目标
   objectives: string[];
+
+  // OKR 目标（结构化）
+  okrObjectives?: OkrObjective[];
+
+  // 团队速度历史（用于 Sprint 容量预测）
+  velocityHistory?: TeamVelocityRecord[];
 
   // 团队资源
   sharedResources: {
@@ -256,7 +336,17 @@ export interface MentorshipRelation {
 }
 
 /**
- * 任务分配
+ * @deprecated 请改用 {@link Task}（在 tasks/types.ts 中定义）和 {@link TaskAssignee}。
+ *
+ * 警告：这个接口有自己独立的状态模型（pending/in-progress/completed/cancelled）
+ * 和优先级模型（少了 "none"），与 tasks/types.ts 中的 TaskStatus/TaskPriority 存在差异。
+ * 继续使用会导致第三套任务状态模型出现。
+ *
+ * 迁移指南：
+ *   之前使用 TaskAssignment 的地方，改为在 tasks/storage.ts 中创建真正的 Task
+ *   并通过 tasks/storage.ts 的 createTask / updateTask / listTasks 管理。
+ *
+ * ⚠️  后续开发者不得在新代码中使用此接口！
  */
 export interface TaskAssignment {
   id: string;

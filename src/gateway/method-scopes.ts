@@ -265,6 +265,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "task.subtask.create",
     "task.dependency.add",
     "task.block",
+    "task.ping",
     "permission_mgmt.grant",
     "permission_mgmt.revoke",
     "permission_mgmt.delegate",

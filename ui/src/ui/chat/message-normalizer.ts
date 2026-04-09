@@ -2,39 +2,14 @@
  * Message normalization utilities for chat rendering.
  */
 
-import { stripInboundMetadata } from "../../../../upstream/src/auto-reply/reply/strip-inbound-meta.js";
-import type { AgentCommMeta, NormalizedMessage, MessageContentItem } from "../types/chat-types.ts";
-
-/**
- * Matches inter-agent communication prefix: [TYPE from senderId]
- * Supports: COMMAND, REQUEST, QUERY, NOTIFICATION (case-insensitive)
- */
-const AGENT_COMM_PREFIX_RE = /^\[(COMMAND|REQUEST|QUERY|NOTIFICATION)\s+from\s+([^\]]+)\]\s*/i;
-
-/**
- * Parse inter-agent communication prefix from a user message text.
- * Returns AgentCommMeta if matched, null otherwise.
- */
-export function parseAgentCommPrefix(text: string): AgentCommMeta | null {
-  const match = AGENT_COMM_PREFIX_RE.exec(text);
-  if (!match) {
-    return null;
-  }
-  const rawType = match[1].toLowerCase();
-  const type =
-    rawType === "command"
-      ? "command"
-      : rawType === "request"
-        ? "request"
-        : rawType === "query"
-          ? "query"
-          : "notification";
-  return {
-    type,
-    senderId: match[2].trim(),
-    body: text.slice(match[0].length).trim(),
-  };
-}
+import { stripInboundMetadata } from "../../../../src/auto-reply/reply/strip-inbound-meta.js";
+import {
+  isToolCallContentType,
+  isToolResultContentType,
+  resolveToolBlockArgs,
+} from "../../../../src/chat/tool-content.js";
+import { normalizeLowercaseStringOrEmpty } from "../string-coerce.ts";
+import type { NormalizedMessage, MessageContentItem } from "../types/chat-types.ts";
 
 /**
  * Normalize a raw message object into a consistent structure.
@@ -53,8 +28,7 @@ export function normalizeMessage(message: unknown): NormalizedMessage {
     Array.isArray(contentItems) &&
     contentItems.some((item) => {
       const x = item as Record<string, unknown>;
-      const t = (typeof x.type === "string" ? x.type : "").toLowerCase();
-      return t === "toolresult" || t === "tool_result";
+      return isToolResultContentType(x.type) || isToolCallContentType(x.type);
     });
 
   const hasToolName = typeof m.toolName === "string" || typeof m.tool_name === "string";
@@ -73,7 +47,7 @@ export function normalizeMessage(message: unknown): NormalizedMessage {
       type: (item.type as MessageContentItem["type"]) || "text",
       text: item.text as string | undefined,
       name: item.name as string | undefined,
-      args: item.args || item.arguments,
+      args: resolveToolBlockArgs(item),
     }));
   } else if (typeof m.text === "string") {
     content = [{ type: "text", text: m.text }];
@@ -81,34 +55,27 @@ export function normalizeMessage(message: unknown): NormalizedMessage {
 
   const timestamp = typeof m.timestamp === "number" ? m.timestamp : Date.now();
   const id = typeof m.id === "string" ? m.id : undefined;
+  const senderLabel =
+    typeof m.senderLabel === "string" && m.senderLabel.trim() ? m.senderLabel.trim() : null;
 
   // Strip AI-injected metadata prefix blocks from user messages before display.
-  // Also detect inter-agent communication prefix ([COMMAND/REQUEST/QUERY/NOTIFICATION from agentId]).
-  let agentComm: AgentCommMeta | undefined;
   if (role === "user" || role === "User") {
     content = content.map((item) => {
       if (item.type === "text" && typeof item.text === "string") {
-        const stripped = stripInboundMetadata(item.text);
-        // Check for inter-agent comm prefix after stripping inbound metadata
-        const commMeta = parseAgentCommPrefix(stripped);
-        if (commMeta) {
-          agentComm = commMeta;
-          return { ...item, text: stripped };
-        }
-        return { ...item, text: stripped };
+        return { ...item, text: stripInboundMetadata(item.text) };
       }
       return item;
     });
   }
 
-  return { role, content, timestamp, id, agentComm };
+  return { role, content, timestamp, id, senderLabel };
 }
 
 /**
  * Normalize role for grouping purposes.
  */
 export function normalizeRoleForGrouping(role: string): string {
-  const lower = role.toLowerCase();
+  const lower = normalizeLowercaseStringOrEmpty(role);
   // Preserve original casing when it's already a core role.
   if (role === "user" || role === "User") {
     return role;
@@ -136,6 +103,6 @@ export function normalizeRoleForGrouping(role: string): string {
  */
 export function isToolResultMessage(message: unknown): boolean {
   const m = message as Record<string, unknown>;
-  const role = typeof m.role === "string" ? m.role.toLowerCase() : "";
+  const role = normalizeLowercaseStringOrEmpty(m.role);
   return role === "toolresult" || role === "tool_result";
 }

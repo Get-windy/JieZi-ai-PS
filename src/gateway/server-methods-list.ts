@@ -239,6 +239,7 @@ const BASE_METHODS = [
   "task.subtask.create",
   "task.dependency.add",
   "task.block",
+  "task.ping",
   // Meetings Management
   "meeting.create",
   "meeting.update",

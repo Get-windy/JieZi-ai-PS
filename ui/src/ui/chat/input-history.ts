@@ -1,138 +1,114 @@
 /**
- * Input history module — P2 feature
+ * 输入历史管理
  *
- * Stores sent messages in a ring buffer (max 50 entries) backed by localStorage.
- * Supports ArrowUp/ArrowDown navigation through history.
- *
- * 对抗-P2 修复：原实现使用全局单例，导致跨 sessionKey 历史混用。
- * 现在通过 getInputHistory(sessionKey) 工厂函数获取按会话隔离的实例。
- * localStorage key 格式："chat-input-history:{sessionKey}"
+ * 两套 API 同时支持：
+ *  1. chatInputHistory - 旧全局单例（兼容保留）
+ *  2. getInputHistory(sessionKey) - 新的按会话隔离实例
  */
 
-const STORAGE_KEY_PREFIX = "chat-input-history:";
-const MAX_ENTRIES = 50;
+const MAX = 50;
 
 export class InputHistory {
-  private entries: string[] = [];
+  private items: string[] = [];
   private cursor = -1;
-  private pendingDraft = "";
-  private readonly storageKey: string;
 
-  constructor(sessionKey: string) {
-    this.storageKey = `${STORAGE_KEY_PREFIX}${sessionKey}`;
-    this.load();
-  }
-
-  /** Load history from localStorage */
-  private load(): void {
-    try {
-      const raw = localStorage.getItem(this.storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          this.entries = parsed.slice(-MAX_ENTRIES);
-        }
-      }
-    } catch {
-      this.entries = [];
-    }
-  }
-
-  /** Persist history to localStorage */
-  private save(): void {
-    try {
-      localStorage.setItem(this.storageKey, JSON.stringify(this.entries));
-    } catch {
-      // localStorage full or unavailable — silently ignore
-    }
-  }
-
-  /** Add a new entry to history (deduplicates last entry) */
-  add(text: string): void {
+  // 新 API：无参数 push（与上游一致）
+  push(text: string): void {
     const trimmed = text.trim();
     if (!trimmed) {
       return;
     }
-    // Don't add if identical to most recent entry
-    if (this.entries.length > 0 && this.entries[this.entries.length - 1] === trimmed) {
-      this.reset();
+    if (this.items[this.items.length - 1] === trimmed) {
       return;
     }
-    this.entries.push(trimmed);
-    if (this.entries.length > MAX_ENTRIES) {
-      this.entries = this.entries.slice(-MAX_ENTRIES);
+    this.items.push(trimmed);
+    if (this.items.length > MAX) {
+      this.items.shift();
     }
-    this.save();
-    this.reset();
-  }
-
-  /** Reset cursor (called after send or on new input) */
-  reset(): void {
     this.cursor = -1;
-    this.pendingDraft = "";
   }
 
-  /** Navigate to older entry (ArrowUp). Returns the text to show, or null if at boundary. */
-  older(currentDraft: string): string | null {
-    if (this.entries.length === 0) {
-      return null;
-    }
-    // If not yet navigating, save current draft
-    if (this.cursor === -1) {
-      this.pendingDraft = currentDraft;
-      this.cursor = this.entries.length;
-    }
-    if (this.cursor <= 0) {
-      return null;
-    }
-    this.cursor--;
-    return this.entries[this.cursor];
+  // 旧 API 兼容别名
+  add(text: string): void {
+    this.push(text);
   }
 
-  /** Navigate to newer entry (ArrowDown). Returns the text to show, or null if at boundary. */
-  newer(): string | null {
-    if (this.cursor === -1) {
+  up(): string | null {
+    if (this.items.length === 0) {
+      return null;
+    }
+    if (this.cursor < 0) {
+      this.cursor = this.items.length - 1;
+    } else if (this.cursor > 0) {
+      this.cursor--;
+    }
+    return this.items[this.cursor] ?? null;
+  }
+
+  down(): string | null {
+    if (this.cursor < 0) {
       return null;
     }
     this.cursor++;
-    if (this.cursor >= this.entries.length) {
-      // Back to current draft
-      const draft = this.pendingDraft;
-      this.reset();
-      return draft;
+    if (this.cursor >= this.items.length) {
+      this.cursor = -1;
+      return null;
     }
-    return this.entries[this.cursor];
+    return this.items[this.cursor] ?? null;
   }
 
-  /** Whether the cursor is actively navigating */
+  // 旧 API：older/newer（带当前值参数，首次调用时保存当前输入）
+  older(current?: string): string | null {
+    if (this.items.length === 0) {
+      return null;
+    }
+    if (this.cursor < 0) {
+      // 首次向上，记录当前未提交的输入（不加入历史）
+      this._current = current ?? "";
+      this.cursor = this.items.length - 1;
+    } else if (this.cursor > 0) {
+      this.cursor--;
+    }
+    return this.items[this.cursor] ?? null;
+  }
+
+  newer(): string | null {
+    if (this.cursor < 0) {
+      return null;
+    }
+    this.cursor++;
+    if (this.cursor >= this.items.length) {
+      this.cursor = -1;
+      const cur = this._current;
+      this._current = "";
+      return cur ?? null;
+    }
+    return this.items[this.cursor] ?? null;
+  }
+
   get isNavigating(): boolean {
-    return this.cursor !== -1;
+    return this.cursor >= 0;
   }
 
-  /** Number of entries currently stored */
-  get size(): number {
-    return this.entries.length;
+  reset(): void {
+    this.cursor = -1;
+    this._current = "";
   }
+
+  private _current = "";
 }
 
-/**
- * 对抗-P2：按 sessionKey 隔离的历史实例缓存。
- * 同一 sessionKey 在同一页面内复用同一实例（避免重复读取 localStorage）。
- */
-const _historyCache = new Map<string, InputHistory>();
+// 旧全局单例（兼容 views/chat.ts 中对 chatInputHistory 的直接引用）
+export const chatInputHistory = new InputHistory();
+
+// 新 API：按 sessionKey 隔离的输入历史
+const sessionHistories = new Map<string, InputHistory>();
 
 export function getInputHistory(sessionKey: string): InputHistory {
-  let instance = _historyCache.get(sessionKey);
-  if (!instance) {
-    instance = new InputHistory(sessionKey);
-    _historyCache.set(sessionKey, instance);
+  let h = sessionHistories.get(sessionKey);
+  if (!h) {
+    h = new InputHistory();
+    sessionHistories.set(sessionKey, h);
   }
-  return instance;
+  return h;
 }
-
-/**
- * 向后兼容的全局单例（供未传入 sessionKey 的展示）。
- * 新代码应优先使用 getInputHistory(sessionKey)。
- * @deprecated 请使用 getInputHistory(sessionKey)
- */
-export const chatInputHistory = getInputHistory("__legacy__");

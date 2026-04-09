@@ -1,10 +1,13 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import { ConnectErrorDetailCodes } from "../../../../upstream/src/gateway/protocol/connect-error-details.js";
-import { t, i18n, type Locale } from "../../i18n/index.ts";
+import { t, i18n, SUPPORTED_LOCALES, type Locale, isSupportedLocale } from "../../i18n/index.ts";
+import { buildExternalLinkRel, EXTERNAL_LINK_TARGET } from "../external-link.ts";
 import { formatRelativeTimestamp, formatDurationHuman } from "../format.ts";
 import type { GatewayHelloOk } from "../gateway.ts";
+import { icons } from "../icons.ts";
 import { formatNextRun } from "../presenter.ts";
 import type { UiSettings } from "../storage.ts";
+import { normalizeLowercaseStringOrEmpty } from "../string-coerce.ts";
 import { shouldShowPairingHint } from "./overview-hints.ts";
 
 export type OverviewProps = {
@@ -19,15 +22,23 @@ export type OverviewProps = {
   cronEnabled: boolean | null;
   cronNext: number | null;
   lastChannelsRefresh: number | null;
+  warnQueryToken?: boolean;
+  showGatewayToken?: boolean;
+  showGatewayPassword?: boolean;
+  // Local-only: workspace management
   workspacesDir: string;
   onSettingsChange: (next: UiSettings) => void;
   onPasswordChange: (next: string) => void;
   onSessionKeyChange: (next: string) => void;
+  onToggleGatewayTokenVisibility?: () => void;
+  onToggleGatewayPasswordVisibility?: () => void;
   onConnect: () => void;
   onRefresh: () => void;
   onWorkspacesDirSave: (newDir: string) => Promise<void>;
   onWorkspaceBackup: (backupDir?: string) => Promise<{ backupDir: string; fileCount: number }>;
-  onWorkspaceMigrateAll: (newRoot: string) => Promise<{ oldRoot: string; newRoot: string; filesCopied: number; agentsMigrated: number }>;
+  onWorkspaceMigrateAll: (
+    newRoot: string,
+  ) => Promise<{ oldRoot: string; newRoot: string; filesCopied: number; agentsMigrated: number }>;
 };
 
 export function renderOverview(props: OverviewProps) {
@@ -39,8 +50,9 @@ export function renderOverview(props: OverviewProps) {
       }
     | undefined;
   const uptime = snapshot?.uptimeMs ? formatDurationHuman(snapshot.uptimeMs) : t("common.na");
-  const tick = snapshot?.policy?.tickIntervalMs
-    ? `${snapshot.policy.tickIntervalMs}ms`
+  const tickIntervalMs = props.hello?.policy?.tickIntervalMs ?? snapshot?.policy?.tickIntervalMs;
+  const tick = tickIntervalMs
+    ? `${(tickIntervalMs / 1000).toFixed(tickIntervalMs % 1000 === 0 ? 0 : 1)}s`
     : t("common.na");
   const authMode = snapshot?.authMode;
   const isTrustedProxy = authMode === "trusted-proxy";
@@ -66,8 +78,8 @@ export function renderOverview(props: OverviewProps) {
           <a
             class="session-link"
             href="https://docs.openclaw.ai/web/control-ui#device-pairing-first-connection"
-            target="_blank"
-            rel="noreferrer"
+            target=${EXTERNAL_LINK_TARGET}
+            rel=${buildExternalLinkRel()}
             title="Device pairing docs (opens in new tab)"
             >Docs: Device pairing</a
           >
@@ -123,8 +135,8 @@ export function renderOverview(props: OverviewProps) {
             <a
               class="session-link"
               href="https://docs.openclaw.ai/web/dashboard"
-              target="_blank"
-              rel="noreferrer"
+              target=${EXTERNAL_LINK_TARGET}
+              rel=${buildExternalLinkRel()}
               title="Control UI auth docs (opens in new tab)"
               >Docs: Control UI auth</a
             >
@@ -139,8 +151,8 @@ export function renderOverview(props: OverviewProps) {
           <a
             class="session-link"
             href="https://docs.openclaw.ai/web/dashboard"
-            target="_blank"
-            rel="noreferrer"
+            target=${EXTERNAL_LINK_TARGET}
+            rel=${buildExternalLinkRel()}
             title="Control UI auth docs (opens in new tab)"
             >Docs: Control UI auth</a
           >
@@ -178,8 +190,8 @@ export function renderOverview(props: OverviewProps) {
           <a
             class="session-link"
             href="https://docs.openclaw.ai/gateway/tailscale"
-            target="_blank"
-            rel="noreferrer"
+            target=${EXTERNAL_LINK_TARGET}
+            rel=${buildExternalLinkRel()}
             title="Tailscale Serve docs (opens in new tab)"
             >Docs: Tailscale Serve</a
           >
@@ -187,8 +199,8 @@ export function renderOverview(props: OverviewProps) {
           <a
             class="session-link"
             href="https://docs.openclaw.ai/web/control-ui#insecure-http"
-            target="_blank"
-            rel="noreferrer"
+            target=${EXTERNAL_LINK_TARGET}
+            rel=${buildExternalLinkRel()}
             title="Insecure HTTP docs (opens in new tab)"
             >Docs: Insecure HTTP</a
           >
@@ -197,7 +209,27 @@ export function renderOverview(props: OverviewProps) {
     `;
   })();
 
-  const currentLocale = i18n.getLocale();
+  const queryTokenHint = (() => {
+    if (props.connected || !props.lastError || !props.warnQueryToken) {
+      return null;
+    }
+    const lower = normalizeLowercaseStringOrEmpty(props.lastError);
+    const authFailed = lower.includes("unauthorized") || lower.includes("device identity required");
+    if (!authFailed) {
+      return null;
+    }
+    return html`
+      <div class="muted" style="margin-top: 8px">
+        Auth token must be passed as a URL fragment:
+        <span class="mono">#token=&lt;token&gt;</span>. Query parameters (<span class="mono">?token=</span
+        >) may appear in server logs.
+      </div>
+    `;
+  })();
+
+  const currentLocale = isSupportedLocale(props.settings.locale)
+    ? props.settings.locale
+    : i18n.getLocale();
 
   return html`
     <section class="grid grid-cols-2">
@@ -222,26 +254,65 @@ export function renderOverview(props: OverviewProps) {
               : html`
                 <label class="field">
                   <span>${t("overview.access.token")}</span>
-                  <input
-                    .value=${props.settings.token}
-                    @input=${(e: Event) => {
-                      const v = (e.target as HTMLInputElement).value;
-                      props.onSettingsChange({ ...props.settings, token: v });
-                    }}
-                    placeholder="OPENCLAW_GATEWAY_TOKEN"
-                  />
+                  <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                    <input
+                      type=${props.showGatewayToken ? "text" : "password"}
+                      autocomplete="off"
+                      style="flex: 1 1 0%; min-width: 0; box-sizing: border-box;"
+                      .value=${props.settings.token}
+                      @input=${(e: Event) => {
+                        const v = (e.target as HTMLInputElement).value;
+                        props.onSettingsChange({ ...props.settings, token: v });
+                      }}
+                      placeholder="OPENCLAW_GATEWAY_TOKEN"
+                    />
+                    ${
+                      props.onToggleGatewayTokenVisibility
+                        ? html`<button
+                          type="button"
+                          class="btn btn--icon ${props.showGatewayToken ? "active" : ""}"
+                          style="flex-shrink: 0; width: 36px; height: 36px; box-sizing: border-box;"
+                          title=${props.showGatewayToken ? "Hide token" : "Show token"}
+                          aria-label="Toggle token visibility"
+                          aria-pressed=${props.showGatewayToken}
+                          @click=${props.onToggleGatewayTokenVisibility}
+                        >
+                          ${props.showGatewayToken ? icons.eye : icons.eyeOff}
+                        </button>`
+                        : nothing
+                    }
+                  </div>
                 </label>
                 <label class="field">
                   <span>${t("overview.access.password")}</span>
-                  <input
-                    type="password"
-                    .value=${props.password}
-                    @input=${(e: Event) => {
-                      const v = (e.target as HTMLInputElement).value;
-                      props.onPasswordChange(v);
-                    }}
-                    placeholder=${t("overview.access.passwordPlaceholder")}
-                  />
+                  <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                    <input
+                      type=${props.showGatewayPassword ? "text" : "password"}
+                      autocomplete="off"
+                      style="flex: 1 1 0%; min-width: 0; width: 100%; box-sizing: border-box;"
+                      .value=${props.password}
+                      @input=${(e: Event) => {
+                        const v = (e.target as HTMLInputElement).value;
+                        props.onPasswordChange(v);
+                      }}
+                      placeholder=${t("overview.access.passwordPlaceholder")}
+                    />
+                    ${
+                      props.onToggleGatewayPasswordVisibility
+                        ? html`<button
+                          type="button"
+                          class="btn btn--icon ${props.showGatewayPassword ? "active" : ""}"
+                          style="flex-shrink: 0; width: 36px; height: 36px; box-sizing: border-box;"
+                          title=${props.showGatewayPassword ? "Hide password" : "Show password"}
+                          aria-label="Toggle password visibility"
+                          aria-pressed=${props.showGatewayPassword}
+                          @click=${props.onToggleGatewayPasswordVisibility}
+                        >
+                          ${props.showGatewayPassword ? icons.eye : icons.eyeOff}
+                        </button>`
+                        : nothing
+                    }
+                  </div>
                 </label>
               `
           }
@@ -265,10 +336,12 @@ export function renderOverview(props: OverviewProps) {
                 props.onSettingsChange({ ...props.settings, locale: v });
               }}
             >
-              <option value="en">${t("languages.en")}</option>
-              <option value="zh-CN">${t("languages.zhCN")}</option>
-              <option value="zh-TW">${t("languages.zhTW")}</option>
-              <option value="pt-BR">${t("languages.ptBR")}</option>
+              ${SUPPORTED_LOCALES.map((loc) => {
+                const key = loc.replace(/-([a-zA-Z])/g, (_, c) => c.toUpperCase());
+                return html`<option value=${loc} ?selected=${currentLocale === loc}>
+                  ${t(`languages.${key}`)}
+                </option>`;
+              })}
             </select>
           </label>
         </div>
@@ -313,6 +386,7 @@ export function renderOverview(props: OverviewProps) {
               ${pairingHint ?? ""}
               ${authHint ?? ""}
               ${insecureContextHint ?? ""}
+              ${queryTokenHint ?? ""}
             </div>`
             : html`
                 <div class="callout" style="margin-top: 14px">
@@ -401,8 +475,14 @@ export function renderOverview(props: OverviewProps) {
             ?disabled=${!props.connected}
             @click=${async () => {
               const newDir = workspacesDirInput.trim();
-              if (!newDir) { alert("请输入工作空间目录"); return; }
-              if (newDir === props.workspacesDir) { alert("路径未变化"); return; }
+              if (!newDir) {
+                alert("请输入工作空间目录");
+                return;
+              }
+              if (newDir === props.workspacesDir) {
+                alert("路径未变化");
+                return;
+              }
               try {
                 await props.onWorkspacesDirSave(newDir);
                 alert("✅ 配置已更新，不复制文件。如需迁移数据请使用「迁移」功能。");
@@ -422,12 +502,23 @@ export function renderOverview(props: OverviewProps) {
                 class="btn"
                 ?disabled=${!props.connected}
                 @click=${async () => {
-                  if (!props.workspacesDir) { alert("请先设置工作空间根目录"); return; }
+                  if (!props.workspacesDir) {
+                    alert("请先设置工作空间根目录");
+                    return;
+                  }
                   const customDir = prompt("备份目录（留空自动生成）:");
-                  if (customDir === null) {return;}
+                  if (customDir === null) {
+                    return;
+                  }
                   try {
                     const result = await props.onWorkspaceBackup(customDir.trim() || undefined);
-                    alert("✅ 备份完成！\n备份目录: " + result.backupDir + "\n已复制: " + result.fileCount + " 个文件");
+                    alert(
+                      "✅ 备份完成！\n备份目录: " +
+                        result.backupDir +
+                        "\n已复制: " +
+                        result.fileCount +
+                        " 个文件",
+                    );
                   } catch (err) {
                     alert("❌ 备份失败：" + (err instanceof Error ? err.message : String(err)));
                   }
@@ -447,13 +538,36 @@ export function renderOverview(props: OverviewProps) {
                 class="btn"
                 ?disabled=${!props.connected}
                 @click=${async () => {
-                  if (!props.workspacesDir) { alert("请先设置当前工作空间根目录"); return; }
+                  if (!props.workspacesDir) {
+                    alert("请先设置当前工作空间根目录");
+                    return;
+                  }
                   const newRoot = prompt("新的工作空间目录:");
-                  if (!newRoot || !newRoot.trim()) {return;}
-                  if (!confirm("确认将整个工作空间迁移到: " + newRoot.trim() + "\n\n这不会删除原目录。建议先备份。")) {return;}
+                  if (!newRoot || !newRoot.trim()) {
+                    return;
+                  }
+                  if (
+                    !confirm(
+                      "确认将整个工作空间迁移到: " +
+                        newRoot.trim() +
+                        "\n\n这不会删除原目录。建议先备份。",
+                    )
+                  ) {
+                    return;
+                  }
                   try {
                     const result = await props.onWorkspaceMigrateAll(newRoot.trim());
-                    alert("✅ 迁移完成！\n原目录: " + result.oldRoot + "\n新目录: " + result.newRoot + "\n已复制: " + result.filesCopied + " 个文件\n已更新 Agent: " + result.agentsMigrated + " 个");
+                    alert(
+                      "✅ 迁移完成！\n原目录: " +
+                        result.oldRoot +
+                        "\n新目录: " +
+                        result.newRoot +
+                        "\n已复制: " +
+                        result.filesCopied +
+                        " 个文件\n已更新 Agent: " +
+                        result.agentsMigrated +
+                        " 个",
+                    );
                   } catch (err) {
                     alert("❌ 迁移失败：" + (err instanceof Error ? err.message : String(err)));
                   }

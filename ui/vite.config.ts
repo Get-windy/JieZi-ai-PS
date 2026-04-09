@@ -6,11 +6,44 @@ import type { Plugin } from "vite";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
+// ============================================================
+// UI 代码分层规范 (Overlay Architecture)
+// ============================================================
+//
+// 本项目采用「上游回退」机制，代码分为三层：
+//
+// 【第一层：上游基础层】upstream/ui/src/ui/
+//   - 来自上游开源项目的原始代码
+//   - 不直接修改！更新上游时整体替换
+//   - 包含：基础工具、通用控制器、标准视图
+//
+// 【第二层：本地覆盖层】ui/src/ui/
+//   - 覆盖上游同名文件时，本地版本优先
+//   - 文件分两类：
+//     A. 上游文件的本地扩展版（含本地业务逻辑）
+//        示例：agents.ts、app-render.ts、navigation.ts
+//        维护要求：上游更新后需 cherry-pick 合入改进
+//     B. 本地独有文件（上游无对应）
+//        示例：views/projects.ts、views/organization-management.ts
+//        维护要求：自由维护，无需跟踪上游
+//
+// 【第三层：本地后端层】src/
+//   - 本地独有后端业务逻辑（组织/项目/任务/权限等）
+//   - 与上游 src/ 完全独立的业务领域，不存在合入关系
+//
+// 覆盖层判断规则（由 upstreamOverlayPlugin 执行）：
+//   导入路径 → 先查 ui/src/ui/ → 找不到 → 回退到 upstream/ui/src/ui/
+//
+// 定期同步：运行 scripts/ui-overlay-sync.ps1 检查上游与本地差异
+// ============================================================
+
 // ========== 三层架构覆盖层插件 ==========
 // 实现 upstream/src/ 路径解析机制，用于 UI 构建
 const ROOT_DIR = path.resolve(here, "..");
-const SRC_DIR = path.join(ROOT_DIR, "src");
-const UP_SRC_DIR = path.join(ROOT_DIR, "upstream", "src");
+const SRC_DIR = path.join(ROOT_DIR, "src"); // 网关后端 src
+const UP_SRC_DIR = path.join(ROOT_DIR, "upstream", "src"); // 上游后端 src
+const UI_SRC_DIR = path.join(here, "src"); // 本地 UI src (ui/src)
+const UP_UI_SRC_DIR = path.join(ROOT_DIR, "upstream", "ui", "src"); // 上游 UI src
 const SEP = path.sep;
 const TS_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".json"];
 
@@ -83,26 +116,50 @@ function upstreamOverlayPlugin(): Plugin {
 
       absTarget = path.normalize(absTarget);
 
-      // Case 1: 目标在 src/ 下 → 本地优先，不存在则回退到 upstream/src/
-      if (absTarget.startsWith(SRC_DIR + SEP) || absTarget === SRC_DIR) {
+      // Case 1: 目标在 ui/src/ 下 → 本地 UI 优先，不存在则回退到 upstream/ui/src/
+      if (absTarget.startsWith(UI_SRC_DIR + SEP) || absTarget === UI_SRC_DIR) {
         if (tryResolveFile(absTarget)) {
           return null;
         } // 本地存在，让默认解析处理
+        const rel = path.relative(UI_SRC_DIR, absTarget);
+        const upPath = path.join(UP_UI_SRC_DIR, rel);
+        const resolved = tryResolveFile(upPath);
+        return resolved || null;
+      }
+
+      // Case 2: 目标在 upstream/ui/src/ 下 → 检查 ui/src/ 是否有本地覆盖
+      if (absTarget.startsWith(UP_UI_SRC_DIR + SEP) || absTarget === UP_UI_SRC_DIR) {
+        const rel = path.relative(UP_UI_SRC_DIR, absTarget);
+        const localPath = path.join(UI_SRC_DIR, rel);
+        const localResult = tryResolveFile(localPath);
+        if (localResult) {
+          return localResult;
+        } // 本地有覆盖版本，使用它
+        const upstreamResult = tryResolveFile(absTarget);
+        if (upstreamResult) {
+          return upstreamResult;
+        }
+      }
+
+      // Case 3: 目标在 src/（网关后端）下 → 本地优先，回退到 upstream/src/
+      if (absTarget.startsWith(SRC_DIR + SEP) || absTarget === SRC_DIR) {
+        if (tryResolveFile(absTarget)) {
+          return null;
+        }
         const rel = path.relative(SRC_DIR, absTarget);
         const upPath = path.join(UP_SRC_DIR, rel);
         const resolved = tryResolveFile(upPath);
         return resolved || null;
       }
 
-      // Case 2: 目标在 upstream/src/ 下 → 检查 src/ 是否有本地覆盖
+      // Case 4: 目标在 upstream/src/（网关后端）下 → 检查 src/ 是否有本地覆盖
       if (absTarget.startsWith(UP_SRC_DIR + SEP) || absTarget === UP_SRC_DIR) {
         const rel = path.relative(UP_SRC_DIR, absTarget);
         const localPath = path.join(SRC_DIR, rel);
         const localResult = tryResolveFile(localPath);
         if (localResult) {
           return localResult;
-        } // 本地有覆盖版本，使用它
-        // 无本地覆盖：显式解析 upstream 路径（处理 .js → .ts 映射）
+        }
         const upstreamResult = tryResolveFile(absTarget);
         if (upstreamResult) {
           return upstreamResult;

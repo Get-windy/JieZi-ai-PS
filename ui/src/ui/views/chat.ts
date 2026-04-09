@@ -55,6 +55,17 @@ import { buildChatItems } from "./chat-thread.ts";
 // Re-export functions used by external modules
 export { resolveConversationInfo, renderChatParticipantsInline };
 
+/**
+ * 切换 tab 时重置聊天视图临时状态（导入历史、斜杠轮换 UI 等）
+ * 上游版本会停止 STT 并清空临时状态，本地版本无状态需要重置。
+ */
+export function resetChatViewState(): void {
+  // 本地 chat 视图不使用上游的模块内状态，暂无需要重置
+}
+
+/** @deprecated 居用 resetChatViewState */
+export const cleanupChatModuleState = resetChatViewState;
+
 export function renderChat(props: ChatProps) {
   // 监控视图路由：contact / all / agent-all 使用专属监控面板
   if (isMonitorContext(props.navCurrentContext)) {
@@ -244,7 +255,7 @@ export function renderChat(props: ChatProps) {
           }
 
           if (item.kind === "reading-indicator") {
-            return renderReadingIndicatorGroup(assistantIdentity);
+            return renderReadingIndicatorGroup(assistantIdentity, props.basePath);
           }
 
           if (item.kind === "stream") {
@@ -253,6 +264,7 @@ export function renderChat(props: ChatProps) {
               item.startedAt,
               props.onOpenSidebar,
               assistantIdentity,
+              props.basePath,
             );
           }
 
@@ -260,8 +272,11 @@ export function renderChat(props: ChatProps) {
             return renderMessageGroup(item, {
               onOpenSidebar: props.onOpenSidebar,
               showReasoning,
+              showToolCalls: props.showToolCalls,
               assistantName: props.assistantName,
               assistantAvatar: assistantIdentity.avatar,
+              basePath: props.basePath,
+              contextWindow: props.contextWindow ?? null,
               onQuote: (quoted: string) => {
                 // Inject quoted text at the start of the draft
                 const current = props.draft.trim();

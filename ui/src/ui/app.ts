@@ -52,6 +52,7 @@ import type { AppViewState } from "./app-view-state.ts";
 import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity.ts";
 import type { DevicePairingList } from "./controllers/devices.ts";
+import type { DreamingStatus } from "./controllers/dreaming.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
@@ -136,8 +137,15 @@ export class OpenClawApp extends LitElement {
   @state() chatStreamStartedAt: number | null = null;
   @state() chatRunId: string | null = null;
   @state() compactionStatus: CompactionStatus | null = null;
+  @state() fallbackStatus: import("./app-tool-stream.ts").FallbackStatus | null = null;
   @state() chatAvatarUrl: string | null = null;
   @state() chatThinkingLevel: string | null = null;
+  @state() chatModelOverrides: Record<
+    string,
+    import("./chat-model-ref.ts").ChatModelOverride | null
+  > = {};
+  @state() chatModelsLoading = false;
+  @state() chatModelCatalog: import("./types.ts").ModelCatalogEntry[] = [];
   @state() chatQueue: ChatQueueItem[] = [];
   @state() chatAttachments: ChatAttachment[] = [];
   @state() chatManualRefreshInFlight = false;
@@ -635,9 +643,12 @@ export class OpenClawApp extends LitElement {
   @state() sessionsFilterLimit = "120";
   @state() sessionsIncludeGlobal = true;
   @state() sessionsIncludeUnknown = false;
+  @state() sessionsHideCron = true;
 
   @state() usageLoading = false;
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
   @state() usageResult: import("./types.js").SessionsUsageResult | null = null;
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
   @state() usageCostSummary: import("./types.js").CostUsageSummary | null = null;
   @state() usageError: string | null = null;
   @state() usageStartDate = (() => {
@@ -655,6 +666,7 @@ export class OpenClawApp extends LitElement {
   @state() usageDailyChartMode: "total" | "by-type" = "by-type";
   @state() usageTimeSeriesMode: "cumulative" | "per-turn" = "per-turn";
   @state() usageTimeSeriesBreakdownMode: "total" | "by-type" = "by-type";
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
   @state() usageTimeSeries: import("./types.js").SessionUsageTimeSeries | null = null;
   @state() usageTimeSeriesLoading = false;
   @state() usageSessionLogs: import("./views/usage.js").SessionLogEntry[] | null = null;
@@ -750,6 +762,16 @@ export class OpenClawApp extends LitElement {
   private debugPollInterval: number | null = null;
   private monitorPollInterval: number | null = null;
   private logsScrollFrame: number | null = null;
+
+  // Dreaming（梦境/记忆整合）状态
+  @state() dreamingStatusLoading = false;
+  @state() dreamingStatusError: string | null = null;
+  @state() dreamingStatus: DreamingStatus | null = null;
+  @state() dreamingModeSaving = false;
+  @state() dreamDiaryLoading = false;
+  @state() dreamDiaryError: string | null = null;
+  @state() dreamDiaryPath: string | null = null;
+  @state() dreamDiaryContent: string | null = null;
   private toolStreamById = new Map<string, ToolStreamEntry>();
   private toolStreamOrder: string[] = [];
   refreshSessionsAfterChat = new Set<string>();

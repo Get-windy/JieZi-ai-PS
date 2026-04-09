@@ -9,8 +9,9 @@
  * - 有效期管理（项目制团队）
  */
 
-import type { Team, TeamType } from "./types.js";
 import { organizationSystem } from "./organization-system.js";
+import { organizationStorage } from "./storage.js";
+import type { Team, TeamType } from "./types.js";
 
 /**
  * 团队统计信息
@@ -34,8 +35,6 @@ export interface TeamStatistics {
  * 团队管理系统类
  */
 export class TeamManagement {
-  private teams: Map<string, Team> = new Map();
-
   /**
    * 创建团队
    */
@@ -69,7 +68,8 @@ export class TeamManagement {
     } = params;
 
     // 检查ID是否已存在
-    if (this.teams.has(id)) {
+    const existingTeam = await organizationStorage.getTeam(id);
+    if (existingTeam) {
       throw new Error(`Team with ID "${id}" already exists`);
     }
 
@@ -123,7 +123,7 @@ export class TeamManagement {
       createdBy: "system",
     };
 
-    this.teams.set(id, team);
+    await organizationStorage.createTeam(team);
     return team;
   }
 
@@ -131,7 +131,7 @@ export class TeamManagement {
    * 获取团队
    */
   async getTeam(teamId: string): Promise<Team | null> {
-    return this.teams.get(teamId) || null;
+    return organizationStorage.getTeam(teamId);
   }
 
   /**
@@ -146,7 +146,7 @@ export class TeamManagement {
   }): Promise<Team> {
     const { teamId, name, objectives, validFrom, validUntil } = params;
 
-    const team = this.teams.get(teamId);
+    const team = await organizationStorage.getTeam(teamId);
     if (!team) {
       throw new Error(`Team "${teamId}" not found`);
     }
@@ -158,28 +158,24 @@ export class TeamManagement {
       }
     }
 
-    const updated: Team = {
-      ...team,
+    return organizationStorage.updateTeam(teamId, {
       ...(name !== undefined && { name }),
       ...(objectives !== undefined && { objectives }),
       ...(validFrom !== undefined && { validFrom }),
       ...(validUntil !== undefined && { validUntil }),
-    };
-
-    this.teams.set(teamId, updated);
-    return updated;
+    });
   }
 
   /**
    * 删除团队
    */
   async deleteTeam(teamId: string): Promise<boolean> {
-    const team = this.teams.get(teamId);
+    const team = await organizationStorage.getTeam(teamId);
     if (!team) {
       throw new Error(`Team "${teamId}" not found`);
     }
 
-    return this.teams.delete(teamId);
+    return organizationStorage.deleteTeam(teamId);
   }
 
   /**
@@ -188,7 +184,7 @@ export class TeamManagement {
   async addTeamMember(params: { teamId: string; memberId: string }): Promise<Team> {
     const { teamId, memberId } = params;
 
-    const team = this.teams.get(teamId);
+    const team = await organizationStorage.getTeam(teamId);
     if (!team) {
       throw new Error(`Team "${teamId}" not found`);
     }
@@ -210,13 +206,9 @@ export class TeamManagement {
       );
     }
 
-    const updated: Team = {
-      ...team,
+    return organizationStorage.updateTeam(teamId, {
       memberIds: [...team.memberIds, memberId],
-    };
-
-    this.teams.set(teamId, updated);
-    return updated;
+    });
   }
 
   /**
@@ -225,7 +217,7 @@ export class TeamManagement {
   async removeTeamMember(params: { teamId: string; memberId: string }): Promise<Team> {
     const { teamId, memberId } = params;
 
-    const team = this.teams.get(teamId);
+    const team = await organizationStorage.getTeam(teamId);
     if (!team) {
       throw new Error(`Team "${teamId}" not found`);
     }
@@ -240,13 +232,9 @@ export class TeamManagement {
       throw new Error(`Member "${memberId}" is not in team "${teamId}"`);
     }
 
-    const updated: Team = {
-      ...team,
+    return organizationStorage.updateTeam(teamId, {
       memberIds: team.memberIds.filter((id) => id !== memberId),
-    };
-
-    this.teams.set(teamId, updated);
-    return updated;
+    });
   }
 
   /**
@@ -255,7 +243,7 @@ export class TeamManagement {
   async setTeamLeader(params: { teamId: string; newLeaderId: string }): Promise<Team> {
     const { teamId, newLeaderId } = params;
 
-    const team = this.teams.get(teamId);
+    const team = await organizationStorage.getTeam(teamId);
     if (!team) {
       throw new Error(`Team "${teamId}" not found`);
     }
@@ -265,13 +253,7 @@ export class TeamManagement {
       throw new Error(`New leader "${newLeaderId}" is not a member of team "${teamId}"`);
     }
 
-    const updated: Team = {
-      ...team,
-      leaderId: newLeaderId,
-    };
-
-    this.teams.set(teamId, updated);
-    return updated;
+    return organizationStorage.updateTeam(teamId, { leaderId: newLeaderId });
   }
 
   /**
@@ -284,7 +266,7 @@ export class TeamManagement {
   }): Promise<Team> {
     const { teamId, resourceType, resourceId } = params;
 
-    const team = this.teams.get(teamId);
+    const team = await organizationStorage.getTeam(teamId);
     if (!team) {
       throw new Error(`Team "${teamId}" not found`);
     }
@@ -294,16 +276,12 @@ export class TeamManagement {
       throw new Error(`Resource "${resourceId}" already exists in ${resourceType}`);
     }
 
-    const updated: Team = {
-      ...team,
+    return organizationStorage.updateTeam(teamId, {
       sharedResources: {
         ...team.sharedResources,
         [resourceType]: [...team.sharedResources[resourceType], resourceId],
       },
-    };
-
-    this.teams.set(teamId, updated);
-    return updated;
+    });
   }
 
   /**
@@ -316,7 +294,7 @@ export class TeamManagement {
   }): Promise<Team> {
     const { teamId, resourceType, resourceId } = params;
 
-    const team = this.teams.get(teamId);
+    const team = await organizationStorage.getTeam(teamId);
     if (!team) {
       throw new Error(`Team "${teamId}" not found`);
     }
@@ -326,30 +304,26 @@ export class TeamManagement {
       throw new Error(`Resource "${resourceId}" not found in ${resourceType}`);
     }
 
-    const updated: Team = {
-      ...team,
+    return organizationStorage.updateTeam(teamId, {
       sharedResources: {
         ...team.sharedResources,
         [resourceType]: team.sharedResources[resourceType].filter((id) => id !== resourceId),
       },
-    };
-
-    this.teams.set(teamId, updated);
-    return updated;
+    });
   }
 
   /**
    * 获取组织的所有团队
    */
   async getTeamsByOrganization(organizationId: string): Promise<Team[]> {
-    return Array.from(this.teams.values()).filter((team) => team.organizationId === organizationId);
+    return organizationStorage.listTeams({ organizationId });
   }
 
   /**
    * 获取团队成员列表
    */
   async getTeamMembers(teamId: string): Promise<string[]> {
-    const team = this.teams.get(teamId);
+    const team = await organizationStorage.getTeam(teamId);
     if (!team) {
       throw new Error(`Team "${teamId}" not found`);
     }
@@ -383,14 +357,15 @@ export class TeamManagement {
    * 获取所有活跃团队
    */
   async getActiveTeams(): Promise<Team[]> {
-    return Array.from(this.teams.values()).filter((team) => this.isTeamActive(team));
+    const allTeams = await organizationStorage.listTeams();
+    return allTeams.filter((team) => this.isTeamActive(team));
   }
 
   /**
    * 获取团队统计信息
    */
   async getTeamStatistics(teamId: string): Promise<TeamStatistics> {
-    const team = this.teams.get(teamId);
+    const team = await organizationStorage.getTeam(teamId);
     if (!team) {
       throw new Error(`Team "${teamId}" not found`);
     }
@@ -424,12 +399,11 @@ export class TeamManagement {
    */
   async getAllTeamsStatistics(): Promise<TeamStatistics[]> {
     const statistics: TeamStatistics[] = [];
-
-    for (const team of this.teams.values()) {
+    const allTeams = await organizationStorage.listTeams();
+    for (const team of allTeams) {
       const stats = await this.getTeamStatistics(team.id);
       statistics.push(stats);
     }
-
     return statistics;
   }
 
@@ -439,9 +413,11 @@ export class TeamManagement {
   async getExpiringTeams(daysThreshold: number = 7): Promise<Team[]> {
     const now = Date.now();
     const threshold = now + daysThreshold * 24 * 60 * 60 * 1000;
-
-    return Array.from(this.teams.values()).filter((team) => {
-      if (!team.validUntil) return false;
+    const allTeams = await organizationStorage.listTeams();
+    return allTeams.filter((team) => {
+      if (!team.validUntil) {
+        return false;
+      }
       return team.validUntil > now && team.validUntil <= threshold;
     });
   }
@@ -451,14 +427,13 @@ export class TeamManagement {
    */
   async cleanupExpiredTeams(): Promise<string[]> {
     const expiredTeamIds: string[] = [];
-
-    for (const team of this.teams.values()) {
+    const allTeams = await organizationStorage.listTeams();
+    for (const team of allTeams) {
       if (!this.isTeamActive(team)) {
-        this.teams.delete(team.id);
+        await organizationStorage.deleteTeam(team.id);
         expiredTeamIds.push(team.id);
       }
     }
-
     return expiredTeamIds;
   }
 
@@ -466,7 +441,7 @@ export class TeamManagement {
    * 获取所有团队
    */
   async getAllTeams(): Promise<Team[]> {
-    return Array.from(this.teams.values());
+    return organizationStorage.listTeams();
   }
 }
 

@@ -44,6 +44,43 @@ export const projectsHandlers: GatewayRequestHandlers = {
       // codeDir 默认为工作空间内的 src 子目录，而非硬编码到 I:\
       const defaultCodeDir = path.join(workspacePath, "src");
 
+      // ── DoD 门禁：解析调用方传入的验收标准 ──
+      // completionGate 参数格式：{ criteria: [{description, verificationType}...], requireHumanSignOff?: boolean }
+      // 如果未传入 completionGate，发出警告但不阻止创建（允许后续补充）
+      let completionGate:
+        | import("../../utils/project-context.js").ProjectCompletionGate
+        | undefined;
+      const rawGate = params?.completionGate;
+      if (
+        rawGate &&
+        typeof rawGate === "object" &&
+        Array.isArray((rawGate as Record<string, unknown>).criteria)
+      ) {
+        const rawCriteria = (rawGate as Record<string, unknown>).criteria as Array<
+          Record<string, unknown>
+        >;
+        const requireHumanSignOff =
+          (rawGate as Record<string, unknown>).requireHumanSignOff !== false; // 默认 true
+        completionGate = {
+          criteria: rawCriteria.map((c, idx) => ({
+            id: `ac_${Date.now()}_${idx}`,
+            description: String(c.description ?? ""),
+            verificationType: (["manual", "automated", "evidence"].includes(
+              String(c.verificationType),
+            )
+              ? c.verificationType
+              : "manual") as "manual" | "automated" | "evidence",
+            satisfied: false,
+          })),
+          requireHumanSignOff,
+          scopeFrozen: false,
+        };
+      }
+
+      const dodWarning = completionGate
+        ? undefined
+        : "⚠️ [DoD缺失] 项目未定义验收标准（completionGate）。强烈建议在创建项目时通过 completionGate 参数定义完成标准，否则主控无法判断项目何时完成，将导致无尽开发。可在创建后调用 projects.updateProgress 补充。";
+
       // 这里主要是返回配置信息，实际的目录创建由 Agent 完成
       respond(
         true,
@@ -54,6 +91,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
           workspacePath,
           codeDir: codeDir || defaultCodeDir,
           ownerId,
+          completionGate,
+          dodWarning,
         },
         undefined,
       );
@@ -334,6 +373,11 @@ export const projectsHandlers: GatewayRequestHandlers = {
       if (params?.acceptanceCriteria !== undefined) {
         existing.acceptanceCriteria = String(params.acceptanceCriteria);
       }
+      // 更新完成门禁（completionGate）字段
+      if (params?.completionGate !== undefined) {
+        existing.completionGate =
+          params.completionGate as import("../../utils/project-context.js").ProjectCompletionGate;
+      }
       if (params?.progressNotes !== undefined) {
         existing.progressNotes = String(params.progressNotes);
       }
@@ -355,13 +399,59 @@ export const projectsHandlers: GatewayRequestHandlers = {
       }
       existing.progressUpdatedAt = Date.now();
 
+      // ── DoD 完成门禁自动处理 ──
+      // 1. 如果项目状态设置为 completed 或 cancelled，自动冒结范围冻结
+      const newStatus = existing.status;
+      if (newStatus === "completed" || newStatus === "cancelled") {
+        if (!existing.completionGate) {
+          existing.completionGate = { criteria: [], requireHumanSignOff: false, scopeFrozen: true };
+        }
+        if (!existing.completionGate.scopeFrozen) {
+          existing.completionGate.scopeFrozen = true;
+          existing.completionGate.scopeFrozenAt = Date.now();
+          existing.completionGate.scopeFrozenReason =
+            newStatus === "completed" ? "completed" : "cancelled";
+        }
+      }
+
+      // 2. 返回当前 DoD 门禁检查结果，供 coordinator 参考
+      let completionGateStatus: Record<string, unknown> | undefined;
+      if (existing.completionGate) {
+        const { checkCompletionGate } = await import("../../utils/project-context.js");
+        const gateResult = checkCompletionGate(existing.completionGate);
+        completionGateStatus = {
+          progress: gateResult.progress,
+          canClose: gateResult.canClose,
+          gaps: gateResult.gaps,
+          scopeFrozen: existing.completionGate.scopeFrozen,
+        };
+        // 3. 若所有标准已满足且无需人工确认，自动将项目状态更新为 completed
+        if (
+          gateResult.canClose &&
+          existing.status !== "completed" &&
+          existing.status !== "cancelled"
+        ) {
+          existing.status = "completed";
+          if (!existing.completionGate.scopeFrozen) {
+            existing.completionGate.scopeFrozen = true;
+            existing.completionGate.scopeFrozenAt = Date.now();
+            existing.completionGate.scopeFrozenReason = "completed";
+          }
+          completionGateStatus.autoCompleted = true;
+        }
+      }
+
       // 确保目录存在
       if (!fs.existsSync(ctx.workspacePath)) {
         fs.mkdirSync(ctx.workspacePath, { recursive: true });
       }
       fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
 
-      respond(true, { success: true, projectId, config: existing }, undefined);
+      respond(
+        true,
+        { success: true, projectId, config: existing, completionGateStatus },
+        undefined,
+      );
     } catch (error) {
       respond(
         false,
@@ -652,6 +742,48 @@ export const projectsHandlers: GatewayRequestHandlers = {
       existing.progress = calcProjectProgress(sprints);
       existing.progressUpdatedAt = now;
 
+      // —— 写入团队 velocity 历史（用于 Sprint 容量预测） ——
+      // 通过项目-团队关联查找负责该项目的团队
+      try {
+        const { organizationStorage } = await import("../../organization/storage.js");
+        const teamRelations = await organizationStorage.getProjectTeamRelations(projectId, {
+          status: "active",
+        });
+        const plannedPoints = sprint.tasks
+          .filter(
+            (t: import("../../utils/project-context.js").ProjectTask) => t.status !== "cancelled",
+          )
+          .reduce(
+            (sum: number, t: import("../../utils/project-context.js").ProjectTask) =>
+              sum + (t.storyPoints ?? 1),
+            0,
+          );
+        const completionRate =
+          plannedPoints === 0 ? 0 : Math.round((velocity / plannedPoints) * 100);
+        const velocityRecord: import("../../organization/types.js").TeamVelocityRecord = {
+          sprintId,
+          sprintTitle: sprint.title,
+          completedPoints: velocity,
+          plannedPoints,
+          completionRate,
+          completedAt: now,
+          projectId,
+        };
+        for (const rel of teamRelations) {
+          const team = await organizationStorage.getTeam(rel.teamId);
+          if (team) {
+            const velocityHistory = [...(team.velocityHistory ?? []), velocityRecord];
+            // 保留最近 20 个 Sprint 的记录
+            await organizationStorage.updateTeam(rel.teamId, {
+              velocityHistory: velocityHistory.slice(-20),
+            });
+          }
+        }
+      } catch (velocityErr) {
+        // 非致命错误：团队 velocity 更新失败不影响 Sprint 完成主流程
+        console.warn(`[completeSprint] velocity update failed: ${String(velocityErr)}`);
+      }
+
       if (!fs.existsSync(ctx.workspacePath)) {
         fs.mkdirSync(ctx.workspacePath, { recursive: true });
       }
@@ -771,6 +903,234 @@ export const projectsHandlers: GatewayRequestHandlers = {
   },
 
   /**
+   * 逐条更新验收标准满足状态
+   *
+   * 参数:
+   * - projectId: 项目 ID
+   * - criterionId: 验收标准 ID
+   * - satisfied: true/false
+   * - evidence: 满足该标准的证据（文件路径/测试输出等）
+   * - satisfiedBy: 由谁确认（Agent ID 或 "human"）
+   */
+  "projects.markCriterionSatisfied": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      const criterionId = params?.criterionId ? String(params.criterionId) : "";
+      if (!projectId || !criterionId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "projectId and criterionId are required"),
+        );
+        return;
+      }
+
+      const { buildProjectContext, readProjectConfig, checkCompletionGate } =
+        await import("../../utils/project-context.js");
+      const path = await import("path");
+      const fs = await import("fs");
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+      const configPath = path.join(ctx.workspacePath, "PROJECT_CONFIG.json");
+
+      const existing = readProjectConfig(ctx.workspacePath);
+      if (!existing) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Project config not found for "${projectId}"`),
+        );
+        return;
+      }
+
+      if (!existing.completionGate) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.UNAVAILABLE,
+            `Project "${projectId}" has no completionGate defined`,
+          ),
+        );
+        return;
+      }
+
+      const criterionIdx = existing.completionGate.criteria.findIndex((c) => c.id === criterionId);
+      if (criterionIdx === -1) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.UNAVAILABLE,
+            `Criterion "${criterionId}" not found in project "${projectId}"`,
+          ),
+        );
+        return;
+      }
+
+      const satisfied = params?.satisfied !== false; // 默认 true
+      const now = Date.now();
+      existing.completionGate.criteria[criterionIdx] = {
+        ...existing.completionGate.criteria[criterionIdx],
+        satisfied,
+        satisfiedAt: satisfied ? now : undefined,
+        evidence: params?.evidence
+          ? String(params.evidence)
+          : existing.completionGate.criteria[criterionIdx].evidence,
+        satisfiedBy: params?.satisfiedBy
+          ? String(params.satisfiedBy)
+          : existing.completionGate.criteria[criterionIdx].satisfiedBy,
+      };
+      existing.progressUpdatedAt = now;
+
+      // 检查是否所有标准已满足且无需人工确认，自动设置为 completed
+      const gateResult = checkCompletionGate(existing.completionGate);
+      let autoCompleted = false;
+      if (
+        gateResult.canClose &&
+        existing.status !== "completed" &&
+        existing.status !== "cancelled"
+      ) {
+        existing.status = "completed";
+        if (!existing.completionGate.scopeFrozen) {
+          existing.completionGate.scopeFrozen = true;
+          existing.completionGate.scopeFrozenAt = now;
+          existing.completionGate.scopeFrozenReason = "completed";
+        }
+        autoCompleted = true;
+      }
+
+      fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+
+      respond(
+        true,
+        {
+          success: true,
+          projectId,
+          criterionId,
+          satisfied,
+          gateStatus: {
+            progress: gateResult.progress,
+            canClose: gateResult.canClose,
+            gaps: gateResult.gaps,
+          },
+          autoCompleted,
+        },
+        undefined,
+      );
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to mark criterion: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * Agent 签收项目（Agent Sign-Off）
+   *
+   * 在 AI 自主开发系统中，签收由负责该项目的 Agent（通常为 coordinator）完成。
+   * 所有验收标准已就绪且 requireHumanSignOff=true 时，
+   * 由项目 ownerId 对应的 Agent 进行最终确认签收。
+   *
+   * 参数:
+   * - projectId: 项目 ID
+   * - signOffBy: 签收 Agent ID（可选，默认取项目 ownerId；若无则为 coordinator）
+   * - note: 签收备注（可选，Agent 可填写验收总结）
+   */
+  "projects.humanSignOff": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
+        return;
+      }
+
+      const { buildProjectContext, readProjectConfig, checkCompletionGate } =
+        await import("../../utils/project-context.js");
+      const path = await import("path");
+      const fs = await import("fs");
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+      const configPath = path.join(ctx.workspacePath, "PROJECT_CONFIG.json");
+
+      const existing = readProjectConfig(ctx.workspacePath);
+      if (!existing) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Project config not found for "${projectId}"`),
+        );
+        return;
+      }
+
+      if (!existing.completionGate) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.UNAVAILABLE,
+            `Project "${projectId}" has no completionGate defined. Cannot sign off.`,
+          ),
+        );
+        return;
+      }
+
+      // 必须先满足所有验收标准才能签收
+      const gateCheck = checkCompletionGate(existing.completionGate);
+      if (!gateCheck.allSatisfied) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Cannot sign off: ${gateCheck.gaps.join("; ")}`),
+        );
+        return;
+      }
+
+      const now = Date.now();
+      existing.completionGate.humanSignOffAt = now;
+      // 签收人优先取参数 signOffBy，其次取项目 ownerId，最后回退到 "coordinator"
+      existing.completionGate.humanSignOffBy = params?.signOffBy
+        ? String(params.signOffBy)
+        : ((existing as unknown as { ownerId?: string }).ownerId ?? "coordinator");
+      existing.completionGate.humanSignOffNote = params?.note ? String(params.note) : undefined;
+
+      // 签收后自动设置项目状态为 completed
+      if (existing.status !== "cancelled") {
+        existing.status = "completed";
+      }
+      if (!existing.completionGate.scopeFrozen) {
+        existing.completionGate.scopeFrozen = true;
+        existing.completionGate.scopeFrozenAt = now;
+        existing.completionGate.scopeFrozenReason = "completed";
+      }
+      existing.progressUpdatedAt = now;
+
+      fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+
+      respond(
+        true,
+        {
+          success: true,
+          projectId,
+          humanSignOffAt: now,
+          humanSignOffBy: existing.completionGate.humanSignOffBy,
+          status: existing.status,
+          scopeFrozen: existing.completionGate.scopeFrozen,
+        },
+        undefined,
+      );
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to sign off project: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
    * 获取项目信息及其关联的群组
    */
   "projects.get": async ({ params, respond }) => {
@@ -782,7 +1142,6 @@ export const projectsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      // 验证项目是否存在
       const projectWorkspaceExists = await import("../../utils/project-context.js").then(
         (m) => m.projectWorkspaceExists,
       );
@@ -796,13 +1155,10 @@ export const projectsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      // 获取项目上下文
       const buildProjectContext = await import("../../utils/project-context.js").then(
         (m) => m.buildProjectContext,
       );
       const projectCtx = buildProjectContext(projectId);
-
-      // 查找所有绑定到该项目的群组
       const allGroups = groupManager.getAllGroups();
       const projectGroups = allGroups.filter((g) => g.projectId === projectId);
 
@@ -817,7 +1173,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
           codeDir: projectCtx.codeDir,
           docsDir: projectCtx.docsDir,
           requirementsDir: projectCtx.config?.requirementsDir,
-
+          status: projectCtx.config?.status,
+          completionGate: projectCtx.config?.completionGate,
           groups: projectGroups.map((g) => ({
             groupId: g.id,
             name: g.name,

@@ -89,13 +89,10 @@ export async function loadActiveSessions(host: OpenClawApp): Promise<void> {
   host.monitorSessionsError = null;
 
   try {
-    const response = await host.gatewayRpc("monitor.sessions", {});
-
-    if (response.ok && response.result) {
-      host.monitorActiveSessions = response.result.sessions || [];
-    } else {
-      host.monitorSessionsError = response.error?.message || "加载活动会话失败";
-    }
+    const result = (await host.client?.request("monitor.sessions", {})) as {
+      sessions?: ActiveSession[];
+    } | null;
+    host.monitorActiveSessions = result?.sessions || [];
   } catch (err) {
     host.monitorSessionsError = err instanceof Error ? err.message : String(err);
   } finally {
@@ -110,11 +107,10 @@ export async function loadMessageFlows(host: OpenClawApp): Promise<void> {
   host.monitorMessageFlowsLoading = true;
 
   try {
-    const response = await host.gatewayRpc("monitor.messageFlows", {});
-
-    if (response.ok && response.result) {
-      host.monitorMessageFlows = response.result.flows || [];
-    }
+    const result = (await host.client?.request("monitor.messageFlows", {})) as {
+      flows?: MessageFlow[];
+    } | null;
+    host.monitorMessageFlows = result?.flows || [];
   } catch (err) {
     console.error("Failed to load message flows:", err);
   } finally {
@@ -129,11 +125,10 @@ export async function loadForwardingRules(host: OpenClawApp): Promise<void> {
   host.monitorForwardingRulesLoading = true;
 
   try {
-    const response = await host.gatewayRpc("monitor.forwardingRules", {});
-
-    if (response.ok && response.result) {
-      host.monitorForwardingRules = response.result.rules || [];
-    }
+    const result = (await host.client?.request("monitor.forwardingRules", {})) as {
+      rules?: ForwardingRule[];
+    } | null;
+    host.monitorForwardingRules = result?.rules || [];
   } catch (err) {
     console.error("Failed to load forwarding rules:", err);
   } finally {
@@ -148,18 +143,9 @@ export async function addForwardingRule(
   host: OpenClawApp,
   rule: Omit<ForwardingRule, "id" | "createdAt">,
 ): Promise<void> {
-  try {
-    const response = await host.gatewayRpc("monitor.addForwardingRule", rule);
-
-    if (response.ok && response.result) {
-      await loadForwardingRules(host);
-      host.monitorCreatingRule = false;
-    } else {
-      throw new Error(response.error?.message || "添加转发规则失败");
-    }
-  } catch (err) {
-    throw err;
-  }
+  await host.client?.request("monitor.addForwardingRule", rule);
+  await loadForwardingRules(host);
+  host.monitorCreatingRule = false;
 }
 
 /**
@@ -170,40 +156,17 @@ export async function updateForwardingRule(
   ruleId: string,
   updates: Partial<ForwardingRule>,
 ): Promise<void> {
-  try {
-    const response = await host.gatewayRpc("monitor.updateForwardingRule", {
-      ruleId,
-      updates,
-    });
-
-    if (response.ok) {
-      await loadForwardingRules(host);
-      host.monitorEditingRule = null;
-    } else {
-      throw new Error(response.error?.message || "更新转发规则失败");
-    }
-  } catch (err) {
-    throw err;
-  }
+  await host.client?.request("monitor.updateForwardingRule", { ruleId, updates });
+  await loadForwardingRules(host);
+  host.monitorEditingRule = null;
 }
 
 /**
  * 删除转发规则
  */
 export async function deleteForwardingRule(host: OpenClawApp, ruleId: string): Promise<void> {
-  try {
-    const response = await host.gatewayRpc("monitor.deleteForwardingRule", {
-      ruleId,
-    });
-
-    if (response.ok) {
-      await loadForwardingRules(host);
-    } else {
-      throw new Error(response.error?.message || "删除转发规则失败");
-    }
-  } catch (err) {
-    throw err;
-  }
+  await host.client?.request("monitor.deleteForwardingRule", { ruleId });
+  await loadForwardingRules(host);
 }
 
 /**
@@ -213,11 +176,10 @@ export async function loadMetrics(host: OpenClawApp): Promise<void> {
   host.monitorMetricsLoading = true;
 
   try {
-    const response = await host.gatewayRpc("monitor.metrics", {});
-
-    if (response.ok && response.result) {
-      host.monitorMetrics = response.result.metrics || null;
-    }
+    const result = (await host.client?.request("monitor.metrics", {})) as {
+      metrics?: PerformanceMetrics;
+    } | null;
+    host.monitorMetrics = result?.metrics || null;
   } catch (err) {
     console.error("Failed to load metrics:", err);
   } finally {
@@ -232,13 +194,10 @@ export async function loadAlerts(host: OpenClawApp, unacknowledgedOnly = false):
   host.monitorAlertsLoading = true;
 
   try {
-    const response = await host.gatewayRpc("monitor.alerts", {
-      unacknowledgedOnly,
-    });
-
-    if (response.ok && response.result) {
-      host.monitorAlerts = response.result.alerts || [];
-    }
+    const result = (await host.client?.request("monitor.alerts", { unacknowledgedOnly })) as {
+      alerts?: Alert[];
+    } | null;
+    host.monitorAlerts = result?.alerts || [];
   } catch (err) {
     console.error("Failed to load alerts:", err);
   } finally {
@@ -250,44 +209,26 @@ export async function loadAlerts(host: OpenClawApp, unacknowledgedOnly = false):
  * 确认告警
  */
 export async function acknowledgeAlert(host: OpenClawApp, alertId: string): Promise<void> {
-  try {
-    const response = await host.gatewayRpc("monitor.acknowledgeAlert", {
-      alertId,
-    });
-
-    if (response.ok) {
-      await loadAlerts(host);
-    } else {
-      throw new Error(response.error?.message || "确认告警失败");
-    }
-  } catch (err) {
-    throw err;
-  }
+  await host.client?.request("monitor.acknowledgeAlert", { alertId });
+  await loadAlerts(host);
 }
 
 /**
  * 清除所有告警
  */
 export async function clearAllAlerts(host: OpenClawApp): Promise<void> {
-  try {
-    const response = await host.gatewayRpc("monitor.clearAlerts", {});
-
-    if (response.ok) {
-      await loadAlerts(host);
-    } else {
-      throw new Error(response.error?.message || "清除告警失败");
-    }
-  } catch (err) {
-    throw err;
-  }
+  await host.client?.request("monitor.clearAlerts", {});
+  await loadAlerts(host);
 }
 
 /**
  * 加载所有 Monitor 数据
  */
 export async function loadMonitorData(host: OpenClawApp): Promise<void> {
-  host.monitorLoading = true;
-  host.monitorError = null;
+  // oxlint-disable-next-line typescript/no-explicit-any
+  const h = host as any;
+  h.monitorLoading = true;
+  h.monitorError = null;
 
   try {
     await Promise.all([
@@ -298,8 +239,8 @@ export async function loadMonitorData(host: OpenClawApp): Promise<void> {
       loadAlerts(host),
     ]);
   } catch (err) {
-    host.monitorError = err instanceof Error ? err.message : String(err);
+    h.monitorError = err instanceof Error ? err.message : String(err);
   } finally {
-    host.monitorLoading = false;
+    h.monitorLoading = false;
   }
 }

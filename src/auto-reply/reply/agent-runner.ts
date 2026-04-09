@@ -6,6 +6,40 @@ import { isCliProvider } from "../../../upstream/src/agents/model-selection.js";
 import { queueEmbeddedPiMessage } from "../../../upstream/src/agents/pi-embedded.js";
 import { hasNonzeroUsage } from "../../../upstream/src/agents/usage.js";
 import {
+  buildFallbackClearedNotice,
+  buildFallbackNotice,
+  resolveFallbackTransition,
+} from "../../../upstream/src/auto-reply/fallback-state.js";
+import {
+  createShouldEmitToolOutput,
+  createShouldEmitToolResult,
+  finalizeWithFollowup,
+  isAudioPayload,
+  signalTypingIfNeeded,
+} from "../../../upstream/src/auto-reply/reply/agent-runner-helpers.js";
+import { runMemoryFlushIfNeeded } from "../../../upstream/src/auto-reply/reply/agent-runner-memory.js";
+import {
+  createAudioAsVoiceBuffer,
+  createBlockReplyPipeline,
+} from "../../../upstream/src/auto-reply/reply/block-reply-pipeline.js";
+import { resolveBlockStreamingCoalescing } from "../../../upstream/src/auto-reply/reply/block-streaming.js";
+import { readPostCompactionContext } from "../../../upstream/src/auto-reply/reply/post-compaction-context.js";
+import {
+  enqueueFollowupRun,
+  type FollowupRun,
+  type QueueSettings,
+} from "../../../upstream/src/auto-reply/reply/queue.js";
+import {
+  createReplyToModeFilterForChannel,
+  resolveReplyToMode,
+} from "../../../upstream/src/auto-reply/reply/reply-threading.js";
+import {
+  incrementRunCompactionCount,
+  persistRunSessionUsage,
+} from "../../../upstream/src/auto-reply/reply/session-run-accounting.js";
+import { createTypingSignaler } from "../../../upstream/src/auto-reply/reply/typing-mode.js";
+import type { GetReplyOptions, ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
+import {
   resolveAgentIdFromSessionKey,
   resolveSessionFilePath,
   resolveSessionFilePathOptions,
@@ -16,38 +50,25 @@ import {
 } from "../../../upstream/src/config/sessions.js";
 import type { TypingMode } from "../../../upstream/src/config/types.js";
 import { emitAgentEvent } from "../../../upstream/src/infra/agent-events.js";
-import { emitDiagnosticEvent, isDiagnosticsEnabled } from "../../../upstream/src/infra/diagnostic-events.js";
+import {
+  emitDiagnosticEvent,
+  isDiagnosticsEnabled,
+} from "../../../upstream/src/infra/diagnostic-events.js";
 import { generateSecureUuid } from "../../../upstream/src/infra/secure-random.js";
 import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
 import { defaultRuntime } from "../../../upstream/src/runtime.js";
-import { estimateUsageCost, resolveModelCostConfig } from "../../../upstream/src/utils/usage-format.js";
 import {
-  buildFallbackClearedNotice,
-  buildFallbackNotice,
-  resolveFallbackTransition,
-} from "../../../upstream/src/auto-reply/fallback-state.js";
+  estimateUsageCost,
+  resolveModelCostConfig,
+} from "../../../upstream/src/utils/usage-format.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
+import * as taskStorage from "../../tasks/storage.js";
 import type { OriginatingChannelType, TemplateContext } from "../templating.js";
 import { resolveResponseUsageMode, type VerboseLevel } from "../thinking.js";
-import type { GetReplyOptions, ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import { runAgentTurnWithFallback } from "./agent-runner-execution.js";
-import {
-  createShouldEmitToolOutput,
-  createShouldEmitToolResult,
-  finalizeWithFollowup,
-  isAudioPayload,
-  signalTypingIfNeeded,
-} from "../../../upstream/src/auto-reply/reply/agent-runner-helpers.js";
-import { runMemoryFlushIfNeeded } from "../../../upstream/src/auto-reply/reply/agent-runner-memory.js";
 import { buildReplyPayloads } from "./agent-runner-payloads.js";
 import { appendUsageLine, formatResponseUsageLine } from "./agent-runner-utils.js";
-import { createAudioAsVoiceBuffer, createBlockReplyPipeline } from "../../../upstream/src/auto-reply/reply/block-reply-pipeline.js";
-import { resolveBlockStreamingCoalescing } from "../../../upstream/src/auto-reply/reply/block-streaming.js";
 import { createFollowupRunner } from "./followup-runner.js";
-import { readPostCompactionContext } from "../../../upstream/src/auto-reply/reply/post-compaction-context.js";
-import { enqueueFollowupRun, type FollowupRun, type QueueSettings } from "../../../upstream/src/auto-reply/reply/queue.js";
-import { createReplyToModeFilterForChannel, resolveReplyToMode } from "../../../upstream/src/auto-reply/reply/reply-threading.js";
-import { incrementRunCompactionCount, persistRunSessionUsage } from "../../../upstream/src/auto-reply/reply/session-run-accounting.js";
-import { createTypingSignaler } from "../../../upstream/src/auto-reply/reply/typing-mode.js";
 import type { TypingController } from "./typing.js";
 
 const BLOCK_REPLY_SEND_TIMEOUT_MS = 15_000;
@@ -681,6 +702,61 @@ export async function runReplyAgent(params: {
           .catch(() => {
             // Silent failure — post-compaction context is best-effort
           });
+
+        // === Compaction 失忆防护（Hermes v0.8.0 借鉴）===
+        // Compaction 后 Agent 的短期工作上下文丁失。
+        // 如果此 session 有正在执行的任务，将任务快照注入到下一轮，
+        // 让 Agent 记得“我正在做什么”。
+        if (sessionKey.startsWith("agent:")) {
+          const agentIdFromKey = sessionKey.split(":")[1];
+          if (agentIdFromKey) {
+            const normalizedAgentId = normalizeAgentId(agentIdFromKey);
+            taskStorage
+              .listTasks({ assigneeId: normalizedAgentId, status: ["in-progress"] })
+              .then((inProgressTasks) => {
+                const activeTask = inProgressTasks[0];
+                if (!activeTask) {
+                  return;
+                }
+                // 构建任务快照，注入到下一轮上下文
+                const recentLogs = (activeTask.workLogs ?? []).slice(-3);
+                const taskSnapshot = [
+                  `[TASK SNAPSHOT — Post-Compaction Memory Restore]`,
+                  `You were working on a task when context compaction occurred. Here is your current task state:`,
+                  ``,
+                  `Task ID: ${activeTask.id}`,
+                  `Title: ${activeTask.title}`,
+                  `Status: ${activeTask.status}`,
+                  `Priority: ${activeTask.priority}`,
+                  activeTask.type ? `Type: ${activeTask.type}` : null,
+                  activeTask.projectId ? `Project: ${activeTask.projectId}` : null,
+                  activeTask.description
+                    ? `Description: ${activeTask.description.slice(0, 300)}`
+                    : null,
+                  recentLogs.length > 0
+                    ? `\nRecent work log (last ${recentLogs.length} entries):`
+                    : null,
+                  ...recentLogs.map(
+                    (log) =>
+                      `  - [${log.action}] ${log.details.slice(0, 150)}${
+                        log.result ? ` (${log.result})` : ""
+                      }`,
+                  ),
+                  ``,
+                  `IMPORTANT: Context was compacted but your task is still IN-PROGRESS. Continue executing it. Do NOT restart from scratch — check your work logs above to understand what was done and resume from where you left off.`,
+                ]
+                  .filter((l) => l !== null)
+                  .join("\n");
+                enqueueSystemEvent(taskSnapshot, {
+                  sessionKey,
+                  contextKey: `compaction:task-snapshot:${activeTask.id}`,
+                });
+              })
+              .catch(() => {
+                // Silent failure — task snapshot is best-effort
+              });
+          }
+        }
 
         // Set pending audit flag for Layer 3 (post-compaction read audit)
         pendingPostCompactionAudits.set(sessionKey, true);

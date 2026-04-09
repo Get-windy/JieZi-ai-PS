@@ -54,19 +54,10 @@ export async function loadFriends(host: OpenClawApp, agentId: string): Promise<v
   host.friendsError = null;
 
   try {
-    const response = await host.client.request("friends.list", { agentId });
-
-    if (!response) {
-      throw new Error("No response from server");
-    }
-
-    if (response.error) {
-      throw new Error(response.error.message || "Failed to load friends");
-    }
-
-    const friends = response.result?.friends || [];
+    const result = await host.client!.request("friends.list", { agentId });
+    const friends = result?.friends || [];
     host.friendsList = friends;
-    host.friendsTotal = response.result?.total || friends.length;
+    host.friendsTotal = result?.total || friends.length;
   } catch (err) {
     console.error("Failed to load friends:", err);
     host.friendsError = err instanceof Error ? err.message : String(err);
@@ -84,17 +75,8 @@ export async function loadFriendRequests(host: OpenClawApp, agentId: string): Pr
   host.friendRequestsLoading = true;
 
   try {
-    const response = await host.client.request("friends.requests", { agentId });
-
-    if (!response) {
-      throw new Error("No response from server");
-    }
-
-    if (response.error) {
-      throw new Error(response.error.message || "Failed to load friend requests");
-    }
-
-    host.friendRequestsList = response.result?.requests || [];
+    const result = await host.client!.request("friends.requests", { agentId });
+    host.friendRequestsList = result?.requests || [];
   } catch (err) {
     console.error("Failed to load friend requests:", err);
     host.friendRequestsList = [];
@@ -113,21 +95,7 @@ export async function addFriend(
   message?: string,
 ): Promise<boolean> {
   try {
-    const response = await host.client.request("friends.add", {
-      fromAgentId,
-      toAgentId,
-      message,
-    });
-
-    if (!response) {
-      throw new Error("No response from server");
-    }
-
-    if (response.error) {
-      throw new Error(response.error.message || "Failed to add friend");
-    }
-
-    // 重新加载好友列表
+    await host.client!.request("friends.add", { fromAgentId, toAgentId, message });
     await loadFriends(host, fromAgentId);
     return true;
   } catch (err) {
@@ -147,21 +115,7 @@ export async function confirmFriend(
   accept: boolean,
 ): Promise<boolean> {
   try {
-    const response = await host.client.request("friends.confirm", {
-      agentId,
-      friendId,
-      accept,
-    });
-
-    if (!response) {
-      throw new Error("No response from server");
-    }
-
-    if (response.error) {
-      throw new Error(response.error.message || "Failed to confirm friend");
-    }
-
-    // 重新加载好友请求和好友列表
+    await host.client!.request("friends.confirm", { agentId, friendId, accept });
     await loadFriendRequests(host, agentId);
     if (accept) {
       await loadFriends(host, agentId);
@@ -187,20 +141,7 @@ export async function removeFriend(
   }
 
   try {
-    const response = await host.client.request("friends.remove", {
-      agentId,
-      friendId,
-    });
-
-    if (!response) {
-      throw new Error("No response from server");
-    }
-
-    if (response.error) {
-      throw new Error(response.error.message || "Failed to remove friend");
-    }
-
-    // 重新加载好友列表
+    await host.client!.request("friends.remove", { agentId, friendId });
     await loadFriends(host, agentId);
     return true;
   } catch (err) {
@@ -223,22 +164,13 @@ export async function loadMessages(
   host.messagesLoading = true;
 
   try {
-    const response = await host.client.request("friends.messages", {
+    const result = await host.client!.request("friends.messages", {
       agentId,
       friendId,
       limit,
       offset,
     });
-
-    if (!response) {
-      throw new Error("No response from server");
-    }
-
-    if (response.error) {
-      throw new Error(response.error.message || "Failed to load messages");
-    }
-
-    host.messagesList = response.result?.messages || [];
+    host.messagesList = result?.messages || [];
   } catch (err) {
     console.error("Failed to load messages:", err);
     host.messagesList = [];
@@ -259,21 +191,7 @@ export async function sendMessage(
   host.sendingMessage = true;
 
   try {
-    const response = await host.client.request("friends.sendMessage", {
-      fromAgentId,
-      toAgentId,
-      content,
-    });
-
-    if (!response) {
-      throw new Error("No response from server");
-    }
-
-    if (response.error) {
-      throw new Error(response.error.message || "Failed to send message");
-    }
-
-    // 重新加载消息列表
+    await host.client!.request("friends.sendMessage", { fromAgentId, toAgentId, content });
     await loadMessages(host, fromAgentId, toAgentId);
     return true;
   } catch (err) {

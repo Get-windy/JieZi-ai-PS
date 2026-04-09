@@ -2208,11 +2208,17 @@ export function disableAuthOnBillingOrAuthError(
         `Will auto-recover in ${AUTH_FAILURE_RESET_WINDOW_MS / 60000}min (reset window). ` +
         `No manual action required unless issue persists.`,
     );
+    const disabledAt = Date.now();
     foundAuth.enabled = false;
     foundAuth.autoDisabledReason = reason;
-    foundAuth.autoDisabledAt = Date.now();
-    // 异步持久化（包括 autoDisabledAt 时间戳）
-    updateAuth({ authId, enabled: false, autoDisabledReason: reason }).catch((err) => {
+    foundAuth.autoDisabledAt = disabledAt;
+    // 异步持久化（包括 autoDisabledAt 时间戳）——必须传 autoDisabledAt 否则重启后丢失时间戳，30min 自动恢复失效
+    updateAuth({
+      authId,
+      enabled: false,
+      autoDisabledReason: reason,
+      autoDisabledAt: disabledAt,
+    }).catch((err) => {
       console.error(`[AuthAutoDisable] Failed to persist disabled state for auth ${authId}:`, err);
     });
   } else {

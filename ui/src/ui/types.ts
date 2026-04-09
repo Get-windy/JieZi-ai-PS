@@ -1,3 +1,6 @@
+export type UpdateAvailable = import("../../../src/infra/update-startup.js").UpdateAvailable;
+import type { CronJobBase } from "../../../src/cron/types-shared.js";
+
 // 通道配对请求类型
 export type ChannelPairingRequest = {
   id: string;
@@ -330,8 +333,40 @@ export type PresenceEntry = {
 };
 
 export type GatewaySessionsDefaults = {
+  modelProvider: string | null;
   model: string | null;
   contextTokens: number | null;
+};
+
+export type ChatModelOverride = import("./chat-model-ref.ts").ChatModelOverride;
+
+export type SessionRunStatus = "running" | "done" | "failed" | "killed" | "timeout";
+
+export type SessionCompactionCheckpointReason =
+  | "manual"
+  | "auto-threshold"
+  | "overflow-retry"
+  | "timeout-retry";
+
+export type SessionCompactionTranscriptReference = {
+  sessionId: string;
+  sessionFile?: string;
+  leafId?: string;
+  entryId?: string;
+};
+
+export type SessionCompactionCheckpoint = {
+  checkpointId: string;
+  sessionKey: string;
+  sessionId: string;
+  createdAt: number;
+  reason: SessionCompactionCheckpointReason;
+  tokensBefore?: number;
+  tokensAfter?: number;
+  summary?: string;
+  firstKeptEntryId?: string;
+  preCompaction: SessionCompactionTranscriptReference;
+  postCompaction: SessionCompactionTranscriptReference;
 };
 
 export type GatewayAgentRow = {
@@ -355,6 +390,41 @@ export type GatewayAgentRow = {
     }>;
     defaultPolicy?: unknown;
   } | null;
+};
+
+export type SessionsCompactionListResult = {
+  ok: true;
+  key: string;
+  checkpoints: SessionCompactionCheckpoint[];
+};
+
+export type SessionsCompactionGetResult = {
+  ok: true;
+  key: string;
+  checkpoint: SessionCompactionCheckpoint;
+};
+
+export type SessionsCompactionBranchResult = {
+  ok: true;
+  sourceKey: string;
+  key: string;
+  sessionId: string;
+  checkpoint: SessionCompactionCheckpoint;
+  entry: {
+    sessionId: string;
+    updatedAt: number;
+  } & Record<string, unknown>;
+};
+
+export type SessionsCompactionRestoreResult = {
+  ok: true;
+  key: string;
+  sessionId: string;
+  checkpoint: SessionCompactionCheckpoint;
+  entry: {
+    sessionId: string;
+    updatedAt: number;
+  } & Record<string, unknown>;
 };
 
 export type AgentsListResult = {
@@ -401,6 +471,7 @@ export type AgentsFilesSetResult = {
 
 export type GatewaySessionRow = {
   key: string;
+  spawnedBy?: string;
   kind: "direct" | "group" | "global" | "unknown";
   label?: string;
   displayName?: string;
@@ -419,15 +490,24 @@ export type GatewaySessionRow = {
   systemSent?: boolean;
   abortedLastRun?: boolean;
   thinkingLevel?: string;
+  fastMode?: boolean;
   verboseLevel?: string;
   reasoningLevel?: string;
   elevatedLevel?: string;
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  totalTokensFresh?: boolean;
+  status?: SessionRunStatus;
+  startedAt?: number;
+  endedAt?: number;
+  runtimeMs?: number;
+  childSessions?: string[];
   model?: string;
   modelProvider?: string;
   contextTokens?: number;
+  compactionCheckpointCount?: number;
+  latestCompactionCheckpoint?: SessionCompactionCheckpoint;
   derivedTitle?: string;
   lastMessagePreview?: string;
 };
@@ -448,9 +528,14 @@ export type SessionsPatchResult = {
     sessionId: string;
     updatedAt?: number;
     thinkingLevel?: string;
+    fastMode?: boolean;
     verboseLevel?: string;
     reasoningLevel?: string;
     elevatedLevel?: string;
+  };
+  resolved?: {
+    modelProvider?: string;
+    model?: string;
   };
 };
 
@@ -464,12 +549,21 @@ export type {
   SessionUsageTimeSeries,
 } from "./usage-types.ts";
 
+export type CronRunStatus = "ok" | "error" | "skipped";
+export type CronDeliveryStatus = "delivered" | "not-delivered" | "unknown" | "not-requested";
+export type CronJobsEnabledFilter = "all" | "enabled" | "disabled";
+export type CronJobsSortBy = "nextRunAtMs" | "updatedAtMs" | "name";
+export type CronRunScope = "job" | "all";
+export type CronRunsStatusValue = CronRunStatus;
+export type CronRunsStatusFilter = "all" | CronRunStatus;
+export type CronSortDir = "asc" | "desc";
+
 export type CronSchedule =
   | { kind: "at"; at: string }
   | { kind: "every"; everyMs: number; anchorMs?: number }
-  | { kind: "cron"; expr: string; tz?: string };
+  | { kind: "cron"; expr: string; tz?: string; staggerMs?: number };
 
-export type CronSessionTarget = "main" | "isolated";
+export type CronSessionTarget = "main" | "isolated" | "current" | `session:${string}`;
 export type CronWakeMode = "next-heartbeat" | "now";
 
 export type CronPayload =
@@ -477,42 +571,77 @@ export type CronPayload =
   | {
       kind: "agentTurn";
       message: string;
+      model?: string;
+      fallbacks?: string[];
       thinking?: string;
       timeoutSeconds?: number;
+      allowUnsafeExternalContent?: boolean;
+      lightContext?: boolean;
+      deliver?: boolean;
+      channel?: string;
+      to?: string;
+      bestEffortDeliver?: boolean;
     };
 
 export type CronDelivery = {
-  mode: "none" | "announce";
+  mode: "none" | "announce" | "webhook";
   channel?: string;
   to?: string;
+  accountId?: string;
   bestEffort?: boolean;
+  failureDestination?: CronFailureDestination;
+};
+
+export type CronFailureDestination = {
+  channel?: string;
+  to?: string;
+  mode?: "announce" | "webhook";
+  accountId?: string;
+};
+
+export type CronFailureAlert = {
+  after?: number;
+  channel?: string;
+  to?: string;
+  cooldownMs?: number;
+  mode?: "announce" | "webhook";
+  accountId?: string;
 };
 
 export type CronJobState = {
   nextRunAtMs?: number;
   runningAtMs?: number;
   lastRunAtMs?: number;
-  lastStatus?: "ok" | "error" | "skipped";
+  lastRunStatus?: CronRunStatus;
+  lastStatus?: CronRunStatus;
   lastError?: string;
+  lastErrorReason?: string;
   lastDurationMs?: number;
+  consecutiveErrors?: number;
+  lastDelivered?: boolean;
+  lastDeliveryStatus?: CronDeliveryStatus;
+  lastDeliveryError?: string;
+  lastFailureAlertAtMs?: number;
 };
 
-export type CronJob = {
-  id: string;
-  agentId?: string;
-  name: string;
-  description?: string;
-  enabled: boolean;
-  notify?: boolean;
-  deleteAfterRun?: boolean;
-  createdAtMs: number;
-  updatedAtMs: number;
-  schedule: CronSchedule;
-  sessionTarget: CronSessionTarget;
-  wakeMode: CronWakeMode;
-  payload: CronPayload;
-  delivery?: CronDelivery;
+export type CronJob = CronJobBase<
+  CronSchedule,
+  CronSessionTarget,
+  CronWakeMode,
+  CronPayload,
+  CronDelivery,
+  CronFailureAlert | false
+> & {
   state?: CronJobState;
+};
+
+export type CronJobsListResult = {
+  jobs: CronJob[];
+  total?: number;
+  limit?: number;
+  offset?: number;
+  nextOffset?: number | null;
+  hasMore?: boolean;
 };
 
 export type CronStatus = {
@@ -524,12 +653,37 @@ export type CronStatus = {
 export type CronRunLogEntry = {
   ts: number;
   jobId: string;
-  status: "ok" | "error" | "skipped";
+  action?: "finished";
+  status?: CronRunStatus;
   durationMs?: number;
   error?: string;
   summary?: string;
+  delivered?: boolean;
+  deliveryStatus?: CronDeliveryStatus;
+  deliveryError?: string;
   sessionId?: string;
   sessionKey?: string;
+  runAtMs?: number;
+  nextRunAtMs?: number;
+  model?: string;
+  provider?: string;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+    cache_read_tokens?: number;
+    cache_write_tokens?: number;
+  };
+  jobName?: string;
+};
+
+export type CronRunsResult = {
+  entries: CronRunLogEntry[];
+  total?: number;
+  limit?: number;
+  offset?: number;
+  nextOffset?: number | null;
+  hasMore?: boolean;
 };
 
 export type SkillsStatusConfigCheck = {
@@ -584,6 +738,35 @@ export type SkillStatusReport = {
 export type StatusSummary = Record<string, unknown>;
 
 export type HealthSnapshot = Record<string, unknown>;
+
+/** Strongly-typed health response from the gateway (richer than HealthSnapshot). */
+export type HealthSummary = {
+  ok: boolean;
+  ts: number;
+  durationMs: number;
+  heartbeatSeconds: number;
+  defaultAgentId: string;
+  agents: Array<{ id: string; name?: string }>;
+  sessions: {
+    path: string;
+    count: number;
+    recent: Array<{
+      key: string;
+      updatedAt: number | null;
+      age: number | null;
+    }>;
+  };
+};
+
+/** A model entry returned by the gateway model-catalog endpoint. */
+export type ModelCatalogEntry = {
+  id: string;
+  name: string;
+  provider: string;
+  contextWindow?: number;
+  reasoning?: boolean;
+  input?: Array<"text" | "image" | "document">;
+};
 
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 
@@ -920,34 +1103,20 @@ export type ModelAccountSnapshot = {
   topP?: number | null;
 };
 
-export type ToolCatalogProfile = {
-  id: "minimal" | "coding" | "messaging" | "full";
-  label: string;
-};
-
-export type ToolCatalogEntry = {
-  id: string;
-  label: string;
-  description: string;
-  source: "core" | "plugin";
-  pluginId?: string;
-  optional?: boolean;
-  defaultProfiles: Array<"minimal" | "coding" | "messaging" | "full">;
-};
-
-export type ToolCatalogGroup = {
-  id: string;
-  label: string;
-  source: "core" | "plugin";
-  pluginId?: string;
-  tools: ToolCatalogEntry[];
-};
-
-export type ToolsCatalogResult = {
-  agentId: string;
-  profiles: ToolCatalogProfile[];
-  groups: ToolCatalogGroup[];
-};
+export type ToolCatalogProfile =
+  import("../../../src/gateway/protocol/schema/types.js").ToolCatalogProfile;
+export type ToolCatalogEntry =
+  import("../../../src/gateway/protocol/schema/types.js").ToolCatalogEntry;
+export type ToolCatalogGroup =
+  import("../../../src/gateway/protocol/schema/types.js").ToolCatalogGroup;
+export type ToolsCatalogResult =
+  import("../../../src/gateway/protocol/schema/types.js").ToolsCatalogResult;
+export type ToolsEffectiveEntry =
+  import("../../../src/gateway/protocol/schema/types.js").ToolsEffectiveEntry;
+export type ToolsEffectiveGroup =
+  import("../../../src/gateway/protocol/schema/types.js").ToolsEffectiveGroup;
+export type ToolsEffectiveResult =
+  import("../../../src/gateway/protocol/schema/types.js").ToolsEffectiveResult;
 
 // ============ 聊天聚合接口类型 ============
 
@@ -996,4 +1165,17 @@ export type MessageTrustMeta = {
   sandboxed?: boolean;
   /** 跨部门防守是否通过（对应 dept-access-guard 防守规则） */
   guardPassed?: boolean;
+};
+
+// ── Attention ───────────────────────────────────────
+
+export type AttentionSeverity = "error" | "warning" | "info";
+
+export type AttentionItem = {
+  severity: AttentionSeverity;
+  icon: string;
+  title: string;
+  description: string;
+  href?: string;
+  external?: boolean;
 };

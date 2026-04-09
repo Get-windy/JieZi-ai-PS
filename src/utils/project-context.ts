@@ -8,10 +8,28 @@
  * 2. 加载项目共享记忆
  * 3. 获取项目代码目录
  * 4. 构建项目上下文环境
+ *
+ * 任务类型说明：
+ *   本文件不再定义任务相关类型，全部从 tasks/types.ts 导入使用。
+ *   Sprint 任务存储类型使用 Task（所有字段完全兼容）。
  */
 
 import * as fs from "fs";
 import * as path from "path";
+
+// 任务类型：唯一数据源 tasks/types.ts
+export type {
+  Task,
+  TaskStatus,
+  TaskPriority,
+  TaskType,
+  WorkItemLevel,
+  normalizeTaskStatus,
+} from "../tasks/types.js";
+// 向后兼容别名：旧代码可能使用 ProjectTask 作为类型名
+import type { Task } from "../tasks/types.js";
+/** @deprecated 请改用 Task（from tasks/types.ts）。此别名仅为历史向后兼容保留，不展开新用途。 */
+export type ProjectTask = Task;
 
 /**
  * 项目上下文信息
@@ -165,42 +183,6 @@ export function getProjectStatusMeta(status: string | undefined): ProjectStatusM
   return PROJECT_STATUS_META[status as ProjectStatus] ?? PROJECT_STATUS_META["planning"];
 }
 
-/** 任务优先级（借鉴 Linear/Jira 标准） */
-export type TaskPriority = "urgent" | "high" | "medium" | "low" | "none";
-
-/** 任务看板状态 */
-export type TaskStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done" | "cancelled";
-
-/**
- * 项目任务/Issue（借鉴 Linear 的 Issue 模型）
- * 每个任务是可追踪的最小工作单元
- */
-export interface ProjectTask {
-  id: string;
-  title: string;
-  description?: string;
-  /** 任务看板状态 */
-  status: TaskStatus;
-  /** 优先级 */
-  priority: TaskPriority;
-  /** 负责人 Agent ID */
-  assigneeId?: string;
-  /** Story Point 估算（Fibonacci: 1,2,3,5,8,13） */
-  storyPoints?: number;
-  /** 标签 */
-  labels?: string[];
-  /** 截止时间 */
-  dueDate?: number;
-  /** 完成时间 */
-  completedAt?: number;
-  /** 创建时间 */
-  createdAt: number;
-  /** 最后更新时间 */
-  updatedAt?: number;
-  /** 阻塞此任务的任务 ID 列表（依赖关系）*/
-  blockedBy?: string[];
-}
-
 /**
  * Sprint 状态
  * planning  = 待规划（尚未开始，可以往里加任务）
@@ -229,8 +211,8 @@ export interface ProjectSprint {
   completedAt?: number;
   /** 排序序号（从1开始）*/
   order: number;
-  /** 包含的任务列表 */
-  tasks: ProjectTask[];
+  /** 包含的任务列表（使用统一的 Task 接口） */
+  tasks: Task[];
   /** Sprint 速度记录（已完成的 Story Points 总量） */
   velocity?: number;
   /** Sprint 回顾备注 */
@@ -269,6 +251,129 @@ export function calcProjectProgress(sprints: ProjectSprint[]): number {
 /** 向后兼容：保留 ProjectMilestone 类型别名 */
 export type ProjectMilestone = ProjectSprint;
 
+// ============================================================================
+// DoD（Definition of Done）完成门禁系统
+// ============================================================================
+
+/**
+ * 单条验收标准条目
+ *
+ * 业界实践（Scrum/SAFe）：每条 AC 必须可验证、有明确证据。
+ * Agent 必须逐条证明满足，不可跳过。
+ */
+export interface AcceptanceCriterion {
+  /** 标准 ID（自动生成） */
+  id: string;
+  /** 标准描述（必须具体可验证，禁止模糊表述如"功能完善"、"基本完成"） */
+  description: string;
+  /**
+   * 验证方式：
+   * - manual: 需要人工确认
+   * - automated: 自动化测试/脚本可验证
+   * - evidence: 提供可检查产出物（文件路径/测试输出/截图链接等）
+   */
+  verificationType: "manual" | "automated" | "evidence";
+  /** 是否已满足 */
+  satisfied: boolean;
+  /** 满足时间戳（Unix ms） */
+  satisfiedAt?: number;
+  /** 满足该条标准的证据（文件路径/测试输出等，必须可追源） */
+  evidence?: string;
+  /** 由谁确认满足（Agent ID 或 "human"） */
+  satisfiedBy?: string;
+}
+
+/**
+ * 完成门禁（Completion Gate / DoD Gate）
+ *
+ * 这是解决"无尽开发、循环开发"问题的核心机制。
+ *
+ * 设计原则（来自业界最佳实践）：
+ * 1. [Scrum DoD] 所有标准全部满足才算完成，缺一不可
+ * 2. [SAFe Feature AC] 每条标准必须有可追源的证据
+ * 3. [DUN Ladder for AI] 最高级验收节点需人工最终确认，防止 Agent 自欺欺人
+ * 4. [Scope Freeze] 项目完成后自动冻结范围，主控禁止再创建新任务
+ */
+export interface ProjectCompletionGate {
+  /**
+   * 验收标准列表（结构化 DoD，取代原 acceptanceCriteria 字符串）。
+   * 创建项目时必须至少提供1条，否则项目无法被判定为完成。
+   */
+  criteria: AcceptanceCriterion[];
+  /**
+   * 是否需要人工最终确认（默认 true，强烈建议保持 true）。
+   * true  = 所有标准满足后，仍需人类点击"确认完成"才关闭
+   * false = 所有标准满足后自动关闭（仅适用于全自动化可验证的纯技术项目）
+   */
+  requireHumanSignOff: boolean;
+  /** 人工确认时间戳（requireHumanSignOff=true 时，有此字段才可设 completed） */
+  humanSignOffAt?: number;
+  /** 确认人（人类用户 ID 或姓名） */
+  humanSignOffBy?: string;
+  /** 确认备注（可记录最终验收意见） */
+  humanSignOffNote?: string;
+  /**
+   * 范围冻结（Scope Freeze）开关。
+   * true  = 主控无法再为该项目创建任何新任务（从根本上阻止"无尽开发"）
+   * false = 正常开发状态
+   * 自动触发：项目进入 completed 或 cancelled 时自动设为 true
+   * 解冻：需人工将项目状态改回 development/active 并明确说明原因
+   */
+  scopeFrozen: boolean;
+  /** 范围冻结时间戳 */
+  scopeFrozenAt?: number;
+  /** 冻结原因 */
+  scopeFrozenReason?: "completed" | "cancelled" | "human_decision";
+}
+
+/**
+ * 检查项目完成门禁是否全部满足，返回当前进度与差距。
+ *
+ * coordinator 必须在每次心跳补充任务前调用此函数：
+ * - canClose=true  → 更新项目状态为 completed，停止分配新任务
+ * - canClose=false → 检查 gaps，优先分配能补齐差距的任务
+ */
+export function checkCompletionGate(gate: ProjectCompletionGate): {
+  allSatisfied: boolean;
+  unsatisfied: AcceptanceCriterion[];
+  progress: { satisfied: number; total: number; percent: number };
+  canClose: boolean;
+  gaps: string[];
+} {
+  const unsatisfied = gate.criteria.filter((c) => !c.satisfied);
+  const allSatisfied = unsatisfied.length === 0 && gate.criteria.length > 0;
+  const humanOk = !gate.requireHumanSignOff || Boolean(gate.humanSignOffAt);
+  const canClose = allSatisfied && humanOk;
+  const total = gate.criteria.length;
+  const satisfiedCount = total - unsatisfied.length;
+
+  const gaps: string[] = [];
+  if (total === 0) {
+    gaps.push(
+      "⚠️ [缺少DoD] 该项目未定义任何验收标准，无法判定完成！请立即补充 completionGate.criteria",
+    );
+  } else {
+    for (const c of unsatisfied) {
+      gaps.push(`\u274c [未满足] ${c.description}（验证方式: ${c.verificationType}）`);
+    }
+  }
+  if (allSatisfied && gate.requireHumanSignOff && !gate.humanSignOffAt) {
+    gaps.push("⏳ [待人工签收] 所有验收标准已满足，等待负责人最终确认");
+  }
+
+  return {
+    allSatisfied,
+    unsatisfied,
+    progress: {
+      satisfied: satisfiedCount,
+      total,
+      percent: total === 0 ? 0 : Math.round((satisfiedCount / total) * 100),
+    },
+    canClose,
+    gaps,
+  };
+}
+
 /**
  * 项目配置文件结构
  */
@@ -304,9 +409,20 @@ export interface ProjectConfig {
   sprints?: ProjectSprint[];
   /** 向后兼容：原 milestones 字段，优先使用 sprints */
   milestones?: ProjectSprint[];
-  /** Backlog 任务列表（未分配到 Sprint 的任务） */
-  backlog?: ProjectTask[];
-  /** 验收标准（Markdown 格式） */
+  /** Backlog 任务列表（未分配到 Sprint 的任务，使用统一的 Task 接口） */
+  backlog?: Task[];
+  /**
+   * ✅ 完成门禁（DoD - Definition of Done）【强烈建议在创建项目时填写】
+   *
+   * 这是解决"无尽开发、循环开发"问题的核心。
+   * 项目必须在此明确定义"什么时候算完成"，coordinator 每次补充任务前会检查此项。
+   * 若所有标准已满足（+ 人工确认），项目进入 completed，主控停止分配新任务。
+   */
+  completionGate?: ProjectCompletionGate;
+  /**
+   * @deprecated 请使用 completionGate.criteria 代替。
+   * 旧版验收标准字符串字段，保留向后兼容，新项目请改用 completionGate。
+   */
   acceptanceCriteria?: string;
   /** 最后一次进度更新的备注 */
   progressNotes?: string;
@@ -332,6 +448,18 @@ export interface ProjectConfig {
    * 启用后，本项目内所有 Agent 的任务输出都会被 SHARP 自动评分。
    */
   sharpEnabled?: boolean;
+  /**
+   * OKR 对齐：项目关联的目标 ID（可属于组织或团队的 OKR）
+   */
+  objectiveId?: string;
+  /**
+   * OKR 对齐：项目关联的关键结果 ID
+   */
+  keyResultId?: string;
+  /**
+   * Initiative ID（如果该项目属于更大战略计划）
+   */
+  initiativeId?: string;
 }
 
 /**
@@ -443,7 +571,41 @@ export function readProjectConfig(workspacePath: string): ProjectConfig | null {
     }
 
     const content = fs.readFileSync(configPath, "utf-8");
-    return JSON.parse(content) as ProjectConfig;
+    const config = JSON.parse(content) as ProjectConfig;
+
+    // 向后兼容：将旧版 ProjectTask 状态标识符转换为统一格式
+    // 旧格式: in_progress / in_review （下划线）
+    // 新格式: in-progress / review   （连字符）
+    const normalize = (s: string): string => {
+      const map: Record<string, string> = { in_progress: "in-progress", in_review: "review" };
+      return map[s] ?? s;
+    };
+    const normalizeTasks = (tasks: unknown[]): unknown[] =>
+      tasks.map((t) => {
+        const task = t as Record<string, unknown>;
+        if (typeof task.status === "string") {
+          return { ...task, status: normalize(task.status) };
+        }
+        return task;
+      });
+
+    if (config.sprints) {
+      config.sprints = config.sprints.map((s) => ({
+        ...s,
+        tasks: normalizeTasks(s.tasks ?? []) as never,
+      }));
+    }
+    if (config.milestones) {
+      config.milestones = config.milestones.map((s) => ({
+        ...s,
+        tasks: normalizeTasks(s.tasks ?? []) as never,
+      }));
+    }
+    if (config.backlog) {
+      config.backlog = normalizeTasks(config.backlog) as never;
+    }
+
+    return config;
   } catch {
     return null;
   }

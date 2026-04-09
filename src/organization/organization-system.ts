@@ -4,14 +4,19 @@
  * 提供组织结构的创建、查询、更新、删除等核心功能
  */
 
-import type { Organization, OrganizationLevel } from "./types.js";
+import { organizationStorage } from "./storage.js";
+import type {
+  Organization,
+  OrganizationLevel,
+  OrganizationMember,
+  MemberRole,
+  MemberType,
+} from "./types.js";
 
 /**
  * 组织系统类
  */
 export class OrganizationSystem {
-  private organizations: Map<string, Organization> = new Map();
-
   /**
    * 创建组织
    */
@@ -35,18 +40,17 @@ export class OrganizationSystem {
     const { id, parentId } = params;
 
     // 检查ID是否已存在
-    if (this.organizations.has(id)) {
+    const existing = await organizationStorage.getOrganization(id);
+    if (existing) {
       throw new Error(`Organization with ID "${id}" already exists`);
     }
 
     // 检查父组织是否存在
-    if (parentId && !this.organizations.has(parentId)) {
-      throw new Error(`Parent organization "${parentId}" not found`);
-    }
-
-    // 验证层级关系
     if (parentId) {
-      const parent = this.organizations.get(parentId)!;
+      const parent = await organizationStorage.getOrganization(parentId);
+      if (!parent) {
+        throw new Error(`Parent organization "${parentId}" not found`);
+      }
       this.validateHierarchy(params.level, parent.level);
     }
 
@@ -65,7 +69,7 @@ export class OrganizationSystem {
       createdBy: params.createdBy,
     };
 
-    this.organizations.set(id, organization);
+    await organizationStorage.createOrganization(organization);
     console.log(`[Organization System] Created organization: ${id} (${params.name})`);
 
     return organization;
@@ -75,7 +79,7 @@ export class OrganizationSystem {
    * 获取组织
    */
   async getOrganization(id: string): Promise<Organization | null> {
-    return this.organizations.get(id) || null;
+    return organizationStorage.getOrganization(id);
   }
 
   /**
@@ -88,7 +92,7 @@ export class OrganizationSystem {
   }): Promise<Organization> {
     const { id, updates, updatedBy } = params;
 
-    const organization = this.organizations.get(id);
+    const organization = await organizationStorage.getOrganization(id);
     if (!organization) {
       throw new Error(`Organization "${id}" not found`);
     }
@@ -96,7 +100,7 @@ export class OrganizationSystem {
     // 如果更新了父组织，验证层级关系
     if (updates.parentId !== undefined && updates.parentId !== organization.parentId) {
       if (updates.parentId) {
-        const parent = this.organizations.get(updates.parentId);
+        const parent = await organizationStorage.getOrganization(updates.parentId);
         if (!parent) {
           throw new Error(`Parent organization "${updates.parentId}" not found`);
         }
@@ -104,14 +108,7 @@ export class OrganizationSystem {
       }
     }
 
-    const updated: Organization = {
-      ...organization,
-      ...updates,
-      updatedAt: Date.now(),
-      updatedBy,
-    };
-
-    this.organizations.set(id, updated);
+    const updated = await organizationStorage.updateOrganization(id, { ...updates, updatedBy });
     console.log(`[Organization System] Updated organization: ${id}`);
 
     return updated;
@@ -121,13 +118,13 @@ export class OrganizationSystem {
    * 删除组织
    */
   async deleteOrganization(id: string): Promise<boolean> {
-    const organization = this.organizations.get(id);
+    const organization = await organizationStorage.getOrganization(id);
     if (!organization) {
       return false;
     }
 
     // 检查是否有子组织
-    const children = Array.from(this.organizations.values()).filter((org) => org.parentId === id);
+    const children = await organizationStorage.getChildOrganizations(id);
     if (children.length > 0) {
       throw new Error(
         `Cannot delete organization "${id}": it has ${children.length} child organization(s)`,
@@ -141,23 +138,33 @@ export class OrganizationSystem {
       );
     }
 
-    this.organizations.delete(id);
-    console.log(`[Organization System] Deleted organization: ${id}`);
+    const deleted = await organizationStorage.deleteOrganization(id);
+    if (deleted) {
+      console.log(`[Organization System] Deleted organization: ${id}`);
+    }
 
-    return true;
+    return deleted;
   }
 
   /**
    * 添加成员到组织
+   *
+   * P1 双轨合并：同步写入 memberIds（兼容旧版）+ members[]（含角色）
+   * 推荐改用 addMemberWithRole() 明确指定角色；
+   * 此方法保留向后兼容，默认角色 = "member"。
    */
   async addMember(params: {
     organizationId: string;
     agentId: string;
     updatedBy: string;
+    /** 可选角色，默认 member */
+    role?: MemberRole;
+    /** 成员类型，默认 agent */
+    memberType?: MemberType;
   }): Promise<Organization> {
-    const { organizationId, agentId, updatedBy } = params;
+    const { organizationId, agentId, updatedBy, role = "member", memberType = "agent" } = params;
 
-    const organization = this.organizations.get(organizationId);
+    const organization = await organizationStorage.getOrganization(organizationId);
     if (!organization) {
       throw new Error(`Organization "${organizationId}" not found`);
     }
@@ -176,21 +183,55 @@ export class OrganizationSystem {
       throw new Error(`Agent "${agentId}" is already a member of organization "${organizationId}"`);
     }
 
-    const updated: Organization = {
-      ...organization,
-      memberIds: [...organization.memberIds, agentId],
-      updatedAt: Date.now(),
-      updatedBy,
+    // P1 双轨合并：同时维护 memberIds（旧）和 members[]（新）
+    const newMember: OrganizationMember = {
+      id: agentId,
+      type: memberType,
+      role,
+      joinedAt: Date.now(),
     };
+    const updatedMembers = [...(organization.members ?? []), newMember];
 
-    this.organizations.set(organizationId, updated);
-    console.log(`[Organization System] Added member ${agentId} to organization ${organizationId}`);
+    const updated = await organizationStorage.updateOrganization(organizationId, {
+      memberIds: [...organization.memberIds, agentId],
+      members: updatedMembers,
+      updatedBy,
+    });
+    console.log(
+      `[Organization System] Added member ${agentId} (role=${role}) to organization ${organizationId}`,
+    );
 
     return updated;
   }
 
   /**
+   * 添加成员并明确指定角色（推荐方式）
+   *
+   * 相比 addMember，此方法语义更清晰，支持完整的 OrganizationMember 结构。
+   */
+  async addMemberWithRole(params: {
+    organizationId: string;
+    agentId: string;
+    role: MemberRole;
+    updatedBy: string;
+    memberType?: MemberType;
+    title?: string;
+    reportTo?: string;
+    responsibilities?: string[];
+  }): Promise<Organization> {
+    return this.addMember({
+      organizationId: params.organizationId,
+      agentId: params.agentId,
+      updatedBy: params.updatedBy,
+      role: params.role,
+      memberType: params.memberType ?? "agent",
+    });
+  }
+
+  /**
    * 从组织移除成员
+   *
+   * P1 双轨合并：同时从 memberIds（旧）和 members[]（新）移除
    */
   async removeMember(params: {
     organizationId: string;
@@ -199,7 +240,7 @@ export class OrganizationSystem {
   }): Promise<Organization> {
     const { organizationId, agentId, updatedBy } = params;
 
-    const organization = this.organizations.get(organizationId);
+    const organization = await organizationStorage.getOrganization(organizationId);
     if (!organization) {
       throw new Error(`Organization "${organizationId}" not found`);
     }
@@ -208,14 +249,14 @@ export class OrganizationSystem {
       throw new Error(`Agent "${agentId}" is not a member of organization "${organizationId}"`);
     }
 
-    const updated: Organization = {
-      ...organization,
-      memberIds: organization.memberIds.filter((id) => id !== agentId),
-      updatedAt: Date.now(),
-      updatedBy,
-    };
+    // P1 双轨合并：同时从 members[] 移除
+    const updatedMembers = (organization.members ?? []).filter((m) => m.id !== agentId);
 
-    this.organizations.set(organizationId, updated);
+    const updated = await organizationStorage.updateOrganization(organizationId, {
+      memberIds: organization.memberIds.filter((id) => id !== agentId),
+      members: updatedMembers,
+      updatedBy,
+    });
     console.log(
       `[Organization System] Removed member ${agentId} from organization ${organizationId}`,
     );
@@ -227,7 +268,7 @@ export class OrganizationSystem {
    * 获取组织的所有子组织
    */
   async getChildren(organizationId: string): Promise<Organization[]> {
-    return Array.from(this.organizations.values()).filter((org) => org.parentId === organizationId);
+    return organizationStorage.getChildOrganizations(organizationId);
   }
 
   /**
@@ -235,11 +276,13 @@ export class OrganizationSystem {
    */
   async getAncestors(organizationId: string): Promise<Organization[]> {
     const ancestors: Organization[] = [];
-    let current = this.organizations.get(organizationId);
+    let current = await organizationStorage.getOrganization(organizationId);
 
     while (current?.parentId) {
-      const parent = this.organizations.get(current.parentId);
-      if (!parent) break;
+      const parent = await organizationStorage.getOrganization(current.parentId);
+      if (!parent) {
+        break;
+      }
       ancestors.push(parent);
       current = parent;
     }
@@ -271,14 +314,14 @@ export class OrganizationSystem {
    * 获取某层级的所有组织
    */
   async getByLevel(level: OrganizationLevel): Promise<Organization[]> {
-    return Array.from(this.organizations.values()).filter((org) => org.level === level);
+    return organizationStorage.listOrganizations({ level });
   }
 
   /**
    * 获取所有组织
    */
   async getAllOrganizations(): Promise<Organization[]> {
-    return Array.from(this.organizations.values());
+    return organizationStorage.listOrganizations();
   }
 
   /**
@@ -298,7 +341,11 @@ export class OrganizationSystem {
    * 清空所有组织（仅用于测试）
    */
   async clearAll(): Promise<void> {
-    this.organizations.clear();
+    const orgs = await organizationStorage.listOrganizations();
+    for (const org of orgs) {
+      await organizationStorage.deleteOrganization(org.id);
+    }
+    organizationStorage.clearCache();
     console.log("[Organization System] Cleared all organizations");
   }
 }
