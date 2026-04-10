@@ -52,6 +52,22 @@ export function renderModels(
     } | null;
   },
 ) {
+  // 调试日志：记录 Models 渲染关键状态
+  if (typeof window !== "undefined" && (window as unknown as { __DEBUG_UI__?: boolean }).__DEBUG_UI__) {
+    console.log("[DEBUG:Models] renderModels called with:", {
+      loading: props.loading,
+      error: props.error,
+      snapshotExists: !!props.snapshot,
+      providersCount: Object.keys(props.snapshot?.providers ?? {}).length,
+      authsCount: Object.keys(props.snapshot?.auths ?? {}).length,
+      modelConfigsCount: Object.keys(props.snapshot?.modelConfigs ?? {}).length,
+      providerInstancesCount: props.snapshot?.providerInstances?.length ?? 0,
+      testingAuthId: props.testingAuthId,
+      managingAuthProvider: props.managingAuthProvider,
+      editingAuthExists: !!props.editingAuth,
+    });
+  }
+
   const providers = props.snapshot?.providers as Record<string, unknown> | null;
   const providerOrder = resolveProviderOrder(props.snapshot);
 

@@ -50,11 +50,14 @@ export interface FriendsState {
  * 加载好友列表
  */
 export async function loadFriends(host: OpenClawApp, agentId: string): Promise<void> {
+  if (!host.client) {
+    return;
+  }
   host.friendsLoading = true;
   host.friendsError = null;
 
   try {
-    const result = await host.client!.request("friends.list", { agentId });
+    const result = await host.client.request("friends.list", { agentId });
     const friends = result?.friends || [];
     host.friendsList = friends;
     host.friendsTotal = result?.total || friends.length;

@@ -67,6 +67,22 @@ export function resetChatViewState(): void {
 export const cleanupChatModuleState = resetChatViewState;
 
 export function renderChat(props: ChatProps) {
+  // 调试日志：记录 Chat 渲染关键状态
+  if (typeof window !== "undefined" && (window as unknown as { __DEBUG_UI__?: boolean }).__DEBUG_UI__) {
+    console.log("[DEBUG:Chat] renderChat called with:", {
+      connected: props.connected,
+      loading: props.loading,
+      sending: props.sending,
+      sessionKey: props.sessionKey,
+      messagesCount: props.messages?.length ?? 0,
+      agentsListCount: props.agentsList?.agents?.length ?? 0,
+      navNodesCount: props.navNodes?.length ?? 0,
+      navLoading: props.navLoading,
+      navError: props.navError,
+      error: props.error,
+    });
+  }
+
   // 监控视图路由：contact / all / agent-all 使用专属监控面板
   if (isMonitorContext(props.navCurrentContext)) {
     return html`

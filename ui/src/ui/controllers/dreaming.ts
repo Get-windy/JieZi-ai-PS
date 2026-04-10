@@ -6,6 +6,18 @@ export type DreamingPhaseId = "light" | "deep" | "rem";
 const DEFAULT_DREAM_DIARY_PATH = "DREAMS.md";
 const DEFAULT_DREAMING_PLUGIN_ID = "memory-core";
 
+/** 梦境目标（与后端 DreamTarget 类型对应） */
+export type DreamTarget =
+  | { kind: "agent"; id: string; label: string; workspaceDir: string }
+  | { kind: "group"; id: string; label: string; workspaceDir: string; projectId?: string };
+
+export type DreamTargetsState = {
+  loading: boolean;
+  error: string | null;
+  targets: DreamTarget[];
+  defaultTargetId: string;
+};
+
 type DreamingPhaseStatusBase = {
   enabled: boolean;
   cron: string;
@@ -74,6 +86,15 @@ export type DreamingState = {
   connected: boolean;
   configSnapshot: ConfigSnapshot | null;
   applySessionKey: string;
+  /** 当前 session 对应的 agent ID，用于读取正确的工作空间梦境日记 */
+  dreamingAgentId?: string | null;
+  /** 已选择的梦境目标（agentId 或 group:<groupId>）—— null 表示使用默认目标 */
+  dreamSelectedTargetId?: string | null;
+  /** 梦境目标列表加载状态 */
+  dreamTargetsLoading?: boolean;
+  dreamTargetsError?: string | null;
+  dreamTargets?: DreamTarget[];
+  dreamTargetsDefaultId?: string;
   dreamingStatusLoading: boolean;
   dreamingStatusError: string | null;
   dreamingStatus: DreamingStatus | null;
@@ -254,9 +275,21 @@ export async function loadDreamDiary(state: DreamingState): Promise<void> {
   state.dreamDiaryLoading = true;
   state.dreamDiaryError = null;
   try {
+    // 优先使用已选择的目标，其次回退到当前 session 对应的 agentId
+    const selectedTargetId = state.dreamSelectedTargetId?.trim();
+    let requestParams: Record<string, string> = {};
+    if (selectedTargetId && selectedTargetId.startsWith("group:")) {
+      // 群组梦境日记
+      requestParams = { groupId: selectedTargetId.slice("group:".length) };
+    } else if (selectedTargetId) {
+      requestParams = { agentId: selectedTargetId };
+    } else {
+      const agentId = state.dreamingAgentId?.trim();
+      if (agentId) { requestParams = { agentId }; }
+    }
     const payload = await state.client.request<DoctorMemoryDreamDiaryPayload>(
       "doctor.memory.dreamDiary",
-      {},
+      requestParams,
     );
     const path = normalizeTrimmedString(payload?.path) ?? DEFAULT_DREAM_DIARY_PATH;
     const found = payload?.found === true;
@@ -271,6 +304,36 @@ export async function loadDreamDiary(state: DreamingState): Promise<void> {
     state.dreamDiaryError = String(err);
   } finally {
     state.dreamDiaryLoading = false;
+  }
+}
+
+/**
+ * 加载梦境目标列表（所有 agent + 群组）
+ */
+export async function loadDreamTargets(state: DreamingState): Promise<void> {
+  if (!state.client || !state.connected || state.dreamTargetsLoading) {
+    return;
+  }
+  state.dreamTargetsLoading = true;
+  state.dreamTargetsError = null;
+  try {
+    const payload = await state.client.request<{
+      targets: DreamTarget[];
+      defaultTargetId: string;
+    }>("doctor.memory.dreamTargets", {});
+    state.dreamTargets = Array.isArray(payload?.targets) ? payload.targets : [];
+    state.dreamTargetsDefaultId = typeof payload?.defaultTargetId === "string"
+      ? payload.defaultTargetId
+      : (state.dreamTargets[0]?.id ?? "");
+    // 若当前未选择目标，自动设置为默认目标
+    if (!state.dreamSelectedTargetId) {
+      state.dreamSelectedTargetId = state.dreamTargetsDefaultId || null;
+    }
+  } catch (err) {
+    state.dreamTargetsError = String(err);
+    state.dreamTargets = [];
+  } finally {
+    state.dreamTargetsLoading = false;
   }
 }
 

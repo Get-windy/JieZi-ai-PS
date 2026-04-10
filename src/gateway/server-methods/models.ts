@@ -12,8 +12,16 @@ import {
   ErrorCodes,
   errorShape,
   formatValidationErrors,
-  validateModelsListParams,
 } from "../../../upstream/src/gateway/protocol/index.js";
+// 使用本地扩展的 schema 验证（允许 probe 和 timeoutMs 参数）
+import { ModelsListParamsSchema } from "../protocol/schema/agents-models-skills.js";
+import AjvPkg from "ajv";
+const ajv = new (AjvPkg as unknown as new (opts?: object) => import("ajv").default)({
+  allErrors: true,
+  strict: false,
+  removeAdditional: false,
+});
+const validateModelsListParams = ajv.compile(ModelsListParamsSchema);
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { resolveDefaultAgentId, resolveAgentDir } from "../../agents/agent-scope.js";
 import { forceRefreshBenchmarkData } from "../../agents/arena-benchmarks.js";

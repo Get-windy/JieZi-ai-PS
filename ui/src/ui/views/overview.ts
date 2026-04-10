@@ -460,7 +460,7 @@ export function renderOverview(props: OverviewProps) {
       <div class="callout" style="margin-top: 12px; font-size: 12px;">
         📦 目录结构：
         <code style="display: block; margin-top: 6px; padding: 8px; background: var(--bg2, #f5f5f5); border-radius: 4px; font-family: monospace;">
-          {workspacesDir}/<br/>
+          ${props.workspacesDir || "<工作空间根目录>"}/<br/>
           &nbsp;&nbsp;{agentId}/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&larr; 个人助手工作空间<br/>
           &nbsp;&nbsp;groups/{groupId}/&nbsp;&larr; 群组工作空间
         </code>

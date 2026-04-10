@@ -928,15 +928,6 @@ function renderChannelSpecificFields(
     | undefined;
   const schema = channelConfigSchemas?.[channelId];
 
-  // ===== 前端调试 =====
-  console.log(
-    `[DEBUG renderChannelSpecificFields] channelId=${channelId}`,
-    `allKeys=${JSON.stringify(Object.keys(channelConfigSchemas ?? {}))}`,
-    `schema=${JSON.stringify(schema)}`,
-    `hasProperties=${!!(schema?.properties)}`,
-  );
-  // ====================
-
   if (!schema || !schema.properties) {
     // 如果没有 schema，返回空（新插件自动支持）
     return html`

@@ -1290,7 +1290,7 @@ function renderSuperAdminSection(props: OrganizationPermissionsProps) {
           ? html`<div class="error">${props.superAdminsError}</div>`
           : html`
             <div style="display: grid; gap: 12px;">
-              ${props.superAdmins.map(
+              ${(props.superAdmins ?? []).map(
                 (admin) => html`
                   <div
                     class="list-item"
@@ -1376,7 +1376,7 @@ function renderSuperAdminSection(props: OrganizationPermissionsProps) {
                   </div>
                 `,
               )}
-              ${props.superAdmins.length === 0
+              ${(props.superAdmins ?? []).length === 0
                 ? html`
                   <div style="text-align: center; padding: 40px; color: var(--muted);">
                     <div style="font-size: 48px; margin-bottom: 16px;">👑</div>

@@ -789,6 +789,15 @@ export type ModelsStatusSnapshot = {
   providerMeta?: ModelProviderMetaEntry[];
   providers: Record<string, unknown>; // 供应商配置
 
+  // 模型目录列表（来自网关的模型目录）
+  models?: Array<{
+    id: string;
+    name?: string;
+    provider: string;
+    contextWindow?: number;
+    enabled?: boolean;
+  }>;
+
   // 新的数据结构
   auths: Record<string, ProviderAuthSnapshot[]>; // 供应商的认证列表（按供应商分组）
   modelConfigs: Record<string, ModelConfigSnapshot[]>; // 模型配置列表（按供应商分组）

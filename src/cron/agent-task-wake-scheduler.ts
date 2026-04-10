@@ -251,8 +251,9 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           `[Task Wake] Agent ${normalizedId} has ${inProgressTasks.length} in-progress tasks (violation of 1-task rule). Resetting ${resetTasks.length} back to todo. Keeping: ${keepTask.id} (${keepTask.priority})`,
         );
 
-        // 将多余任务重置回 todo
+        // 将多余任务重置回 todo（必须经由 blocked 中转，因为状态机不允许 in-progress → todo 直接跳转）
         for (const t of resetTasks) {
+          await taskStorage.updateTask(t.id, { status: "blocked" });
           await taskStorage.updateTask(t.id, {
             status: "todo",
             timeTracking: {
@@ -358,9 +359,11 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           if (shouldForceReset) {
             // 任务卡住超过 60 分钟：强制重置回 todo，让调度器重新派发
             // 这样可以避免因模型 API 超时导致任务永久卡住
+            // 注意：状态机不允许 in-progress → todo 直接跳转，必须经由 blocked 中转
             console.log(
               `[Task Wake] Agent ${normalizedId} task ${activeTask.id} stuck for ${stuckMinutes}min — force resetting to todo`,
             );
+            await taskStorage.updateTask(activeTask.id, { status: "blocked" });
             await taskStorage.updateTask(activeTask.id, {
               status: "todo",
               timeTracking: {

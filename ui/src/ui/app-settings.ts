@@ -254,39 +254,55 @@ export async function refreshActiveTab(host: SettingsHost) {
     await loadModelsTab(host);
   }
   if (host.tab === "instances") {
-    await loadPresence(host as unknown as OpenClawApp);
+    const app = host as unknown as OpenClawApp;
+    if (app.client && app.connected) {
+      await loadPresence(app);
+    }
   }
   if (host.tab === "usage") {
-    await loadUsage(host as unknown as OpenClawApp);
+    const app = host as unknown as OpenClawApp;
+    if (app.client && app.connected) {
+      await loadUsage(app);
+    }
   }
   if (host.tab === "sessions") {
-    await loadSessions(host as unknown as OpenClawApp);
+    const app = host as unknown as OpenClawApp;
+    if (app.client && app.connected) {
+      await loadSessions(app);
+    }
   }
   if (host.tab === "cron") {
     await loadCron(host);
   }
   if (host.tab === "skills") {
-    await loadSkills(host as unknown as OpenClawApp);
+    const app = host as unknown as OpenClawApp;
+    if (app.client && app.connected) {
+      await loadSkills(app);
+    }
   }
   if (host.tab === "agents") {
-    await loadAgents(host as unknown as OpenClawApp);
-    await loadConfig(host as unknown as OpenClawApp);
+    const app = host as unknown as OpenClawApp;
+    if (!app.client || !app.connected) {
+      return;
+    }
+    await loadAgents(app);
+    await loadConfig(app);
     const agentIds = host.agentsList?.agents?.map((entry) => entry.id) ?? [];
     if (agentIds.length > 0) {
-      void loadAgentIdentities(host as unknown as OpenClawApp, agentIds);
+      void loadAgentIdentities(app, agentIds);
     }
     const agentId =
       host.agentsSelectedId ?? host.agentsList?.defaultId ?? host.agentsList?.agents?.[0]?.id;
     if (agentId) {
-      void loadAgentIdentity(host as unknown as OpenClawApp, agentId);
+      void loadAgentIdentity(app, agentId);
       if (host.agentsPanel === "files") {
-        void loadAgentFiles(host as unknown as OpenClawApp, agentId);
+        void loadAgentFiles(app, agentId);
       }
       if (host.agentsPanel === "skills") {
-        void loadAgentSkills(host as unknown as OpenClawApp, agentId);
+        void loadAgentSkills(app, agentId);
       }
       if (host.agentsPanel === "channels") {
-        void loadChannels(host as unknown as OpenClawApp, false);
+        void loadChannels(app, false);
       }
       if (host.agentsPanel === "cron") {
         void loadCron(host);
@@ -294,27 +310,36 @@ export async function refreshActiveTab(host: SettingsHost) {
     }
   }
   if (host.tab === "nodes") {
-    await loadNodes(host as unknown as OpenClawApp);
-    await loadDevices(host as unknown as OpenClawApp);
-    await loadConfig(host as unknown as OpenClawApp);
-    await loadExecApprovals(host as unknown as OpenClawApp);
+    const app = host as unknown as OpenClawApp;
+    if (app.client && app.connected) {
+      await loadNodes(app);
+      await loadDevices(app);
+      await loadConfig(app);
+      await loadExecApprovals(app);
+    }
   }
   if (host.tab === "dreams") {
-    await loadConfig(host as unknown as OpenClawApp);
-    await Promise.all([
-      loadDreamingStatus(host as unknown as OpenClawApp),
-      loadDreamDiary(host as unknown as OpenClawApp),
-    ]);
+    const app = host as unknown as OpenClawApp;
+    if (app.client && app.connected) {
+      await loadConfig(app);
+      await Promise.all([
+        loadDreamingStatus(app),
+        loadDreamDiary(app),
+      ]);
+    }
   }
   if (host.tab === "chat") {
     // 第一步：并发加载所有辅助数据（通道、群组、好友、会话列表）
     // 必须先加载完成，确保导航树有完整数据
     const app = host as unknown as OpenClawApp;
+    if (!app.client || !app.connected) {
+      return;
+    }
     const agentId = app.agentsList?.defaultId ?? "main";
     await Promise.all([
       !app.channelsSnapshot ? loadChannels(app, false) : Promise.resolve(),
-      !app.groupsList ? loadGroups(app, app.client) : Promise.resolve(),
-      app.friendsList?.length === 0 ? loadFriends(app, agentId) : Promise.resolve(),
+      !app.groupsList && app.client ? loadGroups(app, app.client) : Promise.resolve(),
+      app.friendsList?.length === 0 && app.client ? loadFriends(app, agentId) : Promise.resolve(),
       loadSessions(app as unknown as import("./controllers/sessions.ts").SessionsState),
     ]);
     // 第二步：辅助数据加载完成后再刷新聊天
@@ -332,87 +357,104 @@ export async function refreshActiveTab(host: SettingsHost) {
     host.tab === "infrastructure" ||
     host.tab === "aiAgents"
   ) {
-    await loadConfigSchema(host as unknown as OpenClawApp);
-    await loadConfig(host as unknown as OpenClawApp);
+    const app = host as unknown as OpenClawApp;
+    if (app.client && app.connected) {
+      await loadConfigSchema(app);
+      await loadConfig(app);
+    }
   }
   if (host.tab === "debug") {
-    await loadDebug(host as unknown as OpenClawApp);
+    const app = host as unknown as OpenClawApp;
+    if (app.client && app.connected) {
+      await loadDebug(app);
+    }
     host.eventLog = host.eventLogBuffer;
   }
   if (host.tab === "logs") {
     host.logsAtBottom = true;
-    await loadLogs(host as unknown as OpenClawApp, { reset: true });
+    const app = host as unknown as OpenClawApp;
+    if (app.client && app.connected) {
+      await loadLogs(app, { reset: true });
+    }
     scheduleLogsScroll(host as unknown as Parameters<typeof scheduleLogsScroll>[0], true);
   }
   if (host.tab === "message-queue") {
-    await loadQueueStatus(host as unknown as OpenClawApp);
-    await loadQueueStats(host as unknown as OpenClawApp);
+    const app = host as unknown as OpenClawApp;
+    if (app.client && app.connected) {
+      await loadQueueStatus(app);
+      await loadQueueStats(app);
+    }
   }
   if (host.tab === "organization-permissions") {
-    // 切换到组织与权限页面时，自动加载组织数据
-    void import("./app-render.js")
-      .then(async (_m) => {
-        const app = host as unknown as OpenClawApp;
-        if (app.client && !app.organizationDataLoading) {
-          app.organizationDataLoading = true;
-          app.organizationDataError = null;
-          try {
-            const result = await app.client.request("org.list", {
-              includeDepartments: true,
-              includeTeams: true,
-              includeReporting: true,
-            });
-            const agentNodes = (app.agentsList?.agents || []).map((a) => ({
-              id: a.id,
-              name: (a as { name?: string }).name || a.id,
-              permissionLevel: 1,
-            }));
-            app.organizationData = {
-              organizations: (result?.departments || []).map((d, i) => ({
-                id: d.id,
-                name: d.name,
-                description: d.description,
-                parentId: d.parentId,
-                level: i,
-                createdAt: d.createdAt || Date.now(),
-                agentCount: (d.memberIds || []).length,
-              })),
-              teams: (result?.teams || []).map((t) => ({
-                id: t.id,
-                name: t.name,
-                organizationId: t.parentId || "",
-                leaderId: t.managerId,
-                memberIds: t.memberIds || [],
-                createdAt: t.createdAt || Date.now(),
-              })),
-              agents: agentNodes,
-              relationships: (result?.reportingLines || []).map((r) => ({
-                sourceId: r.subordinateId,
-                targetId: r.supervisorId,
-                type: "reports_to" as const,
-              })),
-              statistics: {
-                totalOrganizations: (result?.departments || []).length,
-                totalTeams: (result?.teams || []).length,
-                totalAgents: agentNodes.length,
-                averageTeamSize: 0,
-                permissionDistribution: {},
-              },
-            };
-          } catch (err) {
-            app.organizationDataError = String(err);
-          } finally {
-            app.organizationDataLoading = false;
+    const app = host as unknown as OpenClawApp;
+    if (app.client && app.connected) {
+      // 切换到组织与权限页面时，自动加载组织数据
+      void import("./app-render.js")
+        .then(async (_m) => {
+          if (app.client && !app.organizationDataLoading) {
+            app.organizationDataLoading = true;
+            app.organizationDataError = null;
+            try {
+              const result = await app.client.request("org.list", {
+                includeDepartments: true,
+                includeTeams: true,
+                includeReporting: true,
+              });
+              const agentNodes = (app.agentsList?.agents || []).map((a) => ({
+                id: a.id,
+                name: (a as { name?: string }).name || a.id,
+                permissionLevel: 1,
+              }));
+              app.organizationData = {
+                organizations: (result?.departments || []).map((d, i) => ({
+                  id: d.id,
+                  name: d.name,
+                  description: d.description,
+                  parentId: d.parentId,
+                  level: i,
+                  createdAt: d.createdAt || Date.now(),
+                  agentCount: (d.memberIds || []).length,
+                })),
+                teams: (result?.teams || []).map((t) => ({
+                  id: t.id,
+                  name: t.name,
+                  organizationId: t.parentId || "",
+                  leaderId: t.managerId,
+                  memberIds: t.memberIds || [],
+                  createdAt: t.createdAt || Date.now(),
+                })),
+                agents: agentNodes,
+                relationships: (result?.reportingLines || []).map((r) => ({
+                  sourceId: r.subordinateId,
+                  targetId: r.supervisorId,
+                  type: "reports_to" as const,
+                })),
+                statistics: {
+                  totalOrganizations: (result?.departments || []).length,
+                  totalTeams: (result?.teams || []).length,
+                  totalAgents: agentNodes.length,
+                  averageTeamSize: 0,
+                  permissionDistribution: {},
+                },
+              };
+            } catch (err) {
+              app.organizationDataError = String(err);
+            } finally {
+              app.organizationDataLoading = false;
+            }
           }
-        }
-      })
-      .catch((err) => console.warn("Failed to load org data:", err));
-    await loadApprovals(host as unknown as OpenClawApp);
-    await loadApprovalStats(host as unknown as OpenClawApp);
-    await loadSuperAdmins(host as unknown as OpenClawApp);
+        })
+        .catch((err) => console.warn("Failed to load org data:", err));
+      await loadApprovals(app);
+      await loadApprovalStats(app);
+      await loadSuperAdmins(app);
+    }
   }
   if (host.tab === "collaboration") {
-    await loadGroups(host as unknown as OpenClawApp, (host as unknown as OpenClawApp).client);
+    const collabApp = host as unknown as OpenClawApp;
+    if (collabApp.client) {
+      await loadGroups(collabApp, collabApp.client);
+    }
   }
 }
 
@@ -644,6 +686,9 @@ export function syncUrlWithSessionKey(host: SettingsHost, sessionKey: string, re
 
 export async function loadOverview(host: SettingsHost) {
   const app = host as unknown as OpenClawApp;
+  if (!app.client || !app.connected) {
+    return;
+  }
   await Promise.allSettled([
     loadChannels(app, false),
     loadPresence(app),
@@ -798,22 +843,35 @@ function buildAttentionItems(host: OpenClawApp) {
 }
 
 export async function loadChannelsTab(host: SettingsHost) {
+  const app = host as unknown as OpenClawApp;
+  if (!app.client || !app.connected) {
+    return;
+  }
   await Promise.all([
-    loadChannels(host as unknown as OpenClawApp, true),
-    loadConfigSchema(host as unknown as OpenClawApp),
-    loadConfig(host as unknown as OpenClawApp),
+    loadChannels(app, true),
+    loadConfigSchema(app),
+    loadConfig(app),
   ]);
 }
 
 export async function loadModelsTab(host: SettingsHost) {
-  await loadModels(host as unknown as OpenClawApp, true);
+  const app = host as unknown as OpenClawApp;
+  if (!app.client || !app.connected) {
+    return;
+  }
+  await loadModels(app, true);
   setTimeout(() => {
-    void loadModels(host as unknown as OpenClawApp, false);
+    if (app.client && app.connected) {
+      void loadModels(app, false);
+    }
   }, 200);
 }
 
 export async function loadCron(host: SettingsHost) {
   const app = host as unknown as OpenClawApp;
+  if (!app.client || !app.connected) {
+    return;
+  }
   const activeCronJobId = app.cronRunsScope === "job" ? app.cronRunsJobId : null;
   await Promise.all([
     loadChannels(app, false),

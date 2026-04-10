@@ -240,6 +240,7 @@ export function connectGateway(host: GatewayHost, options?: ConnectGatewayOption
       if (host.client !== client) {
         return;
       }
+      console.log("[DEBUG:Gateway] onHello received:", { serverVersion: hello.serverVersion, snapshotExists: !!hello.snapshot });
       shutdownHost.pendingShutdownMessage = null;
       host.connected = true;
       host.lastError = null;
@@ -256,6 +257,7 @@ export function connectGateway(host: GatewayHost, options?: ConnectGatewayOption
           host as unknown as Parameters<typeof flushChatQueueForEvent>[0],
         );
       }
+      console.log("[DEBUG:Gateway] triggering data loading...");
       void subscribeSessions(host as unknown as OpenClawApp);
       void loadAssistantIdentity(host as unknown as OpenClawApp);
       void loadAgents(host as unknown as OpenClawApp);

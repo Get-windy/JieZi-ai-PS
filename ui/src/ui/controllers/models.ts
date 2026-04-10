@@ -33,25 +33,46 @@ export function stopModelsAutoRefresh() {
 // ============ 基础数据加载 ============
 
 export async function loadModels(state: ModelsState, probe: boolean) {
+  // 调试日志
+  if (typeof window !== "undefined" && (window as unknown as { __DEBUG_UI__?: boolean }).__DEBUG_UI__) {
+    console.log("[DEBUG:Models:loadModels] called:", {
+      hasClient: !!state.client,
+      connected: state.connected,
+      alreadyLoading: state.modelsLoading,
+      probe,
+    });
+  }
+
   if (!state.client || !state.connected) {
+    console.warn("[DEBUG:Models:loadModels] skipped: no client or not connected");
     return;
   }
   if (state.modelsLoading) {
+    console.warn("[DEBUG:Models:loadModels] skipped: already loading");
     return;
   }
   state.modelsLoading = true;
   state.modelsError = null;
   try {
+    console.log("[DEBUG:Models:loadModels] requesting models.list...");
+    // 注意：models.list 的 schema 不允许额外参数，只传递 probe
     const res = await state.client.request<ModelsStatusSnapshot | null>("models.list", {
       probe,
-      timeoutMs: 8000,
+    });
+    console.log("[DEBUG:Models:loadModels] received response:", {
+      providersCount: Object.keys(res?.providers ?? {}).length,
+      authsCount: Object.keys(res?.auths ?? {}).length,
+      modelConfigsCount: Object.keys(res?.modelConfigs ?? {}).length,
+      providerInstancesCount: res?.providerInstances?.length ?? 0,
     });
     state.modelsSnapshot = res;
     state.modelsLastSuccess = Date.now();
   } catch (err) {
+    console.error("[DEBUG:Models:loadModels] error:", err);
     state.modelsError = String(err);
   } finally {
     state.modelsLoading = false;
+    console.log("[DEBUG:Models:loadModels] loading finished");
   }
 }
 

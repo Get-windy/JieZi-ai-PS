@@ -443,6 +443,17 @@ export type AppViewState = {
   sessionsIncludeGlobal: boolean;
   sessionsIncludeUnknown: boolean;
   sessionsHideCron: boolean;
+  sessionsSearchQuery: string;
+  sessionsSortColumn: "key" | "kind" | "updated" | "tokens";
+  sessionsSortDir: "asc" | "desc";
+  sessionsPage: number;
+  sessionsPageSize: number;
+  sessionsSelectedKeys: Set<string>;
+  sessionsExpandedCheckpointKey: string | null;
+  sessionsCheckpointItemsByKey: Record<string, import("./types.ts").SessionCompactionCheckpoint[]>;
+  sessionsCheckpointLoadingKey: string | null;
+  sessionsCheckpointBusyKey: string | null;
+  sessionsCheckpointErrorByKey: Record<string, string>;
   usageLoading: boolean;
   // oxlint-disable-next-line typescript/no-redundant-type-constituents
   usageResult: SessionsUsageResult | null;
@@ -490,6 +501,26 @@ export type AppViewState = {
   cronForm: CronFormState;
   cronRunsJobId: string | null;
   cronRuns: CronRunLogEntry[];
+  cronRunsTotal: number;
+  cronRunsHasMore: boolean;
+  cronRunsLoadingMore: boolean;
+  cronRunsScope: "all" | "job";
+  cronRunsStatuses: string[];
+  cronRunsDeliveryStatuses: string[];
+  cronRunsStatusFilter: string;
+  cronRunsQuery: string;
+  cronRunsSortDir: "asc" | "desc";
+  cronJobsTotal: number;
+  cronJobsHasMore: boolean;
+  cronJobsLoadingMore: boolean;
+  cronJobsQuery: string;
+  cronJobsEnabledFilter: string;
+  cronJobsScheduleKindFilter: string;
+  cronJobsLastStatusFilter: string;
+  cronJobsSortBy: string;
+  cronJobsSortDir: "asc" | "desc";
+  cronEditingJobId: string | null;
+  cronFieldErrors: Record<string, string>;
   cronBusy: boolean;
   toolsCatalogLoading: boolean;
   toolsCatalogError: string | null;
@@ -511,6 +542,7 @@ export type AppViewState = {
   debugHealth: HealthSnapshot | null;
   debugModels: unknown[];
   debugHeartbeat: unknown;
+  debugMethods: string[];
   debugCallMethod: string;
   debugCallParams: string;
   debugCallResult: string | null;
@@ -875,4 +907,10 @@ export type AppViewState = {
   dreamDiaryError: string | null;
   dreamDiaryPath: string | null;
   dreamDiaryContent: string | null;
+  // 梦境目标选择
+  dreamSelectedTargetId?: string | null;
+  dreamTargetsLoading?: boolean;
+  dreamTargetsError?: string | null;
+  dreamTargets?: import("./controllers/dreaming.js").DreamTarget[];
+  dreamTargetsDefaultId?: string;
 };
