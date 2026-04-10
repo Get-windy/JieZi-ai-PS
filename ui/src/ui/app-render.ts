@@ -1435,12 +1435,12 @@ export function renderApp(state: AppViewState) {
                 },
                 onSelectPage: (keys) => {
                   const next = new Set(state.sessionsSelectedKeys);
-                  for (const k of keys) next.add(k);
+                  for (const k of keys) {next.add(k);}
                   state.sessionsSelectedKeys = next;
                 },
                 onDeselectPage: (keys) => {
                   const next = new Set(state.sessionsSelectedKeys);
-                  for (const k of keys) next.delete(k);
+                  for (const k of keys) {next.delete(k);}
                   state.sessionsSelectedKeys = next;
                 },
                 onDeselectAll: () => {
@@ -1454,7 +1454,7 @@ export function renderApp(state: AppViewState) {
                   );
                   if (deleted.length > 0) {
                     const next = new Set(state.sessionsSelectedKeys);
-                    for (const k of deleted) next.delete(k);
+                    for (const k of deleted) {next.delete(k);}
                     state.sessionsSelectedKeys = next;
                   }
                 },
@@ -1805,12 +1805,12 @@ export function renderApp(state: AppViewState) {
                 onLoadRuns: (jobId) => loadCronRuns(state as unknown as CronState, jobId),
                 onLoadMoreJobs: () => Promise.resolve(),
                 onJobsFiltersChange: (patch) => {
-                  if (patch.cronJobsQuery !== undefined) state.cronJobsQuery = patch.cronJobsQuery;
-                  if (patch.cronJobsEnabledFilter !== undefined) state.cronJobsEnabledFilter = patch.cronJobsEnabledFilter;
-                  if (patch.cronJobsScheduleKindFilter !== undefined) state.cronJobsScheduleKindFilter = patch.cronJobsScheduleKindFilter;
-                  if (patch.cronJobsLastStatusFilter !== undefined) state.cronJobsLastStatusFilter = patch.cronJobsLastStatusFilter;
-                  if (patch.cronJobsSortBy !== undefined) state.cronJobsSortBy = patch.cronJobsSortBy;
-                  if (patch.cronJobsSortDir !== undefined) state.cronJobsSortDir = patch.cronJobsSortDir;
+                  if (patch.cronJobsQuery !== undefined) {state.cronJobsQuery = patch.cronJobsQuery;}
+                  if (patch.cronJobsEnabledFilter !== undefined) {state.cronJobsEnabledFilter = patch.cronJobsEnabledFilter;}
+                  if (patch.cronJobsScheduleKindFilter !== undefined) {state.cronJobsScheduleKindFilter = patch.cronJobsScheduleKindFilter;}
+                  if (patch.cronJobsLastStatusFilter !== undefined) {state.cronJobsLastStatusFilter = patch.cronJobsLastStatusFilter;}
+                  if (patch.cronJobsSortBy !== undefined) {state.cronJobsSortBy = patch.cronJobsSortBy;}
+                  if (patch.cronJobsSortDir !== undefined) {state.cronJobsSortDir = patch.cronJobsSortDir;}
                 },
                 onJobsFiltersReset: () => {
                   state.cronJobsQuery = "";
@@ -1822,12 +1822,12 @@ export function renderApp(state: AppViewState) {
                 },
                 onLoadMoreRuns: () => Promise.resolve(),
                 onRunsFiltersChange: (patch) => {
-                  if (patch.cronRunsStatuses !== undefined) state.cronRunsStatuses = patch.cronRunsStatuses;
-                  if (patch.cronRunsDeliveryStatuses !== undefined) state.cronRunsDeliveryStatuses = patch.cronRunsDeliveryStatuses;
-                  if (patch.cronRunsStatusFilter !== undefined) state.cronRunsStatusFilter = patch.cronRunsStatusFilter;
-                  if (patch.cronRunsQuery !== undefined) state.cronRunsQuery = patch.cronRunsQuery;
-                  if (patch.cronRunsSortDir !== undefined) state.cronRunsSortDir = patch.cronRunsSortDir;
-                  if (patch.cronRunsScope !== undefined) state.cronRunsScope = patch.cronRunsScope;
+                  if (patch.cronRunsStatuses !== undefined) {state.cronRunsStatuses = patch.cronRunsStatuses;}
+                  if (patch.cronRunsDeliveryStatuses !== undefined) {state.cronRunsDeliveryStatuses = patch.cronRunsDeliveryStatuses;}
+                  if (patch.cronRunsStatusFilter !== undefined) {state.cronRunsStatusFilter = patch.cronRunsStatusFilter;}
+                  if (patch.cronRunsQuery !== undefined) {state.cronRunsQuery = patch.cronRunsQuery;}
+                  if (patch.cronRunsSortDir !== undefined) {state.cronRunsSortDir = patch.cronRunsSortDir;}
+                  if (patch.cronRunsScope !== undefined) {state.cronRunsScope = patch.cronRunsScope;}
                 },
                 onRunsFiltersReset: () => {
                   state.cronRunsStatuses = [];

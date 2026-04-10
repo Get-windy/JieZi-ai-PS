@@ -166,7 +166,7 @@ function resolveChannelOrder(snapshot: ChannelsStatusSnapshot | null): ChannelKe
   }
 
   // 收集所有通道 ID（从后端 + 内置列表）
-  const ids = new Set<string>([...BUILTIN_CHANNELS]); // 先添加所有内置通道
+  const ids = new Set<string>(BUILTIN_CHANNELS); // 先添加所有内置通道
 
   // 从 channelOrder 添加（后端返回的顺序）
   for (const id of snapshot.channelOrder ?? []) {

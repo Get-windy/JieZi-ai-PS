@@ -340,7 +340,7 @@ export function renderAccountManagerModal(props: ChannelsProps) {
 
   const channelId = props.managingChannelId;
   const accounts = props.snapshot?.channelAccounts?.[channelId] ?? [];
-  const channelLabel = (props.snapshot?.channelLabels as Record<string, string> | undefined)?.[channelId] || resolveChannelLabel(channelId);
+  const channelLabel = (props.snapshot?.channelLabels)?.[channelId] || resolveChannelLabel(channelId);
 
   return html`
     <div class="modal-overlay" @click=${() => props.onManageAccounts("")}>
@@ -501,7 +501,7 @@ export function renderAccountViewModal(props: ChannelsProps) {
     return nothing;
   }
 
-  const channelLabel = (props.snapshot?.channelLabels as Record<string, string> | undefined)?.[channelId] || resolveChannelLabel(channelId);
+  const channelLabel = (props.snapshot?.channelLabels)?.[channelId] || resolveChannelLabel(channelId);
   const displayName = account.name || account.accountId;
   const displaySubtitle = `${channelId}:${accountId}`;
   const config = extractAccountConfig(channelId, accountId, props);

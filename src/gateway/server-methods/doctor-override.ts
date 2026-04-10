@@ -146,7 +146,7 @@ export const doctorOverrideHandlers: GatewayRequestHandlers = {
    */
   "doctor.memory.dreamDiary": async ({ respond, params }) => {
     const cfg = loadConfig();
-    const p = params && typeof params === "object" ? (params as Record<string, unknown>) : {};
+    const p = params && typeof params === "object" ? (params) : {};
 
     const requestedGroupId =
       typeof p.groupId === "string" ? p.groupId.trim() : null;
