@@ -136,8 +136,185 @@ interface SkillStore {
 }
 
 // ============================================================================
-// Gap A: 功能需求日志（self-improving-agent FEATURE_REQUESTS 模式）
+// Hermes-style SKILL.md 技能文档管理（四层渐进式披露）
+// 借鉴 Hermes Agent v0.6.0 Skills System:
+//   Tier 0 — system prompt 注入：技能名 + 一句话描述（约 500 token）
+//   Tier 1 — skill_manage(action=list)：所有技能的完整描述 + 类别
+//   Tier 2 — skill_manage(action=view, name)：某技能完整 SKILL.md 内容
+//   Tier 3 — （保留扩展：特定参考文件，当前版本合并到 Tier 2）
+//
+// 格式：YAML front-matter + Markdown 正文
+//   必含章节：## When to Use / ## Procedure / ## Pitfalls / ## Verification
+//
+// 存储路径：{agentWorkspace}/.skills/{name}/SKILL.md
 // ============================================================================
+
+interface SkillMdMeta {
+  name: string;
+  description: string;
+  version?: string;
+  author?: string;
+  tags?: string[];
+  category?: string;
+  /** 关联技能名称 */
+  relatedSkills?: string[];
+  /** 来源任务 ID（从进展笔记 promote 时填写） */
+  sourceTaskId?: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+interface SkillMdEntry {
+  meta: SkillMdMeta;
+  /** SKILL.md 完整原始内容（含 front-matter） */
+  fullContent: string;
+  /** 文件绝对路径 */
+  filePath: string;
+}
+
+/** 解析 SKILL.md front-matter（简单 YAML key: value，不引入外部依赖） */
+function parseSkillMdFrontMatter(raw: string): { meta: Partial<SkillMdMeta>; body: string } {
+  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(raw);
+  if (!match) {
+    return { meta: {}, body: raw };
+  }
+  const yamlBlock = match[1] ?? "";
+  const body = match[2] ?? "";
+  const meta: Partial<SkillMdMeta> = {};
+  for (const line of yamlBlock.split("\n")) {
+    const colon = line.indexOf(":");
+    if (colon < 0) {
+      continue;
+    }
+    const key = line.slice(0, colon).trim();
+    const val = line.slice(colon + 1).trim();
+    if (!key || !val) {
+      continue;
+    }
+    if (key === "tags" || key === "relatedSkills") {
+      // 支持 [a, b, c] 或 - a\n - b 两种格式（只处理行内数组）
+      const arr = val
+        .replace(/^\[|\]$/g, "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      (meta as Record<string, unknown>)[key] = arr;
+    } else if (key === "createdAt" || key === "updatedAt") {
+      (meta as Record<string, unknown>)[key] = Number(val) || undefined;
+    } else {
+      (meta as Record<string, unknown>)[key] = val.replace(/^["']|["']$/g, "");
+    }
+  }
+  return { meta, body };
+}
+
+/** 生成 SKILL.md front-matter 字符串 */
+function buildSkillMdFrontMatter(meta: SkillMdMeta): string {
+  const lines = ["---"];
+  lines.push(`name: ${meta.name}`);
+  lines.push(`description: "${meta.description.replace(/"/g, "\\")}"`);
+  if (meta.version) {
+    lines.push(`version: ${meta.version}`);
+  }
+  if (meta.author) {
+    lines.push(`author: ${meta.author}`);
+  }
+  if (meta.category) {
+    lines.push(`category: ${meta.category}`);
+  }
+  if (meta.tags?.length) {
+    lines.push(`tags: [${meta.tags.join(", ")}]`);
+  }
+  if (meta.relatedSkills?.length) {
+    lines.push(`relatedSkills: [${meta.relatedSkills.join(", ")}]`);
+  }
+  if (meta.sourceTaskId) {
+    lines.push(`sourceTaskId: ${meta.sourceTaskId}`);
+  }
+  lines.push(`createdAt: ${meta.createdAt ?? Date.now()}`);
+  lines.push(`updatedAt: ${Date.now()}`);
+  lines.push("---");
+  return lines.join("\n") + "\n";
+}
+
+/** 解析 agent 工作空间目录（优先从群组配置取，降级到 stateDir） */
+function resolveAgentWorkspaceDirFallback(agentId: string): string {
+  try {
+    const root = getGroupsWorkspaceRoot();
+    // 从 groupManager 找到该 agentId 对应的第一个群组工作空间
+    const allGroups = groupManager.getAllGroups();
+    for (const group of allGroups) {
+      if (
+        group.workspaceDir &&
+        group.members?.some((m: { agentId: string }) => m.agentId === agentId)
+      ) {
+        return group.workspaceDir;
+      }
+    }
+    return path.join(root, agentId);
+  } catch {
+    const stateDir = resolveStateDir(process.env);
+    return path.join(stateDir, "workspace", agentId);
+  }
+}
+
+/** 解析 skills 目录（agent 工作空间内的 .skills/） */
+function resolveSkillsMdDir(agentId?: string): string {
+  if (!agentId) {
+    const stateDir = resolveStateDir(process.env);
+    return path.join(stateDir, "self-evolve", "_global", "skills-md");
+  }
+  return path.join(resolveAgentWorkspaceDirFallback(agentId), ".skills");
+}
+
+/** 扫描并加载所有 SKILL.md 文件（Tier 1 数据源） */
+function loadAllSkillMd(agentId?: string): SkillMdEntry[] {
+  const dir = resolveSkillsMdDir(agentId);
+  if (!fs.existsSync(dir)) {
+    return [];
+  }
+  const results: SkillMdEntry[] = [];
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      const skillFile = path.join(dir, entry.name, "SKILL.md");
+      if (!fs.existsSync(skillFile)) {
+        continue;
+      }
+      try {
+        const raw = fs.readFileSync(skillFile, "utf8");
+        const { meta } = parseSkillMdFrontMatter(raw);
+        results.push({
+          meta: { name: meta.name ?? entry.name, description: meta.description ?? "", ...meta },
+          fullContent: raw,
+          filePath: skillFile,
+        });
+      } catch {
+        /* 解析失败跳过 */
+      }
+    }
+  } catch {
+    /* 目录读取失败 */
+  }
+  return results;
+}
+
+/** 生成 Tier 0 技能索引摘要（注入 system prompt，约 500 token） */
+export function buildSkillMdTier0Summary(agentId?: string): string {
+  const skills = loadAllSkillMd(agentId);
+  if (skills.length === 0) {
+    return "";
+  }
+  const lines = ["## Available Skills (use skill_manage to load details)"];
+  for (const s of skills) {
+    const cat = s.meta.category ? ` [${s.meta.category}]` : "";
+    lines.push(`- **${s.meta.name}**${cat}: ${s.meta.description}`);
+  }
+  return lines.join("\n");
+}
 
 type FeatureRequestStatus = "pending" | "in_progress" | "done" | "wont_fix";
 type FeatureRequestPriority = "low" | "medium" | "high" | "critical";
@@ -1414,6 +1591,276 @@ export const evolveRpc: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(ErrorCodes.UNAVAILABLE, `evolve.skill.use failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * evolve.skill.manage — Hermes-style SKILL.md 技能文档管理
+   *
+   * 四层渐进式披露：
+   *   action=list   —— Tier 1：返回所有技能的 name + description + category + tags
+   *   action=view   —— Tier 2：返回指定技能完整 SKILL.md 内容
+   *   action=create —— 创建或更新 SKILL.md 文件（进展笔记内容 或 自写技能文档）
+   *   action=promote —— 将任务进展笔记内容升级为正式 SKILL.md（自动生成标准结构）
+   */
+  "evolve.skill.manage": async ({ params, respond }) => {
+    try {
+      const action = params?.action ? String(params.action).trim() : "list";
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+
+      // —— action=list：Tier 1 ——
+      if (action === "list") {
+        const skills = loadAllSkillMd(agentId);
+        respond(
+          true,
+          {
+            skills: skills.map((s) => ({
+              name: s.meta.name,
+              description: s.meta.description,
+              category: s.meta.category,
+              tags: s.meta.tags ?? [],
+              relatedSkills: s.meta.relatedSkills ?? [],
+              updatedAt: s.meta.updatedAt,
+            })),
+            count: skills.length,
+            tip: "Use action=view with name to load full SKILL.md content.",
+          },
+          undefined,
+        );
+        return;
+      }
+
+      // —— action=view：Tier 2 ——
+      if (action === "view") {
+        const name = params?.name ? String(params.name).trim() : "";
+        if (!name) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.INVALID_REQUEST, "name is required for action=view"),
+          );
+          return;
+        }
+        const skills = loadAllSkillMd(agentId);
+        const found = skills.find((s) => s.meta.name.toLowerCase() === name.toLowerCase());
+        if (!found) {
+          respond(
+            false,
+            undefined,
+            errorShape(
+              ErrorCodes.UNAVAILABLE,
+              `Skill "${name}" not found. Use action=list to see available skills.`,
+            ),
+          );
+          return;
+        }
+        respond(
+          true,
+          { name: found.meta.name, content: found.fullContent, filePath: found.filePath },
+          undefined,
+        );
+        return;
+      }
+
+      // —— action=create ——
+      if (action === "create") {
+        const name = params?.name ? String(params.name).trim() : "";
+        const description = params?.description ? String(params.description).trim() : "";
+        const content = params?.content ? String(params.content).trim() : "";
+        if (!name || !description) {
+          respond(
+            false,
+            undefined,
+            errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              "name and description are required for action=create",
+            ),
+          );
+          return;
+        }
+        const tags = Array.isArray(params?.tags) ? params.tags.map(String) : [];
+        const category = params?.category ? String(params.category).trim() : undefined;
+        const relatedSkills = Array.isArray(params?.relatedSkills)
+          ? params.relatedSkills.map(String)
+          : [];
+        const sourceTaskId = params?.sourceTaskId ? String(params.sourceTaskId) : undefined;
+
+        const dirName = name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5-]/g, "-");
+        const skillsDir = resolveSkillsMdDir(agentId);
+        const skillDir = path.join(skillsDir, dirName);
+        const skillFile = path.join(skillDir, "SKILL.md");
+        const now = Date.now();
+
+        // 如果已存在，读取旧的 createdAt
+        let createdAt = now;
+        if (fs.existsSync(skillFile)) {
+          const old = parseSkillMdFrontMatter(fs.readFileSync(skillFile, "utf8"));
+          createdAt = old.meta.createdAt ?? now;
+        }
+
+        const meta: SkillMdMeta = {
+          name,
+          description,
+          category,
+          tags,
+          relatedSkills,
+          sourceTaskId,
+          createdAt,
+          updatedAt: now,
+        };
+
+        // 如果传入了自定义 content，直接使用；否则生成标准模板
+        let fullContent: string;
+        if (content) {
+          // 判断是否已含 front-matter
+          if (content.startsWith("---")) {
+            fullContent = content;
+          } else {
+            fullContent = buildSkillMdFrontMatter(meta) + "\n" + content;
+          }
+        } else {
+          const template = [
+            `# ${name}`,
+            ``,
+            `## When to Use`,
+            ``,
+            `<!-- 说明适用场景：什么情况下应该加载此技能 -->`,
+            ``,
+            `## Procedure`,
+            ``,
+            `<!-- 具体步骤，可以包含代码块和命令 -->`,
+            ``,
+            `## Pitfalls`,
+            ``,
+            `<!-- 已知降阱和避免方法 -->`,
+            ``,
+            `## Verification`,
+            ``,
+            `<!-- 如何验证成功完成 -->`,
+          ].join("\n");
+          fullContent = buildSkillMdFrontMatter(meta) + "\n" + template;
+        }
+
+        fs.mkdirSync(skillDir, { recursive: true });
+        fs.writeFileSync(skillFile, fullContent, "utf8");
+
+        appendEvolveEvent(agentId, {
+          type: "skill.save",
+          summary: `SKILL.md 创建/更新: ${name}`,
+          meta: { dirName, category, sourceTaskId },
+        });
+
+        respond(
+          true,
+          {
+            action: fs.existsSync(skillFile) ? "updated" : "created",
+            name,
+            filePath: skillFile,
+            tip: "Skill saved. Use action=view to confirm content, or action=list to see all skills.",
+          },
+          undefined,
+        );
+        return;
+      }
+
+      // —— action=promote：从进展笔记内容自动生成标准 SKILL.md ——
+      if (action === "promote") {
+        const name = params?.name ? String(params.name).trim() : "";
+        const description = params?.description ? String(params.description).trim() : "";
+        const noteContent = params?.noteContent ? String(params.noteContent).trim() : "";
+        const sourceTaskId = params?.sourceTaskId ? String(params.sourceTaskId) : undefined;
+        if (!name || !description || !noteContent) {
+          respond(
+            false,
+            undefined,
+            errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              "name, description, and noteContent are required for action=promote",
+            ),
+          );
+          return;
+        }
+        const tags = Array.isArray(params?.tags) ? params.tags.map(String) : [];
+        const category = params?.category ? String(params.category).trim() : undefined;
+        const relatedSkills = Array.isArray(params?.relatedSkills)
+          ? params.relatedSkills.map(String)
+          : [];
+
+        const dirName = name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5-]/g, "-");
+        const skillsDir = resolveSkillsMdDir(agentId);
+        const skillDir = path.join(skillsDir, dirName);
+        const skillFile = path.join(skillDir, "SKILL.md");
+        const now = Date.now();
+
+        const meta: SkillMdMeta = {
+          name,
+          description,
+          category,
+          tags,
+          relatedSkills,
+          sourceTaskId,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        // 将进展笔记结构化成标准 SKILL.md 模板
+        const body = [
+          `# ${name}`,
+          ``,
+          `## When to Use`,
+          ``,
+          `该技能从任务 ${sourceTaskId ?? "(unknown)"} 进展笔记自动升级。`,
+          ``,
+          `## Procedure`,
+          ``,
+          noteContent,
+          ``,
+          `## Pitfalls`,
+          ``,
+          `<!-- 请在此添加已知降阱 -->`,
+          ``,
+          `## Verification`,
+          ``,
+          `<!-- 请在此说明验证方法 -->`,
+        ].join("\n");
+
+        const fullContent = buildSkillMdFrontMatter(meta) + "\n" + body;
+        fs.mkdirSync(skillDir, { recursive: true });
+        fs.writeFileSync(skillFile, fullContent, "utf8");
+
+        appendEvolveEvent(agentId, {
+          type: "skill.save",
+          summary: `进展笔记 promote 为 SKILL.md: ${name}（来源任务 ${sourceTaskId ?? ""})）`,
+          meta: { dirName, sourceTaskId, category },
+        });
+
+        respond(
+          true,
+          {
+            action: "promoted",
+            name,
+            filePath: skillFile,
+            tip: "Progress note promoted to SKILL.md. Use action=view to review and enhance the content.",
+          },
+          undefined,
+        );
+        return;
+      }
+
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `Unknown action "${action}". Valid actions: list, view, create, promote`,
+        ),
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.skill.manage failed: ${String(err)}`),
       );
     }
   },

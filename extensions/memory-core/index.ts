@@ -18,6 +18,7 @@ import {
   createAgentSkillShareTool,
   createAgentSkillImportTool,
   createAgentSkillListSharedTool,
+  createSkillManageTool,
 } from "../../src/agents/tools/self-evolve-tool.js";
 import { createTeamRunTool } from "../../src/agents/tools/team-orchestrate-tool.js";
 import {
@@ -105,6 +106,10 @@ const memoryCorePlugin = {
     });
     api.registerTool(() => createAgentSkillListSharedTool(), {
       names: ["agent_skill_list_shared"],
+    });
+    // Hermes 风格 SKILL.md 技能文档管理（四层渐进式披露）
+    api.registerTool((ctx) => createSkillManageTool({ agentId: ctx.agentId }), {
+      names: ["skill_manage"],
     });
 
     // 团队编排工具（借鉴 OpenProse fan-out-fan-in + adversarial-validation + pipeline-composition）

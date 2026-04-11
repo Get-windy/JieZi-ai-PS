@@ -710,11 +710,12 @@ export async function scheduleNextTaskForAgent(
       queueRemaining > 0
         ? `(${queueRemaining} more task(s) waiting in queue after this one)`
         : null,
-      `Execute this task immediately. When done:`,
+      `Execute this task immediately. Before starting, check if relevant skills exist: call skill_manage with action=list and review matching skills with action=view. When done:`,
       `  1. Run quality checks (typecheck / lint / test) — do NOT report done if checks fail.`,
       `  2. Commit ALL changes: git commit -m "feat: ${nextTask.id} - ${nextTask.title}"`,
       `  3. Append a progress note: task_progress_note_append (## Accomplished / ## Findings / ## Decisions / ## Next Steps)`,
-      `  4. Call task_report_to_supervisor with Task ID: ${nextTask.id}`,
+      `  4. If task involved 5+ tool calls with reusable workflow value, call skill_manage action=create (or action=promote from the progress note) to save a SKILL.md.`,
+      `  5. Call task_report_to_supervisor with Task ID: ${nextTask.id}`,
     ]
       .filter(Boolean)
       .join("\n");
