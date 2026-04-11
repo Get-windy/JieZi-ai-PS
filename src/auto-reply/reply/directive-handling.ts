@@ -9,10 +9,8 @@
 export { applyInlineDirectivesFastLane } from "../../../upstream/src/auto-reply/reply/directive-handling.fast-lane.js";
 export * from "../../../upstream/src/auto-reply/reply/directive-handling.impl.js";
 export type { InlineDirectives } from "../../../upstream/src/auto-reply/reply/directive-handling.parse.js";
-export {
-  isDirectiveOnly,
-  parseInlineDirectives,
-} from "../../../upstream/src/auto-reply/reply/directive-handling.parse.js";
+export { isDirectiveOnly } from "../../../upstream/src/auto-reply/reply/directive-handling.directive-only.js";
+export { parseInlineDirectives } from "../../../upstream/src/auto-reply/reply/directive-handling.parse.js";
 export { persistInlineDirectives } from "../../../upstream/src/auto-reply/reply/directive-handling.persist.js";
 export { formatDirectiveAck } from "../../../upstream/src/auto-reply/reply/directive-handling.shared.js";
 

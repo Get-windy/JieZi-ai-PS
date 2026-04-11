@@ -105,6 +105,41 @@ const AgentSkillListSharedSchema = Type.Object({
   limit: Type.Optional(Type.Number({ minimum: 1, maximum: 50 })),
 });
 
+/**
+ * Hermes 风格 SKILL.md 技能文档管理工具 Schema
+ *
+ * 四层渐进式披露：
+ *   action=list    → Tier 1：仅返回技能名 + 描述 + 分类（低 token）
+ *   action=view    → Tier 2：按需加载指定技能的完整 SKILL.md
+ *   action=create  → 创建或更新 SKILL.md（自定义内容或从标准模板生成）
+ *   action=promote → 将任务进展笔记内容升级为正式 SKILL.md
+ */
+const SkillManageSchema = Type.Object({
+  /** 操作类型 */
+  action: Type.Union([
+    Type.Literal("list"),
+    Type.Literal("view"),
+    Type.Literal("create"),
+    Type.Literal("promote"),
+  ]),
+  /** 技能名称（view / create / promote 必填） */
+  name: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+  /** 技能一句话描述（create / promote 必填） */
+  description: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+  /** 完整 SKILL.md 内容（action=create 时可传，不传则自动生成标准模板） */
+  content: Type.Optional(Type.String({ maxLength: 20000 })),
+  /** 原始进展笔记内容（action=promote 必填） */
+  noteContent: Type.Optional(Type.String({ maxLength: 10000 })),
+  /** 来源任务 ID（可选，用于溯源） */
+  sourceTaskId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 技能分类 */
+  category: Type.Optional(Type.String({ maxLength: 50 })),
+  /** 技能标签 */
+  tags: Type.Optional(Type.Array(Type.String({ maxLength: 32 }), { maxItems: 10 })),
+  /** 关联技能名称列表 */
+  relatedSkills: Type.Optional(Type.Array(Type.String({ maxLength: 100 }), { maxItems: 10 })),
+});
+
 const AgentSkillListSchema = Type.Object({
   /** 按分类过滤 */
   category: Type.Optional(SkillCategory),
@@ -385,7 +420,7 @@ export function createAgentSkillImportTool(opts?: { agentId?: string }): AnyAgen
 }
 
 /**
- * agent_skill_list_shared — P3 GEP 全局局共享库检索工具
+ * agent_skill_list_shared — P3 GEP 全局共享库检索工具
  * 列出全局共享技能库中的技能，可按类型或关键词搜索。
  */
 export function createAgentSkillListSharedTool(): AnyAgentTool {
@@ -421,6 +456,74 @@ export function createAgentSkillListSharedTool(): AnyAgentTool {
         return jsonResult({
           success: false,
           error: `Failed to list shared skills: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * skill_manage — Hermes 风格 SKILL.md 技能文档管理（四层渐进式披露）
+ *
+ * Tier 0（System Prompt）：技能名 + 一句描述将被自动注入 Agent 上下文
+ * Tier 1 - action=list   ：所有技能表列（name + description + category + tags）
+ * Tier 2 - action=view   ：按需加载指定技能完整 SKILL.md
+ * Tier 3 - action=create ：创建或更新 SKILL.md（自定义内容或模板）
+ *        - action=promote：将任务进展笔记内容自动升级为正式 SKILL.md
+ */
+export function createSkillManageTool(opts?: { agentId?: string }): AnyAgentTool {
+  return {
+    label: "Skill Manage",
+    name: "skill_manage",
+    description:
+      "Manage reusable SKILL.md knowledge documents in Hermes format. " +
+      "Supports 4-tier progressive disclosure to minimize token consumption: " +
+      "action=list (返回所有技能的 name+description+category, 低 token) → " +
+      "action=view (按需加载指定技能完整内容) → " +
+      "action=create (新建或更新 SKILL.md，支持自定义内容或自动生成标准模板) → " +
+      "action=promote (将进展笔记内容升级为完整 SKILL.md). " +
+      "SKILL.md standard sections: ## When to Use / ## Procedure / ## Pitfalls / ## Verification. " +
+      "When to create a skill: after completing a complex task (5+ tool calls) that has reusable workflow value. " +
+      "Skills are stored under .skills/{name}/SKILL.md in the agent's evolve directory.",
+    parameters: SkillManageSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const action = readStringParam(params, "action", { required: true });
+      const name = readStringParam(params, "name");
+      const description = readStringParam(params, "description");
+      const content = readStringParam(params, "content");
+      const noteContent = readStringParam(params, "noteContent");
+      const sourceTaskId = readStringParam(params, "sourceTaskId");
+      const category = readStringParam(params, "category");
+      const tags = Array.isArray(params.tags) ? params.tags.map(String) : [];
+      const relatedSkills = Array.isArray(params.relatedSkills)
+        ? params.relatedSkills.map(String)
+        : [];
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        const response = await callGatewayTool("evolve.skill.manage", gatewayOpts, {
+          agentId: opts?.agentId,
+          action,
+          name: name || undefined,
+          description: description || undefined,
+          content: content || undefined,
+          noteContent: noteContent || undefined,
+          sourceTaskId: sourceTaskId || undefined,
+          category: category || undefined,
+          tags: tags.length > 0 ? tags : undefined,
+          relatedSkills: relatedSkills.length > 0 ? relatedSkills : undefined,
+        });
+
+        return jsonResult({
+          success: true,
+          action,
+          ...(response as object),
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `skill_manage failed: ${error instanceof Error ? error.message : String(error)}`,
         });
       }
     },

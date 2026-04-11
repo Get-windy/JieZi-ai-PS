@@ -136,6 +136,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     // 自我进化：查询类
     "evolve.reflect.list",
     "evolve.skill.list",
+    "evolve.skill.manage",
     "evolve.stats",
     "evolve.sharp.evaluate",
     "evolve.sharp.history",
@@ -242,6 +243,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "evolve.reflect.save",
     "evolve.skill.save",
     "evolve.skill.use",
+    "evolve.skill.manage",
     // Scenarios 场景：写操作
     "scenarios.create",
     "scenarios.update",

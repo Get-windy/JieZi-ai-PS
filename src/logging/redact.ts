@@ -151,3 +151,7 @@ export function redactToolDetail(detail: string): string {
 export function getDefaultRedactPatterns(): string[] {
   return [...DEFAULT_REDACT_PATTERNS];
 }
+
+// Re-export upstream-new exports required by upstream/src/logging/log-tail.ts (v2026.4.11)
+export type { ResolvedRedactOptions } from "../../upstream/src/logging/redact.js";
+export { resolveRedactOptions, redactSensitiveLines } from "../../upstream/src/logging/redact.js";
