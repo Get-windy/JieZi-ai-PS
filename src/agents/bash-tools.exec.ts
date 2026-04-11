@@ -599,4 +599,4 @@ export function createExecTool(
 
 export const execTool = createExecTool();
 
-export { describeExecTool } from "../../upstream/src/agents/bash-tools.exec.js";
+export { describeExecTool } from "../../upstream/src/agents/bash-tools.descriptions.js";

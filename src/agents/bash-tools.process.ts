@@ -662,4 +662,4 @@ export function createProcessTool(
 
 export const processTool = createProcessTool();
 
-export { describeProcessTool } from "../../upstream/src/agents/bash-tools.process.js";
+export { describeProcessTool } from "../../upstream/src/agents/bash-tools.descriptions.js";
