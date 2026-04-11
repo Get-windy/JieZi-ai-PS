@@ -1,6 +1,6 @@
 {
   "name": "openclaw",
-  "version": "2026.4.11",
+  "version": "2026.4.11-beta.1",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
   "homepage": "https://github.com/openclaw/openclaw#readme",
@@ -1296,6 +1296,10 @@
     "./plugin-sdk/channel-inbound-roots": {
       "types": "./dist/plugin-sdk/channel-inbound-roots.d.ts",
       "default": "./dist/plugin-sdk/channel-inbound-roots.js"
+    },
+    "./plugin-sdk/proxy-capture": {
+      "types": "./dist/plugin-sdk/proxy-capture.d.ts",
+      "default": "./dist/plugin-sdk/proxy-capture.js"
     }
   },
   "scripts": {

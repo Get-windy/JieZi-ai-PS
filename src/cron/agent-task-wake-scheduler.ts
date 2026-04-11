@@ -28,6 +28,24 @@ import * as taskStorage from "../tasks/storage.js";
 import { groupWorkspaceManager } from "../workspace/group-workspace.js";
 
 // ============================================================================
+// 活动感知自动完成（Auto-Done）机制
+// 核心思路：
+//   agent 执行完 heartbeat 后，任务状态仍是 in-progress，
+//   但 lastActivityAt 不再更新（heartbeat 已结束）。
+//   若任务进入「静默窗口」（3~15min 无活动），说明 agent 已完成但未调用 task_report。
+//   程序侧自动将任务标记为 done，触发 scheduleNextTaskForAgent 驱动下一条任务。
+// ============================================================================
+
+// 静默窗口下限：至少 3 分钟无活动才考虑自动完成（防止误判正在执行中的任务）
+const AUTO_DONE_SILENT_MIN_MS = 3 * 60 * 1000;
+// 静默窗口上限：超过 15 分钟由超时处理接管（isStale 分支），auto-done 不介入
+// 与 INACTIVE_ZOMBIE_MS 对齐，确保两段逻辑无缝衔接
+const AUTO_DONE_SILENT_MAX_MS = 15 * 60 * 1000;
+
+// 记录已自动完成过的任务，防止重复触发
+const autoDoneTriggered = new Set<string>();
+
+// ============================================================================
 // 配置
 // ============================================================================
 
@@ -350,6 +368,106 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
         // shouldForceReset 基于 startedAt 计算（表示任务持续占用时间超过 60 分钟）
         // 与 isStale 的基准不同：isStale 用最近活动时间，shouldForceReset 用任务开始时间
         const shouldForceReset = startedAt != null && now - startedAt > FORCE_RESET_MS;
+
+        // ── 活动感知自动完成检测（Auto-Done）─────────────────────────────────
+        // 优先级高于 isStale，在超时告警触发前先判断是否为「已完成但未上报」
+        //
+        // 判定条件（同时满足）：
+        //  1. 有 lastActivityAt（任务运行过，不是僵死态）
+        //  2. 距 lastActivityAt 已过 AUTO_DONE_SILENT_MIN_MS（3min）→ heartbeat 已结束
+        //  3. 距 lastActivityAt 未超 AUTO_DONE_SILENT_MAX_MS（15min）→ 还未进入超时区
+        //  4. 无卡顿信号（metadata 中无 lastFailReason / lastToolError）
+        //  5. 未被之前的循环处理过（autoDoneTriggered 去重）
+        //
+        // 实现原理：
+        //   heartbeat 执行完成后，agent session 进入静默（无新消息），
+        //   lastActivityAt 不再刷新。3min 静默窗口到期时，程序代劳关闭任务。
+        // ────────────────────────────────────────────────────────────────────
+        if (
+          !isStale &&
+          lastActivityAt != null &&
+          now - lastActivityAt >= AUTO_DONE_SILENT_MIN_MS &&
+          now - lastActivityAt < AUTO_DONE_SILENT_MAX_MS &&
+          !activeTask.metadata?.lastFailReason &&
+          !activeTask.metadata?.lastToolError &&
+          !autoDoneTriggered.has(activeTask.id)
+        ) {
+          autoDoneTriggered.add(activeTask.id);
+          const silentMinutes = Math.floor((now - lastActivityAt) / 60000);
+          console.log(
+            `[Task Wake] Agent ${normalizedId} task ${activeTask.id} silent for ${silentMinutes}min after activity — auto-completing as done`,
+          );
+
+          // 程序直接将任务标记为 done（复用与 agent.task.report 完全一致的更新逻辑）
+          const completedAt = now;
+          await taskStorage.updateTask(activeTask.id, {
+            status: "done",
+            completedAt,
+            timeTracking: {
+              ...activeTask.timeTracking,
+              completedAt,
+              lastActivityAt: completedAt,
+              timeSpent: activeTask.timeTracking?.startedAt
+                ? completedAt - activeTask.timeTracking.startedAt
+                : activeTask.timeTracking?.timeSpent,
+            },
+          });
+          await taskStorage.addWorklog({
+            id: `wl_${now}_auto_${Math.random().toString(36).slice(2, 9)}`,
+            taskId: activeTask.id,
+            agentId: normalizedId,
+            action: "completed",
+            details: `Auto-completed by task wake scheduler: agent was silent for ${silentMinutes}min after last activity (task_report_to_supervisor was not called)`,
+            result: "success",
+            createdAt: now,
+          });
+
+          // 通知 supervisor 任务已自动完成
+          const autoDoneSupRaw = (activeTask.metadata?.supervisorId ?? activeTask.creatorId) as
+            | string
+            | undefined;
+          if (autoDoneSupRaw) {
+            const normalizedSupervisor = normalizeAgentId(autoDoneSupRaw);
+            const supervisorSession = `agent:${normalizedSupervisor}:main`;
+            const supervisorNotice = [
+              `[TASK AUTO-DONE] ${normalizedId} 的任务已由系统自动标记为完成（agent 执行完后未主动上报）`,
+              ``,
+              `Agent: ${normalizedId}`,
+              `Task ID: ${activeTask.id}`,
+              `Title: ${activeTask.title}`,
+              `Priority: ${activeTask.priority}`,
+              activeTask.type ? `Type: ${activeTask.type}` : null,
+              ``,
+              `Agent was silent for ${silentMinutes} minutes after last activity.`,
+              `Task has been marked done automatically. If this is incorrect, use agent.task.manage action=reset to requeue it.`,
+            ]
+              .filter(Boolean)
+              .join("\n");
+            enqueueSystemEvent(supervisorNotice, {
+              sessionKey: supervisorSession,
+              contextKey: `cron:task-auto-done:${activeTask.id}`,
+            });
+            requestHeartbeatNow({
+              reason: `cron:task-auto-done:${activeTask.id}`,
+              sessionKey: supervisorSession,
+              agentId: normalizedSupervisor,
+              coalesceMs: 10000,
+            });
+          }
+
+          // 驱动该 agent 的下一条 todo 任务（与 agent.task.report 完成后行为一致）
+          try {
+            const { scheduleNextTaskForAgent } =
+              await import("../gateway/server-methods/agents-management.js");
+            await scheduleNextTaskForAgent(normalizedId, activeTask.id, activeTask.projectId);
+          } catch (schedErr) {
+            console.warn(`[Task Wake] auto-done: scheduleNextTask failed: ${String(schedErr)}`);
+          }
+
+          stats.wokenAgents++;
+          continue;
+        }
+        // ── 活动感知自动完成检测结束 ─────────────────────────────────────────
 
         if (isStale) {
           stats.pendingTasks++;

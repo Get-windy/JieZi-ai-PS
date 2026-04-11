@@ -121,10 +121,9 @@ function renderRootNode(node: ChatNavigationNode, props: ChatNavigationTreeProps
           if (hasChildren) {
             props.onToggleNode(node.id);
           }
-          // 分类节点（有子节点）只展开/折叠，不跳转
-          if (!hasChildren) {
-            props.onSelectContext(node.context);
-          }
+          // 根节点始终可点击跳转（展开/折叠同时跳转到该节点的 context）
+          // 纯分类容器（nodeType === "category" 且无实际 sessionKey）除外
+          props.onSelectContext(node.context);
         }}
       >
         ${
@@ -180,10 +179,9 @@ function renderChildNode(
           if (hasChildren) {
             props.onToggleNode(node.id);
           }
-          // 分类节点（有子节点）只展开/折叠，不跳转
-          if (!hasChildren) {
-            props.onSelectContext(node.context);
-          }
+          // 子节点始终可点击跳转（纯分类容器 nodeType=category 且有子节点时，
+          // 仍然跳转到该节点 context，方便聚合视图切换）
+          props.onSelectContext(node.context);
         }}
       >
         ${
@@ -296,13 +294,22 @@ export function renderDeptNavNode(
   const sandboxEnabled = isDeptRoom && (ctx as { sandboxEnabled?: boolean }).sandboxEnabled;
 
   // 权限标识：非成员显示锁
-  const accessIcon = (!isMember && !isAdmin && (isDeptRoom || isDeptBroadcast))
-    ? html`<span title="无权访问（非成员）" style="font-size:0.75em; opacity:0.6; margin-left:2px;">🔒</span>`
-    : nothing;
+  const accessIcon =
+    !isMember && !isAdmin && (isDeptRoom || isDeptBroadcast)
+      ? html`
+          <span title="无权访问（非成员）" style="font-size: 0.75em; opacity: 0.6; margin-left: 2px">🔒</span>
+        `
+      : nothing;
 
   // 沙箱标识
   const sandboxBadge = sandboxEnabled
-    ? html`<span title="Docker 沙箱隔离已启用" style="font-size:0.65em; color:var(--success, #22c55e); margin-left:2px;">📦</span>`
+    ? html`
+        <span
+          title="Docker 沙箱隔离已启用"
+          style="font-size: 0.65em; color: var(--success, #22c55e); margin-left: 2px"
+          >📦</span
+        >
+      `
     : nothing;
 
   return html`
@@ -315,9 +322,10 @@ export function renderDeptNavNode(
         <span class="chat-nav-item__label">${node.label}</span>
         ${accessIcon}
         ${sandboxBadge}
-        ${node.unreadCount && node.unreadCount > 0
-          ? html`<span class="chat-nav-badge">${node.unreadCount > 99 ? "99+" : node.unreadCount}</span>`
-          : nothing
+        ${
+          node.unreadCount && node.unreadCount > 0
+            ? html`<span class="chat-nav-badge">${node.unreadCount > 99 ? "99+" : node.unreadCount}</span>`
+            : nothing
         }
       </div>
     </div>

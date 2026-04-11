@@ -3397,6 +3397,34 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     // 如果任务入队排候（todo）：预计反馈已排队，由自动调度器处理，不需要立即推送
     // 如果任务直接入场（in-progress）：推送任务消息 + 唐醒 agent
     if (initialTaskStatus === "todo") {
+      // 任务入队排候时，向 agent 发送轻量通知：有新任务在队列等待
+      // 这样当 agent 正在运行的任务完成后，能第一时间感知队列中还有任务
+      // 不需要等待 2 分钟调度器扫描才能被激活
+      try {
+        const queueNotice = [
+          `[TASK QUEUED] A new task has been queued for you. It will start automatically after your current task finishes.`,
+          ``,
+          `Task ID: ${taskId}`,
+          `Title: ${title}`,
+          `Priority: ${priority}`,
+          p?.projectId ? `Project: ${p.projectId}` : null,
+          p?.deadline ? `Deadline: ${p.deadline}` : null,
+          ``,
+          `You do NOT need to do anything now. Continue your current task. This queued task will be auto-started when your current task is marked done.`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        enqueueSystemEvent(queueNotice, {
+          sessionKey,
+          contextKey: `cron:task-queued:${taskId}`,
+        });
+        // 不需要 requestHeartbeatNow——任务排候通知小，不打断 agent 当前工作
+        // 诈发时机：等 agent 当前任务完成后的下一次 heartbeat 中自然读到队列通知
+      } catch (queueNotifyErr) {
+        console.warn(
+          `[agent.assign_task] Failed to enqueue queue notice: ${String(queueNotifyErr)}`,
+        );
+      }
       respond(
         true,
         {
