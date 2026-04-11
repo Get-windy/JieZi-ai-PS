@@ -17,13 +17,13 @@ jobs:
     name: Build dist
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout（含子模块）
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
           fetch-depth: 0
 
-      - name: Setup Node environment
+      - name: Setup Node environment（含子模块拉取）
         uses: ./.github/actions/setup-node-env
         with:
           install-bun: "false"
