@@ -122,6 +122,21 @@ function upstreamOverlayPlugin() {
           if (importerNorm && path.normalize(localResult) === importerNorm) {
             return null; // 让默认解析处理 upstream 文件，避免自循环
           }
+          // 桥接文件检测：如果 importer 是 localResult 对应的桥接文件（*-upstream-extras.ts），
+          // 也跳过 overlay，避免「桥接文件 → upstream → 本地覆盖文件 → 桥接文件」循环
+          if (importerNorm) {
+            const localResultNorm = path.normalize(localResult);
+            const localResultDir = path.dirname(localResultNorm);
+            const localResultBase = path.basename(localResultNorm, path.extname(localResultNorm));
+            const expectedBridgePattern = path.join(
+              localResultDir,
+              `${localResultBase}-upstream-extras`,
+            );
+            const importerBase = importerNorm.replace(/\.[cm]?[jt]sx?$/, "");
+            if (importerBase === expectedBridgePattern) {
+              return null; // 桥接文件不需要 overlay 重定向，直接访问 upstream 原始文件
+            }
+          }
           return localResult; // 本地有覆盖版本，使用它
         }
         // 无本地覆盖：显式解析 upstream 路径（处理 .js → .ts 映射），避免默认解析失败
