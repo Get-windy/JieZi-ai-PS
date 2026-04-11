@@ -30,9 +30,9 @@ export {
   isWeekQuotaErrorMessage,
 } from "./failover-matches.js";
 
-// 上游新增的运行时故障分类工具，本地文件未覆盖，直接从上游 re-export
-export { classifyProviderRuntimeFailureKind } from "../../../upstream/src/agents/pi-embedded-helpers/errors.js";
-export type { ProviderRuntimeFailureKind } from "../../../upstream/src/agents/pi-embedded-helpers/errors.js";
+// 上游新增的运行时故障分类工具，通过桥接文件转发（直接 re-export 会触发 overlay 自循环检测）
+export { classifyProviderRuntimeFailureKind } from "./errors-upstream-extras.js";
+export type { ProviderRuntimeFailureKind } from "./errors-upstream-extras.js";
 
 const log = createSubsystemLogger("errors");
 
