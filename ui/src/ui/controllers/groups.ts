@@ -15,7 +15,10 @@ import type { GroupInfo, GroupsListResult } from "../views/groups.js";
 /**
  * 加载群组列表
  */
-export async function loadGroups(app: App, client: GatewayClient): Promise<void> {
+export async function loadGroups(app: App, client: GatewayClient | null): Promise<void> {
+  if (!client) {
+    return;
+  }
   app.groupsLoading = true;
   app.groupsError = null;
 

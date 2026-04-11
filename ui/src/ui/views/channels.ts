@@ -28,6 +28,23 @@ import {
 import { renderNostrProfileForm } from "./channels.nostr-profile-form.ts";
 
 export function renderChannels(props: ChannelsProps) {
+  // 调试日志：记录 Channels 渲染关键状态
+  if (typeof window !== "undefined" && (window as unknown as { __DEBUG_UI__?: boolean }).__DEBUG_UI__) {
+    console.log("[DEBUG:Channels] renderChannels called with:", {
+      connected: props.connected,
+      loading: props.loading,
+      error: props.lastError,
+      snapshotExists: !!props.snapshot,
+      channelsCount: Object.keys(props.snapshot?.channels ?? {}).length,
+      channelOrderCount: props.snapshot?.channelOrder?.length ?? 0,
+      channelMetaCount: props.snapshot?.channelMeta?.length ?? 0,
+      channelAccountsCount: Object.keys(props.snapshot?.channelAccounts ?? {}).length,
+      whatsappConnected: props.whatsappConnected,
+      whatsappBusy: props.whatsappBusy,
+      managingChannelId: props.managingChannelId,
+    });
+  }
+
   const channels = props.snapshot?.channels as Record<string, unknown> | null;
   const channelOrder = resolveChannelOrder(props.snapshot);
 
@@ -149,7 +166,7 @@ function resolveChannelOrder(snapshot: ChannelsStatusSnapshot | null): ChannelKe
   }
 
   // 收集所有通道 ID（从后端 + 内置列表）
-  const ids = new Set<string>([...BUILTIN_CHANNELS]); // 先添加所有内置通道
+  const ids = new Set<string>(BUILTIN_CHANNELS); // 先添加所有内置通道
 
   // 从 channelOrder 添加（后端返回的顺序）
   for (const id of snapshot.channelOrder ?? []) {

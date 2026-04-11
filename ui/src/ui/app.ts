@@ -52,10 +52,12 @@ import type { AppViewState } from "./app-view-state.ts";
 import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity.ts";
 import type { DevicePairingList } from "./controllers/devices.ts";
+import type { DreamingStatus } from "./controllers/dreaming.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
+import { generateUUID } from "./uuid.ts";
 import type { Tab } from "./navigation.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import type { ResolvedTheme, ThemeMode } from "./theme.ts";
@@ -79,6 +81,7 @@ import type {
   SkillStatusReport,
   StatusSummary,
   NostrProfile,
+  UpdateAvailable,
 } from "./types.ts";
 import { type ChatAttachment, type ChatQueueItem, type CronFormState } from "./ui-types.ts";
 import type { ModelAccountsConfig, ChannelPoliciesConfig } from "./views/agents.ts";
@@ -88,6 +91,8 @@ import type { AgentTeamStatus, TeamSummary, AssignTaskForm } from "./views/team-
 declare global {
   interface Window {
     __OPENCLAW_CONTROL_UI_BASE_PATH__?: string;
+    /** 启用 UI 调试日志输出 */
+    __DEBUG_UI__?: boolean;
   }
 }
 
@@ -108,6 +113,8 @@ function resolveOnboardingMode(): boolean {
 
 @customElement("openclaw-app")
 export class OpenClawApp extends LitElement {
+  clientInstanceId = generateUUID();
+  connectGeneration = 0;
   @state() settings: UiSettings = loadSettings();
   @state() password = "";
   @state() tab: Tab = "chat";
@@ -117,6 +124,9 @@ export class OpenClawApp extends LitElement {
   @state() themeResolved: ResolvedTheme = "dark";
   @state() hello: GatewayHelloOk | null = null;
   @state() lastError: string | null = null;
+  @state() lastErrorCode: string | null = null;
+  @state() serverVersion: string | null = null;
+  @state() updateAvailable: UpdateAvailable | null = null;
   @state() eventLog: EventLogEntry[] = [];
   private eventLogBuffer: EventLogEntry[] = [];
   private toolStreamSyncTimer: number | null = null;
@@ -136,8 +146,15 @@ export class OpenClawApp extends LitElement {
   @state() chatStreamStartedAt: number | null = null;
   @state() chatRunId: string | null = null;
   @state() compactionStatus: CompactionStatus | null = null;
+  @state() fallbackStatus: import("./app-tool-stream.ts").FallbackStatus | null = null;
   @state() chatAvatarUrl: string | null = null;
   @state() chatThinkingLevel: string | null = null;
+  @state() chatModelOverrides: Record<
+    string,
+    import("./chat-model-ref.ts").ChatModelOverride | null
+  > = {};
+  @state() chatModelsLoading = false;
+  @state() chatModelCatalog: import("./types.ts").ModelCatalogEntry[] = [];
   @state() chatQueue: ChatQueueItem[] = [];
   @state() chatAttachments: ChatAttachment[] = [];
   @state() chatManualRefreshInFlight = false;
@@ -164,6 +181,7 @@ export class OpenClawApp extends LitElement {
   @state() execApprovalBusy = false;
   @state() execApprovalError: string | null = null;
   @state() pendingGatewayUrl: string | null = null;
+  pendingGatewayToken: string | null = null;
 
   @state() configLoading = false;
   @state() configRaw = "{\n}\n";
@@ -635,9 +653,23 @@ export class OpenClawApp extends LitElement {
   @state() sessionsFilterLimit = "120";
   @state() sessionsIncludeGlobal = true;
   @state() sessionsIncludeUnknown = false;
+  @state() sessionsHideCron = true;
+  @state() sessionsSearchQuery = "";
+  @state() sessionsSortColumn: "key" | "kind" | "updated" | "tokens" = "key";
+  @state() sessionsSortDir: "asc" | "desc" = "asc";
+  @state() sessionsPage = 0;
+  @state() sessionsPageSize = 25;
+  @state() sessionsSelectedKeys = new Set<string>();
+  @state() sessionsExpandedCheckpointKey: string | null = null;
+  @state() sessionsCheckpointItemsByKey: Record<string, import("./types.js").SessionCompactionCheckpoint[]> = {};
+  @state() sessionsCheckpointLoadingKey: string | null = null;
+  @state() sessionsCheckpointBusyKey: string | null = null;
+  @state() sessionsCheckpointErrorByKey: Record<string, string> = {};
 
   @state() usageLoading = false;
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
   @state() usageResult: import("./types.js").SessionsUsageResult | null = null;
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
   @state() usageCostSummary: import("./types.js").CostUsageSummary | null = null;
   @state() usageError: string | null = null;
   @state() usageStartDate = (() => {
@@ -655,6 +687,7 @@ export class OpenClawApp extends LitElement {
   @state() usageDailyChartMode: "total" | "by-type" = "by-type";
   @state() usageTimeSeriesMode: "cumulative" | "per-turn" = "per-turn";
   @state() usageTimeSeriesBreakdownMode: "total" | "by-type" = "by-type";
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
   @state() usageTimeSeries: import("./types.js").SessionUsageTimeSeries | null = null;
   @state() usageTimeSeriesLoading = false;
   @state() usageSessionLogs: import("./views/usage.js").SessionLogEntry[] | null = null;
@@ -698,6 +731,26 @@ export class OpenClawApp extends LitElement {
   @state() cronForm: CronFormState = { ...DEFAULT_CRON_FORM };
   @state() cronRunsJobId: string | null = null;
   @state() cronRuns: CronRunLogEntry[] = [];
+  @state() cronRunsTotal = 0;
+  @state() cronRunsHasMore = false;
+  @state() cronRunsLoadingMore = false;
+  @state() cronRunsScope: "all" | "job" = "all";
+  @state() cronRunsStatuses: string[] = [];
+  @state() cronRunsDeliveryStatuses: string[] = [];
+  @state() cronRunsStatusFilter = "";
+  @state() cronRunsQuery = "";
+  @state() cronRunsSortDir: "asc" | "desc" = "desc";
+  @state() cronJobsTotal = 0;
+  @state() cronJobsHasMore = false;
+  @state() cronJobsLoadingMore = false;
+  @state() cronJobsQuery = "";
+  @state() cronJobsEnabledFilter = "all";
+  @state() cronJobsScheduleKindFilter = "all";
+  @state() cronJobsLastStatusFilter = "all";
+  @state() cronJobsSortBy = "nextRunAtMs";
+  @state() cronJobsSortDir: "asc" | "desc" = "asc";
+  @state() cronEditingJobId: string | null = null;
+  @state() cronFieldErrors: Record<string, string> = {};
   @state() cronBusy = false;
 
   @state() skillsLoading = false;
@@ -718,6 +771,7 @@ export class OpenClawApp extends LitElement {
   @state() debugHealth: HealthSnapshot | null = null;
   @state() debugModels: unknown[] = [];
   @state() debugHeartbeat: unknown = null;
+  @state() debugMethods: string[] = [];
   @state() debugCallMethod = "";
   @state() debugCallParams = "{}";
   @state() debugCallResult: string | null = null;
@@ -750,6 +804,22 @@ export class OpenClawApp extends LitElement {
   private debugPollInterval: number | null = null;
   private monitorPollInterval: number | null = null;
   private logsScrollFrame: number | null = null;
+
+  // Dreaming（梦境/记忆整合）状态
+  @state() dreamingStatusLoading = false;
+  @state() dreamingStatusError: string | null = null;
+  @state() dreamingStatus: DreamingStatus | null = null;
+  @state() dreamingModeSaving = false;
+  @state() dreamDiaryLoading = false;
+  @state() dreamDiaryError: string | null = null;
+  @state() dreamDiaryPath: string | null = null;
+  @state() dreamDiaryContent: string | null = null;
+  // 梦境目标选择
+  @state() dreamSelectedTargetId: string | null = null;
+  @state() dreamTargetsLoading = false;
+  @state() dreamTargetsError: string | null = null;
+  @state() dreamTargets: import("./controllers/dreaming.js").DreamTarget[] = [];
+  @state() dreamTargetsDefaultId = "";
   private toolStreamById = new Map<string, ToolStreamEntry>();
   private toolStreamOrder: string[] = [];
   refreshSessionsAfterChat = new Set<string>();
@@ -1494,8 +1564,8 @@ export class OpenClawApp extends LitElement {
   }
 
   async handleChannelsRefresh(probe: boolean) {
-    const { loadChannelsStatus } = await import("./controllers/channels.js");
-    await loadChannelsStatus(this, this.client, probe);
+    const { loadChannels } = await import("./controllers/channels.js");
+    await loadChannels(this, probe);
   }
 
   private extractAccountConfig(channelId: string, accountId: string): Record<string, unknown> {

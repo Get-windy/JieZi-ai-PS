@@ -83,6 +83,9 @@ build-output*.txt
 build*.txt
 tsdown*.txt
 tsdown_*.txt
+tsc-out*.txt
+tsc_new*.txt
+ui/vitest-result*.txt
 
 # Local untracked files
 .local/

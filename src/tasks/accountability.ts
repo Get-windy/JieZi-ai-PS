@@ -5,8 +5,107 @@
  * 基于业界最佳实践：Outcome-Based（基于结果）而非 Activity-Based（基于活动）
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as storage from "./storage.js";
 import type { Task } from "./types.js";
+
+// ============================================================================
+// 文件系统产出物验证辅助函数
+// ============================================================================
+
+/**
+ * 检查项目工作区目录是否有近期文件变更（默认 2 小时内）
+ *
+ * 这是判断 AI Agent 是否真实产出工作成果的核心依据之一。
+ * 如果 workspace 目录内有近期更新的文件，说明 Agent 确实在工作。
+ */
+export function checkWorkspaceActivity(
+  workspacePath: string,
+  windowMs: number = 2 * 60 * 60 * 1000, // 默认 2 小时
+): { hasActivity: boolean; latestFile?: string; latestMtime?: number; fileCount: number } {
+  if (!workspacePath || !fs.existsSync(workspacePath)) {
+    return { hasActivity: false, fileCount: 0 };
+  }
+
+  const now = Date.now();
+  const threshold = now - windowMs;
+  let latestFile: string | undefined;
+  let latestMtime = 0;
+  let fileCount = 0;
+
+  function scanDir(dir: string, depth = 0): void {
+    if (depth > 6) {
+      return;
+    } // 防止过深递归
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        // 跳过隐藏目录和 node_modules
+        if (entry.name.startsWith(".") || entry.name === "node_modules") {
+          continue;
+        }
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          scanDir(fullPath, depth + 1);
+        } else {
+          const stat = fs.statSync(fullPath);
+          fileCount++;
+          if (stat.mtimeMs > latestMtime) {
+            latestMtime = stat.mtimeMs;
+            latestFile = fullPath;
+          }
+        }
+      }
+    } catch {
+      // 无读取权限时跳过
+    }
+  }
+
+  scanDir(workspacePath);
+
+  return {
+    hasActivity: latestMtime >= threshold,
+    latestFile,
+    latestMtime: latestMtime || undefined,
+    fileCount,
+  };
+}
+
+/**
+ * 检查 metadata.deliverableUrl/evidencePaths 指向的文件是否真实存在
+ */
+function verifyDeliverableFiles(task: Task): { verified: boolean; paths: string[] } {
+  const paths: string[] = [];
+
+  // 检查 deliverableUrl（本地路径）
+  const deliverableUrl = task.metadata?.deliverableUrl;
+  if (typeof deliverableUrl === "string" && deliverableUrl) {
+    // 如果是本地绝对路径
+    if (path.isAbsolute(deliverableUrl) && fs.existsSync(deliverableUrl)) {
+      paths.push(deliverableUrl);
+    } else if (deliverableUrl.startsWith("http")) {
+      // 远程 URL 被视为已验证
+      paths.push(deliverableUrl);
+    }
+  }
+
+  // 检查 evidencePaths 数组
+  const evidencePaths = task.metadata?.evidencePaths;
+  if (Array.isArray(evidencePaths)) {
+    for (const p of evidencePaths) {
+      if (typeof p === "string" && p) {
+        if (path.isAbsolute(p) && fs.existsSync(p)) {
+          paths.push(p);
+        } else if (p.startsWith("http")) {
+          paths.push(p);
+        }
+      }
+    }
+  }
+
+  return { verified: paths.length > 0, paths };
+}
 
 // ============================================================================
 // 核心问题诊断
@@ -71,6 +170,27 @@ export function validateRealProgress(task: Task): {
 } {
   const evidence: string[] = [];
 
+  // ✔ 优先检查：验收标准（Ralph acceptanceCriteria 实践 —— 最可靠的客观依据）
+  if (task.acceptanceCriteria && task.acceptanceCriteria.length > 0) {
+    const total = task.acceptanceCriteria.length;
+    const passed = task.acceptanceCriteria.filter((c) => c.passes).length;
+    if (passed > 0) {
+      evidence.push(`验收标准通过 ${passed}/${total} 项`);
+    }
+    // 全部通过 → 直接返回高质量，无需再检测其他证据
+    if (passed === total) {
+      return { hasRealProgress: true, evidence, quality: "high" };
+    }
+    // 部分通过
+    if (passed > 0) {
+      return {
+        hasRealProgress: true,
+        evidence,
+        quality: passed / total >= 0.5 ? "medium" : "low",
+      };
+    }
+  }
+
   // 检查 1: 是否有附件（文档、代码文件等）
   if (task.attachments && task.attachments.length > 0) {
     evidence.push(`有 ${task.attachments.length} 个附件`);
@@ -97,6 +217,25 @@ export function validateRealProgress(task: Task): {
     task.metadata?.deliverableUrl
   ) {
     evidence.push("已通过外部验证或有交付物");
+  }
+
+  // 检查 5: 文件系统产出物验证（真实文件存在性）
+  const deliverableCheck = verifyDeliverableFiles(task);
+  if (deliverableCheck.verified) {
+    evidence.push(`文件系统有 ${deliverableCheck.paths.length} 个可验证交付物`);
+  }
+
+  // 检查 6: 项目工作区近期文件活动（傅3小时内）
+  const workspacePath =
+    typeof task.metadata?.workspacePath === "string" ? task.metadata.workspacePath : undefined;
+  if (workspacePath) {
+    const wsActivity = checkWorkspaceActivity(workspacePath, 3 * 60 * 60 * 1000);
+    if (wsActivity.hasActivity) {
+      const minsAgo = wsActivity.latestMtime
+        ? Math.round((Date.now() - wsActivity.latestMtime) / 60_000)
+        : 0;
+      evidence.push(`工作区有近期变更（最近: ${minsAgo}分钟前）`);
+    }
   }
 
   // 检查 5: 时间线分析（长时间无活动 = 可疑）
@@ -364,4 +503,56 @@ export async function enforceQualityReporting(
   }
 
   return { passed: true };
+}
+
+// ============================================================================
+// 验收标准汇报（Ralph 实践）
+// ============================================================================
+
+/**
+ * 生成任务的验收标准完成情况汇报
+ *
+ * 对应 Ralph 的 `cat prd.json | jq '.userStories[] | {id, title, passes}'` 命令输出。
+ * 用于密集汇报和 Agent 自检时快速判断还有哪些验收项未完成。
+ */
+export function validateAcceptanceCriteria(task: Task): {
+  /** 是否所有验收标准已通过 */
+  allPassed: boolean;
+  /** 尚未通过的标准列表 */
+  failing: Array<{ id: string; description: string; note?: string }>;
+  /** 已通过的标准数 */
+  passedCount: number;
+  /** 总标准数 */
+  totalCount: number;
+  /** 完成百分比 (0-100) */
+  completionPct: number;
+  /** 可展示的简要文本 */
+  summary: string;
+} {
+  const criteria = task.acceptanceCriteria ?? [];
+  const totalCount = criteria.length;
+
+  if (totalCount === 0) {
+    return {
+      allPassed: true, // 无验收标准，不阻塞
+      failing: [],
+      passedCount: 0,
+      totalCount: 0,
+      completionPct: 100,
+      summary: "无验收标准（可直接完成）",
+    };
+  }
+
+  const failing = criteria
+    .filter((c) => !c.passes)
+    .map((c) => ({ id: c.id, description: c.description, note: c.note }));
+  const passedCount = totalCount - failing.length;
+  const completionPct = Math.round((passedCount / totalCount) * 100);
+  const allPassed = failing.length === 0;
+
+  const summary = allPassed
+    ? `✅ 所有 ${totalCount} 项验收标准已通过`
+    : `❌ ${failing.length}/${totalCount} 项验收标准未通过（完成度 ${completionPct}%）`;
+
+  return { allPassed, failing, passedCount, totalCount, completionPct, summary };
 }

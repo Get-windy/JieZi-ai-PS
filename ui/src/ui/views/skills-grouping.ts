@@ -1,4 +1,5 @@
-import type { SkillStatusEntry } from "../types.ts";
+import { t } from "../i18n.js";
+import type { SkillStatusEntry } from "../types.js";
 
 export type SkillGroup = {
   id: string;
@@ -6,20 +7,20 @@ export type SkillGroup = {
   skills: SkillStatusEntry[];
 };
 
-const SKILL_SOURCE_GROUPS: Array<{ id: string; label: string; sources: string[] }> = [
-  { id: "workspace", label: "Workspace Skills", sources: ["openclaw-workspace"] },
-  { id: "built-in", label: "Built-in Skills", sources: ["openclaw-bundled"] },
-  { id: "installed", label: "Installed Skills", sources: ["openclaw-managed"] },
-  { id: "extra", label: "Extra Skills", sources: ["openclaw-extra"] },
+const SKILL_SOURCE_GROUPS: Array<{ id: string; label: () => string; sources: string[] }> = [
+  { id: "workspace", label: () => t("skills.group.workspace"), sources: ["openclaw-workspace"] },
+  { id: "built-in", label: () => t("skills.group.built_in"), sources: ["openclaw-bundled"] },
+  { id: "installed", label: () => t("skills.group.installed"), sources: ["openclaw-managed"] },
+  { id: "extra", label: () => t("skills.group.extra"), sources: ["openclaw-extra"] },
 ];
 
 export function groupSkills(skills: SkillStatusEntry[]): SkillGroup[] {
   const groups = new Map<string, SkillGroup>();
   for (const def of SKILL_SOURCE_GROUPS) {
-    groups.set(def.id, { id: def.id, label: def.label, skills: [] });
+    groups.set(def.id, { id: def.id, label: def.label(), skills: [] });
   }
   const builtInGroup = SKILL_SOURCE_GROUPS.find((group) => group.id === "built-in");
-  const other: SkillGroup = { id: "other", label: "Other Skills", skills: [] };
+  const other: SkillGroup = { id: "other", label: t("skills.group.other"), skills: [] };
   for (const skill of skills) {
     const match = skill.bundled
       ? builtInGroup

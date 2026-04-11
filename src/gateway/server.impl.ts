@@ -40,6 +40,7 @@ import { hasConnectedMobileNode } from "../../upstream/src/gateway/server-mobile
 import { loadGatewayModelCatalog } from "../../upstream/src/gateway/server-model-catalog.js";
 import { createNodeSubscriptionManager } from "../../upstream/src/gateway/server-node-subscriptions.js";
 import { loadGatewayPlugins } from "../../upstream/src/gateway/server-plugins.js";
+import { pinActivePluginChannelRegistry } from "../../upstream/src/plugins/runtime.js";
 import { createGatewayReloadHandlers } from "../../upstream/src/gateway/server-reload-handlers.js";
 import { createGatewayRuntimeState } from "../../upstream/src/gateway/server-runtime-state.js";
 import { resolveSessionKeyForRun } from "../../upstream/src/gateway/server-session-key.js";
@@ -329,13 +330,19 @@ export async function startGatewayServer(
   const emptyPluginRegistry = createEmptyPluginRegistry();
   const { pluginRegistry, gatewayMethods: baseGatewayMethods } = minimalTestGateway
     ? { pluginRegistry: emptyPluginRegistry, gatewayMethods: baseMethods }
-    : loadGatewayPlugins({
-        cfg: cfgAtStart,
-        workspaceDir: defaultWorkspaceDir,
-        log,
-        coreGatewayHandlers,
-        baseMethods,
-      });
+    : (() => {
+        const result = loadGatewayPlugins({
+          cfg: cfgAtStart,
+          workspaceDir: defaultWorkspaceDir,
+          log,
+          coreGatewayHandlers,
+          baseMethods,
+        });
+        // 固定 channel registry，确保后续 setActivePluginRegistry（如配置重载）
+        // 不会替换启动时加载的通道插件（如 feishu），与上游 loadGatewayStartupPlugins 保持一致
+        pinActivePluginChannelRegistry(result.pluginRegistry);
+        return result;
+      })();
   const channelLogs = Object.fromEntries(
     listChannelPlugins().map((plugin) => [plugin.id, logChannels.child(plugin.id)]),
   ) as Record<ChannelId, ReturnType<typeof createSubsystemLogger>>;

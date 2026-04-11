@@ -21,7 +21,7 @@ import { loadConfig } from "../../upstream/src/config/config.js";
 import { requestHeartbeatNow } from "../../upstream/src/infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
 import { listAgentIds, resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
-import { getTaskTypePerfScore } from "../gateway/server-methods/evolve-rpc.js";
+import { getTaskTypePerfScore, inferTaskType } from "../gateway/server-methods/evolve-rpc.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { groupManager } from "../sessions/group-manager.js";
 import * as taskStorage from "../tasks/storage.js";
@@ -251,8 +251,9 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           `[Task Wake] Agent ${normalizedId} has ${inProgressTasks.length} in-progress tasks (violation of 1-task rule). Resetting ${resetTasks.length} back to todo. Keeping: ${keepTask.id} (${keepTask.priority})`,
         );
 
-        // 将多余任务重置回 todo
+        // 将多余任务重置回 todo（必须经由 blocked 中转，因为状态机不允许 in-progress → todo 直接跳转）
         for (const t of resetTasks) {
+          await taskStorage.updateTask(t.id, { status: "blocked" });
           await taskStorage.updateTask(t.id, {
             status: "todo",
             timeTracking: {
@@ -358,9 +359,11 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           if (shouldForceReset) {
             // 任务卡住超过 60 分钟：强制重置回 todo，让调度器重新派发
             // 这样可以避免因模型 API 超时导致任务永久卡住
+            // 注意：状态机不允许 in-progress → todo 直接跳转，必须经由 blocked 中转
             console.log(
               `[Task Wake] Agent ${normalizedId} task ${activeTask.id} stuck for ${stuckMinutes}min — force resetting to todo`,
             );
+            await taskStorage.updateTask(activeTask.id, { status: "blocked" });
             await taskStorage.updateTask(activeTask.id, {
               status: "todo",
               timeTracking: {
@@ -676,7 +679,116 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
         // 不做 projectId 过滤：任务只要分配给该 agent 就直接执行，无论属于哪个项目
         // 按优先级排序，只唤醒最高优先级的 1 条
         // C3 自适应课程：当 Agent 在某类任务的历史成功率 <60% 时，降低该类任务的调度优先级
-        const sortedTodos = [...todoTasks].toSorted((a, b) => {
+
+        // === KPI 择优重分配（Hermes v0.8.0 cron KPI 借鉴）===
+        // 扩展现有 C3 自适应课程：当当前 Agent 对某类任务成功率 < 40%（低于阀值），
+        // 且有其他空闲 Agent 对该类型成功率高出至少 25%，则将任务自动重分配给最优 Agent。
+        const KPI_REASSIGN_THRESHOLD = 0.4;
+        const KPI_REASSIGN_MIN_GAIN = 0.25;
+        const idleAgentIds = agentIds
+          .map((id) => normalizeAgentId(id))
+          .filter((id) => id !== normalizedId);
+
+        if (idleAgentIds.length > 0) {
+          for (const todoTask of todoTasks) {
+            if (todoTask.priority === "urgent") {
+              continue; // urgent 任务不重分配
+            }
+            const taskSummary = todoTask.title + " " + (todoTask.description ?? "").slice(0, 100);
+            const currentAgentPerf = getTaskTypePerfScore(normalizedId, taskSummary);
+            if (!currentAgentPerf || currentAgentPerf.total < 3) {
+              continue; // 样本不足
+            }
+            if (currentAgentPerf.successRate >= KPI_REASSIGN_THRESHOLD) {
+              continue; // 表现还不错
+            }
+
+            let bestAgentId: string | null = null;
+            let bestSuccessRate = currentAgentPerf.successRate + KPI_REASSIGN_MIN_GAIN;
+
+            for (const candidateId of idleAgentIds) {
+              const candidatePerf = getTaskTypePerfScore(candidateId, taskSummary);
+              if (
+                candidatePerf &&
+                candidatePerf.total >= 3 &&
+                candidatePerf.successRate > bestSuccessRate
+              ) {
+                try {
+                  const candidateInProgress = await taskStorage.listTasks({
+                    assigneeId: candidateId,
+                    status: ["in-progress"],
+                  });
+                  if (candidateInProgress.length === 0) {
+                    bestSuccessRate = candidatePerf.successRate;
+                    bestAgentId = candidateId;
+                  }
+                } catch {
+                  /* 查询失败不影响主流程 */
+                }
+              }
+            }
+
+            if (bestAgentId) {
+              const taskType = inferTaskType(taskSummary, todoTask.tags ?? []);
+              console.log(
+                `[Task Wake] KPI Reassign: Task ${todoTask.id} (“${todoTask.title}”) reassigned from ${normalizedId} (${Math.round(currentAgentPerf.successRate * 100)}% on ${taskType}) to ${bestAgentId} (${Math.round(bestSuccessRate * 100)}%)`,
+              );
+              await taskStorage.updateTask(todoTask.id, {
+                assignees: [
+                  ...(todoTask.assignees ?? []).filter((a) => a.id !== normalizedId),
+                  {
+                    id: bestAgentId,
+                    type: "agent" as const,
+                    role: "assignee" as const,
+                    assignedAt: now,
+                    assignedBy: "cron:kpi-reassign",
+                  },
+                ],
+              });
+              // 通知 supervisor
+              const kpiSupRaw = todoTask.supervisorId ?? todoTask.creatorId;
+              if (kpiSupRaw && kpiSupRaw !== "system") {
+                const kpiSupId = normalizeAgentId(kpiSupRaw);
+                const kpiSupSession = `agent:${kpiSupId}:main`;
+                enqueueSystemEvent(
+                  [
+                    `[KPI REASSIGN] Task automatically reassigned to a better-performing agent.`,
+                    ``,
+                    `Task ID: ${todoTask.id}`,
+                    `Title: ${todoTask.title}`,
+                    `Original agent: ${normalizedId} (${Math.round(currentAgentPerf.successRate * 100)}% on ${taskType} tasks)`,
+                    `New agent: ${bestAgentId} (${Math.round(bestSuccessRate * 100)}% success rate)`,
+                    ``,
+                    `This reassignment was made automatically by the KPI scheduler.`,
+                  ]
+                    .filter(Boolean)
+                    .join("\n"),
+                  {
+                    sessionKey: kpiSupSession,
+                    contextKey: `cron:kpi-reassign:${todoTask.id}`,
+                  },
+                );
+                requestHeartbeatNow({
+                  reason: `cron:kpi-reassign:${todoTask.id}`,
+                  sessionKey: kpiSupSession,
+                  agentId: kpiSupId,
+                  coalesceMs: 15000,
+                });
+              }
+            }
+          }
+        }
+
+        // KPI 重分配后重新读取最新 todo（部分任务可能已被分出）
+        const latestTodoTasks =
+          idleAgentIds.length > 0
+            ? await taskStorage.listTasks({ assigneeId: normalizedId, status: ["todo"] })
+            : todoTasks;
+        if (latestTodoTasks.length === 0) {
+          continue;
+        }
+
+        const sortedTodos = [...latestTodoTasks].toSorted((a, b) => {
           let scoreA = taskSortKey(a);
           let scoreB = taskSortKey(b);
           // C3: 读取性能画像，当成功率 <60% 时懒化该类任务（不低于 urgent 级别）
@@ -766,6 +878,36 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           } catch {
             /* 不影响主流程 */
           }
+
+          // === P2 Harness Tool Focus（Inferential Feedforward）===
+          // 根据任务类型注入工具聚焦指令，防止 Agent 在重型管理工具上浪费 token。
+          // 参考 Harness Engineering：避免 "Too Many Tools" 导致 dumb zone。
+          let toolFocusHint: string | null = null;
+          try {
+            const taskSummary = nextTask.title + " " + (nextTask.description ?? "").slice(0, 100);
+            const taskType = inferTaskType(taskSummary, nextTask.tags ?? []);
+            const TOOL_FOCUS_MAP: Record<string, string> = {
+              coding:
+                "web_fetch, web_search, task_worklog_add, task_complete. Avoid agent_spawn, team_orchestrate, agent_lifecycle tools unless explicitly required.",
+              writing:
+                "web_search, web_fetch, task_worklog_add, task_complete. Avoid agent_spawn, team_orchestrate tools.",
+              research:
+                "web_search, web_fetch, task_worklog_add, task_complete. Avoid agent_spawn, agent_lifecycle tools.",
+              data_analysis:
+                "web_fetch, task_worklog_add, task_complete. Avoid agent_spawn, team_orchestrate tools.",
+              planning:
+                "task_create, task_subtask_create, task_worklog_add, task_complete. Agent coordination tools are acceptable.",
+              qa: "web_search, web_fetch, task_worklog_add, task_complete.",
+              translation: "task_worklog_add, task_complete.",
+              summarization: "task_worklog_add, task_complete.",
+              general: "Use the minimum set of tools necessary to complete the task.",
+            };
+            const focusTools = TOOL_FOCUS_MAP[taskType] ?? TOOL_FOCUS_MAP["general"];
+            toolFocusHint = `[TOOL FOCUS — ${taskType.toUpperCase()}] This is a "${taskType}" task. Prioritize: ${focusTools}`;
+          } catch {
+            /* 不影响主流程 */
+          }
+
           return [
             `[TASK WAKE] You have ${activatedTasks.length} task(s) activated now${queueRemaining > 0 ? ` (${queueRemaining} more waiting in queue)` : ""}. Tasks are already set to in-progress:`,
             ``,
@@ -779,6 +921,7 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
               : null,
             projectGroupSessionKey ? `- Project Group: sessionKey=${projectGroupSessionKey}` : null,
             perfWarning ? `\n${perfWarning}` : null,
+            toolFocusHint ? `\n${toolFocusHint}` : null,
             ``,
             `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
             ``,

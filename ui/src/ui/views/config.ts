@@ -1,10 +1,18 @@
-import { html, nothing } from "lit";
-import type { ConfigUiHints } from "../types.js";
+import { html, nothing, type TemplateResult } from "lit";
 import { t } from "../i18n.js";
+import { icons } from "../icons.js";
+import { BORDER_RADIUS_STOPS, type BorderRadiusStop } from "../storage.js";
+import type { ThemeTransitionContext } from "../theme-transition.js";
+import type { ThemeMode, ThemeName } from "../theme.js";
+import type { ConfigUiHints } from "../types.js";
 import { analyzeConfigSchema, renderConfigForm, SECTION_META } from "./config-form.js";
 import {
+  countSensitiveConfigValues,
   hintForPath,
   humanize,
+  isSensitiveConfigPath,
+  pathKey,
+  REDACTED_PLACEHOLDER,
   schemaType,
   type JsonSchema,
 } from "./config-form.shared.ts";
@@ -23,6 +31,8 @@ export type ConfigProps = {
   schemaLoading: boolean;
   uiHints: ConfigUiHints;
   formMode: "form" | "raw";
+  rawAvailable?: boolean;
+  showModeToggle?: boolean;
   formValue: Record<string, unknown> | null;
   originalValue: Record<string, unknown> | null;
   searchQuery: string;
@@ -38,6 +48,22 @@ export type ConfigProps = {
   onSave: () => void;
   onApply: () => void;
   onUpdate: () => void;
+  onOpenFile?: () => void;
+  version?: string;
+  theme?: ThemeName;
+  themeMode?: ThemeMode;
+  setTheme?: (theme: ThemeName, context?: ThemeTransitionContext) => void;
+  setThemeMode?: (mode: ThemeMode, context?: ThemeTransitionContext) => void;
+  borderRadius?: number;
+  setBorderRadius?: (value: number) => void;
+  gatewayUrl?: string;
+  assistantName?: string;
+  configPath?: string | null;
+  navRootLabel?: string;
+  includeSections?: string[];
+  excludeSections?: string[];
+  includeVirtualSections?: boolean;
+  onRequestUpdate?: () => void;
 };
 
 // SVG Icons for sidebar (Lucide-style)
@@ -268,6 +294,171 @@ const sidebarIcons = {
   `,
 };
 
+// Additional sidebar icons only in upstream
+const extraSidebarIcons = {
+  bindings2: html`
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+      <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+      <line x1="6" y1="6" x2="6.01" y2="6"></line>
+      <line x1="6" y1="18" x2="6.01" y2="18"></line>
+    </svg>
+  `,
+  broadcast2: html`
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"></path>
+      <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"></path>
+      <circle cx="12" cy="12" r="2"></circle>
+      <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"></path>
+      <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"></path>
+    </svg>
+  `,
+  diagnostics: html`
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+    </svg>
+  `,
+  cli: html`
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="4 17 10 11 4 5"></polyline>
+      <line x1="12" y1="19" x2="20" y2="19"></line>
+    </svg>
+  `,
+  secrets: html`
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path
+        d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"
+      ></path>
+    </svg>
+  `,
+  acp: html`
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+      <circle cx="9" cy="7" r="4"></circle>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+    </svg>
+  `,
+  mcp: html`
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+      <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+      <line x1="6" y1="6" x2="6.01" y2="6"></line>
+      <line x1="6" y1="18" x2="6.01" y2="18"></line>
+    </svg>
+  `,
+  __appearance__: html`
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  `,
+};
+
+const allSidebarIcons = { ...sidebarIcons, ...extraSidebarIcons };
+
+const BORDER_RADIUS_LABELS: Record<BorderRadiusStop, string> = {
+  0: "None",
+  25: "Slight",
+  50: "Default",
+  75: "Round",
+  100: "Full",
+};
+
+// Categorised section definitions
+type SectionCategory = {
+  id: string;
+  label: string;
+  sections: Array<{ key: string; label: string }>;
+};
+
+const SECTION_CATEGORIES: SectionCategory[] = [
+  {
+    id: "core",
+    label: "Core",
+    sections: [
+      { key: "env", label: t("config.section.env") },
+      { key: "auth", label: t("config.section.auth") },
+      { key: "update", label: t("config.section.update") },
+      { key: "meta", label: "Meta" },
+      { key: "logging", label: "Logging" },
+      { key: "diagnostics", label: "Diagnostics" },
+      { key: "cli", label: "Cli" },
+      { key: "secrets", label: "Secrets" },
+    ],
+  },
+  {
+    id: "ai",
+    label: "AI & Agents",
+    sections: [
+      { key: "agents", label: t("config.section.agents") },
+      { key: "models", label: "Models" },
+      { key: "skills", label: t("config.section.skills") },
+      { key: "tools", label: t("config.section.tools") },
+      { key: "memory", label: "Memory" },
+      { key: "session", label: "Session" },
+    ],
+  },
+  {
+    id: "communication",
+    label: "Communication",
+    sections: [
+      { key: "channels", label: t("config.section.channels") },
+      { key: "messages", label: t("config.section.messages") },
+      { key: "broadcast", label: "Broadcast" },
+      { key: "talk", label: "Talk" },
+      { key: "audio", label: "Audio" },
+    ],
+  },
+  {
+    id: "automation",
+    label: "Automation",
+    sections: [
+      { key: "commands", label: t("config.section.commands") },
+      { key: "hooks", label: t("config.section.hooks") },
+      { key: "bindings", label: "Bindings" },
+      { key: "cron", label: "Cron" },
+      { key: "approvals", label: "Approvals" },
+      { key: "plugins", label: "Plugins" },
+    ],
+  },
+  {
+    id: "infrastructure",
+    label: "Infrastructure",
+    sections: [
+      { key: "gateway", label: t("config.section.gateway") },
+      { key: "web", label: "Web" },
+      { key: "browser", label: "Browser" },
+      { key: "nodeHost", label: "NodeHost" },
+      { key: "canvasHost", label: "CanvasHost" },
+      { key: "discovery", label: "Discovery" },
+      { key: "media", label: "Media" },
+      { key: "acp", label: "Acp" },
+      { key: "mcp", label: "Mcp" },
+    ],
+  },
+  {
+    id: "appearance",
+    label: t("tabs.appearance"),
+    sections: [
+      { key: "__appearance__", label: "Theme" },
+      { key: "ui", label: "UI" },
+      { key: "wizard", label: t("config.section.wizard") },
+    ],
+  },
+];
+
+// Flat lookup: all categorised keys
+// oxlint-disable-next-line no-unused-vars
+const CATEGORISED_KEYS = new Set(SECTION_CATEGORIES.flatMap((c) => c.sections.map((s) => s.key)));
+
 // Section definitions
 const SECTIONS: Array<{ key: string; label: () => string }> = [
   { key: "env", label: () => t("config.section.env") },
@@ -294,7 +485,7 @@ type SubsectionEntry = {
 const ALL_SUBSECTION = "__all__";
 
 function getSectionIcon(key: string) {
-  return sidebarIcons[key as keyof typeof sidebarIcons] ?? sidebarIcons.default;
+  return allSidebarIcons[key as keyof typeof allSidebarIcons] ?? sidebarIcons.default;
 }
 
 function resolveSectionMeta(
@@ -316,6 +507,7 @@ function resolveSectionMeta(
 
 function resolveSubsections(params: {
   key: string;
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
   schema: JsonSchema | undefined;
   uiHints: ConfigUiHints;
 }): SubsectionEntry[] {
@@ -389,7 +581,222 @@ function truncateValue(value: unknown, maxLen = 40): string {
   return str.slice(0, maxLen - 3) + "...";
 }
 
+function scopeSchemaSections(
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
+  schema: JsonSchema | null,
+  params: { include?: ReadonlySet<string> | null; exclude?: ReadonlySet<string> | null },
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents
+): JsonSchema | null {
+  if (!schema || schemaType(schema) !== "object" || !schema.properties) {
+    return schema;
+  }
+  const include = params.include;
+  const exclude = params.exclude;
+  const nextProps: Record<string, JsonSchema> = {};
+  for (const [key, value] of Object.entries(schema.properties)) {
+    if (include && include.size > 0 && !include.has(key)) {
+      continue;
+    }
+    if (exclude && exclude.size > 0 && exclude.has(key)) {
+      continue;
+    }
+    nextProps[key] = value;
+  }
+  return { ...schema, properties: nextProps };
+}
+
+function scopeUnsupportedPaths(
+  unsupportedPaths: string[],
+  params: { include?: ReadonlySet<string> | null; exclude?: ReadonlySet<string> | null },
+): string[] {
+  const include = params.include;
+  const exclude = params.exclude;
+  if ((!include || include.size === 0) && (!exclude || exclude.size === 0)) {
+    return unsupportedPaths;
+  }
+  return unsupportedPaths.filter((entry) => {
+    if (entry === "<root>") {
+      return true;
+    }
+    const [top] = entry.split(".");
+    if (include && include.size > 0) {
+      return include.has(top);
+    }
+    if (exclude && exclude.size > 0) {
+      return !exclude.has(top);
+    }
+    return true;
+  });
+}
+
+function renderDiffValue(path: string, value: unknown, _uiHints: ConfigUiHints): string {
+  if (isSensitiveConfigPath(path) && value != null && truncateValue(value).trim() !== "") {
+    return REDACTED_PLACEHOLDER;
+  }
+  return truncateValue(value);
+}
+
+type ThemeOption = { id: ThemeName; label: string; description: string; icon: TemplateResult };
+const THEME_OPTIONS: ThemeOption[] = [
+  { id: "claw", label: "Claw", description: "Chroma family", icon: icons.zap },
+  { id: "knot", label: "Knot", description: "Black & red", icon: icons.link },
+  { id: "dash", label: "Dash", description: "Chocolate blueprint", icon: icons.barChart },
+];
+
+function renderAppearanceSection(props: ConfigProps) {
+  return html`
+    <div class="settings-appearance">
+      ${
+        props.setTheme && props.theme
+          ? html`
+            <div class="settings-appearance__section">
+              <h3 class="settings-appearance__heading">Theme</h3>
+              <p class="settings-appearance__hint">Choose a theme family.</p>
+              <div class="settings-theme-grid">
+                ${THEME_OPTIONS.map(
+                  (opt) => html`
+                    <button
+                      class="settings-theme-card ${
+                        opt.id === props.theme ? "settings-theme-card--active" : ""
+                      }"
+                      title=${opt.description}
+                      @click=${(e: Event) => {
+                        if (opt.id !== props.theme) {
+                          const context: ThemeTransitionContext = {
+                            element: (e.currentTarget as HTMLElement) ?? undefined,
+                          };
+                          props.setTheme!(opt.id, context);
+                        }
+                      }}
+                    >
+                      <span class="settings-theme-card__icon" aria-hidden="true">${opt.icon}</span>
+                      <span class="settings-theme-card__label">${opt.label}</span>
+                      ${
+                        opt.id === props.theme
+                          ? html`<span class="settings-theme-card__check" aria-hidden="true"
+                            >${icons.check}</span
+                          >`
+                          : nothing
+                      }
+                    </button>
+                  `,
+                )}
+              </div>
+            </div>
+          `
+          : nothing
+      }
+      ${
+        props.setBorderRadius && props.borderRadius !== undefined
+          ? html`
+            <div class="settings-appearance__section">
+              <h3 class="settings-appearance__heading">Roundness</h3>
+              <p class="settings-appearance__hint">Adjust corner radius across the UI.</p>
+              <div class="settings-roundness">
+                <div class="settings-roundness__options">
+                  ${BORDER_RADIUS_STOPS.map(
+                    (stop) => html`
+                      <button
+                        type="button"
+                        class="settings-roundness__btn ${stop === props.borderRadius ? "active" : ""}"
+                        @click=${() => props.setBorderRadius!(stop)}
+                      >
+                        <span
+                          class="settings-roundness__swatch"
+                          style="border-radius: ${Math.round(10 * (stop / 50))}px"
+                        ></span>
+                        <span class="settings-roundness__label">${BORDER_RADIUS_LABELS[stop]}</span>
+                      </button>
+                    `,
+                  )}
+                </div>
+              </div>
+            </div>
+          `
+          : nothing
+      }
+      <div class="settings-appearance__section">
+        <h3 class="settings-appearance__heading">Connection</h3>
+        <div class="settings-info-grid">
+          ${
+            props.gatewayUrl
+              ? html`
+                <div class="settings-info-row">
+                  <span class="settings-info-row__label">Gateway</span>
+                  <span class="settings-info-row__value mono">${props.gatewayUrl}</span>
+                </div>
+              `
+              : nothing
+          }
+          <div class="settings-info-row">
+            <span class="settings-info-row__label">Status</span>
+            <span class="settings-info-row__value">
+              <span
+                class="settings-status-dot ${props.connected ? "settings-status-dot--ok" : ""}"
+              ></span>
+              ${props.connected ? t("common.connected") : t("common.offline")}
+            </span>
+          </div>
+          ${
+            props.assistantName
+              ? html`
+                <div class="settings-info-row">
+                  <span class="settings-info-row__label">Assistant</span>
+                  <span class="settings-info-row__value">${props.assistantName}</span>
+                </div>
+              `
+              : nothing
+          }
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+interface ConfigEphemeralState {
+  rawRevealed: boolean;
+  envRevealed: boolean;
+  validityDismissed: boolean;
+  revealedSensitivePaths: Set<string>;
+}
+
+function createConfigEphemeralState(): ConfigEphemeralState {
+  return {
+    rawRevealed: false,
+    envRevealed: false,
+    validityDismissed: false,
+    revealedSensitivePaths: new Set(),
+  };
+}
+
+const cvs = createConfigEphemeralState();
+
+function isSensitivePathRevealed(path: Array<string | number>): boolean {
+  const key = pathKey(path);
+  return key ? cvs.revealedSensitivePaths.has(key) : false;
+}
+
+function toggleSensitivePathReveal(path: Array<string | number>) {
+  const key = pathKey(path);
+  if (!key) {
+    return;
+  }
+  if (cvs.revealedSensitivePaths.has(key)) {
+    cvs.revealedSensitivePaths.delete(key);
+  } else {
+    cvs.revealedSensitivePaths.add(key);
+  }
+}
+
+export function resetConfigViewStateForTests() {
+  Object.assign(cvs, createConfigEphemeralState());
+}
+
 export function renderConfig(props: ConfigProps) {
+  const showModeToggle = props.showModeToggle ?? false;
+  const includeVirtualSections = props.includeVirtualSections ?? true;
+  const include = props.includeSections?.length ? new Set(props.includeSections) : null;
+  const exclude = props.excludeSections?.length ? new Set(props.excludeSections) : null;
   const validityMap = {
     valid: t("config.validity.valid"),
     invalid: t("config.validity.invalid"),
@@ -397,37 +804,65 @@ export function renderConfig(props: ConfigProps) {
   };
   const validity = props.valid == null ? "unknown" : props.valid ? "valid" : "invalid";
   const validityText = validityMap[validity];
-  const analysis = analyzeConfigSchema(props.schema);
+  const rawAnalysis = analyzeConfigSchema(props.schema);
+  const analysis = {
+    schema: scopeSchemaSections(rawAnalysis.schema, { include, exclude }),
+    unsupportedPaths: scopeUnsupportedPaths(rawAnalysis.unsupportedPaths, { include, exclude }),
+  };
   const formUnsafe = analysis.schema ? analysis.unsupportedPaths.length > 0 : false;
+  const rawAvailable = props.rawAvailable ?? true;
+  const formMode = showModeToggle && rawAvailable ? props.formMode : props.formMode;
+  const envSensitiveVisible = cvs.envRevealed;
+  const requestUpdate = props.onRequestUpdate ?? (() => props.onRawChange(props.raw));
 
   // Get available sections from schema
   const schemaProps = analysis.schema?.properties ?? {};
-  const availableSections = SECTIONS.filter((s) => s.key in schemaProps);
 
-  // Add any sections in schema but not in our list
+  const VIRTUAL_SECTIONS = new Set(["__appearance__"]);
+  // oxlint-disable-next-line no-unused-vars
+  const visibleCategories = SECTION_CATEGORIES.map((cat) => ({
+    ...cat,
+    sections: cat.sections.filter(
+      (s) => (includeVirtualSections && VIRTUAL_SECTIONS.has(s.key)) || s.key in schemaProps,
+    ),
+  })).filter((cat) => cat.sections.length > 0);
+
+  // Build flat section list for sidebar nav (preserving local subsection support)
+  const availableSections = SECTIONS.filter((s) => s.key in schemaProps);
   const knownKeys = new Set(SECTIONS.map((s) => s.key));
   const extraSections = Object.keys(schemaProps)
     .filter((k) => !knownKeys.has(k))
     .map((k) => ({ key: k, label: () => humanize(k) }));
-
   const allSections = [...availableSections, ...extraSections];
 
+  const isVirtualSection =
+    includeVirtualSections &&
+    props.activeSection != null &&
+    VIRTUAL_SECTIONS.has(props.activeSection);
   const activeSectionSchema =
-    props.activeSection && analysis.schema && schemaType(analysis.schema) === "object"
+    props.activeSection &&
+    !isVirtualSection &&
+    analysis.schema &&
+    schemaType(analysis.schema) === "object"
       ? analysis.schema.properties?.[props.activeSection]
       : undefined;
-  const activeSectionMeta = props.activeSection
-    ? resolveSectionMeta(props.activeSection, activeSectionSchema)
-    : null;
-  const subsections = props.activeSection
-    ? resolveSubsections({
-        key: props.activeSection,
-        schema: activeSectionSchema,
-        uiHints: props.uiHints,
-      })
-    : [];
+  const activeSectionMeta =
+    props.activeSection && !isVirtualSection
+      ? resolveSectionMeta(props.activeSection, activeSectionSchema)
+      : null;
+  const subsections =
+    props.activeSection && !isVirtualSection
+      ? resolveSubsections({
+          key: props.activeSection,
+          schema: activeSectionSchema,
+          uiHints: props.uiHints,
+        })
+      : [];
   const allowSubnav =
-    props.formMode === "form" && Boolean(props.activeSection) && subsections.length > 0;
+    formMode === "form" &&
+    Boolean(props.activeSection) &&
+    !isVirtualSection &&
+    subsections.length > 0;
   const isAllSubsection = props.activeSubsection === ALL_SUBSECTION;
   const effectiveSubsection = props.searchQuery
     ? null
@@ -436,25 +871,27 @@ export function renderConfig(props: ConfigProps) {
       : (props.activeSubsection ?? subsections[0]?.key ?? null);
 
   // Compute diff for showing changes (works for both form and raw modes)
-  const diff = props.formMode === "form" ? computeDiff(props.originalValue, props.formValue) : [];
-  const hasRawChanges = props.formMode === "raw" && props.raw !== props.originalRaw;
-  const hasChanges = props.formMode === "form" ? diff.length > 0 : hasRawChanges;
+  const diff = formMode === "form" ? computeDiff(props.originalValue, props.formValue) : [];
+  const hasRawChanges = formMode === "raw" && props.raw !== props.originalRaw;
+  const hasChanges = formMode === "form" ? diff.length > 0 : hasRawChanges;
 
   // Save/apply buttons require actual changes to be enabled.
-  // Note: formUnsafe warns about unsupported schema paths but shouldn't block saving.
   const canSaveForm = Boolean(props.formValue) && !props.loading && Boolean(analysis.schema);
   const canSave =
-    props.connected &&
-    !props.saving &&
-    hasChanges &&
-    (props.formMode === "raw" ? true : canSaveForm);
+    props.connected && !props.saving && hasChanges && (formMode === "raw" ? true : canSaveForm);
   const canApply =
     props.connected &&
     !props.applying &&
     !props.updating &&
     hasChanges &&
-    (props.formMode === "raw" ? true : canSaveForm);
+    (formMode === "raw" ? true : canSaveForm);
   const canUpdate = props.connected && !props.applying && !props.updating;
+
+  const showAppearanceOnRoot =
+    includeVirtualSections &&
+    formMode === "form" &&
+    props.activeSection === null &&
+    Boolean(include?.has("__appearance__"));
 
   return html`
     <div class="config-layout">
@@ -486,6 +923,7 @@ export function renderConfig(props: ConfigProps) {
             type="text"
             class="config-search__input"
             placeholder="${t("config.search.placeholder")}"
+            aria-label="Search settings"
             .value=${props.searchQuery}
             @input=${(e: Event) => props.onSearchChange((e.target as HTMLInputElement).value)}
           />
@@ -494,6 +932,7 @@ export function renderConfig(props: ConfigProps) {
               ? html`
                 <button
                   class="config-search__clear"
+                  aria-label="Clear search"
                   @click=${() => props.onSearchChange("")}
                 >
                   ×
@@ -525,20 +964,36 @@ export function renderConfig(props: ConfigProps) {
               </button>
             `,
           )}
+          ${
+            includeVirtualSections
+              ? html`
+                <button
+                  class="config-nav__item ${props.activeSection === "__appearance__" ? "active" : ""}"
+                  @click=${() => props.onSectionChange("__appearance__")}
+                >
+                  <span class="config-nav__icon">${getSectionIcon("__appearance__")}</span>
+                  <span class="config-nav__label">${t("tabs.appearance")}</span>
+                </button>
+              `
+              : nothing
+          }
         </nav>
 
         <!-- Mode toggle at bottom -->
         <div class="config-sidebar__footer">
           <div class="config-mode-toggle">
             <button
-              class="config-mode-toggle__btn ${props.formMode === "form" ? "active" : ""}"
+              class="config-mode-toggle__btn ${formMode === "form" ? "active" : ""}"
               ?disabled=${props.schemaLoading || !props.schema}
+              title=${formUnsafe ? "Form view can't safely edit some fields" : ""}
               @click=${() => props.onFormModeChange("form")}
             >
               ${t("config.mode.form")}
             </button>
             <button
-              class="config-mode-toggle__btn ${props.formMode === "raw" ? "active" : ""}"
+              class="config-mode-toggle__btn ${formMode === "raw" ? "active" : ""}"
+              ?disabled=${!rawAvailable}
+              title=${rawAvailable ? "" : "Raw mode unavailable for this snapshot"}
               @click=${() => props.onFormModeChange("raw")}
             >
               ${t("config.mode.raw")}
@@ -557,7 +1012,7 @@ export function renderConfig(props: ConfigProps) {
                 ? html`
                   <span class="config-changes-badge"
                     >${
-                      props.formMode === "raw"
+                      formMode === "raw"
                         ? t("config.changes.unsaved")
                         : diff.length !== 1
                           ? t("config.changes.count_plural").replace("{count}", String(diff.length))
@@ -571,12 +1026,34 @@ export function renderConfig(props: ConfigProps) {
             }
           </div>
           <div class="config-actions__right">
+            ${
+              !rawAvailable
+                ? html`
+                    <span class="config-status muted"
+                      >Raw mode disabled (snapshot cannot safely round-trip raw text).</span
+                    >
+                  `
+                : nothing
+            }
+            ${
+              props.onOpenFile
+                ? html`
+                  <button
+                    class="btn btn--sm"
+                    title=${props.configPath ? `Open ${props.configPath}` : "Open config file"}
+                    @click=${props.onOpenFile}
+                  >
+                    ${icons.fileText} Open
+                  </button>
+                `
+                : nothing
+            }
             <button
               class="btn btn--sm"
               ?disabled=${props.loading}
               @click=${props.onReload}
             >
-              ${props.loading ? t("config.button.reload_loading") : t("config.button.reload")}
+              ${props.loading ? t("common.loading") : t("common.reload")}
             </button>
             <button
               class="btn btn--sm primary"
@@ -602,9 +1079,45 @@ export function renderConfig(props: ConfigProps) {
           </div>
         </div>
 
+        ${
+          validity === "invalid" && !cvs.validityDismissed
+            ? html`
+              <div class="config-validity-warning">
+                <svg
+                  class="config-validity-warning__icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  width="16"
+                  height="16"
+                >
+                  <path
+                    d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                  ></path>
+                  <line x1="12" y1="9" x2="12" y2="13"></line>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+                <span class="config-validity-warning__text"
+                  >Your configuration is invalid. Some settings may not work as expected.</span
+                >
+                <button
+                  class="btn btn--sm"
+                  @click=${() => {
+                    cvs.validityDismissed = true;
+                    requestUpdate();
+                  }}
+                >
+                  Don't remind again
+                </button>
+              </div>
+            `
+            : nothing
+        }
+
         <!-- Diff panel (form mode only - raw mode doesn't have granular diff) -->
         ${
-          hasChanges && props.formMode === "form"
+          hasChanges && formMode === "form"
             ? html`
               <details class="config-diff">
                 <summary class="config-diff__summary">
@@ -635,11 +1148,11 @@ export function renderConfig(props: ConfigProps) {
                         <div class="config-diff__path">${change.path}</div>
                         <div class="config-diff__values">
                           <span class="config-diff__from"
-                            >${truncateValue(change.from)}</span
+                            >${renderDiffValue(change.path, change.from, props.uiHints)}</span
                           >
                           <span class="config-diff__arrow">→</span>
                           <span class="config-diff__to"
-                            >${truncateValue(change.to)}</span
+                            >${renderDiffValue(change.path, change.to, props.uiHints)}</span
                           >
                         </div>
                       </div>
@@ -651,7 +1164,7 @@ export function renderConfig(props: ConfigProps) {
             : nothing
         }
         ${
-          activeSectionMeta && props.formMode === "form"
+          activeSectionMeta && formMode === "form"
             ? html`
               <div class="config-section-hero">
                 <div class="config-section-hero__icon">
@@ -669,6 +1182,35 @@ export function renderConfig(props: ConfigProps) {
                       : nothing
                   }
                 </div>
+                ${
+                  props.activeSection === "env"
+                    ? html`
+                      <button
+                        class="config-env-peek-btn ${
+                          envSensitiveVisible ? "config-env-peek-btn--active" : ""
+                        }"
+                        title=${envSensitiveVisible ? "Hide env values" : "Reveal env values"}
+                        @click=${() => {
+                          cvs.envRevealed = !cvs.envRevealed;
+                          requestUpdate();
+                        }}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          width="16"
+                          height="16"
+                        >
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                          <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                        Peek
+                      </button>
+                    `
+                    : nothing
+                }
               </div>
             `
             : nothing
@@ -704,48 +1246,118 @@ export function renderConfig(props: ConfigProps) {
         <!-- Form content -->
         <div class="config-content">
           ${
-            props.formMode === "form"
-              ? html`
-                ${
-                  props.schemaLoading
-                    ? html`
-                        <div class="config-loading">
-                          <div class="config-loading__spinner"></div>
-                          <span>${t("config.loading.schema")}</span>
-                        </div>
-                      `
-                    : renderConfigForm({
-                        schema: analysis.schema,
-                        uiHints: props.uiHints,
-                        value: props.formValue,
-                        disabled: props.loading || !props.formValue,
-                        unsupportedPaths: analysis.unsupportedPaths,
-                        onPatch: props.onFormPatch,
-                        searchQuery: props.searchQuery,
-                        activeSection: props.activeSection,
-                        activeSubsection: effectiveSubsection,
-                      })
-                }
-                ${
-                  formUnsafe
-                    ? html`
-                        <div class="callout danger" style="margin-top: 12px">
-                          ${t("config.warning.unsafe_form")}
-                        </div>
-                      `
-                    : nothing
-                }
-              `
-              : html`
-                <label class="field config-raw-field">
-                  <span>${t("config.raw.label")}</span>
-                  <textarea
-                    .value=${props.raw}
-                    @input=${(e: Event) =>
-                      props.onRawChange((e.target as HTMLTextAreaElement).value)}
-                  ></textarea>
-                </label>
-              `
+            props.activeSection === "__appearance__"
+              ? includeVirtualSections
+                ? renderAppearanceSection(props)
+                : nothing
+              : formMode === "form"
+                ? html`
+                  ${showAppearanceOnRoot ? renderAppearanceSection(props) : nothing}
+                  ${
+                    props.schemaLoading
+                      ? html`
+                          <div class="config-loading">
+                            <div class="config-loading__spinner"></div>
+                            <span>${t("config.loading.schema")}</span>
+                          </div>
+                        `
+                      : renderConfigForm({
+                          schema: analysis.schema,
+                          uiHints: props.uiHints,
+                          value: props.formValue,
+                          rawAvailable,
+                          disabled: props.loading || !props.formValue,
+                          unsupportedPaths: analysis.unsupportedPaths,
+                          onPatch: props.onFormPatch,
+                          searchQuery: props.searchQuery,
+                          activeSection: props.activeSection,
+                          activeSubsection: effectiveSubsection,
+                          revealSensitive:
+                            props.activeSection === "env" ? envSensitiveVisible : false,
+                          isSensitivePathRevealed,
+                          onToggleSensitivePath: (path) => {
+                            toggleSensitivePathReveal(path);
+                            requestUpdate();
+                          },
+                        })
+                  }
+                  ${
+                    formUnsafe
+                      ? html`
+                          <div class="callout danger" style="margin-top: 12px">
+                            ${t("config.warning.unsafe_form")}
+                          </div>
+                        `
+                      : nothing
+                  }
+                `
+                : (() => {
+                    const sensitiveCount = countSensitiveConfigValues(
+                      props.formValue,
+                      [],
+                      props.uiHints,
+                    );
+                    const blurred = sensitiveCount > 0 && !cvs.rawRevealed;
+                    return html`
+                    ${
+                      formUnsafe
+                        ? html`
+                            <div class="callout info" style="margin-bottom: 12px">
+                              Your config contains fields the form editor can't safely represent. Use Raw mode to edit those
+                              entries.
+                            </div>
+                          `
+                        : nothing
+                    }
+                    <div class="field config-raw-field">
+                      <span style="display:flex;align-items:center;gap:8px;">
+                        ${t("config.raw.label")}
+                        ${
+                          sensitiveCount > 0
+                            ? html`
+                              <span class="pill pill--sm"
+                                >${sensitiveCount} secret${sensitiveCount === 1 ? "" : "s"}
+                                ${blurred ? "redacted" : "visible"}</span
+                              >
+                              <button
+                                class="btn btn--icon config-raw-toggle ${blurred ? "" : "active"}"
+                                title=${
+                                  blurred ? "Reveal sensitive values" : "Hide sensitive values"
+                                }
+                                aria-label="Toggle raw config redaction"
+                                aria-pressed=${!blurred}
+                                @click=${() => {
+                                  cvs.rawRevealed = !cvs.rawRevealed;
+                                  requestUpdate();
+                                }}
+                              >
+                                ${blurred ? icons.eyeOff : icons.eye}
+                              </button>
+                            `
+                            : nothing
+                        }
+                      </span>
+                      ${
+                        blurred
+                          ? html`
+                            <div class="callout info" style="margin-top: 12px">
+                              ${sensitiveCount} sensitive value${sensitiveCount === 1 ? "" : "s"}
+                              hidden. Use the reveal button above to edit the raw config.
+                            </div>
+                          `
+                          : html`
+                            <textarea
+                              placeholder="Raw config (JSON/JSON5)"
+                              .value=${props.raw}
+                              @input=${(e: Event) => {
+                                props.onRawChange((e.target as HTMLTextAreaElement).value);
+                              }}
+                            ></textarea>
+                          `
+                      }
+                    </div>
+                  `;
+                  })()
           }
         </div>
 

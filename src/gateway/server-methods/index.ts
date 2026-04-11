@@ -26,6 +26,7 @@ import { connectHandlers } from "../../../upstream/src/gateway/server-methods/co
 import { cronHandlers } from "../../../upstream/src/gateway/server-methods/cron.js";
 import { deviceHandlers } from "../../../upstream/src/gateway/server-methods/devices.js";
 import { doctorHandlers } from "../../../upstream/src/gateway/server-methods/doctor.js";
+import { doctorOverrideHandlers } from "./doctor-override.js";
 import { execApprovalsHandlers } from "../../../upstream/src/gateway/server-methods/exec-approvals.js";
 import { healthHandlers } from "../../../upstream/src/gateway/server-methods/health.js";
 import { logsHandlers } from "../../../upstream/src/gateway/server-methods/logs.js";
@@ -139,6 +140,7 @@ const hardcodedHandlers: GatewayRequestHandlers = {
   // 配置与向导
   ...configHandlers,
   ...wizardHandlers,
+  ...doctorOverrideHandlers,  // 覆盖上游 doctor.memory.dreamDiary，支持 agentId 参数
   ...doctorHandlers,
 
   // 模型与 TTS

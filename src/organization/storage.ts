@@ -6,9 +6,14 @@
 
 import { join } from "node:path";
 import { STATE_DIR } from "../../upstream/src/config/paths.js";
-import { createAsyncLock, readJsonFile, writeJsonAtomic } from "../../upstream/src/infra/json-files.js";
+import {
+  createAsyncLock,
+  readJsonFile,
+  writeJsonAtomic,
+} from "../../upstream/src/infra/json-files.js";
 import type {
   Organization,
+  Team,
   CollaborationRelation,
   OrganizationMember,
   AgentRecruitRequest,
@@ -22,6 +27,8 @@ import type {
  */
 interface OrganizationStorage {
   organizations: Record<string, Organization>;
+  /** 团队（团队ID → Team） */
+  teams: Record<string, Team>;
   relations: Record<string, CollaborationRelation>;
   recruitRequests: Record<string, AgentRecruitRequest>;
   onboardingInfo: Record<string, AgentOnboardingInfo>;
@@ -49,6 +56,7 @@ export class OrganizationStorageService {
   private getDefaultStorage(): OrganizationStorage {
     return {
       organizations: {},
+      teams: {},
       relations: {},
       recruitRequests: {},
       onboardingInfo: {},
@@ -72,9 +80,12 @@ export class OrganizationStorageService {
       return this.cache;
     }
 
-    // 兼容旧版本数据（projectTeamRelations 字段不存在时补充默认值）
+    // 兼容旧版本数据（新增字段不存在时补充默认值）
     if (!data.projectTeamRelations) {
       data.projectTeamRelations = {};
+    }
+    if (!data.teams) {
+      data.teams = {};
     }
 
     this.cache = data;
@@ -587,6 +598,91 @@ export class OrganizationStorageService {
       organizationsByType,
       relationsByType,
     };
+  }
+
+  // ==================== 团队 CRUD ====================
+
+  /**
+   * 创建团队
+   */
+  async createTeam(team: Team): Promise<Team> {
+    return this.lock(async () => {
+      const data = await this.load();
+
+      if (data.teams[team.id]) {
+        throw new Error(`Team already exists: ${team.id}`);
+      }
+
+      data.teams[team.id] = team;
+      await this.save(data);
+
+      return team;
+    });
+  }
+
+  /**
+   * 获取团队
+   */
+  async getTeam(id: string): Promise<Team | null> {
+    const data = await this.load();
+    return data.teams[id] || null;
+  }
+
+  /**
+   * 更新团队
+   */
+  async updateTeam(id: string, updates: Partial<Team>): Promise<Team> {
+    return this.lock(async () => {
+      const data = await this.load();
+      const team = data.teams[id];
+
+      if (!team) {
+        throw new Error(`Team not found: ${id}`);
+      }
+
+      const updated: Team = { ...team, ...updates, id, updatedAt: Date.now() };
+      data.teams[id] = updated;
+      await this.save(data);
+
+      return updated;
+    });
+  }
+
+  /**
+   * 删除团队
+   */
+  async deleteTeam(id: string): Promise<boolean> {
+    return this.lock(async () => {
+      const data = await this.load();
+
+      if (!data.teams[id]) {
+        return false;
+      }
+
+      delete data.teams[id];
+      await this.save(data);
+
+      return true;
+    });
+  }
+
+  /**
+   * 列出团队
+   */
+  async listTeams(filter?: { organizationId?: string; type?: string }): Promise<Team[]> {
+    const data = await this.load();
+    let teams = Object.values(data.teams);
+
+    if (filter) {
+      if (filter.organizationId) {
+        teams = teams.filter((t) => t.organizationId === filter.organizationId);
+      }
+      if (filter.type) {
+        teams = teams.filter((t) => t.type === filter.type);
+      }
+    }
+
+    return teams;
   }
 
   // ==================== 项目-团队关系 CRUD ====================

@@ -573,6 +573,10 @@ export function createTaskReportToSupervisorTool(opts?: {
     description:
       "Report task status back to the supervisor agent. MUST be called in the following situations: " +
       '(1) Task completed successfully — use status="done" with a result summary. ' +
+      "    BEFORE reporting done, you MUST complete all three steps in order: " +
+      "    Step A — Run quality checks (typecheck / lint / test); do NOT report done if checks fail. " +
+      "    Step B — Commit ALL changes with message format: 'feat: [Task ID] - [Task Title]'. " +
+      "    Step C — Append a session progress note via task_progress_note_append (## Accomplished / ## Findings / ## Decisions / ## Next Steps). " +
       '(2) Task is blocked and cannot proceed — use status="blocked" and describe the blocker in errorMessage so the supervisor can coordinate a solution. ' +
       '(3) Task must be abandoned — use status="cancelled" with a reason. ' +
       "DO NOT silently stop working on a task. Always report back so the supervisor knows the current situation and can take action.",

@@ -1,3 +1,5 @@
+import { coerceIdentityValue } from "../../../src/shared/assistant-identity-values.js";
+
 const MAX_ASSISTANT_NAME = 50;
 const MAX_ASSISTANT_AVATAR = 200;
 
@@ -10,20 +12,6 @@ export type AssistantIdentity = {
   avatar: string | null;
 };
 
-function coerceIdentityValue(value: string | undefined, maxLength: number): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  if (trimmed.length <= maxLength) {
-    return trimmed;
-  }
-  return trimmed.slice(0, maxLength);
-}
-
 export function normalizeAssistantIdentity(
   input?: Partial<AssistantIdentity> | null,
 ): AssistantIdentity {
@@ -35,17 +23,21 @@ export function normalizeAssistantIdentity(
 }
 
 /**
- * Resolve assistant identity from injected environment variables or defaults
+ * 解析页面内嵌的助手身份信息（通过 window.__OPENCLAW_ASSISTANT_* 注入）
  */
 export function resolveInjectedAssistantIdentity(): AssistantIdentity {
-  // Try to read from environment variables or window object
-  const envName = (window as any).__OPENCLAW_ASSISTANT_NAME__;
-  const envAvatar = (window as any).__OPENCLAW_ASSISTANT_AVATAR__;
-  const envAgentId = (window as any).__OPENCLAW_ASSISTANT_AGENT_ID__;
-
-  return normalizeAssistantIdentity({
-    name: envName,
-    avatar: envAvatar,
-    agentId: envAgentId,
-  });
+  const w = window as Record<string, unknown>;
+  const name =
+    typeof w.__OPENCLAW_ASSISTANT_NAME === "string" && w.__OPENCLAW_ASSISTANT_NAME.trim()
+      ? w.__OPENCLAW_ASSISTANT_NAME.trim()
+      : DEFAULT_ASSISTANT_NAME;
+  const avatar =
+    typeof w.__OPENCLAW_ASSISTANT_AVATAR === "string" && w.__OPENCLAW_ASSISTANT_AVATAR.trim()
+      ? w.__OPENCLAW_ASSISTANT_AVATAR.trim()
+      : null;
+  const agentId =
+    typeof w.__OPENCLAW_ASSISTANT_AGENT_ID === "string" && w.__OPENCLAW_ASSISTANT_AGENT_ID.trim()
+      ? w.__OPENCLAW_ASSISTANT_AGENT_ID.trim()
+      : null;
+  return { name, avatar, agentId };
 }

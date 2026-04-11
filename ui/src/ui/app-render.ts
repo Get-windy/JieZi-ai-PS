@@ -1,5 +1,6 @@
 import { html, nothing } from "lit";
 import { parseAgentSessionKey } from "../../../upstream/src/routing/session-key.js";
+import { resolveAgentIdFromSessionKey } from "./session-key.ts";
 import { refreshChatAvatar } from "./app-chat.ts";
 import { startMonitorPolling, stopMonitorPolling } from "./app-polling.ts";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
@@ -51,7 +52,13 @@ import {
   type AgentPhase5State,
 } from "./controllers/agent-phase5.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
-import { loadAgents } from "./controllers/agents.ts";
+import {
+  loadAgents,
+  loadToolsCatalog,
+  loadToolsEffective,
+  buildToolsEffectiveRequestKey,
+  resetToolsEffectiveState,
+} from "./controllers/agents.ts";
 import { loadApprovals, loadApprovalStats, respondToApproval } from "./controllers/approvals.ts";
 import { loadChannels } from "./controllers/channels.ts";
 import { buildNavigationTree } from "./controllers/chat-navigation.ts";
@@ -84,6 +91,13 @@ import {
   revokeDeviceToken,
   rotateDeviceToken,
 } from "./controllers/devices.ts";
+import {
+  loadDreamingStatus,
+  loadDreamDiary,
+  loadDreamTargets,
+  resolveConfiguredDreaming,
+  updateDreamingEnabled,
+} from "./controllers/dreaming.ts";
 import {
   loadExecApprovals,
   removeExecApprovalsFormValue,
@@ -152,7 +166,7 @@ import {
   loadScenarioRuns,
   loadRecommendations,
 } from "./controllers/scenarios.ts";
-import { deleteSession, loadSessions, patchSession } from "./controllers/sessions.ts";
+import { deleteSessionsAndRefresh, loadSessions, patchSession } from "./controllers/sessions.ts";
 import {
   installSkill,
   loadSkills,
@@ -169,6 +183,56 @@ import {
   changeFilterSource,
 } from "./controllers/skills.ts";
 import { loadSuperAdmins } from "./controllers/super-admin.ts";
+
+type LazyState<T> = { mod: T | null; promise: Promise<T> | null };
+let _pendingUpdate: (() => void) | undefined = undefined;
+
+function createLazy<T>(loader: () => Promise<T>): () => T | null {
+  const s: LazyState<T> = { mod: null, promise: null };
+  return () => {
+    if (s.mod) {
+      return s.mod;
+    }
+    if (!s.promise) {
+      s.promise = loader().then((m) => {
+        s.mod = m;
+        _pendingUpdate?.();
+        return m;
+      });
+    }
+    return null;
+  };
+}
+
+function lazyRender<M>(getter: () => M | null, render: (mod: M) => unknown) {
+  const mod = getter();
+  return mod ? render(mod) : nothing;
+}
+
+const lazyDreamingView = createLazy(() => import("./views/dreaming.ts"));
+
+function formatDreamNextCycle(nextRunAtMs: number | undefined): string | null {
+  if (typeof nextRunAtMs !== "number" || !Number.isFinite(nextRunAtMs)) {
+    return null;
+  }
+  return new Date(nextRunAtMs).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function resolveDreamingNextCycle(
+  status: { phases: Record<string, { enabled: boolean; nextRunAtMs?: number }> } | null,
+): string | null {
+  if (!status) {
+    return null;
+  }
+  const nextRunAtMs = Object.values(status.phases)
+    .filter((phase) => phase.enabled && typeof phase.nextRunAtMs === "number")
+    .map((phase) => phase.nextRunAtMs as number)
+    .toSorted((a, b) => a - b)[0];
+  return formatDreamNextCycle(nextRunAtMs);
+}
 
 /**
  * 加载 agent 三文件身份（SOUL.md / AGENT.md / USER.md）
@@ -428,6 +492,13 @@ function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
 }
 
 export function renderApp(state: AppViewState) {
+  const updatableState = state as AppViewState & { requestUpdate?: () => void };
+  const requestHostUpdate =
+    typeof updatableState.requestUpdate === "function"
+      ? () => updatableState.requestUpdate?.()
+      : undefined;
+  _pendingUpdate = requestHostUpdate;
+
   const presenceCount = state.presenceEntries.length;
   const sessionsCount = state.sessionsResult?.count ?? null;
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
@@ -445,6 +516,10 @@ export function renderApp(state: AppViewState) {
     state.agentsList?.defaultId ??
     state.agentsList?.agents?.[0]?.id ??
     null;
+  const activeSessionAgentId = resolveAgentIdFromSessionKey(state.sessionKey);
+  const toolsPanelUsesActiveSession = Boolean(
+    resolvedAgentId && activeSessionAgentId && resolvedAgentId === activeSessionAgentId,
+  );
 
   return html`
     <div class="shell ${isChat ? "shell--chat" : ""} ${chatFocus ? "shell--chat-focus" : ""} ${state.settings.navCollapsed ? "shell--nav-collapsed" : ""} ${state.onboarding ? "shell--onboarding" : ""}">
@@ -1314,15 +1389,81 @@ export function renderApp(state: AppViewState) {
                 includeGlobal: state.sessionsIncludeGlobal,
                 includeUnknown: state.sessionsIncludeUnknown,
                 basePath: state.basePath,
+                searchQuery: state.sessionsSearchQuery,
+                sortColumn: state.sessionsSortColumn,
+                sortDir: state.sessionsSortDir,
+                page: state.sessionsPage,
+                pageSize: state.sessionsPageSize,
+                selectedKeys: state.sessionsSelectedKeys,
+                expandedCheckpointKey: state.sessionsExpandedCheckpointKey,
+                checkpointItemsByKey: state.sessionsCheckpointItemsByKey,
+                checkpointLoadingKey: state.sessionsCheckpointLoadingKey,
+                checkpointBusyKey: state.sessionsCheckpointBusyKey,
+                checkpointErrorByKey: state.sessionsCheckpointErrorByKey,
                 onFiltersChange: (next) => {
                   state.sessionsFilterActive = next.activeMinutes;
                   state.sessionsFilterLimit = next.limit;
                   state.sessionsIncludeGlobal = next.includeGlobal;
                   state.sessionsIncludeUnknown = next.includeUnknown;
                 },
+                onSearchChange: (q) => {
+                  state.sessionsSearchQuery = q;
+                  state.sessionsPage = 0;
+                },
+                onSortChange: (col, dir) => {
+                  state.sessionsSortColumn = col;
+                  state.sessionsSortDir = dir;
+                  state.sessionsPage = 0;
+                },
+                onPageChange: (p) => {
+                  state.sessionsPage = p;
+                },
+                onPageSizeChange: (s) => {
+                  state.sessionsPageSize = s;
+                  state.sessionsPage = 0;
+                },
                 onRefresh: () => loadSessions(state),
                 onPatch: (key, patch) => patchSession(state, key, patch),
-                onDelete: (key) => deleteSession(state, key),
+                onToggleSelect: (key) => {
+                  const next = new Set(state.sessionsSelectedKeys);
+                  if (next.has(key)) {
+                    next.delete(key);
+                  } else {
+                    next.add(key);
+                  }
+                  state.sessionsSelectedKeys = next;
+                },
+                onSelectPage: (keys) => {
+                  const next = new Set(state.sessionsSelectedKeys);
+                  for (const k of keys) {next.add(k);}
+                  state.sessionsSelectedKeys = next;
+                },
+                onDeselectPage: (keys) => {
+                  const next = new Set(state.sessionsSelectedKeys);
+                  for (const k of keys) {next.delete(k);}
+                  state.sessionsSelectedKeys = next;
+                },
+                onDeselectAll: () => {
+                  state.sessionsSelectedKeys = new Set();
+                },
+                onDeleteSelected: async () => {
+                  const keys = [...state.sessionsSelectedKeys];
+                  const deleted = await deleteSessionsAndRefresh(
+                    state as unknown as Parameters<typeof deleteSessionsAndRefresh>[0],
+                    keys,
+                  );
+                  if (deleted.length > 0) {
+                    const next = new Set(state.sessionsSelectedKeys);
+                    for (const k of deleted) {next.delete(k);}
+                    state.sessionsSelectedKeys = next;
+                  }
+                },
+                onToggleCheckpointDetails: (sessionKey) => {
+                  state.sessionsExpandedCheckpointKey =
+                    state.sessionsExpandedCheckpointKey === sessionKey ? null : sessionKey;
+                },
+                onBranchFromCheckpoint: () => Promise.resolve(),
+                onRestoreCheckpoint: () => Promise.resolve(),
               })
             : nothing
         }
@@ -1330,267 +1471,278 @@ export function renderApp(state: AppViewState) {
         ${
           state.tab === "usage"
             ? renderUsage({
-                loading: state.usageLoading,
-                error: state.usageError,
-                startDate: state.usageStartDate,
-                endDate: state.usageEndDate,
-                sessions: state.usageResult?.sessions ?? [],
-                sessionsLimitReached: (state.usageResult?.sessions?.length ?? 0) >= 1000,
-                totals: state.usageResult?.totals ?? null,
-                aggregates: state.usageResult?.aggregates ?? null,
-                costDaily: state.usageCostSummary?.daily ?? [],
-                selectedSessions: state.usageSelectedSessions,
-                selectedDays: state.usageSelectedDays,
-                selectedHours: state.usageSelectedHours,
-                chartMode: state.usageChartMode,
-                dailyChartMode: state.usageDailyChartMode,
-                timeSeriesMode: state.usageTimeSeriesMode,
-                timeSeriesBreakdownMode: state.usageTimeSeriesBreakdownMode,
-                timeSeries: state.usageTimeSeries,
-                timeSeriesLoading: state.usageTimeSeriesLoading,
-                sessionLogs: state.usageSessionLogs,
-                sessionLogsLoading: state.usageSessionLogsLoading,
-                sessionLogsExpanded: state.usageSessionLogsExpanded,
-                logFilterRoles: state.usageLogFilterRoles,
-                logFilterTools: state.usageLogFilterTools,
-                logFilterHasTools: state.usageLogFilterHasTools,
-                logFilterQuery: state.usageLogFilterQuery,
-                query: state.usageQuery,
-                queryDraft: state.usageQueryDraft,
-                sessionSort: state.usageSessionSort,
-                sessionSortDir: state.usageSessionSortDir,
-                recentSessions: state.usageRecentSessions,
-                sessionsTab: state.usageSessionsTab,
-                visibleColumns:
-                  state.usageVisibleColumns as import("./views/usage.ts").UsageColumnId[],
-                timeZone: state.usageTimeZone,
-                contextExpanded: state.usageContextExpanded,
-                headerPinned: state.usageHeaderPinned,
-                timeSeriesCursorStart: state.usageTimeSeriesCursorStart,
-                timeSeriesCursorEnd: state.usageTimeSeriesCursorEnd,
-                onStartDateChange: (date) => {
-                  state.usageStartDate = date;
-                  state.usageSelectedDays = [];
-                  state.usageSelectedHours = [];
-                  state.usageSelectedSessions = [];
-                  debouncedLoadUsage(state);
+                data: {
+                  loading: state.usageLoading,
+                  error: state.usageError,
+                  sessions: state.usageResult?.sessions ?? [],
+                  sessionsLimitReached: (state.usageResult?.sessions?.length ?? 0) >= 1000,
+                  totals: state.usageResult?.totals ?? null,
+                  aggregates: state.usageResult?.aggregates ?? null,
+                  costDaily: state.usageCostSummary?.daily ?? [],
                 },
-                onEndDateChange: (date) => {
-                  state.usageEndDate = date;
-                  state.usageSelectedDays = [];
-                  state.usageSelectedHours = [];
-                  state.usageSelectedSessions = [];
-                  debouncedLoadUsage(state);
+                filters: {
+                  startDate: state.usageStartDate,
+                  endDate: state.usageEndDate,
+                  selectedSessions: state.usageSelectedSessions,
+                  selectedDays: state.usageSelectedDays,
+                  selectedHours: state.usageSelectedHours,
+                  query: state.usageQuery,
+                  queryDraft: state.usageQueryDraft,
+                  timeZone: state.usageTimeZone,
                 },
-                onRefresh: () => loadUsage(state),
-                onTimeZoneChange: (zone) => {
-                  state.usageTimeZone = zone;
+                display: {
+                  chartMode: state.usageChartMode,
+                  dailyChartMode: state.usageDailyChartMode,
+                  sessionSort: state.usageSessionSort,
+                  sessionSortDir: state.usageSessionSortDir,
+                  recentSessions: state.usageRecentSessions,
+                  sessionsTab: state.usageSessionsTab,
+                  visibleColumns:
+                    state.usageVisibleColumns as import("./views/usage.ts").UsageColumnId[],
+                  contextExpanded: state.usageContextExpanded,
+                  headerPinned: state.usageHeaderPinned,
                 },
-                onToggleContextExpanded: () => {
-                  state.usageContextExpanded = !state.usageContextExpanded;
+                detail: {
+                  timeSeriesMode: state.usageTimeSeriesMode,
+                  timeSeriesBreakdownMode: state.usageTimeSeriesBreakdownMode,
+                  timeSeries: state.usageTimeSeries,
+                  timeSeriesLoading: state.usageTimeSeriesLoading,
+                  timeSeriesCursorStart: state.usageTimeSeriesCursorStart,
+                  timeSeriesCursorEnd: state.usageTimeSeriesCursorEnd,
+                  sessionLogs: state.usageSessionLogs,
+                  sessionLogsLoading: state.usageSessionLogsLoading,
+                  sessionLogsExpanded: state.usageSessionLogsExpanded,
+                  logFilters: {
+                    roles: state.usageLogFilterRoles,
+                    tools: state.usageLogFilterTools,
+                    hasTools: state.usageLogFilterHasTools,
+                    query: state.usageLogFilterQuery,
+                  },
                 },
-                onToggleSessionLogsExpanded: () => {
-                  state.usageSessionLogsExpanded = !state.usageSessionLogsExpanded;
-                },
-                onLogFilterRolesChange: (next) => {
-                  state.usageLogFilterRoles = next;
-                },
-                onLogFilterToolsChange: (next) => {
-                  state.usageLogFilterTools = next;
-                },
-                onLogFilterHasToolsChange: (next) => {
-                  state.usageLogFilterHasTools = next;
-                },
-                onLogFilterQueryChange: (next) => {
-                  state.usageLogFilterQuery = next;
-                },
-                onLogFilterClear: () => {
-                  state.usageLogFilterRoles = [];
-                  state.usageLogFilterTools = [];
-                  state.usageLogFilterHasTools = false;
-                  state.usageLogFilterQuery = "";
-                },
-                onToggleHeaderPinned: () => {
-                  state.usageHeaderPinned = !state.usageHeaderPinned;
-                },
-                onSelectHour: (hour, shiftKey) => {
-                  if (shiftKey && state.usageSelectedHours.length > 0) {
-                    const allHours = Array.from({ length: 24 }, (_, i) => i);
-                    const lastSelected =
-                      state.usageSelectedHours[state.usageSelectedHours.length - 1];
-                    const lastIdx = allHours.indexOf(lastSelected);
-                    const thisIdx = allHours.indexOf(hour);
-                    if (lastIdx !== -1 && thisIdx !== -1) {
-                      const [start, end] =
-                        lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
-                      const range = allHours.slice(start, end + 1);
-                      state.usageSelectedHours = [
-                        ...new Set([...state.usageSelectedHours, ...range]),
-                      ];
-                    }
-                  } else {
-                    if (state.usageSelectedHours.includes(hour)) {
-                      state.usageSelectedHours = state.usageSelectedHours.filter((h) => h !== hour);
-                    } else {
-                      state.usageSelectedHours = [...state.usageSelectedHours, hour];
-                    }
-                  }
-                },
-                onQueryDraftChange: (query) => {
-                  state.usageQueryDraft = query;
-                  if (state.usageQueryDebounceTimer) {
-                    window.clearTimeout(state.usageQueryDebounceTimer);
-                  }
-                  state.usageQueryDebounceTimer = window.setTimeout(() => {
-                    state.usageQuery = state.usageQueryDraft;
-                    state.usageQueryDebounceTimer = null;
-                  }, 250);
-                },
-                onApplyQuery: () => {
-                  if (state.usageQueryDebounceTimer) {
-                    window.clearTimeout(state.usageQueryDebounceTimer);
-                    state.usageQueryDebounceTimer = null;
-                  }
-                  state.usageQuery = state.usageQueryDraft;
-                },
-                onClearQuery: () => {
-                  if (state.usageQueryDebounceTimer) {
-                    window.clearTimeout(state.usageQueryDebounceTimer);
-                    state.usageQueryDebounceTimer = null;
-                  }
-                  state.usageQueryDraft = "";
-                  state.usageQuery = "";
-                },
-                onSessionSortChange: (sort) => {
-                  state.usageSessionSort = sort;
-                },
-                onSessionSortDirChange: (dir) => {
-                  state.usageSessionSortDir = dir;
-                },
-                onSessionsTabChange: (tab) => {
-                  state.usageSessionsTab = tab;
-                },
-                onToggleColumn: (column) => {
-                  if (state.usageVisibleColumns.includes(column)) {
-                    state.usageVisibleColumns = state.usageVisibleColumns.filter(
-                      (entry) => entry !== column,
-                    );
-                  } else {
-                    state.usageVisibleColumns = [...state.usageVisibleColumns, column];
-                  }
-                },
-                onSelectSession: (key, shiftKey) => {
-                  state.usageTimeSeries = null;
-                  state.usageSessionLogs = null;
-                  state.usageRecentSessions = [
-                    key,
-                    ...state.usageRecentSessions.filter((entry) => entry !== key),
-                  ].slice(0, 8);
-
-                  if (shiftKey && state.usageSelectedSessions.length > 0) {
-                    // Shift-click: select range from last selected to this session
-                    // Sort sessions same way as displayed (by tokens or cost descending)
-                    const isTokenMode = state.usageChartMode === "tokens";
-                    const sortedSessions = [...(state.usageResult?.sessions ?? [])].toSorted(
-                      (a, b) => {
-                        const valA = isTokenMode
-                          ? (a.usage?.totalTokens ?? 0)
-                          : (a.usage?.totalCost ?? 0);
-                        const valB = isTokenMode
-                          ? (b.usage?.totalTokens ?? 0)
-                          : (b.usage?.totalCost ?? 0);
-                        return valB - valA;
-                      },
-                    );
-                    const allKeys = sortedSessions.map((s) => s.key);
-                    const lastSelected =
-                      state.usageSelectedSessions[state.usageSelectedSessions.length - 1];
-                    const lastIdx = allKeys.indexOf(lastSelected);
-                    const thisIdx = allKeys.indexOf(key);
-                    if (lastIdx !== -1 && thisIdx !== -1) {
-                      const [start, end] =
-                        lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
-                      const range = allKeys.slice(start, end + 1);
-                      const newSelection = [...new Set([...state.usageSelectedSessions, ...range])];
-                      state.usageSelectedSessions = newSelection;
-                    }
-                  } else {
-                    // Regular click: focus a single session (so details always open).
-                    // Click the focused session again to clear selection.
-                    if (
-                      state.usageSelectedSessions.length === 1 &&
-                      state.usageSelectedSessions[0] === key
-                    ) {
+                callbacks: {
+                  filters: {
+                    onStartDateChange: (date) => {
+                      state.usageStartDate = date;
+                      state.usageSelectedDays = [];
+                      state.usageSelectedHours = [];
                       state.usageSelectedSessions = [];
-                    } else {
-                      state.usageSelectedSessions = [key];
-                    }
-                  }
+                      debouncedLoadUsage(state);
+                    },
+                    onEndDateChange: (date) => {
+                      state.usageEndDate = date;
+                      state.usageSelectedDays = [];
+                      state.usageSelectedHours = [];
+                      state.usageSelectedSessions = [];
+                      debouncedLoadUsage(state);
+                    },
+                    onRefresh: () => loadUsage(state),
+                    onTimeZoneChange: (zone) => {
+                      state.usageTimeZone = zone;
+                      state.usageSelectedDays = [];
+                      state.usageSelectedHours = [];
+                      state.usageSelectedSessions = [];
+                      void loadUsage(state);
+                    },
+                    onToggleHeaderPinned: () => {
+                      state.usageHeaderPinned = !state.usageHeaderPinned;
+                    },
+                    onSelectHour: (hour, shiftKey) => {
+                      if (shiftKey && state.usageSelectedHours.length > 0) {
+                        const allHours = Array.from({ length: 24 }, (_, i) => i);
+                        const lastSelected =
+                          state.usageSelectedHours[state.usageSelectedHours.length - 1];
+                        const lastIdx = allHours.indexOf(lastSelected);
+                        const thisIdx = allHours.indexOf(hour);
+                        if (lastIdx !== -1 && thisIdx !== -1) {
+                          const [start, end] =
+                            lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
+                          const range = allHours.slice(start, end + 1);
+                          state.usageSelectedHours = [
+                            ...new Set([...state.usageSelectedHours, ...range]),
+                          ];
+                        }
+                      } else if (state.usageSelectedHours.includes(hour)) {
+                        state.usageSelectedHours = state.usageSelectedHours.filter((h) => h !== hour);
+                      } else {
+                        state.usageSelectedHours = [...state.usageSelectedHours, hour];
+                      }
+                    },
+                    onQueryDraftChange: (query) => {
+                      state.usageQueryDraft = query;
+                      if (state.usageQueryDebounceTimer) {
+                        window.clearTimeout(state.usageQueryDebounceTimer);
+                      }
+                      state.usageQueryDebounceTimer = window.setTimeout(() => {
+                        state.usageQuery = state.usageQueryDraft;
+                        state.usageQueryDebounceTimer = null;
+                      }, 250);
+                    },
+                    onApplyQuery: () => {
+                      if (state.usageQueryDebounceTimer) {
+                        window.clearTimeout(state.usageQueryDebounceTimer);
+                        state.usageQueryDebounceTimer = null;
+                      }
+                      state.usageQuery = state.usageQueryDraft;
+                    },
+                    onClearQuery: () => {
+                      if (state.usageQueryDebounceTimer) {
+                        window.clearTimeout(state.usageQueryDebounceTimer);
+                        state.usageQueryDebounceTimer = null;
+                      }
+                      state.usageQueryDraft = "";
+                      state.usageQuery = "";
+                    },
+                    onSelectDay: (day, shiftKey) => {
+                      if (shiftKey && state.usageSelectedDays.length > 0) {
+                        const allDays = (state.usageCostSummary?.daily ?? []).map((d) => d.date);
+                        const lastSelected =
+                          state.usageSelectedDays[state.usageSelectedDays.length - 1];
+                        const lastIdx = allDays.indexOf(lastSelected);
+                        const thisIdx = allDays.indexOf(day);
+                        if (lastIdx !== -1 && thisIdx !== -1) {
+                          const [start, end] =
+                            lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
+                          const range = allDays.slice(start, end + 1);
+                          state.usageSelectedDays = [...new Set([...state.usageSelectedDays, ...range])];
+                        }
+                      } else if (state.usageSelectedDays.includes(day)) {
+                        state.usageSelectedDays = state.usageSelectedDays.filter((d) => d !== day);
+                      } else {
+                        state.usageSelectedDays = [day];
+                      }
+                    },
+                    onClearDays: () => {
+                      state.usageSelectedDays = [];
+                    },
+                    onClearHours: () => {
+                      state.usageSelectedHours = [];
+                    },
+                    onClearSessions: () => {
+                      state.usageSelectedSessions = [];
+                      state.usageTimeSeries = null;
+                      state.usageSessionLogs = null;
+                    },
+                    onClearFilters: () => {
+                      state.usageSelectedDays = [];
+                      state.usageSelectedHours = [];
+                      state.usageSelectedSessions = [];
+                      state.usageTimeSeries = null;
+                      state.usageSessionLogs = null;
+                    },
+                  },
+                  display: {
+                    onChartModeChange: (mode) => {
+                      state.usageChartMode = mode;
+                    },
+                    onDailyChartModeChange: (mode) => {
+                      state.usageDailyChartMode = mode;
+                    },
+                    onSessionSortChange: (sort) => {
+                      state.usageSessionSort = sort;
+                    },
+                    onSessionSortDirChange: (dir) => {
+                      state.usageSessionSortDir = dir;
+                    },
+                    onSessionsTabChange: (tab) => {
+                      state.usageSessionsTab = tab;
+                    },
+                    onToggleColumn: (column) => {
+                      if (state.usageVisibleColumns.includes(column)) {
+                        state.usageVisibleColumns = state.usageVisibleColumns.filter(
+                          (entry) => entry !== column,
+                        );
+                      } else {
+                        state.usageVisibleColumns = [...state.usageVisibleColumns, column];
+                      }
+                    },
+                  },
+                  details: {
+                    onToggleContextExpanded: () => {
+                      state.usageContextExpanded = !state.usageContextExpanded;
+                    },
+                    onToggleSessionLogsExpanded: () => {
+                      state.usageSessionLogsExpanded = !state.usageSessionLogsExpanded;
+                    },
+                    onLogFilterRolesChange: (next) => {
+                      state.usageLogFilterRoles = next;
+                    },
+                    onLogFilterToolsChange: (next) => {
+                      state.usageLogFilterTools = next;
+                    },
+                    onLogFilterHasToolsChange: (next) => {
+                      state.usageLogFilterHasTools = next;
+                    },
+                    onLogFilterQueryChange: (next) => {
+                      state.usageLogFilterQuery = next;
+                    },
+                    onLogFilterClear: () => {
+                      state.usageLogFilterRoles = [];
+                      state.usageLogFilterTools = [];
+                      state.usageLogFilterHasTools = false;
+                      state.usageLogFilterQuery = "";
+                    },
+                    onSelectSession: (key, shiftKey) => {
+                      state.usageTimeSeries = null;
+                      state.usageSessionLogs = null;
+                      state.usageRecentSessions = [
+                        key,
+                        ...state.usageRecentSessions.filter((entry) => entry !== key),
+                      ].slice(0, 8);
 
-                  // Load timeseries/logs only if exactly one session selected
-                  if (state.usageSelectedSessions.length === 1) {
-                    void loadSessionTimeSeries(state, state.usageSelectedSessions[0]);
-                    void loadSessionLogs(state, state.usageSelectedSessions[0]);
-                  }
-                },
-                onSelectDay: (day, shiftKey) => {
-                  if (shiftKey && state.usageSelectedDays.length > 0) {
-                    // Shift-click: select range from last selected to this day
-                    const allDays = (state.usageCostSummary?.daily ?? []).map((d) => d.date);
-                    const lastSelected =
-                      state.usageSelectedDays[state.usageSelectedDays.length - 1];
-                    const lastIdx = allDays.indexOf(lastSelected);
-                    const thisIdx = allDays.indexOf(day);
-                    if (lastIdx !== -1 && thisIdx !== -1) {
-                      const [start, end] =
-                        lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
-                      const range = allDays.slice(start, end + 1);
-                      // Merge with existing selection
-                      const newSelection = [...new Set([...state.usageSelectedDays, ...range])];
-                      state.usageSelectedDays = newSelection;
-                    }
-                  } else {
-                    // Regular click: toggle single day
-                    if (state.usageSelectedDays.includes(day)) {
-                      state.usageSelectedDays = state.usageSelectedDays.filter((d) => d !== day);
-                    } else {
-                      state.usageSelectedDays = [day];
-                    }
-                  }
-                },
-                onChartModeChange: (mode) => {
-                  state.usageChartMode = mode;
-                },
-                onDailyChartModeChange: (mode) => {
-                  state.usageDailyChartMode = mode;
-                },
-                onTimeSeriesModeChange: (mode) => {
-                  state.usageTimeSeriesMode = mode;
-                },
-                onTimeSeriesBreakdownChange: (mode) => {
-                  state.usageTimeSeriesBreakdownMode = mode;
-                },
-                onClearDays: () => {
-                  state.usageSelectedDays = [];
-                },
-                onClearHours: () => {
-                  state.usageSelectedHours = [];
-                },
-                onClearSessions: () => {
-                  state.usageSelectedSessions = [];
-                  state.usageTimeSeries = null;
-                  state.usageSessionLogs = null;
-                },
-                onClearFilters: () => {
-                  state.usageSelectedDays = [];
-                  state.usageSelectedHours = [];
-                  state.usageSelectedSessions = [];
-                  state.usageTimeSeries = null;
-                  state.usageSessionLogs = null;
-                },
-                onTimeSeriesCursorRangeChange: (start, end) => {
-                  state.usageTimeSeriesCursorStart = start;
-                  state.usageTimeSeriesCursorEnd = end;
+                      if (shiftKey && state.usageSelectedSessions.length > 0) {
+                        const isTokenMode = state.usageChartMode === "tokens";
+                        const sortedSessions = [...(state.usageResult?.sessions ?? [])].toSorted(
+                          (a, b) => {
+                            const valA = isTokenMode
+                              ? (a.usage?.totalTokens ?? 0)
+                              : (a.usage?.totalCost ?? 0);
+                            const valB = isTokenMode
+                              ? (b.usage?.totalTokens ?? 0)
+                              : (b.usage?.totalCost ?? 0);
+                            return valB - valA;
+                          },
+                        );
+                        const allKeys = sortedSessions.map((s) => s.key);
+                        const lastSelected =
+                          state.usageSelectedSessions[state.usageSelectedSessions.length - 1];
+                        const lastIdx = allKeys.indexOf(lastSelected);
+                        const thisIdx = allKeys.indexOf(key);
+                        if (lastIdx !== -1 && thisIdx !== -1) {
+                          const [start, end] =
+                            lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
+                          const range = allKeys.slice(start, end + 1);
+                          state.usageSelectedSessions = [
+                            ...new Set([...state.usageSelectedSessions, ...range]),
+                          ];
+                        }
+                      } else if (
+                        state.usageSelectedSessions.length === 1 &&
+                        state.usageSelectedSessions[0] === key
+                      ) {
+                        state.usageSelectedSessions = [];
+                      } else {
+                        state.usageSelectedSessions = [key];
+                      }
+
+                      state.usageTimeSeriesCursorStart = null;
+                      state.usageTimeSeriesCursorEnd = null;
+
+                      if (state.usageSelectedSessions.length === 1) {
+                        void loadSessionTimeSeries(state, state.usageSelectedSessions[0]);
+                        void loadSessionLogs(state, state.usageSelectedSessions[0]);
+                      }
+                    },
+                    onTimeSeriesModeChange: (mode) => {
+                      state.usageTimeSeriesMode = mode;
+                    },
+                    onTimeSeriesBreakdownChange: (mode) => {
+                      state.usageTimeSeriesBreakdownMode = mode;
+                    },
+                    onTimeSeriesCursorRangeChange: (start, end) => {
+                      state.usageTimeSeriesCursorStart = start;
+                      state.usageTimeSeriesCursorEnd = end;
+                    },
+                  },
                 },
               })
             : nothing
@@ -1602,6 +1754,16 @@ export function renderApp(state: AppViewState) {
                 loading: state.cronLoading,
                 status: state.cronStatus,
                 jobs: state.cronJobs,
+                jobsLoadingMore: state.cronJobsLoadingMore,
+                jobsTotal: state.cronJobsTotal,
+                jobsHasMore: state.cronJobsHasMore,
+                jobsQuery: state.cronJobsQuery,
+                jobsEnabledFilter: state.cronJobsEnabledFilter as import("./views/cron.ts").CronJobsEnabledFilter,
+                jobsScheduleKindFilter: state.cronJobsScheduleKindFilter as import("./views/cron.ts").CronJobsScheduleKindFilter,
+                jobsLastStatusFilter: state.cronJobsLastStatusFilter as import("./views/cron.ts").CronJobsLastStatusFilter,
+                jobsSortBy: state.cronJobsSortBy as import("./views/cron.ts").CronJobsSortBy,
+                jobsSortDir: state.cronJobsSortDir as import("./views/cron.ts").CronSortDir,
+                editingJobId: state.cronEditingJobId,
                 error: state.cronError,
                 busy: state.cronBusy,
                 form: state.cronForm,
@@ -1612,14 +1774,68 @@ export function renderApp(state: AppViewState) {
                 channelMeta: state.channelsSnapshot?.channelMeta ?? [],
                 runsJobId: state.cronRunsJobId,
                 runs: state.cronRuns,
+                runsTotal: state.cronRunsTotal,
+                runsHasMore: state.cronRunsHasMore,
+                runsLoadingMore: state.cronRunsLoadingMore,
+                runsScope: state.cronRunsScope,
+                runsStatuses: state.cronRunsStatuses,
+                runsDeliveryStatuses: state.cronRunsDeliveryStatuses,
+                runsStatusFilter: state.cronRunsStatusFilter,
+                runsQuery: state.cronRunsQuery,
+                runsSortDir: state.cronRunsSortDir,
+                fieldErrors: state.cronFieldErrors,
+                canSubmit: Object.keys(state.cronFieldErrors).length === 0,
+                agentSuggestions: [],
+                modelSuggestions: [],
+                thinkingSuggestions: [],
+                timezoneSuggestions: [],
+                deliveryToSuggestions: [],
+                accountSuggestions: [],
+                basePath: state.basePath,
                 onFormChange: (patch) => (state.cronForm = { ...state.cronForm, ...patch }),
                 onRefresh: () => state.loadCron(),
                 onAdd: () => addCronJob(state as unknown as CronState),
+                onEdit: (job) => { state.cronEditingJobId = job.id; },
+                onClone: (job) => { state.cronForm = { ...state.cronForm, name: job.name + " (copy)" }; },
+                onCancelEdit: () => { state.cronEditingJobId = null; },
                 onToggle: (job, enabled) =>
                   toggleCronJob(state as unknown as CronState, job, enabled),
-                onRun: (job) => runCronJob(state as unknown as CronState, job),
+                onRun: (job, mode) => runCronJob(state as unknown as CronState, job, mode ?? "force"),
                 onRemove: (job) => removeCronJob(state as unknown as CronState, job),
                 onLoadRuns: (jobId) => loadCronRuns(state as unknown as CronState, jobId),
+                onLoadMoreJobs: () => Promise.resolve(),
+                onJobsFiltersChange: (patch) => {
+                  if (patch.cronJobsQuery !== undefined) {state.cronJobsQuery = patch.cronJobsQuery;}
+                  if (patch.cronJobsEnabledFilter !== undefined) {state.cronJobsEnabledFilter = patch.cronJobsEnabledFilter;}
+                  if (patch.cronJobsScheduleKindFilter !== undefined) {state.cronJobsScheduleKindFilter = patch.cronJobsScheduleKindFilter;}
+                  if (patch.cronJobsLastStatusFilter !== undefined) {state.cronJobsLastStatusFilter = patch.cronJobsLastStatusFilter;}
+                  if (patch.cronJobsSortBy !== undefined) {state.cronJobsSortBy = patch.cronJobsSortBy;}
+                  if (patch.cronJobsSortDir !== undefined) {state.cronJobsSortDir = patch.cronJobsSortDir;}
+                },
+                onJobsFiltersReset: () => {
+                  state.cronJobsQuery = "";
+                  state.cronJobsEnabledFilter = "all";
+                  state.cronJobsScheduleKindFilter = "all";
+                  state.cronJobsLastStatusFilter = "all";
+                  state.cronJobsSortBy = "nextRunAtMs";
+                  state.cronJobsSortDir = "asc";
+                },
+                onLoadMoreRuns: () => Promise.resolve(),
+                onRunsFiltersChange: (patch) => {
+                  if (patch.cronRunsStatuses !== undefined) {state.cronRunsStatuses = patch.cronRunsStatuses;}
+                  if (patch.cronRunsDeliveryStatuses !== undefined) {state.cronRunsDeliveryStatuses = patch.cronRunsDeliveryStatuses;}
+                  if (patch.cronRunsStatusFilter !== undefined) {state.cronRunsStatusFilter = patch.cronRunsStatusFilter;}
+                  if (patch.cronRunsQuery !== undefined) {state.cronRunsQuery = patch.cronRunsQuery;}
+                  if (patch.cronRunsSortDir !== undefined) {state.cronRunsSortDir = patch.cronRunsSortDir;}
+                  if (patch.cronRunsScope !== undefined) {state.cronRunsScope = patch.cronRunsScope;}
+                },
+                onRunsFiltersReset: () => {
+                  state.cronRunsStatuses = [];
+                  state.cronRunsDeliveryStatuses = [];
+                  state.cronRunsStatusFilter = "";
+                  state.cronRunsQuery = "";
+                  state.cronRunsSortDir = "desc";
+                },
               })
             : nothing
         }
@@ -1627,11 +1843,25 @@ export function renderApp(state: AppViewState) {
         ${
           state.tab === "agents"
             ? renderAgents({
+                basePath: state.basePath ?? "",
                 loading: state.agentsLoading,
                 error: state.agentsError,
                 agentsList: state.agentsList,
                 selectedAgentId: resolvedAgentId,
                 activePanel: state.agentsPanel,
+                toolsCatalog: {
+                  loading: state.toolsCatalogLoading,
+                  error: state.toolsCatalogError,
+                  result: state.toolsCatalogResult,
+                },
+                toolsEffective: {
+                  loading: state.toolsEffectiveLoading,
+                  error: state.toolsEffectiveError,
+                  result: state.toolsEffectiveResult,
+                },
+                runtimeSessionKey: state.sessionKey ?? "",
+                runtimeSessionMatchesSelectedAgent: toolsPanelUsesActiveSession,
+                modelCatalog: state.chatModelCatalog ?? [],
                 configForm: configValue,
                 configLoading: state.configLoading,
                 configSaving: state.configSaving,
@@ -1718,6 +1948,20 @@ export function renderApp(state: AppViewState) {
                   if (agentIds.length > 0) {
                     void loadAgentIdentities(state, agentIds);
                   }
+                  const refreshedAgentId =
+                    state.agentsSelectedId ??
+                    state.agentsList?.defaultId ??
+                    state.agentsList?.agents?.[0]?.id ??
+                    null;
+                  if (state.agentsPanel === "tools" && refreshedAgentId) {
+                    void loadToolsCatalog(state, refreshedAgentId);
+                    if (refreshedAgentId === resolveAgentIdFromSessionKey(state.sessionKey)) {
+                      void loadToolsEffective(state, {
+                        agentId: refreshedAgentId,
+                        sessionKey: state.sessionKey ?? "",
+                      });
+                    }
+                  }
                 },
                 onSelectAgent: (agentId) => {
                   if (state.agentsSelectedId === agentId) {
@@ -1733,12 +1977,28 @@ export function renderApp(state: AppViewState) {
                   state.agentSkillsReport = null;
                   state.agentSkillsError = null;
                   state.agentSkillsAgentId = null;
+                  // 重置 tools 状态
+                  resetToolsEffectiveState(state);
+                  state.toolsCatalogResult = null;
+                  state.toolsCatalogError = null;
+                  state.toolsCatalogLoading = false;
+                  state.toolsCatalogLoadingAgentId = null;
                   void loadAgentIdentity(state, agentId);
                   if (state.agentsPanel === "files") {
                     void loadAgentFiles(state, agentId);
                   }
                   if (state.agentsPanel === "skills") {
                     void loadAgentSkills(state, agentId);
+                  }
+                  // 如果当前在 tools 面板，重新加载工具目录
+                  if (state.agentsPanel === "tools") {
+                    void loadToolsCatalog(state, agentId);
+                    if (agentId === resolveAgentIdFromSessionKey(state.sessionKey)) {
+                      void loadToolsEffective(state, {
+                        agentId,
+                        sessionKey: state.sessionKey ?? "",
+                      });
+                    }
                   }
                   // 如果当前在通道策略面板，重新加载通道配置数据
                   if (state.agentsPanel === "channelPolicies") {
@@ -1788,6 +2048,31 @@ export function renderApp(state: AppViewState) {
                   if (panel === "skills") {
                     if (resolvedAgentId) {
                       void loadAgentSkills(state, resolvedAgentId);
+                    }
+                  }
+                  if (panel === "tools" && resolvedAgentId) {
+                    if (
+                      state.toolsCatalogResult?.agentId !== resolvedAgentId ||
+                      state.toolsCatalogError
+                    ) {
+                      void loadToolsCatalog(state, resolvedAgentId);
+                    }
+                    if (resolvedAgentId === resolveAgentIdFromSessionKey(state.sessionKey)) {
+                      const toolsRequestKey = buildToolsEffectiveRequestKey(state, {
+                        agentId: resolvedAgentId,
+                        sessionKey: state.sessionKey ?? "",
+                      });
+                      if (
+                        state.toolsEffectiveResultKey !== toolsRequestKey ||
+                        state.toolsEffectiveError
+                      ) {
+                        void loadToolsEffective(state, {
+                          agentId: resolvedAgentId,
+                          sessionKey: state.sessionKey ?? "",
+                        });
+                      }
+                    } else {
+                      resetToolsEffectiveState(state);
                     }
                   }
                   if (panel === "channels") {
@@ -2902,7 +3187,9 @@ export function renderApp(state: AppViewState) {
                   }
                   // 切换到项目管理面板时加载数据
                   if (panel === "projects" && !state.projectsList) {
-                    void loadProjects(state, state.client!);
+                    if (state.client && state.connected) {
+                      void loadProjects(state, state.client);
+                    }
                   }
                 },
                 groupsProps: {
@@ -4155,7 +4442,6 @@ export function renderApp(state: AppViewState) {
                   ]).then(() => loadChatHistory(state));
                 },
                 onNavSelectContext: (context) => {
-                  console.log("[Nav:调试] 点击导航节点", JSON.stringify(context));
                   state.chatNavCurrentContext = context;
 
                   // V3: 监控视图轮询管理
@@ -4174,9 +4460,6 @@ export function renderApp(state: AppViewState) {
                   }
                   // Z1: 上下文感知的 sessionKey 解析，将 group/contact 解析为后端可识别的 sessionKey
                   const nextKey = resolveBackendSessionKey(context);
-                  console.log(
-                    `[Nav:调试] 当前 state.sessionKey="${state.sessionKey}" → nextKey="${nextKey}" 是否相同=${nextKey === state.sessionKey}`,
-                  );
                   // Z4: 切换到该节点时清除对应的未读计数
                   if (state.unreadSessionMessages) {
                     const unread = { ...state.unreadSessionMessages };
@@ -4306,6 +4589,7 @@ export function renderApp(state: AppViewState) {
                 models: state.debugModels,
                 heartbeat: state.debugHeartbeat,
                 eventLog: state.eventLog,
+                methods: state.debugMethods,
                 callMethod: state.debugCallMethod,
                 callParams: state.debugCallParams,
                 callResult: state.debugCallResult,
@@ -4337,6 +4621,131 @@ export function renderApp(state: AppViewState) {
                 onRefresh: () => loadLogs(state, { reset: true }),
                 onExport: (lines, label) => state.exportLogs(lines, label),
                 onScroll: (event) => state.handleLogsScroll(event),
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "dreams"
+            ? lazyRender(lazyDreamingView, (m) => {
+                // 将当前 session 对应的 agentId 写入 state，作为默认目标备选
+                const dreamAgentId = resolveAgentIdFromSessionKey(state.sessionKey);
+                (state as unknown as { dreamingAgentId: string | null }).dreamingAgentId =
+                  dreamAgentId || null;
+
+                // 首次进入 dreams tab时加载目标列表
+                const dreamTargets =
+                  (state as unknown as { dreamTargets?: unknown[] }).dreamTargets;
+                if (!dreamTargets && !(state as unknown as { dreamTargetsLoading?: boolean }).dreamTargetsLoading) {
+                  void loadDreamTargets(state as unknown as Parameters<typeof loadDreamTargets>[0]);
+                }
+
+                // 若已加载目标列表但还未选中任何目标，自动选择默认
+                const selectedTargetId =
+                  (state as unknown as { dreamSelectedTargetId?: string | null }).dreamSelectedTargetId;
+                const targetsDefaultId =
+                  (state as unknown as { dreamTargetsDefaultId?: string }).dreamTargetsDefaultId;
+                if (!selectedTargetId && targetsDefaultId) {
+                  (state as unknown as { dreamSelectedTargetId: string | null }).dreamSelectedTargetId =
+                    targetsDefaultId;
+                }
+
+                // 梦境目标选择器：动态渲染审点
+                const allTargets =
+                  (state as unknown as { dreamTargets?: Array<{ kind: string; id: string; label: string }> }).dreamTargets ?? [];
+                const currentTargetId = selectedTargetId ?? dreamAgentId ?? "";
+
+                const targetSelector =
+                  allTargets.length > 1
+                    ? html`<div class="dreams-target-selector">
+                        <label class="dreams-target-label">查看梦境：</label>
+                        <select
+                          class="dreams-target-select"
+                          .value=${currentTargetId}
+                          @change=${(e: Event) => {
+                            const sel = e.target as HTMLSelectElement;
+                            const nextId = sel.value;
+                            (state as unknown as { dreamSelectedTargetId: string | null }).dreamSelectedTargetId = nextId;
+                            // 重置日记状态并重新加载
+                            (state as unknown as {
+                              dreamDiaryLoading: boolean;
+                              dreamDiaryError: string | null;
+                              dreamDiaryPath: string | null;
+                              dreamDiaryContent: string | null;
+                            }).dreamDiaryLoading = false;
+                            (state as unknown as { dreamDiaryError: string | null }).dreamDiaryError = null;
+                            (state as unknown as { dreamDiaryPath: string | null }).dreamDiaryPath = null;
+                            (state as unknown as { dreamDiaryContent: string | null }).dreamDiaryContent = null;
+                            void loadDreamDiary(state as unknown as Parameters<typeof loadDreamDiary>[0]);
+                          }}
+                        >
+                          ${allTargets.map(
+                            (t) => html`<option value=${t.id} ?selected=${t.id === currentTargetId}>
+                              ${t.kind === "group" ? "👥 " : "🤖 "}${t.label}
+                            </option>`,
+                          )}
+                        </select>
+                      </div>`
+                    : nothing;
+
+                return m.renderDreaming({
+                  active: (() => {
+                    const configValue =
+                      state.configForm ??
+                      (state.configSnapshot?.config as Record<string, unknown> | null);
+                    const configuredDreaming = resolveConfiguredDreaming(configValue);
+                    return state.dreamingStatus?.enabled ?? configuredDreaming.enabled;
+                  })(),
+                  shortTermCount: state.dreamingStatus?.shortTermCount ?? 0,
+                  totalSignalCount: state.dreamingStatus?.totalSignalCount ?? 0,
+                  phaseSignalCount: state.dreamingStatus?.phaseSignalCount ?? 0,
+                  promotedCount: state.dreamingStatus?.promotedToday ?? 0,
+                  dreamingOf: null,
+                  nextCycle: resolveDreamingNextCycle(state.dreamingStatus),
+                  timezone: state.dreamingStatus?.timezone ?? null,
+                  statusLoading: state.dreamingStatusLoading,
+                  statusError: state.dreamingStatusError,
+                  modeSaving: state.dreamingModeSaving,
+                  dreamDiaryLoading: state.dreamDiaryLoading,
+                  dreamDiaryError: state.dreamDiaryError,
+                  dreamDiaryPath: state.dreamDiaryPath,
+                  dreamDiaryContent: state.dreamDiaryContent,
+                  headerExtra: targetSelector,
+                  onRefresh: () => {
+                    void Promise.all([
+                      loadDreamingStatus(
+                        state as unknown as Parameters<typeof loadDreamingStatus>[0],
+                      ),
+                      loadDreamDiary(state as unknown as Parameters<typeof loadDreamDiary>[0]),
+                    ]);
+                  },
+                  onRefreshDiary: () =>
+                    loadDreamDiary(state as unknown as Parameters<typeof loadDreamDiary>[0]),
+                  onToggleEnabled: (enabled: boolean) => {
+                    const configValue =
+                      state.configForm ??
+                      (state.configSnapshot?.config as Record<string, unknown> | null);
+                    const configuredDreaming = resolveConfiguredDreaming(configValue);
+                    const dreamingOn = state.dreamingStatus?.enabled ?? configuredDreaming.enabled;
+                    if (state.dreamingModeSaving || dreamingOn === enabled) {
+                      return;
+                    }
+                    void (async () => {
+                      const updated = await updateDreamingEnabled(
+                        state as unknown as Parameters<typeof updateDreamingEnabled>[0],
+                        enabled,
+                      );
+                      if (!updated) {
+                        return;
+                      }
+                      await loadConfig(state);
+                      await loadDreamingStatus(
+                        state as unknown as Parameters<typeof loadDreamingStatus>[0],
+                      );
+                    })();
+                  },
+                  onRequestUpdate: requestHostUpdate,
+                });
               })
             : nothing
         }

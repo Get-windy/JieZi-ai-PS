@@ -2,20 +2,21 @@ import type {
   ChannelAccountSnapshot,
   ChannelsStatusSnapshot,
   ConfigUiHints,
-  DiscordStatus,
-  GoogleChatStatus,
-  IMessageStatus,
   NostrProfile,
-  NostrStatus,
-  SignalStatus,
-  SlackStatus,
-  TelegramStatus,
-  WhatsAppStatus,
-} from "../types.ts";
+} from "../types.js";
 import type { NostrProfileFormState } from "./channels.nostr-profile-form.ts";
 
 export type ChannelKey = string;
 
+/**
+ * 本地扩展的 ChannelsProps，在 upstream 基础上增加了：
+ * - 账号管理相关 props
+ * - 配对管理相关 props
+ * - 通道可见性管理 props
+ * - 调试弹窗 props
+ * - 通道全局配置 props
+ * - 账号编辑/查看/创建 props
+ */
 export type ChannelsProps = {
   connected: boolean;
   loading: boolean;
@@ -44,14 +45,15 @@ export type ChannelsProps = {
   viewingChannelAccount: {
     channelId: string;
     accountId: string;
-  } | null; // 查看模式，只读
+  } | null;
   creatingChannelAccount: boolean;
   deletingChannelAccount: boolean;
-  managingChannelId: string | null; // 当前正在管理账号的通道ID
-  showAllChannelsModal: boolean; // 显示所有通道弹窗
-  debuggingChannel: { channelId: string; accountId?: string } | null; // 调试状态
-  editingChannelGlobalConfig: string | null; // 正在编辑全局配置的通道ID
-  showPairingModal: boolean; // 显示配对请求模态框
+  managingChannelId: string | null;
+  showAllChannelsModal: boolean;
+  debuggingChannel: { channelId: string; accountId?: string } | null;
+  editingChannelGlobalConfig: string | null;
+  showPairingModal: boolean;
+  onAccountFormChange: (field: string, value: unknown) => void;
   onRefresh: (probe: boolean) => void;
   onWhatsAppStart: (force: boolean) => void;
   onWhatsAppWait: () => void;
@@ -68,36 +70,35 @@ export type ChannelsProps = {
   // 账号管理回调
   onManageAccounts: (channelId: string) => void;
   onAddAccount: (channelId: string) => void;
-  onViewAccount: (channelId: string, accountId: string) => void; // 查看账号（只读）
-  onEditAccount: (channelId: string, accountId: string) => void; // 编辑账号
-  onDeleteAccount: (channelId: string, accountId: string) => void;
+  onCloseAccountManager?: () => void;
+  onViewAccount: (channelId: string, accountId: string) => void;
+  onCloseAccountView: () => void;
+  onEditAccount: (channelId: string, accountId: string) => void;
+  onCloseAccountEdit: () => void;
   onSaveAccount: () => void;
-  onCancelAccountEdit: () => void;
-  onCancelAccountView: () => void; // 关闭查看页面
-  onAccountFormChange: (field: string, value: unknown) => void;
-  onToggleAllChannelsModal: () => void; // 切换显示所有通道弹窗
-  onToggleChannelVisibility: (channelId: string) => void; // 切换通道显示/隐藏
-  onDebugChannel: (channelId: string, accountId?: string) => void; // 调试通道/账号
-  onCloseDebug: () => void; // 关闭调试
-  onEditChannelGlobalConfig: (channelId: string) => void; // 编辑通道全局配置
-  onCancelChannelGlobalConfig: () => void; // 取消编辑全局配置
-  onSaveChannelGlobalConfig: () => void; // 保存全局配置
+  onDeleteAccount: (channelId: string, accountId: string) => void;
+  onCreateAccount?: (channelId: string) => void;
+  onSaveNewAccount?: () => void;
+  onCancelCreateAccount?: () => void;
+  // 调试弹窗回调
+  onDebugChannel: (channelId: string, accountId?: string) => void;
+  onCloseDebug: () => void;
+  // 通道全局配置回调
+  onEditChannelGlobalConfig: (channelId: string) => void;
+  onCancelChannelGlobalConfig: () => void;
+  onSaveChannelGlobalConfig: () => void;
+  // 显示所有通道弹窗回调
+  onToggleAllChannelsModal: () => void;
+  onToggleChannelVisibility: (channelId: string) => void;
   // 配对管理回调
-  onShowPairingModal: () => void; // 显示配对请求模态框
-  onClosePairingModal: () => void; // 关闭配对请求模态框
-  onApproveAllPairing: () => void; // 批准所有配对请求
-  onApprovePairing?: (channelId: string, code: string) => Promise<void>; // 批准配对
-  onRejectPairing?: (channelId: string, code: string) => Promise<void>; // 拒绝配对
+  onShowPairingModal: () => void;
+  onClosePairingModal: () => void;
+  onApproveAllPairing: () => void;
+  onApprovePairing?: (channelId: string, code: string) => Promise<void>;
+  onRejectPairing?: (channelId: string, code: string) => Promise<void>;
 };
 
 export type ChannelsChannelData = {
-  whatsapp?: WhatsAppStatus;
-  telegram?: TelegramStatus;
-  discord?: DiscordStatus | null;
-  googlechat?: GoogleChatStatus | null;
-  slack?: SlackStatus | null;
-  signal?: SignalStatus | null;
-  imessage?: IMessageStatus | null;
-  nostr?: NostrStatus | null;
   channelAccounts?: Record<string, ChannelAccountSnapshot[]> | null;
+  [key: string]: unknown;
 };

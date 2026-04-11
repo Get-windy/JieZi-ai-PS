@@ -97,4 +97,16 @@ export type ChatProps = {
   agentsList?: AgentsListResult | null;
   /** Context window usage info for warning bar */
   contextUsage?: ContextUsageInfo | null;
+  /** Whether to show tool call messages inline */
+  showToolCalls?: boolean;
+  /** Stream segments (for tool-aware streaming) */
+  streamSegments?: Array<{ text: string; ts: number }>;
+  /** Base path for resolving avatar URLs */
+  basePath?: string;
+  /** Callback to delete a message group */
+  onDeleteMessage?: () => void;
+  /** Callback when user requests update */
+  onRequestUpdate?: () => void;
+  /** Context window size in tokens (for meta display) */
+  contextWindow?: number | null;
 };

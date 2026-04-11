@@ -7,7 +7,7 @@ import type { TtsAutoMode } from "../types.tts.js";
 
 export type SessionScope = "per-sender" | "global";
 
-export type SessionChannelId = ChannelId | "webchat";
+export type SessionChannelId = ChannelId;
 
 export type SessionChatType = ChatType;
 
@@ -170,6 +170,11 @@ export type SessionEntry = {
   lastThreadId?: string | number;
   skillsSnapshot?: SessionSkillSnapshot;
   systemPromptReport?: SessionSystemPromptReport;
+  /**
+   * Generic plugin-owned runtime debug entries shown in verbose status surfaces.
+   * Each plugin owns and may overwrite only its own entry between turns.
+   */
+  pluginDebugEntries?: SessionPluginDebugEntry[];
   acp?: SessionAcpMeta;
 };
 
@@ -315,6 +320,25 @@ export type GroupKeyResolution = {
   id?: string;
   chatType?: SessionChatType;
 };
+
+export type SessionPluginDebugEntry = {
+  pluginId: string;
+  lines: string[];
+};
+
+export function resolveSessionPluginDebugLines(
+  entry: Pick<SessionEntry, "pluginDebugEntries"> | undefined,
+): string[] {
+  return Array.isArray(entry?.pluginDebugEntries)
+    ? entry.pluginDebugEntries.flatMap((pluginEntry) =>
+        Array.isArray(pluginEntry?.lines)
+          ? pluginEntry.lines.filter(
+              (line): line is string => typeof line === "string" && line.trim().length > 0,
+            )
+          : [],
+      )
+    : [];
+}
 
 export type SessionSkillSnapshot = {
   prompt: string;

@@ -1,5 +1,6 @@
-import type { IconName } from "./icons.js";
 import { t } from "./i18n.js";
+import type { IconName } from "./icons.js";
+import { normalizeLowercaseStringOrEmpty } from "./string-coerce.ts";
 
 // Navigation group labels (use with t() function)
 export const NAV_GROUP_LABELS = {
@@ -26,9 +27,21 @@ export const TAB_GROUPS = [
   },
   {
     label: "nav.agent",
-    tabs: ["agents", "organization-permissions", "collaboration", "skills", "nodes"],
+    tabs: ["agents", "organization-permissions", "collaboration", "skills", "nodes", "dreams"],
   },
-  { label: "nav.settings", tabs: ["config", "debug", "logs"] },
+  {
+    label: "nav.settings",
+    tabs: [
+      "config",
+      "communications",
+      "appearance",
+      "automation",
+      "infrastructure",
+      "aiAgents",
+      "debug",
+      "logs",
+    ],
+  },
 ] as const;
 
 export type Tab =
@@ -47,8 +60,14 @@ export type Tab =
   | "nodes"
   | "chat"
   | "config"
+  | "communications"
+  | "appearance"
+  | "automation"
+  | "infrastructure"
+  | "aiAgents"
   | "debug"
-  | "logs";
+  | "logs"
+  | "dreams";
 
 const TAB_PATHS: Record<Tab, string> = {
   agents: "/agents",
@@ -66,11 +85,24 @@ const TAB_PATHS: Record<Tab, string> = {
   nodes: "/nodes",
   chat: "/chat",
   config: "/config",
+  communications: "/communications",
+  appearance: "/appearance",
+  automation: "/automation",
+  infrastructure: "/infrastructure",
+  aiAgents: "/ai-agents",
   debug: "/debug",
   logs: "/logs",
+  dreams: "/dreaming",
 };
 
-const PATH_TO_TAB = new Map(Object.entries(TAB_PATHS).map(([tab, path]) => [path, tab as Tab]));
+const PATH_ALIASES: Record<string, Tab> = {
+  "/dreams": "dreams",
+};
+
+const PATH_TO_TAB = new Map<string, Tab>([
+  ...Object.entries(TAB_PATHS).map(([tab, path]) => [path, tab as Tab] as const),
+  ...Object.entries(PATH_ALIASES),
+]);
 
 export function normalizeBasePath(basePath: string): string {
   if (!basePath) {
@@ -119,7 +151,7 @@ export function tabFromPath(pathname: string, basePath = ""): Tab | null {
       path = path.slice(base.length);
     }
   }
-  let normalized = normalizePath(path).toLowerCase();
+  let normalized = normalizeLowercaseStringOrEmpty(normalizePath(path));
   if (normalized.endsWith("/index.html")) {
     normalized = "/";
   }
@@ -142,7 +174,7 @@ export function inferBasePathFromPathname(pathname: string): string {
     return "";
   }
   for (let i = 0; i < segments.length; i++) {
-    const candidate = `/${segments.slice(i).join("/")}`.toLowerCase();
+    const candidate = normalizeLowercaseStringOrEmpty(`/${segments.slice(i).join("/")}`);
     if (PATH_TO_TAB.has(candidate)) {
       const prefix = segments.slice(0, i);
       return prefix.length ? `/${prefix.join("/")}` : "";
@@ -156,7 +188,7 @@ export function iconForTab(tab: Tab): IconName {
     case "agents":
       return "folder";
     case "collaboration":
-      return "folder";
+      return "users";
     case "organization-permissions":
       return "wrench";
     case "chat":
@@ -181,12 +213,24 @@ export function iconForTab(tab: Tab): IconName {
       return "monitor";
     case "config":
       return "settings";
+    case "communications":
+      return "send";
+    case "appearance":
+      return "spark";
+    case "automation":
+      return "terminal";
+    case "infrastructure":
+      return "globe";
+    case "aiAgents":
+      return "brain";
     case "debug":
       return "bug";
     case "logs":
       return "scrollText";
     case "message-queue":
       return "barChart";
+    case "dreams":
+      return "moon";
     default:
       return "folder";
   }
@@ -199,13 +243,13 @@ export function titleForTab(tab: Tab) {
     case "collaboration":
       return t("tab.collaboration");
     case "organization-permissions":
-      return "组织与权限";
+      return t("tabs.organization-permissions");
     case "overview":
       return t("tab.overview");
     case "channels":
       return t("tab.channels");
     case "models":
-      return t("models.title");
+      return t("tabs.models");
     case "instances":
       return t("tab.instances");
     case "sessions":
@@ -222,12 +266,24 @@ export function titleForTab(tab: Tab) {
       return t("tab.chat");
     case "config":
       return t("tab.config");
+    case "communications":
+      return t("tabs.communications");
+    case "appearance":
+      return t("tabs.appearance");
+    case "automation":
+      return t("tabs.automation");
+    case "infrastructure":
+      return t("tabs.infrastructure");
+    case "aiAgents":
+      return t("tabs.aiAgents");
     case "debug":
       return t("tab.debug");
     case "logs":
       return t("tab.logs");
     case "message-queue":
       return t("tab.message-queue");
+    case "dreams":
+      return t("tabs.dreams");
     default:
       return t("nav.control");
   }
@@ -238,15 +294,15 @@ export function subtitleForTab(tab: Tab) {
     case "agents":
       return t("tab.agents.subtitle");
     case "collaboration":
-      return t("tab.collaboration.subtitle");
+      return t("tabs.collaboration.subtitle");
     case "organization-permissions":
-      return "统一管理组织架构、权限配置、审批流程和系统设置";
+      return t("tabs.organization-permissions.subtitle");
     case "overview":
       return t("tab.overview.subtitle");
     case "channels":
       return t("tab.channels.subtitle");
     case "models":
-      return t("models.subtitle");
+      return t("tabs.models.subtitle");
     case "instances":
       return t("tab.instances.subtitle");
     case "sessions":
@@ -263,12 +319,24 @@ export function subtitleForTab(tab: Tab) {
       return t("tab.chat.subtitle");
     case "config":
       return t("tab.config.subtitle");
+    case "communications":
+      return t("tabs.communications.subtitle");
+    case "appearance":
+      return t("tabs.appearance.subtitle");
+    case "automation":
+      return t("tabs.automation.subtitle");
+    case "infrastructure":
+      return t("tabs.infrastructure.subtitle");
+    case "aiAgents":
+      return t("tabs.aiAgents.subtitle");
     case "debug":
       return t("tab.debug.subtitle");
     case "logs":
       return t("tab.logs.subtitle");
     case "message-queue":
       return t("tab.message-queue.subtitle");
+    case "dreams":
+      return t("tabs.dreams.subtitle");
     default:
       return "";
   }

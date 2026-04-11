@@ -1,256 +1,441 @@
 /**
- * Slash commands — `/` command menu for the chat compose area.
+ * 斜杠命令系统（本地扩展版）
  *
- * When the user types "/" at the start of a line, a dropdown appears
- * with available commands. Selecting a command replaces the input.
- *
- * Features:
- * - i18n aliases: Chinese users can type `/新会话` instead of `/new`
- * - Usage tracking: commands are sorted by frequency & recency (localStorage)
- * - Smart recommendations: frequently used commands marked with ⭐
+ * 在上游 slash-commands.ts 基础上扩展：
+ * - detectSlashToken: 检测输入框中的斜杠命令 token
+ * - filterSlashCommands: 过滤匹配的命令列表
+ * - getBuiltinSlashCommands: 获取内置命令（带回调绑定）
+ * - renderSlashDropdown: 渲染命令选择下拉框
+ * - slashUsageTracker: 使用频率追踪器
+ * - SlashCommand: 带运行时 action 的命令类型
  */
+
 import { html, nothing } from "lit";
+import { buildBuiltinChatCommands } from "../../../../src/auto-reply/commands-registry.shared.js";
+import type {
+  ChatCommandDefinition,
+  CommandArgChoice,
+} from "../../../../src/auto-reply/commands-registry.types.js";
 import { t } from "../i18n.ts";
+import type { IconName } from "../icons.ts";
+import { normalizeLowercaseStringOrEmpty } from "../string-coerce.ts";
 
-export interface SlashCommand {
-  /** Command name without the leading "/" */
+// ============================================================
+// 上游类型内联（避免循环导入）
+// ============================================================
+
+export type SlashCommandCategory = "session" | "model" | "agents" | "tools";
+
+export type SlashCommandDef = {
+  key: string;
   name: string;
-  /** Brief description shown in the menu */
-  description: string;
-  /** Optional icon (emoji) */
-  icon?: string;
-  /** i18n aliases — alternative names users can type (e.g. ["新会话"] for /new) */
   aliases?: string[];
-  /** Action to perform when selected. Returns replacement text for the draft, or null to keep current. */
+  description: string;
+  args?: string;
+  icon?: IconName;
+  category?: SlashCommandCategory;
+  executeLocal?: boolean;
+  argOptions?: string[];
+  shortcut?: string;
+};
+
+export type ParsedSlashCommand = {
+  command: SlashCommandDef;
+  args: string;
+};
+
+// 上游内置配置
+const COMMAND_ICON_OVERRIDES: Partial<Record<string, IconName>> = {
+  help: "book",
+  status: "barChart",
+  usage: "barChart",
+  export: "download",
+  export_session: "download",
+  tools: "terminal",
+  skill: "zap",
+  commands: "book",
+  new: "plus",
+  reset: "refresh",
+  compact: "loader",
+  stop: "stop",
+  clear: "trash",
+  focus: "eye",
+  unfocus: "eye",
+  model: "brain",
+  models: "brain",
+  think: "brain",
+  verbose: "terminal",
+  fast: "zap",
+  agents: "monitor",
+  subagents: "folder",
+  kill: "x",
+  steer: "send",
+  tts: "volume2",
+};
+
+const LOCAL_COMMANDS = new Set([
+  "help",
+  "new",
+  "reset",
+  "stop",
+  "compact",
+  "focus",
+  "model",
+  "think",
+  "fast",
+  "verbose",
+  "export-session",
+  "usage",
+  "agents",
+  "kill",
+  "steer",
+  "redirect",
+]);
+
+const UI_ONLY_COMMANDS: SlashCommandDef[] = [
+  {
+    key: "clear",
+    name: "clear",
+    description: "Clear chat history",
+    icon: "trash",
+    category: "session",
+    executeLocal: true,
+  },
+  {
+    key: "redirect",
+    name: "redirect",
+    description: "Abort and restart with a new message",
+    args: "[id] <message>",
+    icon: "refresh",
+    category: "agents",
+    executeLocal: true,
+  },
+];
+
+const CATEGORY_OVERRIDES: Partial<Record<string, SlashCommandCategory>> = {
+  help: "tools",
+  commands: "tools",
+  tools: "tools",
+  skill: "tools",
+  status: "tools",
+  export_session: "tools",
+  usage: "tools",
+  tts: "tools",
+  agents: "agents",
+  subagents: "agents",
+  kill: "agents",
+  steer: "agents",
+  redirect: "agents",
+  session: "session",
+  stop: "session",
+  reset: "session",
+  new: "session",
+  compact: "session",
+  focus: "session",
+  unfocus: "session",
+  model: "model",
+  models: "model",
+  think: "model",
+  verbose: "model",
+  fast: "model",
+  reasoning: "model",
+  elevated: "model",
+  queue: "model",
+};
+
+const COMMAND_DESCRIPTION_OVERRIDES: Partial<Record<string, string>> = {
+  steer: "Inject a message into the active run",
+};
+
+const COMMAND_ARGS_OVERRIDES: Partial<Record<string, string>> = {
+  steer: "[id] <message>",
+};
+
+function normalizeUiKey(command: ChatCommandDefinition): string {
+  return command.key.replace(/[:.-]/g, "_");
+}
+
+function getSlashAliases(command: ChatCommandDefinition): string[] {
+  return command.textAliases
+    .map((a) => a.trim())
+    .filter((a) => a.startsWith("/"))
+    .map((a) => a.slice(1));
+}
+
+function getPrimarySlashName(command: ChatCommandDefinition): string | null {
+  const aliases = getSlashAliases(command);
+  return aliases.length === 0 ? null : (aliases[0] ?? null);
+}
+
+function formatArgs(command: ChatCommandDefinition): string | undefined {
+  if (!command.args?.length) {
+    return undefined;
+  }
+  return command.args
+    .map((arg) => {
+      const token = `<${arg.name}>`;
+      return arg.required ? token : `[${arg.name}]`;
+    })
+    .join(" ");
+}
+
+function choiceToValue(choice: CommandArgChoice): string {
+  return typeof choice === "string" ? choice : choice.value;
+}
+
+function getArgOptions(command: ChatCommandDefinition): string[] | undefined {
+  const firstArg = command.args?.[0];
+  if (!firstArg || typeof firstArg.choices === "function") {
+    return undefined;
+  }
+  const options = firstArg.choices?.map(choiceToValue).filter(Boolean);
+  return options?.length ? options : undefined;
+}
+
+function toSlashCommandDef(command: ChatCommandDefinition): SlashCommandDef | null {
+  const name = getPrimarySlashName(command);
+  if (!name) {
+    return null;
+  }
+  return {
+    key: command.key,
+    name,
+    aliases: getSlashAliases(command).filter((a) => a !== name),
+    description: COMMAND_DESCRIPTION_OVERRIDES[command.key] ?? command.description,
+    args: COMMAND_ARGS_OVERRIDES[command.key] ?? formatArgs(command),
+    icon: COMMAND_ICON_OVERRIDES[normalizeUiKey(command)] ?? "terminal",
+    category: CATEGORY_OVERRIDES[normalizeUiKey(command)] ?? "tools",
+    executeLocal: LOCAL_COMMANDS.has(command.key),
+    argOptions: getArgOptions(command),
+  };
+}
+
+export const SLASH_COMMANDS: SlashCommandDef[] = [
+  ...buildBuiltinChatCommands()
+    .map(toSlashCommandDef)
+    .filter((c): c is SlashCommandDef => c !== null),
+  ...UI_ONLY_COMMANDS,
+];
+
+const CATEGORY_ORDER: SlashCommandCategory[] = ["session", "model", "tools", "agents"];
+
+export const CATEGORY_LABELS: Record<SlashCommandCategory, string> = {
+  session: "Session",
+  model: "Model",
+  agents: "Agents",
+  tools: "Tools",
+};
+
+export function getSlashCommandCompletions(filter: string): SlashCommandDef[] {
+  const lower = normalizeLowercaseStringOrEmpty(filter);
+  const commands = lower
+    ? SLASH_COMMANDS.filter(
+        (cmd) =>
+          cmd.name.startsWith(lower) ||
+          cmd.aliases?.some((a) => normalizeLowercaseStringOrEmpty(a).startsWith(lower)) ||
+          normalizeLowercaseStringOrEmpty(cmd.description).includes(lower),
+      )
+    : SLASH_COMMANDS;
+  return commands.toSorted((a, b) => {
+    const ai = CATEGORY_ORDER.indexOf(a.category ?? "session");
+    const bi = CATEGORY_ORDER.indexOf(b.category ?? "session");
+    if (ai !== bi) {
+      return ai - bi;
+    }
+    if (lower) {
+      const aExact = a.name.startsWith(lower) ? 0 : 1;
+      const bExact = b.name.startsWith(lower) ? 0 : 1;
+      if (aExact !== bExact) {
+        return aExact - bExact;
+      }
+    }
+    return 0;
+  });
+}
+
+export function parseSlashCommand(text: string): ParsedSlashCommand | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("/")) {
+    return null;
+  }
+  const body = trimmed.slice(1);
+  const firstSeparator = body.search(/[\s:]/u);
+  const name = firstSeparator === -1 ? body : body.slice(0, firstSeparator);
+  let remainder = firstSeparator === -1 ? "" : body.slice(firstSeparator).trimStart();
+  if (remainder.startsWith(":")) {
+    remainder = remainder.slice(1).trimStart();
+  }
+  const args = remainder.trim();
+  if (!name) {
+    return null;
+  }
+  const normalizedName = normalizeLowercaseStringOrEmpty(name);
+  const command = SLASH_COMMANDS.find(
+    (cmd) =>
+      cmd.name === normalizedName ||
+      cmd.aliases?.some((a) => normalizeLowercaseStringOrEmpty(a) === normalizedName),
+  );
+  return command ? { command, args } : null;
+}
+
+/** 带运行时回调的斜杠命令（UI 层使用） */
+export type SlashCommand = {
+  name: string;
+  description: string;
+  /** 执行命令，返回要替换到 draft 的文本，null 表示仅执行副作用 */
   action: () => string | null;
-}
+};
 
-// ============ 使用频率跟踪（localStorage 持久化） ============
-
-const USAGE_STORAGE_KEY = "openclaw_slash_usage";
-type UsageRecord = { count: number; lastUsedAt: number };
-type UsageData = Record<string, UsageRecord>;
-
-class SlashCommandUsageTracker {
-  private data: UsageData;
-
-  constructor() {
-    this.data = this.load();
-  }
-
-  private load(): UsageData {
-    try {
-      const raw = localStorage.getItem(USAGE_STORAGE_KEY);
-      return raw ? (JSON.parse(raw) as UsageData) : {};
-    } catch {
-      return {};
-    }
-  }
-
-  private save(): void {
-    try {
-      localStorage.setItem(USAGE_STORAGE_KEY, JSON.stringify(this.data));
-    } catch {
-      /* localStorage unavailable — ignore */
-    }
-  }
-
-  /** Record a command execution */
-  recordUsage(name: string): void {
-    const existing = this.data[name] ?? { count: 0, lastUsedAt: 0 };
-    existing.count++;
-    existing.lastUsedAt = Date.now();
-    this.data[name] = existing;
-    this.save();
-  }
-
-  /** Whether a command has been used at least once */
-  hasUsage(name: string): boolean {
-    return (this.data[name]?.count ?? 0) > 0;
-  }
-
-  /** Sort commands: frequently used first, then by recency, then original order */
-  sortByUsage<T extends { name: string }>(commands: T[]): T[] {
-    return [...commands].toSorted((a, b) => {
-      const ua = this.data[a.name];
-      const ub = this.data[b.name];
-      // Commands with usage data come first
-      if (ua && !ub) {
-        return -1;
-      }
-      if (!ua && ub) {
-        return 1;
-      }
-      if (!ua && !ub) {
-        return 0;
-      }
-      // Higher count first
-      if (ua.count !== ub.count) {
-        return ub.count - ua.count;
-      }
-      // More recent first
-      return ub.lastUsedAt - ua.lastUsedAt;
-    });
-  }
-}
-
-export const slashUsageTracker = new SlashCommandUsageTracker();
-
-// ============ 内置命令 ============
-
-/** Built-in commands available to all users. */
-export function getBuiltinSlashCommands(callbacks: {
+/** 内置斜杠命令的回调选项 */
+export type BuiltinSlashCommandOptions = {
   onNewSession?: () => void;
   onStop?: () => void;
   onClear?: () => void;
   onCompact?: () => void;
   onCopy?: () => void;
   onFocus?: () => void;
-  onHelp?: () => void;
   onStatus?: () => void;
-}): SlashCommand[] {
+};
+
+/** 获取绑定了回调的内置斜杠命令列表 */
+export function getBuiltinSlashCommands(opts: BuiltinSlashCommandOptions): SlashCommand[] {
   return [
     {
       name: "new",
-      description: t("chat.slash.new"),
-      icon: "✨",
-      aliases: [t("chat.slash.new.alias")],
+      description: t("slash.new.desc"),
       action: () => {
-        callbacks.onNewSession?.();
-        return "";
+        opts.onNewSession?.();
+        return null;
       },
     },
     {
       name: "stop",
-      description: t("chat.slash.stop"),
-      icon: "⏹️",
-      aliases: [t("chat.slash.stop.alias")],
+      description: t("slash.stop.desc"),
       action: () => {
-        callbacks.onStop?.();
-        return "";
+        opts.onStop?.();
+        return null;
       },
     },
     {
       name: "clear",
-      description: t("chat.slash.clear"),
-      icon: "🧹",
-      aliases: [t("chat.slash.clear.alias")],
+      description: t("slash.clear.desc"),
       action: () => {
-        callbacks.onClear?.();
-        return "";
+        opts.onClear?.();
+        return null;
       },
     },
     {
       name: "compact",
-      description: t("chat.slash.compact"),
-      icon: "📦",
-      aliases: [t("chat.slash.compact.alias")],
+      description: t("slash.compact.desc"),
       action: () => {
-        callbacks.onCompact?.();
-        return "";
+        opts.onCompact?.();
+        return null;
       },
     },
     {
       name: "copy",
-      description: t("chat.slash.copy"),
-      icon: "📋",
-      aliases: [t("chat.slash.copy.alias")],
+      description: t("slash.copy.desc"),
       action: () => {
-        callbacks.onCopy?.();
-        return "";
+        opts.onCopy?.();
+        return null;
       },
     },
     {
       name: "focus",
-      description: t("chat.slash.focus"),
-      icon: "🎯",
-      aliases: [t("chat.slash.focus.alias")],
+      description: t("slash.focus.desc"),
       action: () => {
-        callbacks.onFocus?.();
-        return "";
-      },
-    },
-    {
-      name: "help",
-      description: t("chat.slash.help"),
-      icon: "❓",
-      aliases: [t("chat.slash.help.alias")],
-      action: () => {
-        callbacks.onHelp?.();
-        return "";
+        opts.onFocus?.();
+        return null;
       },
     },
     {
       name: "status",
-      description: t("chat.slash.status"),
-      icon: "📊",
-      aliases: [t("chat.slash.status.alias")],
+      description: t("slash.status.desc"),
       action: () => {
-        callbacks.onStatus?.();
-        return "";
+        opts.onStatus?.();
+        return null;
       },
     },
   ];
 }
 
-// ============ Token 检测 ============
-
 /**
- * Detect whether the current draft qualifies for slash command suggestions.
- * Returns the partial command token (excluding the "/") or null.
- *
- * Supports both ASCII and CJK characters (e.g. `/新会话`, `/new`).
+ * 从 draft 文本中检测斜杠 token
+ * 仅在文本以 "/" 开头时触发
+ * 返回斜杠后的内容（不含斜杠），或 null
  */
 export function detectSlashToken(draft: string): string | null {
-  // Only match if the entire draft starts with "/"
-  if (!draft.startsWith("/")) {
+  const trimmed = draft.trimStart();
+  if (!trimmed.startsWith("/")) {
     return null;
   }
-  // Extract the token after "/" — support ASCII + CJK Unified Ideographs
-  const match = draft.match(/^\/([a-zA-Z0-9_\u4e00-\u9fff\u3400-\u4dbf-]*)/);
-  return match ? match[1].toLowerCase() : null;
+  // 如果已经是完整命令（含空格），停止补全
+  const body = trimmed.slice(1);
+  if (body.includes(" ")) {
+    return null;
+  }
+  return body;
 }
 
-// ============ 过滤与排序 ============
-
 /**
- * Filter commands that match the partial token, then sort by usage frequency.
- *
- * Matching logic:
- * 1. Command name starts with the token (e.g. "ne" → /new)
- * 2. Any alias starts with the token (e.g. "新" → /new via alias "新会话")
- * 3. Description contains the token
- *
- * When token is empty (user just typed "/"), returns all commands sorted by usage.
+ * 过滤出与 token 匹配的命令
  */
 export function filterSlashCommands(commands: SlashCommand[], token: string): SlashCommand[] {
-  let filtered: SlashCommand[];
   if (!token) {
-    // Show all commands, sorted by usage (most used first)
-    filtered = commands;
-  } else {
-    const lowerToken = token.toLowerCase();
-    filtered = commands.filter(
-      (cmd) =>
-        cmd.name.toLowerCase().startsWith(lowerToken) ||
-        cmd.aliases?.some((a) => a.toLowerCase().startsWith(lowerToken)) ||
-        cmd.description.toLowerCase().includes(lowerToken),
-    );
+    return commands;
   }
-  return slashUsageTracker.sortByUsage(filtered);
+  const lower = token.toLowerCase();
+  return commands.filter((cmd) => cmd.name.toLowerCase().startsWith(lower));
 }
 
-// ============ 下拉渲染 ============
+// ============================================================
+// 使用频率追踪
+// ============================================================
+
+const TRACKER_KEY = "slash_cmd_usage";
+
+class SlashUsageTracker {
+  private counts: Record<string, number> = this._load();
+
+  recordUsage(name: string): void {
+    this.counts[name] = (this.counts[name] ?? 0) + 1;
+    this._save();
+  }
+
+  getCount(name: string): number {
+    return this.counts[name] ?? 0;
+  }
+
+  sortByUsage(commands: SlashCommand[]): SlashCommand[] {
+    return [...commands].toSorted((a, b) => this.getCount(b.name) - this.getCount(a.name));
+  }
+
+  private _load(): Record<string, number> {
+    try {
+      const raw = localStorage.getItem(TRACKER_KEY);
+      return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private _save(): void {
+    try {
+      localStorage.setItem(TRACKER_KEY, JSON.stringify(this.counts));
+    } catch {
+      // ignore storage errors
+    }
+  }
+}
+
+export const slashUsageTracker = new SlashUsageTracker();
+
+// ============================================================
+// 下拉框渲染
+// ============================================================
 
 /**
- * Render the slash command dropdown.
- * Returns `nothing` if there are no matching commands.
- *
- * Each item shows:
- * - Icon + command name (e.g. ✨ /new)
- * - Chinese alias if present (e.g. 新会话)
- * - Description
- * - ⭐ indicator for frequently used commands
+ * 渲染斜杠命令补全下拉框
  */
 export function renderSlashDropdown(
   commands: SlashCommand[],
@@ -259,40 +444,24 @@ export function renderSlashDropdown(
   if (commands.length === 0) {
     return nothing;
   }
-
   return html`
-    <div class="chat-slash-dropdown" role="listbox" aria-label="Slash commands">
-      ${commands.map((cmd) => {
-        // Show the first alias that differs from the command name
-        const displayAlias = cmd.aliases?.find(
-          (a) => a && a.toLowerCase() !== cmd.name.toLowerCase(),
-        );
-        const isFrequent = slashUsageTracker.hasUsage(cmd.name);
-        return html`
-            <div
-              class="chat-slash-item"
-              role="option"
-              @click=${(e: Event) => {
-                e.stopPropagation();
-                onSelect(cmd);
-              }}
-            >
-              <span class="chat-slash-item__icon">${cmd.icon ?? "/"}</span>
-              <span class="chat-slash-item__name">/${cmd.name}</span>
-              ${
-                displayAlias
-                  ? html`<span class="chat-slash-item__alias">${displayAlias}</span>`
-                  : nothing
-              }
-              <span class="chat-slash-item__desc">${cmd.description}</span>
-              ${
-                isFrequent
-                  ? html`<span class="chat-slash-item__freq" title="${t("chat.slash.frequent")}">⭐</span>`
-                  : nothing
-              }
-            </div>
-          `;
-      })}
+    <div class="slash-dropdown" role="listbox" aria-label="Slash commands">
+      ${commands.map(
+        (cmd) => html`
+          <button
+            class="slash-dropdown__item"
+            role="option"
+            type="button"
+            @mousedown=${(e: Event) => {
+              e.preventDefault(); // 防止 textarea 失焦
+              onSelect(cmd);
+            }}
+          >
+            <span class="slash-dropdown__name">/${cmd.name}</span>
+            <span class="slash-dropdown__desc">${cmd.description}</span>
+          </button>
+        `,
+      )}
     </div>
   `;
 }

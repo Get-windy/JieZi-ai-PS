@@ -1,23 +1,133 @@
 import { html, nothing } from "lit";
-import type { ChannelAccountSnapshot } from "../types.ts";
+import { t } from "../i18n.js";
+import type { ChannelAccountSnapshot } from "../types.js";
 import type { ChannelKey, ChannelsProps } from "./channels.types.ts";
-import { t } from "../i18n.ts";
 
-export function channelEnabled(key: ChannelKey, props: ChannelsProps) {
-  const snapshot = props.snapshot;
-  const channels = snapshot?.channels as Record<string, unknown> | null;
-  if (!snapshot || !channels) {
-    return false;
-  }
-  const channelStatus = channels[key] as Record<string, unknown> | undefined;
-  const configured = typeof channelStatus?.configured === "boolean" && channelStatus.configured;
-  const running = typeof channelStatus?.running === "boolean" && channelStatus.running;
-  const connected = typeof channelStatus?.connected === "boolean" && channelStatus.connected;
-  const accounts = snapshot.channelAccounts?.[key] ?? [];
-  const accountActive = accounts.some(
+type ChannelDisplayState = {
+  configured: boolean | null;
+  running: boolean | null;
+  connected: boolean | null;
+  defaultAccount: ChannelAccountSnapshot | null;
+  hasAnyActiveAccount: boolean;
+  status: Record<string, unknown> | undefined;
+};
+
+type ChannelStatusRow = {
+  label: string;
+  value: unknown;
+};
+
+function resolveChannelStatus(
+  key: ChannelKey,
+  props: ChannelsProps,
+): Record<string, unknown> | undefined {
+  const channels = props.snapshot?.channels as Record<string, unknown> | null;
+  return channels?.[key] as Record<string, unknown> | undefined;
+}
+
+export function resolveDefaultChannelAccount(
+  key: ChannelKey,
+  props: ChannelsProps,
+): ChannelAccountSnapshot | null {
+  const accounts = props.snapshot?.channelAccounts?.[key] ?? [];
+  const defaultAccountId = props.snapshot?.channelDefaultAccountId?.[key];
+  return (
+    (defaultAccountId
+      ? accounts.find((account) => account.accountId === defaultAccountId)
+      : undefined) ??
+    accounts[0] ??
+    null
+  );
+}
+
+export function resolveChannelDisplayState(
+  key: ChannelKey,
+  props: ChannelsProps,
+): ChannelDisplayState {
+  const status = resolveChannelStatus(key, props);
+  const accounts = props.snapshot?.channelAccounts?.[key] ?? [];
+  const defaultAccount = resolveDefaultChannelAccount(key, props);
+  const configured =
+    typeof status?.configured === "boolean"
+      ? status.configured
+      : typeof defaultAccount?.configured === "boolean"
+        ? defaultAccount.configured
+        : null;
+  const running = typeof status?.running === "boolean" ? status.running : null;
+  const connected = typeof status?.connected === "boolean" ? status.connected : null;
+  const hasAnyActiveAccount = accounts.some(
     (account) => account.configured || account.running || account.connected,
   );
-  return configured || running || connected || accountActive;
+
+  return {
+    configured,
+    running,
+    connected,
+    defaultAccount,
+    hasAnyActiveAccount,
+    status,
+  };
+}
+
+export function channelEnabled(key: ChannelKey, props: ChannelsProps) {
+  if (!props.snapshot) {
+    return false;
+  }
+  const displayState = resolveChannelDisplayState(key, props);
+  return (
+    displayState.configured === true ||
+    displayState.running === true ||
+    displayState.connected === true ||
+    displayState.hasAnyActiveAccount
+  );
+}
+
+export function resolveChannelConfigured(key: ChannelKey, props: ChannelsProps): boolean | null {
+  return resolveChannelDisplayState(key, props).configured;
+}
+
+export function formatNullableBoolean(value: boolean | null): string {
+  if (value == null) {
+    return t("common.na");
+  }
+  return value ? t("common.yes") : t("common.no");
+}
+
+export function renderSingleAccountChannelCard(params: {
+  title: string;
+  subtitle: string;
+  accountCountLabel: unknown;
+  statusRows: readonly ChannelStatusRow[];
+  lastError?: string | null;
+  secondaryCallout?: unknown;
+  extraContent?: unknown;
+  configSection: unknown;
+  footer?: unknown;
+}) {
+  return html`
+    <div class="card">
+      <div class="card-title">${params.title}</div>
+      <div class="card-sub">${params.subtitle}</div>
+      ${params.accountCountLabel}
+
+      <div class="status-list" style="margin-top: 16px;">
+        ${params.statusRows.map(
+          (row) => html`
+            <div>
+              <span class="label">${row.label}</span>
+              <span>${row.value}</span>
+            </div>
+          `,
+        )}
+      </div>
+
+      ${params.lastError
+        ? html`<div class="callout danger" style="margin-top: 12px;">${params.lastError}</div>`
+        : nothing}
+      ${params.secondaryCallout ?? nothing} ${params.extraContent ?? nothing}
+      ${params.configSection} ${params.footer ?? nothing}
+    </div>
+  `;
 }
 
 export function getChannelAccountCount(
@@ -36,47 +146,4 @@ export function renderChannelAccountCount(
     return nothing;
   }
   return html`<div class="account-count">Accounts (${count})</div>`;
-}
-
-/**
- * 渲染通道隐藏按钮
- * @param channelId 通道 ID
- * @param props ChannelsProps
- *
- * 自动判断逻辑：
- * 1. 从 snapshot.channels 中查看通道级别的 configured 状态
- * 2. 从 snapshot.channelAccounts 中查看是否有已配置的账号
- * 3. 只有当通道未配置且没有已配置账号时，才显示隐藏按钮
- */
-export function renderChannelHideButton(channelId: ChannelKey, props: ChannelsProps) {
-  const snapshot = props.snapshot;
-  if (!snapshot) {
-    return nothing;
-  }
-
-  // 检查通道级别配置状态
-  const channels = snapshot.channels as Record<string, unknown> | null;
-  const channelStatus = channels?.[channelId] as { configured?: boolean } | undefined;
-  const channelConfigured = channelStatus?.configured === true;
-
-  // 检查账号级别配置状态
-  const accounts = snapshot.channelAccounts?.[channelId] ?? [];
-  const hasConfiguredAccounts = accounts.some((acc) => acc.configured);
-
-  // 只有当通道和账号都未配置时，才显示隐藏按钮
-  const isConfigured = channelConfigured || hasConfiguredAccounts;
-  if (isConfigured) {
-    return nothing;
-  }
-
-  return html`
-    <button 
-      class="btn btn--sm" 
-      style="position: absolute; top: 12px; right: 12px; padding: 4px 8px; font-size: 11px; z-index: 1;"
-      @click=${() => props.onToggleChannelVisibility(channelId)}
-      title="${t("channels.hide")}"
-    >
-      ${t("channels.hide")}
-    </button>
-  `;
 }

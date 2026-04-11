@@ -1,5 +1,39 @@
-import type { GatewayBrowserClient } from "../gateway.ts";
-import type { SkillStatusReport } from "../types.ts";
+import type { GatewayBrowserClient } from "../gateway.js";
+import type { SkillStatusReport } from "../types.js";
+
+export type ClawHubSearchResult = {
+  score: number;
+  slug: string;
+  displayName: string;
+  summary?: string;
+  version?: string;
+  updatedAt?: number;
+};
+
+export type ClawHubSkillDetail = {
+  skill: {
+    slug: string;
+    displayName: string;
+    summary?: string;
+    tags?: Record<string, string>;
+    createdAt: number;
+    updatedAt: number;
+  } | null;
+  latestVersion?: {
+    version: string;
+    createdAt: number;
+    changelog?: string;
+  } | null;
+  metadata?: {
+    os?: string[] | null;
+    systems?: string[] | null;
+  } | null;
+  owner?: {
+    handle?: string | null;
+    displayName?: string | null;
+    image?: string | null;
+  } | null;
+};
 
 export type SkillsState = {
   client: GatewayBrowserClient | null;
@@ -10,11 +44,16 @@ export type SkillsState = {
   skillsBusyKey: string | null;
   skillEdits: Record<string, string>;
   skillMessages: SkillMessageMap;
-  // Advanced features
-  skillsAdvancedMode: boolean;
-  skillsSelectedSkills: Set<string>;
-  skillsFilterStatus: "all" | "eligible" | "blocked" | "disabled";
-  skillsFilterSource: "all" | "workspace" | "built-in" | "installed" | "extra";
+  clawhubSearchQuery: string;
+  clawhubSearchResults: ClawHubSearchResult[] | null;
+  clawhubSearchLoading: boolean;
+  clawhubSearchError: string | null;
+  clawhubDetail: ClawHubSkillDetail | null;
+  clawhubDetailSlug: string | null;
+  clawhubDetailLoading: boolean;
+  clawhubDetailError: string | null;
+  clawhubInstallSlug: string | null;
+  clawhubInstallMessage: { kind: "success" | "error"; text: string } | null;
 };
 
 export type SkillMessage = {
@@ -46,6 +85,14 @@ function getErrorMessage(err: unknown) {
     return err.message;
   }
   return String(err);
+}
+
+export function setClawHubSearchQuery(state: SkillsState, query: string) {
+  state.clawhubSearchQuery = query;
+  state.clawhubInstallMessage = null;
+  state.clawhubSearchResults = null;
+  state.clawhubSearchError = null;
+  state.clawhubSearchLoading = false;
 }
 
 export async function loadSkills(state: SkillsState, options?: LoadSkillsOptions) {
@@ -113,7 +160,7 @@ export async function saveSkillApiKey(state: SkillsState, skillKey: string) {
     await loadSkills(state);
     setSkillMessage(state, skillKey, {
       kind: "success",
-      message: "API key saved",
+      message: `API key saved — stored in openclaw.json (skills.entries.${skillKey})`,
     });
   } catch (err) {
     const message = getErrorMessage(err);
@@ -132,6 +179,7 @@ export async function installSkill(
   skillKey: string,
   name: string,
   installId: string,
+  dangerouslyForceUnsafeInstall = false,
 ) {
   if (!state.client || !state.connected) {
     return;
@@ -142,6 +190,7 @@ export async function installSkill(
     const result = await state.client.request<{ message?: string }>("skills.install", {
       name,
       installId,
+      dangerouslyForceUnsafeInstall,
       timeoutMs: 120000,
     });
     await loadSkills(state);
@@ -161,21 +210,109 @@ export async function installSkill(
   }
 }
 
-/**
- * Toggle advanced mode
- */
-export function toggleAdvancedMode(state: SkillsState) {
+export async function searchClawHub(state: SkillsState, query: string) {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  if (!query.trim()) {
+    state.clawhubSearchResults = null;
+    state.clawhubSearchError = null;
+    state.clawhubSearchLoading = false;
+    return;
+  }
+  state.clawhubSearchResults = null;
+  state.clawhubSearchLoading = true;
+  state.clawhubSearchError = null;
+  try {
+    const res = await state.client.request<{ results: ClawHubSearchResult[] }>("skills.search", {
+      query,
+      limit: 20,
+    });
+    if (query !== state.clawhubSearchQuery) {
+      return;
+    }
+    state.clawhubSearchResults = res?.results ?? [];
+  } catch (err) {
+    if (query !== state.clawhubSearchQuery) {
+      return;
+    }
+    state.clawhubSearchError = getErrorMessage(err);
+  } finally {
+    if (query === state.clawhubSearchQuery) {
+      state.clawhubSearchLoading = false;
+    }
+  }
+}
+
+export async function loadClawHubDetail(state: SkillsState, slug: string) {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  state.clawhubDetailSlug = slug;
+  state.clawhubDetailLoading = true;
+  state.clawhubDetailError = null;
+  state.clawhubDetail = null;
+  try {
+    const res = await state.client.request<ClawHubSkillDetail>("skills.detail", { slug });
+    if (slug !== state.clawhubDetailSlug) {
+      return;
+    }
+    state.clawhubDetail = res ?? null;
+  } catch (err) {
+    if (slug !== state.clawhubDetailSlug) {
+      return;
+    }
+    state.clawhubDetailError = getErrorMessage(err);
+  } finally {
+    if (slug === state.clawhubDetailSlug) {
+      state.clawhubDetailLoading = false;
+    }
+  }
+}
+
+export function closeClawHubDetail(state: SkillsState) {
+  state.clawhubDetailSlug = null;
+  state.clawhubDetail = null;
+  state.clawhubDetailError = null;
+  state.clawhubDetailLoading = false;
+}
+
+export async function installFromClawHub(state: SkillsState, slug: string) {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  state.clawhubInstallSlug = slug;
+  state.clawhubInstallMessage = null;
+  try {
+    await state.client.request("skills.install", { source: "clawhub", slug });
+    await loadSkills(state);
+    state.clawhubInstallMessage = { kind: "success", text: `Installed ${slug}` };
+  } catch (err) {
+    state.clawhubInstallMessage = { kind: "error", text: getErrorMessage(err) };
+  } finally {
+    state.clawhubInstallSlug = null;
+  }
+}
+
+// ============================================================================
+// 高级模式与批量操作（本地扩展）
+// ============================================================================
+
+type AdvancedSkillsState = SkillsState & {
+  skillsAdvancedMode: boolean;
+  skillsSelectedSkills: Set<string>;
+  skillsFilterStatus: "all" | "eligible" | "blocked" | "disabled";
+  skillsFilterSource: "all" | "workspace" | "built-in" | "installed" | "extra";
+};
+
+export function toggleAdvancedMode(state: AdvancedSkillsState) {
   state.skillsAdvancedMode = !state.skillsAdvancedMode;
   if (!state.skillsAdvancedMode) {
-    // Clear selection when exiting advanced mode
     state.skillsSelectedSkills = new Set();
   }
 }
 
-/**
- * Select/deselect a skill
- */
-export function selectSkill(state: SkillsState, skillKey: string, selected: boolean) {
+export function selectSkill(state: AdvancedSkillsState, skillKey: string, selected: boolean) {
   const next = new Set(state.skillsSelectedSkills);
   if (selected) {
     next.add(skillKey);
@@ -185,83 +322,47 @@ export function selectSkill(state: SkillsState, skillKey: string, selected: bool
   state.skillsSelectedSkills = next;
 }
 
-/**
- * Select all visible skills
- */
-export function selectAllSkills(state: SkillsState) {
-  const skills = state.skillsReport?.skills ?? [];
-  state.skillsSelectedSkills = new Set(skills.map((s) => s.skillKey));
+export function selectAllSkills(state: AdvancedSkillsState) {
+  const keys = state.skillsReport?.skills?.map((s) => s.name) ?? [];
+  state.skillsSelectedSkills = new Set(keys);
 }
 
-/**
- * Deselect all skills
- */
-export function deselectAllSkills(state: SkillsState) {
+export function deselectAllSkills(state: AdvancedSkillsState) {
   state.skillsSelectedSkills = new Set();
 }
 
-/**
- * Batch enable selected skills
- */
-export async function batchEnableSkills(state: SkillsState) {
-  if (!state.client || !state.connected || state.skillsSelectedSkills.size === 0) {
+export async function batchEnableSkills(state: AdvancedSkillsState) {
+  if (!state.client || !state.connected) {
     return;
   }
-  state.skillsLoading = true;
-  state.skillsError = null;
-  try {
-    const promises = Array.from(state.skillsSelectedSkills).map((skillKey) =>
-      state.client!.request("skills.update", { skillKey, enabled: true }),
-    );
-    await Promise.all(promises);
-    await loadSkills(state);
-    state.skillsSelectedSkills = new Set();
-  } catch (err) {
-    state.skillsError = getErrorMessage(err);
-  } finally {
-    state.skillsLoading = false;
+  const keys = [...state.skillsSelectedSkills];
+  for (const skillKey of keys) {
+    await updateSkillEnabled(state, skillKey, true);
   }
+  state.skillsSelectedSkills = new Set();
 }
 
-/**
- * Batch disable selected skills
- */
-export async function batchDisableSkills(state: SkillsState) {
-  if (!state.client || !state.connected || state.skillsSelectedSkills.size === 0) {
+export async function batchDisableSkills(state: AdvancedSkillsState) {
+  if (!state.client || !state.connected) {
     return;
   }
-  state.skillsLoading = true;
-  state.skillsError = null;
-  try {
-    const promises = Array.from(state.skillsSelectedSkills).map((skillKey) =>
-      state.client!.request("skills.update", { skillKey, enabled: false }),
-    );
-    await Promise.all(promises);
-    await loadSkills(state);
-    state.skillsSelectedSkills = new Set();
-  } catch (err) {
-    state.skillsError = getErrorMessage(err);
-  } finally {
-    state.skillsLoading = false;
+  const keys = [...state.skillsSelectedSkills];
+  for (const skillKey of keys) {
+    await updateSkillEnabled(state, skillKey, false);
   }
+  state.skillsSelectedSkills = new Set();
 }
 
-/**
- * Change status filter
- */
 export function changeFilterStatus(
-  state: SkillsState,
-  status: "all" | "eligible" | "blocked" | "disabled",
+  state: AdvancedSkillsState,
+  status: AdvancedSkillsState["skillsFilterStatus"],
 ) {
   state.skillsFilterStatus = status;
 }
 
-/**
- * Change source filter
- */
 export function changeFilterSource(
-  state: SkillsState,
-  source: "all" | "workspace" | "built-in" | "installed" | "extra",
+  state: AdvancedSkillsState,
+  source: AdvancedSkillsState["skillsFilterSource"],
 ) {
   state.skillsFilterSource = source;
 }

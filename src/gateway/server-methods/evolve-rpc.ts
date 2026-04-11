@@ -706,8 +706,108 @@ function loadPerfProfile(agentId?: string): PerformanceProfile {
   });
 }
 
-/** 将一次任务结果记录到性能画像 */
-function recordPerfOutcome(
+// ============================================================================
+// P3 Harness Steering Loop: KPI 低分自动写入 HEARTBEAT.md 行为警示
+// ============================================================================
+
+/** P3 阁値：近期成功率低于此値且样本数充足时，触发 Steering Loop 写入 */
+const STEERING_LOOP_FAILURE_THRESHOLD = 0.3; // 近期成功率 < 30%
+const STEERING_LOOP_MIN_SAMPLES = 5; // 至少 5 次样本才假设性判断
+const STEERING_LOOP_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h 内同一 agentId+taskType 不重复写入
+const STEERING_LOOP_HEARTBEAT_MAX_BYTES = 12_000; // HEARTBEAT.md 超过此大小不写入
+
+/** 冷却记录 key=`agentId:taskType` -> lastWriteTs */
+const steeringLoopCooldown = new Map<string, number>();
+
+/**
+ * injectSteeringLoopHint — 当某类型任务 KPI 持续较低时，自动向 HEARTBEAT.md 注入行为警示。
+ *
+ * 实现 Harness Engineering Steering Loop 闭合：
+ * - KPI 数据驱动 Feedforward 更新（而非手工修改文件）
+ * - HEARTBEAT.md 是 agent 每次心跳时必读文件，保证提示持续生效
+ */
+function injectSteeringLoopHint(
+  agentId: string | undefined,
+  taskType: string,
+  bucket: PerfBucket,
+): void {
+  if (!agentId) {
+    return;
+  }
+  // 样本不足，不判断
+  if (bucket.total < STEERING_LOOP_MIN_SAMPLES) {
+    return;
+  }
+  // 近期成功率计算（优先用近期 10 条）
+  const recent = bucket.recentOutcomes;
+  const recentSuccessRate =
+    recent.length > 0
+      ? recent.filter((o) => o === "success").length / recent.length
+      : bucket.success / bucket.total;
+  if (recentSuccessRate >= STEERING_LOOP_FAILURE_THRESHOLD) {
+    return;
+  }
+  // 冷却检查：24h 内同一 agent+taskType 不重复写入
+  const cooldownKey = `${agentId}:${taskType}`;
+  const lastWrite = steeringLoopCooldown.get(cooldownKey) ?? 0;
+  if (Date.now() - lastWrite < STEERING_LOOP_COOLDOWN_MS) {
+    return;
+  }
+  try {
+    const workspaceDir = resolveAgentWorkspaceDirFallback(agentId);
+    if (!fs.existsSync(workspaceDir)) {
+      return;
+    }
+    const heartbeatPath = path.join(workspaceDir, "HEARTBEAT.md");
+    if (!fs.existsSync(heartbeatPath)) {
+      return;
+    }
+    const existing = fs.readFileSync(heartbeatPath, "utf8");
+    if (existing.length > STEERING_LOOP_HEARTBEAT_MAX_BYTES) {
+      return; // 文件过大，跳过
+    }
+    // 检查是否已有同类型的 Steering Loop 注入标记—避免重复追加
+    const existingMarker = `[STEERING-LOOP:${taskType}]`;
+    if (existing.includes(existingMarker)) {
+      // 已有记录，更新冷却后返回
+      steeringLoopCooldown.set(cooldownKey, Date.now());
+      return;
+    }
+    const successPct = Math.round(recentSuccessRate * 100);
+    const date = new Date().toISOString().split("T")[0];
+    const hint = [
+      ``,
+      `<!-- ${existingMarker} auto-injected ${date} by Harness Steering Loop -->`,
+      `## ⚠️ KPI 警示：${taskType} 类任务成功率偏低`,
+      ``,
+      `> 根据近期 ${recent.length} 次执行记录，你在 **${taskType}** 类型任务上的成功率为 **${successPct}%**（小于 30%）。`,
+      ``,
+      `**必读：执行 ${taskType} 类任务前，请确认以下事项：**`,
+      `- 明确了解任务预期交付物（不是活动）`,
+      `- 执行前先调用 task_worklog_add 记录你的执行计划`,
+      `- 完成后才调用 task_complete，不要在无产出时标记完成`,
+      `- 遇到阻塞立即用 task_report_to_supervisor 请求帮助`,
+      ``,
+    ].join("\n");
+    fs.appendFileSync(heartbeatPath, hint, "utf8");
+    steeringLoopCooldown.set(cooldownKey, Date.now());
+    appendEvolveEvent(agentId, {
+      type: "lesson.promoted",
+      summary: `Steering Loop: ${taskType} KPI ${successPct}% 警示写入 HEARTBEAT.md`,
+      meta: { target: "HEARTBEAT.md", taskType, successRate: recentSuccessRate },
+    });
+  } catch {
+    /* 写入失败不影响主流程 */
+  }
+}
+
+/**
+ * 将一次任务结果记录到性能画像
+ *
+ * 供外部（tasks-rpc.ts 等）在任务完成/失败/取消时调用，形成 KPI 写回闭环。
+ * 借鉴 Hermes Agent v0.8.0 cron KPI 自动更新设计。
+ */
+export function recordPerfOutcome(
   agentId: string | undefined,
   taskType: string,
   outcome: ReflectionOutcome,
@@ -732,6 +832,12 @@ function recordPerfOutcome(
   profile.buckets[taskType] = bucket;
   profile.updatedAt = Date.now();
   saveJson(resolvePerfProfileFile(agentId), profile);
+
+  // === P3 Harness Steering Loop 闭合 ===
+  // KPI 持续低于阈値时，自动将行为禁令写入 HEARTBEAT.md，形成 Harness Feedforward 轮循。
+  // 参考 Martin Fowler Harness Engineering: Steering Loop —
+  //   "每次 Agent 犯错就把修复逻辑写入 Harness，下次不再犯同样的错"
+  injectSteeringLoopHint(agentId, taskType, bucket);
 }
 
 // ============================================================================

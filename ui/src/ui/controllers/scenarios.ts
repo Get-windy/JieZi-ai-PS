@@ -83,14 +83,12 @@ export async function loadScenarios(host: OpenClawApp): Promise<void> {
   host.scenariosError = null;
 
   try {
-    const response = await host.client?.request("scenarios.list", {});
-
-    if (response?.ok && response.result) {
-      host.scenariosList = response.result.scenarios || [];
-      host.scenariosTotal = response.result.total || 0;
-    } else {
-      host.scenariosError = response?.error?.message || "加载场景列表失败";
-    }
+    const result = (await host.client?.request("scenarios.list", {})) as {
+      scenarios?: CollaborationScenario[];
+      total?: number;
+    } | null;
+    host.scenariosList = result?.scenarios || [];
+    host.scenariosTotal = result?.total || 0;
   } catch (err) {
     host.scenariosError = err instanceof Error ? err.message : String(err);
   } finally {
@@ -105,19 +103,10 @@ export async function createScenario(
   host: OpenClawApp,
   scenario: Omit<CollaborationScenario, "id" | "createdAt" | "updatedAt">,
 ): Promise<void> {
-  try {
-    const response = await host.client?.request("scenarios.create", scenario);
-
-    if (response?.ok && response.result) {
-      await loadScenarios(host);
-      host.creatingScenario = false;
-      host.editingScenario = null;
-    } else {
-      throw new Error(response?.error?.message || "创建场景失败");
-    }
-  } catch (err) {
-    throw err;
-  }
+  await host.client?.request("scenarios.create", scenario);
+  await loadScenarios(host);
+  host.creatingScenario = false;
+  host.editingScenario = null;
 }
 
 /**
@@ -128,40 +117,17 @@ export async function updateScenario(
   scenarioId: string,
   updates: Partial<CollaborationScenario>,
 ): Promise<void> {
-  try {
-    const response = await host.client?.request("scenarios.update", {
-      scenarioId,
-      updates,
-    });
-
-    if (response?.ok) {
-      await loadScenarios(host);
-      host.editingScenario = null;
-    } else {
-      throw new Error(response?.error?.message || "更新场景失败");
-    }
-  } catch (err) {
-    throw err;
-  }
+  await host.client?.request("scenarios.update", { scenarioId, updates });
+  await loadScenarios(host);
+  host.editingScenario = null;
 }
 
 /**
  * 删除场景
  */
 export async function deleteScenario(host: OpenClawApp, scenarioId: string): Promise<void> {
-  try {
-    const response = await host.client?.request("scenarios.delete", {
-      scenarioId,
-    });
-
-    if (response?.ok) {
-      await loadScenarios(host);
-    } else {
-      throw new Error(response?.error?.message || "删除场景失败");
-    }
-  } catch (err) {
-    throw err;
-  }
+  await host.client?.request("scenarios.delete", { scenarioId });
+  await loadScenarios(host);
 }
 
 /**
@@ -170,20 +136,9 @@ export async function deleteScenario(host: OpenClawApp, scenarioId: string): Pro
 export async function runScenario(host: OpenClawApp, scenarioId: string): Promise<void> {
   try {
     host.runningScenarioId = scenarioId;
-
-    const response = await host.client?.request("scenarios.run", {
-      scenarioId,
-    });
-
-    if (response?.ok) {
-      // 刷新场景列表以更新统计信息
-      await loadScenarios(host);
-      await loadScenarioRuns(host, scenarioId);
-    } else {
-      throw new Error(response?.error?.message || "执行场景失败");
-    }
-  } catch (err) {
-    throw err;
+    await host.client?.request("scenarios.run", { scenarioId });
+    await loadScenarios(host);
+    await loadScenarioRuns(host, scenarioId);
   } finally {
     host.runningScenarioId = null;
   }
@@ -196,13 +151,10 @@ export async function loadScenarioRuns(host: OpenClawApp, scenarioId?: string): 
   host.scenarioRunsLoading = true;
 
   try {
-    const response = await host.client?.request("scenarios.runs", {
-      scenarioId,
-    });
-
-    if (response?.ok && response.result) {
-      host.scenarioRuns = response.result.runs || [];
-    }
+    const result = (await host.client?.request("scenarios.runs", { scenarioId })) as {
+      runs?: ScenarioRun[];
+    } | null;
+    host.scenarioRuns = result?.runs || [];
   } catch (err) {
     console.error("Failed to load scenario runs:", err);
   } finally {
@@ -217,11 +169,10 @@ export async function loadRecommendations(host: OpenClawApp): Promise<void> {
   host.recommendationsLoading = true;
 
   try {
-    const response = await host.client?.request("scenarios.recommendations", {});
-
-    if (response?.ok && response.result) {
-      host.recommendations = response.result.recommendations || [];
-    }
+    const result = (await host.client?.request("scenarios.recommendations", {})) as {
+      recommendations?: ScenarioRecommendation[];
+    } | null;
+    host.recommendations = result?.recommendations || [];
   } catch (err) {
     console.error("Failed to load recommendations:", err);
   } finally {

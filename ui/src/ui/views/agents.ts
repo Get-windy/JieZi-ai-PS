@@ -21,8 +21,11 @@ import type {
   ChannelsStatusSnapshot,
   CronJob,
   CronStatus,
+  ModelCatalogEntry,
   SkillStatusEntry,
   SkillStatusReport,
+  ToolsCatalogResult,
+  ToolsEffectiveResult,
 } from "../types.ts";
 import { renderPolicyBindingDialog } from "./agents.channel-policy-dialog.ts";
 import { renderPermissionsManagement } from "./permissions-management.ts";
@@ -120,12 +123,30 @@ export type ChannelPolicy =
   | "broadcast"
   | "smart-route";
 
+export type ToolsCatalogState = {
+  loading: boolean;
+  error: string | null;
+  result: ToolsCatalogResult | null;
+};
+
+export type ToolsEffectiveState = {
+  loading: boolean;
+  error: string | null;
+  result: ToolsEffectiveResult | null;
+};
+
 export type AgentsProps = {
+  basePath: string;
   loading: boolean;
   error: string | null;
   agentsList: AgentsListResult | null;
   selectedAgentId: string | null;
   activePanel: AgentsPanel;
+  toolsCatalog: ToolsCatalogState;
+  toolsEffective: ToolsEffectiveState;
+  runtimeSessionKey: string;
+  runtimeSessionMatchesSelectedAgent: boolean;
+  modelCatalog: ModelCatalogEntry[];
   configForm: Record<string, unknown> | null;
   configLoading: boolean;
   configSaving: boolean;
@@ -1621,6 +1642,27 @@ function renderAgentChannelPolicies(params: {
 }
 
 export function renderAgents(props: AgentsProps) {
+  // 调试日志：记录 Agents 渲染关键状态
+  if (typeof window !== "undefined" && (window as unknown as { __DEBUG_UI__?: boolean }).__DEBUG_UI__) {
+    console.log("[DEBUG:Agents] renderAgents called with:", {
+      basePath: props.basePath,
+      loading: props.loading,
+      error: props.error,
+      agentsListExists: !!props.agentsList,
+      agentsCount: props.agentsList?.agents?.length ?? 0,
+      defaultId: props.agentsList?.defaultId,
+      selectedAgentId: props.selectedAgentId,
+      activePanel: props.activePanel,
+      configLoading: props.configLoading,
+      configSaving: props.configSaving,
+      configDirty: props.configDirty,
+      toolsCatalogLoading: props.toolsCatalog?.loading,
+      toolsEffectiveLoading: props.toolsEffective?.loading,
+      runtimeSessionKey: props.runtimeSessionKey,
+      runtimeSessionMatches: props.runtimeSessionMatchesSelectedAgent,
+    });
+  }
+
   const agents = props.agentsList?.agents ?? [];
   const defaultId = props.agentsList?.defaultId ?? null;
   const selectedId = props.selectedAgentId ?? defaultId ?? agents[0]?.id ?? null;

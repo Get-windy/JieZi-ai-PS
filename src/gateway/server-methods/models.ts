@@ -12,8 +12,16 @@ import {
   ErrorCodes,
   errorShape,
   formatValidationErrors,
-  validateModelsListParams,
 } from "../../../upstream/src/gateway/protocol/index.js";
+// 使用本地扩展的 schema 验证（允许 probe 和 timeoutMs 参数）
+import { ModelsListParamsSchema } from "../protocol/schema/agents-models-skills.js";
+import AjvPkg from "ajv";
+const ajv = new (AjvPkg as unknown as new (opts?: object) => import("ajv").default)({
+  allErrors: true,
+  strict: false,
+  removeAdditional: false,
+});
+const validateModelsListParams = ajv.compile(ModelsListParamsSchema);
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { resolveDefaultAgentId, resolveAgentDir } from "../../agents/agent-scope.js";
 import { forceRefreshBenchmarkData } from "../../agents/arena-benchmarks.js";
@@ -2208,11 +2216,17 @@ export function disableAuthOnBillingOrAuthError(
         `Will auto-recover in ${AUTH_FAILURE_RESET_WINDOW_MS / 60000}min (reset window). ` +
         `No manual action required unless issue persists.`,
     );
+    const disabledAt = Date.now();
     foundAuth.enabled = false;
     foundAuth.autoDisabledReason = reason;
-    foundAuth.autoDisabledAt = Date.now();
-    // 异步持久化（包括 autoDisabledAt 时间戳）
-    updateAuth({ authId, enabled: false, autoDisabledReason: reason }).catch((err) => {
+    foundAuth.autoDisabledAt = disabledAt;
+    // 异步持久化（包括 autoDisabledAt 时间戳）——必须传 autoDisabledAt 否则重启后丢失时间戳，30min 自动恢复失效
+    updateAuth({
+      authId,
+      enabled: false,
+      autoDisabledReason: reason,
+      autoDisabledAt: disabledAt,
+    }).catch((err) => {
       console.error(`[AuthAutoDisable] Failed to persist disabled state for auth ${authId}:`, err);
     });
   } else {

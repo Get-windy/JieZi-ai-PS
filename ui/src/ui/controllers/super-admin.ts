@@ -11,8 +11,7 @@ import type { AppViewState } from "../app-view-state.js";
  * 加载超级管理员列表
  */
 export async function loadSuperAdmins(state: AppViewState): Promise<void> {
-  if (!state.client) {
-    console.error("[Phase7] Cannot load super admins: client not initialized");
+  if (!state.client || !state.connected) {
     return;
   }
 

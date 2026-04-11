@@ -4,6 +4,8 @@ import { GATEWAY_EVENT_UPDATE_AVAILABLE } from "../../upstream/src/gateway/event
 const BASE_METHODS = [
   "health",
   "doctor.memory.status",
+  "doctor.memory.dreamDiary",
+  "doctor.memory.dreamTargets",
   "logs.tail",
   "channels.status",
   "channels.logout",
@@ -239,6 +241,7 @@ const BASE_METHODS = [
   "task.subtask.create",
   "task.dependency.add",
   "task.block",
+  "task.ping",
   // Meetings Management
   "meeting.create",
   "meeting.update",

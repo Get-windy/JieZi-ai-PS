@@ -68,7 +68,7 @@ function buildMemorySection(params: {
   lines.push(
     "**Memory Isolation Rules (CRITICAL)**",
     "  Your personal memory (MEMORY.md) stores ONLY personal information:",
-    "    - Which projects/teams you belong to (e.g., \"I am a member of project X\", \"My team is Y\")",
+    '    - Which projects/teams you belong to (e.g., "I am a member of project X", "My team is Y")',
     "    - Personal work style, preferences, and habits",
     "    - Your own skill development and lesson-learned insights",
     "    - Personal todos with scope=personal",
@@ -380,6 +380,29 @@ function buildDocsSection(params: { docsPath?: string; isMinimal: boolean; readT
   ];
 }
 
+function buildProgressSection(params: { isMinimal: boolean; progressSummary?: string }) {
+  if (params.isMinimal || !params.progressSummary?.trim()) {
+    return [];
+  }
+  return ["## Task Progress (Cross-Session)", params.progressSummary.trim(), ""];
+}
+
+function buildQualityGateSection(params: { isMinimal: boolean; qualityGateHint?: string }) {
+  if (params.isMinimal) {
+    return [];
+  }
+  const hint = params.qualityGateHint?.trim();
+  if (!hint) {
+    return [
+      "## Quality Gate",
+      "After completing any non-trivial task, your output will be evaluated by an independent Evaluator.",
+      "Do NOT self-certify completion. Let the Evaluator decide. If it requests a retry, address the specific dimensions that failed.",
+      "",
+    ];
+  }
+  return ["## Quality Gate", hint, ""];
+}
+
 export function buildAgentSystemPrompt(params: {
   workspaceDir: string;
   defaultThinkLevel?: ThinkLevel;
@@ -427,6 +450,32 @@ export function buildAgentSystemPrompt(params: {
     channel: string;
   };
   memoryCitationsMode?: MemoryCitationsMode;
+  /**
+   * 跨 session 进度摘要（由 AgentProgressManager.formatForPromptInjection 生成）
+   * 若提供，将注入到 system prompt 中，让 Agent 在新 session 开始时就知道之前的进度
+   */
+  progressSummary?: string;
+  /**
+   * 质量门禁提示（由 Evaluator 生成）
+   * 若提供，将提醒 Agent 任务完成后需要触发独立评估
+   */
+  qualityGateHint?: string;
+  /**
+   * 项目 DoD 摘要（由主控心跳时注入）
+   *
+   * 格式：一个数组，每个元素为一个项目的 DoD 状态摘要。
+   * coordinator 心跳时，系统会注入所有活跃项目的验收标准完成情况，
+   * 让 coordinator 知道哪些项目已完成（应停止分配）、哪些尚缺缺口。
+   */
+  projectDodSummary?: Array<{
+    projectId: string;
+    projectName: string;
+    status: string;
+    scopeFrozen: boolean;
+    canClose: boolean;
+    gaps: string[];
+    progress: { satisfied: number; total: number; percent: number };
+  }>;
 }) {
   const acpEnabled = params.acpEnabled !== false;
   const sandboxedRuntime = params.sandboxInfo?.enabled === true;
@@ -615,6 +664,16 @@ export function buildAgentSystemPrompt(params: {
     isMinimal,
     readToolName,
   });
+  // 跨 session 进度摘要 section
+  const progressSection = buildProgressSection({
+    isMinimal,
+    progressSummary: params.progressSummary,
+  });
+  // 质量门禁提示 section
+  const qualityGateSection = buildQualityGateSection({
+    isMinimal,
+    qualityGateHint: params.qualityGateHint,
+  });
   const workspaceNotes = (params.workspaceNotes ?? []).map((note) => note.trim()).filter(Boolean);
 
   // For "none" mode, return just the basic identity line
@@ -685,6 +744,8 @@ export function buildAgentSystemPrompt(params: {
     ...memorySection,
     ...selfEvolutionSection,
     ...planningSection,
+    ...progressSection,
+    ...qualityGateSection,
     hasGateway && !isMinimal ? "## OpenClaw Self-Update" : "",
     hasGateway && !isMinimal
       ? [
@@ -872,6 +933,39 @@ export function buildAgentSystemPrompt(params: {
 
   // Skip heartbeats for subagent/none modes
   if (!isMinimal) {
+    // DoD 门禁摘要：心跳时告知 coordinator 项目完成状态
+    const dodSummary = params.projectDodSummary;
+    if (dodSummary && dodSummary.length > 0) {
+      lines.push("## Project DoD Status (项目完成门禁)");
+      lines.push(
+        "▶ COORDINATOR RULE: 在补充任务前，必须先检查每个项目的 DoD 状态。scopeFrozen=true 表示该项目已完成，禁止创建任何新任务！",
+      );
+      lines.push("");
+      for (const proj of dodSummary) {
+        const statusIcon = proj.scopeFrozen ? "🔒" : proj.canClose ? "✅" : "🛠️";
+        lines.push(`${statusIcon} 项目: ${proj.projectName} (${proj.projectId})`);
+        lines.push(
+          `   状态: ${proj.status} | 进度: ${proj.progress.satisfied}/${proj.progress.total} 项满足 (${proj.progress.percent}%)`,
+        );
+        if (proj.scopeFrozen) {
+          lines.push("   🔒 范围已冻结 — 此项目已完成，主控禁止创建新任务");
+        } else if (proj.canClose) {
+          lines.push(
+            "   ✅ 所有标准已满足 — 请调用 projects.updateProgress 将项目状态设为 completed",
+          );
+        } else if (proj.gaps.length > 0) {
+          lines.push("   待补齐的差距：");
+          for (const gap of proj.gaps.slice(0, 5)) {
+            lines.push(`     ${gap}`);
+          }
+          if (proj.gaps.length > 5) {
+            lines.push(`     ... 共 ${proj.gaps.length} 个差距`);
+          }
+        }
+        lines.push("");
+      }
+    }
+
     lines.push(
       "## Heartbeats",
       heartbeatPromptLine,

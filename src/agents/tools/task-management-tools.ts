@@ -54,7 +54,7 @@ const TaskCreateToolSchema = Type.Object({
     minLength: 1,
     maxLength: 200,
     description:
-      "[REQUIRED] Task title (1-200 chars). Must be a clear, actionable summary of what needs to be done. Example: \"Implement user login page\", \"Fix null pointer in payment module\"",
+      '[REQUIRED] Task title (1-200 chars). Must be a clear, actionable summary of what needs to be done. Example: "Implement user login page", "Fix null pointer in payment module"',
   }),
   /**
    * 任务描述（必填）
@@ -275,6 +275,37 @@ const TaskSubtaskCreateToolSchema = Type.Object({
 });
 
 /**
+ * task_progress_note_append 工具参数 schema
+ *
+ * 进展笔记与工作日志的區别：
+ *   - worklog: 轻量、次数多、记录单一操作；提供可查询的 action/result/duration
+ *   - progress_note: 重要、每次工作会话结束时写一条；以 Markdown 记录阶段性成果/发现/陨阱；双轨写入 SQLite + .notes 文件
+ */
+const TaskProgressNoteAppendToolSchema = Type.Object({
+  /** 任务ID（必填） */
+  taskId: Type.String({
+    minLength: 1,
+    description: "[REQUIRED] The task ID to append a progress note to.",
+  }),
+  /**
+   * 笔记内容（必填，Markdown格式）
+   *
+   * 建议包含：
+   *   1. 本次会话完成了什么（已完成的事项）
+   *   2. 发现的模式或除陷险（方便后续不走弯路）
+   *   3. 显著决策与依据（ADR级别的重要变更）
+   *   4. 下一步建议（接手者可直接开工的信息）
+   */
+  content: Type.String({
+    minLength: 10,
+    maxLength: 8000,
+    description:
+      "[REQUIRED] Progress note content in Markdown format. Should cover: what was accomplished, " +
+      "patterns/pitfalls discovered, significant decisions with rationale, and next-step recommendations.",
+  }),
+});
+
+/**
  * task_worklog_add 工具参数 schema
  */
 const TaskWorklogAddToolSchema = Type.Object({
@@ -319,21 +350,21 @@ export function createTaskCreateTool(opts?: {
     label: "Task Create",
     name: "task_create",
     description:
-      'Create a new task.\n\n' +
-      'REQUIRED fields:\n' +
+      "Create a new task.\n\n" +
+      "REQUIRED fields:\n" +
       '  - title: Clear task title (1-200 chars), e.g. "Implement login page"\n' +
-      '  - description: What to do + why + done criteria (cannot be empty or vague)\n' +
+      "  - description: What to do + why + done criteria (cannot be empty or vague)\n" +
       '  - scope: "personal" (private todo, no project needed) | "project" (team task, must provide project ID)\n\n' +
-      'CONDITIONAL:\n' +
+      "CONDITIONAL:\n" +
       '  - project: REQUIRED when scope="project". Must be a valid existing project ID.\n\n' +
-      'OPTIONAL:\n' +
+      "OPTIONAL:\n" +
       '  - assignee: Must be a valid registered agent ID (e.g. "doc-writer"). Defaults to self.\n' +
-      '  - priority: low | medium (default) | high | urgent\n' +
-      '  - supervisorId: Must be a project member. Defaults to self (creator).\n\n' +
-      'RULES:\n' +
-      '  - Do NOT omit title. A task with no title will be rejected.\n' +
-      '  - Do NOT create duplicate tasks (same title + same assignee already exists as active).\n' +
-      '  - Personal task results → agent private memory. Project task results → project shared memory.',
+      "  - priority: low | medium (default) | high | urgent\n" +
+      "  - supervisorId: Must be a project member. Defaults to self (creator).\n\n" +
+      "RULES:\n" +
+      "  - Do NOT omit title. A task with no title will be rejected.\n" +
+      "  - Do NOT create duplicate tasks (same title + same assignee already exists as active).\n" +
+      "  - Personal task results → agent private memory. Project task results → project shared memory.",
     parameters: TaskCreateToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -358,6 +389,41 @@ export function createTaskCreateTool(opts?: {
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
+        // ── DoD 范围冻结检查：如果项目已完成/范围冻结，拒绝创建任务 ──
+        if (scope === "project" && project) {
+          try {
+            const projectCtx = await callGatewayTool("projects.get", gatewayOpts, {
+              projectId: project,
+            });
+            const projectData = projectCtx as Record<string, unknown> | null;
+            // projects.get 直接返回项目顶层字段，not nested under config
+            const completionGate = projectData?.completionGate as
+              | Record<string, unknown>
+              | undefined;
+            const projectStatus = projectData?.status as string | undefined;
+
+            // 检查范围已冻结或项目已完成
+            if (completionGate?.scopeFrozen === true) {
+              return jsonResult({
+                success: false,
+                error: `🔒 [范围已冻结] 项目 "${project}" 的范围已冻结（原因：${typeof completionGate.scopeFrozenReason === "string" ? completionGate.scopeFrozenReason : "已完成"}）。禁止创建新任务。如需继续开发，请将项目状态改回 actived/development 并明确说明原因。`,
+                blockedReason: "scope_frozen",
+                projectId: project,
+              });
+            }
+            if (projectStatus === "completed" || projectStatus === "cancelled") {
+              return jsonResult({
+                success: false,
+                error: `❌ [项目已关闭] 项目 "${project}" 当前状态为 "${projectStatus}"，不允许创建新任务。`,
+                blockedReason: "project_closed",
+                projectId: project,
+              });
+            }
+          } catch {
+            // 读取项目配置失败不阻止任务创建（项目可能尚未设置 ProjectConfig）
+          }
+        }
+
         // 生成唯一任务ID
         const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -738,6 +804,7 @@ export function createTaskGetTool(opts?: { currentAgentId?: string }): AnyAgentT
         const task = response;
         const comments = (task.comments as unknown[]) || [];
         const workLogs = (task.workLogs as unknown[]) || [];
+        const progressNotes = (task.progressNotes as unknown[]) || [];
 
         return jsonResult({
           success: true,
@@ -745,6 +812,7 @@ export function createTaskGetTool(opts?: { currentAgentId?: string }): AnyAgentT
           summary: {
             commentCount: comments.length,
             workLogCount: workLogs.length,
+            progressNoteCount: progressNotes.length,
             status: task.status,
             priority: task.priority,
             estimatedHours: task.timeTracking
@@ -757,6 +825,9 @@ export function createTaskGetTool(opts?: { currentAgentId?: string }): AnyAgentT
           // 建议 agent 在开始工作之前先阅读最近的评论，了解任务最新进展
           latestComment: comments.length > 0 ? comments[comments.length - 1] : null,
           latestWorkLog: workLogs.length > 0 ? workLogs[workLogs.length - 1] : null,
+          // 最近一条进展笔记（接手者第一时间应看这里了解历史导向、陷阱、下步计划）
+          latestProgressNote:
+            progressNotes.length > 0 ? progressNotes[progressNotes.length - 1] : null,
         });
       } catch (error) {
         return jsonResult({
@@ -880,6 +951,114 @@ export function createTaskWorklogAddTool(opts?: { currentAgentId?: string }): An
         return jsonResult({
           success: false,
           error: `Failed to add work log: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * task_progress_note_append 工具
+ *
+ * 非常重要：工作会话结束时必须调用，将阶段性工作成果沉淀下来。
+ * 效果：同步写入 SQLite（权威）+ .notes/{taskId}.md（人类可读文件）双轨。
+ */
+export function createTaskProgressNoteAppendTool(opts?: { currentAgentId?: string }): AnyAgentTool {
+  return {
+    label: "Task Progress Note",
+    name: "task_progress_note_append",
+    description:
+      "Append a structured progress note to a task at the END of each work session. " +
+      "Unlike worklogs (fine-grained action records), progress notes are session-level summaries in Markdown — " +
+      "written once per session to capture: accomplished items, discovered patterns/pitfalls, key decisions with rationale, and next-step recommendations. " +
+      "Data is written to BOTH SQLite (authoritative, with auto-compaction at 20 notes) AND a hierarchical .notes/{epic}/{feature}/{story}/{taskId}.md file in the project workspace (human-readable, with auto-archival). " +
+      "Notes are also auto-synced to AgentProgress (pitfalls/decisions/nextSessionPlan) for cross-session learning. " +
+      "WHEN TO CALL: At the end of every work session before handing off or resting. " +
+      "CONTENT FORMAT: Markdown. Include headers like ## Accomplished, ## Findings, ## Decisions, ## Next Steps.",
+    parameters: TaskProgressNoteAppendToolSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const taskId = readStringParam(params, "taskId", { required: true });
+      const content = readStringParam(params, "content", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        const response = await callGatewayTool("task.progress_note.append", gatewayOpts, {
+          taskId,
+          agentId: opts?.currentAgentId || "system",
+          content,
+          authorType: "agent",
+        });
+
+        const res = response as Record<string, unknown> | null;
+        return jsonResult({
+          success: true,
+          message: res?.message ?? `Progress note appended to task ${taskId}`,
+          taskId,
+          noteCount: res?.noteCount,
+          fileWritten: res?.fileWritten ?? false,
+          tip: "进展笔记已写入 SQLite，下次我来或其他 Agent 接手时可通过 task_get 或阅读 .notes/ 目录获取完整进展记录。",
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to append progress note: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * task_ping_activity 工具
+ *
+ * 借鉴 Hermes Agent v0.8.0 「活动感知超时」设计：
+ * Agent 在执行长时间任务时，只要调用此工具就刷新 lastActivityAt，
+ * 就能防止被调度器误判为僵尸任务而触发重新活化。
+ *
+ * 使用场景：执行耗时超过 5 分钟的操作（如大文件写入、复杂计算、网络请求等）
+ * 中途定期 ping，告知系统我还在活跃工作中。
+ */
+export function createTaskPingActivityTool(opts?: { currentAgentId?: string }): AnyAgentTool {
+  return {
+    label: "Task Ping Activity",
+    name: "task_ping_activity",
+    description:
+      "Refresh the activity timestamp of an in-progress task to prevent it from being misidentified as a stuck/zombie task by the scheduler. " +
+      "WHEN TO USE: Call this every 5-10 minutes during long-running operations (file writes, computations, network requests, etc.) " +
+      "to signal that you are actively working. This implements Hermes-style inactivity-based timeout: " +
+      "only truly idle agents time out — actively working agents are never killed.",
+    parameters: Type.Object({
+      taskId: Type.String({
+        minLength: 1,
+        description: "[REQUIRED] The task ID to refresh activity for.",
+      }),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const taskId = readStringParam(params, "taskId", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        await callGatewayTool("task.ping", gatewayOpts, {
+          taskId,
+          agentId: opts?.currentAgentId || "system",
+        });
+
+        return jsonResult({
+          success: true,
+          message: `Activity refreshed for task ${taskId}. Inactivity timeout reset.`,
+          taskId,
+          refreshedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to ping task activity: ${
             error instanceof Error ? error.message : String(error)
           }`,
         });

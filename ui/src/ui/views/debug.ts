@@ -1,7 +1,7 @@
 import { html, nothing } from "lit";
-import type { EventLogEntry } from "../app-events.js";
-import { t } from "../i18n.js";
-import { formatEventPayload } from "../presenter.js";
+import { t } from "../../i18n/index.ts";
+import type { EventLogEntry } from "../app-events.ts";
+import { formatEventPayload } from "../presenter.ts";
 
 export type DebugProps = {
   loading: boolean;
@@ -10,6 +10,7 @@ export type DebugProps = {
   models: unknown[];
   heartbeat: unknown;
   eventLog: EventLogEntry[];
+  methods: string[];
   callMethod: string;
   callParams: string;
   callResult: string | null;
@@ -31,61 +32,61 @@ export function renderDebug(props: DebugProps) {
   const info = securitySummary?.info ?? 0;
   const securityTone = critical > 0 ? "danger" : warn > 0 ? "warn" : "success";
   const securityLabel =
-    critical > 0
-      ? t("debug.security.critical").replace("{count}", String(critical))
-      : warn > 0
-        ? t("debug.security.warnings").replace("{count}", String(warn))
-        : t("debug.security.no_issues");
+    critical > 0 ? `${critical} critical` : warn > 0 ? `${warn} warnings` : "No critical issues";
 
   return html`
-    <section class="grid grid-cols-2">
+    <section class="grid">
       <div class="card">
         <div class="row" style="justify-content: space-between;">
           <div>
-            <div class="card-title">${t("debug.snapshots.title")}</div>
-            <div class="card-sub">${t("debug.snapshots.subtitle")}</div>
+            <div class="card-title">${t("debug.snapshotsTitle")}</div>
+            <div class="card-sub">${t("debug.snapshotsSub")}</div>
           </div>
           <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
-            ${props.loading ? t("debug.snapshots.refreshing") : t("debug.snapshots.refresh")}
+            ${props.loading ? t("common.refreshing") : t("common.refresh")}
           </button>
         </div>
         <div class="stack" style="margin-top: 12px;">
           <div>
-            <div class="muted">${t("debug.snapshots.status")}</div>
-            ${
-              securitySummary
-                ? html`<div class="callout ${securityTone}" style="margin-top: 8px;">
-                  ${t("debug.security.audit").replace("{label}", securityLabel).replace("{command}", "openclaw security audit --deep")}${info > 0 ? ` · ${t("debug.security.info").replace("{count}", String(info))}` : ""}.
+            <div class="muted">${t("debug.statusLabel")}</div>
+            ${securitySummary
+              ? html`<div class="callout ${securityTone}" style="margin-top: 8px;">
+                  Security audit: ${securityLabel}${info > 0 ? ` · ${info} info` : ""}. Run
+                  <span class="mono">openclaw security audit --deep</span> for details.
                 </div>`
-                : nothing
-            }
+              : nothing}
             <pre class="code-block">${JSON.stringify(props.status ?? {}, null, 2)}</pre>
           </div>
           <div>
-            <div class="muted">${t("debug.snapshots.health")}</div>
+            <div class="muted">${t("debug.healthLabel")}</div>
             <pre class="code-block">${JSON.stringify(props.health ?? {}, null, 2)}</pre>
           </div>
           <div>
-            <div class="muted">${t("debug.snapshots.heartbeat")}</div>
+            <div class="muted">${t("debug.heartbeatLabel")}</div>
             <pre class="code-block">${JSON.stringify(props.heartbeat ?? {}, null, 2)}</pre>
           </div>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-title">${t("debug.rpc.title")}</div>
-        <div class="card-sub">${t("debug.rpc.subtitle")}</div>
-        <div class="form-grid" style="margin-top: 16px;">
+        <div class="card-title">${t("debug.rpcTitle")}</div>
+        <div class="card-sub">${t("debug.rpcSub")}</div>
+        <div class="stack" style="margin-top: 16px;">
           <label class="field">
-            <span>${t("debug.rpc.method")}</span>
-            <input
+            <span>${t("debug.methodLabel")}</span>
+            <select
               .value=${props.callMethod}
-              @input=${(e: Event) => props.onCallMethodChange((e.target as HTMLInputElement).value)}
-              placeholder="${t("debug.rpc.method.placeholder")}"
-            />
+              @change=${(e: Event) =>
+                props.onCallMethodChange((e.target as HTMLSelectElement).value)}
+            >
+              ${!props.callMethod
+                ? html` <option value="" disabled>${t("debug.methodPlaceholder")}</option> `
+                : nothing}
+              ${props.methods.map((m) => html`<option value=${m}>${m}</option>`)}
+            </select>
           </label>
           <label class="field">
-            <span>${t("debug.rpc.params")}</span>
+            <span>${t("debug.paramsLabel")}</span>
             <textarea
               .value=${props.callParams}
               @input=${(e: Event) =>
@@ -95,59 +96,49 @@ export function renderDebug(props: DebugProps) {
           </label>
         </div>
         <div class="row" style="margin-top: 12px;">
-          <button class="btn primary" @click=${props.onCall}>${t("debug.rpc.call")}</button>
+          <button class="btn primary" @click=${props.onCall}>${t("common.call")}</button>
         </div>
-        ${
-          props.callError
-            ? html`<div class="callout danger" style="margin-top: 12px;">
-              ${props.callError}
-            </div>`
-            : nothing
-        }
-        ${
-          props.callResult
-            ? html`<pre class="code-block" style="margin-top: 12px;">${props.callResult}</pre>`
-            : nothing
-        }
+        ${props.callError
+          ? html`<div class="callout danger" style="margin-top: 12px;">${props.callError}</div>`
+          : nothing}
+        ${props.callResult
+          ? html`<pre class="code-block" style="margin-top: 12px;">${props.callResult}</pre>`
+          : nothing}
       </div>
     </section>
 
     <section class="card" style="margin-top: 18px;">
-      <div class="card-title">${t("debug.models.title")}</div>
-      <div class="card-sub">${t("debug.models.subtitle")}</div>
-      <pre class="code-block" style="margin-top: 12px;">${JSON.stringify(
-        props.models ?? [],
-        null,
-        2,
-      )}</pre>
+      <div class="card-title">${t("debug.modelsTitle")}</div>
+      <div class="card-sub">${t("debug.modelsSub")}</div>
+      <pre class="code-block" style="margin-top: 12px;">
+${JSON.stringify(props.models ?? [], null, 2)}</pre
+      >
     </section>
 
     <section class="card" style="margin-top: 18px;">
-      <div class="card-title">${t("debug.events.title")}</div>
-      <div class="card-sub">${t("debug.events.subtitle")}</div>
-      ${
-        props.eventLog.length === 0
-          ? html`
-              <div class="muted" style="margin-top: 12px">${t("debug.events.no_events")}</div>
-            `
-          : html`
-            <div class="list" style="margin-top: 12px;">
+      <div class="card-title">${t("debug.eventLogTitle")}</div>
+      <div class="card-sub">${t("debug.eventLogSub")}</div>
+      ${props.eventLog.length === 0
+        ? html` <div class="muted" style="margin-top: 12px">${t("debug.noEvents")}</div> `
+        : html`
+            <div class="list debug-event-log" style="margin-top: 12px;">
               ${props.eventLog.map(
                 (evt) => html`
-                  <div class="list-item">
+                  <div class="list-item debug-event-log__item">
                     <div class="list-main">
                       <div class="list-title">${evt.event}</div>
                       <div class="list-sub">${new Date(evt.ts).toLocaleTimeString()}</div>
                     </div>
-                    <div class="list-meta">
-                      <pre class="code-block">${formatEventPayload(evt.payload)}</pre>
+                    <div class="list-meta debug-event-log__meta">
+                      <pre class="code-block debug-event-log__payload">
+${formatEventPayload(evt.payload)}</pre
+                      >
                     </div>
                   </div>
                 `,
               )}
             </div>
-          `
-      }
+          `}
     </section>
   `;
 }
