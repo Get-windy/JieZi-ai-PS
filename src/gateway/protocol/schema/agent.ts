@@ -4,6 +4,8 @@
 export {
   AgentInternalEventSchema,
   AgentEventSchema,
+  MessageActionToolContextSchema,
+  MessageActionParamsSchema,
   SendParamsSchema,
   PollParamsSchema,
   AgentIdentityParamsSchema,
