@@ -1,21 +1,8 @@
 import { loadConfig } from "../../../upstream/src/config/config.js";
-import { listDevicePairing } from "../../infra/device-pairing.js";
 import {
-  approveNodePairing,
-  listNodePairing,
-  rejectNodePairing,
-  renamePairedNode,
-  requestNodePairing,
-  verifyNodeToken,
-} from "../../../upstream/src/infra/node-pairing.js";
-import {
-  loadApnsRegistration,
-  resolveApnsAuthConfigFromEnv,
-  sendApnsAlert,
-  sendApnsBackgroundWake,
-} from "../../../upstream/src/infra/push-apns.js";
-import { isNodeCommandAllowed, resolveNodeCommandAllowlist } from "../../../upstream/src/gateway/node-command-policy.js";
-import { sanitizeNodeInvokeParamsForForwarding } from "../node-invoke-sanitize.js";
+  isNodeCommandAllowed,
+  resolveNodeCommandAllowlist,
+} from "../../../upstream/src/gateway/node-command-policy.js";
 import {
   ErrorCodes,
   errorShape,
@@ -39,6 +26,22 @@ import {
   uniqueSortedStrings,
 } from "../../../upstream/src/gateway/server-methods/nodes.helpers.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import {
+  approveNodePairing,
+  listNodePairing,
+  rejectNodePairing,
+  renamePairedNode,
+  requestNodePairing,
+  verifyNodeToken,
+} from "../../../upstream/src/infra/node-pairing.js";
+import {
+  loadApnsRegistration,
+  resolveApnsAuthConfigFromEnv,
+  sendApnsAlert,
+  sendApnsBackgroundWake,
+} from "../../../upstream/src/infra/push-apns.js";
+import { listDevicePairing } from "../../infra/device-pairing.js";
+import { sanitizeNodeInvokeParamsForForwarding } from "../node-invoke-sanitize.js";
 
 const NODE_WAKE_RECONNECT_WAIT_MS = 3_000;
 const NODE_WAKE_RECONNECT_RETRY_WAIT_MS = 12_000;
@@ -802,4 +805,13 @@ function buildNodeCommandRejectionHint(
     return `node command not allowed: the node did not declare any supported commands`;
   }
   return `node command not allowed: ${reason}`;
+}
+
+/**
+ * 清除指定节点的唤醒/推送状态缓存。
+ * 在 WS 断开时由 ws-connection 调用，防止内存无限增长。
+ */
+export function clearNodeWakeState(nodeId: string): void {
+  nodeWakeById.delete(nodeId);
+  nodeWakeNudgeById.delete(nodeId);
 }
