@@ -183,12 +183,90 @@ export interface TaskTimeTracking {
 }
 
 /**
+ * 验收标准条目（借鉴 Ralph 的 acceptanceCriteria 实践）
+ *
+ * 每条验收标准是一个可独立检查的条件，只有所有标准都通过，任务才能标记为 done。
+ * 这是防止 AI Agent "敷衍式完成" 的核心机制：必须逐条验证，而非自行宣布完成。
+ *
+ * 示例：
+ * - "typecheck 通过（tsc --noEmit 无错误）"
+ * - "单元测试全部通过"
+ * - "在浏览器中验证 UI 功能正常"
+ * - "API 返回正确的 HTTP 状态码 200"
+ */
+export interface AcceptanceCriterion {
+  /** 唯一 ID（用于逐条追踪） */
+  id: string;
+  /** 验收条件描述（明确、可验证） */
+  description: string;
+  /** 是否已通过（false = 待验证，true = 已验证通过） */
+  passes: boolean;
+  /** 验证时间 */
+  verifiedAt?: number;
+  /** 验证人 ID（人类或 Agent） */
+  verifiedBy?: string;
+  /** 验证备注（失败原因 / 通过说明） */
+  note?: string;
+}
+
+/**
+ * 进展笔记（append-only，借鉴 Ralph 的 progress.txt 机制）
+ *
+ * 每次迭代/工作会话结束后追加一条记录，沉淀上下文和学习内容。
+ * 这些笔记是跨会话的知识传递媒介，让后续 Agent 实例和人类开发者
+ * 都能快速理解任务历史和已发现的模式/陷阱。
+ *
+ * 对应 Ralph 的 progress.txt "append-only learnings" 设计。
+ * 内容格式：Markdown（支持标题、列表、代码块）。
+ *
+ * 冗余控制：超过 MAX_PROGRESS_NOTES 上限时，最早的旧笔记会被压缩为
+ * 一条 compacted=true 的摘要笔记，保留知识精华而非原始全文。
+ */
+export interface TaskProgressNote {
+  /** 唯一 ID */
+  id: string;
+  /** 笔记内容（Markdown 格式：已完成的工作 + 学到的经验 + 下步建议） */
+  content: string;
+  /** 记录者 ID */
+  authorId: string;
+  /** 记录者类型 */
+  authorType: MemberType;
+  /** 创建时间 */
+  createdAt: number;
+  /**
+   * 是否为压缩摘要（由系统自动生成，非原始笔记）
+   * true 时表示此条是多条旧笔记被合并压缩后的摘要。
+   * 消费方（如 prompt 注入）应优先展示 compacted=true 的摘要 + 最近几条原始笔记。
+   */
+  compacted?: boolean;
+  /** 此摘要压缩了多少条原始笔记（compacted=true 时有效） */
+  compactedFrom?: number;
+}
+
+/**
  * 任务（完整定义）
  */
 export interface Task {
   id: string;
   title: string;
   description: string;
+
+  /**
+   * 验收标准列表（借鉴 Ralph acceptanceCriteria 实践）
+   *
+   * 每条是独立可检查的条件。任务标记为 done 前必须逐条验证。
+   * Agent 完成任务时须对每条 criterion 填写 passes=true 并附上 verifiedBy。
+   * 人类在 review 阶段可补充或驳回验收结果。
+   */
+  acceptanceCriteria?: AcceptanceCriterion[];
+
+  /**
+   * 进展笔记（append-only，对应 Ralph 的 progress.txt）
+   *
+   * 每次工作会话结束后追加，记录已完成的事项、发现的模式和坑、
+   * 以及下一步建议。跨迭代/跨 Agent 实例传递上下文。
+   */
+  progressNotes?: TaskProgressNote[];
 
   // 创建者信息
   creatorId: string; // 创建者ID
@@ -270,6 +348,14 @@ export interface Task {
   cancelledAt?: number; // 取消时间
   cancelReason?: string; // 取消原因
   metadata?: Record<string, unknown>; // 扩展元数据（如 supervisorId、assignedVia 等）
+
+  /**
+   * 快捷访问：所有验收标准是否全部通过（计算属性辅助读取）
+   * undefined = 无验收标准（不阻塞完成）
+   * true       = 全部通过
+   * false      = 仍有未通过项
+   */
+  readonly allCriteriaPassed?: boolean;
 }
 
 /**
@@ -595,6 +681,11 @@ export interface CreateTaskRequest {
   projectId?: string;
   parentTaskId?: string;
   tags?: string[];
+  /**
+   * 验收标准（创建时可预先定义，字符串列表会自动转为 AcceptanceCriterion[]）
+   * 传字符串数组时每条自动分配 id，passes 默认 false。
+   */
+  acceptanceCriteria?: string[] | AcceptanceCriterion[];
 }
 
 /**
@@ -608,6 +699,58 @@ export interface UpdateTaskRequest {
   priority?: TaskPriority;
   dueDate?: number;
   tags?: string[];
+  /** 追加或更新验收标准 */
+  acceptanceCriteria?: AcceptanceCriterion[];
+}
+
+/**
+ * 验收标准操作请求（逐条更新通过状态）
+ */
+export interface UpdateCriterionRequest {
+  taskId: string;
+  criterionId: string;
+  passes: boolean;
+  verifiedBy: string;
+  note?: string;
+}
+
+/**
+ * 追加进展笔记请求
+ */
+export interface AppendProgressNoteRequest {
+  taskId: string;
+  content: string;
+  authorId: string;
+  authorType: MemberType;
+  /**
+   * 项目工作空间目录（可选）
+   *
+   * 提供时，笔记会同步镜像写入 `{workspaceDir}/.notes/{hierarchy}/{taskId}.md`。
+   * 这让人类和 AI 都能直接 `cat` 读取，无需查询数据库。
+   * SQLite 仍是权威数据源，文件是只读镜像。
+   *
+   * 对应项目上下文：buildProjectContext(projectId).workspacePath
+   */
+  workspaceDir?: string;
+  /** 任务标题（写入文件头部，方便人类阅读，无需再查 DB） */
+  taskTitle?: string;
+  /**
+   * 任务层次信息（可选）
+   *
+   * 提供时，文件镜像按任务树结构存放：
+   *   .notes/{epicId}/{featureId}/{parentId}/{taskId}.md
+   *
+   * 不提供则回退到扁平目录（向后兼容）。
+   * 字段直接使用 Task 对象的同名字段：
+   *   { epicId: task.epicId, featureId: task.featureId,
+   *     parentTaskId: task.parentTaskId, level: task.level }
+   */
+  hierarchy?: {
+    epicId?: string;
+    featureId?: string;
+    parentTaskId?: string;
+    level?: string;
+  };
 }
 
 /**

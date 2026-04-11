@@ -170,6 +170,27 @@ export function validateRealProgress(task: Task): {
 } {
   const evidence: string[] = [];
 
+  // ✔ 优先检查：验收标准（Ralph acceptanceCriteria 实践 —— 最可靠的客观依据）
+  if (task.acceptanceCriteria && task.acceptanceCriteria.length > 0) {
+    const total = task.acceptanceCriteria.length;
+    const passed = task.acceptanceCriteria.filter((c) => c.passes).length;
+    if (passed > 0) {
+      evidence.push(`验收标准通过 ${passed}/${total} 项`);
+    }
+    // 全部通过 → 直接返回高质量，无需再检测其他证据
+    if (passed === total) {
+      return { hasRealProgress: true, evidence, quality: "high" };
+    }
+    // 部分通过
+    if (passed > 0) {
+      return {
+        hasRealProgress: true,
+        evidence,
+        quality: passed / total >= 0.5 ? "medium" : "low",
+      };
+    }
+  }
+
   // 检查 1: 是否有附件（文档、代码文件等）
   if (task.attachments && task.attachments.length > 0) {
     evidence.push(`有 ${task.attachments.length} 个附件`);
@@ -482,4 +503,56 @@ export async function enforceQualityReporting(
   }
 
   return { passed: true };
+}
+
+// ============================================================================
+// 验收标准汇报（Ralph 实践）
+// ============================================================================
+
+/**
+ * 生成任务的验收标准完成情况汇报
+ *
+ * 对应 Ralph 的 `cat prd.json | jq '.userStories[] | {id, title, passes}'` 命令输出。
+ * 用于密集汇报和 Agent 自检时快速判断还有哪些验收项未完成。
+ */
+export function validateAcceptanceCriteria(task: Task): {
+  /** 是否所有验收标准已通过 */
+  allPassed: boolean;
+  /** 尚未通过的标准列表 */
+  failing: Array<{ id: string; description: string; note?: string }>;
+  /** 已通过的标准数 */
+  passedCount: number;
+  /** 总标准数 */
+  totalCount: number;
+  /** 完成百分比 (0-100) */
+  completionPct: number;
+  /** 可展示的简要文本 */
+  summary: string;
+} {
+  const criteria = task.acceptanceCriteria ?? [];
+  const totalCount = criteria.length;
+
+  if (totalCount === 0) {
+    return {
+      allPassed: true, // 无验收标准，不阻塞
+      failing: [],
+      passedCount: 0,
+      totalCount: 0,
+      completionPct: 100,
+      summary: "无验收标准（可直接完成）",
+    };
+  }
+
+  const failing = criteria
+    .filter((c) => !c.passes)
+    .map((c) => ({ id: c.id, description: c.description, note: c.note }));
+  const passedCount = totalCount - failing.length;
+  const completionPct = Math.round((passedCount / totalCount) * 100);
+  const allPassed = failing.length === 0;
+
+  const summary = allPassed
+    ? `✅ 所有 ${totalCount} 项验收标准已通过`
+    : `❌ ${failing.length}/${totalCount} 项验收标准未通过（完成度 ${completionPct}%）`;
+
+  return { allPassed, failing, passedCount, totalCount, completionPct, summary };
 }

@@ -646,9 +646,7 @@ export class AgentProgressManager {
   /**
    * 列出所有进度文件（用于 Agent 自发现）
    */
-  listAll(
-    agentId: string,
-  ): Array<{
+  listAll(agentId: string): Array<{
     projectName: string;
     status: OverallStatus;
     progressPercent: number;
@@ -717,4 +715,110 @@ export function getAgentProgressManager(opts?: { storageDir?: string }): AgentPr
 
 export function resetAgentProgressManager(): void {
   _globalProgressManager = null;
+}
+
+// ─────────────────────────────────────────────
+// TaskProgressNote → AgentProgress 桥接
+// ─────────────────────────────────────────────
+
+/**
+ * 将 Task.progressNotes 桥接同步到 AgentProgress 进化系统
+ *
+ * TaskProgressNote 是任务级的 append-only 学习记录（对应 Ralph 的 progress.txt）。
+ * AgentProgress 是 Agent 跨 session 的进化载体。
+ *
+ * 桥接规则（基于关键词识别）：
+ * - 含「坑/问题/错误/失败/注意/警告/gotcha/bug/avoid」→ 写入 pitfalls
+ * - 含「下一步/next/todo/接下来/计划/建议」         → 写入 nextSessionPlan
+ * - 含「决策/决定/选择/方案/why/因为/原因」          → 写入 decisions
+ * - 含「债/临时/todo:tech/hack/workaround」          → 写入 technicalDebt
+ * - 其余内容                                          → 更新 contextSummary
+ *
+ * 调用时机：appendProgressNote() 后，或任务状态变为 done 时。
+ *
+ * @param notes   Task.progressNotes（全量或增量均可，函数内去重）
+ * @param agentId 执行此任务的 agent ID（取 task.assignees[0].id 即可）
+ * @param projectName 关联的项目名（取 task.projectId 或 task.title 兜底）
+ * @param manager 可选，默认使用全局单例
+ */
+export function syncProgressNotesToAgentProgress(
+  notes: Array<{ id: string; content: string; authorId: string; createdAt: number }>,
+  agentId: string,
+  projectName: string,
+  manager?: AgentProgressManager,
+): void {
+  if (!notes || notes.length === 0) {
+    return;
+  }
+  const mgr = manager ?? getAgentProgressManager();
+  let progress = mgr.load(agentId, projectName);
+  if (!progress) {
+    // AgentProgress 不存在时不自动创建，避免副作用
+    return;
+  }
+
+  // 已同步的 note ID 集合（存在 contextSummary 前缀标记中，避免重复写入）
+  const syncedKey = `__synced_note_ids__`;
+  const syncedRaw = (progress as Record<string, unknown>)[syncedKey];
+  const synced = new Set<string>(Array.isArray(syncedRaw) ? (syncedRaw as string[]) : []);
+
+  const pitfallKeywords = /坑|问题|错误|失败|注意|警告|gotcha|bug|avoid|陷阱|踩坑/i;
+  const planKeywords = /下一步|next|todo|接下来|计划|建议|需要|should|will/i;
+  const decisionKeywords = /决策|决定|选择|方案|why|因为|原因|理由|架构/i;
+  const debtKeywords = /债|临时|hack|workaround|tech.?debt|TODO.*tech|待优化/i;
+
+  let hasNewContent = false;
+
+  for (const note of notes) {
+    if (synced.has(note.id)) {
+      continue; // 已同步，跳过
+    }
+    synced.add(note.id);
+    hasNewContent = true;
+    const text = note.content.trim();
+
+    if (pitfallKeywords.test(text)) {
+      // → pitfalls
+      progress.pitfalls.push({
+        recordedAt: note.createdAt,
+        stepId: "task-progress-note",
+        problem: text.slice(0, 200),
+        rootCause: "",
+        solution: "",
+        prevention: text.slice(0, 200),
+        tags: ["auto-synced-from-task"],
+      });
+    } else if (planKeywords.test(text)) {
+      // → nextSessionPlan
+      const entry = text.slice(0, 200);
+      if (!progress.nextSessionPlan.includes(entry)) {
+        progress.nextSessionPlan.push(entry);
+      }
+    } else if (decisionKeywords.test(text)) {
+      // → decisions
+      progress.decisions.push({
+        description: text.slice(0, 200),
+        rationale: "",
+        recordedAt: note.createdAt,
+        decidedBy: note.authorId,
+      });
+    } else if (debtKeywords.test(text)) {
+      // → technicalDebt
+      progress.technicalDebt.push({
+        description: text.slice(0, 200),
+        severity: "medium",
+        recordedAt: note.createdAt,
+      });
+    } else {
+      // → contextSummary（追加，控制总长度在 800 字以内）
+      const appended = progress.contextSummary ? `${progress.contextSummary}\n${text}` : text;
+      progress.contextSummary = appended.slice(-800);
+    }
+  }
+
+  if (hasNewContent) {
+    // 记录已同步的 note ID，防止重复
+    (progress as Record<string, unknown>)[syncedKey] = [...synced];
+    mgr.save(progress);
+  }
 }

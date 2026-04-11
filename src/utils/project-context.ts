@@ -47,6 +47,14 @@ export interface ProjectContext {
   docsDir: string;
   /** 项目决策记录目录 */
   decisionsDir: string;
+  /**
+   * 进展笔记目录：{workspacePath}/.notes/
+   *
+   * 每个有 progressNotes 的任务会在此目录生成一个同名 Markdown 文件。
+   * 点开头表示「工具生成」，与 docs/、decisions/ 等人工目录区分。
+   * SQLite 是权威数据源，此目录是供人类/AI 直接阅读的只读镜像。
+   */
+  notesDir: string;
   /** 项目配置对象 (如果存在 PROJECT_CONFIG.json) */
   config?: ProjectConfig;
 }
@@ -552,6 +560,7 @@ export function buildProjectContext(projectId: string, workspaceRoot?: string): 
     codeDir,
     docsDir,
     decisionsDir: path.join(workspacePath, "decisions"),
+    notesDir: path.join(workspacePath, ".notes"),
     config: config ?? undefined,
   };
 }
@@ -707,4 +716,437 @@ export function generateProjectSwitchInstructions(projectId: string, currentDir?
   }
 
   return lines.join("\n");
+}
+
+// ============================================================================
+// .notes 目录：任务进展笔记的工作空间文件镜像
+// ============================================================================
+
+/** .notes 子目录名称常量 */
+export const NOTES_DIR_NAME = ".notes";
+
+/** .notes 目录内的索引文件名 */
+export const NOTES_INDEX_FILENAME = "_index.md";
+
+/** .notes/archive 子目录名称 */
+export const NOTES_ARCHIVE_SUBDIR = "archive";
+
+/**
+ * 主笔记文件行数超过此值时触发归档（对应 MEMORY.md maxChars 机制）
+ *
+ * 300 行约等于 15~20 条中等长度笔记，对大多数长期任务足够。
+ */
+const NOTES_MAX_LINES = 300;
+
+/**
+ * 归档后主文件保留的最新行数（对应 tailRatio 机制）
+ *
+ * 保留最新 120 行，确保最近笔记始终可读。
+ */
+const NOTES_KEEP_LINES = 120;
+
+/** 归档索引区起止标记（与 MEMORY.md 的 ARCHIVE_INDEX_START 同风格） */
+const NOTES_ARCHIVE_INDEX_START = "<!-- [NOTES ARCHIVE INDEX START] -->";
+const NOTES_ARCHIVE_INDEX_END = "<!-- [NOTES ARCHIVE INDEX END] -->";
+
+/**
+ * 任务层次定位信息
+ *
+ * 用于将进展笔记文件按任务树结构存放：
+ *   .notes/{epicId}/{featureId}/{storyId}/{taskId}.md
+ *
+ * 各字段均为可选，未提供时回退到扁平结构（向后兼容）。
+ * 字段语义与 Task 接口一一对应：
+ *   - epicId:    task.epicId（feature/story 级别时填写）
+ *   - featureId: task.featureId（story 级别时填写）
+ *   - parentTaskId: task.parentTaskId（任意嵌套子任务时填写）
+ *   - level:     task.level（epic/feature/story/task）
+ */
+export interface TaskHierarchy {
+  /** 所属 Epic 的任务 ID */
+  epicId?: string;
+  /** 所属 Feature 的任务 ID */
+  featureId?: string;
+  /** 直接父任务 ID（对于嵌套子任务） */
+  parentTaskId?: string;
+  /** 工作层次（epic/feature/story/task） */
+  level?: string;
+}
+
+/**
+ * 根据任务层次信息计算 .notes 内的子目录路径段
+ *
+ * 对齐 WorkItemLevel 层次体系（epic → feature → story → task）：
+ *   - epic:    .notes/{epicId}/
+ *   - feature: .notes/{epicId}/{featureId}/
+ *   - story:   .notes/{epicId}/{featureId}/{storyId}/  （storyId = parentTaskId 或 taskId）
+ *   - task:    按 epicId/featureId/parentTaskId 逐层嵌套
+ *   - 无层次信息：.notes/（扁平，向后兼容）
+ *
+ * @returns 相对于 .notes 根目录的子目录路径（不含文件名，可能为空字符串）
+ */
+export function resolveTaskHierarchySubdir(taskId: string, hierarchy?: TaskHierarchy): string {
+  if (!hierarchy) {
+    return "";
+  }
+
+  const { epicId, featureId, parentTaskId, level } = hierarchy;
+
+  // epic 自身：直接挂在 .notes/ 根，子目录以 epicId 命名
+  if (level === "epic") {
+    return epicId ?? taskId;
+  }
+
+  // feature：挂在 epic 子目录下
+  if (level === "feature") {
+    if (epicId) {
+      return path.join(epicId, featureId ?? taskId);
+    }
+    return featureId ?? taskId;
+  }
+
+  // story：挂在 feature 子目录下（story 自身笔记文件放在 feature 目录内，
+  // 而 story 目录（用来存放其叶子 task）以 taskId 命名）
+  // 目录结构：.notes/{epicId}/{featureId}/{taskId}.md（story 自身笔记）
+  //             .notes/{epicId}/{featureId}/{storyId}/（story 子任务 task 目录）
+  if (level === "story") {
+    const parts: string[] = [];
+    if (epicId) {
+      parts.push(epicId);
+    }
+    // story 的 parentTaskId 是其所属 feature，与 featureId 相同，不重复推入
+    // 只推入 featureId（story 的父 feature 目录），story 自身 .md 文件在此目录下
+    if (featureId) {
+      parts.push(featureId);
+    }
+    // 注意：story 级别的文件放在 featureId 目录下，而非再建一层 story 子目录
+    // story 子目录（存放 task 子项）由 task 级别的 level 逻辑推入 storyId
+    return parts.join(path.sep);
+  }
+
+  // task（叶子）：按 epic/feature/parent 逐层嵌套
+  const parts: string[] = [];
+  if (epicId) {
+    parts.push(epicId);
+  }
+  if (featureId) {
+    parts.push(featureId);
+  }
+  if (parentTaskId) {
+    parts.push(parentTaskId);
+  }
+  return parts.join(path.sep);
+}
+
+/**
+ * 解析任务进展笔记的完整文件路径（层次化结构）
+ *
+ * 生成规则：
+ *   .notes/{subdir}/{taskId}.md
+ *
+ * 示例（Epic → Feature → Story → Task）：
+ *   epic-001      → .notes/epic-001/epic-001.md  （Epic 自身笔记在其目录内）
+ *   feature-A     → .notes/epic-001/feature-A/feature-A.md
+ *   story-A1      → .notes/epic-001/feature-A/story-A1/story-A1.md
+ *   task-A1-1     → .notes/epic-001/feature-A/story-A1/task-A1-1.md
+ *
+ * @param workspaceDir - 项目工作空间目录
+ * @param taskId       - 任务 ID
+ * @param hierarchy    - 任务层次信息（可选，缺失则回退到扁平路径）
+ */
+export function resolveTaskNotesFile(
+  workspaceDir: string,
+  taskId: string,
+  hierarchy?: TaskHierarchy,
+): string {
+  const subdir = resolveTaskHierarchySubdir(taskId, hierarchy);
+  if (subdir) {
+    return path.join(workspaceDir, NOTES_DIR_NAME, subdir, `${taskId}.md`);
+  }
+  return path.join(workspaceDir, NOTES_DIR_NAME, `${taskId}.md`);
+}
+
+/**
+ * 解析 .notes 根目录路径
+ */
+export function resolveNotesDir(workspaceDir: string): string {
+  return path.join(workspaceDir, NOTES_DIR_NAME);
+}
+
+/**
+ * 解析 .notes/_index.md（项目顶层索引）路径
+ */
+export function resolveNotesIndexFile(workspaceDir: string): string {
+  return path.join(workspaceDir, NOTES_DIR_NAME, NOTES_INDEX_FILENAME);
+}
+
+/**
+ * 将单条进展笔记追加写入对应任务的层次化 .notes 文件
+ *
+ * 文件位置由 hierarchy 决定（对齐任务树结构）：
+ *   .notes/{epicId}/{featureId}/{parentId}/{taskId}.md
+ *
+ * - 文件不存在时自动创建（含文件头）
+ * - 写入后自动检查是否需要归档（超过 NOTES_MAX_LINES 触发）
+ * - 写入失败时静默降级（不抛异常），SQLite 仍是权威数据源
+ * - 同时更新当前层目录的 _index.md 和项目根 _index.md（均幂等）
+ *
+ * @param params.workspaceDir - 项目工作空间目录
+ * @param params.taskId       - 任务 ID
+ * @param params.taskTitle    - 任务标题（仅用于文件头，可选）
+ * @param params.hierarchy    - 任务层次信息（epic/feature/story/task），决定文件存放目录
+ * @param params.noteId       - 笔记唯一 ID
+ * @param params.content      - 笔记内容（Markdown）
+ * @param params.authorId     - 记录者 ID
+ * @param params.createdAt    - 创建时间戳（ms）
+ * @param params.compacted    - 是否为压缩摘要
+ */
+export function appendNoteToWorkspaceFile(params: {
+  workspaceDir: string;
+  taskId: string;
+  taskTitle?: string;
+  hierarchy?: TaskHierarchy;
+  noteId: string;
+  content: string;
+  authorId: string;
+  createdAt: number;
+  compacted?: boolean;
+}): void {
+  try {
+    const notesDir = resolveNotesDir(params.workspaceDir);
+    if (!fs.existsSync(notesDir)) {
+      fs.mkdirSync(notesDir, { recursive: true });
+    }
+
+    const filePath = resolveTaskNotesFile(params.workspaceDir, params.taskId, params.hierarchy);
+    // 确保层次化子目录存在
+    const fileDir = path.dirname(filePath);
+    if (!fs.existsSync(fileDir)) {
+      fs.mkdirSync(fileDir, { recursive: true });
+    }
+
+    const isNew = !fs.existsSync(filePath);
+    const date = new Date(params.createdAt).toISOString().replace("T", " ").slice(0, 19);
+    const compactedBadge = params.compacted ? " _(压缩摘要)_" : "";
+
+    let block: string;
+    if (isNew) {
+      // 新文件：写入标题头 + 层次面包屑 + 第一条笔记
+      const breadcrumb = _buildBreadcrumb(params.taskId, params.hierarchy);
+      const titleLine = params.taskTitle
+        ? `# ${params.taskTitle}\n\n> Task ID: \`${params.taskId}\`${breadcrumb}\n`
+        : `# Task: \`${params.taskId}\`${breadcrumb}\n`;
+      block =
+        titleLine +
+        `\n## 进展笔记\n\n` +
+        `### ${date} · ${params.authorId}${compactedBadge}\n\n` +
+        `${params.content}\n`;
+    } else {
+      // 已有文件：追加一节
+      block =
+        `\n---\n\n` +
+        `### ${date} · ${params.authorId}${compactedBadge}\n\n` +
+        `${params.content}\n`;
+    }
+
+    fs.appendFileSync(filePath, block, "utf-8");
+
+    // 写入后检查是否需要归档（对应 MEMORY.md 的 archiveMemoryOverflow 机制）
+    archiveTaskNotesOverflow(filePath, params.taskId, params.workspaceDir);
+
+    // 更新当前层目录的 _index.md（幂等）
+    _upsertNotesIndex(fileDir, params.taskId, params.taskTitle);
+    // 若文件不在根 .notes/，同时更新项目级根索引（幂等）
+    if (fileDir !== notesDir) {
+      _upsertNotesIndex(
+        notesDir,
+        params.taskId,
+        params.taskTitle,
+        filePath.replace(params.workspaceDir + path.sep, ""),
+      );
+    }
+  } catch {
+    // 静默降级：文件写入失败不影响 SQLite 主存储
+  }
+}
+
+/**
+ * 构建面包屑导航字符串（写入笔记文件头部，方便人类理解层次）
+ *
+ * 示例：
+ *   ` | Epic: \`epic-001\` > Feature: \`feature-A\` > Story: \`story-A1\``
+ */
+function _buildBreadcrumb(taskId: string, hierarchy?: TaskHierarchy): string {
+  if (!hierarchy) {
+    return "";
+  }
+  const { epicId, featureId, parentTaskId, level } = hierarchy;
+  const parts: string[] = [];
+  if (epicId && level !== "epic") {
+    parts.push(`Epic: \`${epicId}\``);
+  }
+  if (featureId && level !== "feature") {
+    parts.push(`Feature: \`${featureId}\``);
+  }
+  if (parentTaskId && level !== "story" && parentTaskId !== featureId && parentTaskId !== epicId) {
+    parts.push(`Parent: \`${parentTaskId}\``);
+  }
+  return parts.length > 0 ? ` | ${parts.join(" > ")}` : "";
+}
+
+/**
+ * 对 .notes/{taskId}.md 应用归档转移（零信息丢失）
+ *
+ * 触发条件：主文件行数超过 NOTES_MAX_LINES
+ *
+ * 归档流程（对齐 archiveMemoryOverflow 风格）：
+ * 1. 提取现有归档索引区（文件头部 HTML 注释块）
+ * 2. 将溢出的旧节（去除索引区和标题头后的头部行）移入
+ *    `.notes/archive/{taskId}/YYYY-MM.md`（按月追加）
+ * 3. 在主文件头部更新归档索引区（记录归档条目）
+ * 4. 主文件保留：[文件标题头] + [归档索引区] + [最新 NOTES_KEEP_LINES 行]
+ *
+ * 静默执行：失败时不抛异常，主文件内容不变。
+ */
+export function archiveTaskNotesOverflow(
+  filePath: string,
+  taskId: string,
+  workspaceDir: string,
+): void {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return;
+    }
+
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const allLines = raw.split("\n");
+
+    // 未超限，直接返回
+    if (allLines.length <= NOTES_MAX_LINES) {
+      return;
+    }
+
+    // ── 1. 分离文件标题头（第一行 # 标题 + 紧跟的 > blockquote）──
+    // 归档后主文件必须保留标题头，保证文件可读性
+    let headerEndIdx = 0;
+    if (allLines[0]?.startsWith("# ")) {
+      headerEndIdx = 1;
+      // 跳过紧跟标题的空行和 > blockquote 行
+      while (
+        headerEndIdx < allLines.length &&
+        (allLines[headerEndIdx] === "" || allLines[headerEndIdx]?.startsWith("> "))
+      ) {
+        headerEndIdx++;
+      }
+    }
+    const titleLines = allLines.slice(0, headerEndIdx);
+    const bodyLines = allLines.slice(headerEndIdx);
+
+    // ── 2. 分离现有归档索引区（若存在）──
+    let existingIndexLines: string[] = [];
+    let bodyWithoutIndex = bodyLines;
+    const idxStart = bodyLines.findIndex((l) => l === NOTES_ARCHIVE_INDEX_START);
+    const idxEnd = bodyLines.findIndex((l) => l === NOTES_ARCHIVE_INDEX_END);
+    if (idxStart !== -1 && idxEnd !== -1 && idxEnd > idxStart) {
+      existingIndexLines = bodyLines.slice(idxStart, idxEnd + 1);
+      bodyWithoutIndex = [...bodyLines.slice(0, idxStart), ...bodyLines.slice(idxEnd + 1)].filter(
+        (l, i, arr) => !(l === "" && arr[i - 1] === ""),
+      );
+    }
+
+    // ── 3. 计算溢出（待归档）行和保留（最新）行 ──
+    const overflowLines = bodyWithoutIndex.slice(0, bodyWithoutIndex.length - NOTES_KEEP_LINES);
+    const keepLines = bodyWithoutIndex.slice(bodyWithoutIndex.length - NOTES_KEEP_LINES);
+
+    if (overflowLines.length === 0) {
+      return;
+    }
+
+    // ── 4. 确定归档文件路径：.notes/archive/{taskId}/YYYY-MM.md ──
+    const archiveDir = path.join(workspaceDir, NOTES_DIR_NAME, NOTES_ARCHIVE_SUBDIR, taskId);
+    if (!fs.existsSync(archiveDir)) {
+      fs.mkdirSync(archiveDir, { recursive: true });
+    }
+    const monthStr = new Date().toISOString().slice(0, 7); // YYYY-MM
+    const archiveFilePath = path.join(archiveDir, `${monthStr}.md`);
+    const archiveTimestamp = new Date().toISOString();
+
+    // ── 5. 写入归档文件（追加，当月多次归档追加分隔符）──
+    const archiveBlock = [
+      `\n---\n`,
+      `## 归档时间: ${archiveTimestamp}`,
+      `## 来源: ${filePath}`,
+      `## 行数: ${overflowLines.length}`,
+      ``,
+      overflowLines.join("\n").trimStart(),
+    ].join("\n");
+    fs.appendFileSync(archiveFilePath, archiveBlock, "utf-8");
+
+    // ── 6. 构建新的归档索引区（对应 MEMORY.md 的 newIndexBlock）──
+    const relArchivePath = path.join(NOTES_ARCHIVE_SUBDIR, taskId, `${monthStr}.md`);
+    const newEntry = `- [${archiveTimestamp}] → ${relArchivePath} (${overflowLines.length} 行)`;
+    const existingEntries = existingIndexLines
+      .filter((l) => l !== NOTES_ARCHIVE_INDEX_START && l !== NOTES_ARCHIVE_INDEX_END)
+      .join("\n")
+      .trim();
+    const allEntries = existingEntries ? `${existingEntries}\n${newEntry}` : newEntry;
+
+    const newIndexBlock = [
+      NOTES_ARCHIVE_INDEX_START,
+      `## 📚 归档索引 — ${taskId}`,
+      `## 历史笔记已归档到 ${NOTES_ARCHIVE_SUBDIR}/${taskId}/ 目录，按月存储，零信息丢失`,
+      allEntries,
+      NOTES_ARCHIVE_INDEX_END,
+    ].join("\n");
+
+    // ── 7. 重写主文件：[标题头] + [归档索引区] + [最新行] ──
+    const newContent = [...titleLines, "", ...newIndexBlock.split("\n"), "", ...keepLines].join(
+      "\n",
+    );
+
+    fs.writeFileSync(filePath, newContent, "utf-8");
+  } catch {
+    // 静默降级：归档失败不影响主文件
+  }
+}
+
+/**
+ * 幂等更新指定目录的 _index.md 任务条目
+ *
+ * - 每个层次目录都有独立的 _index.md，只索引当层的文件/子目录
+ * - 若 taskFilePath 已提供（根索引场景），链接指向实际路径；否则指向当层 ./{taskId}.md
+ * - 若文件中已有该 taskId 的条目则跳过（幂等）
+ *
+ * @param indexDir     - _index.md 所在目录
+ * @param taskId       - 任务 ID
+ * @param taskTitle    - 任务标题（可选，用于链接文本）
+ * @param taskFilePath - 相对于工作空间的完整文件路径（根索引场景）
+ */
+function _upsertNotesIndex(
+  indexDir: string,
+  taskId: string,
+  taskTitle?: string,
+  taskFilePath?: string,
+): void {
+  const indexPath = path.join(indexDir, NOTES_INDEX_FILENAME);
+  const linkTarget = taskFilePath ? `./${taskFilePath.replace(/\\/g, "/")}` : `./${taskId}.md`;
+  const link = `[${taskTitle ?? taskId}](${linkTarget})`;
+  const entryLine = `- ${link}  \`${taskId}\``;
+
+  if (!fs.existsSync(indexPath)) {
+    // 根 .notes/ 的索引标题为项目级，子目录的索引标题为层级名
+    const dirName = path.basename(indexDir);
+    const isRoot = dirName === NOTES_DIR_NAME;
+    const header = isRoot
+      ? `# 进展笔记索引\n\n> 由系统自动维护，层次结构对齐任务树（Epic → Feature → Story → Task）\n`
+      : `# ${dirName} 进展笔记\n\n> 由系统自动维护\n`;
+    fs.writeFileSync(indexPath, `${header}\n${entryLine}\n`, "utf-8");
+    return;
+  }
+
+  const existing = fs.readFileSync(indexPath, "utf-8");
+  if (existing.includes(`\`${taskId}\``)) {
+    return; // 已存在，幂等跳过
+  }
+  fs.appendFileSync(indexPath, `${entryLine}\n`, "utf-8");
 }

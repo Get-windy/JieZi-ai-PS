@@ -47,6 +47,7 @@ import { requestHeartbeatNow } from "../../../upstream/src/infra/heartbeat-wake.
 import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
 import { resolveUserPath } from "../../../upstream/src/utils.js";
 import { addAgentToAllowList } from "../../agents/agent-config-manager.js";
+import { getAgentProgressManager } from "../../agents/agent-progress.js";
 import {
   listAgentIds,
   resolveAgentDir,
@@ -643,6 +644,42 @@ export async function scheduleNextTaskForAgent(
     const ctx = resolveTaskContext(agentId, nextTask, cfg);
     const queueRemaining = todoTasks.length - 1;
 
+    // ── 进展笔记注入：从 AgentProgress 读取跨 session 摘要（pitfalls/nextSessionPlan）──
+    // 让 Agent 接到新任务时立刻知道自己的历史陷阱和上次制定的计划
+    let progressSummaryLines: string[] = [];
+    try {
+      const progressMgr = getAgentProgressManager();
+      const projectName = nextTask.projectId ?? nextTask.title;
+      const progressSummary = progressMgr.resumeSession(agentId, projectName, sessionKey);
+      if (progressSummary) {
+        progressSummaryLines = [
+          ``,
+          `Cross-Session Progress Context (from AgentProgress):`,
+          progressSummary,
+        ];
+      }
+    } catch {
+      // 静默降级：AgentProgress 读取失败不影响任务推送
+    }
+
+    // ── 任务历史进展笔记：从任务自身的 progressNotes 取最新一条 ──
+    // 让 Agent 知道「上次执行此任务时留下了什么」（陷阱/下步计划等）
+    let taskProgressNoteLines: string[] = [];
+    try {
+      const latestNote = (nextTask.progressNotes ?? []).slice(-1)[0];
+      if (latestNote) {
+        const noteDate = new Date(latestNote.createdAt).toISOString().slice(0, 10);
+        taskProgressNoteLines = [
+          ``,
+          `Last Progress Note on this Task (${noteDate}, by ${latestNote.authorId}):`,
+          latestNote.content.slice(0, 600) +
+            (latestNote.content.length > 600 ? "\n...（已截断）" : ""),
+        ];
+      }
+    } catch {
+      // 静默降级
+    }
+
     const prompt = [
       `[TASK STARTED - EXECUTE NOW]`,
       `Task ID: ${nextTask.id}`,
@@ -668,10 +705,16 @@ export async function scheduleNextTaskForAgent(
       `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
       ``,
       `Status has been set to in-progress automatically. Previous task ${completedTaskId} is now done.`,
+      ...progressSummaryLines,
+      ...taskProgressNoteLines,
       queueRemaining > 0
         ? `(${queueRemaining} more task(s) waiting in queue after this one)`
         : null,
-      `Execute this task immediately. When done, call task_report_to_supervisor with Task ID: ${nextTask.id}`,
+      `Execute this task immediately. When done:`,
+      `  1. Run quality checks (typecheck / lint / test) — do NOT report done if checks fail.`,
+      `  2. Commit ALL changes: git commit -m "feat: ${nextTask.id} - ${nextTask.title}"`,
+      `  3. Append a progress note: task_progress_note_append (## Accomplished / ## Findings / ## Decisions / ## Next Steps)`,
+      `  4. Call task_report_to_supervisor with Task ID: ${nextTask.id}`,
     ]
       .filter(Boolean)
       .join("\n");

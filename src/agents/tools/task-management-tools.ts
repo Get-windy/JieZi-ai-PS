@@ -275,6 +275,37 @@ const TaskSubtaskCreateToolSchema = Type.Object({
 });
 
 /**
+ * task_progress_note_append 工具参数 schema
+ *
+ * 进展笔记与工作日志的區别：
+ *   - worklog: 轻量、次数多、记录单一操作；提供可查询的 action/result/duration
+ *   - progress_note: 重要、每次工作会话结束时写一条；以 Markdown 记录阶段性成果/发现/陨阱；双轨写入 SQLite + .notes 文件
+ */
+const TaskProgressNoteAppendToolSchema = Type.Object({
+  /** 任务ID（必填） */
+  taskId: Type.String({
+    minLength: 1,
+    description: "[REQUIRED] The task ID to append a progress note to.",
+  }),
+  /**
+   * 笔记内容（必填，Markdown格式）
+   *
+   * 建议包含：
+   *   1. 本次会话完成了什么（已完成的事项）
+   *   2. 发现的模式或除陷险（方便后续不走弯路）
+   *   3. 显著决策与依据（ADR级别的重要变更）
+   *   4. 下一步建议（接手者可直接开工的信息）
+   */
+  content: Type.String({
+    minLength: 10,
+    maxLength: 8000,
+    description:
+      "[REQUIRED] Progress note content in Markdown format. Should cover: what was accomplished, " +
+      "patterns/pitfalls discovered, significant decisions with rationale, and next-step recommendations.",
+  }),
+});
+
+/**
  * task_worklog_add 工具参数 schema
  */
 const TaskWorklogAddToolSchema = Type.Object({
@@ -773,6 +804,7 @@ export function createTaskGetTool(opts?: { currentAgentId?: string }): AnyAgentT
         const task = response;
         const comments = (task.comments as unknown[]) || [];
         const workLogs = (task.workLogs as unknown[]) || [];
+        const progressNotes = (task.progressNotes as unknown[]) || [];
 
         return jsonResult({
           success: true,
@@ -780,6 +812,7 @@ export function createTaskGetTool(opts?: { currentAgentId?: string }): AnyAgentT
           summary: {
             commentCount: comments.length,
             workLogCount: workLogs.length,
+            progressNoteCount: progressNotes.length,
             status: task.status,
             priority: task.priority,
             estimatedHours: task.timeTracking
@@ -792,6 +825,9 @@ export function createTaskGetTool(opts?: { currentAgentId?: string }): AnyAgentT
           // 建议 agent 在开始工作之前先阅读最近的评论，了解任务最新进展
           latestComment: comments.length > 0 ? comments[comments.length - 1] : null,
           latestWorkLog: workLogs.length > 0 ? workLogs[workLogs.length - 1] : null,
+          // 最近一条进展笔记（接手者第一时间应看这里了解历史导向、陷阱、下步计划）
+          latestProgressNote:
+            progressNotes.length > 0 ? progressNotes[progressNotes.length - 1] : null,
         });
       } catch (error) {
         return jsonResult({
@@ -915,6 +951,60 @@ export function createTaskWorklogAddTool(opts?: { currentAgentId?: string }): An
         return jsonResult({
           success: false,
           error: `Failed to add work log: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * task_progress_note_append 工具
+ *
+ * 非常重要：工作会话结束时必须调用，将阶段性工作成果沉淀下来。
+ * 效果：同步写入 SQLite（权威）+ .notes/{taskId}.md（人类可读文件）双轨。
+ */
+export function createTaskProgressNoteAppendTool(opts?: { currentAgentId?: string }): AnyAgentTool {
+  return {
+    label: "Task Progress Note",
+    name: "task_progress_note_append",
+    description:
+      "Append a structured progress note to a task at the END of each work session. " +
+      "Unlike worklogs (fine-grained action records), progress notes are session-level summaries in Markdown — " +
+      "written once per session to capture: accomplished items, discovered patterns/pitfalls, key decisions with rationale, and next-step recommendations. " +
+      "Data is written to BOTH SQLite (authoritative, with auto-compaction at 20 notes) AND a hierarchical .notes/{epic}/{feature}/{story}/{taskId}.md file in the project workspace (human-readable, with auto-archival). " +
+      "Notes are also auto-synced to AgentProgress (pitfalls/decisions/nextSessionPlan) for cross-session learning. " +
+      "WHEN TO CALL: At the end of every work session before handing off or resting. " +
+      "CONTENT FORMAT: Markdown. Include headers like ## Accomplished, ## Findings, ## Decisions, ## Next Steps.",
+    parameters: TaskProgressNoteAppendToolSchema,
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const taskId = readStringParam(params, "taskId", { required: true });
+      const content = readStringParam(params, "content", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        const response = await callGatewayTool("task.progress_note.append", gatewayOpts, {
+          taskId,
+          agentId: opts?.currentAgentId || "system",
+          content,
+          authorType: "agent",
+        });
+
+        const res = response as Record<string, unknown> | null;
+        return jsonResult({
+          success: true,
+          message: res?.message ?? `Progress note appended to task ${taskId}`,
+          taskId,
+          noteCount: res?.noteCount,
+          fileWritten: res?.fileWritten ?? false,
+          tip: "进展笔记已写入 SQLite，下次我来或其他 Agent 接手时可通过 task_get 或阅读 .notes/ 目录获取完整进展记录。",
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to append progress note: ${
             error instanceof Error ? error.message : String(error)
           }`,
         });

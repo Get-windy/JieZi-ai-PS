@@ -126,6 +126,7 @@ import {
   createTaskSubtaskCreateTool,
   createTaskWorklogAddTool,
   createTaskPingActivityTool,
+  createTaskProgressNoteAppendTool,
 } from "./tools/task-management-tools.js";
 import { createTeamOrchestrateTool } from "./tools/team-orchestrate-tool.js";
 import {
@@ -489,6 +490,12 @@ export function createOpenClawTools(options?: {
       }),
     }),
     createTaskPingActivityTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTaskProgressNoteAppendTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
         config: options?.config,

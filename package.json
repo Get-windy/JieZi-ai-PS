@@ -1,6 +1,6 @@
 {
   "name": "openclaw",
-  "version": "2026.4.8",
+  "version": "2026.4.10",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
   "homepage": "https://github.com/openclaw/openclaw#readme",
@@ -1272,6 +1272,18 @@
     "./plugin-sdk/volcengine": {
       "types": "./dist/plugin-sdk/volcengine.d.ts",
       "default": "./dist/plugin-sdk/volcengine.js"
+    },
+    "./plugin-sdk/command-status": {
+      "types": "./dist/plugin-sdk/command-status.d.ts",
+      "default": "./dist/plugin-sdk/command-status.js"
+    },
+    "./plugin-sdk/provider-web-search-config-contract": {
+      "types": "./dist/plugin-sdk/provider-web-search-config-contract.d.ts",
+      "default": "./dist/plugin-sdk/provider-web-search-config-contract.js"
+    },
+    "./plugin-sdk/tool-payload": {
+      "types": "./dist/plugin-sdk/tool-payload.d.ts",
+      "default": "./dist/plugin-sdk/tool-payload.js"
     }
   },
   "scripts": {

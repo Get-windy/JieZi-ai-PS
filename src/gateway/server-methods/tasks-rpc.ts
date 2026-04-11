@@ -17,6 +17,7 @@
  * - task.comment.add - 添加评论
  * - task.attachment.add - 添加附件
  * - task.worklog.add - 添加工作记录（智能助手专用）
+ * - task.progress_note.append - 追加进展笔记（双轨写入：SQLite + .notes 文件镜像）
  *
  * 任务关系操作：
  * - task.subtask.create - 创建子任务
@@ -50,6 +51,7 @@ import type {
   AgentWorkLog,
   TaskDependency,
 } from "../../tasks/types.js";
+import { buildProjectContext } from "../../utils/project-context.js";
 import { scheduleNextTaskForAgent } from "./agents-management.js";
 import { inferTaskType, recordPerfOutcome } from "./evolve-rpc.js";
 
@@ -1714,6 +1716,109 @@ export const tasksRpc: GatewayRequestHandlers = {
    *
    * 如实现 Hermes 的设计语义：只要有工具调用活动就不超时。
    */
+  /**
+   * task.progress_note.append - 追加任务进展笔记
+   *
+   * 双轨写入：
+   *   1. SQLite json_blob（权威数据源，含冗余压缩控制）
+   *   2. {workspacePath}/.notes/{taskId}.md 文件镜像（可选，按任务归档，超限自动按月归档）
+   *
+   * 权限：任务执行者、主管、创建者均可写入（同 worklog 策略）
+   */
+  "task.progress_note.append": async ({ params, respond }) => {
+    try {
+      const taskId =
+        (params?.taskId ? String(params.taskId) : "") || (params?.id ? String(params.id) : "");
+      const agentId = params?.agentId ? String(params.agentId) : "";
+      const content = params?.content ? String(params.content) : "";
+      const authorType = params?.authorType
+        ? (String(params.authorType) as "agent" | "human")
+        : "agent";
+
+      if (!taskId || !agentId || !content) {
+        const missing = [];
+        if (!taskId) {
+          missing.push('"taskId"');
+        }
+        if (!agentId) {
+          missing.push('"agentId"');
+        }
+        if (!content) {
+          missing.push('"content"');
+        }
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `缺少必需参数：${missing.join(", ")}`),
+        );
+        return;
+      }
+
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
+        return;
+      }
+
+      // 权限检查：执行者 / 主管 / 创建者 / system 均可写入进展笔记
+      const isAssignee = (task.assignees ?? []).some((a) => a.id === agentId);
+      const isSupervisor = task.supervisorId === agentId;
+      const isCreator = task.creatorId === agentId;
+      const isSystem = agentId === "system";
+      if (!isAssignee && !isSupervisor && !isCreator && !isSystem) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Agent(${agentId}) 不是任务 ${taskId} 的执行者或管理者，无法写入进展笔记`,
+          ),
+        );
+        return;
+      }
+
+      // 自动解析 workspaceDir（若任务关联项目则同步写入文件镜像）
+      let workspaceDir: string | undefined;
+      if (task.projectId) {
+        try {
+          const ctx = buildProjectContext(task.projectId);
+          workspaceDir = ctx.workspacePath;
+        } catch {
+          // 无法解析项目上下文时，静默降级，仅写 SQLite
+        }
+      }
+
+      const updatedTask = await storage.appendProgressNote({
+        taskId,
+        content,
+        authorId: agentId,
+        authorType,
+        workspaceDir,
+        taskTitle: task.title,
+      });
+
+      respond(
+        true,
+        {
+          taskId,
+          noteCount: updatedTask?.progressNotes?.length ?? 0,
+          fileWritten: Boolean(workspaceDir),
+          message: `进展笔记已写入任务 ${taskId}${workspaceDir ? "（含 .notes 文件镜像）" : ""}`,
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to append progress note: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
   "task.ping": async ({ params, respond }) => {
     try {
       const taskId =

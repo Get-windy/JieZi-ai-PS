@@ -20,6 +20,8 @@ import type { DatabaseSync, StatementSync } from "node:sqlite";
 import { STATE_DIR } from "../../upstream/src/config/paths.js";
 import { createAsyncLock } from "../../upstream/src/infra/json-files.js";
 import { requireNodeSqlite } from "../../upstream/src/infra/node-sqlite.js";
+import { syncProgressNotesToAgentProgress } from "../agents/agent-progress.js";
+import { appendNoteToWorkspaceFile } from "../utils/project-context.js";
 import {
   logTaskCreated,
   logTaskUpdated,
@@ -46,6 +48,11 @@ import type {
   TaskPriority,
   MeetingStatus,
   MeetingType,
+  AcceptanceCriterion,
+  TaskProgressNote,
+  MemberType,
+  UpdateCriterionRequest,
+  AppendProgressNoteRequest,
 } from "./types.js";
 
 // ============================================================================
@@ -721,6 +728,16 @@ export async function createTask(
       }
     }
 
+    // 如果 acceptanceCriteria 中有字符串，自动转为 AcceptanceCriterion
+    if (task.acceptanceCriteria && task.acceptanceCriteria.length > 0) {
+      const hasStringItems = task.acceptanceCriteria.some((c) => typeof c === "string");
+      if (hasStringItems) {
+        (task as Record<string, unknown>).acceptanceCriteria = normalizeCriteria(
+          task.acceptanceCriteria as string[] | AcceptanceCriterion[],
+        );
+      }
+    }
+
     // 写入 SQLite
     withWriteTx((stmts) => {
       stmts.upsertTask.run(taskToRow(task));
@@ -799,6 +816,7 @@ function validateStatusTransition(from: string, to: string): string | null {
 /**
  * 验证将 todo → in-progress 时必须有 assignee。
  * 验证将 in-progress → review 时必须有交付物证据。
+ * 验证将 任意状态 → done 时所有验收标准必须通过。
  */
 function validateTransitionGuards(task: Task, newStatus: string): string | null {
   // todo → in-progress: 必须有 assignee
@@ -816,6 +834,19 @@ function validateTransitionGuards(task: Task, newStatus: string): string | null 
     const hasDeliverableUrl = Boolean(task.metadata?.deliverableUrl);
     if (!hasAttachments && !hasWorkLogs && !hasDeliverableUrl) {
       return `[TaskStateMachine] Cannot move task "${task.id}" to review: no deliverable evidence (attach a file, add a success workLog, or set metadata.deliverableUrl).`;
+    }
+  }
+
+  // → done: 所有验收标准必须通过（Ralph acceptanceCriteria 实践）
+  if (newStatus === "done" && task.acceptanceCriteria && task.acceptanceCriteria.length > 0) {
+    const failing = task.acceptanceCriteria.filter((c) => !c.passes);
+    if (failing.length > 0) {
+      const descriptions = failing.map((c) => `  - [${c.id}] ${c.description}`).join("\n");
+      return (
+        `[TaskStateMachine] Cannot mark task "${task.id}" as done: ` +
+        `${failing.length} acceptance criteria not yet verified:\n${descriptions}\n` +
+        `Use updateCriterion() to verify each criterion before completing the task.`
+      );
     }
   }
 
@@ -898,6 +929,277 @@ export async function deleteTask(taskId: string, actor?: string): Promise<boolea
     }
 
     return existed;
+  });
+}
+
+// ============================================================================
+// 验收标准辅助函数
+// ============================================================================
+
+/**
+ * 将字符串数组转为 AcceptanceCriterion[]，passes 默认 false
+ */
+export function normalizeCriteria(raw: string[] | AcceptanceCriterion[]): AcceptanceCriterion[] {
+  return raw.map((item, idx) => {
+    if (typeof item === "string") {
+      return {
+        id: `ac-${Date.now()}-${idx}`,
+        description: item,
+        passes: false,
+      } satisfies AcceptanceCriterion;
+    }
+    return item;
+  });
+}
+
+/**
+ * 逐条更新验收标准通过状态（Ralph 的 passes=true 机制）
+ *
+ * Agent 完成任务时必须调用此函数逐条确认每个验收标准。
+ * 人类 reviewr 也可以调用此函数驳回（passes=false）或完成验收。
+ */
+export async function updateCriterion(req: UpdateCriterionRequest): Promise<Task | undefined> {
+  return _lock(async () => {
+    const tasks = loadTasks();
+    const task = tasks.get(req.taskId);
+    if (!task) {
+      return undefined;
+    }
+
+    const criteria = task.acceptanceCriteria ?? [];
+    const idx = criteria.findIndex((c) => c.id === req.criterionId);
+    if (idx < 0) {
+      throw new Error(
+        `[TaskStorage] Criterion "${req.criterionId}" not found in task "${req.taskId}".`,
+      );
+    }
+
+    const updatedCriteria: AcceptanceCriterion[] = [...criteria];
+    updatedCriteria[idx] = {
+      ...updatedCriteria[idx],
+      passes: req.passes,
+      verifiedAt: Date.now(),
+      verifiedBy: req.verifiedBy,
+      ...(req.note ? { note: req.note } : {}),
+    };
+
+    const allPassed = updatedCriteria.length > 0 && updatedCriteria.every((c) => c.passes);
+
+    const updatedTask: Task = {
+      ...task,
+      acceptanceCriteria: updatedCriteria,
+      // allCriteriaPassed 是 readonly 计算属性，存储时尚需写入
+      // 用 metadata 传递这个计算值以支持客户端快捷读取
+      updatedAt: Date.now(),
+    };
+    // 写入计算属性（覆盖 readonly 以实现持久化）
+    (updatedTask as Record<string, unknown>).allCriteriaPassed =
+      updatedCriteria.length > 0 ? allPassed : undefined;
+
+    withWriteTx((stmts) => {
+      stmts.upsertTask.run(taskToRow(updatedTask));
+    });
+    tasks.set(req.taskId, updatedTask);
+
+    return updatedTask;
+  });
+}
+
+/**
+ * 进展笔记最大保留数量
+ *
+ * 超出此限制时，最早的旧笔记会被压缩为一条摘要笔记，
+ * 保留知识精华而非原始全文。
+ *
+ * 设计考虑：
+ * - 每条笔记平均约 200-500 字，20 条约 4-10 KB
+ * - 超过 20 条就开始压缩，防止长期项目无限模式增长
+ * - 压缩将最早的 COMPACT_BATCH_SIZE 条合并为一条摘要
+ */
+const MAX_PROGRESS_NOTES = 20;
+const COMPACT_BATCH_SIZE = 10; // 每次压缩剥除的条数
+
+/**
+ * 将多条旧笔记压缩为一条摘要（纯本地、不依赖 LLM）
+ *
+ * 压缩策略：提取每条笔记的前 N 字拼接，加时间戳。
+ * 功能简单而可靠，不引入外部依赖。
+ * 当未来支持 LLM 摘要时，可将此函数替换为调用模型生成摘要。
+ */
+function compactNotes(
+  notes: TaskProgressNote[],
+  authorId: string,
+  authorType: MemberType,
+): TaskProgressNote {
+  const EXCERPT_LEN = 120; // 每条笔记取前 N 字作摘要
+  const lines: string[] = [`## 压缩摘要（共 ${notes.length} 条笔记）`, ``];
+  for (const note of notes) {
+    const date = new Date(note.createdAt).toISOString().slice(0, 10);
+    const excerpt = note.content.replace(/\s+/g, " ").trim().slice(0, EXCERPT_LEN);
+    const suffix = note.content.length > EXCERPT_LEN ? "\u2026" : "";
+    lines.push(`- **${date}** (by ${note.authorId}): ${excerpt}${suffix}`);
+  }
+  return {
+    id: `pn-compact-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    content: lines.join("\n"),
+    authorId,
+    authorType,
+    createdAt: Date.now(),
+    compacted: true,
+    compactedFrom: notes.length,
+  };
+}
+
+/**
+ * 追加进展笔记（append-only，对应 Ralph 的 progress.txt）
+ *
+ * 每次工作会话结束后调用，沉淀已完成的事项、发现的模式/陷阱、下步建议。
+ * 内容格式为 Markdown。
+ *
+ * 冗余控制：笔记数超过 MAX_PROGRESS_NOTES 时，自动将最早的
+ * COMPACT_BATCH_SIZE 条压缩为一条摘要，防止 json_blob 无限增长。
+ *
+ * 父任务冒泡：任务有 parentTaskId 时，同步向父任务写一条简短引用摘要笔记，
+ * 使 Story → Feature → Epic 层级的上层节点自动积累子任务进展，
+ * 无需 Agent 手动维护。冒泡只上冒一层，不递归，避免噪音放大。
+ */
+export async function appendProgressNote(
+  req: AppendProgressNoteRequest,
+): Promise<Task | undefined> {
+  return _lock(async () => {
+    const tasks = loadTasks();
+    const task = tasks.get(req.taskId);
+    if (!task) {
+      return undefined;
+    }
+
+    const now = Date.now();
+    const note: TaskProgressNote = {
+      id: `pn-${now}-${Math.random().toString(36).slice(2, 7)}`,
+      content: req.content,
+      authorId: req.authorId,
+      authorType: req.authorType,
+      createdAt: now,
+    };
+
+    let notes = [...(task.progressNotes ?? []), note];
+
+    // 冗余控制：超过上限时将最早的 COMPACT_BATCH_SIZE 条压缩为一条摘要
+    if (notes.length > MAX_PROGRESS_NOTES) {
+      const toCompact = notes.slice(0, COMPACT_BATCH_SIZE);
+      const rest = notes.slice(COMPACT_BATCH_SIZE);
+      const summary = compactNotes(toCompact, req.authorId, req.authorType);
+      notes = [summary, ...rest];
+    }
+
+    const updatedTask: Task = {
+      ...task,
+      progressNotes: notes,
+      updatedAt: now,
+    };
+
+    withWriteTx((stmts) => {
+      stmts.upsertTask.run(taskToRow(updatedTask));
+    });
+    tasks.set(req.taskId, updatedTask);
+
+    // ── AgentProgress 桥接：将笔记同步到 Agent 进化系统（pitfalls/decisions/nextSessionPlan）──
+    // syncProgressNotesToAgentProgress 内部有去重保护（synced note ID 集合），可安全多次调用
+    // 仅对有 assignees 的任务触发，且 AgentProgress 不存在时静默跳过（不自动创建）
+    try {
+      const primaryAssignee = updatedTask.assignees?.[0]?.id;
+      if (primaryAssignee) {
+        syncProgressNotesToAgentProgress(
+          updatedTask.progressNotes ?? [],
+          primaryAssignee,
+          updatedTask.projectId ?? updatedTask.title,
+        );
+      }
+    } catch {
+      // 静默降级：AgentProgress 桥接失败不影响主写入路径
+    }
+
+    // ── 父任务冒泡（一层，非递归）──
+    // 目的：让 Story/Feature/Epic 等上层节点自动积累子任务进展摘要，
+    // 形成层次化的进展视图，无需 Agent 手动汇报。
+    if (task.parentTaskId) {
+      const parentTask = tasks.get(task.parentTaskId);
+      if (parentTask) {
+        // 提取笔记前 200 字作为冒泡摘要（避免全文复制造成父任务膨胀）
+        const excerpt = req.content.slice(0, 200).replace(/\n+/g, " ");
+        const bubbleContent =
+          `> **[子任务进展]** \`${task.id}\` ${task.title}\n` +
+          `> ${excerpt}${req.content.length > 200 ? "…" : ""}`;
+
+        const bubbleNote: TaskProgressNote = {
+          id: `pn-bubble-${now}-${Math.random().toString(36).slice(2, 7)}`,
+          content: bubbleContent,
+          authorId: req.authorId,
+          authorType: req.authorType,
+          createdAt: now,
+        };
+
+        let parentNotes = [...(parentTask.progressNotes ?? []), bubbleNote];
+        if (parentNotes.length > MAX_PROGRESS_NOTES) {
+          const toCompact = parentNotes.slice(0, COMPACT_BATCH_SIZE);
+          const rest = parentNotes.slice(COMPACT_BATCH_SIZE);
+          parentNotes = [compactNotes(toCompact, req.authorId, req.authorType), ...rest];
+        }
+
+        const updatedParent: Task = {
+          ...parentTask,
+          progressNotes: parentNotes,
+          updatedAt: now,
+        };
+        withWriteTx((stmts) => {
+          stmts.upsertTask.run(taskToRow(updatedParent));
+        });
+        tasks.set(task.parentTaskId, updatedParent);
+
+        // 父任务也镜像写入文件（层次信息使用父任务自身的层次属性）
+        if (req.workspaceDir) {
+          appendNoteToWorkspaceFile({
+            workspaceDir: req.workspaceDir,
+            taskId: task.parentTaskId,
+            taskTitle: parentTask.title,
+            hierarchy: {
+              epicId: parentTask.epicId,
+              featureId: parentTask.featureId,
+              parentTaskId: parentTask.parentTaskId,
+              level: parentTask.level,
+            },
+            noteId: bubbleNote.id,
+            content: bubbleNote.content,
+            authorId: bubbleNote.authorId,
+            createdAt: bubbleNote.createdAt,
+          });
+        }
+      }
+    }
+
+    // 镜像写入项目工作空间（可选）
+    // 失败时静默降级，SQLite 仍保有完整数据
+    if (req.workspaceDir) {
+      appendNoteToWorkspaceFile({
+        workspaceDir: req.workspaceDir,
+        taskId: req.taskId,
+        taskTitle: req.taskTitle ?? task.title,
+        // 优先使用请求中显式传入的 hierarchy，如果没有则从 task 对象自动提取
+        hierarchy: req.hierarchy ?? {
+          epicId: task.epicId,
+          featureId: task.featureId,
+          parentTaskId: task.parentTaskId,
+          level: task.level,
+        },
+        noteId: note.id,
+        content: note.content,
+        authorId: note.authorId,
+        createdAt: note.createdAt,
+        compacted: note.compacted,
+      });
+    }
+
+    return updatedTask;
   });
 }
 
