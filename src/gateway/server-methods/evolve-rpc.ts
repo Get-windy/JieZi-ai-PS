@@ -729,15 +729,6 @@ function appendOntologyOp(agentId: string | undefined, op: OntologyOp): void {
 type LessonPromoteTarget = "SOUL.md" | "AGENTS.md" | "TOOLS.md";
 
 /**
- * resolveAgentWorkspaceDirFallback — 在不依赖 cfg 的情况下推算 Agent 工作空间路径
- * 复用 resolveAgentWorkspaceDir 的逻辑：stateDir/workspace-{agentId}
- */
-function resolveAgentWorkspaceDirFallback(agentId: string): string {
-  const stateDir = resolveStateDir(process.env);
-  return path.join(stateDir, `workspace-${agentId}`);
-}
-
-/**
  * promoteLesson — 将高质量 lesson 晋升追加到工作区文件
  *
  * @param agentId   目标 Agent
