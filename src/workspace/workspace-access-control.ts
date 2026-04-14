@@ -10,6 +10,8 @@
 
 import * as os from "os";
 import * as path from "path";
+import { loadConfig } from "../../upstream/src/config/config.js";
+import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import { groupWorkspaceManager } from "./group-workspace";
 import {
   SessionType,
@@ -74,8 +76,13 @@ export class WorkspaceAccessControlManager {
       rootDir = workspace.dir;
       accessControl = this.buildGroupAccessControl(groupId, agentId);
     } else {
-      // 智能助手个人工作空间
-      rootDir = path.join(this.agentWorkspaceRoot, `workspace-${agentId}`);
+      // 智能助手个人工作空间：优先从配置中读取自定义路径
+      try {
+        const cfg = loadConfig();
+        rootDir = resolveAgentWorkspaceDir(cfg, agentId);
+      } catch {
+        rootDir = path.join(this.agentWorkspaceRoot, `workspace-${agentId}`);
+      }
       accessControl = this.buildAgentAccessControl(agentId);
     }
 
@@ -109,7 +116,13 @@ export class WorkspaceAccessControlManager {
    * 构建智能助手工作空间的访问控制配置
    */
   private buildAgentAccessControl(agentId: string): WorkspaceAccessControl {
-    const workspaceRoot = path.join(this.agentWorkspaceRoot, `workspace-${agentId}`);
+    let workspaceRoot: string;
+    try {
+      const cfg = loadConfig();
+      workspaceRoot = resolveAgentWorkspaceDir(cfg, agentId);
+    } catch {
+      workspaceRoot = path.join(this.agentWorkspaceRoot, `workspace-${agentId}`);
+    }
 
     return {
       // 允许访问的路径（相对于工作空间根目录）
@@ -163,9 +176,9 @@ export class WorkspaceAccessControlManager {
       // 禁止访问的路径
       blockedPaths: [
         // 禁止访问其他智能助手的工作空间
-        `${this.agentWorkspaceRoot}/workspace-*`,
+        `${this.agentWorkspaceRoot}/*`,
         // 排除自己的工作空间
-        `!${this.agentWorkspaceRoot}/workspace-${agentId}`,
+        `!${workspaceRoot}`,
       ],
       // 默认权限
       defaultPermissions: {

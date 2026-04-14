@@ -51,6 +51,33 @@ export type TeamMonitorProps = {
   onAssignFormChange: (field: string, value: unknown) => void;
   onSubmitAssign: () => void;
   onViewTaskDetail: (taskId: string) => void;
+  onResetTask: (taskId: string, targetStatus: "todo" | "in-progress") => void;
+  resetingTaskId: string | null;
+
+  // 编辑弹窗
+  editDialogTask: EditTaskForm | null;
+  editSaving: boolean;
+  editError: string | null;
+  onOpenEditDialog: (task: ActiveTask) => void;
+  onCloseEditDialog: () => void;
+  onEditFormChange: (field: string, value: unknown) => void;
+  onSubmitEdit: () => void;
+
+  // 删除
+  deletingTaskId: string | null;
+  onDeleteTask: (taskId: string) => void;
+
+  // 取消（快捷状态变更）
+  cancelingTaskId: string | null;
+  onCancelTask: (taskId: string) => void;
+};
+
+export type EditTaskForm = {
+  taskId: string;
+  title: string;
+  priority: "low" | "medium" | "high" | "urgent";
+  status: "todo" | "in-progress" | "review" | "blocked" | "done" | "cancelled";
+  dueDate: string; // datetime-local 格式，空字符串表示无
 };
 
 export type AgentTeamStatus = {
@@ -128,6 +155,9 @@ export function renderTeamMonitor(props: TeamMonitorProps): TemplateResult {
 
       <!-- 下达任务对话框 -->
       ${props.assignDialogOpen ? renderAssignDialog(props) : nothing}
+
+      <!-- 编辑任务对话框 -->
+      ${props.editDialogTask ? renderEditDialog(props) : nothing}
     </div>
   `;
 }
@@ -475,6 +505,14 @@ function renderTaskRow(
     task.status !== "done" &&
     task.status !== "cancelled";
 
+  const isReseting = props.resetingTaskId === task.id;
+  const isDeleting = props.deletingTaskId === task.id;
+  const isCanceling = props.cancelingTaskId === task.id;
+  // 可重置的状态：in-progress / blocked / review / done（不包括 todo 和 cancelled）
+  const canReset = task.status !== "todo" && task.status !== "cancelled";
+  // 可取消的状态：未完成的任务
+  const canCancel = task.status !== "cancelled" && task.status !== "done";
+
   return html`
     <div
       class="card"
@@ -509,9 +547,59 @@ function renderTaskRow(
           </div>
         </div>
 
-        <!-- 任务ID (小字) -->
-        <div class="muted" style="font-size: 0.7rem; flex-shrink: 0; text-align: right;">
-          ${task.id.length > 16 ? task.id.slice(0, 16) + "…" : task.id}
+        <!-- 操作区 -->
+        <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;" @click=${(e: Event) => e.stopPropagation()}>
+          <!-- 任务ID (小字) -->
+          <div class="muted" style="font-size: 0.7rem; text-align: right; margin-right: 4px;">
+            ${task.id.length > 12 ? task.id.slice(0, 12) + "…" : task.id}
+          </div>
+
+          <!-- 编辑按钮 -->
+          <button
+            class="btn btn--sm"
+            style="padding: 2px 7px; font-size: 0.73rem;"
+            title="编辑任务"
+            @click=${() => props.onOpenEditDialog(task)}
+          >✏️</button>
+
+          <!-- 重置按钮（仅非 todo/cancelled 状态） -->
+          ${
+            canReset
+              ? html`
+                  <button
+                    class="btn btn--sm"
+                    style="padding: 2px 7px; font-size: 0.73rem; color: #d97706; border-color: #d97706; opacity: ${isReseting ? 0.6 : 1};"
+                    ?disabled=${isReseting}
+                    title="重置为待开始"
+                    @click=${() => { if (!isReseting) props.onResetTask(task.id, "todo"); }}
+                  >${isReseting ? "…" : "↺"}</button>
+                `
+              : nothing
+          }
+
+          <!-- 取消按钮（仅未完成任务） -->
+          ${
+            canCancel
+              ? html`
+                  <button
+                    class="btn btn--sm"
+                    style="padding: 2px 7px; font-size: 0.73rem; color: #6b7280; border-color: #6b7280; opacity: ${isCanceling ? 0.6 : 1};"
+                    ?disabled=${isCanceling}
+                    title="取消任务"
+                    @click=${() => { if (!isCanceling && confirm(`确定要取消任务「${task.title}」？`)) props.onCancelTask(task.id); }}
+                  >${isCanceling ? "…" : "✖"}</button>
+                `
+              : nothing
+          }
+
+          <!-- 删除按钮 -->
+          <button
+            class="btn btn--sm"
+            style="padding: 2px 7px; font-size: 0.73rem; color: #dc2626; border-color: #dc2626; opacity: ${isDeleting ? 0.6 : 1};"
+            ?disabled=${isDeleting}
+            title="删除任务"
+            @click=${() => { if (!isDeleting && confirm(`确定要永久删除任务「${task.title}」？此操作不可恢复。`)) props.onDeleteTask(task.id); }}
+          >${isDeleting ? "…" : "🗑️"}</button>
         </div>
       </div>
     </div>
@@ -656,6 +744,104 @@ function renderAssignDialog(props: TeamMonitorProps): TemplateResult {
                 : "下达任务"
             }
           </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================================
+// 编辑任务对话框
+// ============================================================================
+
+function renderEditDialog(props: TeamMonitorProps): TemplateResult {
+  const form = props.editDialogTask!;
+  return html`
+    <div
+      style="position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; display: flex; align-items: center; justify-content: center;"
+      @click=${(e: Event) => { if (e.target === e.currentTarget) props.onCloseEditDialog(); }}
+    >
+      <div class="card" style="width: 480px; max-width: 95vw; padding: 24px; display: flex; flex-direction: column; gap: 16px; max-height: 90vh; overflow-y: auto;">
+        <!-- 标题 -->
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="font-weight: 600; font-size: 1rem;">编辑任务</div>
+          <button class="btn btn--sm" style="padding: 4px 8px;" @click=${props.onCloseEditDialog}>✕</button>
+        </div>
+
+        <!-- 任务ID (只读提示) -->
+        <div style="font-size: 0.78rem; color: var(--color-muted); word-break: break-all;">ID: ${form.taskId}</div>
+
+        <!-- 标题 -->
+        <div>
+          <label style="display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 6px;">标题 <span style="color: #dc2626;">*</span></label>
+          <input
+            type="text"
+            class="input"
+            style="width: 100%; height: 36px;"
+            .value=${form.title}
+            @input=${(e: Event) => props.onEditFormChange("title", (e.target as HTMLInputElement).value)}
+          />
+        </div>
+
+        <!-- 状态 + 优先级 -->
+        <div style="display: flex; gap: 12px;">
+          <div style="flex: 1;">
+            <label style="display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 6px;">状态</label>
+            <select
+              class="input"
+              style="width: 100%; height: 36px;"
+              .value=${form.status}
+              @change=${(e: Event) => props.onEditFormChange("status", (e.target as HTMLSelectElement).value)}
+            >
+              <option value="todo">待开始</option>
+              <option value="in-progress">进行中</option>
+              <option value="review">待审核</option>
+              <option value="blocked">已阻塞</option>
+              <option value="done">已完成</option>
+              <option value="cancelled">已取消</option>
+            </select>
+          </div>
+          <div style="flex: 1;">
+            <label style="display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 6px;">优先级</label>
+            <select
+              class="input"
+              style="width: 100%; height: 36px;"
+              .value=${form.priority}
+              @change=${(e: Event) => props.onEditFormChange("priority", (e.target as HTMLSelectElement).value)}
+            >
+              <option value="low">低</option>
+              <option value="medium">中</option>
+              <option value="high">高</option>
+              <option value="urgent">紧急</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 截止时间 -->
+        <div>
+          <label style="display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 6px;">截止时间（可选）</label>
+          <input
+            type="datetime-local"
+            class="input"
+            style="width: 100%; height: 36px;"
+            .value=${form.dueDate}
+            @change=${(e: Event) => props.onEditFormChange("dueDate", (e.target as HTMLInputElement).value)}
+          />
+        </div>
+
+        <!-- 错误提示 -->
+        ${props.editError
+          ? html`<div style="color: #dc2626; font-size: 0.875rem; padding: 8px 12px; background: #fef2f2; border-radius: 6px;">${props.editError}</div>`
+          : nothing}
+
+        <!-- 按鈕 -->
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+          <button class="btn" @click=${props.onCloseEditDialog} ?disabled=${props.editSaving}>取消</button>
+          <button
+            class="btn btn--primary"
+            ?disabled=${props.editSaving || !form.title.trim()}
+            @click=${props.onSubmitEdit}
+          >${props.editSaving ? "保存中…" : "保存"}</button>
         </div>
       </div>
     </div>

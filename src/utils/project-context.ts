@@ -260,6 +260,104 @@ export function calcProjectProgress(sprints: ProjectSprint[]): number {
 export type ProjectMilestone = ProjectSprint;
 
 // ============================================================================
+// 项目目标管理（Objective 层）
+// 参考 OKR 设计思想 + Linear Roadmap + Notion Goals
+// 层次：战略目标 → 里程碑 → Sprint → Task
+// ============================================================================
+
+/**
+ * 关键结果（Key Result）— OKR 中的可量化指标
+ */
+export interface KeyResult {
+  id: string;
+  /** 描述（必须可量化，如"用户注册数达 1000"） */
+  description: string;
+  /** 当前值 */
+  current?: number;
+  /** 目标值 */
+  target?: number;
+  /** 单位 */
+  unit?: string;
+  /** 是否完成 */
+  achieved: boolean;
+  /** 完成时间 */
+  achievedAt?: number;
+}
+
+/**
+ * 项目编阶里程碑（Timeline Milestone）
+ *
+ * 区别于 Sprint：里程碑是地图上的标志点，代表一个阶段性交付物，
+ * 不必和 Sprint 一一对应。可跨多个 Sprint。
+ */
+export interface ProjectMilestoneEntry {
+  id: string;
+  /** 里程碑名称 */
+  title: string;
+  /** 描述 — 这个里程碑代表一个什么阶段性成果 */
+  description?: string;
+  /** 里程碑类型 */
+  type: "release" | "phase" | "checkpoint" | "deliverable" | "other";
+  /** 状态 */
+  status: "upcoming" | "in-progress" | "completed" | "missed" | "cancelled";
+  /** 计划完成时间 */
+  targetDate?: number;
+  /** 实际完成时间 */
+  completedAt?: number;
+  /** 关联的项目目标 ID */
+  objectiveId?: string;
+  /** 关联的 Sprint ID（可关联多个） */
+  sprintIds?: string[];
+  /** 负责人 */
+  ownerId?: string;
+  /** 创建时间 */
+  createdAt: number;
+  /** 更新时间 */
+  updatedAt?: number;
+}
+
+/**
+ * 项目战略目标（Objective）
+ *
+ * 描述项目的短期/中期/长期目标。
+ * 层次：战略目标→里程碑→Sprint→Task
+ * 
+ * 参考业界实践：
+ * - Linear: Roadmap Goals
+ * - Jira: 业务目标（Business Goals）
+ * - Notion: Goals DB
+ * - OKR 方法论
+ */
+export interface ProjectObjective {
+  id: string;
+  /** 目标标题 */
+  title: string;
+  /** 详细描述：我们要做什么，为什么这个目标对项目重要 */
+  description?: string;
+  /** 时间范围 */
+  timeframe: "short" | "medium" | "long";
+  /** 目标状态 */
+  status: "not-started" | "in-progress" | "achieved" | "missed" | "deferred";
+  /** 计划达成时间 */
+  targetDate?: number;
+  /** 实际达成时间 */
+  achievedAt?: number;
+  /**
+   * Key Results — 可量化的成功指标
+   * 参考 OKR 方法论：每个 Objective 应有 2-5 个 KR
+   */
+  keyResults?: KeyResult[];
+  /** 父目标 ID（支持层次化目标） */
+  parentObjectiveId?: string;
+  /** 创建时间 */
+  createdAt: number;
+  /** 更新时间 */
+  updatedAt?: number;
+  /** 最后更新备注 */
+  lastUpdateNote?: string;
+}
+
+// ============================================================================
 // DoD（Definition of Done）完成门禁系统
 // ============================================================================
 
@@ -419,6 +517,24 @@ export interface ProjectConfig {
   milestones?: ProjectSprint[];
   /** Backlog 任务列表（未分配到 Sprint 的任务，使用统一的 Task 接口） */
   backlog?: Task[];
+  /**
+   * 项目战略目标（Objectives）
+   *
+   * 定义项目的短期/中期/长期目标。
+   * - 短期目标：2-4周内要达成的重点目标
+   * - 中期目标：1-3个月内要实现的功能目标
+   * - 长期目标：3个月以上的战略方向
+   *
+   * 团队成员将通过心跳注入看到当前活跃目标，明确知道自己的工作服务于哪个目标。
+   */
+  objectives?: ProjectObjective[];
+  /**
+   * 项目里程碑时间轴（Timeline Milestones）
+   *
+   * 独立于 Sprint 的阶段性交付物标志，与目标关联。
+   * 可跨多个 Sprint，代表一个阶段性成果。
+   */
+  timelineMilestones?: ProjectMilestoneEntry[];
   /**
    * ✅ 完成门禁（DoD - Definition of Done）【强烈建议在创建项目时填写】
    *
@@ -718,6 +834,227 @@ export function generateProjectSwitchInstructions(projectId: string, currentDir?
   return lines.join("\n");
 }
 
+
+// ============================================================================
+// 目标感知系统（Objective Awareness）
+// 解决"AI不知道自己工作服务于什么目标"的根本问题
+// ============================================================================
+
+/**
+ * 活跃目标摘要 — 注入到 AI 系统提示中的核心上下文
+ */
+export interface ActiveObjectivesSummary {
+  projectId: string;
+  projectName: string;
+  currentPhase: ProjectStatus;
+  currentPhaseLabel: string;
+  allowedWorkTypes: string[];
+  shortTermObjectives: Array<{
+    id: string; title: string; description?: string; status: string;
+    targetDate?: number; keyResultsSummary?: string; progress?: number;
+  }>;
+  mediumTermObjectives: Array<{
+    id: string; title: string; description?: string; status: string;
+    targetDate?: number; progress?: number;
+  }>;
+  longTermObjectives: Array<{
+    id: string; title: string; description?: string; status: string;
+  }>;
+  activeSprint?: {
+    id: string; title: string; goal?: string; progress: number;
+    endDate?: number; taskCount: number; doneCount: number;
+  };
+  nextMilestone?: {
+    id: string; title: string; type: string; targetDate?: number; objectiveId?: string;
+  };
+}
+
+/**
+ * 构建项目活跃目标摘要（供心跳注入、系统提示生成时使用）
+ */
+export function buildActiveObjectivesSummary(
+  projectId: string,
+  workspaceRoot?: string,
+): ActiveObjectivesSummary | null {
+  try {
+    const ctx = buildProjectContext(projectId, workspaceRoot);
+    const config = ctx.config;
+    if (!config) return null;
+    const meta = getProjectStatusMeta(config.status);
+    const activeStatuses = new Set(["not-started", "in-progress"]);
+    const objectives = (config.objectives ?? []).filter((o) => activeStatuses.has(o.status));
+    const mapKR = (o: ProjectObjective) =>
+      o.keyResults
+        ? {
+            summary: o.keyResults
+              .map(
+                (kr) =>
+                  `${kr.description}${kr.current !== undefined ? ` (${kr.current}/${kr.target}${kr.unit ?? ""})` : ""} [${kr.achieved ? "✅" : "⏳"}]`,
+              )
+              .join("; "),
+            progress: Math.round(
+              (o.keyResults.filter((kr) => kr.achieved).length / Math.max(o.keyResults.length, 1)) * 100,
+            ),
+          }
+        : { summary: undefined, progress: undefined };
+    const shortTerm = objectives
+      .filter((o) => o.timeframe === "short")
+      .map((o) => {
+        const kr = mapKR(o);
+        return { id: o.id, title: o.title, description: o.description, status: o.status, targetDate: o.targetDate, keyResultsSummary: kr.summary, progress: kr.progress };
+      });
+    const mediumTerm = objectives
+      .filter((o) => o.timeframe === "medium")
+      .map((o) => {
+        const kr = mapKR(o);
+        return { id: o.id, title: o.title, description: o.description, status: o.status, targetDate: o.targetDate, progress: kr.progress };
+      });
+    const longTerm = objectives
+      .filter((o) => o.timeframe === "long")
+      .map((o) => ({ id: o.id, title: o.title, description: o.description, status: o.status }));
+    const sprints = config.sprints ?? config.milestones ?? [];
+    const activeSprint = sprints.find((s) => s.status === "active");
+    let activeSprintSummary: ActiveObjectivesSummary["activeSprint"] | undefined;
+    if (activeSprint) {
+      const tasks = activeSprint.tasks.filter((t) => t.status !== "cancelled");
+      const done = tasks.filter((t) => t.status === "done");
+      const totalPts = tasks.reduce((sum, t) => sum + (t.storyPoints ?? 1), 0);
+      const donePts = done.reduce((sum, t) => sum + (t.storyPoints ?? 1), 0);
+      activeSprintSummary = {
+        id: activeSprint.id, title: activeSprint.title, goal: activeSprint.goal,
+        progress: totalPts === 0 ? 0 : Math.round((donePts / totalPts) * 100),
+        endDate: activeSprint.endDate, taskCount: tasks.length, doneCount: done.length,
+      };
+    }
+    const upcomingMilestone = (config.timelineMilestones ?? [])
+      .filter((m) => m.status === "upcoming" || m.status === "in-progress")
+      .sort((a, b) => (a.targetDate ?? Infinity) - (b.targetDate ?? Infinity))[0];
+    return {
+      projectId, projectName: config.name ?? projectId,
+      currentPhase: config.status ?? "planning", currentPhaseLabel: meta.label,
+      allowedWorkTypes: meta.allowedWork, shortTermObjectives: shortTerm,
+      mediumTermObjectives: mediumTerm, longTermObjectives: longTerm,
+      activeSprint: activeSprintSummary,
+      nextMilestone: upcomingMilestone
+        ? { id: upcomingMilestone.id, title: upcomingMilestone.title, type: upcomingMilestone.type, targetDate: upcomingMilestone.targetDate, objectiveId: upcomingMilestone.objectiveId }
+        : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 将活跃目标摘要格式化为可注入系统提示的文本
+ *
+ * 解决"AI不知道自己工作服务于什么目标"问题的最终输出。
+ * 每次新会话时注入此文本，AI就知道：短期/中期/长期目标是什么，当前阶段应做什么工作。
+ */
+export function formatObjectivesSummaryForPrompt(
+  summary: ActiveObjectivesSummary,
+  maxLines = 50,
+): string {
+  const lines: string[] = [
+    `## 项目目标对齐（${summary.projectName}）`,
+    `当前阶段：**${summary.currentPhaseLabel}** | 本阶段工作方向：${summary.allowedWorkTypes.length > 0 ? summary.allowedWorkTypes.join("、") : "（暂停，请勿分配新任务）"}`,
+    "",
+  ];
+  if (summary.activeSprint) {
+    const s = summary.activeSprint;
+    const endStr = s.endDate ? ` | 截止 ${new Date(s.endDate).toLocaleDateString("zh-CN")}` : "";
+    lines.push(
+      `### 当前 Sprint：${s.title}${endStr}`,
+      s.goal ? `Sprint目标：${s.goal}` : "",
+      `进度：${s.progress}%（${s.doneCount}/${s.taskCount} 任务完成）`,
+      "",
+    );
+  }
+  if (summary.shortTermObjectives.length > 0) {
+    lines.push("### 短期目标（当前重点，2-4周内达成）");
+    for (const o of summary.shortTermObjectives) {
+      lines.push(`${o.status === "in-progress" ? "🔥" : "📌"} **${o.title}**`);
+      if (o.description) lines.push(`   ${o.description}`);
+      if (o.keyResultsSummary) lines.push(`   KR: ${o.keyResultsSummary}`);
+      if (o.progress !== undefined) lines.push(`   进度: ${o.progress}%`);
+    }
+    lines.push("");
+  }
+  if (summary.mediumTermObjectives.length > 0) {
+    lines.push("### 中期目标（1-3个月）");
+    for (const o of summary.mediumTermObjectives) {
+      const dateStr = o.targetDate ? ` | 目标日期 ${new Date(o.targetDate).toLocaleDateString("zh-CN")}` : "";
+      lines.push(`📋 ${o.title}${dateStr}`);
+      if (o.description) lines.push(`   ${o.description}`);
+      if (o.progress !== undefined) lines.push(`   进度: ${o.progress}%`);
+    }
+    lines.push("");
+  }
+  if (summary.longTermObjectives.length > 0) {
+    lines.push("### 长期目标（战略方向）");
+    for (const o of summary.longTermObjectives) {
+      lines.push(`🎯 ${o.title}`);
+      if (o.description) lines.push(`   ${o.description}`);
+    }
+    lines.push("");
+  }
+  if (summary.nextMilestone) {
+    const m = summary.nextMilestone;
+    const dateStr = m.targetDate ? ` - 预计 ${new Date(m.targetDate).toLocaleDateString("zh-CN")}` : "";
+    lines.push(`### 下一个里程碑：${m.title}${dateStr}`, "");
+  }
+  lines.push(
+    "> **工作对齐要求**：创建任务前确认该任务服务于哪个目标（填写 objectiveId）。",
+    "> 若 Sprint 存在，优先处理 Sprint 内任务，不要创建与当前目标无关的远期功能。",
+  );
+  const result = lines.filter((l) => l !== null && l !== undefined).join("\n");
+  const resultLines = result.split("\n");
+  if (resultLines.length > maxLines) {
+    return resultLines.slice(0, maxLines).join("\n") + "\n...（目标摘要已截断）";
+  }
+  return result;
+}
+
+/**
+ * Phase Gate 检查：当前项目阶段是否允许创建该类型的任务
+ *
+ * 解决"在错误阶段做错误事情"问题的核心机制。
+ * 例如：在需求阶段不应该写代码；在评审阶段不应该加新功能。
+ *
+ * @returns blocked=true 时应拒绝任务创建；message 包含具体原因
+ */
+export function checkPhaseGate(
+  projectStatus: ProjectStatus | undefined,
+  taskType: string | undefined,
+): { blocked: boolean; message: string | null } {
+  if (!projectStatus || !taskType) return { blocked: false, message: null };
+  const PHASE_GATE_RULES: Partial<Record<ProjectStatus, { blocked: string[]; warning: string[] }>> = {
+    requirements: { blocked: ["feature"], warning: [] },
+    design: { blocked: [], warning: ["bugfix"] },
+    testing: { blocked: [], warning: ["feature"] },
+    review: { blocked: ["feature"], warning: [] },
+  };
+  const rules = PHASE_GATE_RULES[projectStatus];
+  if (!rules) return { blocked: false, message: null };
+  const meta = getProjectStatusMeta(projectStatus);
+  if (rules.blocked.includes(taskType)) {
+    return {
+      blocked: true,
+      message:
+        `⛔ [Phase Gate] 当前项目处于「${meta.label}」阶段，不允许创建类型为「${taskType}」的任务。` +
+        `\n本阶段应集中于：${meta.allowedWork.join("、")}。` +
+        `\n如确实需要跨阶段工作，请先通过 project_update_status 推进项目阶段。`,
+    };
+  }
+  if (rules.warning.includes(taskType)) {
+    return {
+      blocked: false,
+      message:
+        `⚠️ [Phase Gate 警告] 当前项目处于「${meta.label}」阶段，创建「${taskType}」任务需谨慎。` +
+        `\n本阶段建议优先关注：${meta.allowedWork.join("、")}。`,
+    };
+  }
+  return { blocked: false, message: null };
+}
 // ============================================================================
 // .notes 目录：任务进展笔记的工作空间文件镜像
 // ============================================================================
@@ -1149,4 +1486,455 @@ function _upsertNotesIndex(
     return; // 已存在，幂等跳过
   }
   fs.appendFileSync(indexPath, `${entryLine}\n`, "utf-8");
+}
+
+// ============================================================================
+// Sprint 工作日志快照（Sprint Work Snapshot）
+//
+// 参考 OpenHands V1 「事件溢源 + 单一状态源」思路：
+// 每次 AI 开始工作前，先读这份快照——无论大小会话切换，都能快速恢复当前迭代进度。
+// ============================================================================
+
+/**
+ * Sprint 工作快照：进行中的 Sprint 完整运行状态
+ */
+export interface SprintWorkSnapshot {
+  projectId: string;
+  projectName: string;
+  snapshotAt: number;
+  sprint: {
+    id: string;
+    title: string;
+    goal?: string;
+    status: string;
+    progress: number;
+    startDate?: number;
+    endDate?: number;
+    daysRemaining?: number;
+    velocity?: number;
+  };
+  taskBreakdown: {
+    total: number;
+    done: number;
+    inProgress: number;
+    todo: number;
+    blocked: number;
+    cancelled: number;
+    totalStoryPoints: number;
+    completedStoryPoints: number;
+  };
+  /** 当前进行中的任务（最多 5 条）*/
+  inProgressTasks: Array<{ id: string; title: string; storyPoints?: number }>;
+  /** 待开始的任务（最多 5 条）*/
+  pendingTasks: Array<{ id: string; title: string; priority?: string; storyPoints?: number }>;
+  /** 已完成的任务（最多 5 条）*/
+  recentlyDoneTasks: Array<{ id: string; title: string; storyPoints?: number }>;
+  /** 关联的战略目标摘要（如果有） */
+  objectiveSummary?: string;
+  /** 超期警告（如果截止日已过且未完成） */
+  overdueWarning?: string;
+}
+
+/**
+ * 构建活跃 Sprint 的工作快照（供心跳注入、会话恢复使用）
+ *
+ * 是单一状态源的具体实现：不论 AI 需要知道“现在处于迭代周期的哪个位置”，这份快照都能给出答案。
+ */
+export function buildSprintWorkSnapshot(
+  projectId: string,
+  workspaceRoot?: string,
+): SprintWorkSnapshot | null {
+  try {
+    const ctx = buildProjectContext(projectId, workspaceRoot);
+    const config = ctx.config;
+    if (!config) return null;
+    const sprints = config.sprints ?? config.milestones ?? [];
+    const activeSprint = sprints.find((s) => s.status === "active");
+    if (!activeSprint) return null;
+
+    const now = Date.now();
+    const tasks = activeSprint.tasks ?? [];
+    const active = tasks.filter((t) => t.status !== "cancelled");
+    const done = active.filter((t) => t.status === "done");
+    const inProgress = active.filter((t) => t.status === "in-progress");
+    const todo = active.filter((t) => t.status === "todo" || t.status === "pending");
+    const blocked = active.filter((t) => t.status === "blocked");
+    const totalSP = active.reduce((s, t) => s + (t.storyPoints ?? 1), 0);
+    const doneSP = done.reduce((s, t) => s + (t.storyPoints ?? 1), 0);
+    const progress = totalSP === 0 ? 0 : Math.round((doneSP / totalSP) * 100);
+
+    // 计算剩余天数
+    let daysRemaining: number | undefined;
+    let overdueWarning: string | undefined;
+    if (activeSprint.endDate) {
+      const diff = activeSprint.endDate - now;
+      daysRemaining = Math.ceil(diff / 86400000);
+      if (daysRemaining < 0 && progress < 100) {
+        overdueWarning = `⚠️ Sprint 已超期 ${Math.abs(daysRemaining)} 天，完成度 ${progress}%，请优先处理剩余任务或提请延期`;
+      }
+    }
+
+    // 关联目标摘要
+    let objectiveSummary: string | undefined;
+    const sprintMeta = activeSprint as Record<string, unknown>;
+    const linkedObjectiveId = sprintMeta["objectiveId"] as string | undefined;
+    if (linkedObjectiveId && config.objectives) {
+      const obj = config.objectives.find((o) => o.id === linkedObjectiveId);
+      if (obj) {
+        objectiveSummary = `服务于目标「${obj.title}」（${obj.timeframe === "short" ? "短期" : obj.timeframe === "medium" ? "中期" : "长期"}）：${obj.description ?? ""}`.trim();
+      }
+    }
+
+    const topN = <T>(arr: T[], n: number) => arr.slice(0, n);
+
+    return {
+      projectId,
+      projectName: config.name ?? projectId,
+      snapshotAt: now,
+      sprint: {
+        id: activeSprint.id,
+        title: activeSprint.title,
+        goal: activeSprint.goal,
+        status: activeSprint.status ?? "active",
+        progress,
+        startDate: activeSprint.startDate,
+        endDate: activeSprint.endDate,
+        daysRemaining,
+        velocity: activeSprint.velocity,
+      },
+      taskBreakdown: {
+        total: active.length,
+        done: done.length,
+        inProgress: inProgress.length,
+        todo: todo.length,
+        blocked: blocked.length,
+        cancelled: tasks.length - active.length,
+        totalStoryPoints: totalSP,
+        completedStoryPoints: doneSP,
+      },
+      inProgressTasks: topN(
+        inProgress.map((t) => ({ id: t.id, title: t.title, storyPoints: t.storyPoints })),
+        5,
+      ),
+      pendingTasks: topN(
+        todo
+          .sort((a, b) => {
+            const order: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+            return (order[a.priority ?? "medium"] ?? 2) - (order[b.priority ?? "medium"] ?? 2);
+          })
+          .map((t) => ({ id: t.id, title: t.title, priority: t.priority, storyPoints: t.storyPoints })),
+        5,
+      ),
+      recentlyDoneTasks: topN(
+        done
+          .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+          .map((t) => ({ id: t.id, title: t.title, storyPoints: t.storyPoints })),
+        5,
+      ),
+      objectiveSummary,
+      overdueWarning,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 将 Sprint 工作快照格式化为可注入心跳提示的文本
+ *
+ * 设计原则：简洁、可操作、让 AI 看一眼就知道现在应该做什么。
+ */
+export function formatSprintWorkSnapshotForPrompt(
+  snapshot: SprintWorkSnapshot,
+): string {
+  const lines: string[] = [];
+  const s = snapshot.sprint;
+  const b = snapshot.taskBreakdown;
+
+  const endStr = s.endDate
+    ? ` | 截止 ${new Date(s.endDate).toLocaleDateString("zh-CN")}${
+        s.daysRemaining !== undefined
+          ? s.daysRemaining >= 0
+            ? ` (还剡9${Math.abs(s.daysRemaining)}天)`
+            : ` (已超期${Math.abs(s.daysRemaining)}天)`
+          : ""
+      }`
+    : "";
+
+  lines.push(
+    `### 当前 Sprint：${s.title}${endStr}`,
+    s.goal ? `Sprint 目标：**${s.goal}**` : "",
+    `进度：${s.progress}% │ 完成 ${b.done}/${b.total} 任务 │ ${b.completedStoryPoints}/${b.totalStoryPoints} SP`,
+    "",
+  );
+
+  if (snapshot.overdueWarning) {
+    lines.push(snapshot.overdueWarning, "");
+  }
+
+  if (snapshot.objectiveSummary) {
+    lines.push(`🎯 ${snapshot.objectiveSummary}`, "");
+  }
+
+  if (snapshot.inProgressTasks.length > 0) {
+    lines.push("🟡 进行中：");
+    for (const t of snapshot.inProgressTasks) {
+      lines.push(`  - ${t.title}${t.storyPoints ? ` (${t.storyPoints}SP)` : ""}`);
+    }
+    lines.push("");
+  }
+
+  if (snapshot.pendingTasks.length > 0) {
+    lines.push("⏳ 待开始（按优先级）：");
+    for (const t of snapshot.pendingTasks) {
+      const priIcon = t.priority === "urgent" ? "🔴" : t.priority === "high" ? "🟠" : "⚪";
+      lines.push(`  ${priIcon} ${t.title}${t.storyPoints ? ` (${t.storyPoints}SP)` : ""}`);
+    }
+    lines.push("");
+  }
+
+  if (snapshot.recentlyDoneTasks.length > 0) {
+    lines.push("✅ 最近完成：");
+    for (const t of snapshot.recentlyDoneTasks) {
+      lines.push(`  - ${t.title}`);
+    }
+    lines.push("");
+  }
+
+  if (b.blocked > 0) {
+    lines.push(`⛔ 被阻塞任务：${b.blocked} 条，需优先解决阻塞再推进。`, "");
+  }
+
+  lines.push(
+    `> 工作对齐：优先处理 Sprint 内任务，不要创建与当前 Sprint 目标无关的新任务。`,
+  );
+
+  return lines.filter((l) => l !== null && l !== undefined).join("\n");
+}
+
+// ============================================================================
+// 任务驱动系统：阶段化任务阈值配置
+// 
+// 设计原则（对齐人类社会项目实践）：
+//   - 开发阶段：所有开发相关角色必须始终有待办任务（阈值 >= 1）
+//   - 测试/评审阶段： qa 角色饄信，其他角色允许空闲
+//   - 计划/需求阶段：只有 coordinator/product-analyst 必须有待办任务
+//   - 部署/运维阶段： devops 待办 >= 1，其他觖态可空闲
+// ============================================================================
+
+/**
+ * 单个 agent 角色在某项目阶段下的任务阈值配置
+ */
+export interface AgentPhaseThreshold {
+  /** 最小待办任务数量阈值（低于此数就通知 supervisor 补充） */
+  minTodo: number;
+  /** 是否强制要求：为 true 则自动补充到阈值为止（渗入模式）； false 则仅为预警 */
+  required: boolean;
+  /** 该角色在当前阶段是否允许完全空闲（minTodo=0 且 required=false） */
+  allowIdle: boolean;
+}
+
+/**
+ * 项目阶段 + agent 角色 组合的任务阈值配置表
+ *
+ * 读取标准：
+ *   1. 先按 [projectPhase][agentRole] 查找具体配置
+ *   2. 再按 [projectPhase]["*"] 查找阶段默认配置
+ *   3. 最后回退到系统全局默认：{ minTodo: 1, required: false, allowIdle: false }
+ *
+ * Key 格式：阶段名称，觖色为 agentId 中的识别平案名称
+ * 市面参考：
+ *   - Hermes v0.9 的 FlowControl中每个 worker 阶段内 minBuffer=1
+ *   - Microsoft AutoGen 的 GroupChatManager 角色资源分配内测
+ */
+export const PHASE_TASK_THRESHOLD_MAP: Record<
+  string,
+  Record<string, AgentPhaseThreshold>
+> = {
+  // 需求提炼阶段：产品/文档类觖色饄信，开发类可空闲
+  requirements: {
+    "product-analyst": { minTodo: 2, required: true,  allowIdle: false },
+    "doc-writer":      { minTodo: 1, required: true,  allowIdle: false },
+    coordinator:        { minTodo: 1, required: true,  allowIdle: false },
+    "team-member":     { minTodo: 0, required: false, allowIdle: true  },
+    "qa-lead":         { minTodo: 0, required: false, allowIdle: true  },
+    "devops-engineer": { minTodo: 0, required: false, allowIdle: true  },
+    "*":               { minTodo: 0, required: false, allowIdle: true  },
+  },
+  // 架构设计阶段：开发/产品饉信，其他觖色可空闲
+  design: {
+    "team-member":     { minTodo: 1, required: true,  allowIdle: false },
+    "product-analyst": { minTodo: 1, required: true,  allowIdle: false },
+    "doc-writer":      { minTodo: 1, required: false, allowIdle: false },
+    coordinator:        { minTodo: 1, required: false, allowIdle: false },
+    "qa-lead":         { minTodo: 0, required: false, allowIdle: true  },
+    "devops-engineer": { minTodo: 0, required: false, allowIdle: true  },
+    "*":               { minTodo: 0, required: false, allowIdle: true  },
+  },
+  // 计划排期阶段：主控饉信，少量产品/开发等待，其他可空闲
+  planning: {
+    coordinator:        { minTodo: 1, required: true,  allowIdle: false },
+    "product-analyst": { minTodo: 1, required: true,  allowIdle: false },
+    "team-member":     { minTodo: 1, required: false, allowIdle: false },
+    "doc-writer":      { minTodo: 0, required: false, allowIdle: true  },
+    "qa-lead":         { minTodo: 0, required: false, allowIdle: true  },
+    "devops-engineer": { minTodo: 0, required: false, allowIdle: true  },
+    "*":               { minTodo: 0, required: false, allowIdle: true  },
+  },
+  // 开发阶段：所有开发相关觖色必须备足待办任务（渗入开发阶段主渗入模式）
+  development: {
+    "team-member":     { minTodo: 2, required: true,  allowIdle: false },
+    "devops-engineer": { minTodo: 1, required: true,  allowIdle: false },
+    "qa-lead":         { minTodo: 1, required: true,  allowIdle: false },
+    coordinator:        { minTodo: 1, required: false, allowIdle: false },
+    "product-analyst": { minTodo: 0, required: false, allowIdle: true  },
+    "doc-writer":      { minTodo: 1, required: false, allowIdle: false },
+    "*":               { minTodo: 1, required: false, allowIdle: false },
+  },
+  // 测试阶段： qa 饉信，开发可适量空闲
+  testing: {
+    "qa-lead":         { minTodo: 2, required: true,  allowIdle: false },
+    "doc-writer":      { minTodo: 1, required: true,  allowIdle: false },
+    "team-member":     { minTodo: 1, required: false, allowIdle: false },
+    coordinator:        { minTodo: 1, required: false, allowIdle: false },
+    "devops-engineer": { minTodo: 0, required: false, allowIdle: true  },
+    "product-analyst": { minTodo: 0, required: false, allowIdle: true  },
+    "*":               { minTodo: 0, required: false, allowIdle: true  },
+  },
+  // 评审验收阶段： qa/主控/文档饉信
+  review: {
+    coordinator:        { minTodo: 1, required: true,  allowIdle: false },
+    "qa-lead":         { minTodo: 1, required: true,  allowIdle: false },
+    "doc-writer":      { minTodo: 1, required: true,  allowIdle: false },
+    "team-member":     { minTodo: 0, required: false, allowIdle: true  },
+    "devops-engineer": { minTodo: 1, required: false, allowIdle: false },
+    "product-analyst": { minTodo: 0, required: false, allowIdle: true  },
+    "*":               { minTodo: 0, required: false, allowIdle: true  },
+  },
+  // 运行中：持续迭代，开发/devops 饉信
+  active: {
+    "team-member":     { minTodo: 1, required: true,  allowIdle: false },
+    "devops-engineer": { minTodo: 1, required: true,  allowIdle: false },
+    "qa-lead":         { minTodo: 1, required: false, allowIdle: false },
+    coordinator:        { minTodo: 1, required: false, allowIdle: false },
+    "product-analyst": { minTodo: 0, required: false, allowIdle: true  },
+    "doc-writer":      { minTodo: 0, required: false, allowIdle: true  },
+    "*":               { minTodo: 1, required: false, allowIdle: false },
+  },
+  // 开发完成待上线： devops 饉信，其他减少
+  dev_done: {
+    "devops-engineer": { minTodo: 1, required: true,  allowIdle: false },
+    "qa-lead":         { minTodo: 1, required: true,  allowIdle: false },
+    "doc-writer":      { minTodo: 1, required: false, allowIdle: false },
+    "team-member":     { minTodo: 0, required: false, allowIdle: true  },
+    "product-analyst": { minTodo: 0, required: false, allowIdle: true  },
+    "*":               { minTodo: 0, required: false, allowIdle: true  },
+  },
+  // 运营维护
+  operating: {
+    "devops-engineer": { minTodo: 1, required: true,  allowIdle: false },
+    "doc-writer":      { minTodo: 0, required: false, allowIdle: false },
+    "*":               { minTodo: 0, required: false, allowIdle: true  },
+  },
+  // 维护模式：文档/开发备用
+  maintenance: {
+    "team-member":     { minTodo: 1, required: false, allowIdle: false },
+    "devops-engineer": { minTodo: 1, required: false, allowIdle: false },
+    "*":               { minTodo: 0, required: false, allowIdle: true  },
+  },
+  // 暂停/完成/废弃/已终止：所有 agent 允许空闲
+  paused:    { "*": { minTodo: 0, required: false, allowIdle: true } },
+  completed: { "*": { minTodo: 0, required: false, allowIdle: true } },
+  deprecated:{ "*": { minTodo: 0, required: false, allowIdle: true } },
+  cancelled: { "*": { minTodo: 0, required: false, allowIdle: true } },
+};
+
+/** 系统全局默认阈值（项目无阶段信息或觖色魔配时使用） */
+const DEFAULT_THRESHOLD: AgentPhaseThreshold = { minTodo: 1, required: false, allowIdle: false };
+
+/**
+ * 解析某个 agent 在特定项目阶段下的任务阈值配置
+ *
+ * 查询优先级：
+ *   1. 持久化配置文件 task-thresholds.json（用户可手工编辑 + 自适应引擎动态调整）
+ *   2. 内存硬编码 PHASE_TASK_THRESHOLD_MAP（兜底，配置文件不存在或读取失败时使用）
+ *
+ * 匹配规则（配置文件和硬编码均遵循）：
+ *   精确匹配 agentRole → 前缀匹配 → 通配符 "*" → DEFAULT_THRESHOLD
+ *
+ * @param projectPhase - 项目当前阶段（如 "development" "testing" 等）
+ * @param agentRole    - agent 的角色标识（agentId 中含有角色语义，如 "team-member" "qa-lead"）
+ * @returns 阈值配置
+ */
+export function resolveAgentTaskThreshold(
+  projectPhase: string | undefined,
+  agentRole: string,
+): AgentPhaseThreshold {
+  if (!projectPhase) {
+    return DEFAULT_THRESHOLD;
+  }
+
+  // 优先查配置文件（含自适应调整后的值）
+  // _configLookupFn 由 task-threshold-config.ts 加载时调用 registerThresholdLookup 注入
+  if (_configLookupFn) {
+    try {
+      const fromFile = _configLookupFn(projectPhase, agentRole);
+      if (fromFile) return fromFile;
+    } catch {
+      // 配置文件读取失败，fallback 到硬编码
+    }
+  }
+
+  // Fallback：内存硬编码表
+  const phaseMap = PHASE_TASK_THRESHOLD_MAP[projectPhase];
+  if (!phaseMap) {
+    return DEFAULT_THRESHOLD;
+  }
+  // 先按具体角色最精确匹配（如 "qa-lead"）
+  const exact = phaseMap[agentRole];
+  if (exact) {
+    return exact;
+  }
+  // 尝试按角色前缀匹配（如 agentId="qa-lead-2" 匹配 "qa-lead"）
+  for (const key of Object.keys(phaseMap)) {
+    if (key !== "*" && agentRole.startsWith(key)) {
+      return phaseMap[key]!;
+    }
+  }
+  // 阶段默认匹配
+  return phaseMap["*"] ?? DEFAULT_THRESHOLD;
+}
+
+/**
+ * 外部注册接口：由 task-threshold-config.ts 在初始化时调用，把配置文件的查询函数注入进来
+ * 这种设计避免了循环依赖（task-threshold-config 引用 project-context 的类型）
+ */
+let _configLookupFn:
+  | ((phase: string, role: string) => AgentPhaseThreshold | undefined)
+  | null = null;
+
+/**
+ * 由 task-threshold-config.ts 在其模块加载时调用一次，把 lookupThreshold 函数注入
+ */
+export function registerThresholdLookup(
+  fn: (phase: string, role: string) => AgentPhaseThreshold | undefined,
+): void {
+  _configLookupFn = fn;
+}
+
+/**
+ * 获取多个项目中最严格的阈值（取各项目中 minTodo 最大值）
+ * 当一个 agent 同时参与多个项目时，取最严格的那个
+ */
+export function resolveStrictestThreshold(
+  thresholds: AgentPhaseThreshold[],
+): AgentPhaseThreshold {
+  if (thresholds.length === 0) {
+    return DEFAULT_THRESHOLD;
+  }
+  return thresholds.reduce((acc, cur) => ({
+    minTodo: Math.max(acc.minTodo, cur.minTodo),
+    required: acc.required || cur.required,
+    allowIdle: acc.allowIdle && cur.allowIdle,
+  }));
 }

@@ -100,6 +100,18 @@ import {
   createProjectCreateTool,
   createProjectListTool,
   createProjectUpdateStatusTool,
+  createProjectRoadmapViewTool,
+  createProjectObjectiveUpsertTool,
+  createProjectMilestoneUpsertTool,
+  createProjectSprintUpsertTool,
+  createProjectSprintAddTaskTool,
+  createProjectSprintStartTool,
+  createProjectSprintCompleteTool,
+  createProjectDecomposeTool,
+  createTaskDependencyAddTool,
+  createTaskBlockersViewTool,
+  createProjectReportGenerateTool,
+  createProjectDeleteTool,
 } from "./tools/project-management-tools.js";
 // 导入使用自动注册机制的工具文件，加载时注册自动生效
 import "./tools/skill-transfer-tool.js";
@@ -127,6 +139,7 @@ import {
   createTaskWorklogAddTool,
   createTaskPingActivityTool,
   createTaskProgressNoteAppendTool,
+  createTaskResetTool,
 } from "./tools/task-management-tools.js";
 import { createTeamOrchestrateTool } from "./tools/team-orchestrate-tool.js";
 import {
@@ -344,6 +357,23 @@ export function createOpenClawTools(options?: {
     createProjectCreateTool(),
     createProjectListTool(),
     createProjectUpdateStatusTool(),
+    createProjectRoadmapViewTool(),
+    createProjectObjectiveUpsertTool(),
+    createProjectMilestoneUpsertTool(),
+    // Sprint 管理工具
+    createProjectSprintUpsertTool(),
+    createProjectSprintAddTaskTool(),
+    createProjectSprintStartTool(),
+    createProjectSprintCompleteTool(),
+    // 目标分解向导
+    createProjectDecomposeTool(),
+    // 任务依赖关系
+    createTaskDependencyAddTool(),
+    createTaskBlockersViewTool(),
+    // 项目报告
+    createProjectReportGenerateTool(),
+    // 项目删除（高危，必须用户明确授权）
+    createProjectDeleteTool(),
     createGroupListTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
@@ -496,6 +526,12 @@ export function createOpenClawTools(options?: {
       }),
     }),
     createTaskProgressNoteAppendTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    createTaskResetTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
         config: options?.config,

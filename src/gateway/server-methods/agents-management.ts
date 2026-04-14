@@ -63,6 +63,11 @@ import { normalizeAgentId, DEFAULT_AGENT_ID } from "../../routing/session-key.js
 import { groupManager } from "../../sessions/group-manager.js";
 import * as taskStorage from "../../tasks/storage.js";
 import type { Task } from "../../tasks/types.js";
+import {
+  readProjectConfig,
+  resolveAgentTaskThreshold,
+  resolveStrictestThreshold,
+} from "../../utils/project-context.js";
 import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
 
 /**
@@ -368,33 +373,29 @@ function validateModelAccountsConfig(config: unknown): void {
   // 验证智能路由配置
   if (cfg.routingMode === "smart" && cfg.smartRouting) {
     const sr = cfg.smartRouting as Record<string, unknown>;
-    if (
-      sr.complexityWeight !== undefined &&
-      (typeof sr.complexityWeight !== "number" ||
-        sr.complexityWeight < 0 ||
-        sr.complexityWeight > 100)
-    ) {
-      throw new Error("complexityWeight must be between 0 and 100");
-    }
-    if (
-      sr.capabilityWeight !== undefined &&
-      (typeof sr.capabilityWeight !== "number" ||
-        sr.capabilityWeight < 0 ||
-        sr.capabilityWeight > 100)
-    ) {
-      throw new Error("capabilityWeight must be between 0 and 100");
-    }
-    if (
-      sr.costWeight !== undefined &&
-      (typeof sr.costWeight !== "number" || sr.costWeight < 0 || sr.costWeight > 100)
-    ) {
-      throw new Error("costWeight must be between 0 and 100");
-    }
-    if (
-      sr.speedWeight !== undefined &&
-      (typeof sr.speedWeight !== "number" || sr.speedWeight < 0 || sr.speedWeight > 100)
-    ) {
-      throw new Error("speedWeight must be between 0 and 100");
+    // 新增的细粒度能力权重字段（0-100）
+    const weightFields = [
+      "capabilityWeight",
+      "specializationWeight",
+      "modalityWeight",
+      "eloWeight",
+      "codingEloWeight",
+      "reasoningEloWeight",
+      "visionEloWeight",
+      "creativeEloWeight",
+      "instructionEloWeight",
+      // @deprecated 兼容旧字段
+      "complexityWeight",
+      "costWeight",
+      "speedWeight",
+    ] as const;
+    for (const field of weightFields) {
+      if (
+        sr[field] !== undefined &&
+        (typeof sr[field] !== "number" || (sr[field] as number) < 0 || (sr[field] as number) > 100)
+      ) {
+        throw new Error(`${field} must be between 0 and 100`);
+      }
     }
   }
 }
@@ -464,7 +465,11 @@ function getAgentChannelBindings(
     return null;
   }
 
-  const channelBindings = (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
+  const channelBindings =
+    // 优先从 params.channelBindings 读取（新存储位置）
+    ((agent as { params?: Record<string, unknown> }).params?.channelBindings as AgentChannelBindings | undefined) ??
+    // 兼容旧数据：直接写在顶层的 channelBindings
+    (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
   if (channelBindings) {
     return channelBindings;
   }
@@ -514,11 +519,26 @@ async function updateAgentField(
     return false;
   }
 
-  // 更新agent配置
-  const updatedAgent = {
-    ...agents[agentIndex],
-    [fieldName]: fieldValue,
-  };
+  // 本地自研扩展字段（modelAccounts / channelBindings / permissions）不能直接写顶层，
+  // 因为上游 AgentEntrySchema 是 strict 模式，会拒绝未知字段。
+  // 将它们存入上游合法的 params 子键，读取时同样从 params 取，保持透明。
+  const LOCAL_FIELDS_IN_PARAMS = ["modelAccounts", "channelBindings", "permissions"] as const;
+  let updatedAgent: Record<string, unknown>;
+  if ((LOCAL_FIELDS_IN_PARAMS as readonly string[]).includes(fieldName)) {
+    const existingParams = (agents[agentIndex] as Record<string, unknown>).params as Record<string, unknown> | undefined;
+    updatedAgent = {
+      ...agents[agentIndex],
+      params: {
+        ...existingParams,
+        [fieldName]: fieldValue,
+      },
+    };
+  } else {
+    updatedAgent = {
+      ...agents[agentIndex],
+      [fieldName]: fieldValue,
+    };
+  }
 
   agents[agentIndex] = updatedAgent;
 
@@ -1007,7 +1027,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       if (otherNormalized === normalized) {
         continue;
       }
-      const otherBindings = (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
+      const otherBindings =
+        ((agent as { params?: Record<string, unknown> }).params?.channelBindings as AgentChannelBindings | undefined) ??
+        (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
       if (!otherBindings?.bindings) {
         continue;
       }
@@ -1158,7 +1180,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     // 通道账号排他性：一个账号只能绑定给一个助手
     const allBoundAccounts = new Set<string>();
     for (const agent of listAgentEntries(cfg)) {
-      const agentBindings = (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
+      const agentBindings =
+        ((agent as { params?: Record<string, unknown> }).params?.channelBindings as AgentChannelBindings | undefined) ??
+        (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
       if (!agentBindings?.bindings) {
         continue;
       }
@@ -2264,21 +2288,32 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     // 规则：
     //   1. 非已完成任务（todo/in-progress/review/blocked/cancelled）→ 直接删除
     //   2. 已完成任务（done）→ 保留任务记录但从 assignees 中移除该 agent
+    //   3. supervisorId = 被删除 agentId 的任务 → 清空 supervisorId（防止主控对已删除 agent 的任务发送消息）
     try {
       const allTasks = await taskStorage.listTasks({});
       for (const task of allTasks) {
         const isAssignee = task.assignees?.some((a) => a.id === normalized);
-        if (!isAssignee) {
+        const isSupervisor = task.supervisorId === normalized;
+
+        if (!isAssignee && !isSupervisor) {
           continue;
         }
 
-        if (task.status === "done") {
-          // 已完成：仅从 assignees 移除，保留任务记录
-          const newAssignees = task.assignees.filter((a) => a.id !== normalized);
-          await taskStorage.updateTask(task.id, { assignees: newAssignees });
-        } else {
-          // 未完成：整条删除
-          await taskStorage.deleteTask(task.id);
+        if (isAssignee) {
+          if (task.status === "done") {
+            // 已完成：仅从 assignees 移除，同时清空 supervisorId（如果其也是被删除的 agent）
+            const newAssignees = task.assignees.filter((a) => a.id !== normalized);
+            await taskStorage.updateTask(task.id, {
+              assignees: newAssignees,
+              ...(isSupervisor ? { supervisorId: undefined } : {}),
+            });
+          } else {
+            // 未完成：整条删除
+            await taskStorage.deleteTask(task.id);
+          }
+        } else if (isSupervisor) {
+          // 不是 assignee，但是 supervisor：只清空 supervisorId，任务本身保留
+          await taskStorage.updateTask(task.id, { supervisorId: undefined });
         }
       }
     } catch (taskErr) {
@@ -3397,6 +3432,34 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     // 如果任务入队排候（todo）：预计反馈已排队，由自动调度器处理，不需要立即推送
     // 如果任务直接入场（in-progress）：推送任务消息 + 唐醒 agent
     if (initialTaskStatus === "todo") {
+      // 任务入队排候时，向 agent 发送轻量通知：有新任务在队列等待
+      // 这样当 agent 正在运行的任务完成后，能第一时间感知队列中还有任务
+      // 不需要等待 2 分钟调度器扫描才能被激活
+      try {
+        const queueNotice = [
+          `[TASK QUEUED] A new task has been queued for you. It will start automatically after your current task finishes.`,
+          ``,
+          `Task ID: ${taskId}`,
+          `Title: ${title}`,
+          `Priority: ${priority}`,
+          p?.projectId ? `Project: ${p.projectId}` : null,
+          p?.deadline ? `Deadline: ${p.deadline}` : null,
+          ``,
+          `You do NOT need to do anything now. Continue your current task. This queued task will be auto-started when your current task is marked done.`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        enqueueSystemEvent(queueNotice, {
+          sessionKey,
+          contextKey: `cron:task-queued:${taskId}`,
+        });
+        // 不需要 requestHeartbeatNow——任务排候通知小，不打断 agent 当前工作
+        // 诈发时机：等 agent 当前任务完成后的下一次 heartbeat 中自然读到队列通知
+      } catch (queueNotifyErr) {
+        console.warn(
+          `[agent.assign_task] Failed to enqueue queue notice: ${String(queueNotifyErr)}`,
+        );
+      }
       respond(
         true,
         {
@@ -3498,19 +3561,13 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
     try {
       // 携带项目/团队上下文信息，确保任务在正确的项目空间内执行
+      // 注意：不得向 chat.send params 顶层添加额外字段，上游 schema 是 strict 模式（additionalProperties: false）
+      // projectId/teamId 信息已嵌入 taskLines 消息内容中，无需额外传递
       const chatSendParams: Record<string, unknown> = {
         sessionKey,
         message: taskLines,
         idempotencyKey: taskId,
       };
-
-      // 如果有 projectId/teamId，添加到消息上下文中（供 prompt 使用）
-      if (p?.projectId) {
-        chatSendParams.projectContext = p.projectId;
-      }
-      if (p?.teamId) {
-        chatSendParams.teamContext = p.teamId;
-      }
 
       await chatSendHandler({
         ...callCtx,
@@ -4120,6 +4177,77 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           }
         } catch {
           // 查询失败不影响主流程
+        }
+      }
+
+      // === 实时低水位预警（Real-time Low Watermark Alert）===
+      // 任务完成/取消/阈读后，检查该 agent 剩余 todo 任务数量是否低于阶段阈值
+      // 如果低于阈值，立即嵌入到已发给 supervisor 的汇报消息中
+      if (notifiedSupervisor && resolvedLeaderId) {
+        try {
+          const normalizedReporter2 = normalizeAgentId(reporterId);
+          const remainingTodos = await taskStorage.listTasks({
+            assigneeId: normalizedReporter2,
+            status: ["todo"],
+          });
+          const todoCount = remainingTodos.length;
+
+          // 获取项目阶段信息（优先从刚完成的任务获取）
+          const projectId = task?.projectId ?? remainingTodos[0]?.projectId;
+          let projectPhase: string | undefined;
+          if (projectId) {
+            const allGroupsForReport = groupManager.getAllGroups();
+            const group = allGroupsForReport.find((g) => g.projectId === projectId);
+            if (group) {
+              const groupWsDir = groupWorkspaceManager.getGroupWorkspaceDir(group.id);
+              if (groupWsDir) {
+                const projCfg = readProjectConfig(groupWsDir);
+                projectPhase = projCfg?.status ?? undefined;
+              }
+            }
+          }
+
+          const threshold = resolveStrictestThreshold(
+            projectPhase
+              ? [resolveAgentTaskThreshold(projectPhase, normalizedReporter2)]
+              : [],
+          );
+
+          // 仅当不允许完全空闲且 todo 不足时才发预警
+          if (!threshold.allowIdle && todoCount < threshold.minTodo) {
+            const cfg2 = loadConfig();
+            const normalizedLeader2 = normalizeAgentId(resolvedLeaderId);
+            const allowed2 = new Set(listAgentIds(cfg2));
+            if (allowed2.has(normalizedLeader2)) {
+              const urgency = threshold.required ? "❗ [紧急]" : "⚠️";
+              const lwmEmbedMsg = [
+                ``,
+                `---`,
+                `[TASK LOW WATERMARK] ${urgency} ${normalizedReporter2} 待办任务不足`,
+                `待办: ${todoCount} 条 / 需要: ${threshold.minTodo} 条以上`,
+                projectPhase ? `项目阶段: ${projectPhase}` : null,
+                threshold.required
+                  ? `当前阶段要求必须有待办任务。请立即使用 agent_assign_task 分配新任务到 ${normalizedReporter2}。`
+                  : `建议立即分配新任务到 ${normalizedReporter2}，保持工作流水线不停歇。`,
+              ]
+                .filter(Boolean)
+                .join("\n");
+
+              const leaderSession2 = `agent:${normalizedLeader2}:main`;
+              enqueueSystemEvent(lwmEmbedMsg, {
+                sessionKey: leaderSession2,
+                contextKey: `task:lwm-realtime:${normalizedReporter2}`,
+              });
+              requestHeartbeatNow({
+                reason: `task:lwm-realtime:${normalizedReporter2}`,
+                sessionKey: leaderSession2,
+                agentId: normalizedLeader2,
+                coalesceMs: 10000,
+              });
+            }
+          }
+        } catch {
+          // 低水位检测失败不影响主流程
         }
       }
     }

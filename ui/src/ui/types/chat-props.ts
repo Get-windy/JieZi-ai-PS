@@ -92,6 +92,12 @@ export type ChatProps = {
   onNavToggleNode: (nodeId: string) => void;
   onNavSearchChange: (query: string) => void;
   onNavChannelForceJoinToggle: () => void;
+  /**
+   * 导航树会话重命名回调（参考 Helix SessionToolbar.tsx）
+   * sessionKey: 目标会话 key
+   * newName: 新名称
+   */
+  onNavRenameSession?: (sessionKey: string, newName: string) => void;
   // ============ 参与者列表 ============
   /** 所有 agents 列表，用于渲染参与者头部 */
   agentsList?: AgentsListResult | null;
@@ -109,4 +115,11 @@ export type ChatProps = {
   onRequestUpdate?: () => void;
   /** Context window size in tokens (for meta display) */
   contextWindow?: number | null;
+  /**
+   * 消息编辑回调（参考 Helix AI Edit & Regenerate）
+   * messageIndex: 消息在 messages 数组中的下标
+   * newText: 用户编辑后的新内容
+   * 实现：删除该条及之后的所有消息，再以新内容重新发送
+   */
+  onEditMessage?: (messageIndex: number, newText: string) => void;
 };

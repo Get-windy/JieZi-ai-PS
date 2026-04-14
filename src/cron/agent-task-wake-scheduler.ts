@@ -20,12 +20,55 @@ import path from "node:path";
 import { loadConfig } from "../../upstream/src/config/config.js";
 import { requestHeartbeatNow } from "../../upstream/src/infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
-import { listAgentIds, resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
+import { listAgentIds, resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { getTaskTypePerfScore, inferTaskType } from "../gateway/server-methods/evolve-rpc.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { groupManager } from "../sessions/group-manager.js";
 import * as taskStorage from "../tasks/storage.js";
+import {
+  adaptThresholds,
+  recordTodoObservation,
+  registerMissingThresholdNotifier,
+} from "../tasks/task-threshold-config.js";
+import {
+  readProjectConfig,
+  resolveAgentTaskThreshold,
+  resolveStrictestThreshold,
+} from "../utils/project-context.js";
 import { groupWorkspaceManager } from "../workspace/group-workspace.js";
+
+// ============================================================================
+// 任务完成判定设计原则
+//
+// 【金标准】任务完成的唯一可信信号：agent 主动调用 task_report_to_supervisor
+// 系统不应通过静默时长猜测任务是否完成——这是误判的根源。
+//
+// 【两条处理路径】
+// 路径A（超时）：lastActivityAt 静默 > INACTIVE_ZOMBIE_MS（15min）
+//   → agent 的 heartbeat 已停止活动，任务处于挂起状态
+//   → 动作：重唤醒 agent（提醒继续执行）+ 通知主控关注
+//   → 不自动标记完成，由 agent 自己上报或主控介入
+//
+// 路径B（绝对兜底）：startedAt 起超过 FORCE_RESET_MS（60min）
+//   → 任务长期占用但无进展，可能存在阻塞性问题
+//   → 动作：重置为 todo + 通知主控人工检查
+//
+// 【注意】原 auto-done（静默 3~15min 自动标记完成）已移除——
+//   该机制假设「静默 = 完成」，在 heartbeat 刷新 lastActivityAt 后仍存在
+//   误判风险（任务执行时间可能长于 heartbeat 间隔），违反完成信号确定性原则。
+// ============================================================================
+
+// 记录已向主控发送过超时告警的任务（24h 内不重复告警）
+const timeoutAlertedAt = new Map<string, number>();
+const TIMEOUT_ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h
+
+// 记录每个任务上次触发强制上报的时间
+// 用于实现：首次 15min 触发，之后每 10min 触发一次，直到 60min 强制重置
+const progressReportPromptedAt = new Map<string, number>();
+// 首次超时阈值
+const FIRST_TIMEOUT_MS = 15 * 60 * 1000; // 15 分钟首次触发
+// 后续每次检查间隔
+const REPEAT_TIMEOUT_INTERVAL_MS = 5 * 60 * 1000; // 5 分钟重复触发
 
 // ============================================================================
 // 配置
@@ -55,6 +98,9 @@ const OVERFLOW_PAUSE_MS = 10 * 60 * 1000;
 const REACTIVATE_BASE_MS = 10 * 60 * 1000; // 基础间隔 10 分钟
 const REACTIVATE_MAX_MS = 60 * 60 * 1000; // 最大间隔 60 分钟
 const agentLastReactivateAt = new Map<string, { lastAt: number; attempts: number }>();
+
+// 低水位告警冷却记录：每个 agent 最近一次低水位告警时间（防止每轮扫描都轰炸 supervisor）
+const lowWatermarkAlertAt = new Map<string, number>();
 
 /**
  * 计算指数退而间隔
@@ -140,6 +186,141 @@ function taskSortKey(t: { priority: string; weight?: number; createdAt: number }
   const priorityScore = (PRIORITY_WEIGHT[t.priority] ?? 2) * 1e13;
   const weightScore = (t.weight ?? 0) * 1e6;
   return priorityScore + weightScore - t.createdAt;
+}
+
+// ============================================================================
+// 低水位检测辅助函数
+// 被以下场景复用：
+//   1. 每轮定时扫描结束后（主循环）
+//   2. 系统自动完成任务（auto-done）之后
+// ============================================================================
+
+/**
+ * 检查指定 agent 的待办任务数量是否低于阶段阈值，如果是则立即通知 supervisor。
+ *
+ * @param normalizedId  agent ID（已 normalized）
+ * @param now           当前时间戳（ms），用于冷却期计算
+ * @param completedProjectId 刚完成的任务所属项目 ID（优先用于阶段查询，可选）
+ */
+async function checkAndNotifyLowWatermark(
+  normalizedId: string,
+  now: number,
+  completedProjectId?: string,
+): Promise<void> {
+  // 冷却期：同一 agent 1 小时内最多告警一次
+  const lwmCooldownMs = 60 * 60 * 1000;
+  const lwmLastAlertKey = `lwm:${normalizedId}`;
+  const lwmLastAlert = lowWatermarkAlertAt.get(lwmLastAlertKey);
+  if (lwmLastAlert && now - lwmLastAlert < lwmCooldownMs) return;
+
+  // 获取当前 todo 数量（仅 todo 状态，不含已完成/进行中）
+  const currentTodoTasks = await taskStorage.listTasks({
+    assigneeId: normalizedId,
+    status: ["todo"],
+  });
+  const todoCount = currentTodoTasks.length;
+
+  // 收集该 agent 所在项目（todo 任务 + 可选刚完成任务的项目 + in-progress 任务）
+  const agentProjectIds = new Set<string>();
+  if (completedProjectId) agentProjectIds.add(completedProjectId);
+  for (const t of currentTodoTasks) {
+    if (t.projectId) agentProjectIds.add(t.projectId);
+  }
+  if (agentProjectIds.size === 0) {
+    const inProg = await taskStorage.listTasks({
+      assigneeId: normalizedId,
+      status: ["in-progress"],
+    });
+    for (const t of inProg) {
+      if (t.projectId) agentProjectIds.add(t.projectId);
+    }
+  }
+
+  // 计算最严格阈值
+  const thresholds: import("../utils/project-context.js").AgentPhaseThreshold[] = [];
+  const phaseLabels: string[] = [];
+  const allGroupsForLwm = groupManager.getAllGroups();
+  for (const projectId of agentProjectIds) {
+    const group = allGroupsForLwm.find((g) => g.projectId === projectId);
+    if (!group) continue;
+    const groupWsDir = groupWorkspaceManager.getGroupWorkspaceDir(group.id);
+    if (!groupWsDir) continue;
+    const projCfg = readProjectConfig(groupWsDir);
+    const phase = projCfg?.status ?? undefined;
+    if (!phase) continue;
+    phaseLabels.push(`${projectId}(阶段:${phase})`);
+    thresholds.push(resolveAgentTaskThreshold(phase, normalizedId));
+    recordTodoObservation(phase, normalizedId, todoCount);
+  }
+
+  const threshold = resolveStrictestThreshold(thresholds);
+  if (threshold.allowIdle) return;
+  if (todoCount >= threshold.minTodo) return;
+
+  // 找 supervisor
+  let supervisorIdForLwm: string | undefined;
+  if (currentTodoTasks.length > 0) {
+    supervisorIdForLwm = (currentTodoTasks[0].supervisorId ?? currentTodoTasks[0].creatorId) as
+      | string
+      | undefined;
+  }
+  if (!supervisorIdForLwm) {
+    const inProgForSup = await taskStorage.listTasks({
+      assigneeId: normalizedId,
+      status: ["in-progress"],
+    });
+    if (inProgForSup.length > 0) {
+      supervisorIdForLwm = (inProgForSup[0].supervisorId ?? inProgForSup[0].creatorId) as
+        | string
+        | undefined;
+    }
+  }
+  if (!supervisorIdForLwm || supervisorIdForLwm === "system") return;
+
+  const cfgForLwm = loadConfig();
+  const allowedAgents = new Set(listAgentIds(cfgForLwm).map(normalizeAgentId));
+  const normalizedSup = normalizeAgentId(supervisorIdForLwm);
+  if (!allowedAgents.has(normalizedSup)) return;
+
+  // 记录本次告警时间（冷却）
+  lowWatermarkAlertAt.set(lwmLastAlertKey, now);
+
+  const urgencyLabel = threshold.required
+    ? "❗ [紧急 - 当前阶段要求必须有待办任务]"
+    : "⚠️ [建议补充]";
+  const phaseInfo =
+    phaseLabels.length > 0 ? `项目阶段：${phaseLabels.join(", ")}` : "项目阶段未知";
+
+  const lwmMsg = [
+    `[TASK LOW WATERMARK] ${urgencyLabel} Agent ${normalizedId} 的待办任务不足，需要補充`,
+    ``,
+    `Agent: ${normalizedId}`,
+    `当前待办任务数：${todoCount} 条（最小要求：${threshold.minTodo} 条）`,
+    phaseInfo,
+    ``,
+    threshold.required
+      ? `当前阶段要求 ${normalizedId} 必须始终有待办任务。请立即使用 agent_assign_task 分配新任务。`
+      : `建议马上给 ${normalizedId} 分配新任务，保持工作流水线不停歇。`,
+    ``,
+    `请使用 agent_assign_task 分配新任务到 ${normalizedId}。`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const lwmSupSession = `agent:${normalizedSup}:main`;
+  enqueueSystemEvent(lwmMsg, {
+    sessionKey: lwmSupSession,
+    contextKey: `cron:task-lwm:${normalizedId}`,
+  });
+  requestHeartbeatNow({
+    reason: `cron:task-lwm:${normalizedId}`,
+    sessionKey: lwmSupSession,
+    agentId: normalizedSup,
+    coalesceMs: 15000,
+  });
+  console.log(
+    `[Task Wake] ↓ Low watermark: ${normalizedId} todo=${todoCount}/${threshold.minTodo} (phase=${phaseLabels.join(",") || "unknown"}) — notify supervisor ${normalizedSup}`,
+  );
 }
 
 const STARTUP_DELAY_MS = 5 * 1000; // 5 秒（等待基础模块初始化，避免冷启动冲突）
@@ -325,11 +506,10 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
         const executionStartedAt = lastActivityAt ?? startedAt;
         // 活跃度超时：lastActivityAt 超过 15 分钟没更新 → 判定为僵尸任务（agent 未在执行）
         // 模型单次 run 最多 10 分钟，15 分钟没有任何活跃记录说明 agent 已停止工作
-        const INACTIVE_ZOMBIE_MS = 15 * 60 * 1000; // 15 分钟无活动 → 僵尸
         // 兜底：从 startedAt 起超过 60 分钟也强制重置（防止长期卡住）
         const FORCE_RESET_MS = 60 * 60 * 1000; // 60 分钟绝对超时
         // 向下兼容：若没有 lastActivityAt，退化为原来的 12 分钟 startedAt 超时
-        const STALE_IN_PROGRESS_MS = lastActivityAt ? INACTIVE_ZOMBIE_MS : 12 * 60 * 1000;
+        const STALE_IN_PROGRESS_MS = lastActivityAt ? FIRST_TIMEOUT_MS : 12 * 60 * 1000;
 
         // 检查主控是否通过 agent.task.manage action=extend 延长了超时
         const timeoutExtendedUntil =
@@ -345,12 +525,30 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           continue;
         }
 
-        const isStale =
-          executionStartedAt != null && now - executionStartedAt > STALE_IN_PROGRESS_MS;
+        // isStale 判定：
+        //   - 首次触发：lastActivityAt 静默 >= 15min
+        //   - 后续触发：距上次强制上报 >= 10min（每 10min 再催一次）
+        //   - 直到 startedAt 累计 >= 60min 触发强制重置
+        const lastReportPrompt = progressReportPromptedAt.get(activeTask.id);
+        const silentMs = executionStartedAt != null ? now - executionStartedAt : null;
+        const isFirstTimeout = silentMs !== null && silentMs >= STALE_IN_PROGRESS_MS && !lastReportPrompt;
+        const isRepeatTimeout =
+          lastReportPrompt !== undefined &&
+          now - lastReportPrompt >= REPEAT_TIMEOUT_INTERVAL_MS;
+        const isStale = isFirstTimeout || isRepeatTimeout;
         // shouldForceReset 基于 startedAt 计算（表示任务持续占用时间超过 60 分钟）
         // 与 isStale 的基准不同：isStale 用最近活动时间，shouldForceReset 用任务开始时间
         const shouldForceReset = startedAt != null && now - startedAt > FORCE_RESET_MS;
 
+        // ── 任务超时处理（isStale 分支）─────────────────────────────────
+        // 进入此处的条件：lastActivityAt（或 startedAt）静默 > INACTIVE_ZOMBIE_MS（15min）
+        // 说明 agent 的 heartbeat 已停止活动，任务处于挂起状态
+        //
+        // 处理原则（对齐金标准）：
+        //   1. 不自动标记任务为 done（完成的唯一可信信号是 task_report_to_supervisor）
+        //   2. 重唤醒 agent（提醒继续执行或上报），同时通知主控关注
+        //   3. 绝对兜底：startedAt > 60min 时，重置为 todo，由主控人工判断
+        // ────────────────────────────────────────────────────────────────────
         if (isStale) {
           stats.pendingTasks++;
           const sessionKey = `agent:${normalizedId}:main`;
@@ -371,56 +569,66 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
                 startedAt: undefined,
               },
             });
-            // 通知负责人
+            // 通知负责人（重置通知，24h 冷却防重复）
             const supervisorRaw = (activeTask.metadata?.supervisorId ?? activeTask.creatorId) as
               | string
               | undefined;
             if (supervisorRaw) {
               const normalizedSupervisor = normalizeAgentId(supervisorRaw);
-              const supervisorSession = `agent:${normalizedSupervisor}:main`;
-              const supervisorNotice = [
-                `[TASK AUTO-RESET] Agent ${normalizedId}'s task was stuck for ${stuckMinutes} minutes and has been automatically reset to todo queue.`,
-                ``,
-                `Agent: ${normalizedId}`,
-                `Task ID: ${activeTask.id}`,
-                `Title: ${activeTask.title}`,
-                `Priority: ${activeTask.priority}`,
-                activeTask.type ? `Type: ${activeTask.type}` : null,
-                ``,
-                `The task will be automatically retried in the next task scheduling cycle.`,
-                `If this task keeps failing, you may want to cancel it or investigate the cause.`,
-              ]
-                .filter(Boolean)
-                .join("\n");
-              enqueueSystemEvent(supervisorNotice, {
-                sessionKey: supervisorSession,
-                contextKey: `cron:task-autoreset:${activeTask.id}`,
-              });
-              requestHeartbeatNow({
-                reason: `cron:task-autoreset:${activeTask.id}`,
-                sessionKey: supervisorSession,
-                agentId: normalizedSupervisor,
-                coalesceMs: 10000,
-              });
+              const alertKey = `reset:${activeTask.id}`;
+              const lastAlert = timeoutAlertedAt.get(alertKey);
+              const shouldAlert = !lastAlert || now - lastAlert > TIMEOUT_ALERT_COOLDOWN_MS;
+              if (shouldAlert) {
+                timeoutAlertedAt.set(alertKey, now);
+                const supervisorSession = `agent:${normalizedSupervisor}:main`;
+                const supervisorNotice = [
+                  `[TASK AUTO-RESET] 🚨 Agent ${normalizedId} 的任务卡顿超过 ${stuckMinutes} 分钟，已被自动重置回待办队列。需要你人工检查。`,
+                  ``,
+                  `Agent: ${normalizedId}`,
+                  `Task ID: ${activeTask.id}`,
+                  `Title: ${activeTask.title}`,
+                  `Priority: ${activeTask.priority}`,
+                  activeTask.type ? `Type: ${activeTask.type}` : null,
+                  ``,
+                  `「重置原因」任务开始执行已超过 ${stuckMinutes} 分钟，agent 始终未调用 task_report_to_supervisor 上报完成。`,
+                  `已自动重置为 todo 状态，等待下轮调度重新分配。`,
+                  ``,
+                  `【建议】请调用以下工具处理（任务已重置回 todo，可直接重新分配）：`,
+                  `- agent_assign_task 将任务重新分配给合适的 agent`,
+                  `- task_update taskId=${activeTask.id} status=cancelled  （如任务本身无法完成）`,
+                  `- agent_communicate targetAgentId=${normalizedId}        （与 agent 沟通原因）`,
+                ]
+                  .filter(Boolean)
+                  .join("\n");
+                enqueueSystemEvent(supervisorNotice, {
+                  sessionKey: supervisorSession,
+                  contextKey: `cron:task-autoreset:${activeTask.id}`,
+                });
+                requestHeartbeatNow({
+                  reason: `cron:task-autoreset:${activeTask.id}`,
+                  sessionKey: supervisorSession,
+                  agentId: normalizedSupervisor,
+                  coalesceMs: 10000,
+                });
+              }
             }
             stats.wokenAgents++;
+            // 重置后清理上报记录，防止内存泄漏
+            progressReportPromptedAt.delete(activeTask.id);
             // 重置后不再走 todo 派发，等下轮扫描再分配
             continue;
           }
 
-          // 任务卡住 15-60 分钟：程序直接重激活为 in-progress，不走 todo 中转
-          // 避免中转 todo 导致 agent 需要自己改状态（有随机失败风险）
+          // 任务卡住 15-60 分钟：记录本次强制上报时间，每 10min 触发一次
+          progressReportPromptedAt.set(activeTask.id, now);
+          const reportRound = lastReportPrompt
+            ? Math.floor((now - (startedAt ?? now)) / REPEAT_TIMEOUT_INTERVAL_MS)
+            : 1;
           console.log(
-            `[Task Wake] Agent ${normalizedId} task ${activeTask.id} stuck for ${stuckMinutes}min — auto-re-activating to in-progress`,
+            `[Task Wake] Agent ${normalizedId} task ${activeTask.id} stuck for ${stuckMinutes}min (round ${reportRound}) — forcing progress report`,
           );
-          await taskStorage.updateTask(activeTask.id, {
-            status: "in-progress",
-            timeTracking: {
-              ...activeTask.timeTracking,
-              startedAt: now,
-              lastActivityAt: now,
-            },
-          });
+          // 不重置 startedAt/lastActivityAt，避免干扰后续 shouldForceReset 计算
+          // lastActivityAt 会在 heartbeat run 完成后自动刷新（如果 agent 响应了唤醒）
 
           const projectGroupKey = activeTask.projectId
             ? projectGroupCache.get(activeTask.projectId)
@@ -449,8 +657,15 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
               tool_failure: "[工具失败]",
               unknown: "",
             }[stuckReason.type];
+            const isRepeat = lastReportPrompt !== undefined;
+            const reportRound2 = isRepeat
+              ? Math.floor((now - (startedAt ?? now)) / REPEAT_TIMEOUT_INTERVAL_MS) + 1
+              : 1;
             return [
-              `[TASK RETRY] ${reasonTag} Your task timed out after ${stuckMinutes} minutes. It has been automatically re-activated to in-progress — execute it now:`,
+              isRepeat
+                ? `[TASK RETRY — FOLLOW-UP #${reportRound2}] ${reasonTag} Your task has been inactive for ${stuckMinutes} minutes. This is follow-up check #${reportRound2}. You MUST report progress now:`
+                : `[TASK RETRY] ${reasonTag} Your task timed out after ${stuckMinutes} minutes. You MUST report progress now:`,
+              `  (Follow-up checks will repeat every 5 minutes until 60 minutes total, then the task will be force-reset.)`,
               ``,
               taskLines,
               ``,
@@ -468,7 +683,13 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
               ``,
               `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
               ``,
-              `IMPORTANT: This task is already in-progress. Execute it NOW. Do NOT change its status — just work on it and call task_report_to_supervisor when done.`,
+              `‼️ MANDATORY PROGRESS REPORT — You MUST call task_report_to_supervisor NOW with Task ID: ${activeTask.id}`,
+              ``,
+              `  Option A (Done):     status="done",         result=summary of what you accomplished`,
+              `  Option B (Working):  status="in-progress",  result=current progress + what remains + ETA`,
+              `  Option C (Blocked):  status="blocked",      result=specific blocker and what you need to unblock`,
+              ``,
+              `DO NOT remain silent. Failing to call task_report_to_supervisor will trigger further escalation to your supervisor.`,
             ]
               .filter(Boolean)
               .join("\n");
@@ -500,43 +721,53 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
             );
           }
 
-          // 同时通知负责人
+          // 同时通知负责人（超时告警，24h 冷却防重复）
           const supervisorRaw = (activeTask.metadata?.supervisorId ?? activeTask.creatorId) as
             | string
             | undefined;
           if (supervisorRaw) {
             const normalizedSupervisor = normalizeAgentId(supervisorRaw);
-            const supervisorSession = `agent:${normalizedSupervisor}:main`;
-            const supervisorNotice = [
-              `[TASK TIMEOUT ALERT] Agent ${normalizedId}'s task timed out after ${stuckMinutes} minutes and has been auto-retried.`,
-              ``,
-              `Agent: ${normalizedId}`,
-              `Task ID: ${activeTask.id}`,
-              `Title: ${activeTask.title}`,
-              `Priority: ${activeTask.priority}`,
-              activeTask.type ? `Type: ${activeTask.type}` : null,
-              activeTask.description
-                ? `Description: ${activeTask.description.slice(0, 150)}`
-                : null,
-              ``,
-              `⚠️ Root Cause Analysis: ${inferStuckReason(stuckMinutes, activeTask).hint}`,
-              ``,
-              `The task has been reset to todo and the agent has been re-woken. If this keeps happening, you can use agent_task_manage to:`,
-              `- cancel: Cancel the task (if deemed unresolvable)`,
-              `- reset:  Reset to todo queue again (already done automatically)`,
-            ]
-              .filter(Boolean)
-              .join("\n");
-            enqueueSystemEvent(supervisorNotice, {
-              sessionKey: supervisorSession,
-              contextKey: `cron:task-timeout-alert:${activeTask.id}`,
-            });
-            requestHeartbeatNow({
-              reason: `cron:task-timeout:${activeTask.id}`,
-              sessionKey: supervisorSession,
-              agentId: normalizedSupervisor,
-              coalesceMs: 10000,
-            });
+            const alertKey = `timeout:${activeTask.id}`;
+            const lastAlert = timeoutAlertedAt.get(alertKey);
+            const shouldAlert = !lastAlert || now - lastAlert > TIMEOUT_ALERT_COOLDOWN_MS;
+            if (shouldAlert) {
+              timeoutAlertedAt.set(alertKey, now);
+              const supervisorSession = `agent:${normalizedSupervisor}:main`;
+              const supervisorNotice = [
+                `[TASK TIMEOUT ALERT] ⚠️ Agent ${normalizedId} 的任务已超时 ${stuckMinutes} 分钟，系统已自动重唤醒 agent，但任务可能需要你介入。`,
+                ``,
+                `Agent: ${normalizedId}`,
+                `Task ID: ${activeTask.id}`,
+                `Title: ${activeTask.title}`,
+                `Priority: ${activeTask.priority}`,
+                activeTask.type ? `Type: ${activeTask.type}` : null,
+                activeTask.description
+                  ? `Description: ${activeTask.description.slice(0, 150)}`
+                  : null,
+                ``,
+                `⚠️ 根因分析: ${inferStuckReason(stuckMinutes, activeTask).hint}`,
+                ``,
+                `【注意】系统已向 agent 发送 TASK RETRY 消息，要求强制上报进度。`,
+                `任务状态仍为 in-progress，等待 agent 自主上报（task_report_to_supervisor）。`,
+                `如果 agent 持续无法完成此任务，你可以直接调用以下工具：`,
+                `- task_reset taskId=${activeTask.id} targetStatus=todo   （重置回待办，重新排队）`,
+                `- task_update taskId=${activeTask.id} status=cancelled    （取消任务）`,
+                `- task_update taskId=${activeTask.id} assigneeId=<其他agent>  （重新分配给其他 agent）`,
+                `- agent_communicate targetAgentId=${normalizedId}          （直接与 agent 沟通原因）`,
+              ]
+                .filter(Boolean)
+                .join("\n");
+              enqueueSystemEvent(supervisorNotice, {
+                sessionKey: supervisorSession,
+                contextKey: `cron:task-timeout-alert:${activeTask.id}`,
+              });
+              requestHeartbeatNow({
+                reason: `cron:task-timeout:${activeTask.id}`,
+                sessionKey: supervisorSession,
+                agentId: normalizedSupervisor,
+                coalesceMs: 10000,
+              });
+            }
           }
           stats.wokenAgents++;
         } else {
@@ -981,11 +1212,38 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
       }
     }
 
+    // ============================================================================
+    // 任务驱动系统：低水位监测（Low Watermark Refill）
+    //
+    // 直接复用 checkAndNotifyLowWatermark 辅助函数（与 auto-done 共享同一套逻辑）
+    // ============================================================================
+    for (const agentId of agentIds) {
+      const normalizedId = normalizeAgentId(agentId);
+      try {
+        await checkAndNotifyLowWatermark(normalizedId, now);
+      } catch (lwmErr) {
+        console.warn(
+          `[Task Wake] Low watermark check error for ${normalizedId}: ${String(lwmErr)}`,
+        );
+      }
+    }
+
     if (stats.wokenAgents > 0) {
       console.log(
         `[Task Wake] Scan: ${stats.wokenAgents}/${stats.scannedAgents} agents woken, ${stats.pendingTasks} tasks, ${stats.skippedTasks} skipped`,
       );
     }
+
+    // 每日自适应调整：调用阈值自适应引擎（内部有间隔限制，24h 才执行一次）
+    adaptThresholds().then((result) => {
+      if (result.adjusted > 0) {
+        console.log(
+          `[Task Wake] 自适应阈值调整完成：${result.adjusted} 条配置更新，${result.skipped} 条跳过`,
+        );
+      }
+    }).catch((adaptErr) => {
+      console.warn(`[Task Wake] 阈值自适应调整失败: ${String(adaptErr)}`);
+    });
 
     return stats;
   } catch (error) {
@@ -1016,6 +1274,25 @@ export function startAgentTaskWakeScheduler(options?: { intervalMinutes?: number
   // 每次调度器启动（服务重启）都重置首次扫描标志
   // 确保重启后第一次扫描能立即唤醒所有历史 in-progress 任务
   isFirstScan = true;
+
+  // 注册閘失阈值配置通知回调（将缺失告警定向发送给系统默认主控 agent）
+  try {
+    const cfgForNotify = loadConfig();
+    const defaultAgentId = resolveDefaultAgentId(cfgForNotify);
+    const normalizedDefault = normalizeAgentId(defaultAgentId);
+    registerMissingThresholdNotifier((message, contextKey) => {
+      const defaultSession = `agent:${normalizedDefault}:main`;
+      enqueueSystemEvent(message, { sessionKey: defaultSession, contextKey });
+      requestHeartbeatNow({
+        reason: contextKey,
+        sessionKey: defaultSession,
+        agentId: normalizedDefault,
+        coalesceMs: 30000,
+      });
+    });
+  } catch {
+    // 如果获取主控 agent 失败，跳过注册（lookupThreshold 仍正常运行，只是不发通知）
+  }
 
   console.log(
     `[Task Wake] Scheduler starting (first scan in ${STARTUP_DELAY_MS / 1000}s, then every ${intervalMinutes}min)`,

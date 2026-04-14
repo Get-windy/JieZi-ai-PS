@@ -892,10 +892,10 @@ export async function runHeartbeatOnce(opts: {
           "",
           "---",
           "## [DoD 门禁] 当前活跃项目完成状态（Project Definition-of-Done Status）",
-          "▶ 主控规则：在补充任何新任务前，必须先核查以下每个项目的验收标准完成情况。",
-          "  - scopeFrozen=true：该项目已完成/冻结，严禁继续创建新任务！",
-          "  - canClose=true：所有标准已满足，请立即调用 projects.updateProgress 将状态设为 completed。",
-          "  - 存在差距时：仅补充差距对应的任务，不要重复开发已满足的部分。",
+          "▶ 主控规则：",
+          "  - 【任务全部 done ≠ 项目完成】项目开发是滚动迭代过程：完成一批任务后，应根据进展继续安排下一批任务。",
+          "  - 【DoD 验收标准驱动完成判断】只有 completionGate.criteria 中的验收标准全部满足，并得到明确确认后，才可将项目设为 completed。",
+          "  - 【scopeFrozen=true 时禁止创建任务】如发现误封冻，立即调用 projects.reactivate 或 projects.updateProgress 将 status 回退为 development/active。",
           "",
         ];
 
@@ -924,10 +924,15 @@ export async function runHeartbeatOnce(opts: {
           if (gate.scopeFrozen) {
             lines.push(
               `   🔒 范围已冻结（原因: ${gate.scopeFrozenReason ?? "unknown"}）— 严禁创建新任务！`,
+              `   ⤵️ 如判断为误封冻，请立即调用 projects.reactivate(projectId="${id}") 解除封冻。`,
             );
           } else if (gateResult.canClose) {
             lines.push(
-              `   ✅ 所有验收标准已满足。请立即调用 projects.updateProgress(projectId="${id}", status="completed")。`,
+              `   ✅ 所有验收标准已满足。`,
+              `   ⚠️ 在设为 completed 前，请先确认：`,
+              `     (1) 项目确实不需要再迭代新功能或修复；`,
+              `     (2) DoD 验收标准定义完整无遗漏；`,
+              `     (3) 确认后再调用 projects.updateProgress(projectId="${id}", status="completed")。`,
             );
           } else if (gateResult.gaps.length > 0) {
             lines.push(`   🔍 待补齐的差距（仅补这些，不要重复开发其他部分）:`);
@@ -938,6 +943,43 @@ export async function runHeartbeatOnce(opts: {
               lines.push(`     ... 还有 ${gateResult.gaps.length - 5} 项`);
             }
           }
+
+          // ── 当前活跃目标注入 ──
+          // 使用 buildActiveObjectivesSummary 生成标准化目标摘要，让团队知道当前项目目标
+          try {
+            const { buildActiveObjectivesSummary, formatObjectivesSummaryForPrompt, buildSprintWorkSnapshot, formatSprintWorkSnapshotForPrompt } =
+              await import("../utils/project-context.js");
+            const objSummary = buildActiveObjectivesSummary(id);
+            if (objSummary) {
+              const formatted = formatObjectivesSummaryForPrompt(objSummary, 40);
+              if (formatted.trim()) {
+                // 将目标摘要转换为缩进列表格式（每行加缩进）
+                const indented = formatted
+                  .split("\n")
+                  .map((l) => (l ? `   ${l}` : ""))
+                  .join("\n");
+                lines.push(`   🎯 目标与路线图:`);
+                lines.push(indented);
+              }
+            }
+            // ── Sprint 工作日志快照注入（OpenHands 事件溢源思路）──
+            // 让 AI 无论是小会话还是心跳啊醒，都能立即知道当前迭代到了哪里、应该做什么。
+            const sprintSnapshot = buildSprintWorkSnapshot(id);
+            if (sprintSnapshot) {
+              const formattedSnapshot = formatSprintWorkSnapshotForPrompt(sprintSnapshot);
+              if (formattedSnapshot.trim()) {
+                const indentedSnapshot = formattedSnapshot
+                  .split("\n")
+                  .map((l) => (l ? `   ${l}` : ""))
+                  .join("\n");
+                lines.push(`   📋 Sprint 工作快照（进度快照，正常心跳可忽略）:`);
+                lines.push(indentedSnapshot);
+              }
+            }
+          } catch {
+            // 目标摘要生成失败不影响 DoD 主流程
+          }
+
           lines.push("");
         }
 
@@ -947,6 +989,86 @@ export async function runHeartbeatOnce(opts: {
       // DoD 摘要生成失败不影响心跳主流程
       log.warn(`heartbeat: failed to build DoD summary for coordinator: ${String(dodErr)}`);
     }
+
+    // ── 团队成员活跃负载摘要注入 ──────────────────────────────────────────
+    // 直接告知主控每个成员的活跃任务数量（仅计入 todo + in-progress），
+    // 避免 LLM 自行调用 task_list 并误将 done 任务算入负载。
+    // 规则参考：待执行(todo)+进行中(in-progress) < MIN_ACTIVE_TASKS 时，提示主控补充任务。
+    try {
+      const { listTasks } = await import("../tasks/storage.js");
+      const { listAgentIds } = await import("../agents/agent-scope.js");
+      const allAgentIds = listAgentIds(cfg).filter(
+        (id) => id !== agentId && id !== resolveDefaultAgentId(cfg),
+      );
+      if (allAgentIds.length > 0) {
+        // 批量查询所有团队成员的活跃任务（todo + in-progress）
+        const memberLoads: Array<{
+          agentId: string;
+          todo: number;
+          inProgress: number;
+          activeTotal: number;
+        }> = [];
+
+        for (const memberId of allAgentIds) {
+          try {
+            const [todoTasks, inProgressTasks] = await Promise.all([
+              listTasks({ assigneeId: memberId, status: ["todo"] }),
+              listTasks({ assigneeId: memberId, status: ["in-progress"] }),
+            ]);
+            memberLoads.push({
+              agentId: memberId,
+              todo: todoTasks.length,
+              inProgress: inProgressTasks.length,
+              activeTotal: todoTasks.length + inProgressTasks.length,
+            });
+          } catch {
+            /* 单个成员查询失败跳过 */
+          }
+        }
+
+        if (memberLoads.length > 0) {
+          const loadLines: string[] = [
+            "",
+            "---",
+            "## [团队负载] 各成员活跃任务数（仅统计 todo + in-progress，不含 done/cancelled）",
+            "▶ 主控规则：",
+            "  - 【负载判断依据】仅 todo + in-progress 状态的任务才算入活跃工作量，done/cancelled 不计入。",
+            "  - 【补充任务阈值】当成员活跃任务 < 5 条时，应主动从 backlog 中为其安排新任务。",
+            "  - 【空闲识别】activeTotal = 0 表示该成员当前完全空闲，需立即分配工作。",
+            "",
+          ];
+
+          let hasIdleMembers = false;
+          for (const load of memberLoads) {
+            const icon = load.activeTotal === 0 ? "⚪" : load.activeTotal < 3 ? "🟡" : "🟢";
+            loadLines.push(
+              `${icon} ${load.agentId}: 活跃任务 ${load.activeTotal} 条（待开始 ${load.todo} + 进行中 ${load.inProgress}）`,
+            );
+            if (load.activeTotal === 0) {
+              hasIdleMembers = true;
+              loadLines.push(`   ⚠️ 该成员完全空闲！请立即调用 task_create 为其安排工作任务。`);
+            } else if (load.activeTotal < 5) {
+              loadLines.push(
+                `   ℹ️ 活跃任务不足 5 条，如有 backlog 任务可安排给该成员。`,
+              );
+            }
+          }
+
+          if (hasIdleMembers) {
+            loadLines.push("");
+            loadLines.push(
+              "🚨 发现空闲成员！请立即检查 backlog 并为空闲成员分配新任务，保持团队持续运转。",
+            );
+          }
+          loadLines.push("");
+          prompt = prompt + "\n" + loadLines.join("\n");
+        }
+      }
+    } catch (loadErr) {
+      // 负载摘要生成失败不影响心跳主流程
+      log.warn(`heartbeat: failed to build team load summary: ${String(loadErr)}`);
+    }
+    // ────────────────────────────────────────────────────────────────────
   }
   // ────────────────────────────────────────────────────────────────────
 
@@ -1342,6 +1464,38 @@ export async function runHeartbeatOnce(opts: {
       accountId: delivery.accountId,
       indicatorType: visibility.useIndicator ? resolveIndicatorType("sent") : undefined,
     });
+
+    // ── 活动感知：heartbeat run 结束后刷新 in-progress 任务的 lastActivityAt ──
+    // 业务背景：
+    //   agent-task-wake-scheduler.ts 通过检测 lastActivityAt 静默时长来判断任务是否已完成
+    //   但未主动调用 task_report_to_supervisor（「自动完成」机制）。
+    //   原始逻辑的缺陷：lastActivityAt 只在任务进入 in-progress 时设置一次，
+    //   agent 执行过程中调用工具（read_file/write_file 等）不会刷新它，
+    //   导致 3 分钟静默窗口在 agent 还在跑 heartbeat 时就触发误判。
+    // 修复：每次 heartbeat run 成功完成后（agent 确实在工作），立即刷新该 agent
+    //   当前 in-progress 任务的 lastActivityAt，让调度器知道 agent 仍在活跃运行中。
+    void (async () => {
+      try {
+        const { listTasks, updateTask } = await import("../tasks/storage.js");
+        const inProgressTasks = await listTasks({
+          assigneeId: agentId,
+          status: ["in-progress"],
+        });
+        const now = Date.now();
+        for (const task of inProgressTasks) {
+          await updateTask(task.id, {
+            timeTracking: {
+              ...task.timeTracking,
+              lastActivityAt: now,
+            },
+          });
+        }
+      } catch {
+        // 刷新失败不影响 heartbeat 主流程
+      }
+    })();
+    // ─────────────────────────────────────────────────────────────────────
+
     return { status: "ran", durationMs: Date.now() - startedAt };
   } catch (err) {
     const reason = formatErrorMessage(err);

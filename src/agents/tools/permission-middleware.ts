@@ -76,7 +76,13 @@ function getAgentPermissionsConfig(agentId: string): AgentPermissionsConfig | nu
       return null;
     }
 
-    return (agent as any).permissions || null;
+    return (
+      // 优先从 params.permissions 读取（新存储位置）
+      ((agent as any).params?.permissions) ||
+      // 兼容旧数据：直接写在顶层的 permissions
+      (agent as any).permissions ||
+      null
+    );
   } catch (error) {
     console.error(`[Permission Middleware] Failed to load config for agent ${agentId}:`, error);
     return null;

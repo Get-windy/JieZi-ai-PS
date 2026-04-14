@@ -309,6 +309,12 @@ export function createModelInfoGetter(
           mtBench: benchmarkEntry.mtBench,
           gpqa: benchmarkEntry.gpqa,
           normalizedElo,
+          // 专项 Elo（对齐 lmarena 分类榜单，有数据则注入，无数据让路由引擎走回退逻辑）
+          codingElo: benchmarkEntry.codingElo,
+          reasoningElo: benchmarkEntry.reasoningElo,
+          visionElo: benchmarkEntry.visionElo,
+          creativeElo: benchmarkEntry.creativeElo,
+          instructionElo: benchmarkEntry.instructionElo,
         };
         // 基于基准数据修正 reasoningLevel：如果 MATH 很高则提升推理等级
         if ((benchmarkEntry.math ?? 0) >= 90 || (benchmarkEntry.gpqa ?? 0) >= 70) {

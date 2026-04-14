@@ -17,15 +17,20 @@ import { normalizeEloScore } from "./arena-benchmarks.js";
 
 /**
  * 模型专业领域（Specialization）
+ * 基于 lmarena.ai 真实分类体系扩展
  */
 export type ModelSpecialization =
   | "general" // 通用模型
-  | "coding" // 编程专用（如 DeepSeek-Coder、CodeLlama）
-  | "math" // 数学推理（如 MathGPT）
+  | "coding" // 编程专用（如 DeepSeek-Coder、Qwen-Coder）
+  | "math" // 数学推理（高 MATH 基准分）
   | "vision" // 视觉专用（如 GPT-4V）
   | "multimodal" // 多模态（如 Gemini、GPT-4o）
-  | "reasoning" // 深度推理（如 o1、o3）
-  | "creative" // 创作生成（如 Claude、文心一言）
+  | "reasoning" // 深度推理（如 o1、o3、DeepSeek-R1）
+  | "creative" // 创意写作（如 Claude）
+  | "instruction" // 指令跟随（高 MT-Bench）
+  | "multilingual" // 多语言（中日韩等非英文能力强）
+  | "long-context" // 长上下文（200K+）
+  | "function-calling" // 函数调用/工具使用
   | "translation" // 翻译专用
   | "embedding" // 向量嵌入
   | "speech"; // 语音处理
@@ -36,17 +41,19 @@ export type ModelSpecialization =
 export type DataModality = "text" | "image" | "audio" | "video" | "code";
 
 /**
- * 任务领域分类
+ * 任务领域分类（对齐 lmarena.ai 评测分类）
  */
 export type TaskDomain =
   | "general" // 通用问答
-  | "coding" // 编程任务
-  | "math" // 数学计算
-  | "creative" // 创意写作
-  | "analysis" // 数据分析
+  | "coding" // 编程任务（lmarena: Coding Elo）
+  | "math" // 数学计算（lmarena: Math Elo）
+  | "creative" // 创意写作（lmarena: Creative Writing Elo）
+  | "instruction" // 指令跟随（lmarena: Instruction Following Elo）
+  | "analysis" // 数据分析（多轮推理）
   | "translation" // 翻译任务
-  | "vision" // 视觉理解
-  | "reasoning"; // 深度推理
+  | "vision" // 视觉理解（lmarena: Vision Arena Elo）
+  | "reasoning" // 深度推理（lmarena: Hard Prompts Elo）
+  | "multilingual"; // 多语言（lmarena: Chinese/Japanese/Korean Elo）
 
 /**
  * 会话上下文信息
@@ -73,10 +80,10 @@ export type SessionContext = {
 };
 
 /**
- * 外部评测基准分数
+ * 外部评测基准分数（对齐 lmarena.ai 分类体系）
  */
 export type ModelBenchmarkScores = {
-  /** LMSYS Chatbot Arena Elo 分（原始值，约 800-1400） */
+  /** LMSYS Chatbot Arena Elo 分（原始値，约 800-1500） */
   eloScore?: number;
   /** Arena 排名（越小越好） */
   arenaRank?: number;
@@ -92,6 +99,16 @@ export type ModelBenchmarkScores = {
   gpqa?: number;
   /** 归一化 Elo（0-100，用于路由计算） */
   normalizedElo?: number;
+  /** 编程专项 Elo（对齐 lmarena Coding 分类，原始分） */
+  codingElo?: number;
+  /** 数学/推理专项 Elo（对齐 lmarena Math / Hard Prompts，原始分） */
+  reasoningElo?: number;
+  /** 视觉专项 Elo（对齐 lmarena Vision Arena，原始分） */
+  visionElo?: number;
+  /** 创意写作专项 Elo（对齐 lmarena Creative Writing，原始分） */
+  creativeElo?: number;
+  /** 指令跟随专项 Elo（对齐 lmarena Instruction Following，原始分） */
+  instructionElo?: number;
 };
 
 /**
@@ -108,11 +125,11 @@ export type ModelInfo = {
   supportsVision: boolean;
   /** 推理能力等级 (1-3: 1=基础, 2=中级, 3=高级) */
   reasoningLevel: number;
-  /** Input token 价格（每 1K tokens，美元） */
-  inputPrice: number;
-  /** Output token 价格（每 1K tokens，美元） */
-  outputPrice: number;
-  /** 平均响应速度（秒） */
+  /** Input token 价格（每 1K tokens，美元）—— 保留字段，路由不再使用 */
+  inputPrice?: number;
+  /** Output token 价格（每 1K tokens，美元）—— 保留字段，路由不再使用 */
+  outputPrice?: number;
+  /** 平均响应速度（秒）—— 保留字段，路由不再使用 */
   avgResponseTime?: number;
   /** 模型专业领域（可多选） */
   specializations?: ModelSpecialization[];
@@ -125,7 +142,7 @@ export type ModelInfo = {
 };
 
 /**
- * 账号评分结果
+ * 账号评分结果（细粒度能力维度，去除成本/速度）
  */
 export type AccountScore = {
   /** 账号 ID */
@@ -134,18 +151,24 @@ export type AccountScore = {
   totalScore: number;
   /** 复杂度匹配分 */
   complexityScore: number;
-  /** 能力匹配分 */
+  /** 基础能力匹配分（上下文、工具、视觉、推理等级） */
   capabilityScore: number;
-  /** 成本分 */
-  costScore: number;
-  /** 响应速度分 */
-  speedScore: number;
   /** 专业领域匹配分 */
   specializationScore: number;
   /** 模态匹配分 */
   modalityScore: number;
-  /** 外部评测 Elo 归一化分（0-100） */
+  /** 综合 Arena Elo 归一化分（0-100） */
   eloScore: number;
+  /** 编程专项 Elo 分（0-100，基于 lmarena Coding Elo） */
+  codingEloScore: number;
+  /** 数学/推理专项 Elo 分（0-100，基于 lmarena Math + GPQA） */
+  reasoningEloScore: number;
+  /** 视觉专项 Elo 分（0-100，基于 lmarena Vision Arena） */
+  visionEloScore: number;
+  /** 创意写作专项 Elo 分（0-100，基于 lmarena Creative Writing） */
+  creativeEloScore: number;
+  /** 指令跟随专项 Elo 分（0-100，基于 lmarena Instruction Following） */
+  instructionEloScore: number;
   /** 模型信息 */
   modelInfo?: ModelInfo;
   /** 是否可用 */
@@ -346,6 +369,9 @@ export function assessModalityMatch(context: SessionContext, modelInfo: ModelInf
 /**
  * 评估模型专业领域与任务的匹配度
  *
+ * 对齐 lmarena.ai 分类：Coding / Math / Creative Writing /
+ * Instruction Following / Vision / Reasoning(Hard Prompts) / Multilingual
+ *
  * @param taskDomain - 任务领域
  * @param modelInfo - 模型信息
  * @returns 专业领域匹配分数 (0-100)
@@ -359,43 +385,41 @@ export function assessSpecializationMatch(taskDomain: TaskDomain, modelInfo: Mod
   // 如果没有专业领域标记，假设是通用模型
   const specializations = modelInfo.specializations || ["general"];
 
-  // 任务领域到专业领域的映射
-  // 注意：附加 "general" 到 coding/reasoning 等映射，防止通用强模型不必要地失分
+  // 任务领域到专业领域的映射（优先级从高到低）
   const domainToSpecialization: Record<TaskDomain, ModelSpecialization[]> = {
-    general: ["general", "multimodal", "coding", "reasoning", "creative"],
-    coding: ["coding", "general", "reasoning"],
+    general: ["general", "multimodal", "instruction", "coding", "reasoning", "creative"],
+    coding: ["coding", "function-calling", "reasoning", "general"],
     math: ["math", "reasoning", "general"],
-    creative: ["creative", "general"],
-    analysis: ["reasoning", "general", "coding"],
-    translation: ["translation", "general"],
+    creative: ["creative", "multilingual", "general"],
+    instruction: ["instruction", "general", "multilingual"],
+    analysis: ["reasoning", "coding", "general"],
+    translation: ["translation", "multilingual", "general"],
     vision: ["vision", "multimodal"],
-    reasoning: ["reasoning", "general", "coding"],
+    reasoning: ["reasoning", "math", "general", "coding"],
+    multilingual: ["multilingual", "translation", "general"],
   };
 
   // 获取任务对应的专业领域
   const preferredSpecs = domainToSpecialization[taskDomain] || ["general"];
 
-  // 计算匹配度
+  // 计算匹配度（第一优先级100分，依次递减20分）
   for (let i = 0; i < preferredSpecs.length; i++) {
     const spec = preferredSpecs[i];
     if (specializations.includes(spec)) {
-      // 完全匹配：100分
-      if (i === 0) {
-        return 100;
-      }
-      // 次优匹配：降级评分
-      return 100 - i * 20;
+      if (i === 0) return 100;
+      if (i === 1) return 80;
+      if (i === 2) return 65;
+      return 50;
     }
   }
 
-  // 没有匹配的专业领域
-  // 通用模型可以处理所有任务，但效果一般
+  // 通用模型给及格分
   if (specializations.includes("general")) {
-    return 60; // 通用模型给及格分
+    return 55;
   }
 
-  // 专业领域不匹配，给低分但不是0分
-  return 30;
+  // 专业领域完全不匹配
+  return 25;
 }
 
 // ==================== 复杂度评估 ====================
@@ -563,67 +587,41 @@ export function matchCapabilities(
  * @param modelInfo - 模型信息
  * @returns 成本分数 (0-100)
  */
-export function assessCost(message: string, context: SessionContext, modelInfo: ModelInfo): number {
-  // 估算 input tokens
-  const estimatedInputTokens = context.historyTurns * 500 + message.length * 1.5;
-
-  // 估算 output tokens（默认 500）
-  const estimatedOutputTokens = 500;
-
-  // 计算总成本（美元）
-  const totalCost =
-    (estimatedInputTokens / 1000) * modelInfo.inputPrice +
-    (estimatedOutputTokens / 1000) * modelInfo.outputPrice;
-
-  // 归一化到 0-100 分
-  // 假设：成本 < $0.01 = 100分，成本 > $0.10 = 0分
-  const maxCost = 0.1;
-  const minCost = 0.01;
-
-  if (totalCost <= minCost) {
-    return 100;
-  } else if (totalCost >= maxCost) {
-    return 0;
-  } else {
-    // 线性映射
-    const score = 100 - ((totalCost - minCost) / (maxCost - minCost)) * 100;
-    return Math.round(score);
-  }
-}
-
-// ==================== 响应速度评估 ====================
+// ==================== 成本评估（已废弃，保留备用）====================
 
 /**
- * 评估响应速度分数
- *
- * @param modelInfo - 模型信息
- * @returns 响应速度分数 (0-100)
+ * @deprecated 路由引擎已不使用成本评分，此函数保留备外部使用
+ */
+export function assessCost(message: string, context: SessionContext, modelInfo: ModelInfo): number {
+  void message;
+  void context;
+  void modelInfo;
+  return 50;
+}
+
+/**
+ * @deprecated 路由引擎已不使用速度评分，此函数保留备外部使用
  */
 export function assessSpeed(modelInfo: ModelInfo): number {
-  if (!modelInfo.avgResponseTime) {
-    // 没有历史数据，默认给 50 分
-    return 50;
-  }
-
-  // 假设：响应时间 < 2秒 = 100分，响应时间 > 10秒 = 0分
-  const maxTime = 10;
-  const minTime = 2;
-
-  if (modelInfo.avgResponseTime <= minTime) {
-    return 100;
-  } else if (modelInfo.avgResponseTime >= maxTime) {
-    return 0;
-  } else {
-    // 线性映射
-    const score = 100 - ((modelInfo.avgResponseTime - minTime) / (maxTime - minTime)) * 100;
-    return Math.round(score);
-  }
+  void modelInfo;
+  return 50;
 }
 
 // ==================== 综合打分与选择 ====================
 
 /**
  * 为所有模型账号打分并选择最优账号
+ *
+ * 综合评分维度（参考 lmarena.ai 分类）：
+ * - 基础能力（上下文、工具、视觉、推理等级）
+ * - 专业领域匹配（Coding/Math/Vision/Creative/Instruction/Multilingual）
+ * - 模态匹配（文本/图片/代码等）
+ * - 综合 Arena Elo（整体实力）
+ * - 编程专项 Elo（lmarena Coding 分类）
+ * - 数学/推理专项 Elo（lmarena Math/Hard Prompts 分类）
+ * - 视觉专项 Elo（lmarena Vision Arena）
+ * - 创意写作专项 Elo（lmarena Creative Writing）
+ * - 指令跟随专项 Elo（lmarena Instruction Following）
  *
  * @param message - 用户消息内容
  * @param context - 会话上下文
@@ -643,15 +641,26 @@ export async function scoreAllAccounts(
   // 2. 检测任务领域
   const taskDomain = detectTaskDomain(message, context);
 
-  // 3. 获取权重配置（使用默认值）
-  const complexityWeight = config.smartRouting?.complexityWeight ?? 20; // 降低复杂度权重，避免简单任务都被判为 coding
+  // 3. 获取权重配置（应用用户自定义权重，否则使用默认值）
+  // 默认权重分配设计（总和 = 100）：
+  //   基础能力: 20   — 硬性能力检查（视觉、工具、上下文）
+  //   专业领域: 12   — 匹配任务类型
+  //   模态匹配: 8    — 图片/音频/代码等
+  //   综合 Elo:   15   — 整体实力基线
+  //   编程 Elo:   11   — 专项能力（按任务加权）
+  //   推理 Elo:   11   — 专项能力
+  //   视觉 Elo:   8    — 专项能力
+  //   创意 Elo:   8    — 专项能力
+  //   指令 Elo:   7    — 专项能力
   const capabilityWeight = config.smartRouting?.capabilityWeight ?? 20;
-  const costWeight = config.smartRouting?.costWeight ?? 15;
-  const speedWeight = config.smartRouting?.speedWeight ?? 10;
-  // 新增权重：专业领域、模态匹配、外部评测 Elo
-  const specializationWeight = 10; // 专业领域匹配权重（降低，避免 coder 模型在通用任务中过度占优）
-  const modalityWeight = 8; // 模态匹配权重
-  const eloWeight = 17; // LMSYS Arena Elo 权重（提高，让真实能力排行更有影响力）
+  const specializationWeight = config.smartRouting?.specializationWeight ?? 12;
+  const modalityWeight = config.smartRouting?.modalityWeight ?? 8;
+  const eloWeight = config.smartRouting?.eloWeight ?? 15;
+  const codingEloWeight = config.smartRouting?.codingEloWeight ?? 11;
+  const reasoningEloWeight = config.smartRouting?.reasoningEloWeight ?? 11;
+  const visionEloWeight = config.smartRouting?.visionEloWeight ?? 8;
+  const creativeEloWeight = config.smartRouting?.creativeEloWeight ?? 8;
+  const instructionEloWeight = config.smartRouting?.instructionEloWeight ?? 7;
 
   // 4. 为每个账号打分
   const scores: AccountScore[] = await Promise.all(
@@ -659,85 +668,135 @@ export async function scoreAllAccounts(
       // 获取模型信息
       const modelInfo = await modelInfoGetter(accountId);
 
-      if (!modelInfo) {
-        return {
-          accountId,
-          totalScore: 0,
-          complexityScore: 0,
-          capabilityScore: 0,
-          costScore: 0,
-          speedScore: 0,
-          specializationScore: 0,
-          modalityScore: 0,
-          eloScore: 0,
-          available: false,
-        };
-      }
+      const zeroScore = (mi?: ModelInfo): AccountScore => ({
+        accountId,
+        totalScore: 0,
+        complexityScore: 0,
+        capabilityScore: 0,
+        specializationScore: 0,
+        modalityScore: 0,
+        eloScore: 0,
+        codingEloScore: 0,
+        reasoningEloScore: 0,
+        visionEloScore: 0,
+        creativeEloScore: 0,
+        instructionEloScore: 0,
+        modelInfo: mi,
+        available: false,
+      });
 
-      // 能力匹配分数
+      if (!modelInfo) return zeroScore();
+
+      // 基础能力匹配分数（硬性检查）
       const capabilityScore = matchCapabilities(complexity, modelInfo, context);
-
-      // 模态匹配分数
+      // 模态匹配分数（硬性检查）
       const modalityScore = assessModalityMatch(context, modelInfo);
 
-      // 如果能力匹配分数为 0（不支持必需功能）或模态不匹配，直接标记为不可用
+      // 能力或模态不匹配：直接标记不可用
       if (capabilityScore === 0 || modalityScore === 0) {
-        return {
-          accountId,
-          totalScore: 0,
-          complexityScore: 0,
-          capabilityScore: 0,
-          costScore: 0,
-          speedScore: 0,
-          specializationScore: 0,
-          modalityScore: 0,
-          eloScore: 0,
-          modelInfo,
-          available: false,
-        };
+        return zeroScore(modelInfo);
       }
 
       // 专业领域匹配分数
       const specializationScore = assessSpecializationMatch(taskDomain, modelInfo);
 
-      // 成本分数
-      const costScore = config.smartRouting?.enableCostOptimization
-        ? assessCost(message, context, modelInfo)
-        : 50; // 不启用成本优化时给默认分
-
-      // 响应速度分数
-      const speedScore = assessSpeed(modelInfo);
-
-      // 外部评测 Elo 分（优先使用 benchmarks 字段，如果没有则默认 50 分中立）
-      const eloScore =
-        modelInfo.benchmarks?.normalizedElo ??
-        (modelInfo.benchmarks?.eloScore !== undefined
-          ? normalizeEloScore(modelInfo.benchmarks.eloScore)
-          : 50); // 未知模型给中立分
-
-      // 复杂度匹配分数（复杂度越高，越需要负荷能力强的模型）
+      // 复杂度匹配分数（序列调中简单任务不计入总分）
       const complexityScore = 100 - complexity * 10;
 
-      // 综合打分（加入专业领域、模态和 Elo 权重）
+      // ==================== 专项 Elo 分，对齐 lmarena.ai 分类 ====================
+      const benchmarks = modelInfo.benchmarks;
+
+      // 综合 Arena Elo
+      const eloScore =
+        benchmarks?.normalizedElo ??
+        (benchmarks?.eloScore !== undefined ? normalizeEloScore(benchmarks.eloScore) : 50);
+
+      // 编程专项 Elo：优先使用 codingElo 字段，回退到 HumanEval*0.7 + Elo*0.3
+      const codingEloScore =
+        benchmarks?.codingElo !== undefined
+          ? normalizeEloScore(benchmarks.codingElo)
+          : benchmarks?.humanEval !== undefined
+            ? Math.round(benchmarks.humanEval * 0.7 + eloScore * 0.3)
+            : eloScore;
+
+      // 数学/推理专项 Elo：优先使用 reasoningElo，回退到 MATH*0.5 + GPQA*0.3 + Elo*0.2
+      const reasoningEloScore =
+        benchmarks?.reasoningElo !== undefined
+          ? normalizeEloScore(benchmarks.reasoningElo)
+          : (() => {
+              if (benchmarks?.math !== undefined || benchmarks?.gpqa !== undefined) {
+                let s = eloScore * 0.2;
+                let w = 0.2;
+                if (benchmarks.math !== undefined) { s += benchmarks.math * 0.5; w += 0.5; }
+                if (benchmarks.gpqa !== undefined) { s += benchmarks.gpqa * 0.3; w += 0.3; }
+                return Math.round(s / w);
+              }
+              return eloScore;
+            })();
+
+      // 视觉专项 Elo：优先使用 visionElo 字段，回退到 supportsVision 判断
+      const visionEloScore =
+        benchmarks?.visionElo !== undefined
+          ? normalizeEloScore(benchmarks.visionElo)
+          : modelInfo.supportsVision
+            ? eloScore // 支持视觉但无专项数据，用综合 Elo 估算
+            : 0; // 不支持视觉
+
+      // 创意写作专项 Elo：优先使用 creativeElo 字段
+      const creativeEloScore =
+        benchmarks?.creativeElo !== undefined
+          ? normalizeEloScore(benchmarks.creativeElo)
+          : eloScore; // 回退到综合 Elo
+
+      // 指令跟随专项 Elo：优先使用 instructionElo 字段，回退到 MMLU + Elo
+      const instructionEloScore =
+        benchmarks?.instructionElo !== undefined
+          ? normalizeEloScore(benchmarks.instructionElo)
+          : benchmarks?.mmlu !== undefined
+            ? Math.round(benchmarks.mmlu * 0.4 + eloScore * 0.6)
+            : eloScore;
+
+      // ==================== 加权综合打分 ====================
+      // 专项 Elo 权重根据任务领域动态加成：
+      // 当任务为 coding 时，编程 Elo 权重 ×2；当任务为 reasoning/math 时，推理 Elo 权重 ×2，等
+      const domainEloBoost = (domain: TaskDomain) => {
+        if (domain === "coding") return { coding: 2.0, reasoning: 1.2, vision: 0.5, creative: 0.5, instruction: 0.8 };
+        if (domain === "math") return { coding: 0.8, reasoning: 2.0, vision: 0.5, creative: 0.5, instruction: 0.8 };
+        if (domain === "reasoning") return { coding: 1.0, reasoning: 2.0, vision: 0.5, creative: 0.5, instruction: 1.0 };
+        if (domain === "vision") return { coding: 0.5, reasoning: 0.8, vision: 2.5, creative: 0.5, instruction: 0.7 };
+        if (domain === "creative") return { coding: 0.5, reasoning: 0.8, vision: 0.5, creative: 2.0, instruction: 1.0 };
+        if (domain === "instruction") return { coding: 0.8, reasoning: 1.0, vision: 0.5, creative: 1.0, instruction: 2.0 };
+        if (domain === "multilingual") return { coding: 0.5, reasoning: 0.8, vision: 0.5, creative: 1.2, instruction: 1.5 };
+        if (domain === "translation") return { coding: 0.5, reasoning: 0.8, vision: 0.5, creative: 1.2, instruction: 1.5 };
+        // general / analysis
+        return { coding: 1.0, reasoning: 1.0, vision: 1.0, creative: 1.0, instruction: 1.0 };
+      };
+      const boost = domainEloBoost(taskDomain);
+
       const totalScore =
         capabilityScore * (capabilityWeight / 100) +
-        costScore * (costWeight / 100) +
-        speedScore * (speedWeight / 100) +
-        complexityScore * (complexityWeight / 100) +
         specializationScore * (specializationWeight / 100) +
         modalityScore * (modalityWeight / 100) +
-        eloScore * (eloWeight / 100);
+        eloScore * (eloWeight / 100) +
+        codingEloScore * (codingEloWeight / 100) * boost.coding +
+        reasoningEloScore * (reasoningEloWeight / 100) * boost.reasoning +
+        visionEloScore * (visionEloWeight / 100) * boost.vision +
+        creativeEloScore * (creativeEloWeight / 100) * boost.creative +
+        instructionEloScore * (instructionEloWeight / 100) * boost.instruction;
 
       return {
         accountId,
         totalScore: Math.round(totalScore),
         complexityScore,
         capabilityScore,
-        costScore,
-        speedScore,
         specializationScore,
         modalityScore,
         eloScore,
+        codingEloScore,
+        reasoningEloScore,
+        visionEloScore,
+        creativeEloScore,
+        instructionEloScore,
         modelInfo,
         available: true,
       };
@@ -900,11 +959,22 @@ export async function routeToOptimalModelAccount(
   if (selectedScore) {
     reason += ` (总分: ${selectedScore.totalScore}`;
     reason += `, 能力: ${selectedScore.capabilityScore}`;
-    reason += `, 成本: ${selectedScore.costScore}`;
-    reason += `, 速度: ${selectedScore.speedScore}`;
     reason += `, 专业: ${selectedScore.specializationScore}`;
+    // 展示专项 Elo分
+    const taskDomainLocal = detectTaskDomain(message, context);
+    if (taskDomainLocal === "coding" && selectedScore.codingEloScore > 0) {
+      reason += `, 编程Elo: ${selectedScore.codingEloScore}`;
+    } else if ((taskDomainLocal === "reasoning" || taskDomainLocal === "math") && selectedScore.reasoningEloScore > 0) {
+      reason += `, 推理Elo: ${selectedScore.reasoningEloScore}`;
+    } else if (taskDomainLocal === "vision" && selectedScore.visionEloScore > 0) {
+      reason += `, 视觉Elo: ${selectedScore.visionEloScore}`;
+    } else if (taskDomainLocal === "creative" && selectedScore.creativeEloScore > 0) {
+      reason += `, 创意Elo: ${selectedScore.creativeEloScore}`;
+    } else if (taskDomainLocal === "instruction" && selectedScore.instructionEloScore > 0) {
+      reason += `, 指令Elo: ${selectedScore.instructionEloScore}`;
+    }
     if (selectedScore.eloScore > 0 && selectedScore.eloScore !== 50) {
-      reason += `, Elo: ${selectedScore.eloScore}`;
+      reason += `, 综合Elo: ${selectedScore.eloScore}`;
       if (selectedScore.modelInfo?.benchmarks?.eloScore) {
         reason += `[${selectedScore.modelInfo.benchmarks.eloScore}]`;
       }

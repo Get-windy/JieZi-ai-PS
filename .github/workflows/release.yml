@@ -1,0 +1,223 @@
+name: Release
+
+# 触发条件：推送 v* 格式的 Tag，如 v2026.4.11-beta.1、v2026.4.0
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # 允许创建 Release 和上传产物
+
+jobs:
+  # ────────────────────────────────────────────────
+  # 第一步：构建 dist（Linux runner，速度最快）
+  # ────────────────────────────────────────────────
+  build:
+    name: Build dist
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Setup Node environment（含子模块拉取）
+        uses: ./.github/actions/setup-node-env
+        with:
+          install-bun: "false"
+
+      - name: Build dist
+        run: pnpm build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-build
+          path: dist/
+          retention-days: 1
+
+  # ────────────────────────────────────────────────
+  # 第二步：并行打包三个平台产物
+  # ────────────────────────────────────────────────
+  package:
+    name: Package (${{ matrix.os-label }})
+    needs: build
+    strategy:
+      matrix:
+        include:
+          # Windows：生成 .exe 独立可执行文件 + zip 压缩包
+          - runner: windows-latest
+            os-label: windows
+            pkg-target: node22-win-x64
+            exe-name: openclaw.exe
+            archive-name: openclaw-windows-x64
+            archive-cmd: |
+              7z a openclaw-windows-x64.zip openclaw.exe
+          # Linux：生成独立可执行文件 + tar.gz
+          - runner: ubuntu-latest
+            os-label: linux
+            pkg-target: node22-linux-x64
+            exe-name: openclaw
+            archive-name: openclaw-linux-x64
+            archive-cmd: |
+              tar -czf openclaw-linux-x64.tar.gz openclaw
+          # macOS：生成独立可执行文件 + tar.gz
+          - runner: macos-latest
+            os-label: macos
+            pkg-target: node22-macos-x64
+            exe-name: openclaw
+            archive-name: openclaw-macos-x64
+            archive-cmd: |
+              tar -czf openclaw-macos-x64.tar.gz openclaw
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Enable corepack & install pnpm
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.23.0 --activate
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-build
+          path: dist/
+
+      - name: Install pkg（打包成独立可执行文件的工具）
+        shell: bash
+        run: npm install -g @yao-pkg/pkg
+
+      - name: 打包成独立可执行文件
+        shell: bash
+        run: |
+          # 用 pkg 将 openclaw.mjs + dist/ 打包成单个可执行文件
+          # --target: 目标平台
+          # --output: 输出文件名
+          pkg openclaw.mjs \
+            --target ${{ matrix.pkg-target }} \
+            --output ${{ matrix.exe-name }} \
+            --compress GZip
+
+      - name: 压缩打包产物
+        shell: bash
+        run: ${{ matrix.archive-cmd }}
+
+      - name: Upload 压缩包 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os-label }}
+          path: ${{ matrix.archive-name }}.*
+          retention-days: 1
+
+  # ────────────────────────────────────────────────
+  # 第三步：打 npm 包（zip 形式，含 dist/）
+  # ────────────────────────────────────────────────
+  npm-pack:
+    name: npm pack
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Enable corepack & install pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.23.0 --activate
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-build
+          path: dist/
+
+      - name: npm pack（生成 .tgz 安装包）
+        run: npm pack
+
+      - name: 重命名为固定文件名
+        run: mv openclaw-*.tgz openclaw-npm.tgz
+
+      - name: Upload npm tgz artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-npm
+          path: openclaw-npm.tgz
+          retention-days: 1
+
+  # ────────────────────────────────────────────────
+  # 第四步：汇总所有产物，创建 GitHub Release
+  # ────────────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    needs: [package, npm-pack]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: 下载所有平台产物
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release-assets/
+
+      - name: 列出产物文件
+        run: ls -lh release-assets/
+
+      - name: 从 package.json 读取版本号
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: 判断是否为预发布版本（含 beta/alpha/rc）
+        id: prerelease
+        run: |
+          TAG="${{ github.ref_name }}"
+          if echo "$TAG" | grep -qE "beta|alpha|rc"; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 创建 GitHub Release 并上传产物
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "JieZi ${{ steps.version.outputs.version }}"
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
+          generate_release_notes: true
+          files: release-assets/*
+          body: |
+            ## 下载说明
+
+            | 文件 | 平台 | 说明 |
+            |------|------|------|
+            | `openclaw-windows-x64.zip` | Windows 64位 | 解压后直接运行 `openclaw.exe`，无需安装 Node.js |
+            | `openclaw-linux-x64.tar.gz` | Linux 64位 | 解压后运行 `./openclaw` |
+            | `openclaw-macos-x64.tar.gz` | macOS 64位 | 解压后运行 `./openclaw` |
+            | `openclaw-npm.tgz` | 所有平台 | `npm install -g ./openclaw-npm.tgz` |

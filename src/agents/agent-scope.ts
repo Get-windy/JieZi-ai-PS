@@ -444,12 +444,16 @@ export function resolveAgentWorkspaceDir(cfg: OpenClawConfig, agentId: string) {
     return stripNullBytes(resolveUserPath(configured));
   }
   const defaultAgentId = resolveDefaultAgentId(cfg);
+  const fallback = cfg.agents?.defaults?.workspace?.trim();
   if (id === defaultAgentId) {
-    const fallback = cfg.agents?.defaults?.workspace?.trim();
     if (fallback) {
       return stripNullBytes(resolveUserPath(fallback));
     }
     return stripNullBytes(resolveDefaultAgentWorkspaceDir(process.env));
+  }
+  // 非默认 agent：优先使用 defaults.workspace 作为根目录，保证所有 agent 都落在自定义工作空间下
+  if (fallback) {
+    return stripNullBytes(path.join(resolveUserPath(fallback), id));
   }
   const stateDir = resolveStateDir(process.env);
   return stripNullBytes(path.join(stateDir, `workspace-${id}`));
@@ -540,9 +544,11 @@ export function resolveAgentModelAccounts(
     return undefined;
   }
 
-  // 从 entry 中读取 modelAccounts 配置
-  const modelAccounts = (entry as unknown as { modelAccounts?: AgentModelAccountsConfig })
-    .modelAccounts;
+  // 优先从 params.modelAccounts 读取（新存储位置，避免上游 strict schema 内 Unrecognized key 报错）
+  // 兼容旧数据：直接写在顶层的 modelAccounts
+  const modelAccounts =
+    ((entry as unknown as { params?: Record<string, unknown> }).params?.modelAccounts as AgentModelAccountsConfig | undefined) ??
+    (entry as unknown as { modelAccounts?: AgentModelAccountsConfig }).modelAccounts;
 
   return modelAccounts;
 }

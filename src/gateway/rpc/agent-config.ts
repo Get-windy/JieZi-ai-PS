@@ -222,11 +222,27 @@ function validateModelAccountsConfig(config: any): void {
 
   // 验证智能路由配置
   if (config.routingMode === "smart" && config.smartRouting) {
-    const validStrategies = ["cost", "speed", "quality", "balanced"];
-    if (!validStrategies.includes(config.smartRouting.strategy)) {
-      throw new Error(
-        `400 Bad Request: invalid smart routing strategy '${config.smartRouting.strategy}'`,
-      );
+    // 新增的细粒度能力权重字段（0-100）
+    const weightFields = [
+      "capabilityWeight",
+      "specializationWeight",
+      "modalityWeight",
+      "eloWeight",
+      "codingEloWeight",
+      "reasoningEloWeight",
+      "visionEloWeight",
+      "creativeEloWeight",
+      "instructionEloWeight",
+      // @deprecated 兼容旧字段
+      "complexityWeight",
+      "costWeight",
+      "speedWeight",
+    ] as const;
+    for (const field of weightFields) {
+      const val = (config.smartRouting as Record<string, unknown>)[field];
+      if (val !== undefined && (typeof val !== "number" || (val as number) < 0 || (val as number) > 100)) {
+        throw new Error(`400 Bad Request: ${field} must be between 0 and 100`);
+      }
     }
   }
 }

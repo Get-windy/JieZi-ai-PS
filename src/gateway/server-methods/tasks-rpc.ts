@@ -74,6 +74,24 @@ function notifySupervisor(supervisorRaw: string, message: string, contextKey: st
 }
 
 /**
+ * 向执行 agent 发送任务系统事件通知
+ * @param agentRaw - 执行者 agentId（未规范化）
+ * @param message - 通知消息
+ * @param contextKey - 合并键
+ */
+function notifyAssignee(agentRaw: string, message: string, contextKey: string): void {
+  const agentId = normalizeAgentId(agentRaw);
+  const sessionKey = `agent:${agentId}:main`;
+  enqueueSystemEvent(message, { sessionKey, contextKey });
+  requestHeartbeatNow({
+    reason: contextKey,
+    sessionKey,
+    agentId,
+    coalesceMs: 8000,
+  });
+}
+
+/**
  * 任务 RPC 方法注册
  */
 export const tasksRpc: GatewayRequestHandlers = {
@@ -417,6 +435,71 @@ export const tasksRpc: GatewayRequestHandlers = {
 
       respond(true, updatedTask, undefined);
 
+      // 状态变更通知主控（Task State Change Event）
+      // 业界最佳实践：任何状态变化都通知项目负责人，使其能及时感知进展
+      if (normalizedStatus && normalizedStatus !== task.status) {
+        const statusEmoji: Record<string, string> = {
+          done: "✅",
+          cancelled: "❌",
+          blocked: "⛔",
+          "in-progress": "▶️",
+          todo: "⏸️",
+          review: "🔍",
+        };
+        const emoji = statusEmoji[normalizedStatus] ?? "🟡";
+        const operatorId = (params?.requesterId ? String(params.requesterId) : null) ?? "system";
+
+        // 通知主控
+        const supervisorRaw = task.supervisorId ?? task.creatorId;
+        if (supervisorRaw && supervisorRaw !== "system") {
+          const stateChangeMsg = [
+            `[TASK STATE CHANGE] ${emoji} 任务状态变更`,
+            ``,
+            `Task ID: ${taskId}`,
+            task.title ? `标题: ${task.title}` : null,
+            `状态变更: ${task.status} → ${normalizedStatus}`,
+            task.projectId ? `项目: ${task.projectId}` : null,
+            `操作者: ${operatorId}`,
+            normalizedStatus === "blocked"
+              ? `\n⚠️ 任务已阻塞，请尽快介入除阻。`
+              : null,
+            normalizedStatus === "done"
+              ? `\n任务已完成，请检查是否需要迟程工作或关闭关联 Sprint。`
+              : null,
+          ]
+            .filter(Boolean)
+            .join("\n");
+          notifySupervisor(supervisorRaw, stateChangeMsg, `task:state-change:${taskId}`);
+        }
+
+        // 通知执行人（assignees）
+        const assigneeList = task.assignees ?? [];
+        for (const assignee of assigneeList) {
+          if (!assignee.id || assignee.id === "system" || assignee.id === supervisorRaw) continue;
+          const assigneeMsg = [
+            `[TASK STATE CHANGE] ${emoji} 你的任务状态已更新`,
+            ``,
+            `Task ID: ${taskId}`,
+            task.title ? `标题: ${task.title}` : null,
+            `状态变更: ${task.status} → ${normalizedStatus}`,
+            task.projectId ? `项目: ${task.projectId}` : null,
+            `操作者: ${operatorId}`,
+            normalizedStatus === "todo"
+              ? `\n任务已被重置为待开始，请确认当前工作计划。`
+              : null,
+            normalizedStatus === "cancelled"
+              ? `\n任务已被取消，无需继续执行。`
+              : null,
+            normalizedStatus === "in-progress"
+              ? `\n任务已被标记为进行中，请继续推进。`
+              : null,
+          ]
+            .filter(Boolean)
+            .join("\n");
+          notifyAssignee(assignee.id, assigneeMsg, `task:state-change:${taskId}`);
+        }
+      }
+
       // 状态变为 done/cancelled 时触发即时归档
       if (normalizedStatus === "done" || normalizedStatus === "cancelled") {
         storage.archiveOldTasks().catch((archErr) => {
@@ -436,6 +519,39 @@ export const tasksRpc: GatewayRequestHandlers = {
           );
           const kpiOutcome = normalizedStatus === "done" ? "success" : "failure";
           recordPerfOutcome(kpiAssigneeId, kpiTaskType, kpiOutcome);
+        }
+      }
+
+      // 非状态字段变更通知（标题/优先级/截止时间被编辑）
+      const fieldChanges: string[] = [];
+      if (title && title !== task.title) fieldChanges.push(`标题: ${task.title} → ${title}`);
+      if (priority && priority !== task.priority) fieldChanges.push(`优先级: ${task.priority} → ${priority}`);
+      if (dueDate !== undefined && dueDate !== task.dueDate) {
+        const dueDateStr = dueDate ? new Date(dueDate).toLocaleString("zh-CN") : "无";
+        fieldChanges.push(`截止时间: → ${dueDateStr}`);
+      }
+      if (!normalizedStatus && fieldChanges.length > 0) {
+        const operatorId2 = (params?.requesterId ? String(params.requesterId) : null) ?? "system";
+        const supervisorRaw2 = task.supervisorId ?? task.creatorId;
+        const fieldEditMsg = [
+          `[TASK UPDATED] ✏️ 任务内容已编辑`,
+          ``,
+          `Task ID: ${taskId}`,
+          task.title ? `标题: ${updatedTask?.title ?? task.title}` : null,
+          ...fieldChanges,
+          task.projectId ? `项目: ${task.projectId}` : null,
+          `操作者: ${operatorId2}`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        // 通知主控
+        if (supervisorRaw2 && supervisorRaw2 !== "system") {
+          notifySupervisor(supervisorRaw2, fieldEditMsg, `task:field-edit:${taskId}`);
+        }
+        // 通知执行人
+        for (const assignee of task.assignees ?? []) {
+          if (!assignee.id || assignee.id === "system" || assignee.id === supervisorRaw2) continue;
+          notifyAssignee(assignee.id, fieldEditMsg, `task:field-edit:${taskId}`);
         }
       }
     } catch (err) {
@@ -522,6 +638,33 @@ export const tasksRpc: GatewayRequestHandlers = {
       const deleted = await storage.deleteTask(taskId);
 
       respond(true, { success: deleted, taskId }, undefined);
+
+      // 删除成功：通知主控和执行人
+      if (deleted) {
+        const operatorId = requesterId ?? "system";
+        const deleteMsg = [
+          `[TASK DELETED] 🗑️ 任务已被删除`,
+          ``,
+          `Task ID: ${taskId}`,
+          task.title ? `标题: ${task.title}` : null,
+          task.projectId ? `项目: ${task.projectId}` : null,
+          `操作者: ${operatorId}`,
+          ``,
+          `该任务已被永久删除，请停止一切相关执行。`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        // 通知主控
+        const supervisorRaw = task.supervisorId ?? task.creatorId;
+        if (supervisorRaw && supervisorRaw !== "system") {
+          notifySupervisor(supervisorRaw, deleteMsg, `task:deleted:${taskId}`);
+        }
+        // 通知执行人
+        for (const assignee of task.assignees ?? []) {
+          if (!assignee.id || assignee.id === "system" || assignee.id === supervisorRaw) continue;
+          notifyAssignee(assignee.id, deleteMsg, `task:deleted:${taskId}`);
+        }
+      }
     } catch (err) {
       respond(
         false,
@@ -861,7 +1004,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         todo: ["in-progress", "cancelled"],
         "in-progress": ["review", "blocked", "done", "cancelled"],
         review: ["in-progress", "done", "cancelled"],
-        blocked: ["in-progress", "cancelled"],
+        blocked: ["in-progress", "done", "cancelled"], // 修复：blocked 允许直接完成（解除阻塞即完成）
         done: ["in-progress"], // 允许重新打开
         cancelled: ["todo"], // 允许恢复
       };
@@ -885,20 +1028,55 @@ export const tasksRpc: GatewayRequestHandlers = {
 
       // 如果状态变为in-progress，记录开始时间并刷新活跃度时间戳
       if (newStatus === "in-progress") {
+        // 修复：task.timeTracking 可能为 undefined（旧任务迁移场景），需防御性解构
+        const existingTracking = task.timeTracking ?? { timeSpent: 0, lastActivityAt: Date.now() };
         updates.timeTracking = {
-          ...task.timeTracking,
-          startedAt: task.timeTracking.startedAt ?? Date.now(),
+          ...existingTracking,
+          startedAt: existingTracking.startedAt ?? Date.now(),
           lastActivityAt: Date.now(), // 每次进入 in-progress 都刷新活跃度，防止被误判为僵尸
         };
       }
 
       await storage.updateTask(taskId, updates);
 
-      // 发送状态变更通知
+      // 状态变更通知主控（Task State Change Event）
+      // 业界最佳实践：任何状态变化都通知项目负责人，使其能及时感知进展
+      const statusEmoji: Record<string, string> = {
+        done: "✅",
+        cancelled: "❌",
+        blocked: "⛔",
+        "in-progress": "▶️",
+        todo: "⏸️",
+        review: "🔍",
+      };
+      const sceEmoji = statusEmoji[newStatus] ?? "🟡";
+      const sceSupRaw = task.supervisorId ?? task.creatorId;
+      if (sceSupRaw && sceSupRaw !== "system") {
+        const stateChangeMsg = [
+          `[TASK STATE CHANGE] ${sceEmoji} 任务状态变更`,
+          ``,
+          `Task ID: ${taskId}`,
+          task.title ? `标题: ${task.title}` : null,
+          `状态变更: ${task.status} → ${newStatus}`,
+          task.projectId ? `项目: ${task.projectId}` : null,
+          reason ? `备注: ${reason}` : null,
+          `操作者: ${updatedBy}`,
+          newStatus === "blocked"
+            ? `\n⚠️ 任务已阈读，请尽快介入除阈。可尝试：1) 进行 agent_task_manage 延长期限 2) 重分配其他 agent 3) 取消任务`
+            : null,
+          newStatus === "done"
+            ? `\n任务已完成，请检查是否需要更新 Sprint 状态或进行后续工作。`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        notifySupervisor(sceSupRaw, stateChangeMsg, `task:state-change:${taskId}`);
+      }
+
+      // 实际环境中应该通知所有相关人员
       console.log(
         `[Task Notification] Task ${taskId} status changed: ${task.status} -> ${newStatus}`,
       );
-      // 实际环境中应该通知所有相关人员
 
       const result = {
         taskId,
@@ -1858,7 +2036,7 @@ export const tasksRpc: GatewayRequestHandlers = {
       const now = Date.now();
       await storage.updateTask(taskId, {
         timeTracking: {
-          ...task.timeTracking,
+          ...(task.timeTracking ?? { timeSpent: 0 }), // 防御 undefined
           lastActivityAt: now,
         },
       });
@@ -1879,6 +2057,119 @@ export const tasksRpc: GatewayRequestHandlers = {
         errorShape(
           ErrorCodes.UNAVAILABLE,
           `Failed to ping task: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
+  /**
+   * task.reset - 强制重置任务到非终态状态（绕过状态机）
+   *
+   * 适用场景：
+   * - 任务被误标为 done/cancelled，需重新打开
+   * - 任务陷入 blocked 死锁无法自行解除
+   * - 系统异常导致任务进入错误状态
+   *
+   * 目标状态 targetStatus 可选：todo（默认）/ in-progress / blocked
+   * 权限：任务创建者、主管、系统均可调用
+   */
+  "task.reset": async ({ params, respond }) => {
+    try {
+      const taskId =
+        (params?.taskId ? String(params.taskId) : "") || (params?.id ? String(params.id) : "");
+      const targetStatus = (params?.targetStatus
+        ? String(params.targetStatus)
+        : "todo") as "todo" | "in-progress" | "blocked";
+      const reason = params?.reason ? String(params.reason) : undefined;
+      const actor = params?.actor ? String(params.actor) : "system";
+
+      if (!taskId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId 不能为空"));
+        return;
+      }
+
+      if (!["todo", "in-progress", "blocked"].includes(targetStatus)) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `无效的目标状态 "${targetStatus}"，允许值：todo / in-progress / blocked`,
+          ),
+        );
+        return;
+      }
+
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "任务不存在"));
+        return;
+      }
+
+      const previousStatus = task.status;
+      const updatedTask = await storage.forceResetTask(taskId, targetStatus, actor, reason);
+
+      respond(
+        true,
+        {
+          taskId,
+          previousStatus,
+          newStatus: targetStatus,
+          reason: reason ?? "手动重置",
+          resetBy: actor,
+          resetAt: Date.now(),
+          task: updatedTask,
+        },
+        undefined,
+      );
+
+      // 通知主控任务被重置（Task Reset Event）
+      const resetSupRaw = task.supervisorId ?? task.creatorId;
+      if (resetSupRaw && resetSupRaw !== "system") {
+        const resetMsg = [
+          `[TASK RESET] 🔄 任务已被强制重置`,
+          ``,
+          `Task ID: ${taskId}`,
+          task.title ? `标题: ${task.title}` : null,
+          `重置: ${previousStatus} → ${targetStatus}`,
+          task.projectId ? `项目: ${task.projectId}` : null,
+          reason ? `原因: ${reason}` : null,
+          `操作者: ${actor}`,
+          ``,
+          `任务已回到 ${targetStatus} 状态，如有需要请重新分配或处理。`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        notifySupervisor(resetSupRaw, resetMsg, `task:reset:${taskId}`);
+      }
+
+      // 通知执行人任务被重置
+      for (const assignee of task.assignees ?? []) {
+        if (!assignee.id || assignee.id === "system" || assignee.id === resetSupRaw) continue;
+        const assigneeResetMsg = [
+          `[TASK RESET] 🔄 你的任务已被重置`,
+          ``,
+          `Task ID: ${taskId}`,
+          task.title ? `标题: ${task.title}` : null,
+          `重置: ${previousStatus} → ${targetStatus}`,
+          reason ? `原因: ${reason}` : null,
+          `操作者: ${actor}`,
+          ``,
+          targetStatus === "todo"
+            ? `任务已重置为待开始，请停止当前进行中的执行并等待重新分配。`
+            : `任务已重置为 ${targetStatus}，请確认下一步操作。`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        notifyAssignee(assignee.id, assigneeResetMsg, `task:reset:${taskId}`);
+      }
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to reset task: ${String(err instanceof Error ? err.message : err)}`,
         ),
       );
     }

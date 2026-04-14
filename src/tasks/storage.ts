@@ -782,7 +782,7 @@ export async function getTask(taskId: string): Promise<Task | undefined> {
  *   todo        → in-progress, blocked, cancelled
  *   in-progress → review, blocked, done, cancelled
  *   review      → in-progress, done, cancelled
- *   blocked     → todo, in-progress, cancelled
+ *   blocked     → todo, in-progress, done, cancelled
  *   done        → (终态)
  *   cancelled   → (终态)
  */
@@ -791,7 +791,7 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   todo: ["in-progress", "blocked", "cancelled"],
   "in-progress": ["review", "blocked", "done", "cancelled"],
   review: ["in-progress", "done", "cancelled"],
-  blocked: ["todo", "in-progress", "cancelled"],
+  blocked: ["todo", "in-progress", "done", "cancelled"], // 修复：blocked 允许直接完成（解除阻塞即完成）
   done: [], // terminal
   cancelled: [], // terminal
 };
@@ -929,6 +929,64 @@ export async function deleteTask(taskId: string, actor?: string): Promise<boolea
     }
 
     return existed;
+  });
+}
+
+/**
+ * 强制重置任务状态（绕过状态机，管理员专用）
+ *
+ * 适用场景：
+ * - 任务被误标为 done/cancelled，需重新打开
+ * - 任务陷入 blocked 死锁，无法通过正常流转解除
+ * - 系统异常导致任务进入错误终态
+ *
+ * 与 updateTask 的区别：本函数跳过 validateStatusTransition 和 validateTransitionGuards，
+ * 直接覆盖状态。会清空 completedAt、重置 timeTracking.lastActivityAt。
+ */
+export async function forceResetTask(
+  taskId: string,
+  targetStatus: "todo" | "in-progress" | "blocked",
+  actor: string,
+  reason?: string,
+): Promise<Task | undefined> {
+  return _lock(async () => {
+    const tasks = loadTasks();
+    const task = tasks.get(taskId);
+    if (!task) {
+      return undefined;
+    }
+
+    const now = Date.now();
+    const existingTracking = task.timeTracking ?? { timeSpent: 0, lastActivityAt: now };
+
+    const resetTask: Task = {
+      ...task,
+      status: targetStatus,
+      updatedAt: now,
+      // 清除终态标记
+      completedAt: undefined,
+      // 刷新活跃度，防止调度器立即将其超时
+      timeTracking: {
+        ...existingTracking,
+        lastActivityAt: now,
+        startedAt: targetStatus === "in-progress" ? (existingTracking.startedAt ?? now) : existingTracking.startedAt,
+      },
+    };
+
+    withWriteTx((stmts) => {
+      stmts.upsertTask.run(taskToRow(resetTask));
+    });
+    tasks.set(taskId, resetTask);
+
+    // 审计日志
+    void logTaskUpdated(
+      taskId,
+      actor,
+      task as unknown as Record<string, unknown>,
+      { ...resetTask, _resetReason: reason ?? "force-reset" } as unknown as Record<string, unknown>,
+    );
+
+    return resetTask;
   });
 }
 

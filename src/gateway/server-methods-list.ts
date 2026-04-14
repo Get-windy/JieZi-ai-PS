@@ -242,6 +242,8 @@ const BASE_METHODS = [
   "task.dependency.add",
   "task.block",
   "task.ping",
+  "task.reset",
+  "task.progress_note.append",
   // Meetings Management
   "meeting.create",
   "meeting.update",
@@ -416,8 +418,14 @@ const BASE_METHODS = [
   "projects.save",
   "projects.updateWorkspace",
   "projects.updateProgress",
+  "projects.reactivate",
   "projects.completeSprint",
   "projects.startSprint",
+  "projects.objective.upsert",
+  "projects.objective.delete",
+  "projects.milestone.upsert",
+  "projects.milestone.delete",
+  "projects.delete",
   // Scenarios 自动化协作场景
   "scenarios.list",
   "scenarios.get",

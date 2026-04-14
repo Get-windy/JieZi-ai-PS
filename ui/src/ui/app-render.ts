@@ -395,6 +395,81 @@ async function loadTeamMonitor(state: AppViewState): Promise<void> {
 }
 
 /**
+ * 重置团队任务状态
+ */
+async function resetTeamTask(
+  state: AppViewState,
+  taskId: string,
+  targetStatus: "todo" | "in-progress",
+): Promise<void> {
+  state.teamMonitorResetingTaskId = taskId;
+  try {
+    await state.client!.request("task.reset", { taskId, targetStatus });
+    setTimeout(() => void loadTeamMonitor(state), 800);
+  } catch (err) {
+    alert(`重置失败：${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    state.teamMonitorResetingTaskId = null;
+  }
+}
+
+/**
+ * 提交编辑任务
+ */
+async function submitEditTeamTask(state: AppViewState): Promise<void> {
+  const form = state.teamMonitorEditDialogTask;
+  if (!form || !form.title.trim()) return;
+  state.teamMonitorEditSaving = true;
+  state.teamMonitorEditError = null;
+  try {
+    const dueDate = form.dueDate ? new Date(form.dueDate).getTime() : undefined;
+    await state.client!.request("task.update", {
+      taskId: form.taskId,
+      title: form.title.trim(),
+      status: form.status,
+      priority: form.priority,
+      dueDate: dueDate ?? null,
+    });
+    state.teamMonitorEditDialogTask = null;
+    setTimeout(() => void loadTeamMonitor(state), 800);
+  } catch (err) {
+    state.teamMonitorEditError = err instanceof Error ? err.message : String(err);
+  } finally {
+    state.teamMonitorEditSaving = false;
+  }
+}
+
+/**
+ * 删除团队任务
+ */
+async function deleteTeamTask(state: AppViewState, taskId: string): Promise<void> {
+  state.teamMonitorDeletingTaskId = taskId;
+  try {
+    await state.client!.request("task.delete", { taskId });
+    setTimeout(() => void loadTeamMonitor(state), 800);
+  } catch (err) {
+    alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    state.teamMonitorDeletingTaskId = null;
+  }
+}
+
+/**
+ * 取消团队任务（快捷状态变更）
+ */
+async function cancelTeamTask(state: AppViewState, taskId: string): Promise<void> {
+  state.teamMonitorCancelingTaskId = taskId;
+  try {
+    await state.client!.request("task.update", { taskId, status: "cancelled" });
+    setTimeout(() => void loadTeamMonitor(state), 800);
+  } catch (err) {
+    alert(`取消失败：${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    state.teamMonitorCancelingTaskId = null;
+  }
+}
+
+/**
  * 提交团队任务分配
  */
 async function submitTeamAssignTask(state: AppViewState): Promise<void> {
@@ -3526,6 +3601,11 @@ export function renderApp(state: AppViewState) {
                   projectCodeRoot: state.projectCodeRoot,
                   onCodeRootChange: (root) => {
                     state.projectCodeRoot = root;
+                    if (root.trim()) {
+                      localStorage.setItem("openclaw.projectCodeRoot", root);
+                    } else {
+                      localStorage.removeItem("openclaw.projectCodeRoot");
+                    }
                   },
                   projectStatusFilter: state.projectStatusFilter,
                   onStatusFilterChange: (filter) => {
@@ -3578,7 +3658,30 @@ export function renderApp(state: AppViewState) {
                     }
                     const proj = state.editingProject;
                     try {
-                      // 找到该项目绑定的群组列表
+                      // ① 保存项目基本信息（名称、描述、目录等）到 PROJECT_CONFIG.json
+                      await state.client!.request("projects.save", {
+                        projectId: proj.projectId,
+                        name: proj.name,
+                        description: proj.description ?? "",
+                        codeDir: proj.codeDir ?? "",
+                        docsDir: proj.docsDir ?? "",
+                      });
+
+                      // ② 如果工作空间路径发生变化，同步到所有绑定群组
+                      const originalProject = state.projectsList?.projects.find(
+                        (p) => p.projectId === proj.projectId,
+                      );
+                      if (
+                        proj.workspacePath &&
+                        proj.workspacePath !== originalProject?.workspacePath
+                      ) {
+                        await state.client!.request("projects.updateWorkspace", {
+                          projectId: proj.projectId,
+                          workspacePath: proj.workspacePath,
+                        });
+                      }
+
+                      // ③ 同步更新绑定群组的 metadata（codeDir）
                       const response = await state.client!.request("groups.list", {});
                       // oxlint-disable-next-line typescript/no-explicit-any
                       const groupsRaw = Array.isArray((response as any)?.groups)
@@ -3588,7 +3691,6 @@ export function renderApp(state: AppViewState) {
                       const boundGroups = groupsRaw.filter(
                         (g) => (g as Record<string, unknown>).projectId === proj.projectId,
                       );
-
                       for (const g of boundGroups) {
                         const gr = g as Record<string, unknown>;
                         const metaUpdate: Record<string, unknown> = {
@@ -3599,13 +3701,8 @@ export function renderApp(state: AppViewState) {
                           groupId: gr.id,
                           metadata: metaUpdate,
                         });
-                        if (proj.workspacePath && proj.workspacePath !== gr.workspacePath) {
-                          await state.client!.request("projects.updateWorkspace", {
-                            projectId: proj.projectId,
-                            workspacePath: proj.workspacePath,
-                          });
-                        }
                       }
+
                       await loadProjects(state, state.client!);
                       state.editingProject = null;
                     } catch (err) {
@@ -3903,6 +4000,117 @@ export function renderApp(state: AppViewState) {
                         alert(
                           `更换负责人失败：${err instanceof Error ? err.message : String(err)}`,
                         );
+                      }
+                    })();
+                  },
+                  // 删除项目相关
+                  deleteProjectConfirm: state.deleteProjectConfirm,
+                  onShowDeleteProjectConfirm: (projectId, projectName) => {
+                    state.deleteProjectConfirm = {
+                      projectId,
+                      projectName,
+                      deleteWorkspace: false,
+                      deleteTasks: false,
+                      deleteGroups: false,
+                    };
+                  },
+                  onHideDeleteProjectConfirm: () => {
+                    state.deleteProjectConfirm = null;
+                  },
+                  onDeleteProjectOptionChange: (key, value) => {
+                    if (state.deleteProjectConfirm) {
+                      state.deleteProjectConfirm = { ...state.deleteProjectConfirm, [key]: value };
+                    }
+                  },
+                  onDeleteProject: (projectId, opts) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      try {
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const result = (await state.client.request("projects.delete", { projectId, ...opts })) as any;
+                        state.selectedProjectId = null;
+                        state.deleteProjectConfirm = null;
+                        await loadProjects(state, state.client);
+                        const msg = result?.message;
+                        alert(msg ? `删除完成：\n${msg}` : `项目 "${projectId}" 已删除。`);
+                      } catch (err) {
+                        alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  // 验收标准（DoD）管理
+                  onMarkCriterionSatisfied: (projectId, criterionId, satisfied, evidence) => {
+                    void (async () => {
+                      if (!state.client) return;
+                      try {
+                        await state.client.request("projects.markCriterionSatisfied", { projectId, criterionId, satisfied, evidence });
+                        const { loadProjects } = await import("./controllers/projects.js");
+                        await loadProjects(state, state.client);
+                      } catch (err) {
+                        alert(`更新验收标准失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  onHumanSignOff: (projectId, signOffBy, note) => {
+                    void (async () => {
+                      if (!state.client) return;
+                      try {
+                        await state.client.request("projects.humanSignOff", { projectId, signOffBy, note });
+                        const { loadProjects } = await import("./controllers/projects.js");
+                        await loadProjects(state, state.client);
+                      } catch (err) {
+                        alert(`签收失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  // 目标与里程碑管理
+                  onUpsertObjective: (projectId, objective) => {
+                    void (async () => {
+                      if (!state.client) return;
+                      try {
+                        await state.client.request("projects.objective.upsert", { projectId, ...objective });
+                        const { loadProjects } = await import("./controllers/projects.js");
+                        await loadProjects(state, state.client);
+                      } catch (err) {
+                        alert(`保存目标失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  onDeleteObjective: (projectId, objectiveId) => {
+                    void (async () => {
+                      if (!state.client) return;
+                      try {
+                        await state.client.request("projects.objective.delete", { projectId, objectiveId });
+                        const { loadProjects } = await import("./controllers/projects.js");
+                        await loadProjects(state, state.client);
+                      } catch (err) {
+                        alert(`删除目标失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  onUpsertMilestone: (projectId, milestone) => {
+                    void (async () => {
+                      if (!state.client) return;
+                      try {
+                        await state.client.request("projects.milestone.upsert", { projectId, ...milestone });
+                        const { loadProjects } = await import("./controllers/projects.js");
+                        await loadProjects(state, state.client);
+                      } catch (err) {
+                        alert(`保存里程碑失败：${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
+                  onDeleteMilestone: (projectId, milestoneId) => {
+                    void (async () => {
+                      if (!state.client) return;
+                      try {
+                        await state.client.request("projects.milestone.delete", { projectId, milestoneId });
+                        const { loadProjects } = await import("./controllers/projects.js");
+                        await loadProjects(state, state.client);
+                      } catch (err) {
+                        alert(`删除里程碑失败：${err instanceof Error ? err.message : String(err)}`);
                       }
                     })();
                   },
@@ -4220,6 +4428,52 @@ export function renderApp(state: AppViewState) {
                   },
                   onViewTaskDetail: (taskId) => {
                     console.log("[team-monitor] View task detail:", taskId);
+                  },
+                  onResetTask: (taskId, targetStatus) => {
+                    void resetTeamTask(state, taskId, targetStatus);
+                  },
+                  resetingTaskId: state.teamMonitorResetingTaskId,
+                  editDialogTask: state.teamMonitorEditDialogTask,
+                  editSaving: state.teamMonitorEditSaving,
+                  editError: state.teamMonitorEditError,
+                  onOpenEditDialog: (task) => {
+                    // 将 dueDate timestamp 转为 datetime-local 字符串
+                    let dueDateStr = "";
+                    if (task.dueDate) {
+                      const d = new Date(task.dueDate);
+                      dueDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+                    }
+                    state.teamMonitorEditDialogTask = {
+                      taskId: task.id,
+                      title: task.title,
+                      priority: task.priority,
+                      status: task.status,
+                      dueDate: dueDateStr,
+                    };
+                    state.teamMonitorEditError = null;
+                  },
+                  onCloseEditDialog: () => {
+                    state.teamMonitorEditDialogTask = null;
+                    state.teamMonitorEditError = null;
+                  },
+                  onEditFormChange: (field, value) => {
+                    if (state.teamMonitorEditDialogTask) {
+                      state.teamMonitorEditDialogTask = {
+                        ...state.teamMonitorEditDialogTask,
+                        [field]: value,
+                      };
+                    }
+                  },
+                  onSubmitEdit: () => {
+                    void submitEditTeamTask(state);
+                  },
+                  deletingTaskId: state.teamMonitorDeletingTaskId,
+                  onDeleteTask: (taskId) => {
+                    void deleteTeamTask(state, taskId);
+                  },
+                  cancelingTaskId: state.teamMonitorCancelingTaskId,
+                  onCancelTask: (taskId) => {
+                    void cancelTeamTask(state, taskId);
                   },
                 },
               })

@@ -270,6 +270,8 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "task.dependency.add",
     "task.block",
     "task.ping",
+    "task.reset",
+    "task.progress_note.append",
     "permission_mgmt.grant",
     "permission_mgmt.revoke",
     "permission_mgmt.delegate",
@@ -331,12 +333,25 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "organization.relation.delete",
     // 项目管理：写操作
     "projects.create",
-    "projects.get",
     "projects.updateWorkspace",
     "projects.updateProgress",
     "projects.completeSprint",
     "projects.startSprint",
     "projects.save",
+    "projects.delete",
+    // 项目目标（OKR）：写操作
+    "projects.objective.upsert",
+    "projects.objective.delete",
+    // 项目里程碑：写操作
+    "projects.milestone.upsert",
+    "projects.milestone.delete",
+    // 项目 Sprint：写操作
+    "projects.sprint.upsert",
+    "projects.sprint.addTask",
+    // 项目 DoD 阔关与重激活：写操作
+    "projects.markCriterionSatisfied",
+    "projects.reactivate",
+    "projects.humanSignOff",
     // 项目 SHARP 质量门控：写操作
     // 项目跨团队协作与交付：写操作
     "project.team.assign",

@@ -113,6 +113,19 @@ const AgentAssignTaskToolSchema = Type.Object({
   teamId: Type.Optional(Type.String({ maxLength: 128 })),
   /** 所属组织 ID（可选） */
   organizationId: Type.Optional(Type.String({ maxLength: 128 })),
+  // ── 结构化任务背景包（MetaGPT 角色交接模式）─────────────────────────────
+  /** 关联的战略目标 ID（OKR Objective）。
+   * 填写后系统会自动查询该目标详情并附加到任务背景包中，让被分配者清楚任务服务于哪个目标。 */
+  objectiveId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 关联的里程碑 ID。填写后系统自动将里程碑信息注入任务背景包。 */
+  milestoneId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 关联的 Sprint ID。填写后被分配者可立即了解当前迭代上下文。 */
+  sprintId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 验收标准列表（可选，明确定义任务完成的标准）。
+   * 每条标准应具体可验证，如 "单元测试覆盖率 >= 80%"、"接口返回 200 状态码" 等。 */
+  acceptanceCriteria: Type.Optional(Type.Array(Type.String())),
+  /** 输出物格式说明（可选，描述期望的交付物形式，如 "PR链接 + 测试报告"）*/
+  deliverableFormat: Type.Optional(Type.String({ maxLength: 500 })),
 });
 
 /**
@@ -357,6 +370,11 @@ export function createAgentCapabilitiesTool(opts?: {
               supportedChannels: response.supportedChannels || [],
             },
           },
+          // NOTE: skills:[] 表示该 agent 不限制技能（接受所有类型任务），而非“没有任何能力”。
+          // 请勿因此拒绝分配任务。只有 limitations 字段不为空时才表示真正的能力限制。
+          skillsNote: (response.skills || []).length === 0
+            ? "skills:[] means no skill restriction — this agent accepts ALL task types. Do NOT refuse task assignment based on empty skills."
+            : undefined,
         });
       } catch (error) {
         return jsonResult({
@@ -382,7 +400,14 @@ export function createAgentAssignTaskTool(opts?: {
       "Assign a task to another agent. The task will be queued and executed by the target agent. Returns task ID for tracking. Requires task assignment permission." +
       " IMPORTANT: If projectId is provided, targetAgentId MUST be a member of that project's group. " +
       "You cannot assign a project task to an agent who is not in the project. " +
-      "If rejected, first add the agent to the project group, then assign the task.",
+      "If rejected, first add the agent to the project group, then assign the task." +
+      " SKILL NOTE: skills:[] in agent capabilities means NO skill restriction (accepts ALL task types). Do NOT block assignment due to empty skills list." +
+      "\n\n\u3010\u7ed3\u6784\u5316\u4efb\u52a1\u80cc\u666f\u5305\u3011\u5f3a\u70c8\u5efa\u8bae\u586b\u5199\u4ee5\u4e0b\u5b57\u6bb5\uff0c\u8ba9\u88ab\u5206\u914d\u8005\u65e0\u9700\u989d\u5916\u67e5\u8be2\u5c31\u80fd\u7acb\u5373\u5f00\u5de5\uff1a" +
+      "\n  - objectiveId: \u5173\u8054\u7684\u6218\u7565\u76ee\u6807 ID\uff0c\u7cfb\u7edf\u81ea\u52a8\u67e5\u8be2\u76ee\u6807\u8be6\u60c5\u5e76\u9644\u52a0\u5230\u80cc\u666f\u5305" +
+      "\n  - sprintId: \u5f53\u524d Sprint ID\uff0c\u88ab\u5206\u914d\u8005\u7acb\u5373\u4e86\u89e3\u8fed\u4ee3\u4e0a\u4e0b\u6587" +
+      "\n  - milestoneId: \u5173\u8054\u91cc\u7a0b\u7891 ID" +
+      "\n  - acceptanceCriteria: \u9a8c\u6536\u6807\u51c6\u5217\u8868\uff08\u5177\u4f53\u53ef\u9a8c\u8bc1\uff0c\u5982 [\"\u5355\u5143\u6d4b\u8bd5\u8986\u76d6\u7387>=80%\", \"\u63a5\u53e3\u8fd4\u56de200\"]\uff09" +
+      "\n  - deliverableFormat: \u671f\u671b\u7684\u4ea4\u4ed8\u7269\u5f62\u5f0f\uff08\u5982 \"PR\u94fe\u63a5+\u6d4b\u8bd5\u62a5\u544a\")\uff09",
     parameters: AgentAssignTaskToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -395,7 +420,99 @@ export function createAgentAssignTaskTool(opts?: {
       const projectId = readStringParam(params, "projectId");
       const teamId = readStringParam(params, "teamId");
       const organizationId = readStringParam(params, "organizationId");
+      // 结构化任务背景包字段
+      const objectiveId = readStringParam(params, "objectiveId");
+      const milestoneId = readStringParam(params, "milestoneId");
+      const sprintId = readStringParam(params, "sprintId");
+      const acceptanceCriteria = Array.isArray(params.acceptanceCriteria)
+        ? (params.acceptanceCriteria as unknown[]).map(String)
+        : undefined;
+      const deliverableFormat = readStringParam(params, "deliverableFormat");
       const gatewayOpts = readGatewayCallOptions(params);
+
+      // ── 自动构建任务背景包（Task Context Packet）──────────────────────────
+      // 参考 MetaGPT 角色交接模式：结构化传递目标/Sprint/里程碑上下文，
+      // 让被分配者无需额外查询就能理解任务的战略位置。
+      let taskContextPacket: Record<string, unknown> | undefined;
+      if (projectId && (objectiveId || sprintId || milestoneId)) {
+        try {
+          const { buildActiveObjectivesSummary } = await import(
+            "../../utils/project-context.js"
+          );
+          const objSummary = buildActiveObjectivesSummary(projectId);
+          const contextParts: string[] = [];
+
+          // 注入目标信息
+          if (objectiveId && objSummary) {
+            const allObjs = [
+              ...objSummary.shortTermObjectives,
+              ...objSummary.mediumTermObjectives,
+              ...objSummary.longTermObjectives,
+            ];
+            const obj = allObjs.find((o) => o.id === objectiveId);
+            if (obj) {
+              contextParts.push(
+                `【战略目标】${obj.title}${
+                  obj.description ? `：${obj.description}` : ""
+                }（状态：${obj.status}）`,
+              );
+            }
+          }
+
+          // 注入 Sprint 信息
+          if (sprintId && objSummary?.activeSprint?.id === sprintId) {
+            const s = objSummary.activeSprint;
+            const endStr = s.endDate
+              ? ` | 截止 ${new Date(s.endDate).toLocaleDateString("zh-CN")}`
+              : "";
+            contextParts.push(
+              `【当前 Sprint】${s.title}${endStr}${s.goal ? ` — 目标：${s.goal}` : ""}（进度：${s.progress}%，${s.doneCount}/${s.taskCount} 任务完成）`,
+            );
+          }
+
+          // 注入里程碑信息
+          if (milestoneId && objSummary?.nextMilestone?.id === milestoneId) {
+            const m = objSummary.nextMilestone;
+            const dateStr = m.targetDate
+              ? ` — 预计 ${new Date(m.targetDate).toLocaleDateString("zh-CN")}`
+              : "";
+            contextParts.push(`【关联里程碑】${m.title}${dateStr}`);
+          }
+
+          // 注入当前阶段允许的工作类型
+          if (objSummary) {
+            contextParts.push(
+              `【项目阶段】${objSummary.currentPhaseLabel}｜本阶段工作方向：${
+                objSummary.allowedWorkTypes.length > 0
+                  ? objSummary.allowedWorkTypes.join("、")
+                  : "（暂停状态，请确认分配合理性）"
+              }`,
+            );
+          }
+
+          if (contextParts.length > 0) {
+            taskContextPacket = {
+              objectiveId: objectiveId || undefined,
+              sprintId: sprintId || undefined,
+              milestoneId: milestoneId || undefined,
+              acceptanceCriteria: acceptanceCriteria || undefined,
+              deliverableFormat: deliverableFormat || undefined,
+              contextSummary: contextParts.join("\n"),
+            };
+          }
+        } catch {
+          // 背景包构建失败不阻止任务分配
+        }
+      } else if (acceptanceCriteria || deliverableFormat) {
+        // 即使没有项目ID，也保存验收标准和输出物格式
+        taskContextPacket = {
+          objectiveId: objectiveId || undefined,
+          sprintId: sprintId || undefined,
+          milestoneId: milestoneId || undefined,
+          acceptanceCriteria: acceptanceCriteria || undefined,
+          deliverableFormat: deliverableFormat || undefined,
+        };
+      }
 
       try {
         // 生成任务ID
@@ -410,7 +527,9 @@ export function createAgentAssignTaskTool(opts?: {
           task,
           priority,
           deadline,
-          context,
+          context: taskContextPacket
+            ? { ...(context ?? {}), taskContextPacket }
+            : context,
           projectId,
           teamId: teamId || undefined,
           organizationId: organizationId || undefined,
@@ -434,6 +553,8 @@ export function createAgentAssignTaskTool(opts?: {
             assignedBy: opts?.currentAgentId,
             assignedAt: Date.now(),
           },
+          // 结构化任务背景包：被分配者可立即了解任务的战略位置
+          ...(taskContextPacket ? { taskContextPacket } : {}),
         });
       } catch (error) {
         return jsonResult({
@@ -571,7 +692,9 @@ export function createTaskReportToSupervisorTool(opts?: {
     label: "Task Report to Supervisor",
     name: "task_report_to_supervisor",
     description:
-      "Report task status back to the supervisor agent. MUST be called in the following situations: " +
+      "[MANDATORY] Report task status back to the supervisor agent. " +
+      "THIS TOOL MUST BE CALLED when you finish ANY assigned task. Failing to call it is a critical error — the system cannot detect completion and your supervisor will never know you are done. " +
+      "MUST be called in ALL of the following situations: " +
       '(1) Task completed successfully — use status="done" with a result summary. ' +
       "    BEFORE reporting done, you MUST complete all four steps in order: " +
       "    Step A — Run quality checks (typecheck / lint / test); do NOT report done if checks fail. " +
@@ -580,7 +703,8 @@ export function createTaskReportToSupervisorTool(opts?: {
       "    Step D — If this task involved 5+ tool calls and produced a reusable workflow, call skill_manage with action=create (or action=promote from the progress note) to save a SKILL.md document. Skip if the task was purely one-off with no generalizable value. " +
       '(2) Task is blocked and cannot proceed — use status="blocked" and describe the blocker in errorMessage so the supervisor can coordinate a solution. ' +
       '(3) Task must be abandoned — use status="cancelled" with a reason. ' +
-      "DO NOT silently stop working on a task. Always report back so the supervisor knows the current situation and can take action.",
+      "DO NOT silently stop working on a task. NEVER finish your work without calling this tool. " +
+      "If you skip this call, your supervisor will not receive your results, will not be able to assign the next task, and the pipeline will stall. Always report back.",
     parameters: TaskReportToSupervisorToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;

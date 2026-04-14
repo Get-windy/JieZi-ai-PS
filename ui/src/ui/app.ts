@@ -389,10 +389,18 @@ export class OpenClawApp extends LitElement {
   @state() creatingProject = false;
   @state() editingProject: import("./views/projects.ts").ProjectInfo | null = null;
   @state() upgradingGroupToProject = false;
-  /** 项目代码根目录（用户在项目管理页面顶部设置，常驻内存） */
-  @state() projectCodeRoot = "";
+  /** 项目代码根目录（用户在项目管理页面顶部设置，持久化到 localStorage） */
+  @state() projectCodeRoot = localStorage.getItem("openclaw.projectCodeRoot") ?? "";
   /** 项目列表状态筛选（默认显示进行中） */
   @state() projectStatusFilter: import("./views/projects.ts").ProjectStatusFilter = "active";
+  /** 删除项目确认 modal 状态 */
+  @state() deleteProjectConfirm: {
+    projectId: string;
+    projectName: string;
+    deleteWorkspace: boolean;
+    deleteTasks: boolean;
+    deleteGroups: boolean;
+  } | null = null;
   // 项目跨团队协作 Handoff 状态
   @state() projectTeamRelations: import("./views/projects.ts").ProjectTeamRelation[] = [];
   @state() projectTeamRelationsLoading = false;
@@ -636,6 +644,12 @@ export class OpenClawApp extends LitElement {
     task: "",
     priority: "medium",
   };
+  @state() teamMonitorResetingTaskId: string | null = null;
+  @state() teamMonitorEditDialogTask: import("./views/team-monitor.js").EditTaskForm | null = null;
+  @state() teamMonitorEditSaving = false;
+  @state() teamMonitorEditError: string | null = null;
+  @state() teamMonitorDeletingTaskId: string | null = null;
+  @state() teamMonitorCancelingTaskId: string | null = null;
 
   @state() queueLoading = false;
   @state() queueError: string | null = null;

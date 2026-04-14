@@ -44,21 +44,30 @@ export type AgentsPanel =
 
 /**
  * Phase 5: 模型账号配置类型（Phase 1 智能路由）
+ * 对齐后端 AgentModelSmartRoutingConfig
  */
 export type ModelAccountsConfig = {
   accounts: string[];
   routingMode: "manual" | "smart" | "roundRobin";
   smartRouting?: {
-    enableCostOptimization?: boolean;
-    complexityWeight?: number;
+    /** 基础能力匹配权重（上下文、工具、视觉、推理等级）默认 20 */
     capabilityWeight?: number;
-    costWeight?: number;
-    speedWeight?: number;
-    complexityThresholds?: {
-      simple: number;
-      medium: number;
-      complex: number;
-    };
+    /** 专业领域匹配权重默认 12 */
+    specializationWeight?: number;
+    /** 模态匹配权重默认 8 */
+    modalityWeight?: number;
+    /** 综合 Arena Elo 权重默认 15 */
+    eloWeight?: number;
+    /** 编程专项 Elo 权重（lmarena Coding 分类）默认 11 */
+    codingEloWeight?: number;
+    /** 数学/推理专项 Elo 权重默认 11 */
+    reasoningEloWeight?: number;
+    /** 视觉专项 Elo 权重默认 8 */
+    visionEloWeight?: number;
+    /** 创意写作专项 Elo 权重默认 8 */
+    creativeEloWeight?: number;
+    /** 指令跟随专项 Elo 权重默认 7 */
+    instructionEloWeight?: number;
   };
   defaultAccountId?: string;
   enableSessionPinning?: boolean;
@@ -1087,23 +1096,67 @@ function renderAgentModelAccounts(params: {
                 config.routingMode === "smart" && config.smartRouting
                   ? html`
                 <div style="margin-top: 16px; padding: 16px; border-radius: 6px; background: var(--bg-1);">
-                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
-                    <div>
-                      <div class="muted" style="font-size: 0.875rem;">复杂度权重</div>
-                      <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.complexityWeight || 0}%</div>
+                  <div class="muted" style="font-size: 0.8125rem; margin-bottom: 12px;">
+                    各维度权重基于 <a href="https://lmarena.ai/leaderboard" target="_blank" style="color: var(--color-accent);">lmarena.ai</a> 分类 Elo 体系，全局动态加成总和应接近 100
+                  </div>
+                  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                    <!-- 基础能力 -->
+                    <div style="padding: 10px 12px; border-radius: 4px; background: var(--bg-2);">
+                      <div class="muted" style="font-size: 0.75rem;">基础能力</div>
+                      <div class="mono" style="margin-top: 2px; font-size: 1.125rem;">${config.smartRouting.capabilityWeight ?? 20}%</div>
+                      <div style="font-size: 0.7rem; color: var(--text-4); margin-top: 2px;">上下文窗口、工具、视觉、推理等级</div>
                     </div>
-                    <div>
-                      <div class="muted" style="font-size: 0.875rem;">能力权重</div>
-                      <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.capabilityWeight || 0}%</div>
+                    <!-- 专业领域 -->
+                    <div style="padding: 10px 12px; border-radius: 4px; background: var(--bg-2);">
+                      <div class="muted" style="font-size: 0.75rem;">专业领域</div>
+                      <div class="mono" style="margin-top: 2px; font-size: 1.125rem;">${config.smartRouting.specializationWeight ?? 12}%</div>
+                      <div style="font-size: 0.7rem; color: var(--text-4); margin-top: 2px;">任务领域匹配度</div>
                     </div>
-                    <div>
-                      <div class="muted" style="font-size: 0.875rem;">成本权重</div>
-                      <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.costWeight || 0}%</div>
+                    <!-- 模态匹配 -->
+                    <div style="padding: 10px 12px; border-radius: 4px; background: var(--bg-2);">
+                      <div class="muted" style="font-size: 0.75rem;">模态匹配</div>
+                      <div class="mono" style="margin-top: 2px; font-size: 1.125rem;">${config.smartRouting.modalityWeight ?? 8}%</div>
+                      <div style="font-size: 0.7rem; color: var(--text-4); margin-top: 2px;">文本 / 图片 / 代码</div>
                     </div>
-                    <div>
-                      <div class="muted" style="font-size: 0.875rem;">速度权重</div>
-                      <div class="mono" style="margin-top: 4px; font-size: 1.125rem;">${config.smartRouting.speedWeight || 0}%</div>
+                    <!-- 综合 Elo -->
+                    <div style="padding: 10px 12px; border-radius: 4px; background: var(--bg-2);">
+                      <div class="muted" style="font-size: 0.75rem;">综合 Elo</div>
+                      <div class="mono" style="margin-top: 2px; font-size: 1.125rem;">${config.smartRouting.eloWeight ?? 15}%</div>
+                      <div style="font-size: 0.7rem; color: var(--text-4); margin-top: 2px;">Arena 整体实力基线</div>
                     </div>
+                    <!-- 编程 Elo -->
+                    <div style="padding: 10px 12px; border-radius: 4px; background: var(--bg-2); border-left: 2px solid var(--color-info);">
+                      <div class="muted" style="font-size: 0.75rem;">💻 编程 Elo</div>
+                      <div class="mono" style="margin-top: 2px; font-size: 1.125rem;">${config.smartRouting.codingEloWeight ?? 11}%</div>
+                      <div style="font-size: 0.7rem; color: var(--text-4); margin-top: 2px;">lmarena Coding 分类</div>
+                    </div>
+                    <!-- 推理 Elo -->
+                    <div style="padding: 10px 12px; border-radius: 4px; background: var(--bg-2); border-left: 2px solid var(--color-warning);">
+                      <div class="muted" style="font-size: 0.75rem;">🧠 深度推理 Elo</div>
+                      <div class="mono" style="margin-top: 2px; font-size: 1.125rem;">${config.smartRouting.reasoningEloWeight ?? 11}%</div>
+                      <div style="font-size: 0.7rem; color: var(--text-4); margin-top: 2px;">lmarena Math / Hard Prompts</div>
+                    </div>
+                    <!-- 视觉 Elo -->
+                    <div style="padding: 10px 12px; border-radius: 4px; background: var(--bg-2); border-left: 2px solid #a78bfa;">
+                      <div class="muted" style="font-size: 0.75rem;">📷 视觉理解 Elo</div>
+                      <div class="mono" style="margin-top: 2px; font-size: 1.125rem;">${config.smartRouting.visionEloWeight ?? 8}%</div>
+                      <div style="font-size: 0.7rem; color: var(--text-4); margin-top: 2px;">lmarena Vision Arena</div>
+                    </div>
+                    <!-- 创意 Elo -->
+                    <div style="padding: 10px 12px; border-radius: 4px; background: var(--bg-2); border-left: 2px solid #f472b6;">
+                      <div class="muted" style="font-size: 0.75rem;">✍️ 创意写作 Elo</div>
+                      <div class="mono" style="margin-top: 2px; font-size: 1.125rem;">${config.smartRouting.creativeEloWeight ?? 8}%</div>
+                      <div style="font-size: 0.7rem; color: var(--text-4); margin-top: 2px;">lmarena Creative Writing</div>
+                    </div>
+                    <!-- 指令跟随 Elo -->
+                    <div style="padding: 10px 12px; border-radius: 4px; background: var(--bg-2); border-left: 2px solid #34d399;">
+                      <div class="muted" style="font-size: 0.75rem;">🎯 指令跟随 Elo</div>
+                      <div class="mono" style="margin-top: 2px; font-size: 1.125rem;">${config.smartRouting.instructionEloWeight ?? 7}%</div>
+                      <div style="font-size: 0.7rem; color: var(--text-4); margin-top: 2px;">lmarena Instruction Following</div>
+                    </div>
+                  </div>
+                  <div class="muted" style="font-size: 0.75rem; margin-top: 10px;">
+                    ⚡ 任务检测到编程/推理/视觉等领域时，对应 Elo 权重将自动加成（最高 2.5×），无需手动调节
                   </div>
                 </div>
               `

@@ -402,20 +402,29 @@ export function createTaskCreateTool(opts?: {
               | undefined;
             const projectStatus = projectData?.status as string | undefined;
 
-            // 检查范围已冻结或项目已完成
+            // 检查范围已冻结（completed 或 cancelled 状态自动触发）
             if (completionGate?.scopeFrozen === true) {
+              const reason = completionGate.scopeFrozenReason as string | undefined;
+              const isCancelled = reason === "cancelled" || projectStatus === "cancelled";
               return jsonResult({
                 success: false,
-                error: `🔒 [范围已冻结] 项目 "${project}" 的范围已冻结（原因：${typeof completionGate.scopeFrozenReason === "string" ? completionGate.scopeFrozenReason : "已完成"}）。禁止创建新任务。如需继续开发，请将项目状态改回 actived/development 并明确说明原因。`,
+                error: isCancelled
+                  ? `❌ [项目已取消] 项目 "${project}" 已取消，禁止创建新任务。` +
+                    `\n如判断为误操作，可调用 projects.reactivate(projectId="${project}") 解除冻结。`
+                  : `🔒 [范围已冻结] 项目 "${project}" 已设为 completed，范围已冻结。` +
+                    `\n\n▶ 如该冻结属于误判（例如：任务队列为空但项目实际未完成），请立即执行：` +
+                    `\n  方案A（推荐）：调用 projects.reactivate(projectId="${project}", reason="误判为完成，实际需继续迭代")，一键解除冻结` +
+                    `\n  方案B：调用 projects.updateProgress(projectId="${project}", status="development")，系统自动解除冻结` +
+                    `\n\n⚠️ 核心原则：任务全部完成 ≠ 项目完成。项目应根据进展持续安排新任务，直到 DoD 验收标准全部满足。`,
                 blockedReason: "scope_frozen",
                 projectId: project,
               });
             }
-            if (projectStatus === "completed" || projectStatus === "cancelled") {
+            if (projectStatus === "cancelled") {
               return jsonResult({
                 success: false,
-                error: `❌ [项目已关闭] 项目 "${project}" 当前状态为 "${projectStatus}"，不允许创建新任务。`,
-                blockedReason: "project_closed",
+                error: `❌ [项目已取消] 项目 "${project}" 已取消，不允许创建新任务。`,
+                blockedReason: "project_cancelled",
                 projectId: project,
               });
             }
@@ -424,6 +433,47 @@ export function createTaskCreateTool(opts?: {
           }
         }
 
+
+        // ── Phase Gate 检查 + 目标对齐提示 ──
+        if (scope === "project" && project) {
+          try {
+            const { buildActiveObjectivesSummary, checkPhaseGate } = await import(
+              "../../utils/project-context.js"
+            );
+            // Phase Gate：检查当前阶段是否允许该任务类型
+            if (type) {
+              const projectCtxForGate = await callGatewayTool("projects.get", gatewayOpts, {
+                projectId: project,
+              }).catch(() => null);
+              const projectStatus = (projectCtxForGate as Record<string, unknown> | null)?.status as string | undefined;
+              const gateResult = checkPhaseGate(
+                projectStatus as import("../../utils/project-context.js").ProjectStatus | undefined,
+                type,
+              );
+              if (gateResult.blocked) {
+                return jsonResult({ success: false, error: gateResult.message, blockedReason: "phase_gate", projectId: project });
+              }
+              // 警告：继续执行但附加提示
+              if (gateResult.message) {
+                // 将警告附到后续返回中（通过 _phaseGateWarning 临时变量）
+                (params as Record<string, unknown>)._phaseGateWarning = gateResult.message;
+              }
+            }
+            // 目标对齐提示：如果项目有活跃目标但任务未关联 objectiveId，发出建议
+            const objectiveId = (params as Record<string, unknown>).objectiveId as string | undefined;
+            if (!objectiveId) {
+              const summary = buildActiveObjectivesSummary(project);
+              if (summary && (summary.shortTermObjectives.length > 0 || summary.mediumTermObjectives.length > 0)) {
+                const activeObjs = [...summary.shortTermObjectives, ...summary.mediumTermObjectives];
+                (params as Record<string, unknown>)._objectiveAlignmentHint =
+                  `提示：项目有 ${activeObjs.length} 个活跃目标（${activeObjs.map((o) => `"${o.title}"`).join("、")}）。` +
+                  `建议在任务描述中说明此任务服务于哪个目标，或通过 objectiveId 字段关联。`;
+              }
+            }
+          } catch {
+            // 目标对齐检查失败不阻止任务创建
+          }
+        }
         // 生成唯一任务ID
         const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -490,6 +540,8 @@ export function createTaskCreateTool(opts?: {
             blockedBy && blockedBy.length > 0
               ? `此任务正在等待 ${blockedBy.length} 个前置任务完成`
               : null,
+            (params as Record<string, unknown>)._phaseGateWarning as string | null ?? null,
+            (params as Record<string, unknown>)._objectiveAlignmentHint as string | null ?? null,
           ].filter(Boolean),
         });
       } catch (error) {
@@ -1059,6 +1111,79 @@ export function createTaskPingActivityTool(opts?: { currentAgentId?: string }): 
         return jsonResult({
           success: false,
           error: `Failed to ping task activity: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        });
+      }
+    },
+  };
+}
+
+/**
+ * task_reset - 强制重置任务状态（绕过状态机）
+ *
+ * 适用场景：
+ * - 任务被误标为 done/cancelled，需重新打开
+ * - 任务陷入 blocked 死锁，无法通过正常流转解除
+ * - 系统异常导致任务进入错误状态
+ */
+export function createTaskResetTool(opts?: { currentAgentId?: string }): AnyAgentTool {
+  return {
+    label: "Task Reset",
+    name: "task_reset",
+    description:
+      "Force-reset a task to a non-terminal status, bypassing the state machine. " +
+      "USE THIS WHEN: a task is stuck in done/cancelled by mistake, blocked in a deadlock, " +
+      "or entered an incorrect terminal state due to a system error. " +
+      "This is an administrative action — it skips all transition guards. " +
+      "Target statuses: todo (default), in-progress, blocked.",
+    parameters: Type.Object({
+      taskId: Type.String({
+        minLength: 1,
+        description: "[REQUIRED] The task ID to reset.",
+      }),
+      targetStatus: Type.Optional(
+        Type.Union([
+          Type.Literal("todo"),
+          Type.Literal("in-progress"),
+          Type.Literal("blocked"),
+        ], {
+          description: "Target status after reset. Defaults to 'todo'.",
+        }),
+      ),
+      reason: Type.Optional(
+        Type.String({
+          description: "Reason for the forced reset (for audit log).",
+        }),
+      ),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const taskId = readStringParam(params, "taskId", { required: true });
+      const targetStatus = (readStringParam(params, "targetStatus") ?? "todo") as
+        | "todo"
+        | "in-progress"
+        | "blocked";
+      const reason = readStringParam(params, "reason");
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        const result = await callGatewayTool("task.reset", gatewayOpts, {
+          taskId,
+          targetStatus,
+          reason: reason ?? "通过 task_reset 工具手动重置",
+          actor: opts?.currentAgentId ?? "system",
+        });
+
+        return jsonResult({
+          success: true,
+          message: `Task ${taskId} reset from "${(result as Record<string, unknown>)?.previousStatus}" to "${targetStatus}".`,
+          ...((result as Record<string, unknown>) ?? {}),
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to reset task: ${
             error instanceof Error ? error.message : String(error)
           }`,
         });

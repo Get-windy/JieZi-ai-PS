@@ -1,6 +1,6 @@
 {
   "name": "openclaw",
-  "version": "2026.4.11",
+  "version": "2026.4.11-beta.1",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
   "homepage": "https://github.com/openclaw/openclaw#readme",
@@ -1296,6 +1296,10 @@
     "./plugin-sdk/channel-inbound-roots": {
       "types": "./dist/plugin-sdk/channel-inbound-roots.d.ts",
       "default": "./dist/plugin-sdk/channel-inbound-roots.js"
+    },
+    "./plugin-sdk/proxy-capture": {
+      "types": "./dist/plugin-sdk/proxy-capture.d.ts",
+      "default": "./dist/plugin-sdk/proxy-capture.js"
     }
   },
   "scripts": {
@@ -1313,7 +1317,7 @@
     "android:test:integration": "OPENCLAW_LIVE_TEST=1 OPENCLAW_LIVE_ANDROID_NODE=1 node scripts/run-vitest.mjs run --config vitest.live.config.ts src/gateway/android-node.capabilities.live.test.ts",
     "android:test:third-party": "cd apps/android && ./gradlew :app:testThirdPartyDebugUnitTest",
     "audit:seams": "node scripts/audit-seams.mjs",
-    "build": "pnpm canvas:a2ui:bundle && node scripts/sync-plugin-sdk-exports.mjs && node node_modules/tsdown/dist/run.mjs && pnpm build:plugin-sdk:dts && node --import tsx scripts/write-plugin-sdk-entry-dts.ts && node --import tsx scripts/canvas-a2ui-copy.ts && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/copy-export-html-templates.ts && node --import tsx scripts/write-build-info.ts && node --import tsx scripts/write-cli-compat.ts && node --import tsx scripts/copy-plugin-sdk-root-alias.ts",
+    "build": "node scripts/prebuild-sync-version.mjs && pnpm canvas:a2ui:bundle && node scripts/sync-plugin-sdk-exports.mjs && node node_modules/tsdown/dist/run.mjs && pnpm build:plugin-sdk:dts && node --import tsx scripts/write-plugin-sdk-entry-dts.ts && node --import tsx scripts/canvas-a2ui-copy.ts && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/copy-export-html-templates.ts && node --import tsx scripts/write-build-info.ts && node --import tsx scripts/write-cli-compat.ts && node --import tsx scripts/copy-plugin-sdk-root-alias.ts",
     "build:docker": "node scripts/tsdown-build.mjs && node scripts/runtime-postbuild.mjs && node scripts/build-stamp.mjs && node --import tsx scripts/canvas-a2ui-copy.ts && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/copy-export-html-templates.ts && node --import tsx scripts/write-build-info.ts && node --experimental-strip-types scripts/write-cli-startup-metadata.ts && node --import tsx scripts/write-cli-compat.ts",
     "build:plugin-sdk:dts": "tsc -p tsconfig.plugin-sdk.dts.json || node -e \"process.exit(0)\"",
     "build:strict-smoke": "pnpm canvas:a2ui:bundle && node scripts/tsdown-build.mjs && node scripts/runtime-postbuild.mjs && node scripts/build-stamp.mjs && pnpm build:plugin-sdk:dts && node --import tsx scripts/write-plugin-sdk-entry-dts.ts && node scripts/check-plugin-sdk-exports.mjs",
@@ -1543,6 +1547,25 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "0.18.0",
+    "@aws/bedrock-token-generator": "^1.1.0",
+    "@buape/carbon": "0.15.0",
+    "@google/genai": "^1.49.0",
+    "@grammyjs/runner": "^2.0.3",
+    "@grammyjs/transformer-throttler": "^1.2.1",
+    "@lancedb/lancedb": "^0.27.2",
+    "@larksuiteoapi/node-sdk": "^1.60.0",
+    "@slack/bolt": "^4.7.0",
+    "@slack/web-api": "^7.15.0",
+    "discord-api-types": "^0.38.45",
+    "google-auth-library": "^10.6.2",
+    "grammy": "^1.42.0",
+    "https-proxy-agent": "^9.0.0",
+    "jimp": "^1.6.1",
+    "mpg123-decoder": "^1.0.3",
+    "nostr-tools": "^2.23.3",
+    "openai": "^6.34.0",
+    "opusscript": "^0.1.1",
+    "silk-wasm": "^3.7.1",
     "@anthropic-ai/vertex-sdk": "^0.14.4",
     "@aws-sdk/client-bedrock": "3.1024.0",
     "@aws-sdk/client-bedrock-runtime": "3.1024.0",
