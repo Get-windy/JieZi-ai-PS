@@ -16,6 +16,8 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { loadConfig } from "../../upstream/src/config/config.js";
+import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import { archiveMemoryOverflow } from "./file-tools-secure.js";
 
 // ============================================================================
@@ -348,10 +350,18 @@ export function runWorkspaceHygiene(groupsRoot?: string): HygieneReport {
       continue;
     }
 
-    // 解析实际工作空间路径
-    const agentWorkspaceDir = agent.workspace
-      ? agent.workspace.replace(/\\\\/g, "\\")
-      : path.join(os.homedir(), ".openclaw", `workspace-${agent.id}`);
+    // 解析实际工作空间路径：优先用 agent.workspace 配置，否则用 resolveAgentWorkspaceDir
+    let agentWorkspaceDir: string;
+    if (agent.workspace) {
+      agentWorkspaceDir = agent.workspace.replace(/\\\\/g, "\\");
+    } else {
+      try {
+        const cfg = loadConfig();
+        agentWorkspaceDir = resolveAgentWorkspaceDir(cfg, agent.id);
+      } catch {
+        agentWorkspaceDir = path.join(os.homedir(), ".openclaw", `workspace-${agent.id}`);
+      }
+    }
 
     if (!fs.existsSync(agentWorkspaceDir)) {
       // 工作空间目录不存在时只记录 info，不报 error（可能是新 agent 还未初始化）

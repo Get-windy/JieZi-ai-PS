@@ -191,6 +191,11 @@ export function renderMessageGroup(
     contextWindow?: number | null;
     onQuote?: (text: string) => void;
     onDelete?: () => void;
+    /** Edit & Regenerate（参考 Helix AI Interaction.tsx）
+     * 仅对 user 角色气泡生效，点击编辑按钮后进入行内编辑模式
+     * text: 用户编辑后的新内容
+     */
+    onEditMessage?: (text: string) => void;
   },
 ) {
   const normalizedRole = normalizeRoleForGrouping(group.role);
@@ -319,6 +324,11 @@ export function renderMessageGroup(
           <span class="chat-group-timestamp">${timestamp}</span>
           ${renderMessageMeta(meta)}
           ${normalizedRole === "assistant" && isTtsSupported() ? renderTtsButton(group) : nothing}
+          ${
+            normalizedRole === "user" && opts.onEditMessage
+              ? renderEditButton(extractGroupText(group), opts.onEditMessage)
+              : nothing
+          }
           ${
             opts.onDelete
               ? renderDeleteButton(opts.onDelete, normalizedRole === "user" ? "left" : "right")
@@ -665,13 +675,123 @@ function renderTtsButton(group: MessageGroup) {
   `;
 }
 
+/**
+ * Edit & Regenerate 按钮（参考 Helix AI Interaction.tsx）
+ * 点击后在消息气泡内展开行内编辑模式，支持确认/取消
+ */
+function renderEditButton(originalText: string, onEdit: (text: string) => void) {
+  const handleEdit = (e: Event) => {
+    e.stopPropagation();
+    const btn = e.currentTarget as HTMLElement;
+    const footer = btn.closest(".chat-group-footer");
+    const groupMessages = btn.closest(".chat-group-messages");
+    if (!footer || !groupMessages) return;
+
+    // 已经在编辑模式则关闭
+    const existing = groupMessages.querySelector(".chat-edit-inline");
+    if (existing) {
+      existing.remove();
+      return;
+    }
+
+    // 创建行内编辑器
+    const editWrap = document.createElement("div");
+    editWrap.className = "chat-edit-inline";
+
+    const textarea = document.createElement("textarea");
+    textarea.className = "chat-edit-textarea";
+    textarea.value = originalText;
+    textarea.rows = Math.min(Math.max(originalText.split("\n").length, 2), 10);
+
+    const actions = document.createElement("div");
+    actions.className = "chat-edit-actions";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "chat-edit-cancel";
+    cancelBtn.textContent = "取消";
+    cancelBtn.addEventListener("click", () => editWrap.remove());
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = "chat-edit-confirm";
+    confirmBtn.textContent = "确认并重新生成";
+    confirmBtn.addEventListener("click", () => {
+      const newText = textarea.value.trim();
+      if (newText && newText !== originalText) {
+        editWrap.remove();
+        onEdit(newText);
+      } else {
+        editWrap.remove();
+      }
+    });
+
+    // Ctrl+Enter 快捷确认
+    textarea.addEventListener("keydown", (ke: KeyboardEvent) => {
+      if (ke.key === "Enter" && (ke.ctrlKey || ke.metaKey)) {
+        ke.preventDefault();
+        confirmBtn.click();
+      }
+      if (ke.key === "Escape") {
+        editWrap.remove();
+      }
+    });
+
+    actions.append(cancelBtn, confirmBtn);
+    editWrap.append(textarea, actions);
+
+    // 插入到 footer 之前
+    groupMessages.insertBefore(editWrap, footer);
+    textarea.focus();
+    textarea.select();
+  };
+
+  return html`
+    <button
+      class="btn btn--xs chat-edit-btn"
+      type="button"
+      title="编辑并重新生成"
+      aria-label="编辑并重新生成"
+      @click=${handleEdit}
+    >✏️</button>
+  `;
+}
+
 /** Badge label & color for each agent communication type */
 const AGENT_COMM_TYPE_LABELS: Record<AgentCommMeta["type"], { label: string; cls: string }> = {
-  command: { label: "命令", cls: "agent-comm-badge--command" },
-  request: { label: "请求", cls: "agent-comm-badge--request" },
-  query: { label: "查询", cls: "agent-comm-badge--query" },
-  notification: { label: "通知", cls: "agent-comm-badge--notification" },
+  command: { label: "\u547d\u4ee4", cls: "agent-comm-badge--command" },
+  request: { label: "\u8bf7\u6c42", cls: "agent-comm-badge--request" },
+  query: { label: "\u67e5\u8be2", cls: "agent-comm-badge--query" },
+  notification: { label: "\u901a\u77e5", cls: "agent-comm-badge--notification" },
 };
+
+/**
+ * ThinkingWidget \u2014 \u53c2\u8003 Helix AI ThinkingWidget.tsx
+ * \u5c06\u63a8\u7406\u8fc7\u7a0b\u6e32\u67d3\u4e3a\u53ef\u6298\u53e0\u7684 <details>\uff0c\u6d41\u5f0f\u65f6\u5c55\u5f00\uff0b\u663e\u793a\u8bba\u8bc1\u4e2d\u52a8\u753b\uff0c\u5b8c\u6210\u540e\u9ed8\u8ba4\u6298\u53e0
+ */
+function renderThinkingWidget(reasoningMarkdown: string, isStreaming: boolean) {
+  const html_content = unsafeHTML(toSanitizedMarkdownHtml(reasoningMarkdown));
+  if (isStreaming) {
+    return html`
+      <details class="chat-thinking-widget" open>
+        <summary class="chat-thinking-widget__summary">
+          <span class="chat-thinking-widget__spinner" aria-hidden="true"></span>
+          <span class="chat-thinking-widget__label">\u63a8\u7406\u4e2d\u2026</span>
+        </summary>
+        <div class="chat-thinking-widget__body">${html_content}</div>
+      </details>
+    `;
+  }
+  return html`
+    <details class="chat-thinking-widget chat-thinking-widget--done">
+      <summary class="chat-thinking-widget__summary">
+        <span class="chat-thinking-widget__icon" aria-hidden="true">\u{1f9e0}</span>
+        <span class="chat-thinking-widget__label">\u67e5\u770b\u63a8\u7406\u8fc7\u7a0b</span>
+      </summary>
+      <div class="chat-thinking-widget__body">${html_content}</div>
+    </details>
+  `;
+}
 
 /**
  * Render a special bubble for inter-agent communication messages.
@@ -827,6 +947,60 @@ function jsonSummaryLabel(parsed: unknown): string {
     return `Object (${keys.length} keys)`;
   }
   return "JSON";
+}
+
+/**
+ * Token pattern: CONFIRM_<ACTION>_<id>
+ * Matches confirmation tokens emitted by guarded tools (project_create, agent_spawn, project_delete, etc.)
+ */
+const CONFIRM_TOKEN_RE = /(CONFIRM_[A-Z][A-Z0-9_\-]*[A-Z0-9])/g;
+
+/**
+ * Render a single confirmation token as an inline card with a one-click copy button.
+ */
+function renderTokenCard(token: string) {
+  const handleCopy = (e: Event) => {
+    e.stopPropagation();
+    const btn = e.currentTarget as HTMLElement;
+    navigator.clipboard
+      .writeText(token)
+      .then(() => {
+        btn.setAttribute("data-copied", "1");
+        setTimeout(() => btn.removeAttribute("data-copied"), 1500);
+      })
+      .catch(() => { /* ignore */ });
+  };
+  return html`<span class="chat-token-card"><code class="chat-token-card__text">${token}</code><button class="chat-token-card__copy" type="button" title="复制令牌" @click=${handleCopy}><span data-default>📋</span><span data-copied>✅</span></button></span>`;
+}
+
+/**
+ * Render markdown text, with any CONFIRM_* tokens replaced by inline token cards.
+ * Non-token segments are rendered as sanitized markdown HTML.
+ */
+function renderChatMarkdownWithTokens(markdown: string) {
+  if (!CONFIRM_TOKEN_RE.test(markdown)) {
+    // Fast path: no tokens, render as plain markdown
+    return html`<div class="chat-text" dir="${detectTextDirection(markdown)}">${unsafeHTML(toSanitizedMarkdownHtml(markdown))}</div>`;
+  }
+  CONFIRM_TOKEN_RE.lastIndex = 0;
+  const parts: Array<{ type: "text" | "token"; value: string }> = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+  while ((match = CONFIRM_TOKEN_RE.exec(markdown)) !== null) {
+    if (match.index > last) {
+      parts.push({ type: "text", value: markdown.slice(last, match.index) });
+    }
+    parts.push({ type: "token", value: match[1] });
+    last = match.index + match[0].length;
+  }
+  if (last < markdown.length) {
+    parts.push({ type: "text", value: markdown.slice(last) });
+  }
+  return html`<div class="chat-text" dir="${detectTextDirection(markdown)}">${parts.map((p) =>
+    p.type === "token"
+      ? renderTokenCard(p.value)
+      : unsafeHTML(toSanitizedMarkdownHtml(p.value)),
+  )}</div>`;
 }
 
 function renderExpandButton(markdown: string, onOpenSidebar: (content: string) => void) {
@@ -1002,9 +1176,7 @@ function renderGroupedMessage(
                 ${renderMessageImages(images)} ${renderMessageAudio(audioClips)}
                 ${
                   reasoningMarkdown
-                    ? html`<div class="chat-thinking">
-                      ${unsafeHTML(toSanitizedMarkdownHtml(reasoningMarkdown))}
-                    </div>`
+                    ? renderThinkingWidget(reasoningMarkdown, opts.isStreaming)
                     : nothing
                 }
                 ${
@@ -1017,9 +1189,7 @@ function renderGroupedMessage(
                       <pre class="chat-json-content"><code>${jsonResult.pretty}</code></pre>
                     </details>`
                     : markdown
-                      ? html`<div class="chat-text" dir="${detectTextDirection(markdown)}">
-                        ${unsafeHTML(toSanitizedMarkdownHtml(markdown))}
-                      </div>`
+                      ? renderChatMarkdownWithTokens(markdown)
                       : nothing
                 }
                 ${hasToolCards ? renderCollapsedToolCards(toolCards, onOpenSidebar) : nothing}
@@ -1030,9 +1200,7 @@ function renderGroupedMessage(
             ${renderMessageImages(images)} ${renderMessageAudio(audioClips)}
             ${
               reasoningMarkdown
-                ? html`<div class="chat-thinking">
-                  ${unsafeHTML(toSanitizedMarkdownHtml(reasoningMarkdown))}
-                </div>`
+                ? renderThinkingWidget(reasoningMarkdown, opts.isStreaming)
                 : nothing
             }
             ${
@@ -1045,9 +1213,7 @@ function renderGroupedMessage(
                   <pre class="chat-json-content"><code>${jsonResult.pretty}</code></pre>
                 </details>`
                 : markdown
-                  ? html`<div class="chat-text" dir="${detectTextDirection(markdown)}">
-                    ${unsafeHTML(toSanitizedMarkdownHtml(markdown))}
-                  </div>`
+                  ? renderChatMarkdownWithTokens(markdown)
                   : nothing
             }
             ${hasToolCards ? renderCollapsedToolCards(toolCards, onOpenSidebar) : nothing}

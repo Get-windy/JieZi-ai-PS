@@ -59,6 +59,13 @@ const AgentSpawnToolSchema = Type.Object({
   autoStart: Type.Optional(Type.Boolean()),
   /** 父智能体ID（可选，用于建立层级关系） */
   parentAgentId: Type.Optional(Type.String({ maxLength: 64 })),
+  /**
+   * 用户明确授权的确认令牌。
+   * 调用此工具前，必须先向用户展示将要创建的 agent 信息，
+   * 并要求用户回复 "CONFIRM_CREATE_AGENT_<agentId>" 作为确认。
+   * 将用户的原始确认文本原样填入此字段。
+   */
+  userConfirmation: Type.String({ minLength: 1 }),
 });
 
 /**
@@ -164,7 +171,13 @@ export function createAgentSpawnTool(opts?: {
     label: "Agent Spawn",
     name: "agent_spawn",
     description:
-      "Create and spawn a new agent with full configuration. Specify role, name, model, skills, system prompt and workspace. Requires admin permission. Returns agent ID and initialization status.",
+      "Create and spawn a new agent with full configuration. " +
+      "THIS TOOL REQUIRES EXPLICIT USER CONFIRMATION BEFORE EXECUTION. " +
+      "BEFORE calling this tool you MUST: " +
+      "1) Show the user a clear summary of the agent to be created (agentId, name, role, workspace). " +
+      "2) Ask the user to confirm by explicitly typing \"CONFIRM_CREATE_AGENT_<agentId>\". " +
+      "3) Pass the user's exact confirmation text in the userConfirmation field. " +
+      "DO NOT create agents silently or based on vague instructions.",
     parameters: AgentSpawnToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -180,7 +193,38 @@ export function createAgentSpawnTool(opts?: {
       const tags = Array.isArray(params.tags) ? params.tags.map(String) : [];
       const autoStart = typeof params.autoStart === "boolean" ? params.autoStart : true;
       const parentAgentId = readStringParam(params, "parentAgentId");
+      const userConfirmation = readStringParam(params, "userConfirmation", { required: true });
       const gatewayOpts = readGatewayCallOptions(params);
+
+      // 强制校验用户确认令牌
+      const expectedToken = `CONFIRM_CREATE_AGENT_${agentId}`;
+      if (!userConfirmation.includes(expectedToken)) {
+        return jsonResult({
+          success: false,
+          blocked: true,
+          pendingConfirmation: true,
+          agentPreview: {
+            agentId,
+            name,
+            role,
+            description,
+            workspace: workspace || `agents/${agentId}`,
+            model: model || "default",
+          },
+          error:
+            `操作被阻止：未收到有效的用户授权确认。` +
+            `\n\n请向用户展示以下将要创建的智能体信息，并等待确认：` +
+            `\n- 智能体 ID：${agentId}` +
+            `\n- 名称：${name}` +
+            `\n- 角色：${role}` +
+            `\n- 描述：${description || '无'}` +
+            `\n- 工作空间：${workspace || `agents/${agentId}`}` +
+            `\n- 模型：${model || '默认'}` +
+            `\n\n请用户回复以下确认令牌：\n  ${expectedToken}` +
+            `\n\n收到确认后，将用户原始回复文本填入 userConfirmation 字段再次调用。`,
+          requiredConfirmationToken: expectedToken,
+        });
+      }
 
       try {
         // 调用 agent.create RPC（gateway 只注册了 agent.create，无 agent.spawn）

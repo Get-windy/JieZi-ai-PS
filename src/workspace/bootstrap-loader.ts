@@ -173,8 +173,8 @@ export class BootstrapLoader {
       const cfg = loadConfig();
       workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
     } catch {
-      // loadConfig 失败时回退到旧逻辑，保证兼容性
-      workspaceDir = path.join(this.agentWorkspaceRoot, `workspace-${agentId}`);
+      // loadConfig 失败时回退到旧逻辑，使用 defaults.workspace/{id} 格式减少旧路径污染
+      workspaceDir = path.join(this.agentWorkspaceRoot, `${agentId}`);
     }
     const files: WorkspaceBootstrapFile[] = [];
 
@@ -515,7 +515,13 @@ export class BootstrapLoader {
    * @returns Bootstrap 文件列表（只读）
    */
   private loadAgentKnowledgeFilesForGroup(agentId: string): WorkspaceBootstrapFile[] {
-    const workspaceDir = path.join(this.agentWorkspaceRoot, `workspace-${agentId}`);
+    let workspaceDir: string;
+    try {
+      const cfg = loadConfig();
+      workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    } catch {
+      workspaceDir = path.join(this.agentWorkspaceRoot, `workspace-${agentId}`);
+    }
     const files: WorkspaceBootstrapFile[] = [];
 
     // 在群组中可以读取的专业知识文件

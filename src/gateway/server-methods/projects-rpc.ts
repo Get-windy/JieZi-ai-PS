@@ -399,22 +399,39 @@ export const projectsHandlers: GatewayRequestHandlers = {
       }
       existing.progressUpdatedAt = Date.now();
 
-      // ── DoD 完成门禁自动处理 ──
-      // 1. 如果项目状态设置为 completed 或 cancelled，自动冒结范围冻结
+      // ── DoD 完成门禁处理 ──
+      // 设计原则（AI 自主开发系统）：
+      // 1. 任务全部 done ≠ 项目完成。项目任务是滚动迭代安排的，完成一批后继续安排下一批。
+      // 2. Agent 可以自主将项目设为 completed（基于 DoD 判断），也可以自主回退（发现误判时）。
+      // 3. 人工可通过前端管理页面将状态回退为 development/active，系统自动解除 scopeFrozen。
+      // 4. completed/cancelled 状态自动触发 scopeFrozen，防止范围蔓延；回退状态自动解冻。
       const newStatus = existing.status;
+      const prevStatus = existing.status;
+
+      // 状态回退检测：从 completed/cancelled 回退到活跃状态 → 自动解除 scopeFrozen
+      const activeStatuses = ["requirements", "design", "planning", "development", "testing", "review", "active", "dev_done", "operating", "maintenance", "paused"];
+      const isReactivating = params?.status !== undefined &&
+        activeStatuses.includes(String(params.status)) &&
+        (prevStatus === "completed" || prevStatus === "cancelled" || existing.completionGate?.scopeFrozen === true);
+      if (isReactivating && existing.completionGate?.scopeFrozen) {
+        existing.completionGate.scopeFrozen = false;
+        delete existing.completionGate.scopeFrozenAt;
+        delete existing.completionGate.scopeFrozenReason;
+      }
+
+      // completed / cancelled 状态 → 自动冻结范围
       if (newStatus === "completed" || newStatus === "cancelled") {
         if (!existing.completionGate) {
-          existing.completionGate = { criteria: [], requireHumanSignOff: false, scopeFrozen: true };
+          existing.completionGate = { criteria: [], requireHumanSignOff: false, scopeFrozen: false };
         }
         if (!existing.completionGate.scopeFrozen) {
           existing.completionGate.scopeFrozen = true;
           existing.completionGate.scopeFrozenAt = Date.now();
-          existing.completionGate.scopeFrozenReason =
-            newStatus === "completed" ? "completed" : "cancelled";
+          existing.completionGate.scopeFrozenReason = newStatus === "completed" ? "completed" : "cancelled";
         }
       }
 
-      // 2. 返回当前 DoD 门禁检查结果，供 coordinator 参考
+      // 返回当前 DoD 门禁检查结果，供 coordinator 参考
       let completionGateStatus: Record<string, unknown> | undefined;
       if (existing.completionGate) {
         const { checkCompletionGate } = await import("../../utils/project-context.js");
@@ -424,20 +441,18 @@ export const projectsHandlers: GatewayRequestHandlers = {
           canClose: gateResult.canClose,
           gaps: gateResult.gaps,
           scopeFrozen: existing.completionGate.scopeFrozen,
+          // 引导 coordinator 下一步操作
+          hint: existing.completionGate.scopeFrozen
+            ? "🔒 范围已冻结。如发现误判，可调用 projects.updateProgress 将 status 回退为 development/active 自动解冻"
+            : gateResult.canClose
+              ? "✅ 所有验收标准已满足，可设为 completed"
+              : gateResult.progress.total === 0
+                ? "⚠️ 尚未定义验收标准，请通过 completionGate.criteria 补充 DoD"
+                : `🛠️ 还有 ${gateResult.unsatisfied.length} 项验收标准未满足，请继续安排任务推进`,
         };
-        // 3. 若所有标准已满足且无需人工确认，自动将项目状态更新为 completed
-        if (
-          gateResult.canClose &&
-          existing.status !== "completed" &&
-          existing.status !== "cancelled"
-        ) {
-          existing.status = "completed";
-          if (!existing.completionGate.scopeFrozen) {
-            existing.completionGate.scopeFrozen = true;
-            existing.completionGate.scopeFrozenAt = Date.now();
-            existing.completionGate.scopeFrozenReason = "completed";
-          }
-          completionGateStatus.autoCompleted = true;
+        if (isReactivating) {
+          completionGateStatus.reactivated = true;
+          completionGateStatus.reactivatedHint = "✅ 项目已重新激活，范围冻结已解除，可继续创建新任务";
         }
       }
 
@@ -983,22 +998,12 @@ export const projectsHandlers: GatewayRequestHandlers = {
       };
       existing.progressUpdatedAt = now;
 
-      // 检查是否所有标准已满足且无需人工确认，自动设置为 completed
+      // 检查验收标准满足情况，但不自动设置 completed
+      // 设计原则：项目完成判定需明确由人工或 coordinator 调用 projects.updateProgress(status=completed)
+      // 或 projects.humanSignOff 来完成。仅凭验收标准全部满足不能自动关闭，
+      // 防止误判（例如验收标准定义不完整时的误触发）
       const gateResult = checkCompletionGate(existing.completionGate);
-      let autoCompleted = false;
-      if (
-        gateResult.canClose &&
-        existing.status !== "completed" &&
-        existing.status !== "cancelled"
-      ) {
-        existing.status = "completed";
-        if (!existing.completionGate.scopeFrozen) {
-          existing.completionGate.scopeFrozen = true;
-          existing.completionGate.scopeFrozenAt = now;
-          existing.completionGate.scopeFrozenReason = "completed";
-        }
-        autoCompleted = true;
-      }
+      const autoCompleted = false; // 不自动关闭，需人工/coordinator 明确确认
 
       fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
 
@@ -1015,6 +1020,11 @@ export const projectsHandlers: GatewayRequestHandlers = {
             gaps: gateResult.gaps,
           },
           autoCompleted,
+          // 当所有标准满足时，给出下一步提示
+          nextStep: gateResult.canClose
+            ? `✅ 所有验收标准已满足。如确认项目已真正完成，可调用 projects.updateProgress(status="completed") 或 projects.humanSignOff 关闭项目。` +
+              `\n⚠️ 注意：关闭前请确认：(1) 项目确实不需要再迭代新任务；(2) DoD 验收标准定义完整无遗漏。`
+            : undefined,
         },
         undefined,
       );
@@ -1023,6 +1033,120 @@ export const projectsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(ErrorCodes.UNAVAILABLE, `Failed to mark criterion: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 项目重新激活（解除 scopeFrozen 死锁）
+   *
+   * 专用于以下场景的快速恢复：
+   * 1. Agent 误将项目标记为 completed（任务队列为空时的误判）
+   * 2. 项目验收标准不完整导致的提前关闭
+   * 3. 人工通过前端协作页面将项目退回活跃状态
+   *
+   * 执行动作：
+   * - 将 status 改回指定活跃状态（默认 development）
+   * - 清除 completionGate.scopeFrozen / scopeFrozenAt / scopeFrozenReason
+   * - 记录回退原因（reactivateReason）
+   *
+   * 参数:
+   * - projectId: 项目 ID（必填）
+   * - status: 回退目标状态，默认 "development"（可选：active/planning/testing/review 等任意活跃状态）
+   * - reason: 回退原因说明（可选，建议填写，便于审计）
+   * - workspaceRoot: 自定义工作空间根目录（可选）
+   */
+  "projects.reactivate": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
+        return;
+      }
+
+      const { buildProjectContext, readProjectConfig } =
+        await import("../../utils/project-context.js");
+      const path = await import("path");
+      const fs = await import("fs");
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+      const configPath = path.join(ctx.workspacePath, "PROJECT_CONFIG.json");
+
+      const existing = readProjectConfig(ctx.workspacePath);
+      if (!existing) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Project config not found for "${projectId}"`),
+        );
+        return;
+      }
+
+      const prevStatus = existing.status;
+      const prevScopeFrozen = existing.completionGate?.scopeFrozen ?? false;
+
+      // 目标活跃状态（默认 development）
+      const activeStatuses = ["requirements", "design", "planning", "development", "testing", "review", "active", "dev_done", "operating", "maintenance"];
+      const targetStatus = params?.status ? String(params.status) : "development";
+      if (!activeStatuses.includes(targetStatus)) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `Invalid target status "${targetStatus}". Must be one of: ${activeStatuses.join(", ")}`
+          ),
+        );
+        return;
+      }
+
+      const reason = params?.reason ? String(params.reason) : "manual reactivation";
+      const now = Date.now();
+
+      // 回退状态
+      existing.status = targetStatus as import("../../utils/project-context.js").ProjectStatus;
+
+      // 解除 scopeFrozen
+      if (existing.completionGate) {
+        existing.completionGate.scopeFrozen = false;
+        delete existing.completionGate.scopeFrozenAt;
+        delete existing.completionGate.scopeFrozenReason;
+      }
+
+      // 记录回退元信息（便于审计）
+      existing.progressUpdatedAt = now;
+      if (!existing.metadata) {
+        (existing as unknown as Record<string, unknown>).metadata = {};
+      }
+      const meta = (existing as unknown as Record<string, unknown>).metadata as Record<string, unknown>;
+      meta.lastReactivatedAt = now;
+      meta.lastReactivatedReason = reason;
+      meta.lastReactivatedFrom = prevStatus;
+
+      if (!fs.existsSync(ctx.workspacePath)) {
+        fs.mkdirSync(ctx.workspacePath, { recursive: true });
+      }
+      fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+
+      respond(
+        true,
+        {
+          success: true,
+          projectId,
+          prevStatus,
+          newStatus: targetStatus,
+          prevScopeFrozen,
+          scopeFrozen: false,
+          reason,
+          message: `✅ 项目已重新激活：${prevStatus} → ${targetStatus}，范围冻结已解除，可继续创建新任务。`,
+        },
+        undefined,
+      );
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to reactivate project: ${String(error)}`),
       );
     }
   },
@@ -1175,6 +1299,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
           requirementsDir: projectCtx.config?.requirementsDir,
           status: projectCtx.config?.status,
           completionGate: projectCtx.config?.completionGate,
+          objectives: projectCtx.config?.objectives,
+          timelineMilestones: projectCtx.config?.timelineMilestones,
           groups: projectGroups.map((g) => ({
             groupId: g.id,
             name: g.name,
@@ -1191,6 +1317,600 @@ export const projectsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(ErrorCodes.UNAVAILABLE, `Failed to get project: ${String(error)}`),
+      );
+    }
+  },
+
+  // ============================================================================
+  // 项目目标管理（Objective CRUD）
+  // ============================================================================
+
+  /**
+   * projects.objective.upsert - 新增或更新项目战略目标
+   */
+  "projects.objective.upsert": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
+        return;
+      }
+
+      const { buildProjectContext, projectWorkspaceExists } = await import(
+        "../../utils/project-context.js"
+      );
+      if (!projectWorkspaceExists(projectId)) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`),
+        );
+        return;
+      }
+
+      const ctx = buildProjectContext(projectId);
+      const configPath = `${ctx.workspacePath}/PROJECT_CONFIG.json`;
+
+      const existing = ctx.config ?? ({ projectId, workspacePath: ctx.workspacePath } as import("../../utils/project-context.js").ProjectConfig);
+
+      if (!existing.objectives) existing.objectives = [];
+
+      const now = Date.now();
+      const title = params?.title ? String(params.title) : "";
+      if (!title) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "title is required"));
+        return;
+      }
+
+      const objectiveId = params?.id ? String(params.id) : `obj_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const existingIdx = existing.objectives.findIndex((o) => o.id === objectiveId);
+
+      const timeframe = ["short", "medium", "long"].includes(String(params?.timeframe))
+        ? (String(params!.timeframe) as import("../../utils/project-context.js").ProjectObjective["timeframe"])
+        : ("medium" as const);
+      const status = ["not-started", "in-progress", "achieved", "missed", "deferred"].includes(String(params?.status))
+        ? (String(params!.status) as import("../../utils/project-context.js").ProjectObjective["status"])
+        : ("not-started" as const);
+
+      const objective: import("../../utils/project-context.js").ProjectObjective = {
+        ...(existingIdx >= 0 ? existing.objectives[existingIdx] : {}),
+        id: objectiveId,
+        title,
+        description: params?.description ? String(params.description) : undefined,
+        timeframe,
+        status,
+        targetDate: params?.targetDate ? Number(params.targetDate) : undefined,
+        keyResults: params?.keyResults ? (params.keyResults as import("../../utils/project-context.js").KeyResult[]) : (existingIdx >= 0 ? existing.objectives[existingIdx].keyResults : undefined),
+        parentObjectiveId: params?.parentObjectiveId ? String(params.parentObjectiveId) : undefined,
+        lastUpdateNote: params?.note ? String(params.note) : undefined,
+        createdAt: existingIdx >= 0 ? existing.objectives[existingIdx].createdAt : now,
+        updatedAt: now,
+      };
+
+      if (existingIdx >= 0) {
+        existing.objectives[existingIdx] = objective;
+      } else {
+        existing.objectives.push(objective);
+      }
+      existing.progressUpdatedAt = now;
+
+      fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+
+      respond(
+        true,
+        {
+          success: true,
+          projectId,
+          objective,
+          action: existingIdx >= 0 ? "updated" : "created",
+        },
+        undefined,
+      );
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to upsert objective: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * projects.objective.delete - 删除项目目标
+   */
+  "projects.objective.delete": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      const objectiveId = params?.id ? String(params.id) : "";
+      if (!projectId || !objectiveId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId and id are required"));
+        return;
+      }
+
+      const { buildProjectContext, projectWorkspaceExists } = await import(
+        "../../utils/project-context.js"
+      );
+      if (!projectWorkspaceExists(projectId)) {
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`));
+        return;
+      }
+
+      const ctx = buildProjectContext(projectId);
+      const configPath = `${ctx.workspacePath}/PROJECT_CONFIG.json`;
+      const existing = ctx.config;
+      if (!existing) {
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Project config not found"));
+        return;
+      }
+
+      const before = existing.objectives?.length ?? 0;
+      existing.objectives = (existing.objectives ?? []).filter((o) => o.id !== objectiveId);
+      const deleted = before > (existing.objectives?.length ?? 0);
+
+      fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+      respond(true, { success: true, projectId, objectiveId, deleted }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete objective: ${String(error)}`));
+    }
+  },
+
+  // ============================================================================
+  // 里程碑管理（Timeline Milestone CRUD）
+  // ============================================================================
+
+  /**
+   * projects.milestone.upsert - 新增或更新里程碑
+   */
+  "projects.milestone.upsert": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
+        return;
+      }
+
+      const { buildProjectContext, projectWorkspaceExists } = await import(
+        "../../utils/project-context.js"
+      );
+      if (!projectWorkspaceExists(projectId)) {
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`));
+        return;
+      }
+
+      const ctx = buildProjectContext(projectId);
+      const configPath = `${ctx.workspacePath}/PROJECT_CONFIG.json`;
+      const existing = ctx.config ?? ({ projectId, workspacePath: ctx.workspacePath } as import("../../utils/project-context.js").ProjectConfig);
+
+      if (!existing.timelineMilestones) existing.timelineMilestones = [];
+
+      const now = Date.now();
+      const title = params?.title ? String(params.title) : "";
+      if (!title) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "title is required"));
+        return;
+      }
+
+      const milestoneId = params?.id ? String(params.id) : `ms_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const existingIdx = existing.timelineMilestones.findIndex((m) => m.id === milestoneId);
+
+      const validTypes = ["release", "phase", "checkpoint", "deliverable", "other"];
+      const validStatuses = ["upcoming", "in-progress", "completed", "missed", "cancelled"];
+      const msType = validTypes.includes(String(params?.type)) ? String(params!.type) as import("../../utils/project-context.js").ProjectMilestoneEntry["type"] : "phase" as const;
+      const msStatus = validStatuses.includes(String(params?.status)) ? String(params!.status) as import("../../utils/project-context.js").ProjectMilestoneEntry["status"] : "upcoming" as const;
+
+      const milestone: import("../../utils/project-context.js").ProjectMilestoneEntry = {
+        ...(existingIdx >= 0 ? existing.timelineMilestones[existingIdx] : {}),
+        id: milestoneId,
+        title,
+        description: params?.description ? String(params.description) : undefined,
+        type: msType,
+        status: msStatus,
+        targetDate: params?.targetDate ? Number(params.targetDate) : undefined,
+        completedAt: msStatus === "completed" && params?.completedAt ? Number(params.completedAt) : (msStatus === "completed" && existingIdx < 0 ? now : (existingIdx >= 0 ? existing.timelineMilestones[existingIdx].completedAt : undefined)),
+        objectiveId: params?.objectiveId ? String(params.objectiveId) : undefined,
+        sprintIds: params?.sprintIds ? (params.sprintIds as string[]) : (existingIdx >= 0 ? existing.timelineMilestones[existingIdx].sprintIds : undefined),
+        ownerId: params?.ownerId ? String(params.ownerId) : undefined,
+        createdAt: existingIdx >= 0 ? existing.timelineMilestones[existingIdx].createdAt : now,
+        updatedAt: now,
+      };
+
+      if (existingIdx >= 0) {
+        existing.timelineMilestones[existingIdx] = milestone;
+      } else {
+        existing.timelineMilestones.push(milestone);
+      }
+      existing.progressUpdatedAt = now;
+
+      fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+
+      respond(
+        true,
+        {
+          success: true,
+          projectId,
+          milestone,
+          action: existingIdx >= 0 ? "updated" : "created",
+        },
+        undefined,
+      );
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to upsert milestone: ${String(error)}`));
+    }
+  },
+
+  /**
+   * projects.milestone.delete - 删除里程碑
+   */
+  "projects.milestone.delete": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      const milestoneId = params?.id ? String(params.id) : "";
+      if (!projectId || !milestoneId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId and id are required"));
+        return;
+      }
+
+      const { buildProjectContext, projectWorkspaceExists } = await import(
+        "../../utils/project-context.js"
+      );
+      if (!projectWorkspaceExists(projectId)) {
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`));
+        return;
+      }
+
+      const ctx = buildProjectContext(projectId);
+      const configPath = `${ctx.workspacePath}/PROJECT_CONFIG.json`;
+      const existing = ctx.config;
+      if (!existing) {
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Project config not found"));
+        return;
+      }
+
+      const before = existing.timelineMilestones?.length ?? 0;
+      existing.timelineMilestones = (existing.timelineMilestones ?? []).filter((m) => m.id !== milestoneId);
+      const deleted = before > (existing.timelineMilestones?.length ?? 0);
+
+      fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+      respond(true, { success: true, projectId, milestoneId, deleted }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete milestone: ${String(error)}`));
+    }
+  },
+
+  /**
+   * projects.sprint.upsert — 创建或更新 Sprint
+   *
+   * 这是 Sprint 管理闭环的入口：
+   * 1. AI coordinator 在接手项目时，先通过 project_objective_upsert 定义三层目标
+   * 2. 再通过 project_milestone_upsert 建立里程碑时间轴
+   * 3. 最后通过此方法将里程碑分解为具体的 Sprint 迭代周期
+   *
+   * 参数:
+   * - projectId: 项目 ID（必填）
+   * - title: Sprint 标题（必填）
+   * - goal: Sprint 目标（强烈推荐，类似 Scrum Sprint Goal）
+   * - order: 排序序号，默认自动追加到末尾
+   * - startDate: 开始时间（Unix ms）
+   * - endDate: 截止时间（Unix ms）
+   * - objectiveId: 关联的战略目标 ID（推荐填写，强化目标对齐）
+   * - milestoneId: 关联的里程碑 ID
+   * - id: Sprint ID（更新时传入）
+   * - status: 状态（planning/active/completed/cancelled）
+   */
+  "projects.sprint.upsert": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      const title = params?.title ? String(params.title) : "";
+      if (!projectId || !title) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId and title are required"));
+        return;
+      }
+
+      const { buildProjectContext, readProjectConfig } = await import("../../utils/project-context.js");
+      const path = await import("path");
+      const fs = await import("fs");
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+      const configPath = path.join(ctx.workspacePath, "PROJECT_CONFIG.json");
+
+      const existing = readProjectConfig(ctx.workspacePath) ?? { projectId, workspacePath: ctx.workspacePath };
+
+      // 初始化 sprints 数组
+      if (!existing.sprints) existing.sprints = existing.milestones ?? [];
+
+      const now = Date.now();
+      const sprintId = params?.id ? String(params.id) : `sprint_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const existingIdx = existing.sprints.findIndex(
+        (s: import("../../utils/project-context.js").ProjectSprint) => s.id === sprintId,
+      );
+
+      // 自动计算 order：新建时追加到末尾
+      const maxOrder = existing.sprints.reduce(
+        (m: number, s: import("../../utils/project-context.js").ProjectSprint) => Math.max(m, s.order ?? 0),
+        0,
+      );
+      const order = params?.order ? Number(params.order) : (existingIdx >= 0 ? existing.sprints[existingIdx].order : maxOrder + 1);
+
+      const sprint: import("../../utils/project-context.js").ProjectSprint = {
+        ...(existingIdx >= 0 ? existing.sprints[existingIdx] : {}),
+        id: sprintId,
+        title,
+        goal: params?.goal ? String(params.goal) : (existingIdx >= 0 ? existing.sprints[existingIdx].goal : undefined),
+        order,
+        status: params?.status
+          ? (String(params.status) as import("../../utils/project-context.js").SprintStatus)
+          : (existingIdx >= 0 ? existing.sprints[existingIdx].status : "planning"),
+        startDate: params?.startDate ? Number(params.startDate) : (existingIdx >= 0 ? existing.sprints[existingIdx].startDate : undefined),
+        endDate: params?.endDate ? Number(params.endDate) : (existingIdx >= 0 ? existing.sprints[existingIdx].endDate : undefined),
+        tasks: existingIdx >= 0 ? existing.sprints[existingIdx].tasks : [],
+        // 扩展字段：存入 metadata
+        ...(params?.objectiveId || params?.milestoneId ? {
+          retrospective: existingIdx >= 0 ? existing.sprints[existingIdx].retrospective : undefined,
+        } : {}),
+      };
+
+      // 将 objectiveId / milestoneId 存入配置的扩展字段
+      // （ProjectSprint 无这两个字段，通过 JSON 宽松存储）
+      const sprintWithMeta = sprint as Record<string, unknown>;
+      if (params?.objectiveId) sprintWithMeta["objectiveId"] = String(params.objectiveId);
+      if (params?.milestoneId) sprintWithMeta["milestoneId"] = String(params.milestoneId);
+
+      if (existingIdx >= 0) {
+        existing.sprints[existingIdx] = sprintWithMeta as import("../../utils/project-context.js").ProjectSprint;
+      } else {
+        existing.sprints.push(sprintWithMeta as import("../../utils/project-context.js").ProjectSprint);
+      }
+
+      // 同步到 milestones（向后兼容）
+      existing.milestones = existing.sprints;
+      existing.progressUpdatedAt = now;
+
+      if (!fs.existsSync(ctx.workspacePath)) fs.mkdirSync(ctx.workspacePath, { recursive: true });
+      fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+
+      respond(true, {
+        success: true,
+        projectId,
+        sprint: sprintWithMeta,
+        action: existingIdx >= 0 ? "updated" : "created",
+        tip: sprint.goal
+          ? `Sprint "${title}" 已${existingIdx >= 0 ? "更新" : "创建"}。用 projects.sprint.addTask 向 Sprint 加入任务，准备好后调用 projects.startSprint 启动。`
+          : `⚠️ 建议为 Sprint 设置 goal（Sprint目标），让团队清晰知道本轮迭代要达成什么。`,
+      }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to upsert sprint: ${String(error)}`));
+    }
+  },
+
+  /**
+   * projects.sprint.addTask — 向 Sprint 中添加或移除任务引用
+   *
+   * Sprint 中的任务是对 SQLite Task 系统的引用快照（task ID + 基础信息）。
+   * 任务的权威状态仍在 SQLite，Sprint 中存储快照用于进度计算。
+   *
+   * action:
+   * - "add": 将任务加入 Sprint（必填 taskId + title）
+   * - "remove": 从 Sprint 移除任务（仅需 taskId）
+   * - "update": 更新 Sprint 内任务状态（通常由任务完成时触发）
+   */
+  "projects.sprint.addTask": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      const sprintId = params?.sprintId ? String(params.sprintId) : "";
+      const taskId = params?.taskId ? String(params.taskId) : "";
+      const action = params?.action ? String(params.action) : "add";
+
+      if (!projectId || !sprintId || !taskId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId, sprintId, and taskId are required"));
+        return;
+      }
+
+      const { buildProjectContext, readProjectConfig } = await import("../../utils/project-context.js");
+      const path = await import("path");
+      const fs = await import("fs");
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+      const configPath = path.join(ctx.workspacePath, "PROJECT_CONFIG.json");
+
+      const existing = readProjectConfig(ctx.workspacePath);
+      if (!existing) {
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Project config not found for "${projectId}"`));
+        return;
+      }
+
+      const sprints = existing.sprints ?? existing.milestones ?? [];
+      const sprintIdx = sprints.findIndex(
+        (s: import("../../utils/project-context.js").ProjectSprint) => s.id === sprintId,
+      );
+      if (sprintIdx === -1) {
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Sprint "${sprintId}" not found`));
+        return;
+      }
+
+      const now = Date.now();
+      const sprint = sprints[sprintIdx];
+
+      if (action === "remove") {
+        sprints[sprintIdx] = { ...sprint, tasks: sprint.tasks.filter((t) => t.id !== taskId) };
+      } else if (action === "update") {
+        // 更新 Sprint 内任务状态快照
+        const taskIdx = sprint.tasks.findIndex((t) => t.id === taskId);
+        if (taskIdx >= 0) {
+          const newStatus = params?.status ? String(params.status) : sprint.tasks[taskIdx].status;
+          const updatedTask = {
+            ...sprint.tasks[taskIdx],
+            status: newStatus as import("../../utils/project-context.js").TaskStatus,
+            updatedAt: now,
+            ...(newStatus === "done" ? { completedAt: now } : {}),
+          };
+          const newTasks = [...sprint.tasks];
+          newTasks[taskIdx] = updatedTask;
+          sprints[sprintIdx] = { ...sprint, tasks: newTasks };
+        } else {
+          respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Task "${taskId}" not found in sprint`));
+          return;
+        }
+      } else {
+        // action === "add"
+        const alreadyIn = sprint.tasks.some((t) => t.id === taskId);
+        if (alreadyIn) {
+          respond(true, { success: true, projectId, sprintId, taskId, action: "already_in", message: "任务已在 Sprint 中" }, undefined);
+          return;
+        }
+        const title = params?.title ? String(params.title) : taskId;
+        const newTask: import("../../utils/project-context.js").Task = {
+          id: taskId,
+          title,
+          scope: "project",
+          status: (params?.status ? String(params.status) : "todo") as import("../../utils/project-context.js").TaskStatus,
+          priority: (params?.priority ? String(params.priority) : "medium") as import("../../utils/project-context.js").TaskPriority,
+          type: (params?.taskType ? String(params.taskType) : "other") as import("../../utils/project-context.js").TaskType,
+          projectId,
+          storyPoints: params?.storyPoints ? Number(params.storyPoints) : undefined,
+          timeTracking: { timeSpent: 0 },
+          createdAt: now,
+          updatedAt: now,
+          objectiveId: params?.objectiveId ? String(params.objectiveId) : undefined,
+        };
+        sprints[sprintIdx] = { ...sprint, tasks: [...sprint.tasks, newTask] };
+      }
+
+      if (existing.sprints) {
+        existing.sprints = sprints;
+      } else {
+        existing.milestones = sprints;
+      }
+      existing.progressUpdatedAt = now;
+
+      // 重算进度
+      const { calcProjectProgress } = await import("../../utils/project-context.js");
+      existing.progress = calcProjectProgress(sprints);
+
+      if (!fs.existsSync(ctx.workspacePath)) fs.mkdirSync(ctx.workspacePath, { recursive: true });
+      fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+
+      const updatedSprint = sprints[sprintIdx];
+      const { calcSprintProgress } = await import("../../utils/project-context.js");
+      respond(true, {
+        success: true,
+        projectId,
+        sprintId,
+        taskId,
+        action,
+        sprintTaskCount: updatedSprint.tasks.length,
+        sprintProgress: calcSprintProgress(updatedSprint),
+      }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to update sprint task: ${String(error)}`));
+    }
+  },
+
+  /**
+   * 物理删除项目
+   *
+   * 删除项目包含：
+   * 1. 删除 Task 系统中该项目的所有任务（物理删除，不是标记删除）
+   * 2. 删除/解绑项目绑定的所有群组
+   * 3. 删除工作空间目录（包括 PROJECT_CONFIG.json 和所有子目录）
+   *
+   * 注意：这是不可逆操作，前端必须先进行二次确认才调用此接口。
+   */
+  "projects.delete": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
+        return;
+      }
+
+      // 删除选项（默认不删除，即保留）
+      const deleteWorkspace = params?.deleteWorkspace === true;
+      const deleteTasks = params?.deleteTasks === true;
+      const deleteGroups = params?.deleteGroups === true;
+
+      const { buildProjectContext } = await import("../../utils/project-context.js");
+      const fs = await import("fs");
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+
+      const summary: {
+        tasksDeleted: number;
+        groupsRemoved: string[];
+        workspaceDeleted: boolean;
+        errors: string[];
+      } = {
+        tasksDeleted: 0,
+        groupsRemoved: [],
+        workspaceDeleted: false,
+        errors: [],
+      };
+
+      // ① 删除 Task 系统中该项目的所有任务（物理删除）
+      if (deleteTasks) {
+        try {
+          const { listTasks, deleteTask } = await import("../../tasks/storage.js");
+          const tasks = await listTasks({ projectId });
+          for (const task of tasks) {
+            await deleteTask(task.id);
+          }
+          summary.tasksDeleted = tasks.length;
+        } catch (taskErr) {
+          summary.errors.push(`删除任务失败: ${String(taskErr)}`);
+        }
+      }
+
+      // ② 删除/解绑项目绑定的所有群组
+      if (deleteGroups) {
+        try {
+          const allGroups = groupManager.getAllGroups();
+          const projectGroups = allGroups.filter(
+            (g) => g.projectId && g.projectId.toLowerCase() === projectId.toLowerCase(),
+          );
+          for (const group of projectGroups) {
+            try {
+              await groupManager.deleteGroup(group.id);
+              summary.groupsRemoved.push(group.id);
+            } catch (groupErr) {
+              summary.errors.push(`删除群组 ${group.id} 失败: ${String(groupErr)}`);
+            }
+          }
+        } catch (groupsErr) {
+          summary.errors.push(`删除群组失败: ${String(groupsErr)}`);
+        }
+      }
+
+      // ③ 删除工作空间目录（物理删除）
+      if (deleteWorkspace) {
+        try {
+          const wsPath = ctx.workspacePath;
+          if (wsPath && fs.existsSync(wsPath)) {
+            fs.rmSync(wsPath, { recursive: true, force: true });
+            summary.workspaceDeleted = true;
+          }
+        } catch (fsErr) {
+          summary.errors.push(`删除工作空间失败: ${String(fsErr)}`);
+        }
+      }
+
+      respond(true, {
+        success: true,
+        projectId,
+        ...summary,
+        message: [
+          `项目 "${projectId}" 删除操作完成。`,
+          `- 删除任务: ${deleteTasks ? `${summary.tasksDeleted} 个` : '已跳过（保留）'}`,
+          `- 删除群组: ${deleteGroups ? `${summary.groupsRemoved.length} 个 (${summary.groupsRemoved.join(", ") || "无"})` : '已跳过（保留）'}`,
+          `- 工作空间: ${deleteWorkspace ? (summary.workspaceDeleted ? "已删除" : "不存在/删除跳过") : '已跳过（保留）'}`,
+          summary.errors.length > 0 ? `- 警告: ${summary.errors.join("; ")}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete project: ${String(error)}`),
       );
     }
   },

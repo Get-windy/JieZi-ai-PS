@@ -1048,6 +1048,8 @@ export type ChatNavigationNode = {
   children?: ChatNavigationNode[];
   /** 节点层级类型，用于样式区分 */
   nodeType?: "root" | "agent" | "category" | "item";
+  /** 最后更新时间戳（毫秒），用于时间分组 */
+  updatedAt?: number | null;
 };
 
 /**
@@ -1070,6 +1072,12 @@ export type ChatNavigationTreeProps = {
   onToggleNode: (nodeId: string) => void;
   onSearchChange: (query: string) => void;
   onChannelForceJoinToggle: () => void;
+  /**
+   * 会话重命名回调（参考 Helix SessionToolbar.tsx）
+   * sessionKey: 目标会话 key
+   * newName: 新名称
+   */
+  onRenameSession?: (sessionKey: string, newName: string) => void;
 };
 
 // ============ 旧的类型定义（向后兼容，标记为废弃）============

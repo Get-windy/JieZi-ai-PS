@@ -747,3 +747,97 @@
   fill: none;
   stroke-width: 2px;
 }
+
+/* ============ 时间分组标签（参考 Helix SessionsSidebar）============ */
+
+.chat-nav-time-group {
+  padding: 6px 12px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.75;
+  user-select: none;
+  /* 粘性固定到节点列表顶部 */
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.chat-nav-time-group:first-child {
+  border-top: none;
+  margin-top: 0;
+}
+
+/* ============ 重命名按钮 + 行内编辑（参考 Helix SessionToolbar）============ */
+
+/* 重命名按钮：默认隐藏，悬停父元素时显示 */
+.chat-nav-rename-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+/* 悬停导航条目时显示重命名按钮 */
+.chat-nav-item__content:hover .chat-nav-rename-btn,
+.chat-nav-item--active .chat-nav-rename-btn {
+  display: flex;
+}
+
+.chat-nav-rename-btn:hover {
+  background: var(--panel-strong);
+  color: var(--text);
+}
+
+/* 行内编辑输入框 */
+.chat-nav-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 4px;
+  font-size: 12px;
+  font-family: var(--font-body);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  outline: none;
+  /* 平齐 label 高度 */
+  line-height: 1.4;
+}
+
+.chat-nav-rename-input:focus {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* ============ 执行组节点（P2 任务折叠）============ */
+
+/* 执行组条目 - 比普通会话有青色左边界 + 淡背景区分 */
+.chat-nav-item--category.chat-nav-item__content {
+  border-left: 2px solid var(--accent, #3b82f6);
+  padding-left: 6px;
+  background: color-mix(in srgb, var(--accent, #3b82f6) 6%, transparent);
+  border-radius: 0 4px 4px 0;
+}
+
+/* 执行组标签文字 - 稍大一些以展示层级 */
+.chat-nav-item--category > .chat-nav-item__content > .chat-nav-item__label {
+  font-weight: 500;
+  color: var(--text-secondary, var(--text));
+}

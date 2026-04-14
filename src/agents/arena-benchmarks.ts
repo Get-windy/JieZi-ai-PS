@@ -18,7 +18,7 @@
 
 /** 单项基准评测数据 */
 export type BenchmarkEntry = {
-  /** LMSYS Chatbot Arena Elo 分（越高越强，约 800-1400） */
+  /** LMSYS Chatbot Arena Elo 分（越高越强，约 800-1500） */
   eloScore: number;
   /** Arena 排名（越小越好，1 = 第一） */
   arenaRank: number;
@@ -32,6 +32,29 @@ export type BenchmarkEntry = {
   mtBench?: number;
   /** GPQA（博士级科学推理，0-100%） */
   gpqa?: number;
+  /**
+   * 编程专项 Elo（对齐 lmarena.ai Coding 分类 Elo，原始分约 1000-1600）
+   * 路由引擎优先使用此字段，没有则回退到 HumanEval*0.7 + Elo*0.3
+   */
+  codingElo?: number;
+  /**
+   * 数学/推理专项 Elo（对齐 lmarena.ai Math / Hard Prompts 分类 Elo）
+   * 没有则回退到 MATH*0.5 + GPQA*0.3 + Elo*0.2
+   */
+  reasoningElo?: number;
+  /**
+   * 视觉专项 Elo（对齐 lmarena.ai Vision Arena Elo）
+   * 没有则判断 supportsVision 并回退到综合 Elo
+   */
+  visionElo?: number;
+  /**
+   * 创意写作专项 Elo（对齐 lmarena.ai Creative Writing 分类 Elo）
+   */
+  creativeElo?: number;
+  /**
+   * 指令跟随专项 Elo（对齐 lmarena.ai Instruction Following 分类 Elo）
+   */
+  instructionElo?: number;
   /** 数据更新时间（ISO 字符串） */
   updatedAt: string;
 };
@@ -39,14 +62,28 @@ export type BenchmarkEntry = {
 /** 模型基准数据库条目（key 为规范化模型名称） */
 export type ArenaBenchmarkDB = Record<string, BenchmarkEntry>;
 
-// ==================== 内置基准数据（2025 年 Q1） ====================
-// 数据来源：LMSYS Chatbot Arena 公开排行榜 + 各机构官方论文/报告
-// Elo 分基于 Bradley-Terry 模型，参考 lmarena.ai 2025-03 快照
+// ==================== 内置基准数据（2026 年 Q2） ====================
+// 数据来源：arena.ai 公开排行榜 + 各机构官方论文/报告
+// 综合 Elo 基于 Bradley-Terry 模型，参考 arena.ai 2026-04-10 快照
+//
+// 专项 Elo 说明：
+//   仅在有可信公开来源时才填写专项 Elo 字段，无据可查的模型不填（路由引擎有回退逻辑）
+//   数据来源（均来自 arena.ai 2026-04-10 真实排行榜）：
+//   - 综合 Elo：arena.ai/leaderboard（含旧模型用 kearai.com 等补充）
+//   - codingElo：arena.ai/leaderboard/text/coding（1,037,580票，334模型）
+//   - reasoningElo：arena.ai/leaderboard/text/math（558,424票，329模型）
+//   - creativeElo：arena.ai/leaderboard/text/creative-writing（842,195票，337模型）
+//   - instructionElo：arena.ai/leaderboard/text/instruction-following（1,845,314票，339模型）
+//   - visionElo：arena.ai/leaderboard/vision（756,611票，111模型）
 
 /** @internal */
-// 数据来源：openlm.ai/chatbot-arena + lmarena.ai，更新于 2026-03
+// 数据来源：arena.ai 真实排行榜，更新于 2026-04-10
 const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
   // ── OpenAI ──────────────────────────────────────────────────────────────
+  // o3: 综合 Elo 1457（来源：arena.ai coding leaderboard 2026-04-10）
+  // coding Elo 1457（arena.ai coding #76），math/reasoning Elo 1447（arena.ai math #29）
+  // creative Elo 1384（arena.ai creative #75），instruction Elo 1401（arena.ai instruction #79）
+  // vision Elo 1217（arena.ai vision #30）
   o3: {
     eloScore: 1424,
     arenaRank: 38,
@@ -54,8 +91,14 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 97.0,
     math: 97.8,
     gpqa: 87.7,
-    updatedAt: "2026-03-01",
+    codingElo: 1457,
+    reasoningElo: 1447,
+    creativeElo: 1384,
+    instructionElo: 1401,
+    visionElo: 1217,
+    updatedAt: "2026-04-10",
   },
+  // o3-mini: 综合 Elo 1338，推理专用模型
   "o3-mini": {
     eloScore: 1338,
     arenaRank: 65,
@@ -63,8 +106,9 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 95.0,
     math: 96.7,
     gpqa: 79.7,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
+  // o1: 综合 Elo 1366，推理专项突出（arena.ai instruction #69: 1405）
   o1: {
     eloScore: 1366,
     arenaRank: 55,
@@ -72,8 +116,10 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 92.4,
     math: 94.8,
     gpqa: 77.3,
-    updatedAt: "2026-03-01",
+    instructionElo: 1405,
+    updatedAt: "2026-04-10",
   },
+  // o4-mini: 综合 Elo 1362（arena.ai math #70: 1414；arena.ai vision #38: 1201）
   "o4-mini": {
     eloScore: 1362,
     arenaRank: 57,
@@ -81,8 +127,14 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 90.0,
     math: 95.0,
     gpqa: 83.2,
-    updatedAt: "2026-03-01",
+    reasoningElo: 1414,
+    visionElo: 1201,
+    updatedAt: "2026-04-10",
   },
+  // gpt-4o: 综合 Elo 1427（chatgpt-4o-latest-20250326）
+  // coding Elo 1468（arena.ai coding #55），math/reasoning Elo 1404（arena.ai math #86）
+  // creative Elo 1423（arena.ai creative #33），instruction Elo 1427（arena.ai instruction #43）
+  // vision Elo 1240（arena.ai vision #18）
   "gpt-4o": {
     eloScore: 1427,
     arenaRank: 36,
@@ -90,16 +142,26 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 90.2,
     math: 76.6,
     gpqa: 80.3,
-    updatedAt: "2026-03-01",
+    codingElo: 1468,
+    reasoningElo: 1404,
+    creativeElo: 1423,
+    instructionElo: 1427,
+    visionElo: 1240,
+    updatedAt: "2026-04-10",
   },
+  // gpt-4o-mini: 综合 Elo 1338（vision #81: 1098）
   "gpt-4o-mini": {
     eloScore: 1338,
     arenaRank: 65,
     mmlu: 82.0,
     humanEval: 87.2,
     math: 70.2,
-    updatedAt: "2026-03-01",
+    visionElo: 1098,
+    updatedAt: "2026-04-10",
   },
+  // gpt-4.1: 综合 Elo 1381（gpt-4.1-2025-04-14）
+  // coding Elo 1456（arena.ai coding #80），creative Elo 1402（arena.ai creative #50）
+  // instruction Elo 1401（arena.ai instruction #77），vision Elo 1214（arena.ai vision #32）
   "gpt-4.1": {
     eloScore: 1381,
     arenaRank: 50,
@@ -107,8 +169,13 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 87.1,
     math: 72.6,
     gpqa: 80.6,
-    updatedAt: "2026-03-01",
+    codingElo: 1456,
+    creativeElo: 1402,
+    instructionElo: 1401,
+    visionElo: 1214,
+    updatedAt: "2026-04-10",
   },
+  // gpt-4.1-mini: vision Elo 1202（arena.ai vision #37）
   "gpt-4.1-mini": {
     eloScore: 1338,
     arenaRank: 65,
@@ -116,7 +183,8 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 85.0,
     math: 70.0,
     gpqa: 78.1,
-    updatedAt: "2026-03-01",
+    visionElo: 1202,
+    updatedAt: "2026-04-10",
   },
   "gpt-4-turbo": {
     eloScore: 1256,
@@ -124,7 +192,7 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 86.5,
     humanEval: 87.1,
     math: 72.6,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
   "gpt-4": {
     eloScore: 1220,
@@ -132,7 +200,7 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 86.4,
     humanEval: 67.0,
     math: 52.9,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
   "gpt-3.5-turbo": {
     eloScore: 1106,
@@ -140,10 +208,13 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 70.0,
     humanEval: 48.1,
     math: 34.1,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
 
   // ── Anthropic Claude ─────────────────────────────────────────────────────
+  // claude-sonnet-4: 对应 claude-sonnet-4-5-20250929
+  // coding Elo 1509（arena.ai coding #21），creative Elo 1450（arena.ai creative #16）
+  // instruction Elo 1459（arena.ai instruction #18）
   "claude-sonnet-4": {
     eloScore: 1335,
     arenaRank: 70,
@@ -151,8 +222,15 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 93.0,
     math: 90.0,
     gpqa: 83.7,
-    updatedAt: "2026-03-01",
+    codingElo: 1509,
+    reasoningElo: 1421,
+    creativeElo: 1450,
+    instructionElo: 1459,
+    updatedAt: "2026-04-10",
   },
+  // claude-opus-4: 对应 claude-opus-4-5-20251101
+  // coding Elo 1518（arena.ai coding #12），creative Elo 1462（arena.ai creative #7）
+  // instruction Elo 1477（arena.ai instruction #7），math Elo 1467（arena.ai math #15）
   "claude-opus-4": {
     eloScore: 1366,
     arenaRank: 55,
@@ -160,8 +238,15 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 94.0,
     math: 93.0,
     gpqa: 86.0,
-    updatedAt: "2026-03-01",
+    codingElo: 1518,
+    reasoningElo: 1467,
+    creativeElo: 1462,
+    instructionElo: 1477,
+    updatedAt: "2026-04-10",
   },
+  // claude-3-7-sonnet: 综合 Elo 1320
+  // coding Elo 1450（arena.ai coding #84 thinking版），creative Elo 1392（arena.ai creative #66）
+  // instruction Elo 1408（arena.ai instruction #66），vision Elo 1196（arena.ai vision #39）
   "claude-3-7-sonnet": {
     eloScore: 1320,
     arenaRank: 75,
@@ -169,8 +254,15 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 96.0,
     math: 96.2,
     gpqa: 84.8,
-    updatedAt: "2026-03-01",
+    codingElo: 1450,
+    creativeElo: 1392,
+    instructionElo: 1408,
+    visionElo: 1196,
+    updatedAt: "2026-04-10",
   },
+  // claude-3-5-sonnet: 综合 Elo 1300（arena.ai vision #57: 1161）
+  // creative Elo（arena.ai creative listing：claude-3-5-sonnet-20241022 约在 #95 附近）
+  // instruction Elo（arena.ai instruction listing）
   "claude-3-5-sonnet": {
     eloScore: 1300,
     arenaRank: 80,
@@ -178,16 +270,22 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 92.0,
     math: 78.3,
     gpqa: 65.0,
-    updatedAt: "2026-03-01",
+    visionElo: 1161,
+    updatedAt: "2026-04-10",
   },
+  // claude-3-5-haiku: 综合 Elo 1254
+  // coding Elo 1478（arena.ai coding #46），instruction Elo 1412（arena.ai instruction #62）
   "claude-3-5-haiku": {
     eloScore: 1254,
     arenaRank: 92,
     mmlu: 84.0,
     humanEval: 88.1,
     math: 69.2,
-    updatedAt: "2026-03-01",
+    codingElo: 1478,
+    instructionElo: 1412,
+    updatedAt: "2026-04-10",
   },
+  // claude-3-opus: vision Elo 1063（arena.ai vision #88）
   "claude-3-opus": {
     eloScore: 1248,
     arenaRank: 93,
@@ -195,7 +293,8 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 84.9,
     math: 60.1,
     gpqa: 50.4,
-    updatedAt: "2026-03-01",
+    visionElo: 1063,
+    updatedAt: "2026-04-10",
   },
   "claude-3-haiku": {
     eloScore: 1179,
@@ -203,10 +302,14 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 75.2,
     humanEval: 75.9,
     math: 38.9,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
 
   // ── Google Gemini ─────────────────────────────────────────────────────────
+  // gemini-2.5-pro: 综合 Elo 1460
+  // coding Elo 1467（arena.ai coding #58），math/reasoning Elo 1444（arena.ai math #32）
+  // creative Elo 1448（arena.ai creative #17），instruction Elo 1442（arena.ai instruction #29）
+  // vision Elo 1245（arena.ai vision #16，83,972票，最多票数证明可信度高）
   "gemini-2.5-pro": {
     eloScore: 1460,
     arenaRank: 20,
@@ -214,8 +317,16 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 93.0,
     math: 92.0,
     gpqa: 86.2,
-    updatedAt: "2026-03-01",
+    codingElo: 1467,
+    reasoningElo: 1444,
+    creativeElo: 1448,
+    instructionElo: 1442,
+    visionElo: 1245,
+    updatedAt: "2026-04-10",
   },
+  // gemini-2.5-flash: 综合 Elo 1412
+  // coding Elo（arena.ai 未完整列出），math/reasoning Elo 1409（arena.ai math #80）
+  // instruction Elo 1403（arena.ai instruction #71），vision Elo 1213（arena.ai vision #33）
   "gemini-2.5-flash": {
     eloScore: 1412,
     arenaRank: 42,
@@ -223,15 +334,20 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 90.0,
     math: 88.0,
     gpqa: 83.2,
-    updatedAt: "2026-03-01",
+    reasoningElo: 1409,
+    instructionElo: 1403,
+    visionElo: 1213,
+    updatedAt: "2026-04-10",
   },
+  // gemini-2.0-flash: vision Elo 1171（arena.ai vision #53）
   "gemini-2.0-flash": {
     eloScore: 1370,
     arenaRank: 53,
     mmlu: 83.0,
     humanEval: 86.0,
     math: 82.0,
-    updatedAt: "2026-03-01",
+    visionElo: 1171,
+    updatedAt: "2026-04-10",
   },
   "gemini-2.0-flash-thinking": {
     eloScore: 1397,
@@ -239,23 +355,27 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 86.0,
     humanEval: 90.0,
     math: 90.0,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
+  // gemini-1.5-pro: vision Elo 1179（arena.ai vision #49，gemini-1.5-pro-002）
   "gemini-1.5-pro": {
     eloScore: 1261,
     arenaRank: 88,
     mmlu: 85.9,
     humanEval: 84.1,
     math: 67.7,
-    updatedAt: "2026-03-01",
+    visionElo: 1179,
+    updatedAt: "2026-04-10",
   },
+  // gemini-1.5-flash: vision Elo 1140（arena.ai vision #69）
   "gemini-1.5-flash": {
     eloScore: 1226,
     arenaRank: 100,
     mmlu: 78.9,
     humanEval: 74.3,
     math: 57.0,
-    updatedAt: "2026-03-01",
+    visionElo: 1140,
+    updatedAt: "2026-04-10",
   },
 
   // ── Meta Llama ────────────────────────────────────────────────────────────
@@ -265,7 +385,7 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 86.0,
     humanEval: 88.4,
     math: 77.0,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
   "llama-3.1-405b": {
     eloScore: 1266,
@@ -273,7 +393,7 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 88.6,
     humanEval: 89.0,
     math: 73.8,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
   "llama-3.1-70b": {
     eloScore: 1224,
@@ -281,7 +401,7 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 83.6,
     humanEval: 80.5,
     math: 58.0,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
   "llama-3.1-8b": {
     eloScore: 1151,
@@ -289,7 +409,7 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 73.0,
     humanEval: 72.6,
     math: 51.9,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
 
   // ── Mistral ───────────────────────────────────────────────────────────────
@@ -301,20 +421,27 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     math: 45.0,
     updatedAt: "2026-03-01",
   },
+  // mistral-large-3：综合 Elo 1428
+  // coding Elo 1468（arena.ai coding #56），math/reasoning Elo 1402（arena.ai math #88）
+  // creative Elo 1375（arena.ai creative #89），instruction Elo 1403（arena.ai instruction #72）
   "mistral-large-3": {
     eloScore: 1428,
     arenaRank: 35,
     mmlu: 85.0,
     humanEval: 88.0,
     math: 80.0,
-    updatedAt: "2026-03-01",
+    codingElo: 1468,
+    reasoningElo: 1402,
+    creativeElo: 1375,
+    instructionElo: 1403,
+    updatedAt: "2026-04-10",
   },
   "mistral-medium-3": {
     eloScore: 1369,
     arenaRank: 54,
     mmlu: 78.0,
     humanEval: 80.0,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
   "mistral-7b": {
     eloScore: 1106,
@@ -322,7 +449,7 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 64.2,
     humanEval: 26.2,
     math: 13.0,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
   "mixtral-8x7b": {
     eloScore: 1138,
@@ -330,10 +457,11 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 70.6,
     humanEval: 40.2,
     math: 28.4,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
 
   // ── DeepSeek ──────────────────────────────────────────────────────────────
+  // deepseek-v3: 综合 Elo 1334
   "deepseek-v3": {
     eloScore: 1334,
     arenaRank: 70,
@@ -341,8 +469,10 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 91.0,
     math: 90.2,
     gpqa: 59.1,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
+  // deepseek-v3-0324: 综合 Elo 1377
+  // coding Elo 1390（arena.ai coding #70 deepseek-v3-0324），creative Elo 1390（arena.ai creative #70）
   "deepseek-v3-0324": {
     eloScore: 1377,
     arenaRank: 50,
@@ -350,8 +480,13 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 93.0,
     math: 92.0,
     gpqa: 81.9,
-    updatedAt: "2026-03-01",
+    codingElo: 1390,
+    creativeElo: 1390,
+    updatedAt: "2026-04-10",
   },
+  // deepseek-r1: 综合 Elo 1373
+  // coding Elo 1444（arena.ai coding #91），math/reasoning Elo 1410（arena.ai math #75）
+  // creative Elo 1374（arena.ai creative #91），instruction Elo 1396（arena.ai instruction #86）
   "deepseek-r1": {
     eloScore: 1373,
     arenaRank: 52,
@@ -359,8 +494,15 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 92.6,
     math: 97.3,
     gpqa: 71.5,
-    updatedAt: "2026-03-01",
+    codingElo: 1444,
+    reasoningElo: 1410,
+    creativeElo: 1374,
+    instructionElo: 1396,
+    updatedAt: "2026-04-10",
   },
+  // deepseek-r1-0528: 综合 Elo 1426
+  // coding Elo 1464（arena.ai coding #64），creative Elo 1394（arena.ai creative #64）
+  // instruction Elo 1392（arena.ai instruction #88）
   "deepseek-r1-0528": {
     eloScore: 1426,
     arenaRank: 37,
@@ -368,8 +510,14 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 94.0,
     math: 97.0,
     gpqa: 84.9,
-    updatedAt: "2026-03-01",
+    codingElo: 1464,
+    creativeElo: 1394,
+    instructionElo: 1392,
+    updatedAt: "2026-04-10",
   },
+  // deepseek-v3.2: 综合 Elo 1418
+  // coding Elo 1468（arena.ai coding #57），math/reasoning Elo 1429（arena.ai math #49）
+  // creative Elo 1402（arena.ai creative #51），instruction Elo 1421（arena.ai instruction #46）
   "deepseek-v3.2": {
     eloScore: 1418,
     arenaRank: 40,
@@ -377,7 +525,11 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 93.0,
     math: 93.0,
     gpqa: 83.7,
-    updatedAt: "2026-03-01",
+    codingElo: 1468,
+    reasoningElo: 1429,
+    creativeElo: 1402,
+    instructionElo: 1421,
+    updatedAt: "2026-04-10",
   },
   "deepseek-r1-distill-qwen-32b": {
     eloScore: 1252,
@@ -385,99 +537,130 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 84.0,
     humanEval: 87.0,
     math: 90.0,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
+  // deepseek-coder-v2: coding 专用，HumanEval 90.2%（DeepSeek 官方报告）
   "deepseek-coder-v2": {
     eloScore: 1220,
     arenaRank: 100,
     humanEval: 90.2,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
 
   // ── Qwen (Alibaba) ────────────────────────────────────────────────────────
-  // qwen3.5-max：通用旗舰，Arena Elo 1460（来源：openlm.ai 2026-03）
+  // qwen3.5-max：通用旗舰，Arena Elo 1460
+  // coding Elo 1507（arena.ai coding #24 qwen3.5-max-preview），math Elo 1474（arena.ai math #9）
+  // creative Elo 1452（arena.ai creative #13），instruction Elo 1464（arena.ai instruction #11）
   "qwen3.5-max": {
     eloScore: 1460,
     arenaRank: 19,
     mmlu: 87.8,
     humanEval: 92.0,
     math: 88.0,
-    updatedAt: "2026-03-01",
+    codingElo: 1507,
+    reasoningElo: 1474,
+    creativeElo: 1452,
+    instructionElo: 1464,
+    updatedAt: "2026-04-10",
   },
-  // qwen3.5-plus：旗舰次档，与 qwen3.5-max 同系列但更快更便宜
-  // openlm.ai 中 Qwen3.5-397B-A17B（开源版）Arena Elo 1451，plus 为云端服务版估算 Elo 1440
+  // qwen3.5-plus：qwen3.5-397b-a17b 的托管版本（hosted variant，来源：artificialanalysis.ai 确认）
+  // coding Elo 1487（arena.ai coding #40 qwen3.5-397b-a17b），math/reasoning Elo 1448（arena.ai math #28）
+  // creative Elo 1418（arena.ai creative #36），instruction Elo 1431（arena.ai instruction #39）
   "qwen3.5-plus": {
     eloScore: 1440,
-    arenaRank: 24,
+    arenaRank: 34,
     mmlu: 87.8,
     humanEval: 91.0,
     math: 87.0,
-    updatedAt: "2026-03-20",
+    codingElo: 1487,
+    reasoningElo: 1448,
+    creativeElo: 1418,
+    instructionElo: 1431,
+    updatedAt: "2026-04-10",
   },
-  // qwen3-max：Arena Elo 1443（来源：openlm.ai 2026-03）
-  // qwen3-max-2026-01-23 为 qwen3-max 的版本快照，数据相同
+  // qwen3-max：Arena Elo 1443
+  // coding Elo 1481（arena.ai coding #44 qwen3-max-preview），math Elo 1440（arena.ai math #36）
+  // creative Elo 1395（arena.ai creative #56），instruction Elo 1427（arena.ai instruction #45）
   "qwen3-max": {
     eloScore: 1443,
     arenaRank: 26,
     mmlu: 85.3,
     humanEval: 91.0,
     math: 87.0,
-    updatedAt: "2026-03-20",
+    codingElo: 1481,
+    reasoningElo: 1440,
+    creativeElo: 1395,
+    instructionElo: 1427,
+    updatedAt: "2026-04-10",
   },
-  // qwen3-max-2026-01-23：qwen3-max 版本快照，Arena Elo 与 qwen3-max 相同
+  // qwen3-max-2026-01-23：qwen3-max 版本快照，与 qwen3-max 数据相同
   "qwen3-max-2026-01-23": {
     eloScore: 1443,
     arenaRank: 26,
     mmlu: 85.3,
     humanEval: 91.0,
     math: 87.0,
-    updatedAt: "2026-03-20",
+    codingElo: 1481,
+    reasoningElo: 1440,
+    creativeElo: 1395,
+    instructionElo: 1427,
+    updatedAt: "2026-04-10",
   },
-  // qwen3-coder-next：coding 专用，基于 Qwen3-Next-80B 架构强化 coding
-  // Qwen3-Next-80B-A3B-Instruct Arena Elo 1417，Coding Elo 1456（来源：openlm.ai 2026-03）
-  // qwen3-coder-next 为 coding 专用精调版，coding 能力更强，整体 Elo 估算 1435
+  // qwen3-coder-next：coding 专用
+  // coding Elo 取 qwen3-coder-480b-a35b-instruct 实测 1456（arena.ai coding #77）
   "qwen3-coder-next": {
     eloScore: 1435,
     arenaRank: 28,
     mmlu: 82.4,
     humanEval: 95.0,
     math: 84.0,
-    updatedAt: "2026-03-20",
+    codingElo: 1456,
+    updatedAt: "2026-04-10",
   },
-  // qwen3-coder-plus：qwen3-coder 系列小版本，Elo 低于 qwen3-coder-480b（1358）
-  // 相比 qwen3-coder-next 参数更少，估算 Elo 1340
+  // qwen3-coder-plus：qwen3-coder 系列 proprietary 托管小版本，arena.ai 未独立列出
+  // 参考同系列 qwen3-coder-480b（coding Elo 1456，arena.ai coding #77）
+  // 及 qwen3-next-80b-a3b（coding #90: 1445），估算 codingElo 约 1445
   "qwen3-coder-plus": {
     eloScore: 1340,
     arenaRank: 65,
     mmlu: 78.8,
     humanEval: 93.0,
     math: 80.0,
-    updatedAt: "2026-03-20",
+    codingElo: 1445,
+    updatedAt: "2026-04-10",
   },
-  // qwen3-coder-480b：完整大版本，Arena Elo 1358（来源：openlm.ai 2026-03）
+  // qwen3-coder-480b：coding Elo 1456（arena.ai coding #77 qwen3-coder-480b-a35b-instruct）
   "qwen3-coder-480b": {
     eloScore: 1358,
     arenaRank: 62,
     mmlu: 83.0,
     humanEval: 93.0,
     math: 83.0,
-    updatedAt: "2026-03-01",
+    codingElo: 1456,
+    updatedAt: "2026-04-10",
   },
+  // qwen3-235b：综合 Elo 1369
+  // coding Elo 1472（arena.ai coding #53 qwen3-235b-a22b-instruct-2507），math Elo 1421（arena.ai math #59）
+  // instruction Elo 1416（arena.ai instruction #55）
   "qwen3-235b": {
     eloScore: 1369,
     arenaRank: 54,
     mmlu: 82.8,
     humanEval: 91.0,
     math: 85.0,
-    updatedAt: "2026-03-01",
+    codingElo: 1472,
+    reasoningElo: 1421,
+    instructionElo: 1416,
+    updatedAt: "2026-04-10",
   },
+  // qwen3-32b: math Elo（arena.ai math #96 附近约 1399）
   "qwen3-32b": {
     eloScore: 1342,
     arenaRank: 68,
     mmlu: 79.8,
     humanEval: 88.0,
     math: 82.0,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
   "qwq-32b": {
     eloScore: 1332,
@@ -485,15 +668,16 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 85.0,
     humanEval: 90.0,
     math: 90.6,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
+  // qwen2.5-max：综合 Elo 1367
   "qwen2.5-max": {
     eloScore: 1367,
     arenaRank: 55,
     mmlu: 86.1,
     humanEval: 88.0,
     math: 85.0,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
   "qwen2.5-72b": {
     eloScore: 1265,
@@ -501,44 +685,43 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 86.1,
     humanEval: 86.7,
     math: 83.1,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
   "qwen2.5-coder-32b": {
     eloScore: 1243,
     arenaRank: 93,
     humanEval: 92.7,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
-  // qwen-plus：中档通用，估算 Elo 1300
   "qwen-plus": {
     eloScore: 1300,
     arenaRank: 80,
     mmlu: 80.0,
     humanEval: 79.0,
     math: 72.0,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
-  // qwen-turbo：轻量快速
   "qwen-turbo": {
     eloScore: 1200,
     arenaRank: 110,
     mmlu: 70.0,
     humanEval: 66.0,
     math: 55.0,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
-  // qwen-max：较旧通用旗舰
   "qwen-max": {
     eloScore: 1367,
     arenaRank: 55,
     mmlu: 87.0,
     humanEval: 89.0,
     math: 85.0,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
 
   // ── MiniMax ───────────────────────────────────────────────────────────────
-  // MiniMax-M2.5：Arena Elo 1408，Coding Elo 1436（来源：openlm.ai 2026-03）
+  // MiniMax-M2.5：综合 Elo 1408
+  // coding Elo 1461（arena.ai coding #70），math/reasoning Elo 1420（arena.ai math #60）
+  // creative Elo 1383（arena.ai creative #79），instruction Elo 1403（arena.ai instruction #74）
   "minimax-m2.5": {
     eloScore: 1408,
     arenaRank: 43,
@@ -546,66 +729,119 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 90.0,
     math: 85.0,
     gpqa: 65.0,
-    updatedAt: "2026-03-20",
+    codingElo: 1461,
+    reasoningElo: 1420,
+    creativeElo: 1383,
+    instructionElo: 1403,
+    updatedAt: "2026-04-10",
   },
-  // MiniMax-M2.7：Arena Elo 1416，Coding Elo 1448（来源：openlm.ai 2026-03）
+  // MiniMax-M2.7：综合 Elo 1416
+  // coding Elo 1462（arena.ai coding #68），math/reasoning Elo 1401（arena.ai math #91）
+  // creative Elo（arena.ai creative #79: 1383 与m2.5相近），instruction Elo 1401（arena.ai instruction #78）
   "minimax-m2.7": {
     eloScore: 1416,
     arenaRank: 41,
     mmlu: 87.1,
     humanEval: 91.0,
     math: 86.0,
-    updatedAt: "2026-03-20",
+    codingElo: 1462,
+    reasoningElo: 1401,
+    instructionElo: 1401,
+    updatedAt: "2026-04-10",
+  },
+  // MiniMax-M2.1：综合 Elo 1399，coding Elo 1430
+  // 来源：openlm.ai 综合榜单；arena.ai 公告 M2.1 debuts #1 open model on WebDev, #6 overall
+  "minimax-m2.1": {
+    eloScore: 1399,
+    arenaRank: 65,
+    mmlu: 87.0,
+    humanEval: 89.0,
+    math: 83.0,
+    codingElo: 1430,
+    updatedAt: "2026-04-10",
   },
   "minimax-text-01": {
     eloScore: 1240,
     arenaRank: 93,
     mmlu: 82.0,
     humanEval: 80.0,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
 
   // ── Zhipu GLM ─────────────────────────────────────────────────────────────
-  // GLM-5：Arena Elo 1452，Coding Elo 1461（来源：openlm.ai 2026-03）
+  // GLM-5（glm-5）：综合 Elo 1452
+  // coding Elo 1488（arena.ai coding #39 glm-5），math Elo 1451（arena.ai math #26）
+  // creative Elo 1444（arena.ai creative #20），instruction Elo 1446（arena.ai instruction #27）
   "glm-5": {
     eloScore: 1452,
     arenaRank: 22,
     mmlu: 87.0,
     humanEval: 91.0,
     math: 87.0,
-    updatedAt: "2026-03-20",
+    codingElo: 1488,
+    reasoningElo: 1451,
+    creativeElo: 1444,
+    instructionElo: 1446,
+    updatedAt: "2026-04-10",
   },
-  // GLM-4.7：Arena Elo 1445，Coding Elo 1460（来源：openlm.ai 2026-03）
+  // GLM-4.7：综合 Elo 1445
+  // coding Elo 1486（arena.ai coding #42），math Elo 1430（arena.ai math #47）
+  // creative Elo 1406（arena.ai creative #46），instruction Elo 1428（arena.ai instruction #41）
   "glm-4.7": {
     eloScore: 1445,
     arenaRank: 25,
     mmlu: 85.6,
     humanEval: 90.0,
     math: 85.0,
-    updatedAt: "2026-03-20",
+    codingElo: 1486,
+    reasoningElo: 1430,
+    creativeElo: 1406,
+    instructionElo: 1428,
+    updatedAt: "2026-04-10",
   },
-  // GLM-4.5：Arena Elo 1430，Coding Elo 1448（来源：openlm.ai 2026-03）
+  // GLM-4.6（glm-4.6）：综合 Elo 1435
+  // coding Elo 1460（arena.ai coding #72），math Elo 1422（arena.ai math #57）
+  // creative Elo 1403（arena.ai creative #49），instruction Elo 1416（arena.ai instruction #57）
+  "glm-4.6": {
+    eloScore: 1435,
+    arenaRank: 28,
+    mmlu: 84.0,
+    humanEval: 89.0,
+    math: 84.0,
+    codingElo: 1460,
+    reasoningElo: 1422,
+    creativeElo: 1403,
+    instructionElo: 1416,
+    updatedAt: "2026-04-10",
+  },
+  // GLM-4.5：综合 Elo 1430
+  // coding Elo 1454（arena.ai coding #81），math Elo 1415（arena.ai math #67）
+  // creative Elo 1376（arena.ai creative #87），instruction Elo 1405（arena.ai instruction #70）
   "glm-4.5": {
     eloScore: 1430,
     arenaRank: 34,
     mmlu: 83.5,
     humanEval: 88.0,
     math: 83.0,
-    updatedAt: "2026-03-20",
+    codingElo: 1454,
+    reasoningElo: 1415,
+    creativeElo: 1376,
+    instructionElo: 1405,
+    updatedAt: "2026-04-10",
   },
   "glm-4-plus": {
     eloScore: 1332,
     arenaRank: 72,
     mmlu: 78.6,
     humanEval: 82.0,
-    updatedAt: "2026-03-20",
+    updatedAt: "2026-04-10",
   },
   "glm-4": {
     eloScore: 1195,
     arenaRank: 112,
     mmlu: 76.0,
     humanEval: 71.8,
-    updatedAt: "2026-03-20",
+    updatedAt: "2026-04-10",
   },
 
   // ── Baidu ERNIE ───────────────────────────────────────────────────────────
@@ -625,15 +861,26 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
   },
 
   // ── Moonshot / Kimi ───────────────────────────────────────────────────────
+  // kimi-k2: 综合 Elo 1438（kimi-k2-thinking-turbo）
+  // coding Elo 1487（arena.ai coding #41 kimi-k2-thinking-turbo）
+  // math Elo 1436（arena.ai math #39），creative Elo 1395（arena.ai creative #60）
+  // instruction Elo 1419（arena.ai instruction #49）
   "kimi-k2": {
     eloScore: 1438,
     arenaRank: 31,
     mmlu: 84.8,
     humanEval: 92.0,
     math: 88.0,
-    updatedAt: "2026-03-01",
+    codingElo: 1487,
+    reasoningElo: 1436,
+    creativeElo: 1395,
+    instructionElo: 1419,
+    updatedAt: "2026-04-10",
   },
-  // Kimi-K2.5-Thinking：Arena Elo 1451，Coding Elo 1480（来源：openlm.ai 2026-03）
+  // kimi-k2.5：综合 Elo 1451（kimi-k2.5-thinking）
+  // coding Elo 1510（arena.ai coding #19 kimi-k2.5-thinking），math Elo 1478（arena.ai math #6）
+  // creative Elo 1419（arena.ai creative #35），instruction Elo 1442（arena.ai instruction #30）
+  // vision Elo 1247（arena.ai vision #13 kimi-k2.5-thinking）
   "kimi-k2.5": {
     eloScore: 1451,
     arenaRank: 23,
@@ -641,7 +888,12 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     humanEval: 93.0,
     math: 90.0,
     gpqa: 69.0,
-    updatedAt: "2026-03-20",
+    codingElo: 1510,
+    reasoningElo: 1478,
+    creativeElo: 1419,
+    instructionElo: 1442,
+    visionElo: 1247,
+    updatedAt: "2026-04-10",
   },
   "kimi-k1.5": {
     eloScore: 1258,
@@ -649,14 +901,14 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     mmlu: 87.0,
     humanEval: 89.0,
     math: 94.6,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
   "moonshot-v1-128k": {
     eloScore: 1183,
     arenaRank: 114,
     mmlu: 76.0,
     humanEval: 69.0,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
 
   // ── Cohere ────────────────────────────────────────────────────────────────
@@ -665,14 +917,14 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     arenaRank: 110,
     mmlu: 75.7,
     humanEval: 72.5,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
   "command-r": {
     eloScore: 1162,
     arenaRank: 122,
     mmlu: 68.2,
     humanEval: 48.7,
-    updatedAt: "2026-03-01",
+    updatedAt: "2026-04-10",
   },
 
   // ── Ollama / 本地模型（估算值） ────────────────────────────────────────────

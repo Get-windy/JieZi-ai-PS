@@ -387,6 +387,32 @@ function buildProgressSection(params: { isMinimal: boolean; progressSummary?: st
   return ["## Task Progress (Cross-Session)", params.progressSummary.trim(), ""];
 }
 
+/**
+ * 项目目标对齐章节
+ *
+ * 解决「AI不知道自己在服务哪个目标」的根本问题。
+ * 在每次会话启动时注入当前活跃目标，让AI始终知道:
+ * - 短期目标（本周/本Sprint要达成什么）
+ * - 中期目标（本季度方向）
+ * - 长期目标（战略愿景）
+ * - 当前阶段允许做什么工作（Phase Discipline）
+ */
+function buildObjectiveAlignmentSection(params: {
+  isMinimal: boolean;
+  activeObjectivesSummary?: string;
+}) {
+  if (params.isMinimal || !params.activeObjectivesSummary?.trim()) {
+    return [];
+  }
+  return [
+    "## 项目目标对齐（Project Objective Alignment）",
+    "▶ CRITICAL: 在开始任何项目工作前，先阅读以下目标摘要。创建任务时必须关联 objectiveId，确保工作服务于当前目标。",
+    "",
+    params.activeObjectivesSummary.trim(),
+    "",
+  ];
+}
+
 function buildQualityGateSection(params: { isMinimal: boolean; qualityGateHint?: string }) {
   if (params.isMinimal) {
     return [];
@@ -464,7 +490,7 @@ export function buildAgentSystemPrompt(params: {
    * 项目 DoD 摘要（由主控心跳时注入）
    *
    * 格式：一个数组，每个元素为一个项目的 DoD 状态摘要。
-   * coordinator 心跳时，系统会注入所有活跃项目的验收标准完成情况，
+   * coordinator 心跟时，系统会注入所有活跃项目的验收标准完成情况，
    * 让 coordinator 知道哪些项目已完成（应停止分配）、哪些尚缺缺口。
    */
   projectDodSummary?: Array<{
@@ -476,6 +502,14 @@ export function buildAgentSystemPrompt(params: {
     gaps: string[];
     progress: { satisfied: number; total: number; percent: number };
   }>;
+  /**
+   * 项目活跃目标摘要（由心跟时注入）
+   *
+   * 由 buildActiveObjectivesSummary + formatObjectivesSummaryForPrompt 生成的格式化文本。
+   * 心跟时，系统自动注入所有活跃项目的目标信息，
+   * 让 coordinator 和团队成员始终知道当前工作在服务于哪些目标。
+   */
+  activeObjectivesSummary?: string;
 }) {
   const acpEnabled = params.acpEnabled !== false;
   const sandboxedRuntime = params.sandboxInfo?.enabled === true;
@@ -674,6 +708,11 @@ export function buildAgentSystemPrompt(params: {
     isMinimal,
     qualityGateHint: params.qualityGateHint,
   });
+  // 项目目标对齐 section
+  const objectiveAlignmentSection = buildObjectiveAlignmentSection({
+    isMinimal,
+    activeObjectivesSummary: params.activeObjectivesSummary,
+  });
   const workspaceNotes = (params.workspaceNotes ?? []).map((note) => note.trim()).filter(Boolean);
 
   // For "none" mode, return just the basic identity line
@@ -744,6 +783,7 @@ export function buildAgentSystemPrompt(params: {
     ...memorySection,
     ...selfEvolutionSection,
     ...planningSection,
+    ...objectiveAlignmentSection,
     ...progressSection,
     ...qualityGateSection,
     hasGateway && !isMinimal ? "## OpenClaw Self-Update" : "",

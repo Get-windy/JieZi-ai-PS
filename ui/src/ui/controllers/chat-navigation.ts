@@ -178,6 +178,7 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       icon: "💬",
       nodeType: "item",
       unreadCount: getUnread(s.key),
+      updatedAt: s.updatedAt,
       context: {
         type: "session-history",
         sessionKey: s.key,
@@ -192,12 +193,67 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
   const MAX_SESSION_PREVIEW = 20;
   const activeSessions = sortedSessions.filter((s) => s.updatedAt != null);
   const activeUnreadSessions = unreadSessions.filter((s) => s.updatedAt != null);
+
+  // P2: 执行组折叠 — 把有相同 spawnedBy 的子会话合并为一个 "Task Group" 节点
+  // 参考 Helix SessionsSidebar.tsx groupSessionsByExecutionId()
+  const groupMap = new Map<string, SessionsListResult["sessions"]>();
+  const ungroupedSessions: SessionsListResult["sessions"] = [];
+  for (const s of activeSessions) {
+    const parentKey = s.spawnedBy;
+    if (parentKey) {
+      // 只有 spawnedBy 的子会话才归入任务组
+      const arr = groupMap.get(parentKey) ?? [];
+      arr.push(s);
+      groupMap.set(parentKey, arr);
+    } else {
+      ungroupedSessions.push(s);
+    }
+  }
+
+  // 构建任务组节点（>= 2 个子会话才折叠为组）
+  const taskGroupNodes: ChatNavigationNode[] = [];
+  for (const [parentKey, children] of groupMap) {
+    if (children.length < 2) {
+      // 单个子会话不需要分组，作为普通节点显示
+      ungroupedSessions.push(...children);
+      continue;
+    }
+    // 找到最近更新的子会话作为组标题
+    const sortedChildren = [...children].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+    const latestChild = sortedChildren[0];
+    const groupLabel = latestChild.displayName?.trim() ||
+      latestChild.label?.trim() ||
+      `${t("chat.nav.exec_group")} · ${parentKey.slice(-8)}`;
+    const groupUnread = children.reduce((sum, c) => sum + (getUnread(c.key) ?? 0), 0);
+    const parentSessionKey = activeSessions.find((s) => s.key === parentKey)?.key ?? parentKey;
+
+    taskGroupNodes.push({
+      id: `exec-group-${parentKey}`,
+      label: `📦 ${groupLabel} · ${children.length} 个子任务`,
+      icon: "📦",
+      nodeType: "category" as const,
+      unreadCount: groupUnread > 0 ? groupUnread : undefined,
+      updatedAt: latestChild.updatedAt,
+      context: {
+        type: "session-history" as const,
+        sessionKey: parentSessionKey,
+        displayName: groupLabel,
+      },
+      children: sortedChildren.map(makeSessionHistoryNode),
+    });
+  }
+
+  // 将任务组节点 + 晦散节点合并（任务组排在前面）
+  const allActiveSessions = [
+    ...taskGroupNodes,
+    ...ungroupedSessions.filter((s) => !(unread[s.key] > 0)),
+  ];
+
   const sessionChildNodes: ChatNavigationNode[] = [
-    ...activeUnreadSessions.map(makeSessionHistoryNode),
-    ...activeSessions
-      .filter((s) => !(unread[s.key] > 0))
-      .slice(0, Math.max(0, MAX_SESSION_PREVIEW - activeUnreadSessions.length))
+    ...activeUnreadSessions
+      .filter((s) => !s.spawnedBy)
       .map(makeSessionHistoryNode),
+    ...allActiveSessions.slice(0, Math.max(0, MAX_SESSION_PREVIEW - activeUnreadSessions.length)),
   ];
 
   // nav1 修复：全部会话根节点本身不可点击跳转（它是容器，不是目标）

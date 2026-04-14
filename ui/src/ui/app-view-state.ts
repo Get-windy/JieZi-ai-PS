@@ -295,6 +295,14 @@ export type AppViewState = {
   projectCodeRoot: string;
   /** 项目列表状态筛选 */
   projectStatusFilter: import("./views/projects.ts").ProjectStatusFilter;
+  /** 删除项目确认 modal 状态（null 表示未显示） */
+  deleteProjectConfirm: {
+    projectId: string;
+    projectName: string;
+    deleteWorkspace: boolean;
+    deleteTasks: boolean;
+    deleteGroups: boolean;
+  } | null;
   // 项目跨团队协作 Handoff 状态
   projectTeamRelations: import("./views/projects.ts").ProjectTeamRelation[];
   projectTeamRelationsLoading: boolean;
@@ -802,6 +810,12 @@ export type AppViewState = {
   teamMonitorAssignSaving: boolean;
   teamMonitorAssignError: string | null;
   teamMonitorAssignForm: AssignTaskForm;
+  teamMonitorResetingTaskId: string | null;
+  teamMonitorEditDialogTask: import("./views/team-monitor.js").EditTaskForm | null;
+  teamMonitorEditSaving: boolean;
+  teamMonitorEditError: string | null;
+  teamMonitorDeletingTaskId: string | null;
+  teamMonitorCancelingTaskId: string | null;
 
   client: GatewayBrowserClient | null;
   refreshSessionsAfterChat: Set<string>;

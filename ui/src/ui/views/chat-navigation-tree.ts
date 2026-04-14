@@ -146,7 +146,23 @@ function renderRootNode(node: ChatNavigationNode, props: ChatNavigationTreeProps
         expanded && hasChildren
           ? html`
             <div class="chat-nav-children">
-              ${node.children!.map((child) => renderChildNode(child, props, 1))}
+              ${
+                // 对 session-history 子节点进行时间分组渲染（当所有子节点均为 session-history 且有时间戳）
+                (() => {
+                  const children = node.children!;
+                  const allSessionHistory = children.every(
+                    (c) => c.context?.type === "session-history" && c.updatedAt != null,
+                  );
+                  if (allSessionHistory && children.length > 3) {
+                    const timeGroups = groupSessionsByTime(children);
+                    return timeGroups.map((group) => html`
+                      ${renderTimeGroupLabel(group.label)}
+                      ${group.nodes.map((child) => renderChildNode(child, props, 1))}
+                    `);
+                  }
+                  return children.map((child) => renderChildNode(child, props, 1));
+                })()
+              }
             </div>
           `
           : nothing
@@ -200,6 +216,7 @@ function renderChildNode(
             >`
             : nothing
         }
+        ${renderRenameButton(node, props)}
       </div>
 
       ${
@@ -258,6 +275,115 @@ function renderChannelModeIndicator(props: ChatNavigationTreeProps) {
       }
     </div>
   `;
+}
+
+// ============ 时间分组工具函数 ============
+
+/**
+ * 按时间戳对导航节点进行分组（今天 / 最近7天 / 最近30天 / 更早）
+ * 参考 Helix SessionsSidebar.tsx groupSessionsByTime()
+ */
+function groupSessionsByTime(nodes: import("../types.ts").ChatNavigationNode[]) {
+  const now = Date.now();
+  const DAY = 86_400_000;
+  const groups: Array<{ label: string; nodes: typeof nodes }> = [
+    { label: t("chat.nav.group.today"),   nodes: [] },
+    { label: t("chat.nav.group.week"),    nodes: [] },
+    { label: t("chat.nav.group.month"),   nodes: [] },
+    { label: t("chat.nav.group.older"),   nodes: [] },
+  ];
+
+  for (const node of nodes) {
+    const ts = node.updatedAt ?? 0;
+    const diff = now - ts;
+    if (diff < DAY) {
+      groups[0].nodes.push(node);
+    } else if (diff < 7 * DAY) {
+      groups[1].nodes.push(node);
+    } else if (diff < 30 * DAY) {
+      groups[2].nodes.push(node);
+    } else {
+      groups[3].nodes.push(node);
+    }
+  }
+
+  return groups.filter((g) => g.nodes.length > 0);
+}
+
+// ============ 会话重命名行内编辑 ============
+
+/**
+ * 渲染重命名按钮（✏️），点击后将节点标签替换为行内 input
+ * 参考 Helix SessionToolbar.tsx 内联重命名逻辑
+ */
+function renderRenameButton(
+  node: import("../types.ts").ChatNavigationNode,
+  props: import("../types.ts").ChatNavigationTreeProps,
+): import("lit").TemplateResult | typeof nothing {
+  if (!props.onRenameSession) return nothing;
+  if (node.context.type !== "session-history") return nothing;
+
+  const sessionKey = node.context.sessionKey;
+
+  const handleRenameClick = (e: Event) => {
+    e.stopPropagation();
+    // 找到最近的 .chat-nav-item__label 替换为 input
+    const btn = e.currentTarget as HTMLElement;
+    const item = btn.closest(".chat-nav-item__content")!;
+    const labelEl = item.querySelector(".chat-nav-item__label") as HTMLElement | null;
+    if (!labelEl || item.querySelector(".chat-nav-rename-input")) return;
+
+    const original = labelEl.textContent ?? "";
+    const input = document.createElement("input");
+    input.className = "chat-nav-rename-input";
+    input.value = original;
+    input.maxLength = 80;
+
+    const commit = () => {
+      const newName = input.value.trim();
+      if (newName && newName !== original) {
+        props.onRenameSession!(sessionKey, newName);
+      }
+      // 恢复标签（重新渲染时 Lit 会处理）
+      if (input.parentNode) {
+        input.replaceWith(labelEl);
+        labelEl.style.display = "";
+      }
+    };
+
+    const cancel = () => {
+      if (input.parentNode) {
+        input.replaceWith(labelEl);
+        labelEl.style.display = "";
+      }
+    };
+
+    input.addEventListener("keydown", (ke: KeyboardEvent) => {
+      if (ke.key === "Enter") { ke.preventDefault(); commit(); }
+      if (ke.key === "Escape") { ke.preventDefault(); cancel(); }
+    });
+    input.addEventListener("blur", commit, { once: true });
+
+    labelEl.style.display = "none";
+    labelEl.insertAdjacentElement("afterend", input);
+    input.focus();
+    input.select();
+  };
+
+  return html`
+    <button
+      class="chat-nav-rename-btn"
+      type="button"
+      title="重命名"
+      @click=${handleRenameClick}
+    >✏️</button>
+  `;
+}
+
+// ============ 时间分组标签渲染 ============
+
+function renderTimeGroupLabel(label: string) {
+  return html`<div class="chat-nav-time-group">${label}</div>`;
 }
 
 // ============ 工具函数 ============

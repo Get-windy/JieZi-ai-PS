@@ -177,6 +177,48 @@ export interface ProjectSprint {
 /** 向后兼容别名 */
 export type ProjectMilestone = ProjectSprint;
 
+// ===== 目标管理类型（与后端 project-context.ts 保持一致）=====
+
+export interface KeyResult {
+  id: string;
+  description: string;
+  current?: number;
+  target?: number;
+  unit?: string;
+  achieved: boolean;
+  achievedAt?: number;
+}
+
+export interface ProjectMilestoneEntry {
+  id: string;
+  title: string;
+  description?: string;
+  type: "release" | "phase" | "checkpoint" | "deliverable" | "other";
+  status: "upcoming" | "in-progress" | "completed" | "missed" | "cancelled";
+  targetDate?: number;
+  completedAt?: number;
+  objectiveId?: string;
+  sprintIds?: string[];
+  ownerId?: string;
+  createdAt: number;
+  updatedAt?: number;
+}
+
+export interface ProjectObjective {
+  id: string;
+  title: string;
+  description?: string;
+  timeframe: "short" | "medium" | "long";
+  status: "not-started" | "in-progress" | "achieved" | "missed" | "deferred";
+  targetDate?: number;
+  achievedAt?: number;
+  keyResults?: KeyResult[];
+  parentObjectiveId?: string;
+  createdAt: number;
+  updatedAt?: number;
+  lastUpdateNote?: string;
+}
+
 /** 计算 Sprint 进度 */
 export function calcSprintProgress(sprint: ProjectSprint): number {
   const tasks = sprint.tasks.filter((t) => t.status !== "cancelled");
@@ -277,6 +319,10 @@ export interface ProjectInfo {
   progressNotes?: string;
   /** 进度最后更新时间 */
   progressUpdatedAt?: number;
+  /** 战略目标（OKR）列表 */
+  objectives?: ProjectObjective[];
+  /** 时间轴里程碑列表 */
+  timelineMilestones?: ProjectMilestoneEntry[];
   groups?: Array<{
     groupId: string;
     name: string;
@@ -300,7 +346,7 @@ export type ProjectsProps = {
   error: string | null;
   projectsList: ProjectsListResult | null;
   selectedProjectId: string | null;
-  activePanel: "list" | "config" | "members" | "progress" | "handoff";
+  activePanel: "list" | "config" | "members" | "progress" | "handoff" | "roadmap";
   creatingProject: boolean;
   editingProject: ProjectInfo | null;
   agentsList: AgentsListResult | null;
@@ -314,7 +360,15 @@ export type ProjectsProps = {
   onStatusFilterChange: (filter: ProjectStatusFilter) => void;
   onRefresh: () => void;
   onSelectProject: (projectId: string) => void;
-  onSelectPanel: (panel: "list" | "config" | "members" | "progress" | "handoff") => void;
+  onSelectPanel: (panel: "list" | "config" | "members" | "progress" | "handoff" | "roadmap") => void;
+  /** 新增/更新战略目标 */
+  onUpsertObjective: (projectId: string, objective: Omit<ProjectObjective, "createdAt" | "updatedAt"> & { id?: string }) => void;
+  /** 删除战略目标 */
+  onDeleteObjective: (projectId: string, objectiveId: string) => void;
+  /** 新增/更新时间轴里程碑 */
+  onUpsertMilestone: (projectId: string, milestone: Omit<ProjectMilestoneEntry, "createdAt" | "updatedAt"> & { id?: string }) => void;
+  /** 删除时间轴里程碑 */
+  onDeleteMilestone: (projectId: string, milestoneId: string) => void;
   onCreateProject: () => void;
   onEditProject: (projectId: string) => void;
   onSaveProject: () => void;
@@ -388,6 +442,22 @@ export type ProjectsProps = {
   onLoadTeamRelations: (projectId: string) => void;
   // 更换项目负责人
   onTransferProjectOwner: (projectId: string, newOwnerId: string) => void;
+  /** 删除项目确认 modal 状态（null 表示未显示） */
+  deleteProjectConfirm: {
+    projectId: string;
+    projectName: string;
+    deleteWorkspace: boolean;
+    deleteTasks: boolean;
+    deleteGroups: boolean;
+  } | null;
+  /** 打开删除确认 modal */
+  onShowDeleteProjectConfirm: (projectId: string, projectName: string) => void;
+  /** 关闭删除确认 modal */
+  onHideDeleteProjectConfirm: () => void;
+  /** 更改删除项目选项 */
+  onDeleteProjectOptionChange: (key: "deleteWorkspace" | "deleteTasks" | "deleteGroups", value: boolean) => void;
+  /** 确认删除项目（带选项） */
+  onDeleteProject: (projectId: string, opts: { deleteWorkspace: boolean; deleteTasks: boolean; deleteGroups: boolean }) => void;
 };
 
 export function renderProjects(props: ProjectsProps) {
@@ -416,9 +486,14 @@ export function renderProjects(props: ProjectsProps) {
 
       <!-- 项目列表主区域 -->
       <div style="flex:1; display:flex; gap:12px; min-height:0; overflow:hidden;">
-        <!-- 左侧：筛选栏 + 卡片网格 -->
-        <div style="display:flex; flex-direction:column; flex:1; min-width:0; overflow:hidden;">
-          <!-- 工具栏 -->
+        <!-- 左侧：筛选栏 + 卡片网格（选中项目时折叠为竖列） -->
+        <div style="
+          display:flex; flex-direction:column;
+          ${selectedProject ? 'width:200px; flex-shrink:0;' : 'flex:1;'}
+          min-width:0; overflow:hidden; transition: width 0.2s ease;
+        ">
+          <!-- 工具栏（未选中时显示，已选中时隐藏过滤条） -->
+          ${!selectedProject ? html`
           <div class="card" style="padding:10px 14px; margin-bottom:10px; flex-shrink:0;">
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
               <!-- 状态筛选下拉 -->
@@ -490,40 +565,52 @@ export function renderProjects(props: ProjectsProps) {
               </div>
             </div>
           </div>
+          ` : html`
+          <!-- 选中状态下的紧凑工具栏 -->
+          <div style="display:flex; gap:4px; margin-bottom:8px; flex-shrink:0;">
+            <button class="btn btn--sm" style="flex:1; font-size:11px;" ?disabled=${props.loading} @click=${props.onCreateProject}>新建</button>
+            <button class="btn btn--sm" style="font-size:11px;" ?disabled=${props.loading} @click=${props.onRefresh}>刷新</button>
+          </div>
+          `}
 
           <!-- 错误提示 -->
-          ${props.error ? html`<div class="callout danger" style="margin-bottom:10px;">${props.error}</div>` : nothing}
+          ${props.error ? html`<div class="callout danger" style="margin-bottom:10px;font-size:12px;">${props.error}</div>` : nothing}
 
-          <!-- 卡片网格 -->
+          <!-- 卡片区 -->
           <div style="flex:1; overflow-y:auto; padding-right:2px;">
             ${
               filtered.length === 0
-                ? html`<div class="callout" style="text-align:center; padding:40px 20px;">
-                  <div style="font-size:32px; margin-bottom:8px;">📋</div>
-                  <div style="font-size:14px; color:var(--muted);">
-                    ${allProjects.length === 0 ? "暂无项目，点击「新建项目」创建第一个" : "该状态下暂无项目"}
+                ? html`<div class="callout" style="text-align:center; padding:${selectedProject ? '12px 8px' : '40px 20px'};">
+                  <div style="font-size:${selectedProject ? '20px' : '32px'}; margin-bottom:8px;">📋</div>
+                  <div style="font-size:${selectedProject ? '11px' : '14px'}; color:var(--muted);">
+                    ${allProjects.length === 0 ? (selectedProject ? "暂无项目" : "暂无项目，点击「新建项目」创建第一个") : "该状态下暂无项目"}
                   </div>
                 </div>`
-                : html`<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; padding-bottom:16px;">
-                  ${filtered.map((project) => renderProjectCard(props, project, selectedId))}
-                </div>`
+                : selectedProject
+                  ? html`<div style="display:flex; flex-direction:column; gap:4px; padding-bottom:16px;">
+                    ${filtered.map((project) => renderProjectCardCompact(props, project, selectedId))}
+                  </div>`
+                  : html`<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; padding-bottom:16px;">
+                    ${filtered.map((project) => renderProjectCard(props, project, selectedId))}
+                  </div>`
             }
           </div>
         </div>
 
-        <!-- 右侧：项目详情面板（选中时显示） -->
+        <!-- 右侧：项目详情面板（选中时占满剩余空间） -->
         ${
           selectedProject
             ? html`
-            <div class="card" style="width:480px; flex-shrink:0; display:flex; flex-direction:column; overflow:hidden;">
+            <div class="card" style="flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden;">
               <!-- 面板头部 -->
               <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border); flex-shrink:0;">
-                <div style="font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                <div style="font-weight:600; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                   ${selectedProject.name}
                 </div>
                 <button
-                  style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--muted);padding:2px 6px;"
+                  style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--muted);padding:2px 6px;line-height:1;"
                   @click=${() => props.onSelectProject("")}
+                  title="关闭详情"
                 >×</button>
               </div>
               <!-- Tab 内容 -->
@@ -537,9 +624,11 @@ export function renderProjects(props: ProjectsProps) {
                         ? renderProjectConfig(props, selectedProject)
                         : props.activePanel === "members"
                           ? renderProjectMembers(props, selectedProject)
-                          : props.activePanel === "handoff"
-                            ? renderProjectHandoff(props, selectedProject)
-                            : renderProjectProgress(props, selectedProject)
+                          : props.activePanel === "roadmap"
+                            ? renderProjectRoadmap(props, selectedProject)
+                            : props.activePanel === "handoff"
+                              ? renderProjectHandoff(props, selectedProject)
+                              : renderProjectProgress(props, selectedProject)
                   }
                 </div>
               </div>
@@ -675,6 +764,54 @@ function renderProjectCard(
   `;
 }
 
+/**
+ * 紧凑卡片（选中项目时左侧竖向列使用）
+ */
+function renderProjectCardCompact(
+  props: ProjectsProps,
+  project: ProjectInfo,
+  selectedId: string | null | undefined,
+) {
+  const status = project.status ?? "planning";
+  const meta = PROJECT_STATUS_META[status];
+  const sprints = project.sprints ?? project.milestones ?? [];
+  const progress = sprints.length > 0 ? calcProjectProgress(sprints) : (project.progress ?? 0);
+  const progressColor =
+    progress >= 100 ? "#2563eb" : progress >= 60 ? "#16a34a" : progress >= 30 ? "#d97706" : "#9ca3af";
+  const isSelected = selectedId === project.projectId;
+
+  return html`
+    <div
+      style="
+        border: 2px solid ${isSelected ? "var(--primary, #2563eb)" : "var(--border)"};
+        border-radius: 8px;
+        overflow: hidden;
+        cursor: pointer;
+        background: ${isSelected ? "var(--primary-bg, #eff6ff)" : "var(--card-bg, #fff)"};
+        ${isSelected ? "box-shadow: 0 0 0 2px rgba(37,99,235,0.15);" : ""}
+      "
+      @click=${() => props.onSelectProject(project.projectId)}
+    >
+      <!-- 顶部进度条 -->
+      <div style="height:3px; background:var(--border);">
+        <div style="height:100%; width:${progress}%; background:${progressColor};"></div>
+      </div>
+      <!-- 内容区 -->
+      <div style="padding:8px 10px;">
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+          <span style="font-size:10px; font-weight:600; padding:1px 6px; border-radius:8px; background:${meta.bg}; color:${meta.color}; flex-shrink:0;">
+            ${meta.icon}
+          </span>
+          <span style="font-size:12px; font-weight:${isSelected ? '700' : '500'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:${isSelected ? "var(--primary, #2563eb)" : "inherit"};">
+            ${project.name}
+          </span>
+        </div>
+        <div style="font-size:11px; color:${progressColor}; font-weight:600;">${progress}%</div>
+      </div>
+    </div>
+  `;
+}
+
 function renderProjectTabs(
   active: ProjectsProps["activePanel"],
   onSelect: (panel: ProjectsProps["activePanel"]) => void,
@@ -684,6 +821,7 @@ function renderProjectTabs(
     { id: "config" as const, label: "项目配置", icon: "⚙️" },
     { id: "members" as const, label: "成员管理", icon: "👥" },
     { id: "progress" as const, label: "项目进度", icon: "📈" },
+    { id: "roadmap" as const, label: "目标路线图", icon: "🗺️" },
     { id: "handoff" as const, label: "跨团队协作", icon: "🤝" },
   ];
 
@@ -773,7 +911,7 @@ function renderProjectOverview(props: ProjectsProps, project: ProjectInfo) {
             `
       }
 
-      <div style="margin-top: 24px; display: flex; gap: 8px;">
+      <div style="margin-top: 24px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
         <button class="btn" @click=${() => props.onEditProject(project.projectId)}>
           编辑项目
         </button>
@@ -783,10 +921,133 @@ function renderProjectOverview(props: ProjectsProps, project: ProjectInfo) {
         >
           打开工作空间
         </button>
+        <button
+          class="btn btn--danger"
+          style="margin-left: auto; background: #fef2f2; color: #dc2626; border-color: #fca5a5;"
+          @click=${() => props.onShowDeleteProjectConfirm(project.projectId, project.name)}
+        >
+          🗑️ 删除项目
+        </button>
       </div>
+
+      <!-- 删除确认 Modal -->
+      ${props.deleteProjectConfirm?.projectId === project.projectId
+        ? renderDeleteProjectConfirmModal(props, project)
+        : nothing}
   `;
 }
 
+/**
+ * 删除项目确认 modal：含三个选项复选框（默认全部保留）
+ */
+function renderDeleteProjectConfirmModal(props: ProjectsProps, project: ProjectInfo) {
+  const confirm = props.deleteProjectConfirm!;
+  return html`
+    <div style="
+      position:fixed; inset:0; z-index:1000;
+      background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;
+    " @click=${(e: Event) => { if (e.target === e.currentTarget) props.onHideDeleteProjectConfirm(); }}>
+      <div style="
+        background:var(--surface, #fff); border-radius:12px; padding:28px 32px;
+        min-width:380px; max-width:480px; box-shadow:0 8px 32px rgba(0,0,0,0.18);
+      ">
+        <!-- 标题 -->
+        <div style="font-size:18px; font-weight:700; margin-bottom:6px; color:#dc2626;">
+          🗑️ 删除项目「${project.name}」
+        </div>
+        <div style="font-size:13px; color:var(--muted); margin-bottom:20px;">
+          选择需要删除的内容，未勾选项目将被保留。
+        </div>
+
+        <!-- 删除选项 -->
+        <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:24px;">
+          <!-- 工作空间 -->
+          <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;
+            padding:12px 14px; border-radius:8px;
+            border:1px solid ${confirm.deleteWorkspace ? '#fca5a5' : 'var(--border)'};
+            background:${confirm.deleteWorkspace ? '#fef2f2' : 'var(--surface-hover, #f9f9f9)'};
+          ">
+            <input type="checkbox"
+              style="margin-top:2px; accent-color:#dc2626;"
+              .checked=${confirm.deleteWorkspace}
+              @change=${(e: Event) => props.onDeleteProjectOptionChange("deleteWorkspace", (e.target as HTMLInputElement).checked)}
+            />
+            <div>
+              <div style="font-weight:600; font-size:13px;">删除工作空间目录</div>
+              <div style="font-size:12px; color:var(--muted); margin-top:2px;">
+                ${project.workspacePath
+                  ? html`<code style="font-size:11px; background:#f3f4f6; padding:1px 5px; border-radius:3px;">${project.workspacePath}</code>`
+                  : '未设置工作空间路径'}
+              </div>
+            </div>
+          </label>
+
+          <!-- Task 任务 -->
+          <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;
+            padding:12px 14px; border-radius:8px;
+            border:1px solid ${confirm.deleteTasks ? '#fca5a5' : 'var(--border)'};
+            background:${confirm.deleteTasks ? '#fef2f2' : 'var(--surface-hover, #f9f9f9)'};
+          ">
+            <input type="checkbox"
+              style="margin-top:2px; accent-color:#dc2626;"
+              .checked=${confirm.deleteTasks}
+              @change=${(e: Event) => props.onDeleteProjectOptionChange("deleteTasks", (e.target as HTMLInputElement).checked)}
+            />
+            <div>
+              <div style="font-weight:600; font-size:13px;">删除 Task 系统任务</div>
+              <div style="font-size:12px; color:var(--muted); margin-top:2px;">将物理删除该项目下所有任务记录</div>
+            </div>
+          </label>
+
+          <!-- 群组 -->
+          <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;
+            padding:12px 14px; border-radius:8px;
+            border:1px solid ${confirm.deleteGroups ? '#fca5a5' : 'var(--border)'};
+            background:${confirm.deleteGroups ? '#fef2f2' : 'var(--surface-hover, #f9f9f9)'};
+          ">
+            <input type="checkbox"
+              style="margin-top:2px; accent-color:#dc2626;"
+              .checked=${confirm.deleteGroups}
+              @change=${(e: Event) => props.onDeleteProjectOptionChange("deleteGroups", (e.target as HTMLInputElement).checked)}
+            />
+            <div>
+              <div style="font-weight:600; font-size:13px;">删除绑定群组</div>
+              <div style="font-size:12px; color:var(--muted); margin-top:2px;">删除该项目关联的所有群组</div>
+            </div>
+          </label>
+        </div>
+
+        <!-- 提示文字 -->
+        ${(!confirm.deleteWorkspace && !confirm.deleteTasks && !confirm.deleteGroups) ? html`
+          <div style="font-size:12px; color:#6b7280; background:#f9fafb; padding:8px 12px; border-radius:6px; margin-bottom:16px;">
+            ℹ️ 未选择任何内容，删除后项目将仅从列表移除，工作空间/任务/群组均保留。
+          </div>
+        ` : nothing}
+
+        <!-- 操作按鈕 -->
+        <div style="display:flex; gap:10px; justify-content:flex-end;">
+          <button class="btn" @click=${() => props.onHideDeleteProjectConfirm()}>
+            取消
+          </button>
+          <button
+            class="btn btn--danger"
+            style="background:#dc2626; color:#fff; border-color:#dc2626;"
+            @click=${() => {
+              props.onDeleteProject(project.projectId, {
+                deleteWorkspace: confirm.deleteWorkspace,
+                deleteTasks: confirm.deleteTasks,
+                deleteGroups: confirm.deleteGroups,
+              });
+              props.onHideDeleteProjectConfirm();
+            }}
+          >
+            确认删除
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
 function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
   return html`
     <div class="project-config">
@@ -1987,12 +2248,224 @@ function renderCompletionGate(props: ProjectsProps, project: ProjectInfo) {
           `
           : isScopeFrozen
             ? html`
-              <div style="font-size:12px; color:var(--muted); border-top:1px solid var(--border); padding-top:8px;">
-                🔒 项目已完成并冻结，不再接受新任务。
-                ${gate?.scopeFrozenAt ? html`冻结时间: ${new Date(gate.scopeFrozenAt).toLocaleString("zh-CN")}` : nothing}
+              <div style="border-top:1px solid var(--border); padding-top:10px; margin-top:4px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                  <div style="font-size:12px; color:var(--muted);">
+                    🔒 项目已${gate?.scopeFrozenReason === "cancelled" ? "取消" : "完成"}并冻结，不再接受新任务。
+                    ${gate?.scopeFrozenAt ? html`<span style="margin-left:4px;">冻结于 ${new Date(gate.scopeFrozenAt).toLocaleString("zh-CN")}</span>` : nothing}
+                  </div>
+                  <button
+                    class="btn btn--sm"
+                    style="font-size:11px; background:#fffbeb; color:#d97706; border-color:#d97706; flex-shrink:0;"
+                    title="将项目状态回退为开发中，解除范围冻结，允许继续创建新任务"
+                    @click=${() => {
+                      if (confirm(`确认重新激活项目「${project.name}」？\n\n项目状态将回退为"开发中"，范围冻结解除，AI 可继续创建新任务。`)) {
+                        props.onSaveProgress(project.projectId, { status: "development" });
+                      }
+                    }}
+                  >↩ 重新激活（解冻）</button>
+                </div>
               </div>`
             : nothing
       }
+    </div>
+  `;
+}
+
+function renderProjectRoadmap(props: ProjectsProps, project: ProjectInfo) {
+  const objectives = project.objectives ?? [];
+  const milestones = project.timelineMilestones ?? [];
+
+  const timeframeLabel: Record<ProjectObjective["timeframe"], string> = {
+    short: "\uD83D\uDFE1 \u77ED\u671F",
+    medium: "\uD83D\uDD35 \u4E2D\u671F",
+    long: "\uD83D\uDFDF \u957F\u671F",
+  };
+  const objStatusLabel: Record<ProjectObjective["status"], string> = {
+    "not-started": "\u2B1C \u672A\u5F00\u59CB",
+    "in-progress": "\uD83D\uDFE2 \u8FDB\u884C\u4E2D",
+    "achieved": "\u2705 \u5DF2\u8FBE\u6210",
+    "missed": "\u274C \u672A\u8FBE\u6210",
+    "deferred": "\u23F8\uFE0F \u5DF2\u5EF6\u8FDF",
+  };
+  const msTypeLabel: Record<ProjectMilestoneEntry["type"], string> = {
+    release: "\uD83D\uDE80 \u53D1\u5E03",
+    phase: "\uD83D\uDCE6 \u9636\u6BB5",
+    checkpoint: "\uD83D\uDD0D \u68C0\u67E5\u70B9",
+    deliverable: "\uD83D\uDCDD \u4EA4\u4ED8\u7269",
+    other: "\uD83D\uDCCC \u5176\u4ED6",
+  };
+  const msStatusLabel: Record<ProjectMilestoneEntry["status"], string> = {
+    upcoming: "\u23F3 \u5373\u5C06\u5230\u6765",
+    "in-progress": "\uD83D\uDFE2 \u8FDB\u884C\u4E2D",
+    completed: "\u2705 \u5DF2\u5B8C\u6210",
+    missed: "\u274C \u5DF2\u9519\u8FC7",
+    cancelled: "\u26D4 \u5DF2\u53D6\u6D88",
+  };
+
+  let newObjTitle = "";
+  let newObjTimeframe: ProjectObjective["timeframe"] = "short";
+  let newObjDesc = "";
+  let newMsTitle = "";
+  let newMsType: ProjectMilestoneEntry["type"] = "phase";
+  let newMsDateStr = "";
+
+  return html`
+    <div style="padding-bottom: 24px;">
+      <h3 style="margin: 0 0 4px 0;">\uD83D\uDDFA\uFE0F \u76EE\u6807\u4E0E\u8DEF\u7EBF\u56FE</h3>
+      <p style="font-size: 12px; color: var(--muted); margin: 0 0 20px 0;">
+        \u7BA1\u7406\u9879\u76EE\u77ED\u671F\u3001\u4E2D\u671F\u3001\u957F\u671F\u6218\u7565\u76EE\u6807\uFF08OKR\uFF09\u4E0E\u65F6\u95F4\u8F74\u91CC\u7A0B\u7891\uFF0C\u5E2E\u52A9\u56E2\u961F\u660E\u786E\u76EE\u6807\u3001\u5F62\u6210\u5408\u529B\u3002
+      </p>
+
+      <div style="margin-bottom: 28px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <h4 style="margin: 0; font-size: 14px;">\uD83C\uDFAF \u6218\u7565\u76EE\u6807\uFF08Objectives\uFF09</h4>
+          <span style="font-size: 12px; color: var(--muted);">\u5171 ${objectives.length} \u4E2A\u76EE\u6807</span>
+        </div>
+        ${
+          objectives.length === 0
+            ? html`<div class="callout" style="font-size: 13px;">\u6682\u65E0\u6218\u7565\u76EE\u6807\uFF0C\u5728\u4E0B\u65B9\u6DFB\u52A0\u7B2C\u4E00\u4E2A\u76EE\u6807</div>`
+            : objectives.map((obj) => {
+                const krTotal = obj.keyResults?.length ?? 0;
+                const krDone = obj.keyResults?.filter((kr) => kr.achieved).length ?? 0;
+                const krPct = krTotal > 0 ? Math.round((krDone / krTotal) * 100) : 0;
+                return html`
+                  <div style="border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
+                      <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap;">
+                          <span style="font-weight: 600; font-size: 13px;">${obj.title}</span>
+                          <span class="chip" style="font-size: 11px;">${timeframeLabel[obj.timeframe]}</span>
+                          <span class="chip" style="font-size: 11px;">${objStatusLabel[obj.status]}</span>
+                        </div>
+                        ${obj.description ? html`<div style="font-size: 12px; color: var(--muted); margin-bottom: 6px;">${obj.description}</div>` : nothing}
+                        ${
+                          krTotal > 0
+                            ? html`
+                              <div style="margin-top: 6px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                  <span style="font-size: 11px; color: var(--muted);">KR \u8FDB\u5EA6: ${krDone}/${krTotal}</span>
+                                  <div style="flex: 1; height: 4px; background: var(--border); border-radius: 2px; max-width: 120px;">
+                                    <div style="height: 4px; background: #16a34a; border-radius: 2px; width: ${krPct}%;"></div>
+                                  </div>
+                                  <span style="font-size: 11px; color: var(--muted);">${krPct}%</span>
+                                </div>
+                                ${(obj.keyResults ?? []).map((kr) => html`
+                                  <div style="font-size: 11px; color: ${kr.achieved ? "#16a34a" : "var(--muted)"}; display: flex; align-items: center; gap: 4px;">
+                                    ${kr.achieved ? "\u2705" : "\u25CB"} <span>${kr.description}${
+                                      kr.target != null
+                                        ? html` <em style="color:var(--muted);font-size:10px;">(${kr.current ?? 0}/${kr.target} ${kr.unit ?? ""})</em>`
+                                        : nothing
+                                    }</span>
+                                  </div>
+                                `)}
+                              </div>
+                            `
+                            : nothing
+                        }
+                        ${obj.targetDate ? html`<div style="font-size: 11px; color: var(--muted); margin-top: 4px;">\uD83D\uDCC5 \u76EE\u6807\u65E5\u671F: ${new Date(obj.targetDate).toLocaleDateString()}</div>` : nothing}
+                      </div>
+                      <button class="btn btn--sm" style="flex-shrink:0;font-size:11px;padding:2px 6px;background:var(--danger-bg,#fee2e2);color:var(--danger,#dc2626);"
+                        @click=${() => { if (confirm(`\u786E\u8BA4\u5220\u9664\u76EE\u6807\u300C${obj.title}\u300D\uFF1F`)) { props.onDeleteObjective(project.projectId, obj.id); } }}
+                      >\u5220\u9664</button>
+                    </div>
+                  </div>
+                `;
+              })
+        }
+        <div style="border: 1px dashed var(--border); border-radius: 8px; padding: 14px; margin-top: 12px;">
+          <div style="font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--muted);">\u2795 \u65B0\u589E\u76EE\u6807</div>
+          <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: end;">
+            <div class="form-group" style="margin: 0;">
+              <label style="font-size: 11px;">\u76EE\u6807\u540D\u79F0 *</label>
+              <input type="text" class="form-control" placeholder="\u4F8B\u5982\uFF1A\u5B8C\u6210\u7B2C\u4E00\u671F\u6838\u5FC3\u529F\u80FD\u4E0A\u7EBF"
+                @input=${(e: InputEvent) => { newObjTitle = (e.target as HTMLInputElement).value; }} />
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label style="font-size: 11px;">\u65F6\u95F4\u8303\u56F4</label>
+              <select class="form-control" @change=${(e: Event) => { newObjTimeframe = (e.target as HTMLSelectElement).value as ProjectObjective["timeframe"]; }}>
+                <option value="short">\uD83D\uDFE1 \u77ED\u671F</option>
+                <option value="medium">\uD83D\uDD35 \u4E2D\u671F</option>
+                <option value="long">\uD83D\uDFDF \u957F\u671F</option>
+              </select>
+            </div>
+            <button class="btn btn--primary btn--sm" @click=${() => {
+              if (!newObjTitle.trim()) { alert("\u8BF7\u8F93\u5165\u76EE\u6807\u540D\u79F0"); return; }
+              props.onUpsertObjective(project.projectId, { id: `obj-${Date.now()}`, title: newObjTitle.trim(), description: newObjDesc.trim() || undefined, timeframe: newObjTimeframe, status: "not-started" });
+              newObjTitle = ""; newObjDesc = "";
+            }}>\u6DFB\u52A0</button>
+          </div>
+          <div class="form-group" style="margin: 8px 0 0 0;">
+            <label style="font-size: 11px;">\u76EE\u6807\u63CF\u8FF0\uFF08\u53EF\u9009\uFF09</label>
+            <input type="text" class="form-control" placeholder="\u7B80\u8FF0\u8BE5\u76EE\u6807\u8981\u8FBE\u6210\u7684\u4E1A\u52A1\u6210\u679C"
+              @input=${(e: InputEvent) => { newObjDesc = (e.target as HTMLInputElement).value; }} />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <h4 style="margin: 0; font-size: 14px;">\uD83D\uDEA9 \u65F6\u95F4\u8F74\u91CC\u7A0B\u7891</h4>
+          <span style="font-size: 12px; color: var(--muted);">${milestones.filter((m) => m.status === "upcoming" || m.status === "in-progress").length} \u4E2A\u8FDB\u884C\u4E2D/\u5373\u5C06\u5230\u6765</span>
+        </div>
+        ${
+          milestones.length === 0
+            ? html`<div class="callout" style="font-size: 13px;">\u6682\u65E0\u91CC\u7A0B\u7891\uFF0C\u5728\u4E0B\u65B9\u6DFB\u52A0\u7B2C\u4E00\u4E2A\u91CC\u7A0B\u7891</div>`
+            : [...milestones].sort((a, b) => (a.targetDate ?? Infinity) - (b.targetDate ?? Infinity)).map((ms) => {
+                const isPast = ms.status === "completed" || ms.status === "missed" || ms.status === "cancelled";
+                const isOverdue = ms.targetDate != null && ms.targetDate < Date.now() && (ms.status === "upcoming" || ms.status === "in-progress");
+                return html`
+                  <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 14px;margin-bottom:8px;border:1px solid ${isOverdue ? "#fca5a5" : "var(--border)"};border-radius:8px;background:${isOverdue ? "#fff5f5" : isPast ? "var(--bg-subtle,#f9fafb)" : "var(--card-bg,#fff)"};opacity:${ms.status === "cancelled" ? "0.6" : "1"};">
+                    <div style="flex-shrink:0;font-size:20px;margin-top:2px;">${ms.status === "completed" ? "\u2705" : ms.status === "missed" ? "\uD83D\uDD34" : ms.status === "cancelled" ? "\u26D4" : ms.status === "in-progress" ? "\uD83D\uDFE2" : "\u23F3"}</div>
+                    <div style="flex:1;">
+                      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
+                        <span style="font-weight:600;font-size:13px;">${ms.title}</span>
+                        <span class="chip" style="font-size:11px;">${msTypeLabel[ms.type]}</span>
+                        <span class="chip" style="font-size:11px;">${msStatusLabel[ms.status]}</span>
+                        ${isOverdue ? html`<span class="chip" style="font-size:11px;color:#dc2626;border-color:#fca5a5;background:#fee2e2;">\u26A0\uFE0F \u5DF2\u8FDB\u5EA6\u6EDE\u540E</span>` : nothing}
+                      </div>
+                      ${ms.description ? html`<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">${ms.description}</div>` : nothing}
+                      ${ms.targetDate ? html`<div style="font-size:11px;color:${isOverdue ? "#dc2626" : "var(--muted)"};">📅 \u76EE\u6807\u65E5\u671F: ${new Date(ms.targetDate).toLocaleDateString()}${ms.completedAt ? html` &middot; \u5B8C\u6210\u4E8E: ${new Date(ms.completedAt).toLocaleDateString()}` : nothing}</div>` : nothing}
+                    </div>
+                    <button class="btn btn--sm" style="flex-shrink:0;font-size:11px;padding:2px 6px;background:var(--danger-bg,#fee2e2);color:var(--danger,#dc2626);"
+                      @click=${() => { if (confirm(`\u786E\u8BA4\u5220\u9664\u91CC\u7A0B\u7891\u300C${ms.title}\u300D\uFF1F`)) { props.onDeleteMilestone(project.projectId, ms.id); } }}
+                    >\u5220\u9664</button>
+                  </div>
+                `;
+              })
+        }
+        <div style="border: 1px dashed var(--border); border-radius: 8px; padding: 14px; margin-top: 12px;">
+          <div style="font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--muted);">\u2795 \u65B0\u589E\u91CC\u7A0B\u7891</div>
+          <div style="display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: end;">
+            <div class="form-group" style="margin: 0;">
+              <label style="font-size: 11px;">\u91CC\u7A0B\u7891\u540D\u79F0 *</label>
+              <input type="text" class="form-control" placeholder="\u4F8B\u5982\uFF1A MVP v1.0 \u53D1\u5E03"
+                @input=${(e: InputEvent) => { newMsTitle = (e.target as HTMLInputElement).value; }} />
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label style="font-size: 11px;">\u7C7B\u578B</label>
+              <select class="form-control" @change=${(e: Event) => { newMsType = (e.target as HTMLSelectElement).value as ProjectMilestoneEntry["type"]; }}>
+                <option value="phase">\uD83D\uDCE6 \u9636\u6BB5</option>
+                <option value="release">\uD83D\uDE80 \u53D1\u5E03</option>
+                <option value="checkpoint">\uD83D\uDD0D \u68C0\u67E5\u70B9</option>
+                <option value="deliverable">\uD83D\uDCDD \u4EA4\u4ED8\u7269</option>
+                <option value="other">\uD83D\uDCCC \u5176\u4ED6</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label style="font-size: 11px;">\u76EE\u6807\u65E5\u671F</label>
+              <input type="date" class="form-control"
+                @input=${(e: InputEvent) => { newMsDateStr = (e.target as HTMLInputElement).value; }} />
+            </div>
+            <button class="btn btn--primary btn--sm" style="margin-bottom:0;" @click=${() => {
+              if (!newMsTitle.trim()) { alert("\u8BF7\u8F93\u5165\u91CC\u7A0B\u7891\u540D\u79F0"); return; }
+              const targetDate = newMsDateStr ? new Date(newMsDateStr).getTime() : undefined;
+              props.onUpsertMilestone(project.projectId, { id: `ms-${Date.now()}`, title: newMsTitle.trim(), type: newMsType, status: "upcoming", targetDate });
+              newMsTitle = ""; newMsDateStr = "";
+            }}>\u6DFB\u52A0</button>
+          </div>
+        </div>
+      </div>
     </div>
   `;
 }

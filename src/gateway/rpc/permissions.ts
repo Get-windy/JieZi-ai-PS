@@ -72,7 +72,12 @@ async function handleGetPermissions(params: { agentId?: string }, context: any):
     throw errorShape(ErrorCodes.INVALID_REQUEST, `Agent not found: ${agentId}`);
   }
 
-  const permissions = (agent as any).permissions || null;
+  const permissions =
+    // 优先从 params.permissions 读取（新存储位置）
+    (agent as any).params?.permissions ||
+    // 兼容旧数据：直接写在顶层的 permissions
+    (agent as any).permissions ||
+    null;
 
   return {
     agentId,

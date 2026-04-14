@@ -149,6 +149,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "chat.nav.groups": "Groups",
     "chat.nav.sessions_count": "{count} sessions",
     "chat.nav.more_sessions": "{count} more…",
+    // 时间分组标签（参考 Helix SessionsSidebar.tsx）
+    "chat.nav.group.today": "Today",
+    "chat.nav.group.week": "Last 7 days",
+    "chat.nav.group.month": "Last 30 days",
+    "chat.nav.group.older": "Older",
+    "chat.nav.exec_group": "Task Group",
     // Chat monitor view
     "chat.monitor.user": "👤 User",
     "chat.monitor.title": "Collaboration Monitor",
@@ -3255,6 +3261,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "chat.nav.groups": "群聊",
     "chat.nav.sessions_count": "{count} 个会话",
     "chat.nav.more_sessions": "还有 {count} 条未展示…",
+    // 时间分组标签（参考 Helix SessionsSidebar.tsx）
+    "chat.nav.group.today": "今天",
+    "chat.nav.group.week": "最近 7 天",
+    "chat.nav.group.month": "最近 30 天",
+    "chat.nav.group.older": "更早",
+    "chat.nav.exec_group": "任务组",
     // 聊天监控视图
     "chat.monitor.user": "👤 用户",
     "chat.monitor.title": "协作监控",

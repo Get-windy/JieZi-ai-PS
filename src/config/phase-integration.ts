@@ -354,10 +354,15 @@ export function initializePhaseIntegration(config: OpenClawConfig): {
       }
 
       const agentId = (agent as any).id || "default";
+      // 本地自研字段存在 params 里（新写入），兼容旧数据直接写在顶层（fallback）
+      const agentParams = (agent as any).params as Record<string, unknown> | undefined;
+      const agentModelAccounts = agentParams?.modelAccounts ?? (agent as any).modelAccounts;
+      const agentChannelBindings = agentParams?.channelBindings ?? (agent as any).channelBindings;
+      const agentPermissions = agentParams?.permissions ?? (agent as any).permissions;
 
       // 验证模型账号配置（Phase 1）
-      if ((agent as any).modelAccounts) {
-        const modelAccountsResult = validateModelAccounts((agent as any).modelAccounts);
+      if (agentModelAccounts) {
+        const modelAccountsResult = validateModelAccounts(agentModelAccounts);
         if (!modelAccountsResult.valid) {
           errors.push(...modelAccountsResult.errors.map((e) => `Agent ${agentId}: ${e}`));
         } else {
@@ -366,8 +371,8 @@ export function initializePhaseIntegration(config: OpenClawConfig): {
       }
 
       // 验证通道绑定配置（Phase 2）
-      if ((agent as any).channelBindings) {
-        const bindingResult = validateChannelBindings((agent as any).channelBindings);
+      if (agentChannelBindings) {
+        const bindingResult = validateChannelBindings(agentChannelBindings);
         if (!bindingResult.valid) {
           errors.push(...bindingResult.errors.map((e) => `Agent ${agentId}: ${e}`));
         } else {
@@ -376,14 +381,14 @@ export function initializePhaseIntegration(config: OpenClawConfig): {
       }
 
       // 验证和初始化权限配置（Phase 3）
-      if ((agent as any).permissions) {
-        const permissionResult = validatePermissions((agent as any).permissions);
+      if (agentPermissions) {
+        const permissionResult = validatePermissions(agentPermissions);
         if (!permissionResult.valid) {
           errors.push(...permissionResult.errors.map((e) => `Agent ${agentId}: ${e}`));
         } else {
           // 初始化权限系统
           try {
-            initializePermissionSystem((agent as any).permissions);
+            initializePermissionSystem(agentPermissions);
             console.log(`[Phase Integration] Agent ${agentId}: permissions initialized`);
           } catch (err) {
             errors.push(

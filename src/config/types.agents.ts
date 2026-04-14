@@ -117,12 +117,37 @@ export type AgentsConfig = {
 
 /** Smart routing weight config for modelAccounts. */
 export type AgentModelSmartRoutingConfig = {
-  complexityWeight?: number;
+  /** 基础能力匹配权重（上下文窗口、工具、视觉、推理等级）默认 20 */
   capabilityWeight?: number;
-  costWeight?: number;
-  speedWeight?: number;
+  /** 专业领域匹配权重（Coding/Math/Vision/Creative…）默认 12 */
+  specializationWeight?: number;
+  /** 模态匹配权重（文本/图片/代码）默认 8 */
+  modalityWeight?: number;
+  /** 综合 Arena Elo 权重（整体实力基线）默认 15 */
   eloWeight?: number;
-  /** Whether to enable cost-based optimization scoring. */
+  /** 编程专项 Elo 权重（lmarena Coding 分类）默认 11 */
+  codingEloWeight?: number;
+  /** 数学/推理专项 Elo 权重（lmarena Math / Hard Prompts）默认 11 */
+  reasoningEloWeight?: number;
+  /** 视觉专项 Elo 权重（lmarena Vision Arena）默认 8 */
+  visionEloWeight?: number;
+  /** 创意写作专项 Elo 权重（lmarena Creative Writing）默认 8 */
+  creativeEloWeight?: number;
+  /** 指令跟随专项 Elo 权重（lmarena Instruction Following）默认 7 */
+  instructionEloWeight?: number;
+  /**
+   * @deprecated 路由引擎已不再使用成本评分，保留字段不封包破坏已有配置
+   */
+  costWeight?: number;
+  /**
+   * @deprecated 路由引擎已不再使用速度评分，保留字段不封包破坏已有配置
+   */
+  speedWeight?: number;
+  /**
+   * @deprecated 保留字段兼容
+   */
+  complexityWeight?: number;
+  /** @deprecated 保留字段兼容 */
   enableCostOptimization?: boolean;
 };
 

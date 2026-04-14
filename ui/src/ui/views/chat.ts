@@ -227,6 +227,14 @@ export function renderChat(props: ChatProps) {
 
   const hasMessages = props.messages.length > 0 || props.stream !== null;
 
+  // 方向3：断连检测警告——参考 Helix AI
+  // streamStartedAt 超过 45s 且 stream 正在活跃（非 null），显示断连警告
+  const STREAM_STALL_MS = 45_000;
+  const isStreamStalled =
+    props.stream !== null &&
+    props.streamStartedAt !== null &&
+    Date.now() - (props.streamStartedAt ?? 0) > STREAM_STALL_MS;
+
   const thread = html`
     <div
       class="chat-thread"
@@ -299,12 +307,42 @@ export function renderChat(props: ChatProps) {
                 const newDraft = current ? `${quoted}${current}` : quoted;
                 props.onDraftChange(newDraft);
               },
+              // Edit & Regenerate（方向1）
+              // 通过匹配 group 内第一条消息的时间戳查找在 messages 中的真实索引
+              onEditMessage: props.onEditMessage
+                ? (newText: string) => {
+                    const group = item;
+                    const firstMsg = group.messages[0]?.message as Record<string, unknown> | undefined;
+                    const targetTs = firstMsg?.timestamp as number | undefined;
+                    const msgIndex = targetTs
+                      ? (props.messages as unknown[]).findIndex(
+                          (m) => (m as Record<string, unknown>).timestamp === targetTs,
+                        )
+                      : -1;
+                    props.onEditMessage!(msgIndex >= 0 ? msgIndex : 0, newText);
+                  }
+                : undefined,
             });
           }
 
           return nothing;
         },
       )}
+      ${
+        isStreamStalled
+          ? html`
+            <div class="chat-stall-warning" role="alert" aria-live="assertive">
+              <span class="chat-stall-warning__icon" aria-hidden="true">⚠️</span>
+              <span class="chat-stall-warning__text">Agent 可能已断开连接，请稍候或尝试中断</span>
+              ${
+                props.onAbort
+                  ? html`<button class="btn btn--xs chat-stall-warning__abort" type="button" @click=${props.onAbort}>中断</button>`
+                  : nothing
+              }
+            </div>
+          `
+          : nothing
+      }
     </div>
   `;
 

@@ -375,7 +375,7 @@ export async function archiveStaleTask(task: Task): Promise<void> {
           : null,
         task.projectId ? `Project: ${task.projectId}` : null,
         ``,
-        `If this task should NOT have been cancelled, use agent_task_manage to restore it.`,
+        `If this task should NOT have been cancelled, use task_reset taskId=${task.id} targetStatus=todo to restore it.`,
       ]
         .filter(Boolean)
         .join("\n");
@@ -452,11 +452,11 @@ export async function reassignBlockedTask(task: Task, _projectId?: string): Prom
         `Blocked for: ${blockedMinutes} minutes (blocked count: ${blockCount})`,
         task.description ? `Description: ${task.description.slice(0, 200)}` : null,
         ``,
-        `Suggested actions:`,
-        `1. Check why the assignee is blocked — ask them directly via chat`,
-        `2. Use agent_task_manage to reassign to another available agent`,
-        `3. Use agent_task_manage action=unblock if the blocker has been resolved`,
-        `4. If no one can help, cancel the task with a clear reason`,
+        `Suggested actions (use these tools directly):`,
+        `1. Check why the assignee is blocked — use agent_communicate targetAgentId=${task.assignees?.[0]?.id ?? "<assignee>"}`,
+        `2. Use task_reset taskId=${task.id} targetStatus=todo to reset and reassign to another agent`,
+        `3. Use task_update taskId=${task.id} status=in-progress if the blocker has been resolved`,
+        `4. Use task_update taskId=${task.id} status=cancelled to cancel if no one can help`,
       ]
         .filter(Boolean)
         .join("\n");
