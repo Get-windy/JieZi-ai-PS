@@ -170,7 +170,7 @@ async function buildLeaderSnapshot(
         if (alertRows.length < MAX_ALERT_AGENTS) {
           const bt = blocked[0];
           alertRows.push(
-            `  ⚠️ ${agentId} blocked [${bt.id}] "${bt.title.slice(0, MAX_TASK_TITLE_CHARS)}" — use agent.task.manage to resolve`,
+            `  ⚠️ ${agentId} blocked [${bt.id}] "${bt.title.slice(0, MAX_TASK_TITLE_CHARS)}" — use agent.task.triage to batch-resolve`,
           );
         }
       }
@@ -219,7 +219,7 @@ async function buildLeaderSnapshot(
   }
 
   // 操作提示（极度精简，仅关键命令）
-  lines.push("📌 常用操作: agent.task.manage(assign/cancel/reset/extend) | agent.task.list | agent_communicate");
+  lines.push("📌 常用操作: agent.task.triage(批量分诊) | agent.task.manage(cancel/reset/extend/split) | agent.task.list | agent_communicate");
 
   const snapshot = lines.join("\n");
 

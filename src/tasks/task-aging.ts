@@ -430,6 +430,53 @@ export async function reassignBlockedTask(task: Task, _projectId?: string): Prom
       },
     });
 
+    // ── 阻塞原因分类 ──────────────────────────────────────────────────────────
+    // 依据 task.metadata.blockType 或关键词推断阻塞类型，给主控提供精准建议
+    type BlockType = "dependency" | "needs-info" | "technical-block" | "unknown";
+    const rawBlockType = String(task.metadata?.blockType ?? "").toLowerCase();
+    const rawBlockReason = String(task.metadata?.blockReason ?? task.description ?? "").toLowerCase();
+
+    let blockType: BlockType;
+    if (rawBlockType === "dependency" || /\bwait(ing)?\s+(for|on)\b|\bdepend(s|ency)?\b|\bblockedby\b/.test(rawBlockReason)) {
+      blockType = "dependency";
+    } else if (/\bconfirm|clarif|detail|unclear|需求|接口|spec\b/.test(rawBlockReason) || rawBlockType === "needs-info") {
+      blockType = "needs-info";
+    } else if (/\btechni|arch|design|方案|implementation|integrate\b/.test(rawBlockReason) || rawBlockType === "technical-block") {
+      blockType = "technical-block";
+    } else {
+      blockType = "unknown";
+    }
+
+    // 根据分类生成差异化建议（减少主控思考量）
+    const BLOCK_TYPE_LABEL: Record<BlockType, string> = {
+      dependency:      "⏳ 依赖阻塞 (DEPENDENCY)",
+      "needs-info":    "❓ 需求/接口待确认 (NEEDS-INFO)",
+      "technical-block": "🔧 技术方案待确认 (TECHNICAL-BLOCK)",
+      unknown:         "⚠️  原因未知 (UNKNOWN)",
+    };
+    const BLOCK_TYPE_SUGGEST: Record<BlockType, string[]> = {
+      dependency: [
+        `→ 推荐: agent.task.triage action=mark-dependency blockedByTaskIds=["<dependency_task_id>"]`,
+        `  当依赖任务完成后，系统将自动解除此阻塞`,
+        `→ 若依赖任务已完成: agent.task.triage action=reset taskId=${task.id}`,
+      ],
+      "needs-info": [
+        `→ 推荐: 先通过 agent_communicate 与 assignee 或相关 agent 确认细节`,
+        `→ 确认后: agent.task.triage action=reset taskId=${task.id}`,
+        `→ 若需求已取消: agent.task.triage action=cancel taskId=${task.id}`,
+      ],
+      "technical-block": [
+        `→ 推荐: 用 agent.task.triage action=reassign 指派给更有技术能力的 agent`,
+        `→ 或者: agent.task.triage action=add-note 记录方案决策，再 action=reset 重启`,
+        `→ 若任务可拆分: agent.task.manage action=split taskId=${task.id}`,
+      ],
+      unknown: [
+        `→ 推荐: agent_communicate 向 assignee 询问阻塞原因`,
+        `→ 根据回复再选: agent.task.triage action=reset|cancel|mark-dependency|reassign`,
+        `→ 批量处理多个同类阻塞: agent.task.triage operations=[...]`,
+      ],
+    };
+
     // 向 supervisor 发送告警
     const supervisorRaw =
       (task.metadata?.supervisorId as string | undefined) ?? task.supervisorId ?? task.creatorId;
@@ -446,17 +493,15 @@ export async function reassignBlockedTask(task: Task, _projectId?: string): Prom
         ``,
         `Task ID: ${task.id}`,
         `Title: ${task.title}`,
-        `Priority: ${task.priority}`,
+        `Priority: ${task.priority} | Blocked for: ${blockedMinutes}min | Block count: ${blockCount}`,
         `Assigned to: ${assigneeList}`,
         task.projectId ? `Project: ${task.projectId}` : null,
-        `Blocked for: ${blockedMinutes} minutes (blocked count: ${blockCount})`,
-        task.description ? `Description: ${task.description.slice(0, 200)}` : null,
+        task.description ? `Description: ${task.description.slice(0, 150)}` : null,
         ``,
-        `Suggested actions (use these tools directly):`,
-        `1. Check why the assignee is blocked — use agent_communicate targetAgentId=${task.assignees?.[0]?.id ?? "<assignee>"}`,
-        `2. Use task_reset taskId=${task.id} targetStatus=todo to reset and reassign to another agent`,
-        `3. Use task_update taskId=${task.id} status=in-progress if the blocker has been resolved`,
-        `4. Use task_update taskId=${task.id} status=cancelled to cancel if no one can help`,
+        `Block type: ${BLOCK_TYPE_LABEL[blockType]}`,
+        ...BLOCK_TYPE_SUGGEST[blockType],
+        ``,
+        `[批量处理提示] 如有多个同类阻塞任务，请使用 agent.task.triage 一次传入 operations 数组批量决策，避免逐条处理消耗上下文。`,
       ]
         .filter(Boolean)
         .join("\n");
