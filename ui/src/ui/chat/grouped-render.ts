@@ -685,7 +685,7 @@ function renderEditButton(originalText: string, onEdit: (text: string) => void) 
     const btn = e.currentTarget as HTMLElement;
     const footer = btn.closest(".chat-group-footer");
     const groupMessages = btn.closest(".chat-group-messages");
-    if (!footer || !groupMessages) return;
+    if (!footer || !groupMessages) {return;}
 
     // 已经在编辑模式则关闭
     const existing = groupMessages.querySelector(".chat-edit-inline");
@@ -953,7 +953,7 @@ function jsonSummaryLabel(parsed: unknown): string {
  * Token pattern: CONFIRM_<ACTION>_<id>
  * Matches confirmation tokens emitted by guarded tools (project_create, agent_spawn, project_delete, etc.)
  */
-const CONFIRM_TOKEN_RE = /(CONFIRM_[A-Z][A-Z0-9_\-]*[A-Z0-9])/g;
+const CONFIRM_TOKEN_RE = /(CONFIRM_[A-Z][A-Z0-9_-]*[A-Z0-9])/g;
 
 /**
  * Render a single confirmation token as an inline card with a one-click copy button.

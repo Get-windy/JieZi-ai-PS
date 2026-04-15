@@ -563,6 +563,80 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("## Reactions");
     expect(prompt).toContain("Reactions are enabled for Telegram in MINIMAL mode.");
   });
+
+  it("injects doc-writer deliverable spec when agentRole is doc-writer", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      toolNames: ["project_memory_save", "project_memory_get", "task_complete"],
+      agentRole: "doc-writer",
+    });
+
+    expect(prompt).toContain("## 文档交付规范（doc-writer 专属）");
+    expect(prompt).toContain("project_memory_save");
+    expect(prompt).toContain("{projectWorkspace}/docs/");
+    expect(prompt).toContain("{projectWorkspace}/decisions/ADR-");
+    expect(prompt).toContain("将文档写入上述对应路径");
+    expect(prompt).toContain("task_complete");
+  });
+
+  it("injects qa-lead deliverable spec when agentRole is qa-lead", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      toolNames: ["project_memory_save", "project_memory_get", "task_complete"],
+      agentRole: "qa-lead",
+    });
+
+    expect(prompt).toContain("## 测试交付规范（qa-lead 专属）");
+    expect(prompt).toContain("qa/test-reports/");
+    expect(prompt).toContain("qa/bugs/");
+    expect(prompt).toContain("DoD");
+    expect(prompt).toContain("[ AC 满足 ]");
+    expect(prompt).toContain("project_memory_save");
+  });
+
+  it("injects doc-writer spec via runtimeInfo.agentId when agentRole not set", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      runtimeInfo: {
+        agentId: "doc-writer",
+      },
+    });
+
+    expect(prompt).toContain("## 文档交付规范（doc-writer 专属）");
+  });
+
+  it("injects qa-lead spec via runtimeInfo.agentId when agentRole not set", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      runtimeInfo: {
+        agentId: "qa-lead",
+      },
+    });
+
+    expect(prompt).toContain("## 测试交付规范（qa-lead 专属）");
+  });
+
+  it("does not inject role deliverable spec for unknown agent roles", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      runtimeInfo: {
+        agentId: "team-member",
+      },
+    });
+
+    expect(prompt).not.toContain("文档交付规范");
+    expect(prompt).not.toContain("测试交付规范");
+  });
+
+  it("does not inject role deliverable spec in minimal prompt mode", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      promptMode: "minimal",
+      agentRole: "doc-writer",
+    });
+
+    expect(prompt).not.toContain("文档交付规范");
+  });
 });
 
 describe("buildSubagentSystemPrompt", () => {

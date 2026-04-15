@@ -330,7 +330,7 @@ export async function enforceToolPermission(context: ToolExecutionContext): Prom
       console.log(`[Permission Middleware] Tool ${toolName} approved, continuing execution`);
       return;
     } catch (error) {
-      throw new Error(`Approval failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`Approval failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
   }
 

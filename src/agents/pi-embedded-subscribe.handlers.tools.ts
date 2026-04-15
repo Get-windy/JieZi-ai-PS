@@ -31,6 +31,11 @@ import {
   isToolResultError,
   sanitizeToolResult,
 } from "./pi-embedded-subscribe.tools.js";
+import {
+  auditToolStart,
+  auditToolOutput,
+  auditToolError,
+} from "./tool-chain-audit.js";
 
 type ToolStartRecord = {
   startTime: number;
@@ -320,6 +325,14 @@ export async function handleToolExecutionStart(
   // Track start time and args for after_tool_call hook
   toolStartData.set(buildToolStartKey(runId, toolCallId), { startTime: Date.now(), args });
 
+  // 审计：工具开始执行（完整 input 可回放）
+  void auditToolStart({
+    runId,
+    toolCallId,
+    toolName,
+    args: args as Record<string, unknown>,
+  });
+
   if (toolName === "read") {
     const record = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const filePathValue =
@@ -522,6 +535,28 @@ export async function handleToolExecutionEnd(
   // Track committed reminders only when cron.add completed successfully.
   if (!isToolError && toolName === "cron" && isCronAddAction(startData?.args)) {
     ctx.state.successfulCronAdds += 1;
+  }
+
+  // 审计：工具执行结果（完整 output 可回放，区分成功/失败）
+  const durationMsAudit = startData?.startTime != null ? Date.now() - startData.startTime : 0;
+  if (isToolError) {
+    void auditToolError({
+      runId: ctx.params.runId,
+      toolCallId,
+      toolName,
+      output: sanitizedResult,
+      durationMs: durationMsAudit,
+      meta: { meta },
+    });
+  } else {
+    void auditToolOutput({
+      runId: ctx.params.runId,
+      toolCallId,
+      toolName,
+      output: sanitizedResult,
+      durationMs: durationMsAudit,
+      meta: { meta },
+    });
   }
 
   emitAgentEvent({

@@ -78,8 +78,9 @@ export function normalizeTaskStatus(raw: string): TaskStatus {
  * - feature: 属于 Epic 的功能块，必须关联 epicId
  * - story:   用户故事，属于 Feature，必须关联 featureId
  * - task:    技术实现单元，可属于 story / feature / epic / 独立
+ * - initiative: 战略主题级（跨多个项目的顶层工作项，对标 Linear Initiatives / SAFe Portfolio Epic）
  */
-export type WorkItemLevel = "epic" | "feature" | "story" | "task";
+export type WorkItemLevel = "epic" | "feature" | "story" | "task" | "initiative";
 
 /**
  * 任务类型
@@ -340,6 +341,11 @@ export interface Task {
   objectiveId?: string;
   /** 关联的 OKR 关键结果 ID */
   keyResultId?: string;
+  /**
+   * 关联的 Initiative ID（战略主题 ID）
+   * level=initiative 时必填；其他层次可选填以将任务对齐到战略主题
+   */
+  initiativeId?: string;
 
   // 元数据
   createdAt: number;

@@ -315,7 +315,7 @@ export function renderChat(props: ChatProps) {
                     const firstMsg = group.messages[0]?.message as Record<string, unknown> | undefined;
                     const targetTs = firstMsg?.timestamp as number | undefined;
                     const msgIndex = targetTs
-                      ? (props.messages as unknown[]).findIndex(
+                      ? (props.messages).findIndex(
                           (m) => (m as Record<string, unknown>).timestamp === targetTs,
                         )
                       : -1;

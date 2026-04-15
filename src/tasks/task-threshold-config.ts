@@ -117,12 +117,12 @@ export function recordTodoObservation(
   agentRole: string,
   todoCount: number,
 ): void {
-  if (!projectPhase) return;
+  if (!projectPhase) {return;}
   const key = `${projectPhase}:${agentRole}`;
   const arr = _observations.get(key) ?? [];
   arr.push(todoCount);
   // 限制内存：每个 key 最多保留 200 条
-  if (arr.length > 200) arr.splice(0, arr.length - 200);
+  if (arr.length > 200) {arr.splice(0, arr.length - 200);}
   _observations.set(key, arr);
 }
 
@@ -277,11 +277,11 @@ export function registerMissingThresholdNotifier(
  * 内部有 24h 冷却，同一 phase:role 不重复轰炸
  */
 function notifyMissingThreshold(projectPhase: string, agentRole: string): void {
-  if (!_missingNotifyFn) return;
+  if (!_missingNotifyFn) {return;}
   const key = `${projectPhase}:${agentRole}`;
   const now = Date.now();
   const lastAt = _missingConfigNotifiedAt.get(key);
-  if (lastAt && now - lastAt < MISSING_NOTIFY_COOLDOWN_MS) return;
+  if (lastAt && now - lastAt < MISSING_NOTIFY_COOLDOWN_MS) {return;}
   _missingConfigNotifiedAt.set(key, now);
 
   const msg = [
@@ -320,7 +320,7 @@ export function lookupThreshold(
   projectPhase: string | undefined,
   agentRole: string,
 ): AgentPhaseThreshold | undefined {
-  if (!projectPhase) return undefined;
+  if (!projectPhase) {return undefined;}
 
   try {
     const cfg = loadThresholdConfig();
@@ -333,17 +333,17 @@ export function lookupThreshold(
 
     // 精确匹配
     const exact = phaseMap[agentRole];
-    if (exact) return stripMeta(exact);
+    if (exact) {return stripMeta(exact);}
 
     // 前缀匹配
     for (const key of Object.keys(phaseMap)) {
       if (key !== "*" && agentRole.startsWith(key)) {
-        return stripMeta(phaseMap[key]!);
+        return stripMeta(phaseMap[key]);
       }
     }
 
     // 通配符（用于未知角色，不触发漏配通知）
-    if (phaseMap["*"]) return stripMeta(phaseMap["*"]);
+    if (phaseMap["*"]) {return stripMeta(phaseMap["*"]);}
 
     // 匹配到阶段下无对应角色且无通配符：通知主控补充角色配置
     notifyMissingThreshold(projectPhase, agentRole);
@@ -390,7 +390,7 @@ export async function adaptThresholds(): Promise<{
   skipped: number;
   details: string[];
 }> {
-  if (_adaptRunning) return { adjusted: 0, skipped: 0, details: ["[skip] already running"] };
+  if (_adaptRunning) {return { adjusted: 0, skipped: 0, details: ["[skip] already running"] };}
   const now = Date.now();
   if (now - _lastAdaptAt < ADAPT_INTERVAL_MS) {
     return { adjusted: 0, skipped: 0, details: ["[skip] interval not reached"] };
@@ -413,10 +413,10 @@ export async function adaptThresholds(): Promise<{
 
       const [phase, ...roleParts] = key.split(":");
       const role = roleParts.join(":");
-      if (!phase || !role) continue;
+      if (!phase || !role) {continue;}
 
       const phaseMap = cfg.phases[phase];
-      if (!phaseMap) continue;
+      if (!phaseMap) {continue;}
 
       // 找到配置项（精确或前缀）
       let configKey: string | undefined;
@@ -429,11 +429,11 @@ export async function adaptThresholds(): Promise<{
             break;
           }
         }
-        if (!configKey && phaseMap["*"]) configKey = "*";
+        if (!configKey && phaseMap["*"]) {configKey = "*";}
       }
-      if (!configKey) continue;
+      if (!configKey) {continue;}
 
-      const entry = phaseMap[configKey]!;
+      const entry = phaseMap[configKey];
 
       // pinned 跳过
       if (entry.pinned) {
@@ -456,7 +456,7 @@ export async function adaptThresholds(): Promise<{
       }
 
       // 全局 bounds 约束
-      const bounds = GLOBAL_BOUNDS[configKey] ?? GLOBAL_BOUNDS["*"]!;
+      const bounds = GLOBAL_BOUNDS[configKey] ?? GLOBAL_BOUNDS["*"];
       newMinTodo = Math.max(bounds.min, Math.min(bounds.max, newMinTodo));
 
       if (newMinTodo === entry.minTodo) {
@@ -510,7 +510,7 @@ export function getThresholdConfigSummary(): {
   for (const roleMap of Object.values(cfg.phases)) {
     for (const entry of Object.values(roleMap)) {
       totalEntries++;
-      if (entry.pinned) pinnedEntries++;
+      if (entry.pinned) {pinnedEntries++;}
     }
   }
 

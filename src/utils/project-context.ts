@@ -879,7 +879,7 @@ export function buildActiveObjectivesSummary(
   try {
     const ctx = buildProjectContext(projectId, workspaceRoot);
     const config = ctx.config;
-    if (!config) return null;
+    if (!config) {return null;}
     const meta = getProjectStatusMeta(config.status);
     const activeStatuses = new Set(["not-started", "in-progress"]);
     const objectives = (config.objectives ?? []).filter((o) => activeStatuses.has(o.status));
@@ -928,7 +928,7 @@ export function buildActiveObjectivesSummary(
     }
     const upcomingMilestone = (config.timelineMilestones ?? [])
       .filter((m) => m.status === "upcoming" || m.status === "in-progress")
-      .sort((a, b) => (a.targetDate ?? Infinity) - (b.targetDate ?? Infinity))[0];
+      .toSorted((a, b) => (a.targetDate ?? Infinity) - (b.targetDate ?? Infinity))[0];
     return {
       projectId, projectName: config.name ?? projectId,
       currentPhase: config.status ?? "planning", currentPhaseLabel: meta.label,
@@ -973,9 +973,9 @@ export function formatObjectivesSummaryForPrompt(
     lines.push("### 短期目标（当前重点，2-4周内达成）");
     for (const o of summary.shortTermObjectives) {
       lines.push(`${o.status === "in-progress" ? "🔥" : "📌"} **${o.title}**`);
-      if (o.description) lines.push(`   ${o.description}`);
-      if (o.keyResultsSummary) lines.push(`   KR: ${o.keyResultsSummary}`);
-      if (o.progress !== undefined) lines.push(`   进度: ${o.progress}%`);
+      if (o.description) {lines.push(`   ${o.description}`);}
+      if (o.keyResultsSummary) {lines.push(`   KR: ${o.keyResultsSummary}`);}
+      if (o.progress !== undefined) {lines.push(`   进度: ${o.progress}%`);}
     }
     lines.push("");
   }
@@ -984,8 +984,8 @@ export function formatObjectivesSummaryForPrompt(
     for (const o of summary.mediumTermObjectives) {
       const dateStr = o.targetDate ? ` | 目标日期 ${new Date(o.targetDate).toLocaleDateString("zh-CN")}` : "";
       lines.push(`📋 ${o.title}${dateStr}`);
-      if (o.description) lines.push(`   ${o.description}`);
-      if (o.progress !== undefined) lines.push(`   进度: ${o.progress}%`);
+      if (o.description) {lines.push(`   ${o.description}`);}
+      if (o.progress !== undefined) {lines.push(`   进度: ${o.progress}%`);}
     }
     lines.push("");
   }
@@ -993,7 +993,7 @@ export function formatObjectivesSummaryForPrompt(
     lines.push("### 长期目标（战略方向）");
     for (const o of summary.longTermObjectives) {
       lines.push(`🎯 ${o.title}`);
-      if (o.description) lines.push(`   ${o.description}`);
+      if (o.description) {lines.push(`   ${o.description}`);}
     }
     lines.push("");
   }
@@ -1026,7 +1026,7 @@ export function checkPhaseGate(
   projectStatus: ProjectStatus | undefined,
   taskType: string | undefined,
 ): { blocked: boolean; message: string | null } {
-  if (!projectStatus || !taskType) return { blocked: false, message: null };
+  if (!projectStatus || !taskType) {return { blocked: false, message: null };}
   const PHASE_GATE_RULES: Partial<Record<ProjectStatus, { blocked: string[]; warning: string[] }>> = {
     requirements: { blocked: ["feature"], warning: [] },
     design: { blocked: [], warning: ["bugfix"] },
@@ -1034,7 +1034,7 @@ export function checkPhaseGate(
     review: { blocked: ["feature"], warning: [] },
   };
   const rules = PHASE_GATE_RULES[projectStatus];
-  if (!rules) return { blocked: false, message: null };
+  if (!rules) {return { blocked: false, message: null };}
   const meta = getProjectStatusMeta(projectStatus);
   if (rules.blocked.includes(taskType)) {
     return {
@@ -1547,10 +1547,10 @@ export function buildSprintWorkSnapshot(
   try {
     const ctx = buildProjectContext(projectId, workspaceRoot);
     const config = ctx.config;
-    if (!config) return null;
+    if (!config) {return null;}
     const sprints = config.sprints ?? config.milestones ?? [];
     const activeSprint = sprints.find((s) => s.status === "active");
-    if (!activeSprint) return null;
+    if (!activeSprint) {return null;}
 
     const now = Date.now();
     const tasks = activeSprint.tasks ?? [];
@@ -1618,7 +1618,7 @@ export function buildSprintWorkSnapshot(
       ),
       pendingTasks: topN(
         todo
-          .sort((a, b) => {
+          .toSorted((a, b) => {
             const order: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
             return (order[a.priority ?? "medium"] ?? 2) - (order[b.priority ?? "medium"] ?? 2);
           })
@@ -1627,7 +1627,7 @@ export function buildSprintWorkSnapshot(
       ),
       recentlyDoneTasks: topN(
         done
-          .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+          .toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
           .map((t) => ({ id: t.id, title: t.title, storyPoints: t.storyPoints })),
         5,
       ),
@@ -1879,7 +1879,7 @@ export function resolveAgentTaskThreshold(
   if (_configLookupFn) {
     try {
       const fromFile = _configLookupFn(projectPhase, agentRole);
-      if (fromFile) return fromFile;
+      if (fromFile) {return fromFile;}
     } catch {
       // 配置文件读取失败，fallback 到硬编码
     }
@@ -1898,7 +1898,7 @@ export function resolveAgentTaskThreshold(
   // 尝试按角色前缀匹配（如 agentId="qa-lead-2" 匹配 "qa-lead"）
   for (const key of Object.keys(phaseMap)) {
     if (key !== "*" && agentRole.startsWith(key)) {
-      return phaseMap[key]!;
+      return phaseMap[key];
     }
   }
   // 阶段默认匹配

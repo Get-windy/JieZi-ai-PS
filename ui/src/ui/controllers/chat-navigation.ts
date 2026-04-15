@@ -219,7 +219,7 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       continue;
     }
     // 找到最近更新的子会话作为组标题
-    const sortedChildren = [...children].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+    const sortedChildren = [...children].toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
     const latestChild = sortedChildren[0];
     const groupLabel = latestChild.displayName?.trim() ||
       latestChild.label?.trim() ||

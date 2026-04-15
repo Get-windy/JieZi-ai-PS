@@ -56,7 +56,8 @@ function buildMemorySection(params: {
   const hasDelete = params.availableTools.has("memory_delete");
   const hasList = params.availableTools.has("memory_list");
   const hasProjectMemorySave = params.availableTools.has("project_memory_save");
-  const hasProjectMemoryRead = params.availableTools.has("project_memory_read");
+  // 工具注册名为 project_memory_get（见 memory-core/index.ts），兼容两种名称
+  const hasProjectMemoryRead = params.availableTools.has("project_memory_get") || params.availableTools.has("project_memory_read");
 
   if (!hasSearch && !hasGet && !hasSave) {
     return [];
@@ -107,7 +108,7 @@ function buildMemorySection(params: {
   // 2b. Project Shared Memory
   if (hasProjectMemorySave || hasProjectMemoryRead) {
     lines.push(
-      "**Project Shared Memory** — Use project_memory_save / project_memory_read for all project-level knowledge:",
+      "**Project Shared Memory** — Use project_memory_save / project_memory_get for all project-level knowledge:",
       "  - Technical decisions, architecture choices, API contracts",
       "  - Meeting notes, requirements, deliverable status",
       "  - Progress and outcomes of project tasks (scope=project)",
@@ -413,6 +414,79 @@ function buildObjectiveAlignmentSection(params: {
   ];
 }
 
+/**
+ * 角色专属交付物规范 section
+ *
+ * 解决「文档类/测试类 Agent 产出物路径不明确、后续 Agent 无法定位」的问题。
+ * 业界最佳实践（Anthropic Build Effective Agents 2024）：
+ *   1. 结构化输出 — 每类角色的产出物必须写到约定路径
+ *   2. 可追源性   — 产出物路径必须登记到 SHARED_MEMORY.md，供后续 Agent 读取
+ *   3. 完成信号   — 完成任务前必须在 task_progress_note_append 中记录产出物证据
+ */
+function buildRoleDeliverableSection(params: { isMinimal: boolean; agentRole?: string }) {
+  if (params.isMinimal || !params.agentRole) {
+    return [];
+  }
+
+  const role = params.agentRole.toLowerCase();
+
+  if (role === "doc-writer") {
+    return [
+      "## 文档交付规范（doc-writer 专属）",
+      "你是文档专家，每次完成文档任务必须遵守以下交付规范：",
+      "",
+      "**产出物路径约定**",
+      "  - 技术文档 / API 规范  → {projectWorkspace}/docs/",
+      "  - 架构决策记录 (ADR)  → {projectWorkspace}/decisions/ADR-{序号}-{主题}.md",
+      "  - 需求文档 / 用户故事  → {projectWorkspace}/requirements/",
+      "  - README / 入门指南   → {projectWorkspace}/README.md 或 {codeDir}/README.md",
+      "  - 会议纪要            → {projectWorkspace}/docs/meetings/YYYY-MM-DD-{主题}.md",
+      "",
+      "**完成任务前必须执行（缺一不可）**",
+      "  1. 将文档写入上述对应路径（不得只回复内容而不写文件）",
+      "  2. 调用 project_memory_save 将文档路径和摘要写入 SHARED_MEMORY.md，格式：",
+      "     [ 文档更新 ] {文档名称} → {文件路径} | 摘要: {一句话描述} | 时间: {ISO日期}",
+      "  3. 调用 task_progress_note_append 记录产出物证据，包含文件路径和简要说明",
+      "  4. 调用 task_complete 完成任务，note 字段填写文件路径",
+      "",
+      "**后续 Agent 读取机制**",
+      "  - team-member / qa-lead 开始工作前必须先读 SHARED_MEMORY.md，从中查找最新文档路径",
+      "  - 文档路径变更时，必须更新 SHARED_MEMORY.md 中的记录（不得遗留过期路径）",
+      "",
+    ];
+  }
+
+  if (role === "qa-lead") {
+    return [
+      "## 测试交付规范（qa-lead 专属）",
+      "你是质量保障专家，每次完成测试任务必须遵守以下交付规范：",
+      "",
+      "**产出物路径约定**",
+      "  - 测试脚本 / 用例       → {projectWorkspace}/tests/ 或 {codeDir}/tests/",
+      "  - 测试报告（每次执行后） → {projectWorkspace}/qa/test-reports/YYYY-MM-DD-{场景}.md",
+      "  - 性能测试报告          → {projectWorkspace}/qa/perf-reports/",
+      "  - Bug 列表              → {projectWorkspace}/qa/bugs/YYYY-MM-DD-bugs.md",
+      "",
+      "**完成任务前必须执行（缺一不可）**",
+      "  1. 将测试报告写入 qa/test-reports/（包含：通过/失败数、失败详情、覆盖率）",
+      "  2. 调用 project_memory_save 将测试结果摘要写入 SHARED_MEMORY.md，格式：",
+      "     [ 测试结果 ] {场景} → {报告路径} | 通过率: {X}% | 关键发现: {摘要} | 时间: {ISO日期}",
+      "  3. 如果测试验证了某条 DoD 验收标准（AcceptanceCriterion），在报告中明确标注：",
+      "     '已满足验收标准: {标准描述}'，并在 task_progress_note_append 中记录证据路径",
+      "  4. 如果发现 Bug，在 qa/bugs/ 目录创建 Bug 列表并通过 task_create 创建 bugfix 任务分配给 team-member",
+      "  5. 调用 task_complete 完成任务，note 字段填写测试报告路径和通过率",
+      "",
+      "**测试结果与 DoD 打通规则**",
+      "  - 当测试脚本全部通过时，用 project_memory_save 更新 SHARED_MEMORY.md 中对应 AC 的状态",
+      "  - 格式：[ AC 满足 ] {acceptanceCriterion.description} → verified by {报告路径}",
+      "  - coordinator 心跳时会读取 SHARED_MEMORY.md 来判断 DoD 完成情况",
+      "",
+    ];
+  }
+
+  return [];
+}
+
 function buildQualityGateSection(params: { isMinimal: boolean; qualityGateHint?: string }) {
   if (params.isMinimal) {
     return [];
@@ -510,8 +584,18 @@ export function buildAgentSystemPrompt(params: {
    * 让 coordinator 和团队成员始终知道当前工作在服务于哪些目标。
    */
   activeObjectivesSummary?: string;
+  /**
+   * Agent 角色 ID（可选）
+   * 获取角色信息用于生成角色专属的交付物规范提示。
+   * 支持的角色："doc-writer" | "qa-lead" | "coordinator" | "team-member" | "devops-engineer" | "product-analyst"
+   */
+  agentRole?: string;
 }) {
   const acpEnabled = params.acpEnabled !== false;
+  // 从 runtimeInfo.agentId 自动推导角色（当调用方未传入 agentRole 时）
+  // agentId 即角色 ID：doc-writer、qa-lead、team-member 等
+  // 这样 attempt.ts（upstream）无需修改即可自动获得角色专属提示
+  const resolvedAgentRole = params.agentRole ?? params.runtimeInfo?.agentId ?? undefined;
   const sandboxedRuntime = params.sandboxInfo?.enabled === true;
   const acpSpawnRuntimeEnabled = acpEnabled && !sandboxedRuntime;
   const coreToolSummaries: Record<string, string> = {
@@ -708,6 +792,11 @@ export function buildAgentSystemPrompt(params: {
     isMinimal,
     qualityGateHint: params.qualityGateHint,
   });
+  // 角色专属交付物规范 section
+  const roleDeliverableSection = buildRoleDeliverableSection({
+    isMinimal,
+    agentRole: resolvedAgentRole,
+  });
   // 项目目标对齐 section
   const objectiveAlignmentSection = buildObjectiveAlignmentSection({
     isMinimal,
@@ -786,6 +875,7 @@ export function buildAgentSystemPrompt(params: {
     ...objectiveAlignmentSection,
     ...progressSection,
     ...qualityGateSection,
+    ...roleDeliverableSection,
     hasGateway && !isMinimal ? "## OpenClaw Self-Update" : "",
     hasGateway && !isMinimal
       ? [

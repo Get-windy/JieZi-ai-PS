@@ -106,7 +106,7 @@ export function createProjectCreateTool(): AnyAgentTool {
       // 强制校验用户确认令牌
       const expectedToken = `CONFIRM_CREATE_PROJECT_${finalProjectId}`;
       if (!userConfirmation.includes(expectedToken)) {
-        const previewCodeDir = codeDir || (codeRoot ? `${codeRoot.replace(/[\/\\]+$/, "")}\\${name}` : "未设置");
+        const previewCodeDir = codeDir || (codeRoot ? `${codeRoot.replace(/[/\\]+$/, "")}\\${name}` : "未设置");
         return jsonResult({
           success: false,
           blocked: true,
@@ -501,7 +501,7 @@ export function createProjectRoadmapViewTool(): AnyAgentTool {
       const gatewayOpts = readGatewayCallOptions(params);
       try {
         // 获取完整项目信息
-        const projectData = await callGatewayTool("projects.get", gatewayOpts, { projectId }) as Record<string, unknown>;
+        const projectData = await callGatewayTool("projects.get", gatewayOpts, { projectId });
 
         const { buildActiveObjectivesSummary, formatObjectivesSummaryForPrompt, getProjectStatusMeta } = await import("../../utils/project-context.js");
 
@@ -555,7 +555,7 @@ export function createProjectRoadmapViewTool(): AnyAgentTool {
             const tf = String(o.timeframe ?? "medium");
             const st = String(o.status ?? "not-started");
             lines.push(`${statusEmoji[st] ?? "⬜"} [${timeframeLabel[tf] ?? tf}] **${String(o.title ?? "")}**`);
-            if (o.description) lines.push(`   ${String(o.description)}`);
+            if (o.description) {lines.push(`   ${String(o.description)}`);}
           }
           lines.push("");
         }
@@ -576,7 +576,7 @@ export function createProjectRoadmapViewTool(): AnyAgentTool {
           const total = gate.criteria.length;
           const done = (gate.criteria as Array<Record<string, unknown>>).filter((c) => c.satisfied).length;
           lines.push(`## DoD 完成门禁：${done}/${total} 已满足 (${total > 0 ? Math.round((done / total) * 100) : 0}%)`);
-          if (gate.scopeFrozen) lines.push("⛔ 范围已冻结（项目已完成/取消）");
+          if (gate.scopeFrozen) {lines.push("⛔ 范围已冻结（项目已完成/取消）");}
           lines.push("");
         }
 
@@ -669,7 +669,7 @@ export function createProjectObjectiveUpsertTool(): AnyAgentTool {
         });
         return jsonResult({
           success: true,
-          ...(result as Record<string, unknown>),
+          ...(result),
           tip: "Objective saved. Link tasks to this objective via objectiveId to track alignment.",
         });
       } catch (error) {
@@ -742,7 +742,7 @@ export function createProjectMilestoneUpsertTool(): AnyAgentTool {
           sprintIds: params.sprintIds,
           ownerId: params.ownerId ? String(params.ownerId) : undefined,
         });
-        return jsonResult({ success: true, ...(result as Record<string, unknown>) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({
           success: false,
@@ -802,6 +802,13 @@ export function createProjectSprintUpsertTool(): AnyAgentTool {
         Type.Literal("cancelled"),
       ], { description: "Sprint status (default: planning)" })),
       id: Type.Optional(Type.String({ description: "Sprint ID for update (omit for create)" })),
+      /**
+       * Sprint 容量上限（故事点）—对标 Jira/Linear 容量规划
+       * 设置团队在本轮 Sprint 内可承载的总故事点。
+       * 建议设为历史平均 velocity（26周平均 = 24 SP/Sprint）。
+       * startSprint 时如已分配 SP 超过此値，将出现警告提示范围缩减。
+       */
+      capacityPoints: Type.Optional(Type.Number({ minimum: 1, maximum: 200, description: "Team capacity in story points for this Sprint. Set to historical average velocity. startSprint will warn if overloaded." })),
     }),
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -823,8 +830,9 @@ export function createProjectSprintUpsertTool(): AnyAgentTool {
           endDate: params.endDate ? Number(params.endDate) : undefined,
           order: params.order ? Number(params.order) : undefined,
           status: params.status ?? "planning",
+          capacityPoints: params.capacityPoints ? Number(params.capacityPoints) : undefined,
         });
-        return jsonResult({ success: true, ...(result as Record<string, unknown>) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({
           success: false,
@@ -888,7 +896,7 @@ export function createProjectSprintAddTaskTool(): AnyAgentTool {
           priority: params.priority ? String(params.priority) : undefined,
           taskType: params.taskType ? String(params.taskType) : undefined,
         });
-        return jsonResult({ success: true, ...(result as Record<string, unknown>) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({
           success: false,
@@ -912,6 +920,8 @@ export function createProjectSprintStartTool(): AnyAgentTool {
     description:
       "Start a Sprint (set status to active). " +
       "Before starting: confirm the Sprint has a clear goal and enough tasks loaded. " +
+      "CAPACITY CHECK: If the Sprint has capacityPoints set and assigned SP exceeds it, " +
+      "the response will include a warning — you should reduce scope before starting. " +
       "Only one Sprint should be active at a time per project (recommended). " +
       "REQUIRED: projectId, sprintId.",
     parameters: Type.Object({
@@ -928,7 +938,7 @@ export function createProjectSprintStartTool(): AnyAgentTool {
       const gatewayOpts = readGatewayCallOptions(params);
       try {
         const result = await callGatewayTool("projects.startSprint", gatewayOpts, { projectId, sprintId });
-        return jsonResult({ success: true, ...(result as Record<string, unknown>), tip: "已启动 Sprint。团队成员应优先处理 Sprint 内任务，完成后调用 project_sprint_complete 完结本轮迭代。" });
+        return jsonResult({ success: true, ...(result), tip: "已启动 Sprint。团队成员应优先处理 Sprint 内任务，完成后调用 project_sprint_complete 完结本轮迭代。" });
       } catch (error) {
         return jsonResult({
           success: false,
@@ -979,7 +989,7 @@ export function createProjectSprintCompleteTool(): AnyAgentTool {
         });
         return jsonResult({
           success: true,
-          ...(result as Record<string, unknown>),
+          ...(result),
           tip: "本轮 Sprint 已完成。建议：回顾目标达成情况、更新 objective 状态，再谄划下一个 Sprint。",
         });
       } catch (error) {
@@ -1046,7 +1056,7 @@ export function createProjectDecomposeTool(): AnyAgentTool {
 
       try {
         // 读取现有项目状态
-        const projectData = await callGatewayTool("projects.get", gatewayOpts, { projectId }) as Record<string, unknown>;
+        const projectData = await callGatewayTool("projects.get", gatewayOpts, { projectId });
         const { buildActiveObjectivesSummary, getProjectStatusMeta } = await import("../../utils/project-context.js");
         const summary = buildActiveObjectivesSummary(projectId);
         const meta = getProjectStatusMeta(projectData?.status as string | undefined);
@@ -1629,6 +1639,7 @@ const ProjectReportGenerateSchema = Type.Object({
 /**
  * project_report_generate — 自动生成项目进度报告（Markdown 格式）
  * 汇总任务完成率、延期率、按状态/优先级分布，支持日报/周报/月报/快照四种模式。
+ * P4 增强：集成 Sprint 速度/Flow 指标/技术债比例。
  */
 export function createProjectReportGenerateTool(): AnyAgentTool {
   return {
@@ -1637,6 +1648,7 @@ export function createProjectReportGenerateTool(): AnyAgentTool {
     description:
       "Generate a project progress report in Markdown format. " +
       "Includes task completion rate, overdue rate, status distribution, priority breakdown. " +
+      "P4 ENHANCED: Also includes Sprint velocity, CycleTime, FlowEfficiency, and tech-debt ratio. " +
       "Supports daily/weekly/monthly/snapshot report types. " +
       "The generated Markdown can be directly sent to team members or saved as a file.",
     parameters: ProjectReportGenerateSchema,
@@ -1668,6 +1680,15 @@ export function createProjectReportGenerateTool(): AnyAgentTool {
           projectId,
           limit: 200,
         }).catch(() => ({ tasks: [] }));
+
+        // P4: 并行获取 Flow 指标和技术债统计
+        const [flowResult] = await Promise.allSettled([
+          callGatewayTool("tasks.flowMetrics", gatewayOpts, {
+            projectId,
+            windowDays: reportType === "daily" ? 1 : reportType === "weekly" ? 7 : reportType === "monthly" ? 30 : 14,
+          }),
+        ]);
+        const flowMetrics = flowResult.status === "fulfilled" ? flowResult.value : null;
 
         const tasks = (taskListResult.tasks as Array<{
           id: string;
@@ -1712,7 +1733,7 @@ export function createProjectReportGenerateTool(): AnyAgentTool {
         );
         const overdueTasks = includeOverdue
           ? tasks.filter((t) => {
-              if (!t.dueDate) return false;
+              if (!t.dueDate) {return false;}
               const due = typeof t.dueDate === "number" ? t.dueDate : new Date(t.dueDate).getTime();
               return due < now && !["done", "completed", "cancelled"].includes(t.status);
             })
@@ -1735,6 +1756,23 @@ export function createProjectReportGenerateTool(): AnyAgentTool {
           customTitle ??
           `📊 ${projectName} ${reportTypeLabel[reportType] ?? "报告"} — ${dateStr}`;
 
+        // 技术债统计
+        const techDebtTasks = tasks.filter(
+          (t) =>
+            !(["done", "completed", "cancelled"] as string[]).includes(t.status) &&
+            Array.isArray((t as Record<string, unknown>).tags) &&
+            ((t as Record<string, unknown>).tags as string[]).some((tag) =>
+              ["tech-debt", "technical-debt", "技术债"].includes(tag),
+            ),
+        );
+        const activeTotalCount = tasks.filter(
+          (t) => !(["done", "completed", "cancelled"] as string[]).includes(t.status),
+        ).length;
+        const techDebtRatio =
+          activeTotalCount > 0
+            ? Math.round((techDebtTasks.length / activeTotalCount) * 100)
+            : 0;
+
         // 8. 拼接 Markdown
         const md: string[] = [
           `# ${reportTitle}`,
@@ -1753,6 +1791,7 @@ export function createProjectReportGenerateTool(): AnyAgentTool {
           `| 进行中 | ${inProgressCount} |`,
           `| 未开始 | ${(byStatus["todo"] ?? byStatus["pending"] ?? 0)} |`,
           `| 超期任务 | ${overdueCount} (${overdueRate}%) |`,
+          `| 技术债任务 | ${techDebtTasks.length} (${techDebtRatio}% 活跃任务) |`,
           "",
         ];
 
@@ -1765,13 +1804,55 @@ export function createProjectReportGenerateTool(): AnyAgentTool {
             medium: "🟡 中",
             low: "🟢 低",
           };
-          for (const [p, cnt] of Object.entries(byPriority).sort(([a], [b]) => {
+          for (const [p, cnt] of Object.entries(byPriority).toSorted(([a], [b]) => {
             const order = ["critical", "high", "medium", "low"];
             return order.indexOf(a) - order.indexOf(b);
           })) {
             md.push(`- ${priorityLabel[p] ?? p}：${cnt} 个任务`);
           }
           md.push("");
+        }
+
+        // P4: Flow 指标段落（CycleTime / Throughput / FlowEfficiency / WIP）
+        if (flowMetrics) {
+          const cycleTime = flowMetrics.cycleTime as { medianHours?: number; p85Hours?: number } | null | undefined;
+          const throughput = flowMetrics.throughput as { tasksPerWeek?: number; storyPointsCompleted?: number } | null | undefined;
+          const flowEff = flowMetrics.flowEfficiency as { efficiency?: number; activeRatio?: number } | null | undefined;
+          const wip = flowMetrics.wip as { current?: number; limit?: number } | null | undefined;
+          const insights = flowMetrics.insights as string[] | null | undefined;
+
+          md.push("## ⚡ Flow 交付指标", "");
+          md.push(`| 指标 | 数值 |`);
+          md.push(`|------|------|`);
+          if (cycleTime?.medianHours !== undefined) {
+            md.push(`| CycleTime (中位数) | ${cycleTime.medianHours.toFixed(1)} h |`);
+          }
+          if (cycleTime?.p85Hours !== undefined) {
+            md.push(`| CycleTime (P85) | ${cycleTime.p85Hours.toFixed(1)} h |`);
+          }
+          if (throughput?.tasksPerWeek !== undefined) {
+            md.push(`| 周均完成任务数 | ${throughput.tasksPerWeek.toFixed(1)} 个/周 |`);
+          }
+          if (throughput?.storyPointsCompleted !== undefined) {
+            md.push(`| Sprint 速度 (SP) | ${throughput.storyPointsCompleted} SP |`);
+          }
+          if (flowEff?.efficiency !== undefined) {
+            const effPct = Math.round((flowEff.efficiency) * 100);
+            const effEmoji = effPct >= 40 ? "🟢" : effPct >= 15 ? "🟡" : "🔴";
+            md.push(`| Flow 效率 | ${effEmoji} ${effPct}% |`);
+          }
+          if (wip?.current !== undefined) {
+            const wipEmoji = wip.limit && wip.current > wip.limit ? "🔴" : "🟢";
+            md.push(`| WIP（在制任务数）| ${wipEmoji} ${wip.current}${wip.limit ? ` / 上限 ${wip.limit}` : ""} |`);
+          }
+          md.push("");
+          if (insights && insights.length > 0) {
+            md.push("**洞察建议：**", "");
+            for (const insight of insights) {
+              md.push(`- ${insight}`);
+            }
+            md.push("");
+          }
         }
 
         // 超期任务专项
@@ -1952,6 +2033,544 @@ export function createProjectDeleteTool(): AnyAgentTool {
           success: false,
           error: `删除项目失败: ${error instanceof Error ? error.message : String(error)}`,
         });
+      }
+    },
+  };
+}
+
+// =============================================================================
+// project_sprint_retrospective — Sprint 回顾报告
+// =============================================================================
+
+/**
+ * project_sprint_retrospective — 基于 Sprint 数据自动生成回顾报告
+ *
+ * 对标 Scrum Retrospective 4L 框架：
+ * - Liked：哪些事情进展顺利
+ * - Learned：学到了什么
+ * - Lacked：哪些事情需要改进
+ * - Longed For：期望下次改进的地方
+ */
+export function createProjectSprintRetrospectiveTool(): AnyAgentTool {
+  return {
+    label: "Project Sprint Retrospective",
+    name: "project_sprint_retrospective",
+    description:
+      "Generate a structured Sprint Retrospective report based on Sprint data. " +
+      "Analyzes: velocity gap, blocked/overdue/failed-AC tasks, unfinished work. " +
+      "Writes retrospective to sprint.retrospective field and provides next-Sprint planning suggestions. " +
+      "WHEN TO USE: Immediately after calling project_sprint_complete. " +
+      "The generated report is automatically injected into the next Sprint Planning context.",
+    parameters: Type.Object({
+      projectId: Type.String({ description: "[REQUIRED] Project ID" }),
+      sprintId: Type.String({ description: "[REQUIRED] Sprint ID to generate retrospective for" }),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const projectId = readStringParam(params, "projectId", { required: true });
+      const sprintId = readStringParam(params, "sprintId", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        const result = await callGatewayTool("projects.sprintRetrospective", gatewayOpts, {
+          projectId,
+          sprintId,
+        });
+
+        return jsonResult({
+          success: true,
+          ...result,
+          tip:
+            "回顾报告已生成并写入 sprint.retrospective。" +
+            "下次 Sprint Planning 时将自动注入此上下文。",
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to generate sprint retrospective: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        });
+      }
+    },
+  };
+}
+
+// =============================================================================
+// project_health_dashboard — 项目健康看板（整合多维度）
+// =============================================================================
+
+/**
+ * project_health_dashboard — 一键获取项目综合健康状态
+ *
+ * 整合：任务健康度 + Flow 指标 + OKR 进度 + 技术债数量
+ */
+// =============================================================================
+// project_sprint_burndown — Sprint 逐日燃尽图
+// =============================================================================
+
+export function createProjectSprintBurndownTool(): AnyAgentTool {
+  return {
+    label: "Project Sprint Burndown",
+    name: "project_sprint_burndown",
+    description:
+      "Get Sprint burndown chart data: daily remaining story points vs ideal burndown line. " +
+      "Returns dataPoints[{date, remainingSP, idealSP, completedTasks}], isOnTrack, trend. " +
+      "WHEN TO USE: Daily standup ('are we on track?'), Sprint mid-point check, " +
+      "Sprint review to show velocity. " +
+      "isOnTrack=true means remainingSP <= idealSP (ahead of or on schedule). " +
+      "Requires a valid sprintId from project_roadmap_view.",
+    parameters: Type.Object({
+      projectId: Type.String({ description: "[REQUIRED] Project ID" }),
+      sprintId: Type.String({ description: "[REQUIRED] Sprint ID or name" }),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const projectId = readStringParam(params, "projectId", { required: true });
+      const sprintId = readStringParam(params, "sprintId", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("projects.sprintBurndown", gatewayOpts, {
+          projectId,
+          sprintId,
+        });
+        return jsonResult({
+          success: true,
+          ...result,
+          burndownSummary:
+            "Sprint: " + String(result?.sprintName ?? sprintId) +
+            " | Total SP: " + String(result?.totalStoryPoints ?? "?") +
+            " | Tasks: " + String(result?.totalTasks ?? "?") +
+            " | " + String(result?.trend ?? "?"),
+          tip: result?.isOnTrack === false
+            ? "Sprint is behind schedule. Consider scope reduction or adding capacity."
+            : result?.isOnTrack === true
+            ? "Sprint is on track. Keep the pace!"
+            : "Sprint not started or data insufficient.",
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: "Failed to get sprint burndown: " + (error instanceof Error ? error.message : String(error)),
+        });
+      }
+    },
+  };
+}
+
+// =============================================================================
+// portfolio_health_summary — 多项目汇总健康看板
+// =============================================================================
+
+export function createPortfolioHealthSummaryTool(): AnyAgentTool {
+  return {
+    label: "Portfolio Health Summary",
+    name: "portfolio_health_summary",
+    description:
+      "Get cross-project portfolio health overview. " +
+      "For each project: overallHealth (green/yellow/red), completionRate, overdue/blocked/techDebt counts, OKR progress. " +
+      "Returns healthSummary{green/yellow/red counts}, overallPortfolioHealth, projects[]. " +
+      "WHEN TO USE: Weekly management review, identifying at-risk projects, " +
+      "portfolio-level resource allocation decisions. " +
+      "Omit projectIds to check ALL projects. Pass projectIds[] to filter specific ones.",
+    parameters: Type.Object({
+      projectIds: Type.Optional(
+        Type.Array(Type.String(), {
+          description: "Specific project IDs to check (omit to check all projects)",
+        }),
+      ),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("projects.portfolioHealth", gatewayOpts, {
+          projectIds: Array.isArray(params.projectIds) ? params.projectIds : undefined,
+        });
+        const summary = result?.healthSummary as { green: number; yellow: number; red: number } | undefined;
+        return jsonResult({
+          success: true,
+          ...result,
+          portfolioLine: String(result?.overallPortfolioHealth ?? "?") +
+            " | Projects: " + String(result?.totalProjects ?? 0) +
+            (summary ? " (" + summary.green + "g " + summary.yellow + "y " + summary.red + "r)" : ""),
+          tip: summary?.red && summary.red > 0
+            ? String(summary.red) + " project(s) need immediate intervention."
+            : summary?.yellow && summary.yellow > 0
+            ? String(summary.yellow) + " project(s) need attention."
+            : "Portfolio is healthy.",
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: "Failed to get portfolio health: " + (error instanceof Error ? error.message : String(error)),
+        });
+      }
+    },
+  };
+}
+
+export function createProjectHealthDashboardTool(): AnyAgentTool {
+  return {
+    label: "Project Health Dashboard",
+    name: "project_health_dashboard",
+    description:
+      "Get a comprehensive health overview of a project combining: " +
+      "(1) Task health scores (red/yellow/green), " +
+      "(2) Flow metrics (CycleTime, Throughput, FlowEfficiency), " +
+      "(3) OKR progress (objective completion rates), " +
+      "(4) Tech debt ratio (tasks tagged 'tech-debt'). " +
+      "WHEN TO USE: Weekly project review, escalation triage, or before Sprint planning. " +
+      "This is the single most comprehensive project status view available.",
+    parameters: Type.Object({
+      projectId: Type.String({ description: "[REQUIRED] Project ID" }),
+      windowDays: Type.Optional(
+        Type.Number({
+          minimum: 1,
+          maximum: 90,
+          description: "Days for flow metrics analysis (default: 14)",
+        }),
+      ),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const projectId = readStringParam(params, "projectId", { required: true });
+      const windowDays = typeof params.windowDays === "number" ? params.windowDays : 14;
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      try {
+        // 并行获取多个度量数据
+        const [healthResult, flowResult, okrResult] = await Promise.allSettled([
+          callGatewayTool("tasks.health", gatewayOpts, { projectId }),
+          callGatewayTool("tasks.flowMetrics", gatewayOpts, { projectId, windowDays }),
+          callGatewayTool("tasks.okr.list", gatewayOpts, { projectId }),
+        ]);
+
+        const health = healthResult.status === "fulfilled" ? healthResult.value : null;
+        const flow = flowResult.status === "fulfilled" ? flowResult.value : null;
+        const okr = okrResult.status === "fulfilled" ? okrResult.value : null;
+
+        // 计算技术债主要依靠 task_list 过滤 tag=tech-debt
+        let techDebtCount = 0;
+        let totalActiveCount = 0;
+        try {
+          const allTasks = await callGatewayTool("task.list", gatewayOpts, {
+            projectId,
+            limit: 500,
+          });
+          const tasks = (allTasks?.tasks ?? allTasks ?? []) as Array<Record<string, unknown>>;
+          const activeTasks = tasks.filter(
+            (t) => t.status !== "done" && t.status !== "cancelled",
+          );
+          totalActiveCount = activeTasks.length;
+          techDebtCount = activeTasks.filter(
+            (t) =>
+              Array.isArray(t.tags) &&
+              (t.tags as string[]).some((tag) =>
+                ["tech-debt", "technical-debt", "技术债"].includes(tag),
+              ),
+          ).length;
+        } catch {
+          // 获取任务失败不阻断看板
+        }
+
+        const healthSummary = health?.summary as {
+          total: number;
+          green: number;
+          yellow: number;
+          red: number;
+          avgScore: number;
+        } | undefined;
+
+        const techDebtRatio =
+          totalActiveCount > 0
+            ? Math.round((techDebtCount / totalActiveCount) * 100)
+            : 0;
+
+        // 构建综合评价
+        const issues: string[] = [];
+        if (healthSummary?.red && healthSummary.red > 0) {
+          issues.push(`🔴 ${healthSummary.red} 个任务处于红色健康状态（需立即处理）`);
+        }
+        const flowThroughput = flow?.throughput as { tasksPerWeek?: number } | undefined;
+        if (flowThroughput?.tasksPerWeek !== undefined && flowThroughput.tasksPerWeek < 1) {
+          issues.push(`⚠️ 周均完成任务数不足 1 个，交付效率过低`);
+        }
+        const flowEff = flow?.flowEfficiency as { efficiency?: number } | undefined;
+        if (flowEff?.efficiency !== undefined && flowEff.efficiency < 0.15) {
+          issues.push(`⚠️ Flow 效率低于 15%（当前 ${Math.round((flowEff.efficiency ?? 0) * 100)}%），等待时间过长`);
+        }
+        if (techDebtRatio > 20) {
+          issues.push(`⚠️ 技术债占活跃任务比例 ${techDebtRatio}%，建议专项 Sprint 清理`);
+        }
+
+        const overallHealth = issues.length === 0 ? "🟢 健康" : issues.length <= 1 ? "🟡 需关注" : "🔴 需干预";
+
+        return jsonResult({
+          success: true,
+          projectId,
+          overallHealth,
+          issues,
+          taskHealth: health
+            ? {
+                summary: healthSummary,
+                redTasks: Object.entries(health.scores ?? {})
+                  .filter(([, s]) => (s as { level: string }).level === "red")
+                  .slice(0, 10)
+                  .map(([id, s]) => ({ id, ...(s as object) })),
+              }
+            : null,
+          flowMetrics: flow
+            ? {
+                cycleTime: flow.cycleTime,
+                throughput: flow.throughput,
+                flowEfficiency: flow.flowEfficiency,
+                wip: flow.wip,
+                insights: flow.insights,
+              }
+            : null,
+          okrProgress: okr
+            ? {
+                summary: okr.summary,
+                objectives: (okr.objectives as unknown[])?.length ?? 0,
+              }
+            : null,
+          techDebt: {
+            count: techDebtCount,
+            ratio: `${techDebtRatio}%`,
+            totalActive: totalActiveCount,
+          },
+          tip: issues.length > 0
+            ? `发现 ${issues.length} 个问题，建议按优先级依次处理。`
+            : "项目健康状态良好，继续推进。",
+        });
+      } catch (error) {
+        return jsonResult({
+          success: false,
+          error: `Failed to generate health dashboard: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        });
+      }
+    },
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Initiative 战略主题管理 Agent 工具（对标 Linear 2025 Initiatives）
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * 创建或更新 Initiative 工具
+ * Initiative 是层次最高层：Initiative > Project > Sprint/Epic > Task
+ * 对标 Linear 2025 Initiatives、SAFe Portfolio Epic
+ */
+export function createProjectInitiativeUpsertTool(): AnyAgentTool {
+  return {
+    label: "Project Initiative Upsert",
+    name: "project_initiative_upsert",
+    description:
+      "Create or update a strategic Initiative — the top level above Projects. " +
+      "Initiatives represent major strategic themes that span multiple projects (e.g., 'Q2 Performance Initiative', 'Internationalization', 'User Growth'). " +
+      "Map: Initiative > Project > Sprint/Epic > Task. " +
+      "Set health=on-track|at-risk|off-track|completed|cancelled. " +
+      "Link to OKR with objectiveId. Use project_initiative_add_update to post progress updates.",
+    parameters: Type.Object({
+      title: Type.String({ minLength: 1, maxLength: 200, description: "[REQUIRED] Initiative title" }),
+      id: Type.Optional(Type.String({ description: "Existing initiative ID to update (omit to create new)" })),
+      description: Type.Optional(Type.String({ maxLength: 2000 })),
+      health: Type.Optional(Type.Union([
+        Type.Literal("on-track"),
+        Type.Literal("at-risk"),
+        Type.Literal("off-track"),
+        Type.Literal("completed"),
+        Type.Literal("cancelled"),
+      ], { description: "Health status (default: on-track)" })),
+      ownerId: Type.Optional(Type.String({ description: "Owner agent ID" })),
+      projectIds: Type.Optional(Type.Array(Type.String(), { description: "Linked project IDs" })),
+      targetDate: Type.Optional(Type.Number({ description: "Target completion date (Unix timestamp ms)" })),
+      objectiveId: Type.Optional(Type.String({ description: "Link to OKR objective ID" })),
+      priority: Type.Optional(Type.Number({ minimum: 1, maximum: 4, description: "1=highest, 4=lowest" })),
+      tags: Type.Optional(Type.Array(Type.String())),
+      createdBy: Type.Optional(Type.String()),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const title = readStringParam(params, "title", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("projects.initiative.upsert", gatewayOpts, {
+          id: readStringParam(params, "id"),
+          title,
+          description: readStringParam(params, "description"),
+          health: readStringParam(params, "health") || "on-track",
+          ownerId: readStringParam(params, "ownerId"),
+          projectIds: Array.isArray(params.projectIds) ? params.projectIds : [],
+          targetDate: typeof params.targetDate === "number" ? params.targetDate : undefined,
+          objectiveId: readStringParam(params, "objectiveId"),
+          priority: typeof params.priority === "number" ? params.priority : undefined,
+          tags: Array.isArray(params.tags) ? params.tags : undefined,
+          createdBy: readStringParam(params, "createdBy"),
+          workspaceRoot: readStringParam(params, "workspaceRoot"),
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to upsert initiative: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * 列出 Initiative 工具
+ * 一屏看全部战略主题的健康状态
+ */
+export function createProjectInitiativeListTool(): AnyAgentTool {
+  return {
+    label: "Project Initiative List",
+    name: "project_initiative_list",
+    description:
+      "List all strategic Initiatives with health status summary. " +
+      "Filter by health (on-track|at-risk|off-track|completed|cancelled), ownerId, or projectId. " +
+      "Returns healthSummary showing count of on-track/at-risk/off-track initiatives. " +
+      "Use this at leadership reviews or sprint planning to align daily work with strategic goals.",
+    parameters: Type.Object({
+      health: Type.Optional(Type.Union([
+        Type.Literal("on-track"), Type.Literal("at-risk"), Type.Literal("off-track"),
+        Type.Literal("completed"), Type.Literal("cancelled"),
+      ], { description: "Filter by health status" })),
+      ownerId: Type.Optional(Type.String({ description: "Filter by owner agent ID" })),
+      projectId: Type.Optional(Type.String({ description: "Filter by linked project ID" })),
+      objectiveId: Type.Optional(Type.String({ description: "Filter by linked OKR objective ID" })),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("projects.initiative.list", gatewayOpts, {
+          health: readStringParam(params, "health"),
+          ownerId: readStringParam(params, "ownerId"),
+          projectId: readStringParam(params, "projectId"),
+          objectiveId: readStringParam(params, "objectiveId"),
+          workspaceRoot: readStringParam(params, "workspaceRoot"),
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to list initiatives: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * 向 Initiative 追加进展更新工具
+ * 对标 Linear 2025 initiative updates — append-only 进展历史
+ */
+export function createProjectInitiativeAddUpdateTool(): AnyAgentTool {
+  return {
+    label: "Project Initiative Add Update",
+    name: "project_initiative_add_update",
+    description:
+      "Post a progress update to an Initiative. Updates are append-only and form a chronological history. " +
+      "Include current health status with each update. Significant changes (target date, health transitions) are auto-recorded. " +
+      "RECOMMENDED: post weekly updates at leadership reviews or when health status changes.",
+    parameters: Type.Object({
+      initiativeId: Type.String({ description: "[REQUIRED] Initiative ID" }),
+      content: Type.String({ minLength: 1, maxLength: 2000, description: "[REQUIRED] Update content describing current progress, blockers, next steps" }),
+      health: Type.Optional(Type.Union([
+        Type.Literal("on-track"), Type.Literal("at-risk"), Type.Literal("off-track"),
+        Type.Literal("completed"), Type.Literal("cancelled"),
+      ], { description: "Current health status of this initiative (default: on-track)" })),
+      authorId: Type.Optional(Type.String({ description: "Author agent ID" })),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const initiativeId = readStringParam(params, "initiativeId", { required: true });
+      const content = readStringParam(params, "content", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("projects.initiative.addUpdate", gatewayOpts, {
+          initiativeId,
+          content,
+          health: readStringParam(params, "health") || "on-track",
+          authorId: readStringParam(params, "authorId"),
+          workspaceRoot: readStringParam(params, "workspaceRoot"),
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to add initiative update: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * B3: project_velocity_trend — 多Sprint 速度趋势分析
+ * 对标 Linear 2026 Sprint 分析面板：历史速度、趋势和预测
+ */
+export function createProjectVelocityTrendTool(): AnyAgentTool {
+  return {
+    label: "Project Velocity Trend",
+    name: "project_velocity_trend",
+    description:
+      "Analyze Sprint velocity trend across multiple completed Sprints. Returns historical velocity, average, trend direction (improving/declining/stable), " +
+      "and weighted moving average prediction for the next Sprint. " +
+      "Use this to assess team capacity health and plan future Sprint scope. " +
+      "Best practice: if trend is 'declining' for 2+ sprints, investigate root cause before committing to next Sprint.",
+    parameters: Type.Object({
+      projectId: Type.String({ description: "[REQUIRED] Project ID" }),
+      limit: Type.Optional(Type.Number({ minimum: 2, maximum: 20, description: "Number of recent sprints to analyze (default 5)" })),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const projectId = readStringParam(params, "projectId", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("projects.velocityTrend", gatewayOpts, {
+          projectId,
+          limit: params.limit,
+          workspaceRoot: readStringParam(params, "workspaceRoot"),
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to get velocity trend: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * B5: project_health_update_reminder — 项目健康更新到期检测
+ * 对标 Linear 2026 项目健康状态过期提醒功能
+ */
+export function createProjectHealthUpdateReminderTool(): AnyAgentTool {
+  return {
+    label: "Project Health Update Reminder",
+    name: "project_health_update_reminder",
+    description:
+      "Check which active projects have not posted a health update recently (default: >7 days). " +
+      "Returns overdue project list sorted by staleness. " +
+      "Best practice: run this tool at the start of each work session and post updates for overdue projects. " +
+      "Regular health updates keep stakeholders informed and enable early risk detection.",
+    parameters: Type.Object({
+      thresholdDays: Type.Optional(Type.Number({ minimum: 1, maximum: 90, description: "Days without update to consider overdue (default 7)" })),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("projects.checkHealthUpdateDue", gatewayOpts, {
+          thresholdDays: params.thresholdDays,
+          workspaceRoot: readStringParam(params, "workspaceRoot"),
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to check health update due: ${error instanceof Error ? error.message : String(error)}` });
       }
     },
   };

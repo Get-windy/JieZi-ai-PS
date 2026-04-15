@@ -571,7 +571,7 @@ function renderTaskRow(
                     style="padding: 2px 7px; font-size: 0.73rem; color: #d97706; border-color: #d97706; opacity: ${isReseting ? 0.6 : 1};"
                     ?disabled=${isReseting}
                     title="重置为待开始"
-                    @click=${() => { if (!isReseting) props.onResetTask(task.id, "todo"); }}
+                    @click=${() => { if (!isReseting) {props.onResetTask(task.id, "todo");} }}
                   >${isReseting ? "…" : "↺"}</button>
                 `
               : nothing
@@ -586,7 +586,7 @@ function renderTaskRow(
                     style="padding: 2px 7px; font-size: 0.73rem; color: #6b7280; border-color: #6b7280; opacity: ${isCanceling ? 0.6 : 1};"
                     ?disabled=${isCanceling}
                     title="取消任务"
-                    @click=${() => { if (!isCanceling && confirm(`确定要取消任务「${task.title}」？`)) props.onCancelTask(task.id); }}
+                    @click=${() => { if (!isCanceling && confirm(`确定要取消任务「${task.title}」？`)) {props.onCancelTask(task.id);} }}
                   >${isCanceling ? "…" : "✖"}</button>
                 `
               : nothing
@@ -598,7 +598,7 @@ function renderTaskRow(
             style="padding: 2px 7px; font-size: 0.73rem; color: #dc2626; border-color: #dc2626; opacity: ${isDeleting ? 0.6 : 1};"
             ?disabled=${isDeleting}
             title="删除任务"
-            @click=${() => { if (!isDeleting && confirm(`确定要永久删除任务「${task.title}」？此操作不可恢复。`)) props.onDeleteTask(task.id); }}
+            @click=${() => { if (!isDeleting && confirm(`确定要永久删除任务「${task.title}」？此操作不可恢复。`)) {props.onDeleteTask(task.id);} }}
           >${isDeleting ? "…" : "🗑️"}</button>
         </div>
       </div>
@@ -759,7 +759,7 @@ function renderEditDialog(props: TeamMonitorProps): TemplateResult {
   return html`
     <div
       style="position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; display: flex; align-items: center; justify-content: center;"
-      @click=${(e: Event) => { if (e.target === e.currentTarget) props.onCloseEditDialog(); }}
+      @click=${(e: Event) => { if (e.target === e.currentTarget) {props.onCloseEditDialog();} }}
     >
       <div class="card" style="width: 480px; max-width: 95vw; padding: 24px; display: flex; flex-direction: column; gap: 16px; max-height: 90vh; overflow-y: auto;">
         <!-- 标题 -->

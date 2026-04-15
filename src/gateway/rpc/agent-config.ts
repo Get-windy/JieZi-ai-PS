@@ -240,7 +240,7 @@ function validateModelAccountsConfig(config: any): void {
     ] as const;
     for (const field of weightFields) {
       const val = (config.smartRouting as Record<string, unknown>)[field];
-      if (val !== undefined && (typeof val !== "number" || (val as number) < 0 || (val as number) > 100)) {
+      if (val !== undefined && (typeof val !== "number" || (val) < 0 || (val) > 100)) {
         throw new Error(`400 Bad Request: ${field} must be between 0 and 100`);
       }
     }
@@ -259,7 +259,7 @@ function validateChannelPoliciesConfig(config: any): void {
     throw new Error("400 Bad Request: bindings must be an array");
   }
 
-  const validPolicies = [
+  const validPolicies = new Set([
     "private",
     "monitor",
     "listen_only",
@@ -272,9 +272,9 @@ function validateChannelPoliciesConfig(config: any): void {
     "queue",
     "moderate",
     "echo",
-  ];
+  ]);
 
-  if (!validPolicies.includes(config.defaultPolicy)) {
+  if (!validPolicies.has(config.defaultPolicy)) {
     throw new Error(`400 Bad Request: invalid defaultPolicy '${config.defaultPolicy}'`);
   }
 
@@ -283,7 +283,7 @@ function validateChannelPoliciesConfig(config: any): void {
     if (!binding.channelId) {
       throw new Error("400 Bad Request: binding must have channelId");
     }
-    if (!validPolicies.includes(binding.policy)) {
+    if (!validPolicies.has(binding.policy)) {
       throw new Error(`400 Bad Request: invalid policy '${binding.policy}' in binding`);
     }
     // 验证策略配置

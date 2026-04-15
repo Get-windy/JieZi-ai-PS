@@ -112,6 +112,15 @@ import {
   createTaskBlockersViewTool,
   createProjectReportGenerateTool,
   createProjectDeleteTool,
+  createProjectSprintRetrospectiveTool,
+  createProjectHealthDashboardTool,
+  createProjectSprintBurndownTool,
+  createPortfolioHealthSummaryTool,
+  createProjectInitiativeUpsertTool,
+  createProjectInitiativeListTool,
+  createProjectInitiativeAddUpdateTool,
+  createProjectVelocityTrendTool,
+  createProjectHealthUpdateReminderTool,
 } from "./tools/project-management-tools.js";
 // 导入使用自动注册机制的工具文件，加载时注册自动生效
 import "./tools/skill-transfer-tool.js";
@@ -140,6 +149,19 @@ import {
   createTaskPingActivityTool,
   createTaskProgressNoteAppendTool,
   createTaskResetTool,
+  createTaskFlowMetricsTool,
+  createTaskCriticalPathTool,
+  createTaskHealthCheckTool,
+  createTaskOkrListTool,
+  createTaskAcVerifyTool,
+  createTaskSearchTool,
+  createTaskTimelineTool,
+  createTaskQualityGateUpdateTool,
+  createTaskTriageAutoTool,
+  createTaskSlaCheckTool,
+  createTaskTemplateUpsertTool,
+  createTaskTemplateListTool,
+  createTaskTemplateApplyTool,
 } from "./tools/task-management-tools.js";
 import { createTeamOrchestrateTool } from "./tools/team-orchestrate-tool.js";
 import {
@@ -374,6 +396,9 @@ export function createOpenClawTools(options?: {
     createProjectReportGenerateTool(),
     // 项目删除（高危，必须用户明确授权）
     createProjectDeleteTool(),
+    // 项目健康看板 + Sprint 回顾
+    createProjectSprintRetrospectiveTool(),
+    createProjectHealthDashboardTool(),
     createGroupListTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
@@ -537,6 +562,33 @@ export function createOpenClawTools(options?: {
         config: options?.config,
       }),
     }),
+    // Flow 度量 / 关键路径 / 健康度 / OKR 列表
+    createTaskFlowMetricsTool(),
+    createTaskCriticalPathTool(),
+    createTaskHealthCheckTool(),
+    createTaskOkrListTool(),
+    // AC 逐条确认 / 全文搜索 / 生命周期时间线 / CI 质量门禁
+    createTaskAcVerifyTool(),
+    createTaskSearchTool(),
+    createTaskTimelineTool(),
+    createTaskQualityGateUpdateTool(),
+    // Sprint 燃尽图 / 多项目组合健康看板
+    createProjectSprintBurndownTool(),
+    createPortfolioHealthSummaryTool(),
+    // Initiative 战略主题管理（对标 Linear 2025 Initiatives）
+    createProjectInitiativeUpsertTool(),
+    createProjectInitiativeListTool(),
+    createProjectInitiativeAddUpdateTool(),
+    // B3: Velocity Trend 多Sprint趋势 / B5: 项目健康更新到期检测（对标 Linear 2026）
+    createProjectVelocityTrendTool(),
+    createProjectHealthUpdateReminderTool(),
+    // B0: Triage Intelligence 自动优先级评估 / B2: SLA 违约检查（对标 Linear 2026）
+    createTaskTriageAutoTool(),
+    createTaskSlaCheckTool(),
+    // B4: 任务模板（对标 Linear 2026 Issue Templates）
+    createTaskTemplateUpsertTool(),
+    createTaskTemplateListTool(),
+    createTaskTemplateApplyTool(),
     createAgentDiscoverTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,

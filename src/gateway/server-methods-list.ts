@@ -244,6 +244,7 @@ const BASE_METHODS = [
   "task.ping",
   "task.reset",
   "task.progress_note.append",
+  "task.trace",
   // Meetings Management
   "meeting.create",
   "meeting.update",
@@ -421,11 +422,18 @@ const BASE_METHODS = [
   "projects.reactivate",
   "projects.completeSprint",
   "projects.startSprint",
+  "projects.sprintRetrospective",
   "projects.objective.upsert",
   "projects.objective.delete",
   "projects.milestone.upsert",
   "projects.milestone.delete",
   "projects.delete",
+  // Tasks Flow Metrics & Analysis
+  "tasks.flowMetrics",
+  "tasks.criticalPath",
+  "tasks.health",
+  "tasks.okr.upsert",
+  "tasks.okr.list",
   // Scenarios 自动化协作场景
   "scenarios.list",
   "scenarios.get",

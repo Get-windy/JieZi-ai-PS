@@ -320,8 +320,8 @@ function renderRenameButton(
   node: import("../types.ts").ChatNavigationNode,
   props: import("../types.ts").ChatNavigationTreeProps,
 ): import("lit").TemplateResult | typeof nothing {
-  if (!props.onRenameSession) return nothing;
-  if (node.context.type !== "session-history") return nothing;
+  if (!props.onRenameSession) {return nothing;}
+  if (node.context.type !== "session-history") {return nothing;}
 
   const sessionKey = node.context.sessionKey;
 
@@ -331,7 +331,7 @@ function renderRenameButton(
     const btn = e.currentTarget as HTMLElement;
     const item = btn.closest(".chat-nav-item__content")!;
     const labelEl = item.querySelector(".chat-nav-item__label") as HTMLElement | null;
-    if (!labelEl || item.querySelector(".chat-nav-rename-input")) return;
+    if (!labelEl || item.querySelector(".chat-nav-rename-input")) {return;}
 
     const original = labelEl.textContent ?? "";
     const input = document.createElement("input");

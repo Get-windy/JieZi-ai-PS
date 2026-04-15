@@ -406,9 +406,9 @@ export function assessSpecializationMatch(taskDomain: TaskDomain, modelInfo: Mod
   for (let i = 0; i < preferredSpecs.length; i++) {
     const spec = preferredSpecs[i];
     if (specializations.includes(spec)) {
-      if (i === 0) return 100;
-      if (i === 1) return 80;
-      if (i === 2) return 65;
+      if (i === 0) {return 100;}
+      if (i === 1) {return 80;}
+      if (i === 2) {return 65;}
       return 50;
     }
   }
@@ -685,7 +685,7 @@ export async function scoreAllAccounts(
         available: false,
       });
 
-      if (!modelInfo) return zeroScore();
+      if (!modelInfo) {return zeroScore();}
 
       // 基础能力匹配分数（硬性检查）
       const capabilityScore = matchCapabilities(complexity, modelInfo, context);
@@ -760,14 +760,14 @@ export async function scoreAllAccounts(
       // 专项 Elo 权重根据任务领域动态加成：
       // 当任务为 coding 时，编程 Elo 权重 ×2；当任务为 reasoning/math 时，推理 Elo 权重 ×2，等
       const domainEloBoost = (domain: TaskDomain) => {
-        if (domain === "coding") return { coding: 2.0, reasoning: 1.2, vision: 0.5, creative: 0.5, instruction: 0.8 };
-        if (domain === "math") return { coding: 0.8, reasoning: 2.0, vision: 0.5, creative: 0.5, instruction: 0.8 };
-        if (domain === "reasoning") return { coding: 1.0, reasoning: 2.0, vision: 0.5, creative: 0.5, instruction: 1.0 };
-        if (domain === "vision") return { coding: 0.5, reasoning: 0.8, vision: 2.5, creative: 0.5, instruction: 0.7 };
-        if (domain === "creative") return { coding: 0.5, reasoning: 0.8, vision: 0.5, creative: 2.0, instruction: 1.0 };
-        if (domain === "instruction") return { coding: 0.8, reasoning: 1.0, vision: 0.5, creative: 1.0, instruction: 2.0 };
-        if (domain === "multilingual") return { coding: 0.5, reasoning: 0.8, vision: 0.5, creative: 1.2, instruction: 1.5 };
-        if (domain === "translation") return { coding: 0.5, reasoning: 0.8, vision: 0.5, creative: 1.2, instruction: 1.5 };
+        if (domain === "coding") {return { coding: 2.0, reasoning: 1.2, vision: 0.5, creative: 0.5, instruction: 0.8 };}
+        if (domain === "math") {return { coding: 0.8, reasoning: 2.0, vision: 0.5, creative: 0.5, instruction: 0.8 };}
+        if (domain === "reasoning") {return { coding: 1.0, reasoning: 2.0, vision: 0.5, creative: 0.5, instruction: 1.0 };}
+        if (domain === "vision") {return { coding: 0.5, reasoning: 0.8, vision: 2.5, creative: 0.5, instruction: 0.7 };}
+        if (domain === "creative") {return { coding: 0.5, reasoning: 0.8, vision: 0.5, creative: 2.0, instruction: 1.0 };}
+        if (domain === "instruction") {return { coding: 0.8, reasoning: 1.0, vision: 0.5, creative: 1.0, instruction: 2.0 };}
+        if (domain === "multilingual") {return { coding: 0.5, reasoning: 0.8, vision: 0.5, creative: 1.2, instruction: 1.5 };}
+        if (domain === "translation") {return { coding: 0.5, reasoning: 0.8, vision: 0.5, creative: 1.2, instruction: 1.5 };}
         // general / analysis
         return { coding: 1.0, reasoning: 1.0, vision: 1.0, creative: 1.0, instruction: 1.0 };
       };

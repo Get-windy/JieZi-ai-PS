@@ -418,7 +418,7 @@ async function resetTeamTask(
  */
 async function submitEditTeamTask(state: AppViewState): Promise<void> {
   const form = state.teamMonitorEditDialogTask;
-  if (!form || !form.title.trim()) return;
+  if (!form || !form.title.trim()) {return;}
   state.teamMonitorEditSaving = true;
   state.teamMonitorEditError = null;
   try {
@@ -4043,7 +4043,7 @@ export function renderApp(state: AppViewState) {
                   // 验收标准（DoD）管理
                   onMarkCriterionSatisfied: (projectId, criterionId, satisfied, evidence) => {
                     void (async () => {
-                      if (!state.client) return;
+                      if (!state.client) {return;}
                       try {
                         await state.client.request("projects.markCriterionSatisfied", { projectId, criterionId, satisfied, evidence });
                         const { loadProjects } = await import("./controllers/projects.js");
@@ -4055,7 +4055,7 @@ export function renderApp(state: AppViewState) {
                   },
                   onHumanSignOff: (projectId, signOffBy, note) => {
                     void (async () => {
-                      if (!state.client) return;
+                      if (!state.client) {return;}
                       try {
                         await state.client.request("projects.humanSignOff", { projectId, signOffBy, note });
                         const { loadProjects } = await import("./controllers/projects.js");
@@ -4068,7 +4068,7 @@ export function renderApp(state: AppViewState) {
                   // 目标与里程碑管理
                   onUpsertObjective: (projectId, objective) => {
                     void (async () => {
-                      if (!state.client) return;
+                      if (!state.client) {return;}
                       try {
                         await state.client.request("projects.objective.upsert", { projectId, ...objective });
                         const { loadProjects } = await import("./controllers/projects.js");
@@ -4080,7 +4080,7 @@ export function renderApp(state: AppViewState) {
                   },
                   onDeleteObjective: (projectId, objectiveId) => {
                     void (async () => {
-                      if (!state.client) return;
+                      if (!state.client) {return;}
                       try {
                         await state.client.request("projects.objective.delete", { projectId, objectiveId });
                         const { loadProjects } = await import("./controllers/projects.js");
@@ -4092,7 +4092,7 @@ export function renderApp(state: AppViewState) {
                   },
                   onUpsertMilestone: (projectId, milestone) => {
                     void (async () => {
-                      if (!state.client) return;
+                      if (!state.client) {return;}
                       try {
                         await state.client.request("projects.milestone.upsert", { projectId, ...milestone });
                         const { loadProjects } = await import("./controllers/projects.js");
@@ -4104,7 +4104,7 @@ export function renderApp(state: AppViewState) {
                   },
                   onDeleteMilestone: (projectId, milestoneId) => {
                     void (async () => {
-                      if (!state.client) return;
+                      if (!state.client) {return;}
                       try {
                         await state.client.request("projects.milestone.delete", { projectId, milestoneId });
                         const { loadProjects } = await import("./controllers/projects.js");
