@@ -680,7 +680,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const failedAcceptanceTasks = tasks.filter(
         (t: import("../../utils/project-context.js").ProjectTask) => {
           const criteria = (t as Record<string, unknown>).acceptanceCriteria;
-          if (!Array.isArray(criteria) || criteria.length === 0) return false;
+          if (!Array.isArray(criteria) || criteria.length === 0) {return false;}
           return criteria.some(
             (c: Record<string, unknown>) => !c.satisfied,
           );
@@ -690,8 +690,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
       // ── 逾期任务（有 dueDate 且未在 dueDate 前完成，或仍未完成） ──
       const overdueTasks = tasks.filter(
         (t: import("../../utils/project-context.js").ProjectTask) => {
-          if (!t.dueDate) return false;
-          if (t.status === "cancelled") return false;
+          if (!t.dueDate) {return false;}
+          if (t.status === "cancelled") {return false;}
           const completedAt = (t as Record<string, unknown>).completedAt as number | undefined;
           if (t.status === "done" && completedAt != null) {
             return completedAt > t.dueDate; // 完成了但晚于截止日
@@ -749,7 +749,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
           const reason = (t as Record<string, unknown>).blockedReason as string | undefined;
           lines.push(`- ${t.title}${reason ? `: ${reason}` : ""}`);
         }
-        if (blockedTasks.length > 5) lines.push(`- ...还有 ${blockedTasks.length - 5} 个`);
+        if (blockedTasks.length > 5) {lines.push(`- ...还有 ${blockedTasks.length - 5} 个`);}
         lines.push("");
       }
 
@@ -758,7 +758,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
         for (const t of overdueTasks.slice(0, 5)) {
           lines.push(`- ${t.title}`);
         }
-        if (overdueTasks.length > 5) lines.push(`- ...还有 ${overdueTasks.length - 5} 个`);
+        if (overdueTasks.length > 5) {lines.push(`- ...还有 ${overdueTasks.length - 5} 个`);}
         lines.push("");
       }
 
@@ -775,7 +775,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
         for (const t of unfinishedTasks.slice(0, 5)) {
           lines.push(`- ${t.title}（${t.status}）`);
         }
-        if (unfinishedTasks.length > 5) lines.push(`- ...还有 ${unfinishedTasks.length - 5} 个`);
+        if (unfinishedTasks.length > 5) {lines.push(`- ...还有 ${unfinishedTasks.length - 5} 个`);}
         lines.push("");
       }
 
@@ -806,8 +806,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
       );
       if (sprintIdx >= 0) {
         sprints[sprintIdx] = { ...sprints[sprintIdx], retrospective: retrospectiveText };
-        if (existing.sprints) existing.sprints = sprints;
-        else existing.milestones = sprints;
+        if (existing.sprints) {existing.sprints = sprints;}
+        else {existing.milestones = sprints;}
         existing.progressUpdatedAt = now;
 
         if (!fs.existsSync(ctx.workspacePath)) {
@@ -1158,14 +1158,14 @@ export const projectsHandlers: GatewayRequestHandlers = {
           );
           for (const tid of sprintTaskIds) {
             const t = sprintTaskMap.get(tid);
-            if (!t) continue;
+            if (!t) {continue;}
             const missing: string[] = [];
-            if (!t.description || t.description.trim().length < 10) missing.push("description(<10chars)");
+            if (!t.description || t.description.trim().length < 10) {missing.push("description(<10chars)");}
             const ac = (t as Record<string, unknown>).acceptanceCriteria as unknown[] | undefined;
-            if (!ac || ac.length === 0) missing.push("acceptanceCriteria(not-set)");
+            if (!ac || ac.length === 0) {missing.push("acceptanceCriteria(not-set)");}
             const sp = (t as Record<string, unknown>).storyPoints as number | undefined;
-            if (sp == null || sp <= 0) missing.push("storyPoints(not-estimated)");
-            if (missing.length > 0) dorNotReadyTasks.push({ taskId: tid, title: t.title, missing });
+            if (sp == null || sp <= 0) {missing.push("storyPoints(not-estimated)");}
+            if (missing.length > 0) {dorNotReadyTasks.push({ taskId: tid, title: t.title, missing });}
           }
         } catch {
           // DoR 检查失败不阻塞 Sprint 启动
@@ -2259,9 +2259,9 @@ export const projectsHandlers: GatewayRequestHandlers = {
       }
       // 获取 Sprint 任务列表
       const { listTasks } = await import("../../tasks/storage.js");
-      const sprintTaskIds = (sprint.tasks as SprintLike[] ?? []).map((t: SprintLike) => String(t.id ?? t.taskId ?? "")).filter(Boolean);
+      const sprintTaskIds = new Set((sprint.tasks as SprintLike[] ?? []).map((t: SprintLike) => String(t.id ?? t.taskId ?? "")).filter(Boolean));
       const allProjectTasks = await listTasks({ projectId, limit: 2000 });
-      const sprintTasks = allProjectTasks.filter((t) => sprintTaskIds.includes(t.id));
+      const sprintTasks = allProjectTasks.filter((t) => sprintTaskIds.has(t.id));
       // 计算 Sprint 时间范围
       const sprintStart = Number(sprint.startDate ?? sprint.createdAt ?? Date.now());
       const sprintEnd = Number(sprint.endDate ?? sprint.dueDate ?? (sprintStart + 14 * 24 * 3600 * 1000));
@@ -2349,7 +2349,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
               const taskStats = new Map();
               for (const t of doneTasks) {
                 const oid = (t as Record<string, unknown>).objectiveId as string | undefined;
-                if (!oid) continue;
+                if (!oid) {continue;}
                 const stat = taskStats.get(oid) ?? { total: 0, completed: 0 };
                 stat.total++; stat.completed++;
                 taskStats.set(oid, stat);
@@ -2361,9 +2361,9 @@ export const projectsHandlers: GatewayRequestHandlers = {
           } catch { /* OKR 模块可能未初始化 */ }
           // 健康状态评判
           const issues: string[] = [];
-          if (overdueTasks.length > 0) issues.push("超期 " + overdueTasks.length + " 个");
-          if (blockedTasks.length > 0) issues.push("阻塞 " + blockedTasks.length + " 个");
-          if (techDebtCount > activeTasks.length * 0.2) issues.push("技术债 " + techDebtCount + " 个");
+          if (overdueTasks.length > 0) {issues.push("超期 " + overdueTasks.length + " 个");}
+          if (blockedTasks.length > 0) {issues.push("阻塞 " + blockedTasks.length + " 个");}
+          if (techDebtCount > activeTasks.length * 0.2) {issues.push("技术债 " + techDebtCount + " 个");}
           const overallHealth = issues.length === 0 ? "🟢 健康" : issues.length <= 1 ? "🟡 需关注" : "🔴 需干预";
           return {
             projectId: pid,
@@ -2385,14 +2385,14 @@ export const projectsHandlers: GatewayRequestHandlers = {
         }),
       );
       const projects = results
-        .map((r, i) => r.status === "fulfilled" ? r.value : { projectId: allProjectIds[i], error: String((r as PromiseRejectedResult).reason) })
+        .map((r, i) => r.status === "fulfilled" ? r.value : { projectId: allProjectIds[i], error: String((r).reason) })
         .filter(Boolean);
       const healthCounts = { green: 0, yellow: 0, red: 0 };
       for (const p of projects) {
         const h = String((p as Record<string, unknown>).overallHealth ?? "");
-        if (h.includes("🟢")) healthCounts.green++;
-        else if (h.includes("🟡")) healthCounts.yellow++;
-        else if (h.includes("🔴")) healthCounts.red++;
+        if (h.includes("🟢")) {healthCounts.green++;}
+        else if (h.includes("🟡")) {healthCounts.yellow++;}
+        else if (h.includes("🔴")) {healthCounts.red++;}
       }
       respond(true, {
         totalProjects: projects.length,
@@ -2617,9 +2617,9 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const allSprints = (config.sprints ?? config.milestones ?? []) as Array<Record<string, unknown>>;
       const completedSprints = allSprints
         .filter((s) => s["status"] === "completed" || s["completedAt"])
-        .sort((a, b) => Number(b["completedAt"] ?? 0) - Number(a["completedAt"] ?? 0))
+        .toSorted((a, b) => Number(b["completedAt"] ?? 0) - Number(a["completedAt"] ?? 0))
         .slice(0, limitSprints)
-        .reverse();
+        .toReversed();
 
       if (completedSprints.length === 0) {
         respond(true, {
@@ -2653,9 +2653,9 @@ export const projectsHandlers: GatewayRequestHandlers = {
         // 过滤在 sprint 时间段内完成的任务
         const inSprintTasks = sprintTasks.filter((t) => {
           const completedAtT = (t as Record<string, unknown>).completedAt as number | undefined;
-          if (!completedAtT) return false;
-          if (startedAt && completedAtT < startedAt) return false;
-          if (completedAt && completedAtT > completedAt) return false;
+          if (!completedAtT) {return false;}
+          if (startedAt && completedAtT < startedAt) {return false;}
+          if (completedAt && completedAtT > completedAt) {return false;}
           return true;
         });
 
@@ -2717,15 +2717,15 @@ export const projectsHandlers: GatewayRequestHandlers = {
       if (fs.existsSync(root)) {
         const entries = fs.readdirSync(root, { withFileTypes: true });
         for (const entry of entries) {
-          if (!entry.isDirectory()) continue;
+          if (!entry.isDirectory()) {continue;}
           const projectId = entry.name;
           const configPath = path.join(root, projectId, "PROJECT_CONFIG.json");
-          if (!fs.existsSync(configPath)) continue;
+          if (!fs.existsSync(configPath)) {continue;}
           const config = readProjectConfig(path.join(root, projectId));
-          if (!config) continue;
+          if (!config) {continue;}
           // 只检查 active 项目
           const status = config.status ?? "active";
-          if (status === "completed" || status === "archived" || status === "cancelled") continue;
+          if (status === "completed" || status === "archived" || status === "cancelled") {continue;}
           scannedCount++;
 
           const lastHealthAt = (config as Record<string, unknown>).lastHealthUpdateAt as number | undefined

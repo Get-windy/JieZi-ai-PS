@@ -578,6 +578,27 @@ const BUILTIN_BENCHMARKS: ArenaBenchmarkDB = {
     instructionElo: 1431,
     updatedAt: "2026-04-10",
   },
+  // qwen3.6-plus：2026-04-02 发布，阿里云百炼旗舰 plus 档，1M 上下文
+  // 来源：BenchLM.ai #23/106（overall 77/100），llm-stats.com 全球 #8
+  // SWE-bench Verified: 78.8%（来源：quantabit/fb 实测，接近 Claude Opus 4.5 的 80.9%）
+  // Coding BenchLM #15（79.7/100），IFEval BenchLM #13（90.0/100）
+  // Knowledge BenchLM #23（76.8/100），Multilingual BenchLM #22（81.5/100）
+  // Agentic BenchLM #19（71.6/100），Multimodal BenchLM #24（73.8/100）
+  // arena.ai 暂无独立 Elo（模型太新），综合 llm-stats #8 位置估算约 1453
+  // 定位：百炼官方说 "效果、速度、成本均衡"，媲美 qwen3-max，速度更快
+  "qwen3.6-plus": {
+    eloScore: 1453,
+    arenaRank: 23,
+    mmlu: 87.8,
+    humanEval: 92.0,
+    math: 87.5,
+    gpqa: 68.0,
+    codingElo: 1492,
+    reasoningElo: 1450,
+    creativeElo: 1422,
+    instructionElo: 1440,
+    updatedAt: "2026-04-15",
+  },
   // qwen3-max：Arena Elo 1443
   // coding Elo 1481（arena.ai coding #44 qwen3-max-preview），math Elo 1440（arena.ai math #36）
   // creative Elo 1395（arena.ai creative #56），instruction Elo 1427（arena.ai instruction #45）

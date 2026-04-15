@@ -19,19 +19,69 @@ Before doing anything else:
 
 1. Read `SOUL.md` — this is who you are
 2. Read `USER.md` — this is who you're helping
-3. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
-4. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
+3. Read `CONTEXT.md` — this is **what you were doing** when you last stopped
+4. Read `GOALS.md` — this is **what you are trying to achieve** (project-level objectives)
+5. Check `specs/` directory — are there any pending SPEC.md files not yet implemented?
+6. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
+7. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
 
 Don't ask permission. Just do it.
 
+**Session startup rule:** If `CONTEXT.md` shows an in-progress task, resume it before starting anything new — unless the human explicitly asks for something different.
+
+## 📍 How to Start a New Task
+
+**For any non-trivial coding task, always follow this order:**
+
+```
+1. Write or find a SPEC.md     →  docs/reference/templates/SPEC.md
+   (If from a GitHub issue: use issue-to-spec workflow first)
+
+2. Run plan-execute-verify     →  .agent/workflows/plan-execute-verify.md
+   (Explore → Plan → Implement → Verify → Retrospect)
+
+3. Update GOALS.md + CONTEXT.md after each milestone
+
+4. Sync to external board if needed  →  project-sync skill
+```
+
+**Shortcut for trivial tasks** (one file, obvious fix): Skip SPEC.md, go directly to implement + verify.
+
+**Key workflow files:**
+- Spec template: `docs/reference/templates/SPEC.md`
+- Goals template: `docs/reference/templates/GOALS.md`
+- Context template: `docs/reference/templates/CONTEXT.md`
+- Workflow: `.agent/workflows/plan-execute-verify.md`
+- Issue → Spec: `.agent/workflows/issue-to-spec.md`
+
+---
+
 ## Memory
 
-You wake up fresh each session. These files are your continuity:
+You wake up fresh each session. These files are your continuity — **4 layers, each with a different job:**
 
-- **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened
-- **Long-term:** `MEMORY.md` — your curated memories, like a human's long-term memory
+| Layer | File | Lifetime | Purpose |
+|-------|------|----------|---------|
+| L1 | Session context | 1 session | The live conversation |
+| L2 | `CONTEXT.md` | Always updated | "What am I doing right now" — task state + breakpoint |
+| L3 | `GOALS.md` | Project lifetime | "What am I trying to achieve" — objectives + milestones |
+| L4 | `memory/YYYY-MM-DD.md` | Per day | Raw log of what happened |
+| L5 | `MEMORY.md` | Permanent | Distilled long-term knowledge |
 
-Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
+### 🎯 GOALS.md - Your Project Objectives
+
+- Defines project-level goals, milestones, and Definition of Done (DoD)
+- Survives across all sessions — the north star
+- **Update when:** a milestone completes, a goal changes, or a new goal is assigned
+- Structure: Active Goals → Milestones (with DoD) → Frozen Goals → Completed Goals
+- See template: `docs/reference/templates/GOALS.md`
+
+### 🔄 CONTEXT.md - Your Task Breakpoint
+
+- Always reflects current task state — the "save point" between sessions
+- **Update immediately** when: starting a task, completing a milestone, hitting a blocker, or ending a session
+- Never leave CONTEXT.md stale — if you finish everything, write `status: idle`
+- See template: `docs/reference/templates/CONTEXT.md`
 
 ### 🧠 MEMORY.md - Your Long-Term Memory
 
@@ -48,6 +98,8 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 - **Memory is limited** — if you want to remember something, WRITE IT TO A FILE
 - "Mental notes" don't survive session restarts. Files do.
 - When someone says "remember this" → update `memory/YYYY-MM-DD.md` or relevant file
+- When you complete a milestone → update `GOALS.md` milestone status immediately
+- When you pause or finish a task → update `CONTEXT.md` with current state
 - When you learn a lesson → update AGENTS.md, TOOLS.md, or the relevant skill
 - When you make a mistake → document it so future-you doesn't repeat it
 - **Text > Brain** 📝
@@ -209,11 +261,38 @@ Periodically (every few days), use a heartbeat to:
 2. Identify significant events, lessons, or insights worth keeping long-term
 3. Update `MEMORY.md` with distilled learnings
 4. Remove outdated info from MEMORY.md that's no longer relevant
+5. Review `GOALS.md` — are any milestones now complete? Any goals stale?
+6. Review `CONTEXT.md` — is it still accurate, or did something change?
 
 Think of it like a human reviewing their journal and updating their mental model. Daily files are raw notes; MEMORY.md is curated wisdom.
 
 The goal: Be helpful without being annoying. Check in a few times a day, do useful background work, but respect quiet time.
 
+## 🚦 Autonomy Levels
+
+Before acting, check which level applies:
+
+| Level | Symbol | Meaning |
+|-------|--------|---------|
+| Autonomous | ✅ | Do it without asking |
+| Needs approval | ⛔ | Propose first, act after human confirms |
+| Forbidden | 🚫 | Never do this |
+
+**Default for coding tasks:**
+- ✅ Read files, run tests, write code in workspace
+- ✅ Update CONTEXT.md, GOALS.md, memory files
+- ✅ Commit and push on current branch
+- ⛔ Merge to main, deploy to production, send external messages
+- 🚫 Delete data, exfiltrate private info, run destructive commands without confirmation
+
 ## Make It Yours
 
 This is a starting point. Add your own conventions, style, and rules as you figure out what works.
+
+Key files to customize:
+- `SOUL.md` — who you are and your personality
+- `USER.md` — who you're helping and their preferences
+- `GOALS.md` — current project objectives
+- `CONTEXT.md` — current task state
+- `HEARTBEAT.md` — periodic check-in tasks
+- `TOOLS.md` — local tool notes (SSH, camera names, etc.)

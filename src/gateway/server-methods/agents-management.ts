@@ -1563,7 +1563,61 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
       const success = await updateAgentField(agentId, "modelAccounts", updatedConfig, respond);
       if (success) {
-        respond(true, { success: true, agentId, modelId }, undefined);
+        // 绑定成功后，直接计算最新的 bound/available 列表，随响应一并返回，
+        // 避免前端再发起两次额外的网络请求（提升页面响应速度）
+        const newBoundAccounts = updatedConfig.accounts;
+        const boundSet = new Set(newBoundAccounts);
+        const availableModels: Array<{
+          modelId: string;
+          providerId: string;
+          modelName: string;
+          displayName: string;
+          providerName: string;
+        }> = [];
+        for (const [pid, mList] of Object.entries(storage.models)) {
+          const prov = storage.providers.find((p: { id: string }) => p.id === pid);
+          const auths = storage.auths[pid] || [];
+          for (const m of mList) {
+            if (!m.enabled || m.deprecated) {continue;}
+            const a = auths.find((au: { authId: string }) => au.authId === m.authId);
+            if (!a || !a.enabled) {continue;}
+            const mid = `${pid}/${m.modelName}`;
+            if (boundSet.has(mid)) {continue;}
+            availableModels.push({
+              modelId: mid,
+              providerId: pid,
+              modelName: m.modelName,
+              displayName: `${prov?.name || pid} - ${m.nickname || m.modelName}`,
+              providerName: prov?.name || pid,
+            });
+          }
+        }
+        const boundModels = newBoundAccounts.map((mid: string) => {
+          const slash = mid.indexOf("/");
+          const pid = slash === -1 ? mid : mid.substring(0, slash);
+          const mn = slash === -1 ? mid : mid.substring(slash + 1);
+          const prov = storage.providers.find((p: { id: string }) => p.id === pid);
+          const mList = storage.models[pid] || [];
+          const m = mList.find((x: { modelName: string }) => x.modelName === mn);
+          return {
+            modelId: mid,
+            providerId: pid,
+            modelName: mn,
+            displayName: `${prov?.name || pid} - ${m?.nickname || mn}`,
+            providerName: prov?.name || pid,
+            enabled: !!m,
+          };
+        });
+        respond(true, {
+          success: true,
+          agentId,
+          modelId,
+          defaultAccountId: updatedConfig.defaultAccountId,
+          boundAccounts: newBoundAccounts,
+          boundModelDetails: boundModels,
+          availableAccounts: availableModels.map((m) => m.modelId),
+          availableModelDetails: availableModels,
+        }, undefined);
       }
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
@@ -1633,7 +1687,67 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
     const success = await updateAgentField(agentId, "modelAccounts", updatedConfig, respond);
     if (success) {
-      respond(true, { success: true, agentId, modelId }, undefined);
+      // 解绑成功后，直接计算最新的 bound/available 列表，随响应一并返回，避免前端再发起两次请求
+      try {
+        const { loadModelManagement } = await import("./models.js");
+        const storage = await loadModelManagement();
+        const newBoundAccounts = updatedAccounts;
+        const boundSet = new Set(newBoundAccounts);
+        const availableModels: Array<{
+          modelId: string;
+          providerId: string;
+          modelName: string;
+          displayName: string;
+          providerName: string;
+        }> = [];
+        for (const [pid, mList] of Object.entries(storage.models)) {
+          const prov = storage.providers.find((p: { id: string }) => p.id === pid);
+          const auths = storage.auths[pid] || [];
+          for (const m of mList) {
+            if (!m.enabled || m.deprecated) {continue;}
+            const a = auths.find((au: { authId: string }) => au.authId === m.authId);
+            if (!a || !a.enabled) {continue;}
+            const mid = `${pid}/${m.modelName}`;
+            if (boundSet.has(mid)) {continue;}
+            availableModels.push({
+              modelId: mid,
+              providerId: pid,
+              modelName: m.modelName,
+              displayName: `${prov?.name || pid} - ${m.nickname || m.modelName}`,
+              providerName: prov?.name || pid,
+            });
+          }
+        }
+        const boundModels = newBoundAccounts.map((mid: string) => {
+          const slash = mid.indexOf("/");
+          const pid = slash === -1 ? mid : mid.substring(0, slash);
+          const mn = slash === -1 ? mid : mid.substring(slash + 1);
+          const prov = storage.providers.find((p: { id: string }) => p.id === pid);
+          const mList = storage.models[pid] || [];
+          const m = mList.find((x: { modelName: string }) => x.modelName === mn);
+          return {
+            modelId: mid,
+            providerId: pid,
+            modelName: mn,
+            displayName: `${prov?.name || pid} - ${m?.nickname || mn}`,
+            providerName: prov?.name || pid,
+            enabled: !!m,
+          };
+        });
+        respond(true, {
+          success: true,
+          agentId,
+          modelId,
+          defaultAccountId: defaultAccountId || "",
+          boundAccounts: newBoundAccounts,
+          boundModelDetails: boundModels,
+          availableAccounts: availableModels.map((m) => m.modelId),
+          availableModelDetails: availableModels,
+        }, undefined);
+      } catch {
+        // 附加数据加载失败，降级为仅返回成功标志（前端会回退到独立请求刷新）
+        respond(true, { success: true, agentId, modelId }, undefined);
+      }
     }
   },
 
@@ -2268,8 +2382,11 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
     // 始终清理 agentDir（.openclaw/agents/{id}/agent）和 sessionsDir（.../sessions）
     // 无论用户是否勾选"清空工作区"，这两个目录都应随 agent 删除而清理（与 CLI 行为对齐）
+    let agentRootDir: string | undefined;
     try {
       const agentDir = resolveAgentDir(cfg, normalized);
+      // agentDir = .openclaw/agents/{id}/agent，其父目录即 .openclaw/agents/{id}/
+      agentRootDir = path.dirname(agentDir);
       await fs.rm(agentDir, { recursive: true, force: true });
     } catch (err) {
       console.error(`[agent.delete] Failed to remove agentDir for ${id}:`, err);
@@ -2279,6 +2396,15 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       await fs.rm(sessionsDir, { recursive: true, force: true });
     } catch (err) {
       console.error(`[agent.delete] Failed to remove sessionsDir for ${id}:`, err);
+    }
+    // 清理 agents/{id}/ 父目录（及其残留内容），防止模型同步等逻辑把已删除 agent 目录当作有效 agent 处理
+    if (agentRootDir) {
+      try {
+        await fs.rm(agentRootDir, { recursive: true, force: true });
+        console.log(`[agent.delete] Removed agent root dir: ${agentRootDir}`);
+      } catch (err) {
+        console.error(`[agent.delete] Failed to remove agent root dir for ${id}:`, err);
+      }
     }
 
     // 从列表中移除

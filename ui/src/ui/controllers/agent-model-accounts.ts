@@ -162,11 +162,29 @@ export async function bindModelAccount(
     });
 
     if (response.ok) {
-      // 重新加载绑定列表和可用列表
-      await Promise.all([
-        loadBoundModelAccounts(state, agentId),
-        loadAvailableModelAccounts(state, agentId),
-      ]);
+      // 服务端已在响应中携带最新的 bound/available 列表，直接更新 state，无需额外网络请求
+      const data = response.data as {
+        boundAccounts?: string[];
+        boundModelDetails?: ModelDetail[];
+        availableAccounts?: string[];
+        availableModelDetails?: ModelDetail[];
+        defaultAccountId?: string;
+      };
+      if (data.boundAccounts) {
+        state.boundModelAccounts = [...data.boundAccounts];
+        state.boundModelDetails = [...(data.boundModelDetails || [])];
+        state.availableModelAccounts = [...(data.availableAccounts || [])];
+        state.availableModelDetails = [...(data.availableModelDetails || [])];
+        if (data.defaultAccountId !== undefined) {
+          state.defaultModelAccountId = data.defaultAccountId;
+        }
+      } else {
+        // 山路不通（旧版本后端）：退化为重新加载
+        await Promise.all([
+          loadBoundModelAccounts(state, agentId),
+          loadAvailableModelAccounts(state, agentId),
+        ]);
+      }
     } else {
       state.modelAccountOperationError = response.error?.message || "Failed to bind model";
     }
@@ -196,11 +214,29 @@ export async function unbindModelAccount(
     });
 
     if (response.ok) {
-      // 重新加载绑定列表和可用列表
-      await Promise.all([
-        loadBoundModelAccounts(state, agentId),
-        loadAvailableModelAccounts(state, agentId),
-      ]);
+      // 服务端已在响应中携带最新的 bound/available 列表，直接更新 state，无需额外网络请求
+      const data = response.data as {
+        boundAccounts?: string[];
+        boundModelDetails?: ModelDetail[];
+        availableAccounts?: string[];
+        availableModelDetails?: ModelDetail[];
+        defaultAccountId?: string;
+      };
+      if (data.boundAccounts) {
+        state.boundModelAccounts = [...data.boundAccounts];
+        state.boundModelDetails = [...(data.boundModelDetails || [])];
+        state.availableModelAccounts = [...(data.availableAccounts || [])];
+        state.availableModelDetails = [...(data.availableModelDetails || [])];
+        if (data.defaultAccountId !== undefined) {
+          state.defaultModelAccountId = data.defaultAccountId;
+        }
+      } else {
+        // 山路不通（旧版本后端）：退化为重新加载
+        await Promise.all([
+          loadBoundModelAccounts(state, agentId),
+          loadAvailableModelAccounts(state, agentId),
+        ]);
+      }
     } else {
       state.modelAccountOperationError = response.error?.message || "Failed to unbind model";
     }

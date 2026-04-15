@@ -40,8 +40,35 @@ Goal: PR must end in GitHub state = MERGED (never CLOSED). Use `gh pr merge` wit
    - Rebase if we want to preserve commit history
    - Squash if we want a single clean commit
    - If unclear, ask
-10. Full gate (BEFORE commit):
-    - `pnpm lint && pnpm build && pnpm test`
+10. **Full Quality Gate (BEFORE commit) — ALL must pass:**
+
+    ```sh
+    # Step 1: Type check
+    pnpm typecheck
+
+    # Step 2: Lint (zero warnings allowed)
+    pnpm lint
+
+    # Step 3: Build (must exit 0)
+    pnpm build
+
+    # Step 4: Tests (must all pass, no skips unless pre-existing)
+    pnpm test
+
+    # Step 5: Coverage (must not drop below baseline)
+    pnpm coverage
+    ```
+
+    **STOP if any gate fails.** Fix the issue before proceeding. Do NOT use `--ignore` flags or suppress errors.
+
+    **Additional gates by PR type:**
+    | PR type | Extra check |
+    |---------|-------------|
+    | API change | `curl localhost:PORT/endpoint` smoke test |
+    | UI change | Screenshot before/after compare |
+    | Auth/security | Login + logout flow manual test |
+    | Dependency bump | `pnpm audit` — no new high/critical vulns |
+
 11. Commit via committer (final merge commit only includes PR # + thanks):
     - For the final merge-ready commit: `committer "fix: <summary> (#<PR>) (thanks @$contrib)" CHANGELOG.md <changed files>`
     - If you need intermediate fix commits before the final merge commit, keep those messages concise and **omit** PR number/thanks.
@@ -64,10 +91,13 @@ Goal: PR must end in GitHub state = MERGED (never CLOSED). Use `gh pr merge` wit
 
     ```sh
     merge_sha=$(gh pr view <PR> --json mergeCommit --jq '.mergeCommit.oid')
-    gh pr comment <PR> --body "Landed via temp rebase onto main.\n\n- Gate: pnpm lint && pnpm build && pnpm test\n- Land commit: $land_sha\n- Merge commit: $merge_sha\n\nThanks @$contrib!"
+    gh pr comment <PR> --body "Landed via temp rebase onto main.\n\n- Gate: pnpm typecheck && pnpm lint && pnpm build && pnpm test\n- Land commit: $land_sha\n- Merge commit: $merge_sha\n\nThanks @$contrib!"
     ```
 
 16. Verify PR state == MERGED:
     - `gh pr view <PR> --json state --jq .state`
 17. Delete temp branch:
     - `git branch -D temp/landpr-<ts-or-pr>`
+18. Update `GOALS.md` if this PR completed a milestone:
+    - Find the relevant milestone in GOALS.md and mark it ✅ Done
+    - If no GOALS.md exists, skip this step

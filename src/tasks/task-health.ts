@@ -317,8 +317,8 @@ export function summarizeHealthScores(scores: Map<string, TaskHealthScore>): {
 
   for (const score of scores.values()) {
     totalScore += score.score;
-    if (score.level === "green") green++;
-    else if (score.level === "yellow") yellow++;
+    if (score.level === "green") {green++;}
+    else if (score.level === "yellow") {yellow++;}
     else {
       red++;
       criticalTaskIds.push(score.taskId);

@@ -196,7 +196,7 @@ export function buildRetryContext(
   ];
 
   for (let i = 0; i < failures.length; i++) {
-    const f = failures[i]!;
+    const f = failures[i];
     lines.push(`  ${i + 1}. [${f.code}] ${f.message}`);
     if (f.criterion) {
       lines.push(`     验收标准：${f.criterion}`);
@@ -390,10 +390,10 @@ export function criterionNoToolError<T>(): AcceptanceCriterion<T> {
     name: "no-tool-error",
     description: '输出 details.status 不能为 "error" 或 "timeout"',
     validate(output) {
-      if (!output || typeof output !== "object") return null;
+      if (!output || typeof output !== "object") {return null;}
       const record = output as Record<string, unknown>;
       const details = record.details;
-      if (!details || typeof details !== "object") return null;
+      if (!details || typeof details !== "object") {return null;}
       const status =
         typeof (details as Record<string, unknown>).status === "string"
           ? ((details as Record<string, unknown>).status as string).trim().toLowerCase()

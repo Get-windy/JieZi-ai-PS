@@ -2414,7 +2414,7 @@ export function createProjectInitiativeUpsertTool(): AnyAgentTool {
           createdBy: readStringParam(params, "createdBy"),
           workspaceRoot: readStringParam(params, "workspaceRoot"),
         });
-        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to upsert initiative: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -2456,7 +2456,7 @@ export function createProjectInitiativeListTool(): AnyAgentTool {
           objectiveId: readStringParam(params, "objectiveId"),
           workspaceRoot: readStringParam(params, "workspaceRoot"),
         });
-        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to list initiatives: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -2499,7 +2499,7 @@ export function createProjectInitiativeAddUpdateTool(): AnyAgentTool {
           authorId: readStringParam(params, "authorId"),
           workspaceRoot: readStringParam(params, "workspaceRoot"),
         });
-        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to add initiative update: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -2535,7 +2535,7 @@ export function createProjectVelocityTrendTool(): AnyAgentTool {
           limit: params.limit,
           workspaceRoot: readStringParam(params, "workspaceRoot"),
         });
-        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to get velocity trend: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -2568,7 +2568,7 @@ export function createProjectHealthUpdateReminderTool(): AnyAgentTool {
           thresholdDays: params.thresholdDays,
           workspaceRoot: readStringParam(params, "workspaceRoot"),
         });
-        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to check health update due: ${error instanceof Error ? error.message : String(error)}` });
       }

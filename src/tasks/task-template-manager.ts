@@ -130,7 +130,7 @@ export function listTaskTemplates(
     );
   }
 
-  return templates.sort((a, b) => b.useCount - a.useCount);
+  return templates.toSorted((a, b) => b.useCount - a.useCount);
 }
 
 /**
@@ -147,7 +147,7 @@ export function getTaskTemplate(workspaceRoot: string, templateId: string): Task
 export function deleteTaskTemplate(workspaceRoot: string, templateId: string): boolean {
   const store = loadTemplateStore(workspaceRoot);
   const idx = store.templates.findIndex((t) => t.id === templateId);
-  if (idx === -1) return false;
+  if (idx === -1) {return false;}
   store.templates.splice(idx, 1);
   store.updatedAt = Date.now();
   saveTemplateStore(workspaceRoot, store);
@@ -165,7 +165,7 @@ export function applyTaskTemplate(
 ): { merged: TaskTemplate["fields"] & { title?: string }; template: TaskTemplate } | null {
   const store = loadTemplateStore(workspaceRoot);
   const idx = store.templates.findIndex((t) => t.id === templateId);
-  if (idx === -1) return null;
+  if (idx === -1) {return null;}
 
   // 增加使用计数
   store.templates[idx].useCount++;
@@ -175,7 +175,7 @@ export function applyTaskTemplate(
   const template = store.templates[idx];
   const merged: TaskTemplate["fields"] & { title?: string } = {
     ...template.fields,
-    ...(overrides ?? {}),
+    ...overrides,
     // AC 列表合并（模板 AC + 覆盖 AC）
     acceptanceCriteria: [
       ...(template.fields.acceptanceCriteria ?? []),

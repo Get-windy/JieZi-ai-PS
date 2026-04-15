@@ -164,11 +164,11 @@ export function upsertObjective(
  */
 export function deleteObjective(workspacePath: string, objectiveId: string): boolean {
   const store = loadOkrStore(workspacePath);
-  if (!store) return false;
+  if (!store) {return false;}
 
   const before = store.objectives.length;
   store.objectives = store.objectives.filter((o) => o.id !== objectiveId);
-  if (store.objectives.length === before) return false;
+  if (store.objectives.length === before) {return false;}
 
   saveOkrStore(workspacePath, store);
   return true;
@@ -192,7 +192,7 @@ export function upsertKeyResult(
 ): KeyResult | null {
   const store = loadOkrStore(workspacePath) ?? initStore(projectId);
   const objIdx = store.objectives.findIndex((o) => o.id === objectiveId);
-  if (objIdx < 0) return null;
+  if (objIdx < 0) {return null;}
 
   const obj = store.objectives[objIdx];
   const krs = obj.keyResults ?? [];
@@ -243,10 +243,10 @@ export function updateObjectiveStatus(
   note?: string,
 ): boolean {
   const store = loadOkrStore(workspacePath);
-  if (!store) return false;
+  if (!store) {return false;}
 
   const idx = store.objectives.findIndex((o) => o.id === objectiveId);
-  if (idx < 0) return false;
+  if (idx < 0) {return false;}
 
   const now = Date.now();
   store.objectives[idx] = {
@@ -281,7 +281,7 @@ export function calcOkrProgress(
 
     // KeyResult 进度
     const krProgressList = krs.map((kr) => {
-      if (kr.achieved) return 100;
+      if (kr.achieved) {return 100;}
       if (kr.current != null && kr.target != null && kr.target > 0) {
         return Math.min(100, Math.round((kr.current / kr.target) * 100));
       }
