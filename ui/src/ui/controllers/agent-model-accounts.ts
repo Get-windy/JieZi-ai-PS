@@ -163,7 +163,7 @@ export async function bindModelAccount(
 
     if (response.ok) {
       // 服务端已在响应中携带最新的 bound/available 列表，直接更新 state，无需额外网络请求
-      const data = response.data as unknown as {
+      const data = response.data as {
         boundAccounts?: string[];
         boundModelDetails?: ModelDetail[];
         availableAccounts?: string[];
@@ -215,7 +215,7 @@ export async function unbindModelAccount(
 
     if (response.ok) {
       // 服务端已在响应中携带最新的 bound/available 列表，直接更新 state，无需额外网络请求
-      const data = response.data as unknown as {
+      const data = response.data as {
         boundAccounts?: string[];
         boundModelDetails?: ModelDetail[];
         availableAccounts?: string[];

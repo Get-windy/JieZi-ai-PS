@@ -1414,7 +1414,7 @@ export function createTaskResetTool(opts?: { currentAgentId?: string }): AnyAgen
         return jsonResult({
           success: true,
           message: `Task ${taskId} reset from "${(result)?.previousStatus}" to "${targetStatus}".`,
-          ...((result) ?? {}),
+          ...(result),
         });
       } catch (error) {
         return jsonResult({
@@ -1460,7 +1460,7 @@ export function createTaskFlowMetricsTool(): AnyAgentTool {
           fromDays,
           workspaceRoot: readStringParam(params, "workspaceRoot"),
         });
-        return jsonResult({ success: true, ...((result) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to get flow metrics: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -1497,7 +1497,7 @@ export function createTaskCriticalPathTool(): AnyAgentTool {
           includeCompleted: params.includeCompleted,
           hoursPerSP: params.hoursPerSP,
         });
-        return jsonResult({ success: true, ...((result) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to get critical path: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -1537,7 +1537,7 @@ export function createTaskHealthCheckTool(): AnyAgentTool {
           levelFilter,
           workspaceRoot: readStringParam(params, "workspaceRoot"),
         });
-        return jsonResult({ success: true, ...((result) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to get task health: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -1571,7 +1571,7 @@ export function createTaskOkrListTool(): AnyAgentTool {
           projectId,
           workspaceRoot: readStringParam(params, "workspaceRoot"),
         });
-        return jsonResult({ success: true, ...((result) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to list OKR: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -1615,7 +1615,7 @@ export function createTaskAcVerifyTool(): AnyAgentTool {
           criteriaUpdates,
           verifiedBy,
         });
-        return jsonResult({ success: true, ...((result) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to verify AC: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -1661,7 +1661,7 @@ export function createTaskSearchTool(): AnyAgentTool {
         const result = await callGatewayTool("task.search", gatewayOpts, {
           keyword, projectId, status, assigneeId, tag, level, limit,
         });
-        return jsonResult({ success: true, ...((result) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to search tasks: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -1690,7 +1690,7 @@ export function createTaskTimelineTool(): AnyAgentTool {
       const gatewayOpts = readGatewayCallOptions(params);
       try {
         const result = await callGatewayTool("task.timeline", gatewayOpts, { taskId });
-        return jsonResult({ success: true, ...((result) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to get task timeline: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -1743,7 +1743,7 @@ export function createTaskQualityGateUpdateTool(): AnyAgentTool {
         const result = await callGatewayTool("task.quality_gate_update", gatewayOpts, {
           taskId, gates, actor, autoAppend, autoTransitionToReview,
         });
-        return jsonResult({ success: true, ...((result) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to update quality gate: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -1785,7 +1785,7 @@ export function createTaskTriageAutoTool(): AnyAgentTool {
           priority: readStringParam(params, "priority"),
           tags: params.tags,
         });
-        return jsonResult({ success: true, ...((result) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to triage: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -1819,7 +1819,7 @@ export function createTaskSlaCheckTool(): AnyAgentTool {
           projectId: readStringParam(params, "projectId"),
           assigneeId: readStringParam(params, "assigneeId"),
         });
-        return jsonResult({ success: true, ...((result) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to check SLA: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -1871,7 +1871,7 @@ export function createTaskTemplateUpsertTool(): AnyAgentTool {
           createdBy: readStringParam(params, "createdBy"),
           workspaceRoot: readStringParam(params, "workspaceRoot"),
         });
-        return jsonResult({ success: true, ...((result) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to upsert template: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -1902,7 +1902,7 @@ export function createTaskTemplateListTool(): AnyAgentTool {
           keyword: readStringParam(params, "keyword"),
           workspaceRoot: readStringParam(params, "workspaceRoot"),
         });
-        return jsonResult({ success: true, ...((result) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to list templates: ${error instanceof Error ? error.message : String(error)}` });
       }
@@ -1945,7 +1945,7 @@ export function createTaskTemplateApplyTool(): AnyAgentTool {
           overrides: params.overrides,
           workspaceRoot: readStringParam(params, "workspaceRoot"),
         });
-        return jsonResult({ success: true, ...((result) ?? {}) });
+        return jsonResult({ success: true, ...(result) });
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to apply template: ${error instanceof Error ? error.message : String(error)}` });
       }

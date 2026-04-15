@@ -1578,11 +1578,11 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           const prov = storage.providers.find((p: { id: string }) => p.id === pid);
           const auths = storage.auths[pid] || [];
           for (const m of mList) {
-            if (!m.enabled || m.deprecated) continue;
+            if (!m.enabled || m.deprecated) {continue;}
             const a = auths.find((au: { authId: string }) => au.authId === m.authId);
-            if (!a || !a.enabled) continue;
+            if (!a || !a.enabled) {continue;}
             const mid = `${pid}/${m.modelName}`;
-            if (boundSet.has(mid)) continue;
+            if (boundSet.has(mid)) {continue;}
             availableModels.push({
               modelId: mid,
               providerId: pid,
@@ -1704,11 +1704,11 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           const prov = storage.providers.find((p: { id: string }) => p.id === pid);
           const auths = storage.auths[pid] || [];
           for (const m of mList) {
-            if (!m.enabled || m.deprecated) continue;
+            if (!m.enabled || m.deprecated) {continue;}
             const a = auths.find((au: { authId: string }) => au.authId === m.authId);
-            if (!a || !a.enabled) continue;
+            if (!a || !a.enabled) {continue;}
             const mid = `${pid}/${m.modelName}`;
-            if (boundSet.has(mid)) continue;
+            if (boundSet.has(mid)) {continue;}
             availableModels.push({
               modelId: mid,
               providerId: pid,
