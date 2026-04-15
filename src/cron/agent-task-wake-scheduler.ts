@@ -338,38 +338,16 @@ async function checkAndNotifyLowWatermark(
   // 记录本次告警时间（冷却）
   lowWatermarkAlertAt.set(lwmLastAlertKey, now);
 
-  const urgencyLabel = threshold.required
-    ? "❗ [紧急 - 当前阶段要求必须有待办任务]"
-    : "⚠️ [建议补充]";
-  const phaseInfo =
-    phaseLabels.length > 0 ? `项目阶段：${phaseLabels.join(", ")}` : "项目阶段未知";
-
-  const lwmMsg = [
-    `[TASK LOW WATERMARK] ${urgencyLabel} Agent ${normalizedId} 的待办任务不足，需要補充`,
-    ``,
-    `Agent: ${normalizedId}`,
-    `当前待办任务数：${todoCount} 条（最小要求：${threshold.minTodo} 条）`,
-    phaseInfo,
-    ``,
-    threshold.required
-      ? `当前阶段要求 ${normalizedId} 必须始终有待办任务。请立即使用 agent_assign_task 分配新任务。`
-      : `建议马上给 ${normalizedId} 分配新任务，保持工作流水线不停歇。`,
-    ``,
-    `请使用 agent_assign_task 分配新任务到 ${normalizedId}。`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  const lwmSupSession = `agent:${normalizedSup}:main`;
-  enqueueSystemEvent(lwmMsg, {
-    sessionKey: lwmSupSession,
-    contextKey: `cron:task-lwm:${normalizedId}`,
-  });
-  requestHeartbeatNow({
-    reason: `cron:task-lwm:${normalizedId}`,
-    sessionKey: lwmSupSession,
-    agentId: normalizedSup,
-    coalesceMs: 15000,
+  // 快照注入：用仪表盘替代多行 LWM 消息，避免主控上下文膨胀
+  await injectLeaderSnapshot({
+    leaderId: normalizedSup,
+    wakeReason: {
+      type: "low_watermark",
+      agentId: normalizedId,
+      todoCount,
+      minTodo: threshold.minTodo,
+    },
+    coalesceMs: 15_000,
   });
   console.log(
     `[Task Wake] ↓ Low watermark: ${normalizedId} todo=${todoCount}/${threshold.minTodo} (phase=${phaseLabels.join(",") || "unknown"}) — notify supervisor ${normalizedSup}`,
@@ -699,36 +677,17 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
               const shouldAlert = !lastAlert || now - lastAlert > TIMEOUT_ALERT_COOLDOWN_MS;
               if (shouldAlert) {
                 timeoutAlertedAt.set(alertKey, now);
-                const supervisorSession = `agent:${normalizedSupervisor}:main`;
-                const supervisorNotice = [
-                  `[TASK AUTO-RESET] 🚨 Agent ${normalizedId} 的任务卡顿超过 ${stuckMinutes} 分钟，已被自动重置回待办队列。需要你人工检查。`,
-                  ``,
-                  `Agent: ${normalizedId}`,
-                  `Task ID: ${activeTask.id}`,
-                  `Title: ${activeTask.title}`,
-                  `Priority: ${activeTask.priority}`,
-                  activeTask.type ? `Type: ${activeTask.type}` : null,
-                  ``,
-                  `「重置原因」任务开始执行已超过 ${stuckMinutes} 分钟，agent 始终未调用 task_report_to_supervisor 上报完成。`,
-                  `已自动重置为 todo 状态，等待下轮调度重新分配。`,
-                  ``,
-                  `【建议】请调用以下工具处理（任务已重置回 todo，可直接重新分配）：`,
-                  `- agent_assign_task 将任务重新分配给合适的 agent`,
-                  `- task_update taskId=${activeTask.id} status=cancelled  （如任务本身无法完成）`,
-                  `- agent_communicate targetAgentId=${normalizedId}        （与 agent 沟通原因）`,
-                ]
-                  .filter(Boolean)
-                  .join("\n");
-                enqueueSystemEvent(supervisorNotice, {
-                  sessionKey: supervisorSession,
-                  contextKey: `cron:task-autoreset:${activeTask.id}`,
-                });
-                requestHeartbeatNow({
-                  reason: `cron:task-autoreset:${activeTask.id}`,
-                  sessionKey: supervisorSession,
-                  agentId: normalizedSupervisor,
-                  coalesceMs: 10000,
-                });
+                // 快照注入：用仪表盘替代单条消息，避免主控上下文膨胀
+                injectLeaderSnapshot({
+                  leaderId: normalizedSupervisor,
+                  wakeReason: {
+                    type: "task_reset",
+                    agentId: normalizedId,
+                    taskId: activeTask.id,
+                    stuckMinutes,
+                  },
+                  coalesceMs: 10_000,
+                }).catch(() => { /* best-effort */ });
               }
             }
             stats.wokenAgents++;
@@ -851,41 +810,17 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
             const shouldAlert = !lastAlert || now - lastAlert > TIMEOUT_ALERT_COOLDOWN_MS;
             if (shouldAlert) {
               timeoutAlertedAt.set(alertKey, now);
-              const supervisorSession = `agent:${normalizedSupervisor}:main`;
-              const supervisorNotice = [
-                `[TASK TIMEOUT ALERT] ⚠️ Agent ${normalizedId} 的任务已超时 ${stuckMinutes} 分钟，系统已自动重唤醒 agent，但任务可能需要你介入。`,
-                ``,
-                `Agent: ${normalizedId}`,
-                `Task ID: ${activeTask.id}`,
-                `Title: ${activeTask.title}`,
-                `Priority: ${activeTask.priority}`,
-                activeTask.type ? `Type: ${activeTask.type}` : null,
-                activeTask.description
-                  ? `Description: ${activeTask.description.slice(0, 150)}`
-                  : null,
-                ``,
-                `⚠️ 根因分析: ${inferStuckReason(stuckMinutes, activeTask).hint}`,
-                ``,
-                `【注意】系统已向 agent 发送 TASK RETRY 消息，要求强制上报进度。`,
-                `任务状态仍为 in-progress，等待 agent 自主上报（task_report_to_supervisor）。`,
-                `如果 agent 持续无法完成此任务，你可以直接调用以下工具：`,
-                `- task_reset taskId=${activeTask.id} targetStatus=todo   （重置回待办，重新排队）`,
-                `- task_update taskId=${activeTask.id} status=cancelled    （取消任务）`,
-                `- task_update taskId=${activeTask.id} assigneeId=<其他agent>  （重新分配给其他 agent）`,
-                `- agent_communicate targetAgentId=${normalizedId}          （直接与 agent 沟通原因）`,
-              ]
-                .filter(Boolean)
-                .join("\n");
-              enqueueSystemEvent(supervisorNotice, {
-                sessionKey: supervisorSession,
-                contextKey: `cron:task-timeout-alert:${activeTask.id}`,
-              });
-              requestHeartbeatNow({
-                reason: `cron:task-timeout:${activeTask.id}`,
-                sessionKey: supervisorSession,
-                agentId: normalizedSupervisor,
-                coalesceMs: 10000,
-              });
+              // 快照注入：用仪表盘替代单条消息，避免主控上下文膨胀
+              injectLeaderSnapshot({
+                leaderId: normalizedSupervisor,
+                wakeReason: {
+                  type: "task_timeout",
+                  agentId: normalizedId,
+                  taskId: activeTask.id,
+                  stuckMinutes,
+                },
+                coalesceMs: 10_000,
+              }).catch(() => { /* best-effort */ });
             }
           }
           stats.wokenAgents++;
@@ -998,31 +933,17 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
             const overdueSupRaw = t.supervisorId ?? t.creatorId;
             if (overdueSupRaw && overdueSupRaw !== "system") {
               const overdueSupId = normalizeAgentId(overdueSupRaw);
-              const overdueSupSession = `agent:${overdueSupId}:main`;
-              const overdueMsg = [
-                `[TASK OVERDUE] A task assigned to ${(t.assignees ?? []).map((a) => a.id).join(", ") || "unknown"} is overdue and has been auto-escalated to urgent priority.`,
-                ``,
-                `Task ID: ${t.id}`,
-                `Title: ${t.title}`,
-                `Due date: ${new Date(t.dueDate).toISOString()}`,
-                `Overdue by: ${overdueMinutes} minutes`,
-                t.projectId ? `Project: ${t.projectId}` : null,
-                ``,
-                `The task priority has been automatically upgraded to urgent.`,
-                `Please review and decide: extend the deadline, reassign, or cancel.`,
-              ]
-                .filter(Boolean)
-                .join("\n");
-              enqueueSystemEvent(overdueMsg, {
-                sessionKey: overdueSupSession,
-                contextKey: `cron:task-overdue:${t.id}`,
-              });
-              requestHeartbeatNow({
-                reason: `cron:task-overdue:${t.id}`,
-                sessionKey: overdueSupSession,
-                agentId: overdueSupId,
-                coalesceMs: 10000,
-              });
+              // 快照注入：用仪表盘替代单条消息，避免主控上下文膨胀
+              injectLeaderSnapshot({
+                leaderId: overdueSupId,
+                wakeReason: {
+                  type: "overdue",
+                  taskId: t.id,
+                  title: t.title,
+                  overdueMinutes,
+                },
+                coalesceMs: 10_000,
+              }).catch(() => { /* best-effort */ });
             }
           }
         }
@@ -1099,31 +1020,17 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
               const kpiSupRaw = todoTask.supervisorId ?? todoTask.creatorId;
               if (kpiSupRaw && kpiSupRaw !== "system") {
                 const kpiSupId = normalizeAgentId(kpiSupRaw);
-                const kpiSupSession = `agent:${kpiSupId}:main`;
-                enqueueSystemEvent(
-                  [
-                    `[KPI REASSIGN] Task automatically reassigned to a better-performing agent.`,
-                    ``,
-                    `Task ID: ${todoTask.id}`,
-                    `Title: ${todoTask.title}`,
-                    `Original agent: ${normalizedId} (${Math.round(currentAgentPerf.successRate * 100)}% on ${taskType} tasks)`,
-                    `New agent: ${bestAgentId} (${Math.round(bestSuccessRate * 100)}% success rate)`,
-                    ``,
-                    `This reassignment was made automatically by the KPI scheduler.`,
-                  ]
-                    .filter(Boolean)
-                    .join("\n"),
-                  {
-                    sessionKey: kpiSupSession,
-                    contextKey: `cron:kpi-reassign:${todoTask.id}`,
+                // 快照注入：用仪表盘替代单条消息，避免主控上下文膨胀
+                injectLeaderSnapshot({
+                  leaderId: kpiSupId,
+                  wakeReason: {
+                    type: "kpi_reassign",
+                    taskId: todoTask.id,
+                    fromAgent: normalizedId,
+                    toAgent: bestAgentId,
                   },
-                );
-                requestHeartbeatNow({
-                  reason: `cron:kpi-reassign:${todoTask.id}`,
-                  sessionKey: kpiSupSession,
-                  agentId: kpiSupId,
-                  coalesceMs: 15000,
-                });
+                  coalesceMs: 15_000,
+                }).catch(() => { /* best-effort */ });
               }
             }
           }
@@ -1302,30 +1209,16 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           const backlogSupRaw = firstTask.supervisorId ?? firstTask.creatorId;
           if (backlogSupRaw && backlogSupRaw !== "system") {
             const backlogSupId = normalizeAgentId(backlogSupRaw);
-            const backlogSupSession = `agent:${backlogSupId}:main`;
-            const backlogMsg = [
-              `[TASK BACKLOG ALERT] Agent ${normalizedId} has ${queueRemaining + tasksToActivate.length} pending tasks (${queueRemaining} waiting in queue). This may indicate task assignment is outpacing execution.`,
-              ``,
-              `Agent: ${normalizedId}`,
-              `Total active tasks: ${queueRemaining + tasksToActivate.length}`,
-              `Currently activated: ${tasksToActivate.length}`,
-              `Waiting in queue: ${queueRemaining}`,
-              ``,
-              `Recommendation: Review if some tasks can be cancelled, reassigned to other agents, or if the assignment rate needs to slow down.`,
-              `Use agent_task_manage to manage tasks if needed.`,
-            ]
-              .filter(Boolean)
-              .join("\n");
-            enqueueSystemEvent(backlogMsg, {
-              sessionKey: backlogSupSession,
-              contextKey: `cron:task-backlog:${normalizedId}`,
-            });
-            requestHeartbeatNow({
-              reason: `cron:task-backlog:${normalizedId}`,
-              sessionKey: backlogSupSession,
-              agentId: backlogSupId,
-              coalesceMs: 30000, // 合并尽量减少打扰
-            });
+            // 快照注入：用仪表盘替代单条消息，避免主控上下文膨胀
+            injectLeaderSnapshot({
+              leaderId: backlogSupId,
+              wakeReason: {
+                type: "backlog",
+                agentId: normalizedId,
+                queueSize: queueRemaining + tasksToActivate.length,
+              },
+              coalesceMs: 30_000,
+            }).catch(() => { /* best-effort */ });
           }
         }
       }

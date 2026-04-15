@@ -113,7 +113,7 @@ const GroupCreateToolSchema = Type.Object({
   maxMembers: Type.Optional(Type.Number({ minimum: 2, maximum: 1000 })),
   /** 项目 ID（可选）- 如果是项目群组，指定所属项目 */
   projectId: Type.Optional(Type.String()),
-  /** 工作空间路径（可选）- 指定项目工作空间路径，默认在 H:\\OpenClaw_Workspace\\groups\\{groupId} */
+  /** 工作空间路径（可选）- 指定项目工作空间路径，默认通过 getGroupsWorkspaceRoot() 动态解析 */
   workspacePath: Type.Optional(Type.String()),
 });
 

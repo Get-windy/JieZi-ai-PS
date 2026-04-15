@@ -18,6 +18,8 @@ import * as os from "os";
 import * as path from "path";
 import { loadConfig } from "../../upstream/src/config/config.js";
 import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
+import { getGroupsWorkspaceRoot } from "../utils/project-context.js";
+
 import { archiveMemoryOverflow } from "./file-tools-secure.js";
 
 // ============================================================================
@@ -337,8 +339,7 @@ export function runWorkspaceHygiene(groupsRoot?: string): HygieneReport {
   const startTime = Date.now();
   const allIssues: HygieneIssue[] = [];
 
-  const effectiveGroupsRoot =
-    groupsRoot || process.env.OPENCLAW_GROUPS_ROOT || "H:\\OpenClaw_Workspace\\groups";
+  const effectiveGroupsRoot = getGroupsWorkspaceRoot(groupsRoot);
 
   // 读取权威数据源
   const registeredAgents = loadRegisteredAgents();

@@ -62,6 +62,7 @@ import {
   resolveModelCostConfig,
 } from "../../../upstream/src/utils/usage-format.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
+import { injectLeaderSnapshot } from "../../agents/leader-context-snapshot.js";
 import * as taskStorage from "../../tasks/storage.js";
 import type { OriginatingChannelType, TemplateContext } from "../templating.js";
 import { resolveResponseUsageMode, type VerboseLevel } from "../thinking.js";
@@ -704,57 +705,75 @@ export async function runReplyAgent(params: {
           });
 
         // === Compaction 失忆防护（Hermes v0.8.0 借鉴）===
-        // Compaction 后 Agent 的短期工作上下文丁失。
-        // 如果此 session 有正在执行的任务，将任务快照注入到下一轮，
-        // 让 Agent 记得“我正在做什么”。
+        // Compaction 后 Agent 的短期工作上下文丢失。
+        // 分两类处理：
+        // - 普通 agent session：注入任务快照（让 agent 记得自己在做什么）
+        // - 主控 agent session：注入仪表盘快照（injectLeaderSnapshot），
+        //   一次性获取所有子 agent 的当前状态，而非堆积历史消息
         if (sessionKey.startsWith("agent:")) {
           const agentIdFromKey = sessionKey.split(":")[1];
           if (agentIdFromKey) {
             const normalizedAgentId = normalizeAgentId(agentIdFromKey);
-            taskStorage
-              .listTasks({ assigneeId: normalizedAgentId, status: ["in-progress"] })
-              .then((inProgressTasks) => {
-                const activeTask = inProgressTasks[0];
-                if (!activeTask) {
-                  return;
-                }
-                // 构建任务快照，注入到下一轮上下文
-                const recentLogs = (activeTask.workLogs ?? []).slice(-3);
-                const taskSnapshot = [
-                  `[TASK SNAPSHOT — Post-Compaction Memory Restore]`,
-                  `You were working on a task when context compaction occurred. Here is your current task state:`,
-                  ``,
-                  `Task ID: ${activeTask.id}`,
-                  `Title: ${activeTask.title}`,
-                  `Status: ${activeTask.status}`,
-                  `Priority: ${activeTask.priority}`,
-                  activeTask.type ? `Type: ${activeTask.type}` : null,
-                  activeTask.projectId ? `Project: ${activeTask.projectId}` : null,
-                  activeTask.description
-                    ? `Description: ${activeTask.description.slice(0, 300)}`
-                    : null,
-                  recentLogs.length > 0
-                    ? `\nRecent work log (last ${recentLogs.length} entries):`
-                    : null,
-                  ...recentLogs.map(
-                    (log) =>
-                      `  - [${log.action}] ${log.details.slice(0, 150)}${
-                        log.result ? ` (${log.result})` : ""
-                      }`,
-                  ),
-                  ``,
-                  `IMPORTANT: Context was compacted but your task is still IN-PROGRESS. Continue executing it. Do NOT restart from scratch — check your work logs above to understand what was done and resume from where you left off.`,
-                ]
-                  .filter((l) => l !== null)
-                  .join("\n");
-                enqueueSystemEvent(taskSnapshot, {
-                  sessionKey,
-                  contextKey: `compaction:task-snapshot:${activeTask.id}`,
+
+            // 尝试作为主控注入仪表盘快照（injectLeaderSnapshot 内部会验证是否为合法 leader）
+            // 若成功则跳过普通任务快照（避免双重注入）
+            injectLeaderSnapshot({
+              leaderId: normalizedAgentId,
+              wakeReason: { type: "compaction_restore" },
+              coalesceMs: 3_000,
+            }).then((injected) => {
+              if (injected) {
+                // 主控已注入仪表盘快照，无需再注入任务快照
+                return;
+              }
+              // 普通 agent：注入任务快照（原有逻辑）
+              taskStorage
+                .listTasks({ assigneeId: normalizedAgentId, status: ["in-progress"] })
+                .then((inProgressTasks) => {
+                  const activeTask = inProgressTasks[0];
+                  if (!activeTask) {
+                    return;
+                  }
+                  // 构建任务快照，注入到下一轮上下文
+                  const recentLogs = (activeTask.workLogs ?? []).slice(-3);
+                  const taskSnapshot = [
+                    `[TASK SNAPSHOT \u2014 Post-Compaction Memory Restore]`,
+                    `You were working on a task when context compaction occurred. Here is your current task state:`,
+                    ``,
+                    `Task ID: ${activeTask.id}`,
+                    `Title: ${activeTask.title}`,
+                    `Status: ${activeTask.status}`,
+                    `Priority: ${activeTask.priority}`,
+                    activeTask.type ? `Type: ${activeTask.type}` : null,
+                    activeTask.projectId ? `Project: ${activeTask.projectId}` : null,
+                    activeTask.description
+                      ? `Description: ${activeTask.description.slice(0, 300)}`
+                      : null,
+                    recentLogs.length > 0
+                      ? `\nRecent work log (last ${recentLogs.length} entries):`
+                      : null,
+                    ...recentLogs.map(
+                      (log) =>
+                        `  - [${log.action}] ${log.details.slice(0, 150)}${
+                          log.result ? ` (${log.result})` : ""
+                        }`,
+                    ),
+                    ``,
+                    `IMPORTANT: Context was compacted but your task is still IN-PROGRESS. Continue executing it. Do NOT restart from scratch \u2014 check your work logs above to understand what was done and resume from where you left off.`,
+                  ]
+                    .filter((l) => l !== null)
+                    .join("\n");
+                  enqueueSystemEvent(taskSnapshot, {
+                    sessionKey,
+                    contextKey: `compaction:task-snapshot:${activeTask.id}`,
+                  });
+                })
+                .catch(() => {
+                  // Silent failure — task snapshot is best-effort
                 });
-              })
-              .catch(() => {
-                // Silent failure — task snapshot is best-effort
-              });
+            }).catch(() => {
+              // Silent failure — leader snapshot is best-effort
+            });
           }
         }
 
