@@ -48,6 +48,7 @@ import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js
 import { resolveUserPath } from "../../../upstream/src/utils.js";
 import { addAgentToAllowList } from "../../agents/agent-config-manager.js";
 import { getAgentProgressManager } from "../../agents/agent-progress.js";
+import { injectLeaderSnapshot } from "../../agents/leader-context-snapshot.js";
 import {
   listAgentIds,
   resolveAgentDir,
@@ -4148,101 +4149,26 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       const normalizedLeader = normalizeAgentId(resolvedLeaderId);
       const allowed = new Set(listAgentIds(cfg));
       if (allowed.has(normalizedLeader)) {
-        // 查询 reporter 当前任务状态摘要（用 normalized ID 确保匹配存储格式）
-        const normalizedReporter = normalizeAgentId(reporterId);
-        let inProgressCount = 0;
-        let todoCount = 0;
-        let inProgressTitles: string[] = [];
-        let todoTitles: string[] = [];
-        try {
-          const [inProgressTasks, todoTasksForReport] = await Promise.all([
-            taskStorage.listTasks({ assigneeId: normalizedReporter, status: ["in-progress"] }),
-            taskStorage.listTasks({ assigneeId: normalizedReporter, status: ["todo"] }),
-          ]);
-          inProgressCount = inProgressTasks.length;
-          todoCount = todoTasksForReport.length;
-          inProgressTitles = inProgressTasks.slice(0, 3).map((t) => `  - [${t.id}] ${t.title}`);
-          todoTitles = todoTasksForReport.slice(0, 3).map((t) => `  - [${t.id}] ${t.title}`);
-        } catch {
-          // 查询失败，跳过摘要
-        }
-
-        const statusLabel =
-          finalStatus === "done"
-            ? "✅ 已完成"
-            : finalStatus === "blocked"
-              ? "⚠️ 已阻塞（需要你介入协调）"
-              : finalStatus === "cancelled"
-                ? "❌ 已取消"
-                : `状态: ${finalStatus}`;
-
-        const reportLines = [
-          finalStatus === "blocked"
-            ? `[TASK BLOCKED - ACTION REQUIRED] ${reporterId} 遇到问题，无法继续执行，需要主控介入`
-            : `[TASK REPORT] ${reporterId} 任务汇报`,
-          `汇报时间: ${new Date().toISOString()} (刚刚完成)`,
-          ``,
-          `完成任务: ${statusLabel}`,
-          `  Task ID: ${taskId}`,
-          task?.title ? `  标题: ${task.title}` : null,
-          result
-            ? `  成果:\n${result
-                .split("\n")
-                .map((l) => `    ${l}`)
-                .join("\n")}`
-            : null,
-          p?.errorMessage ? `  错误: ${p.errorMessage}` : null,
-          ``,
-          inProgressCount > 0
-            ? [
-                `进行中任务 (${inProgressCount} 个):`,
-                ...inProgressTitles,
-                inProgressCount > 3 ? `  ... 还有 ${inProgressCount - 3} 个` : null,
-              ]
-                .filter(Boolean)
-                .join("\n")
-            : `进行中任务: 无`,
-          ``,
-          todoCount > 0
-            ? [
-                `待执行任务 (${todoCount} 个):`,
-                ...todoTitles,
-                todoCount > 3 ? `  ... 还有 ${todoCount - 3} 个` : null,
-              ]
-                .filter(Boolean)
-                .join("\n")
-            : `待执行任务: 无`,
-          finalStatus === "blocked"
-            ? [
-                ``,
-                `❗ 需要主控介入：`,
-                `请检查上述错误信息，并采取以下其中一种操作：`,
-                `  - 调度分配: 用 agent_assign_task 将阻塞源头任务分配给其他 agent`,
-                `  - 延时继续: 用 agent.task.manage action=extend 延长该任务的执行时间`,
-                `  - 取消任务: 用 agent.task.manage action=cancel 取消该任务`,
-                `  - 重置重试: 用 agent.task.manage action=reset 将该任务重置回 todo 队列`,
-              ].join("\n")
-            : null,
-        ]
-          .filter((l) => l !== null)
-          .join("\n");
-
+        // === 用仪表盘快照替代多行消息推送 ===
+        // 参考 Claude Code 泄露架构：主控状态外置，唤醒时注入实时快照而非堆积历史消息
+        const wakeType = finalStatus === "done" ? "task_done"
+          : finalStatus === "blocked" ? "task_blocked"
+          : "task_done"; // cancelled 也走 done 路径
         const leaderSession = `agent:${normalizedLeader}:main`;
-        const wakeReason = `cron:task-report:${taskId}:${reporterId}`;
         try {
-          enqueueSystemEvent(reportLines, {
-            sessionKey: leaderSession,
-            contextKey: wakeReason,
+          const injected = await injectLeaderSnapshot({
+            leaderId: normalizedLeader,
+            wakeReason:
+              wakeType === "task_blocked"
+                ? { type: "task_blocked", taskId, reporterId, errorMsg: p?.errorMessage ?? "" }
+                : { type: "task_done", taskId, reporterId, summary: result },
           });
-          requestHeartbeatNow({
-            reason: wakeReason,
-            sessionKey: leaderSession,
-            agentId: normalizedLeader,
-          });
-          notifiedSupervisor = true;
-          console.log(
-            `[agent.task.report] Notified leader ${normalizedLeader} (session: ${leaderSession}) about task ${taskId} completion by ${reporterId}`,
-          );
+          notifiedSupervisor = injected;
+          if (injected) {
+            console.log(
+              `[agent.task.report] Injected leader snapshot to ${normalizedLeader} (session: ${leaderSession}) for task ${taskId} by ${reporterId}`,
+            );
+          }
         } catch (notifyErr) {
           console.warn(`[agent.task.report] Failed to notify leader: ${String(notifyErr)}`);
         }
@@ -4272,43 +4198,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       // 先完成调度（同步等待），使下一任务变为 in-progress
       await scheduleNextTaskForAgent(normalizedReporterId, taskId, task?.projectId);
 
-      // 如果已向 supervisor 发过汇报，追加一条"下一任务已启动"的补充通知
-      if (notifiedSupervisor && resolvedLeaderId) {
-        try {
-          const nextInProgress = await taskStorage.listTasks({
-            assigneeId: normalizedReporterId,
-            status: ["in-progress"],
-          });
-          if (nextInProgress.length > 0) {
-            const next = nextInProgress[0];
-            const cfg = loadConfig();
-            const normalizedLeader = normalizeAgentId(resolvedLeaderId);
-            const allowed = new Set(listAgentIds(cfg));
-            if (allowed.has(normalizedLeader)) {
-              const leaderSession = `agent:${normalizedLeader}:main`;
-              const nextTaskNotice = [
-                `[TASK AUTO-STARTED] ${reporterId} 已自动开始执行下一条任务`,
-                `  Task ID: ${next.id}`,
-                `  标题: ${next.title}`,
-                `  优先级: ${next.priority}`,
-                next.type ? `  类型: ${next.type}` : null,
-              ]
-                .filter(Boolean)
-                .join("\n");
-              enqueueSystemEvent(nextTaskNotice, {
-                sessionKey: leaderSession,
-                contextKey: `cron:task-auto-start:${next.id}`,
-              });
-            }
-          }
-        } catch {
-          // 查询失败不影响主流程
-        }
-      }
-
-      // === 实时低水位预警（Real-time Low Watermark Alert）===
-      // 任务完成/取消/阈读后，检查该 agent 剩余 todo 任务数量是否低于阶段阈值
-      // 如果低于阈值，立即嵌入到已发给 supervisor 的汇报消息中
+      // 步骤 3 后续：快照已在步骤 2 中通过 injectLeaderSnapshot 发出，包含完整全局状态。
+      // 下一任务启动已融入快照仪表盘；仅当低水位触发时再次注入快照（debounce 保护已内置）。
       if (notifiedSupervisor && resolvedLeaderId) {
         try {
           const normalizedReporter2 = normalizeAgentId(reporterId);
@@ -4317,8 +4208,6 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             status: ["todo"],
           });
           const todoCount = remainingTodos.length;
-
-          // 获取项目阶段信息（优先从刚完成的任务获取）
           const projectId = task?.projectId ?? remainingTodos[0]?.projectId;
           let projectPhase: string | undefined;
           if (projectId) {
@@ -4332,45 +4221,23 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
               }
             }
           }
-
           const threshold = resolveStrictestThreshold(
             projectPhase
               ? [resolveAgentTaskThreshold(projectPhase, normalizedReporter2)]
               : [],
           );
-
-          // 仅当不允许完全空闲且 todo 不足时才发预警
           if (!threshold.allowIdle && todoCount < threshold.minTodo) {
-            const cfg2 = loadConfig();
-            const normalizedLeader2 = normalizeAgentId(resolvedLeaderId);
-            const allowed2 = new Set(listAgentIds(cfg2));
-            if (allowed2.has(normalizedLeader2)) {
-              const urgency = threshold.required ? "❗ [紧急]" : "⚠️";
-              const lwmEmbedMsg = [
-                ``,
-                `---`,
-                `[TASK LOW WATERMARK] ${urgency} ${normalizedReporter2} 待办任务不足`,
-                `待办: ${todoCount} 条 / 需要: ${threshold.minTodo} 条以上`,
-                projectPhase ? `项目阶段: ${projectPhase}` : null,
-                threshold.required
-                  ? `当前阶段要求必须有待办任务。请立即使用 agent_assign_task 分配新任务到 ${normalizedReporter2}。`
-                  : `建议立即分配新任务到 ${normalizedReporter2}，保持工作流水线不停歇。`,
-              ]
-                .filter(Boolean)
-                .join("\n");
-
-              const leaderSession2 = `agent:${normalizedLeader2}:main`;
-              enqueueSystemEvent(lwmEmbedMsg, {
-                sessionKey: leaderSession2,
-                contextKey: `task:lwm-realtime:${normalizedReporter2}`,
-              });
-              requestHeartbeatNow({
-                reason: `task:lwm-realtime:${normalizedReporter2}`,
-                sessionKey: leaderSession2,
-                agentId: normalizedLeader2,
-                coalesceMs: 10000,
-              });
-            }
+            // 低水位：注入快照（携带 low_watermark 触发原因）
+            await injectLeaderSnapshot({
+              leaderId: resolvedLeaderId,
+              wakeReason: {
+                type: "low_watermark",
+                agentId: normalizedReporter2,
+                todoCount,
+                minTodo: threshold.minTodo,
+              },
+              coalesceMs: 10_000,
+            });
           }
         } catch {
           // 低水位检测失败不影响主流程
