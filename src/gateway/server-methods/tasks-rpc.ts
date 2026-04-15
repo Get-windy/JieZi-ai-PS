@@ -2310,7 +2310,7 @@ export const tasksRpc: GatewayRequestHandlers = {
       if (runIds.length > 0) {
         // 直接按 runIds 查询
         const allRecords = await Promise.all(runIds.map((runId) => getToolChainTrace(runId)));
-        toolChainRecords = allRecords.flat().sort(
+        toolChainRecords = allRecords.flat().toSorted(
           (a, b) => (a as { timestamp: number }).timestamp - (b as { timestamp: number }).timestamp
         );
       } else {
@@ -2321,8 +2321,8 @@ export const tasksRpc: GatewayRequestHandlers = {
         const recentFiles = allFiles.filter((f) => {
           // 文件名格式: tool-chain-YYYYMMDD.jsonl
           const m = /tool-chain-(\d{8})\.jsonl$/.exec(f);
-          if (!m) return false;
-          const dateStr = m[1]!;
+          if (!m) {return false;}
+          const dateStr = m[1];
           const year = parseInt(dateStr.slice(0, 4), 10);
           const month = parseInt(dateStr.slice(4, 6), 10) - 1;
           const day = parseInt(dateStr.slice(6, 8), 10);
@@ -2336,7 +2336,7 @@ export const tasksRpc: GatewayRequestHandlers = {
             const content = await readFile(filePath, { encoding: "utf-8" });
             for (const line of content.split("\n")) {
               const trimmed = line.trim();
-              if (!trimmed) continue;
+              if (!trimmed) {continue;}
               try {
                 const rec = JSON.parse(trimmed) as Record<string, unknown>;
                 if ((rec.meta as Record<string, unknown>)?.taskId === taskId) {
@@ -2648,7 +2648,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         for (const u of params.updates as CriterionUpdate[]) {
           if (u?.criterionId) {
             updateMap.set(String(u.criterionId), {
-              passes: u.passes === true || (u.passes as unknown) === "true",
+              passes:  u.passes || (u.passes as unknown) === "true",
               note: u.note ? String(u.note) : undefined,
             });
           }
@@ -2664,12 +2664,12 @@ export const tasksRpc: GatewayRequestHandlers = {
       const notFoundIds: string[] = [];
       const newCriteria = existingCriteria.map((c) => {
         const update = updateMap.get(c.id);
-        if (!update) return c;
+        if (!update) {return c;}
         updatedCount++;
         return { ...c, passes: update.passes, verifiedAt: now, verifiedBy, ...(update.note ? { note: update.note } : {}) };
       });
       for (const cid of updateMap.keys()) {
-        if (!existingCriteria.some((c) => c.id === cid)) notFoundIds.push(cid);
+        if (!existingCriteria.some((c) => c.id === cid)) {notFoundIds.push(cid);}
       }
       await storage.updateTask(taskId, { acceptanceCriteria: newCriteria as Task["acceptanceCriteria"] });
       const allPassed = newCriteria.length > 0 && newCriteria.every((c) => c.passes);
@@ -2711,8 +2711,8 @@ export const tasksRpc: GatewayRequestHandlers = {
         return;
       }
       const filter: Record<string, unknown> = { keyword, projectId, status, assigneeId, limit: Math.min(limit * 3, 500) };
-      if (tag) filter.tags = [tag];
-      if (level) filter.level = level;
+      if (tag) {filter.tags = [tag];}
+      if (level) {filter.level = level;}
       const tasks = await storage.listTasks(filter);
       let scoredTasks = tasks;
       if (keyword) {
@@ -2726,7 +2726,7 @@ export const tasksRpc: GatewayRequestHandlers = {
               ((t.tags ?? []).some((tg) => tg.toLowerCase().includes(kw)) ? 5 : 0),
           }))
           .filter((s) => s.score > 0)
-          .sort((a, b) => b.score - a.score)
+          .toSorted((a, b) => b.score - a.score)
           .map((s) => s.task);
       }
       const resultTasks = scoredTasks.slice(0, limit);
@@ -2925,10 +2925,10 @@ export const tasksRpc: GatewayRequestHandlers = {
       const taskStats = new Map<string, { total: number; completed: number }>();
       for (const t of allTasks) {
         const oid = (t as Record<string, unknown>).objectiveId as string | undefined;
-        if (!oid) continue;
+        if (!oid) {continue;}
         const stat = taskStats.get(oid) ?? { total: 0, completed: 0 };
         stat.total++;
-        if (t.status === "done") stat.completed++;
+        if (t.status === "done") {stat.completed++;}
         taskStats.set(oid, stat);
       }
 
@@ -3028,7 +3028,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         const startedAt = (t as Record<string, unknown>).startedAt as number | undefined
           ?? (t as Record<string, unknown>).updatedAt as number | undefined
           ?? t.createdAt;
-        if (!startedAt) continue;
+        if (!startedAt) {continue;}
         const slaDeadline = startedAt + slaMs;
         if (now > slaDeadline) {
           breached.push({ taskId: t.id, title: t.title, priority: t.priority, startedAt, slaDeadline, overdueMs: now - slaDeadline, overdueHours: Math.round((now - slaDeadline) / 3600000 * 10) / 10 });
@@ -3181,23 +3181,23 @@ function calcTriageSuggestion(
   }
 
   // bugfix 类型加分
-  if (taskType === "bugfix") urgencyScore += 2;
+  if (taskType === "bugfix") {urgencyScore += 2;}
 
   // 类型强制覆盖
   const PRIORITY_LEVELS = ["low", "medium", "high", "urgent"];
   const currentIdx = PRIORITY_LEVELS.indexOf(currentPriority);
   let suggestedIdx = currentIdx < 0 ? 1 : currentIdx;
 
-  if (urgencyScore >= 5) suggestedIdx = Math.max(suggestedIdx, 3); // urgent
-  else if (urgencyScore >= 2) suggestedIdx = Math.max(suggestedIdx, 2); // high
-  else if (urgencyScore >= 1) suggestedIdx = Math.max(suggestedIdx, 1); // medium
+  if (urgencyScore >= 5) {suggestedIdx = Math.max(suggestedIdx, 3);} // urgent
+  else if (urgencyScore >= 2) {suggestedIdx = Math.max(suggestedIdx, 2);} // high
+  else if (urgencyScore >= 1) {suggestedIdx = Math.max(suggestedIdx, 1);} // medium
 
   const suggestedPriority = PRIORITY_LEVELS[Math.min(suggestedIdx, 3)];
 
   // 自动标签推断
   const suggestedLabels: string[] = [...tags];
   for (const [kw, label] of Object.entries(LABELS_MAP)) {
-    if (text.includes(kw) && !suggestedLabels.includes(label)) suggestedLabels.push(label);
+    if (text.includes(kw) && !suggestedLabels.includes(label)) {suggestedLabels.push(label);}
   }
 
   return {

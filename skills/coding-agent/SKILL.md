@@ -252,6 +252,83 @@ This prevents the user from seeing only "Agent failed before reply" and having n
 
 ---
 
+## ✅ Milestone Self-Verification (Mandatory)
+
+**Before sending any milestone-complete notification, the agent MUST run its DoD verification.**
+
+Every milestone prompt you write MUST include a verification step:
+
+```bash
+# Template for milestone-aware prompts:
+bash pty:true workdir:~/project background:true command:"codex --yolo '
+[Task description here]
+
+Milestone: [Name]
+Definition of Done: run [verification command] and confirm it exits 0.
+
+Steps:
+1. Implement [feature/fix]
+2. Run: [verification command]
+3. If verification PASSES: run `openclaw system event --text \"Milestone done: [Name] - [brief summary]\" --mode now`
+4. If verification FAILS: fix the issue and re-verify before notifying.
+
+Do NOT send the completion notification until verification passes.
+'"
+```
+
+**Standard verification commands by project type:**
+
+| Project | Verification | Notes |
+|---------|-------------|-------|
+| TypeScript/Node | `pnpm lint && pnpm build && pnpm test` | All three must pass |
+| Go | `go build ./... && go test ./...` | Test cache means fast reruns |
+| Frontend | `pnpm lint && pnpm build` + screenshot compare | Visual diff required for UI |
+| API | `pnpm test` + `curl localhost:PORT/health` | Health check confirms runtime |
+
+**If verification fails:** Do NOT notify completion. Fix and re-verify. If blocked after 2 attempts, send a `blocked` notification instead:
+```bash
+openclaw system event --text "BLOCKED: [Milestone] - [reason]" --mode now
+```
+
+---
+
+## 📁 Parallel Agent File Scope Declaration
+
+When spawning multiple agents in parallel (git worktrees or separate background sessions), **each agent MUST declare its file scope** to prevent conflicts.
+
+**Rule:** No agent may modify files outside its declared scope without explicit orchestrator approval.
+
+```bash
+# Pattern: declare scope in the agent prompt
+bash pty:true workdir:/tmp/issue-78 background:true command:"codex --yolo '
+Scope: This agent ONLY modifies files under src/auth/ and src/middleware/.
+Do NOT touch: package.json, pnpm-lock.yaml, src/api/, or any other directories.
+
+Task: Fix issue #78 - [description]
+[...rest of prompt]
+'"
+```
+
+**Orchestrator responsibilities when parallelizing:**
+
+1. Assign non-overlapping file scopes to each worker
+2. Reserve shared files (package.json, tsconfig.json, etc.) for orchestrator-only changes
+3. Collect results via `process action:log` before merging
+4. Merge sequentially — never let two workers commit to the same branch simultaneously
+
+```bash
+# Safe parallel pattern:
+# Worker A: src/auth/ only
+bash pty:true workdir:/tmp/worker-a background:true command:"codex --yolo 'Scope: src/auth/ ONLY. Task: ...'" 
+# Worker B: src/payments/ only  
+bash pty:true workdir:/tmp/worker-b background:true command:"codex --yolo 'Scope: src/payments/ ONLY. Task: ...'"
+# Orchestrator: wait for both, then merge results
+process action:poll sessionId:A
+process action:poll sessionId:B
+```
+
+---
+
 ## Auto-Notify on Completion
 
 For long-running background tasks, append a wake trigger to your prompt so OpenClaw gets notified immediately when the agent finishes (instead of waiting for the next heartbeat):
@@ -275,10 +352,30 @@ This triggers an immediate wake event — Skippy gets pinged in seconds, not 10 
 
 ---
 
+## 📊 CONTEXT.md Integration
+
+When running long coding tasks, keep CONTEXT.md updated so work can resume across sessions:
+
+```bash
+# Include in your coding agent prompts for long tasks:
+"After each milestone completes, append to CONTEXT.md:
+  - status: in-progress
+  - updated: [timestamp]
+  - goal: [current goal name]
+  - milestone: [just completed milestone]
+  - next step: [exact next action]"
+```
+
+This enables seamless resume if the session is interrupted.
+
+---
+
 ## Learnings (Jan 2026)
 
 - **PTY is essential:** Coding agents are interactive terminal apps. Without `pty:true`, output breaks or agent hangs.
 - **Git repo required:** Codex won't run outside a git directory. Use `mktemp -d && git init` for scratch work.
 - **exec is your friend:** `codex exec "prompt"` runs and exits cleanly - perfect for one-shots.
 - **submit vs write:** Use `submit` to send input + Enter, `write` for raw data without newline.
+- **Verification before notification:** Never send a milestone-done event without running the DoD check first.
+- **Scope declaration prevents conflicts:** Always declare file scope in parallel agent prompts.
 - **Sass works:** Codex responds well to playful prompts. Asked it to write a haiku about being second fiddle to a space lobster, got: _"Second chair, I code / Space lobster sets the tempo / Keys glow, I follow"_ 🦞

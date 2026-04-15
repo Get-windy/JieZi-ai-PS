@@ -1,0 +1,24 @@
+npm warn Unknown project config "allow-build-scripts". This will stop working in the next major version of npm.
+npm warn Unknown project config "node_llama_cpp_skip_download". This will stop working in the next major version of npm.
+npm warn Unknown project config "node_llama_cpp_gpu". This will stop working in the next major version of npm.
+npm warn Unknown project config "git-shallow-hosts". This will stop working in the next major version of npm.
+
+<--- Last few GCs --->
+
+[45396:0000016F495C9000]   118737 ms: Mark-Compact 4086.3 (4105.6) -> 4078.9 (4106.1) MB, pooled: 4 MB, 2382.36 / 0.00 ms  (average mu = 0.163, current mu = 0.108) allocation failure; scavenge might not succeed
+[45396:0000016F495C9000]   120482 ms: Mark-Compact (reduce) 4087.0 (4106.8) -> 4085.0 (4097.1) MB, pooled: 0 MB, 643.67 / 0.00 ms  (+ 627.7 ms in 125 steps since start of marking, biggest step 5.4 ms, walltime since start of marking 1396 ms) (average mu =
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+----- Native stack trace -----
+
+ 1: 00007FF732EF97FF node::OnFatalError+1343
+ 2: 00007FF733B3DA77 v8::Function::NewInstance+423
+ 3: 00007FF73393E327 v8::base::AddressSpaceReservation::AddressSpaceReservation+322071
+ 4: 00007FF733942034 v8::base::AddressSpaceReservation::AddressSpaceReservation+337700
+ 5: 00007FF733950FCC v8::internal::StrongRootAllocatorBase::deallocate_impl+16604
+ 6: 00007FF73395080B v8::internal::StrongRootAllocatorBase::deallocate_impl+14619
+ 7: 00007FF734DB89AD v8::base::UnsignedDivisionByConstant<unsigned __int64>+2791325
+ 8: 00007FF73393BDF0 v8::base::AddressSpaceReservation::AddressSpaceReservation+312544
+ 9: 00007FF73395667A X509_STORE_set_cleanup+5098
+10: 00007FF733962A96 uv_timer_set_repeat+20566
+11: 00007FF733535BB7 v8::String::Utf8Value::~Utf8Value+143495
+12: 0000016F1FE7733A 

@@ -134,7 +134,7 @@ async function resetAgentSessionForOverflow(agentId: string, taskId: string): Pr
     await updateSessionStore(storePath, (store) => {
       const prev = store[sessionKey];
       store[sessionKey] = {
-        ...(prev ?? {}),
+        ...prev,
         sessionId: nextSessionId,
         sessionFile: nextSessionFile,
         updatedAt: now,

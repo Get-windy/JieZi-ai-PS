@@ -151,7 +151,7 @@ export function calcCriticalPath(
   }
 
   for (const t of activeTasks) {
-    if (!t.dependencies) continue;
+    if (!t.dependencies) {continue;}
     for (const dep of t.dependencies) {
       // dep.taskId 是前置任务（blocks current task），当前任务 t 依赖 dep.taskId
       if (taskMap.has(dep.taskId)) {
@@ -169,7 +169,7 @@ export function calcCriticalPath(
 
   const queue: string[] = [];
   for (const [id, deg] of inDegree.entries()) {
-    if (deg === 0) queue.push(id);
+    if (deg === 0) {queue.push(id);}
   }
 
   const topoOrder: string[] = [];
@@ -183,7 +183,7 @@ export function calcCriticalPath(
     for (const succ of successors.get(current) ?? []) {
       const newDeg = (inDegree.get(succ) ?? 1) - 1;
       inDegree.set(succ, newDeg);
-      if (newDeg === 0) queue.push(succ);
+      if (newDeg === 0) {queue.push(succ);}
     }
   }
 
@@ -235,7 +235,7 @@ export function calcCriticalPath(
     lateFinish.set(id, projectDuration);
   }
 
-  for (const id of [...topoOrder].reverse()) {
+  for (const id of [...topoOrder].toReversed()) {
     const duration = durationMap.get(id) ?? 0;
     const minSuccLS = Math.min(
       projectDuration,
@@ -274,7 +274,7 @@ export function calcCriticalPath(
   // ── 7. 提取关键路径（按 earlyStart 排序） ──
   const criticalNodes = Array.from(allNodes.values())
     .filter((n) => n.isCritical)
-    .sort((a, b) => a.earlyStart - b.earlyStart);
+    .toSorted((a, b) => a.earlyStart - b.earlyStart);
 
   const criticalTaskIds = criticalNodes.map((n) => n.taskId);
 

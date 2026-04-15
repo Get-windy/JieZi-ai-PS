@@ -121,7 +121,7 @@ function genAuditId(): string {
 let _ensureDirPromise: Promise<void> | null = null;
 
 async function ensureAuditDir(): Promise<void> {
-  if (_ensureDirPromise) return _ensureDirPromise;
+  if (_ensureDirPromise) {return _ensureDirPromise;}
   _ensureDirPromise = fs.mkdir(AUDIT_DIR, { recursive: true }).then(() => undefined);
   return _ensureDirPromise;
 }
@@ -385,7 +385,7 @@ export async function getToolChainTrace(
     const records: ToolChainAuditRecord[] = [];
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
-      if (!trimmed) continue;
+      if (!trimmed) {continue;}
       try {
         const rec = JSON.parse(trimmed) as ToolChainAuditRecord;
         if (rec.runId === runId) {
@@ -421,7 +421,7 @@ export async function getToolCallTrace(
     const records: ToolChainAuditRecord[] = [];
     for (const line of content.split("\n")) {
       const trimmed = line.trim();
-      if (!trimmed) continue;
+      if (!trimmed) {continue;}
       try {
         const rec = JSON.parse(trimmed) as ToolChainAuditRecord;
         if (rec.toolCallId === toolCallId) {
@@ -446,7 +446,7 @@ export async function listAuditFiles(): Promise<string[]> {
     const entries = await fs.readdir(AUDIT_DIR);
     return entries
       .filter((f) => f.startsWith("tool-chain-") && f.endsWith(".jsonl"))
-      .sort()
+      .toSorted()
       .map((f) => path.join(AUDIT_DIR, f));
   } catch {
     return [];

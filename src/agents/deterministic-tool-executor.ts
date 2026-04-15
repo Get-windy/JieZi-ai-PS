@@ -123,7 +123,7 @@ export function validateIntentParams<TParams extends Record<string, unknown>>(
 
   for (const key of keys) {
     const rule = schema[key];
-    if (!rule) continue;
+    if (!rule) {continue;}
 
     const value = params[key as string];
     const fieldLabel = String(key);
@@ -140,7 +140,7 @@ export function validateIntentParams<TParams extends Record<string, unknown>>(
       };
     }
 
-    if (value === undefined || value === null) continue;
+    if (value === undefined || value === null) {continue;}
 
     // 类型检查
     if (rule.type) {
@@ -433,11 +433,11 @@ registerDeterministicScript<
       required: true,
       type: "string",
       validate: (v) => {
-        if (!v.trim()) return "path 不能为空";
-        const dangerous = ["__proto__", "constructor", "prototype"];
+        if (!v.trim()) {return "path 不能为空";}
+        const dangerous = new Set(["__proto__", "constructor", "prototype"]);
         const parts = v.split(".");
         for (const part of parts) {
-          if (dangerous.includes(part)) {
+          if (dangerous.has(part)) {
             return `path 包含危险字段 "${part}"`;
           }
         }
@@ -453,14 +453,14 @@ registerDeterministicScript<
     let current: Record<string, unknown> = result;
 
     for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i]!;
+      const part = parts[i];
       if (!current[part] || typeof current[part] !== "object" || Array.isArray(current[part])) {
         current[part] = {};
       }
       current = current[part] as Record<string, unknown>;
     }
 
-    const lastPart = parts[parts.length - 1]!;
+    const lastPart = parts[parts.length - 1];
     current[lastPart] = value;
     return result;
   },

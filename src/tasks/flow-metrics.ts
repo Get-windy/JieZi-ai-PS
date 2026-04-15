@@ -112,18 +112,18 @@ function msToHours(ms: number): number {
 }
 
 function percentile(sortedArr: number[], p: number): number {
-  if (sortedArr.length === 0) return 0;
-  if (sortedArr.length === 1) return sortedArr[0];
+  if (sortedArr.length === 0) {return 0;}
+  if (sortedArr.length === 1) {return sortedArr[0];}
   const idx = (p / 100) * (sortedArr.length - 1);
   const lo = Math.floor(idx);
   const hi = Math.ceil(idx);
-  if (lo === hi) return sortedArr[lo];
+  if (lo === hi) {return sortedArr[lo];}
   return sortedArr[lo] + (sortedArr[hi] - sortedArr[lo]) * (idx - lo);
 }
 
 function buildStats(durationsMsArr: number[]): CycleTimeStats | null {
-  if (durationsMsArr.length === 0) return null;
-  const hours = durationsMsArr.map(msToHours).sort((a, b) => a - b);
+  if (durationsMsArr.length === 0) {return null;}
+  const hours = durationsMsArr.map(msToHours).toSorted((a, b) => a - b);
   const avg = hours.reduce((s, v) => s + v, 0) / hours.length;
   return {
     sampleCount: hours.length,
@@ -198,7 +198,7 @@ export function calcFlowMetrics(
     }
   }
 
-  const cycleTime = buildStats(cycleDurations) as CycleTimeStats | null;
+  const cycleTime = buildStats(cycleDurations);
 
   // ── 3. Lead Time（createdAt → completedAt） ──
   const leadDurations: number[] = [];
@@ -266,13 +266,13 @@ export function calcFlowMetrics(
     {};
   for (const [prio, durations] of Object.entries(cycleByPriority)) {
     const s = buildStats(durations);
-    if (s) cycleTimeByPriority[prio] = { sampleCount: s.sampleCount, medianHours: s.medianHours };
+    if (s) {cycleTimeByPriority[prio] = { sampleCount: s.sampleCount, medianHours: s.medianHours };}
   }
 
   const cycleTimeByType: Record<string, Pick<CycleTimeStats, "sampleCount" | "medianHours">> = {};
   for (const [typ, durations] of Object.entries(cycleByType)) {
     const s = buildStats(durations);
-    if (s) cycleTimeByType[typ] = { sampleCount: s.sampleCount, medianHours: s.medianHours };
+    if (s) {cycleTimeByType[typ] = { sampleCount: s.sampleCount, medianHours: s.medianHours };}
   }
 
   // ── 8. 健康诊断 ──

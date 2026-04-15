@@ -639,7 +639,7 @@ function renderTaskCard(task: TaskCard, props: TaskKanbanProps): TemplateResult 
 // ============================================================================
 
 function renderTaskDetailPanel(props: TaskKanbanProps) {
-  if (!props.selectedTask) return nothing;
+  if (!props.selectedTask) {return nothing;}
 
   const task = props.selectedTask;
   const tab = props.taskTraceTab ?? "info";
@@ -1151,7 +1151,7 @@ function renderTaskAttachments(props: TaskKanbanProps) {
 }
 
 function renderTaskWorkLogs(props: TaskKanbanProps) {
-  if (props.taskWorkLogs.length === 0) return nothing;
+  if (props.taskWorkLogs.length === 0) {return nothing;}
 
   return html`
     <div class="card" style="padding: 16px; margin-bottom: 16px;">
@@ -1206,7 +1206,7 @@ function renderCreateTaskDialog(props: TaskKanbanProps) {
         z-index: 2000;
       "
       @click=${(e: Event) => {
-        if (e.target === e.currentTarget) props.onCloseCreateDialog();
+        if (e.target === e.currentTarget) {props.onCloseCreateDialog();}
       }}
     >
       <div
@@ -1378,7 +1378,7 @@ function formatDueDate(timestamp: number): string {
 }
 
 function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024) {return `${bytes} B`;}
+  if (bytes < 1024 * 1024) {return `${(bytes / 1024).toFixed(1)} KB`;}
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

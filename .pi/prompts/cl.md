@@ -37,10 +37,24 @@ Audit changelog entries for all commits since the last release.
    - Propose the top new features to the user for confirmation before writing them.
    - Link to relevant docs and sections whenever possible.
 
-7. **Report:**
+7. **Pre-release quality gate — run before tagging:**
+
+   ```bash
+   # All must pass before creating the release tag
+   pnpm typecheck
+   pnpm lint
+   pnpm build
+   pnpm test
+   pnpm coverage
+   ```
+
+   **STOP if any fails.** Do not create the release tag until all gates pass.
+
+8. **Report:**
    - List commits with missing entries
    - List entries that need cross-package duplication
    - Add any missing entries directly
+   - Confirm quality gate results
 
 ## Changelog Format Reference
 

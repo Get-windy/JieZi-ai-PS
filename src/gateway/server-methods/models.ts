@@ -23,7 +23,8 @@ const ajv = new (AjvPkg as unknown as new (opts?: object) => import("ajv").defau
 });
 const validateModelsListParams = ajv.compile(ModelsListParamsSchema);
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
-import { resolveDefaultAgentId, resolveAgentDir } from "../../agents/agent-scope.js";
+import { resolveDefaultAgentId, resolveAgentDir, listAgentEntries } from "../../agents/agent-scope.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
 import { forceRefreshBenchmarkData } from "../../agents/arena-benchmarks.js";
 
 // 模型管理配置文件路径 - UI 管理系统的主存储
@@ -1437,9 +1438,24 @@ async function syncRuntimeFiles(storage: ModelManagementStorage): Promise<void> 
   const agentsBaseDir = path.join(STATE_DIR, "agents");
   const modelsPaths: string[] = [];
 
+  // 读取当前已注册的 agent ID 集合，用于过滤磁盘上的孤立目录
+  let registeredAgentIds: Set<string> = new Set();
+  try {
+    const cfg = loadConfig();
+    const agents = listAgentEntries(cfg);
+    registeredAgentIds = new Set(agents.map((a) => normalizeAgentId(a.id)));
+  } catch {
+    // 配置读取失败时退化为不过滤（保持兼容）
+  }
+
   try {
     const agentDirs = await fs.readdir(agentsBaseDir);
     for (const agentId of agentDirs) {
+      // 跳过不在配置中的孤立目录（已删除的 agent）
+      if (registeredAgentIds.size > 0 && !registeredAgentIds.has(normalizeAgentId(agentId))) {
+        console.log(`[Models] Skipping orphaned agent dir: ${agentId}`);
+        continue;
+      }
       const agentModelsPath = path.join(agentsBaseDir, agentId, "agent", "models.json");
       modelsPaths.push(agentModelsPath);
     }
@@ -1600,9 +1616,25 @@ async function syncAuthProfiles(storage: ModelManagementStorage): Promise<void> 
   // ── Step 3: 扫描所有 agents/<agentId>/agent/ 目录 ──
   const agentsBaseDir = path.join(STATE_DIR, "agents");
   const authProfilePaths: string[] = [];
+
+  // 读取当前已注册的 agent ID 集合，用于过滤磁盘上的孤立目录
+  let registeredAgentIds2: Set<string> = new Set();
+  try {
+    const cfg2 = loadConfig();
+    const agents2 = listAgentEntries(cfg2);
+    registeredAgentIds2 = new Set(agents2.map((a) => normalizeAgentId(a.id)));
+  } catch {
+    // 配置读取失败时退化为不过滤
+  }
+
   try {
     const agentDirs = await fs.readdir(agentsBaseDir);
     for (const agentId of agentDirs) {
+      // 跳过不在配置中的孤立目录（已删除的 agent）
+      if (registeredAgentIds2.size > 0 && !registeredAgentIds2.has(normalizeAgentId(agentId))) {
+        console.log(`[Models] Skipping orphaned agent dir (auth-profiles): ${agentId}`);
+        continue;
+      }
       const agentAuthPath = path.join(agentsBaseDir, agentId, "agent", "auth-profiles.json");
       try {
         await fs.access(agentAuthPath);

@@ -246,7 +246,7 @@ export function addInitiativeUpdate(
 ): InitiativeUpdate | null {
   const store = loadInitiativeStore(workspaceRoot);
   const idx = store.initiatives.findIndex((i) => i.id === initiativeId);
-  if (idx < 0) return null;
+  if (idx < 0) {return null;}
 
   const update: InitiativeUpdate = {
     id: generateId("upd"),
@@ -273,7 +273,7 @@ export function linkProjectToInitiative(
 ): boolean {
   const store = loadInitiativeStore(workspaceRoot);
   const idx = store.initiatives.findIndex((i) => i.id === initiativeId);
-  if (idx < 0) return false;
+  if (idx < 0) {return false;}
 
   const existing = store.initiatives[idx].projectIds ?? [];
   if (!existing.includes(projectId)) {
@@ -294,7 +294,7 @@ export function unlinkProjectFromInitiative(
 ): boolean {
   const store = loadInitiativeStore(workspaceRoot);
   const idx = store.initiatives.findIndex((i) => i.id === initiativeId);
-  if (idx < 0) return false;
+  if (idx < 0) {return false;}
 
   store.initiatives[idx].projectIds = (store.initiatives[idx].projectIds ?? []).filter(
     (id) => id !== projectId,
@@ -333,10 +333,10 @@ export function listInitiatives(
   }
 
   // 按优先级 + 最新更新排序
-  return list.sort((a, b) => {
+  return list.toSorted((a, b) => {
     const pa = a.priority ?? 99;
     const pb = b.priority ?? 99;
-    if (pa !== pb) return pa - pb;
+    if (pa !== pb) {return pa - pb;}
     return b.updatedAt - a.updatedAt;
   });
 }
@@ -356,7 +356,7 @@ export function deleteInitiative(workspaceRoot: string, initiativeId: string): b
   const store = loadInitiativeStore(workspaceRoot);
   const before = store.initiatives.length;
   store.initiatives = store.initiatives.filter((i) => i.id !== initiativeId);
-  if (store.initiatives.length === before) return false;
+  if (store.initiatives.length === before) {return false;}
   saveInitiativeStore(workspaceRoot, store);
   return true;
 }
