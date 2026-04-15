@@ -528,7 +528,7 @@ export function createAgentAssignTaskTool(opts?: {
           priority,
           deadline,
           context: taskContextPacket
-            ? { ...(context ?? {}), taskContextPacket }
+            ? { ...context, taskContextPacket }
             : context,
           projectId,
           teamId: teamId || undefined,

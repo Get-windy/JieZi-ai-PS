@@ -1200,6 +1200,122 @@ export async function runHeartbeatOnce(opts: {
     }
     // ─────────────────────────────────────────────────────────────────
 
+    // ── 主动 Token 用量百分比门控（Proactive Token Percentage Gate）──────
+    // 业界最佳实践（VNX Context Rotation / claudefa.st Code Kit）：
+    // 不等 overflow 发生，而是在 context 用量达到 65% 时主动轮换 session。
+    // 这比事后 overflow 更优：65% 以上推理准确率开始显著下降（Stanford 2024）。
+    //
+    // 触发条件（同时满足）：
+    //   1. session store 中有可信的 totalTokens（totalTokensFresh=true）
+    //   2. totalTokens / contextTokens >= 0.65（65% 用量）
+    //   3. 该 agent 有 in-progress 任务（有任务才需要 handover，避免打扰空闲 agent）
+    //   4. 不是 isolated session（isolated session 每次都是新 session，无需主动轮换）
+    //
+    // 动作：
+    //   - 向该 session 注入 [PROACTIVE CONTEXT ROTATE] handover 消息（含任务摘要+工作日志快照）
+    //   - 清空 transcript，让本次 run 以干净 context 开始
+    //   - handover 消息将作为新 context 的第一条 system event，指引 agent 从已有工作继续
+    if (!useIsolatedSession && transcriptState.transcriptPath) {
+      try {
+        const sessionStoreForGate = loadSessionStore(runStorePath);
+        const sessionEntryForGate = sessionStoreForGate[runSessionKey];
+        const totalTokensForGate = sessionEntryForGate?.totalTokens;
+        const contextTokensForGate =
+          sessionEntryForGate?.contextTokens ?? agentContextTokens;
+        const isFreshGate = sessionEntryForGate?.totalTokensFresh !== false;
+        // 65% 阈值（业界参考：VNX 65%、claudefa.st 50%，取中间偏保守值）
+        const TOKEN_ROTATE_THRESHOLD = 0.65;
+        if (
+          isFreshGate &&
+          typeof totalTokensForGate === "number" &&
+          totalTokensForGate > 0 &&
+          contextTokensForGate > 0 &&
+          totalTokensForGate / contextTokensForGate >= TOKEN_ROTATE_THRESHOLD
+        ) {
+          // 检查是否有 in-progress 任务（只对有任务的 agent 做 handover）
+          const usagePct = Math.round((totalTokensForGate / contextTokensForGate) * 100);
+          let hasActiveTask = false;
+          let activeTaskForHandover: import("../tasks/storage.js").Task | undefined;
+          if (runSessionKey.startsWith("agent:")) {
+            const agentIdForGate = runSessionKey.split(":")[1];
+            if (agentIdForGate) {
+              const { listTasks } = await import("../tasks/storage.js");
+              const inProgressTasks = await listTasks({
+                assigneeId: normalizeAgentId(agentIdForGate),
+                status: ["in-progress"],
+              });
+              activeTaskForHandover = inProgressTasks[0];
+              hasActiveTask = Boolean(activeTaskForHandover);
+            }
+          }
+          if (hasActiveTask && activeTaskForHandover) {
+            log.warn(
+              `heartbeat: context at ${usagePct}% (${totalTokensForGate}/${contextTokensForGate} tokens) — proactive rotate for agent "${agentId}" (task ${activeTaskForHandover.id})`,
+              { agentId, sessionKey: runSessionKey, usagePct, totalTokensForGate, contextTokensForGate },
+            );
+            // 构建 handover 消息（对标 VNX handover contract：Completed / Remaining / Next Steps）
+            const recentWorkLogs = (activeTaskForHandover.workLogs ?? []).slice(-5);
+            const handoverMsg = [
+              `[PROACTIVE CONTEXT ROTATE] Your session context is at ${usagePct}% capacity and has been proactively rotated to maintain performance.`,
+              `A fresh session has been started with your task state preserved. This is a planned rotation — no work has been lost.`,
+              ``,
+              `=== TASK TO RESUME ===`,
+              `Task ID: ${activeTaskForHandover.id}`,
+              `Title: ${activeTaskForHandover.title}`,
+              `Status: in-progress`,
+              `Priority: ${activeTaskForHandover.priority}`,
+              activeTaskForHandover.type ? `Type: ${activeTaskForHandover.type}` : null,
+              activeTaskForHandover.projectId ? `Project: ${activeTaskForHandover.projectId}` : null,
+              activeTaskForHandover.description
+                ? `Description: ${activeTaskForHandover.description.slice(0, 300)}`
+                : null,
+              recentWorkLogs.length > 0
+                ? `\n=== RECENT WORK LOG (last ${recentWorkLogs.length} entries) ===`
+                : null,
+              ...recentWorkLogs.map(
+                (log) =>
+                  `  [${log.action}] ${log.details.slice(0, 200)}${log.result ? ` → ${log.result}` : ""}`,
+              ),
+              ``,
+              `=== WORKING CONTEXT ===`,
+              `Working Directory: ${workspaceDir}`,
+              `Your Personal Memory: ${path.join(workspaceDir, "MEMORY.md")}`,
+              ``,
+              `=== NEXT STEPS ===`,
+              `1. Do NOT start over — your task is already in-progress, continue from where you left off.`,
+              `2. Check your working directory and work logs above to understand current progress.`,
+              `3. Continue executing the task using your available tools.`,
+              `4. Call task_report_to_supervisor with Task ID: ${activeTaskForHandover.id} when complete.`,
+            ]
+              .filter(Boolean)
+              .join("\n");
+            enqueueSystemEvent(handoverMsg, {
+              sessionKey: runSessionKey,
+              contextKey: `cron:proactive-rotate:${activeTaskForHandover.id}`,
+            });
+            // 清空 transcript，让本次 run 以干净 context 开始（handover 作为第一条 system event）
+            try {
+              await fs.writeFile(transcriptState.transcriptPath, "", "utf-8");
+              transcriptState.preHeartbeatSize = 0;
+              log.info(
+                `heartbeat: proactive context rotation done for agent "${agentId}" (${usagePct}% → 0%)`,
+                { agentId },
+              );
+            } catch (rotateErr) {
+              log.warn(
+                `heartbeat: failed to clear transcript for proactive rotation: ${String(rotateErr)}`,
+                { agentId },
+              );
+            }
+          }
+        }
+      } catch (gateErr) {
+        // 门控逻辑失败不影响心跳主流程
+        log.warn(`heartbeat: proactive token gate error (non-fatal): ${String(gateErr)}`, { agentId });
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────
+
     const heartbeatModelOverride = heartbeat?.model?.trim() || undefined;
     const suppressToolErrorWarnings = heartbeat?.suppressToolErrorWarnings === true;
     const bootstrapContextMode: "lightweight" | undefined =

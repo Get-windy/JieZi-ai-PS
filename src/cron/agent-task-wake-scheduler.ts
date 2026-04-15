@@ -16,10 +16,16 @@
  *    （不受 5min 静默窗口限制）——修复服务重启后历史任务无驱动消息的根本问题
  */
 
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { loadConfig } from "../../upstream/src/config/config.js";
 import { requestHeartbeatNow } from "../../upstream/src/infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
+import {
+  resolveDefaultSessionStorePath,
+  resolveSessionTranscriptPath,
+  updateSessionStore,
+} from "../config/sessions.js";
 import { listAgentIds, resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { getTaskTypePerfScore, inferTaskType } from "../gateway/server-methods/evolve-rpc.js";
 import { normalizeAgentId } from "../routing/session-key.js";
@@ -85,10 +91,14 @@ const PRIORITY_WEIGHT: Record<string, number> = {
 // Context Overflow 循环防护
 // 记录每个 agent 还没成功唤醒的连续次数（如果任务状态没变化）
 const agentStaleWakeCount = new Map<string, { count: number; taskId: string; lastAt: number }>();
-// 连续失败 N 次后暂停重试（业界最佳实践：3-5 次）
+// 连续失败 N 次后触发 session reset（业界最佳实践：3-5 次）
 const MAX_STALE_WAKE_BEFORE_PAUSE = 3;
-// 暂停期间（10 分钟，等 heartbeat-runner 的 overflow 清空生效）
-const OVERFLOW_PAUSE_MS = 10 * 60 * 1000;
+// session reset 后的冷却期（8 分钟，等新会话初始化完成）
+const OVERFLOW_PAUSE_MS = 8 * 60 * 1000;
+// 记录已触发过 session reset 的 agent:taskId，避免每轮都 reset
+const overflowSessionResetAt = new Map<string, number>();
+// session reset 操作自身的冷却期（每个 agent:task 最多每 15 分钟重置一次）
+const OVERFLOW_RESET_COOLDOWN_MS = 15 * 60 * 1000;
 
 // 背压保护：记录每个 agent 每个任务的重激活状态
 // 业界参考：Temporal.io 指数退而重试策略
@@ -101,6 +111,49 @@ const agentLastReactivateAt = new Map<string, { lastAt: number; attempts: number
 
 // 低水位告警冷却记录：每个 agent 最近一次低水位告警时间（防止每轮扫描都轰炸 supervisor）
 const lowWatermarkAlertAt = new Map<string, number>();
+
+/**
+ * 对 Agent 的 session store 执行 overflow reset：
+ * 生成新 sessionId 写入 store，使下次 heartbeat run 以干净的空 context 启动。
+ * 对标 upstream agent-runner.ts 中的 resetSessionAfterCompactionFailure 逻辑。
+ *
+ * @returns true 表示重置成功，false 表示跳过（store 不存在或已在冷却期内）
+ */
+async function resetAgentSessionForOverflow(agentId: string, taskId: string): Promise<boolean> {
+  const resetKey = `${agentId}:${taskId}`;
+  const now = Date.now();
+  const lastReset = overflowSessionResetAt.get(resetKey);
+  if (lastReset && now - lastReset < OVERFLOW_RESET_COOLDOWN_MS) {
+    return false; // 冷却期内，跳过
+  }
+  try {
+    const storePath = resolveDefaultSessionStorePath(agentId);
+    const sessionKey = `agent:${agentId}:main`;
+    const nextSessionId = randomUUID();
+    const nextSessionFile = resolveSessionTranscriptPath(nextSessionId, agentId);
+    await updateSessionStore(storePath, (store) => {
+      const prev = store[sessionKey];
+      store[sessionKey] = {
+        ...(prev ?? {}),
+        sessionId: nextSessionId,
+        sessionFile: nextSessionFile,
+        updatedAt: now,
+        systemSent: false,
+        abortedLastRun: false,
+      } as (typeof store)[string];
+    });
+    overflowSessionResetAt.set(resetKey, now);
+    console.log(
+      `[Task Wake] Agent ${agentId} session reset for overflow (task ${taskId}) -> new session ${nextSessionId}`,
+    );
+    return true;
+  } catch (err) {
+    console.error(
+      `[Task Wake] Failed to reset session for agent ${agentId} (non-fatal): ${String(err)}`,
+    );
+    return false;
+  }
+}
 
 /**
  * 计算指数退而间隔
@@ -211,7 +264,7 @@ async function checkAndNotifyLowWatermark(
   const lwmCooldownMs = 60 * 60 * 1000;
   const lwmLastAlertKey = `lwm:${normalizedId}`;
   const lwmLastAlert = lowWatermarkAlertAt.get(lwmLastAlertKey);
-  if (lwmLastAlert && now - lwmLastAlert < lwmCooldownMs) return;
+  if (lwmLastAlert && now - lwmLastAlert < lwmCooldownMs) {return;}
 
   // 获取当前 todo 数量（仅 todo 状态，不含已完成/进行中）
   const currentTodoTasks = await taskStorage.listTasks({
@@ -222,9 +275,9 @@ async function checkAndNotifyLowWatermark(
 
   // 收集该 agent 所在项目（todo 任务 + 可选刚完成任务的项目 + in-progress 任务）
   const agentProjectIds = new Set<string>();
-  if (completedProjectId) agentProjectIds.add(completedProjectId);
+  if (completedProjectId) {agentProjectIds.add(completedProjectId);}
   for (const t of currentTodoTasks) {
-    if (t.projectId) agentProjectIds.add(t.projectId);
+    if (t.projectId) {agentProjectIds.add(t.projectId);}
   }
   if (agentProjectIds.size === 0) {
     const inProg = await taskStorage.listTasks({
@@ -232,7 +285,7 @@ async function checkAndNotifyLowWatermark(
       status: ["in-progress"],
     });
     for (const t of inProg) {
-      if (t.projectId) agentProjectIds.add(t.projectId);
+      if (t.projectId) {agentProjectIds.add(t.projectId);}
     }
   }
 
@@ -242,20 +295,20 @@ async function checkAndNotifyLowWatermark(
   const allGroupsForLwm = groupManager.getAllGroups();
   for (const projectId of agentProjectIds) {
     const group = allGroupsForLwm.find((g) => g.projectId === projectId);
-    if (!group) continue;
+    if (!group) {continue;}
     const groupWsDir = groupWorkspaceManager.getGroupWorkspaceDir(group.id);
-    if (!groupWsDir) continue;
+    if (!groupWsDir) {continue;}
     const projCfg = readProjectConfig(groupWsDir);
     const phase = projCfg?.status ?? undefined;
-    if (!phase) continue;
+    if (!phase) {continue;}
     phaseLabels.push(`${projectId}(阶段:${phase})`);
     thresholds.push(resolveAgentTaskThreshold(phase, normalizedId));
     recordTodoObservation(phase, normalizedId, todoCount);
   }
 
   const threshold = resolveStrictestThreshold(thresholds);
-  if (threshold.allowIdle) return;
-  if (todoCount >= threshold.minTodo) return;
+  if (threshold.allowIdle) {return;}
+  if (todoCount >= threshold.minTodo) {return;}
 
   // 找 supervisor
   let supervisorIdForLwm: string | undefined;
@@ -275,12 +328,12 @@ async function checkAndNotifyLowWatermark(
         | undefined;
     }
   }
-  if (!supervisorIdForLwm || supervisorIdForLwm === "system") return;
+  if (!supervisorIdForLwm || supervisorIdForLwm === "system") {return;}
 
   const cfgForLwm = loadConfig();
   const allowedAgents = new Set(listAgentIds(cfgForLwm).map(normalizeAgentId));
   const normalizedSup = normalizeAgentId(supervisorIdForLwm);
-  if (!allowedAgents.has(normalizedSup)) return;
+  if (!allowedAgents.has(normalizedSup)) {return;}
 
   // 记录本次告警时间（冷却）
   lowWatermarkAlertAt.set(lwmLastAlertKey, now);
@@ -383,10 +436,10 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
       ]);
 
       // === Context Overflow 防循环检测 ===
-      // 业界最佳实践：overflow 属于 non-retriable 错误。
-      // 如果 agent 对同一个任务连续尝试多次却任务状态始终没变，
-      // 说明它占着任务却没在执行（最常见原因：context overflow 導致 embedded run 静默失败）。
-      // 连续超过阈値后暂停唤醒，等待 heartbeat-runner 的自动清空生效。
+      // 业界最佳实践（对标 Claude Code、Cursor 等主流 Agent 框架）：
+      //   overflow 是 non-retriable 错误，不能用同一个撑爆的 session 重试。
+      //   正确做法：重置 session（生成新 sessionId），在新的空 context 中注入
+      //   任务摘要（Summarize & Continue），让 agent 从干净状态恢复执行。
       const activeInProgress = inProgressTasks[0];
       if (activeInProgress) {
         const staleKey = `${normalizedId}:${activeInProgress.id}`;
@@ -398,12 +451,78 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           // 任务有进展，同步重置退避计数器，让下次空闲从基础间隔重新计算
           const reactivateKeyForReset = `reactivate:${normalizedId}:${activeInProgress.id}`;
           agentLastReactivateAt.delete(reactivateKeyForReset);
+          // 同时清除 overflow reset 记录（任务有进展说明 overflow 已经恢复）
+          overflowSessionResetAt.delete(staleKey);
         } else if (staleInfo && staleInfo.count >= MAX_STALE_WAKE_BEFORE_PAUSE) {
           const pauseRemaining = staleInfo.lastAt + OVERFLOW_PAUSE_MS - now;
           if (pauseRemaining > 0) {
-            console.log(
-              `[Task Wake] Agent ${normalizedId} paused due to repeated stale wakes (${staleInfo.count}/${MAX_STALE_WAKE_BEFORE_PAUSE}) — possible context overflow loop. Resuming in ${Math.ceil(pauseRemaining / 60000)}min.`,
-            );
+            // ── 在暂停期内：首次进入暂停时立刻触发 session reset ──
+            // 业界做法（参考 upstream agent-runner.ts resetSessionAfterCompactionFailure）：
+            // 生成新 sessionId 写入 store，使下次 heartbeat run 以干净空 context 启动，
+            // 同时向新 session 发送携带完整任务信息的 [CONTEXT RESET] 唤醒消息。
+            const didReset = await resetAgentSessionForOverflow(normalizedId, activeInProgress.id);
+            if (didReset) {
+              // 新 session 已就绪，注入任务 handover 作为新会话的第一条消息
+              // 对标业界 VNX handover contract: Completed Work / Remaining Tasks / Next Steps
+              const sessionKey = `agent:${normalizedId}:main`;
+              const agentWorkspaceDirForReset = resolveAgentWorkspaceDir(cfg, normalizedId);
+              const agentMemoryPathForReset = path.join(agentWorkspaceDirForReset, "MEMORY.md");
+              // 取最近 5 条工作日志作为 handover 快照（让 Agent 知道已做了什么、从哪里继续）
+              const recentWorkLogs = (activeInProgress.workLogs ?? []).slice(-5);
+              const contextResetMsg = [
+                `[CONTEXT RESET] Your previous session ran out of context window and was automatically reset.`,
+                `A fresh session has been started. Your in-progress task has been preserved and is ready to continue.`,
+                ``,
+                `=== TASK TO RESUME ===`,
+                `Task ID: ${activeInProgress.id}`,
+                `Title: ${activeInProgress.title}`,
+                `Status: in-progress`,
+                `Priority: ${activeInProgress.priority}`,
+                activeInProgress.type ? `Type: ${activeInProgress.type}` : null,
+                activeInProgress.projectId ? `Project: ${activeInProgress.projectId}` : null,
+                activeInProgress.description
+                  ? `Description: ${activeInProgress.description.slice(0, 300)}`
+                  : null,
+                recentWorkLogs.length > 0
+                  ? `\n=== COMPLETED WORK (last ${recentWorkLogs.length} log entries) ===`
+                  : null,
+                ...recentWorkLogs.map(
+                  (wl) =>
+                    `  [${wl.action}] ${wl.details.slice(0, 200)}${
+                      wl.result ? ` → ${wl.result}` : ""
+                    }`,
+                ),
+                ``,
+                `=== WORKING CONTEXT ===`,
+                `Working Directory: ${agentWorkspaceDirForReset}`,
+                `Your Personal Memory: ${agentMemoryPathForReset}`,
+                ``,
+                `=== NEXT STEPS ===`,
+                `1. Do NOT start over. Check the work logs above to understand what was already done.`,
+                `2. Check your working directory for partial work already completed.`,
+                `3. Continue executing the task from where you left off.`,
+                `4. Call task_report_to_supervisor with Task ID: ${activeInProgress.id} when complete.`,
+                `5. If the remaining scope is too large, break it into smaller subtasks.`,
+                ``,
+                `IMPORTANT: Call task_report_to_supervisor with Task ID: ${activeInProgress.id} when done.`,
+              ]
+                .filter(Boolean)
+                .join("\n");
+              enqueueSystemEvent(contextResetMsg, {
+                sessionKey,
+                contextKey: `cron:overflow-reset:${activeInProgress.id}`,
+              });
+              requestHeartbeatNow({
+                reason: `cron:overflow-reset:${activeInProgress.id}`,
+                sessionKey,
+                agentId: normalizedId,
+                coalesceMs: 3000,
+              });
+              console.log(
+                `[Task Wake] Agent ${normalizedId} overflow recovery: new session + context reset message sent (task ${activeInProgress.id})`,
+              );
+            }
+            // 无论是否成功 reset，暂停期内都跳过本轮正常唤醒（避免双重消息）
             stats.skippedTasks++;
             continue;
           }

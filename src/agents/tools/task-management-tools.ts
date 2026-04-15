@@ -41,6 +41,17 @@ const TaskStatus = Type.Union([
 ]);
 
 /**
+ * 工作层次枚举（SAFe/Linear/Jira 五层）
+ */
+const WorkItemLevel = Type.Union([
+  Type.Literal("initiative"), // 战略主题（跨项目顶层，对标 Linear Initiatives）
+  Type.Literal("epic"),
+  Type.Literal("feature"),
+  Type.Literal("story"),
+  Type.Literal("task"),
+]);
+
+/**
  * task_create 工具参数 schema
  */
 const TaskCreateToolSchema = Type.Object({
@@ -126,6 +137,66 @@ const TaskCreateToolSchema = Type.Object({
    */
   estimatedHours: Type.Optional(Type.Number({ minimum: 0.5, maximum: 999 })),
   /**
+   * 故事点（可选，Sprint 速度计算的基础单位）
+   * SAFe/Scrum 最佳实践：每个任务在 Sprint 规划时必须估算故事点。
+   * 典型取値：1/2/3/5/8/13（Fibonacci）
+   */
+  storyPoints: Type.Optional(
+    Type.Number({
+      minimum: 0,
+      maximum: 100,
+      description: "Story points for Sprint velocity tracking. Fibonacci: 1/2/3/5/8/13. Defaults to 1 if omitted.",
+    }),
+  ),
+  /**
+   * 工作层次（可选）
+   * - initiative: 战略主题（跨项目顶层）
+   * - epic:       跨多个 Sprint 的大价値块
+   * - feature:    属于 Epic 的功能块
+   * - story:      用户故事
+   * - task:       技术实现单元（默认）
+   */
+  level: Type.Optional(WorkItemLevel),
+  /** 所属 Epic ID（可选，level=feature/story/task 时建议填写） */
+  epicId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 所属 Feature ID（可选，level=story/task 时建议填写） */
+  featureId: Type.Optional(Type.String({ maxLength: 128 })),
+  /**
+   * 关联目标 ID（可选，强烈建议填写）
+   * 将此任务与项目 OKR 目标关联，OKR 完成率会自动汇聚。
+   */
+  objectiveId: Type.Optional(
+    Type.String({
+      maxLength: 128,
+      description: "Link this task to a project OKR objective. Use project_roadmap_view to get active objective IDs.",
+    }),
+  ),
+  /** 关联关键结果 ID（可选） */
+  keyResultId: Type.Optional(Type.String({ maxLength: 128 })),
+  /**
+   * 关联 Initiative ID（可选）
+   * 将此任务对齐到某个战略主题。level=initiative 时必填。
+   */
+  initiativeId: Type.Optional(
+    Type.String({
+      maxLength: 128,
+      description: "Link this task to a strategic initiative. Use project_initiative_list to get active initiative IDs. Required when level=initiative.",
+    }),
+  ),
+  /**
+   * 验收标准列表（可选，强烈建议填写）
+   * 每条验收标准是一个可独立验证的条件，防止 AI Agent “敷衍式完成”。
+   * 示例：["tsc --noEmit 无错误", "单元测试全部通过", "API 返回 200"]
+   */
+  acceptanceCriteria: Type.Optional(
+    Type.Array(
+      Type.String({ maxLength: 500 }),
+      {
+        description: "Acceptance criteria checklist. Each item is a verifiable condition. Task cannot be marked done until all criteria pass.",
+      },
+    ),
+  ),
+  /**
    * 父任务ID（可选）
    * 将此任务作为某个复杂任务的子任务，实现任务分解
    */
@@ -185,6 +256,36 @@ const TaskListToolSchema = Type.Object({
   overdueOnly: Type.Optional(Type.Boolean()),
   /** 只返回被阻塞的任务（可选） */
   blockedOnly: Type.Optional(Type.Boolean()),
+  /**
+   * 按工作层次过滤（可选）
+   * initiative | epic | feature | story | task
+   */
+  level: Type.Optional(WorkItemLevel),
+  /**
+   * 按所属 Epic ID 过滤（可选）
+   * 返回某个 Epic 下的所有 Feature/Story/Task。
+   */
+  epicId: Type.Optional(Type.String({ maxLength: 128 })),
+  /**
+   * 按所属 Feature ID 过滤（可选）
+   * 返回某个 Feature 下的所有 Story/Task。
+   */
+  featureId: Type.Optional(Type.String({ maxLength: 128 })),
+  /**
+   * 按关联目标 ID 过滤（可选）
+   * 查看某个 OKR 目标下的所有任务。
+   */
+  objectiveId: Type.Optional(Type.String({ maxLength: 128 })),
+  /**
+   * 按战略主题 ID 过滤（可选）
+   * 查看某个 Initiative 下的所有任务。
+   */
+  initiativeId: Type.Optional(Type.String({ maxLength: 128 })),
+  /**
+   * 只返回 backlog 池任务（可选）
+   * 设为 true 时等效于 status=backlog，适合 Sprint Grooming 场景。
+   */
+  backlogOnly: Type.Optional(Type.Boolean()),
 });
 
 /**
@@ -215,6 +316,40 @@ const TaskUpdateToolSchema = Type.Object({
   teamId: Type.Optional(Type.String({ maxLength: 128 })),
   /** 更新所属组织ID（可选） */
   organizationId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 更新故事点（可选） */
+  storyPoints: Type.Optional(Type.Number({ minimum: 0, maximum: 100 })),
+  /** 更新工作层次（可选） */
+  level: Type.Optional(WorkItemLevel),
+  /** 更新所属 Epic ID（可选） */
+  epicId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 更新所属 Feature ID（可选） */
+  featureId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 更新关联目标 ID（可选） */
+  objectiveId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 更新关联关键结果 ID（可选） */
+  keyResultId: Type.Optional(Type.String({ maxLength: 128 })),
+  /** 更新关联 Initiative ID（可选） */
+  initiativeId: Type.Optional(Type.String({ maxLength: 128, description: "Link task to a strategic initiative." })),
+  /**
+   * 验收标准（可选，传入字符串数组将全量更新验收标准—替换现有）
+   */
+  acceptanceCriteria: Type.Optional(
+    Type.Array(Type.String({ maxLength: 500 }), {
+      description: "Full replace of acceptance criteria. Pass string array to overwrite all existing criteria.",
+    }),
+  ),
+  /**
+   * 增加前置阻塞任务 ID（可选）
+   * 向 blockedBy 列表中添加一或多个前置依赖。
+   * 如果任务当前不是 blocked 状态，系统自动将其标记为 blocked。
+   */
+  addBlockedBy: Type.Optional(Type.Array(Type.String({ maxLength: 128 }), { description: "Task IDs to add as blockers. Auto-sets status to blocked." })),
+  /**
+   * 解除前置阻塞任务 ID（可选）
+   * 从 blockedBy 列表中移除指定前置依赖。
+   * 如果移除后 blockedBy 列表为空且任务当前是 blocked，系统自动将其恢复为 in-progress。
+   */
+  removeBlockedBy: Type.Optional(Type.Array(Type.String({ maxLength: 128 }), { description: "Task IDs to remove from blockers. Auto-clears blocked status when list becomes empty." })),
 });
 
 /**
@@ -357,8 +492,12 @@ export function createTaskCreateTool(opts?: {
       '  - scope: "personal" (private todo, no project needed) | "project" (team task, must provide project ID)\n\n' +
       "CONDITIONAL:\n" +
       '  - project: REQUIRED when scope="project". Must be a valid existing project ID.\n\n' +
-      "OPTIONAL:\n" +
-      '  - assignee: Must be a valid registered agent ID (e.g. "doc-writer"). Defaults to self.\n' +
+      "OPTIONAL (highly recommended):\n" +
+      '  - storyPoints: Fibonacci (1/2/3/5/8/13), required for Sprint velocity tracking\n' +
+      '  - acceptanceCriteria: string[] of verifiable conditions\n' +
+      '  - level: initiative | epic | feature | story | task (default: task)\n' +
+      '  - epicId / featureId / initiativeId / objectiveId / keyResultId: hierarchy links\n' +
+      '  - assignee: Must be a valid registered agent ID. Defaults to self.\n' +
       "  - priority: low | medium (default) | high | urgent\n" +
       "  - supervisorId: Must be a project member. Defaults to self (creator).\n\n" +
       "RULES:\n" +
@@ -383,6 +522,17 @@ export function createTaskCreateTool(opts?: {
         typeof params.estimatedHours === "number" ? params.estimatedHours : undefined;
       const parentTaskId = readStringParam(params, "parentTaskId");
       const blockedBy = Array.isArray(params.blockedBy) ? params.blockedBy.map(String) : undefined;
+      // P1 新增字段
+      const storyPoints = typeof params.storyPoints === "number" ? params.storyPoints : undefined;
+      const level = readStringParam(params, "level");
+      const epicId = readStringParam(params, "epicId");
+      const featureId = readStringParam(params, "featureId");
+      const objectiveId = readStringParam(params, "objectiveId");
+      const keyResultId = readStringParam(params, "keyResultId");
+      const initiativeId = readStringParam(params, "initiativeId");
+      const acceptanceCriteria = Array.isArray(params.acceptanceCriteria)
+        ? (params.acceptanceCriteria as string[]).filter((s) => typeof s === "string" && s.length > 0)
+        : undefined;
       // supervisorId：若 AI 未显式传入，自动用当前 agent 自身作为主管（主控分配子任务场景）
       // supervisorId：AI 应根据任务内容从项目成员中选择；未指定时默认为创建者自己
       const supervisorId = readStringParam(params, "supervisorId") || opts?.currentAgentId;
@@ -497,6 +647,22 @@ export function createTaskCreateTool(opts?: {
           estimatedHours,
           blockedBy: blockedBy || undefined,
           supervisorId: supervisorId || undefined,
+          // P1 新增字段
+          storyPoints: storyPoints ?? undefined,
+          level: level || undefined,
+          epicId: epicId || undefined,
+          featureId: featureId || undefined,
+          objectiveId: objectiveId || undefined,
+          keyResultId: keyResultId || undefined,
+          initiativeId: initiativeId || undefined,
+          acceptanceCriteria: acceptanceCriteria && acceptanceCriteria.length > 0
+            ? acceptanceCriteria.map((text, i) => ({
+                id: `ac_${taskId}_${i}`,
+                description: text,
+                passes: false,
+                createdAt: Date.now(),
+              }))
+            : undefined,
           // creatorId：自动填入当前 agent，确保 creatorId 不会变成不存在的 "system"
           creatorId: opts?.currentAgentId || undefined,
           creatorType: "agent",
@@ -581,6 +747,12 @@ export function createTaskListTool(opts?: {
         typeof params.includeNextTask === "boolean" ? params.includeNextTask : false;
       const overdueOnly = typeof params.overdueOnly === "boolean" ? params.overdueOnly : false;
       const blockedOnly = typeof params.blockedOnly === "boolean" ? params.blockedOnly : false;
+      const level = readStringParam(params, "level");
+      const epicId = readStringParam(params, "epicId");
+      const featureId = readStringParam(params, "featureId");
+      const objectiveId = readStringParam(params, "objectiveId");
+      const initiativeId = readStringParam(params, "initiativeId");
+      const backlogOnly = typeof params.backlogOnly === "boolean" ? params.backlogOnly : false;
       const gatewayOpts = readGatewayCallOptions(params);
 
       const resolvedAssignee =
@@ -588,7 +760,7 @@ export function createTaskListTool(opts?: {
 
       try {
         const response = await callGatewayTool("task.list", gatewayOpts, {
-          status,
+          status: backlogOnly ? "backlog" : status,
           priority,
           assignee: resolvedAssignee,
           tag,
@@ -597,6 +769,11 @@ export function createTaskListTool(opts?: {
           projectId: project || undefined,
           overdueOnly: overdueOnly || undefined,
           blockedOnly: blockedOnly || undefined,
+          level: level || undefined,
+          epicId: epicId || undefined,
+          featureId: featureId || undefined,
+          objectiveId: objectiveId || undefined,
+          initiativeId: initiativeId || undefined,
         });
 
         const resp = response as { tasks?: unknown[]; total?: number } | unknown[] | null;
@@ -660,7 +837,7 @@ export function createTaskUpdateTool(_opts?: {
     label: "Task Update",
     name: "task_update",
     description:
-      "Update an existing task's title, description, status (todo/in-progress/done/review/blocked/cancelled), priority, due date, assignee, tags or project/team/organization assignment. At least one field must be provided.",
+      "Update an existing task. Supports: title, description, status, priority, dueDate, assignee, addTags/removeTags, projectId, teamId, organizationId, storyPoints, level (initiative|epic|feature|story|task), epicId, featureId, objectiveId, keyResultId, initiativeId, acceptanceCriteria (full replace), addBlockedBy, removeBlockedBy. At least one field must be provided.",
     parameters: TaskUpdateToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -678,6 +855,20 @@ export function createTaskUpdateTool(_opts?: {
       const projectId = readStringParam(params, "projectId");
       const teamId = readStringParam(params, "teamId");
       const organizationId = readStringParam(params, "organizationId");
+      // P1 新增字段
+      const storyPoints = typeof params.storyPoints === "number" ? params.storyPoints : undefined;
+      const level = readStringParam(params, "level");
+      const epicId = readStringParam(params, "epicId");
+      const featureId = readStringParam(params, "featureId");
+      const objectiveId = readStringParam(params, "objectiveId");
+      const keyResultId = readStringParam(params, "keyResultId");
+      const initiativeId = readStringParam(params, "initiativeId");
+      const acceptanceCriteria = Array.isArray(params.acceptanceCriteria)
+        ? (params.acceptanceCriteria as string[]).filter((s) => typeof s === "string" && s.length > 0)
+        : undefined;
+      // P2: blockedBy 动态更新
+      const addBlockedBy = Array.isArray(params.addBlockedBy) ? (params.addBlockedBy as string[]) : undefined;
+      const removeBlockedBy = Array.isArray(params.removeBlockedBy) ? (params.removeBlockedBy as string[]) : undefined;
       const gatewayOpts = readGatewayCallOptions(params);
 
       // 检查是否至少提供了一个更新字段
@@ -692,7 +883,17 @@ export function createTaskUpdateTool(_opts?: {
         !removeTags &&
         !projectId &&
         !teamId &&
-        !organizationId
+        !organizationId &&
+        storyPoints === undefined &&
+        !level &&
+        !epicId &&
+        !featureId &&
+        !objectiveId &&
+        !keyResultId &&
+        !initiativeId &&
+        !acceptanceCriteria &&
+        !addBlockedBy &&
+        !removeBlockedBy
       ) {
         return jsonResult({
           success: false,
@@ -716,6 +917,25 @@ export function createTaskUpdateTool(_opts?: {
           teamId: teamId || undefined,
           organizationId: organizationId || undefined,
           updatedAt: Date.now(),
+          // P1 新增字段
+          storyPoints: storyPoints ?? undefined,
+          level: level || undefined,
+          epicId: epicId || undefined,
+          featureId: featureId || undefined,
+          objectiveId: objectiveId || undefined,
+          keyResultId: keyResultId || undefined,
+          initiativeId: initiativeId || undefined,
+          acceptanceCriteria: acceptanceCriteria && acceptanceCriteria.length > 0
+            ? acceptanceCriteria.map((text, i) => ({
+                id: `ac_${taskId}_${i}`,
+                description: text,
+                passes: false,
+                createdAt: Date.now(),
+              }))
+            : undefined,
+          // P2: blockedBy 动态更新（增加/移除阻塞源，自动同步 status）
+          addBlockedBy: addBlockedBy && addBlockedBy.length > 0 ? addBlockedBy : undefined,
+          removeBlockedBy: removeBlockedBy && removeBlockedBy.length > 0 ? removeBlockedBy : undefined,
         });
 
         return jsonResult({
@@ -753,6 +973,21 @@ export function createTaskCompleteTool(opts?: {
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
+        // AC 门禁检查（warn 不 block）
+        let acWarning: string | null = null;
+        try {
+          const taskData = await callGatewayTool("task.get", gatewayOpts, { taskId, requesterId: opts?.currentAgentId });
+          const ac = (taskData as Record<string, unknown>)?.acceptanceCriteria as Array<{ passes?: boolean; description?: string }> | undefined;
+          if (ac && ac.length > 0) {
+            const failed = ac.filter((c) => !c.passes);
+            if (failed.length > 0) {
+              acWarning = `[DoD WARNING] ${failed.length}/${ac.length} acceptance criteria not yet verified: ${failed.map((c) => c.description ?? "(unnamed)").slice(0, 3).join("; ")}${failed.length > 3 ? " ..." : ""}. It is strongly recommended to verify all criteria before marking complete.`;
+            }
+          }
+        } catch {
+          // AC 检查失败不阻塞完成流程
+        }
+
         // 调用 task.complete RPC
         const response = await callGatewayTool("task.complete", gatewayOpts, {
           id: taskId,
@@ -768,6 +1003,7 @@ export function createTaskCompleteTool(opts?: {
           completedBy: opts?.currentAgentId,
           completedAt: Date.now(),
           note,
+          ...(acWarning ? { acWarning } : {}),
         });
       } catch (error) {
         return jsonResult({
@@ -1187,6 +1423,531 @@ export function createTaskResetTool(opts?: { currentAgentId?: string }): AnyAgen
             error instanceof Error ? error.message : String(error)
           }`,
         });
+      }
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 下面是工具层加强功能工具（Flow 度量 / 关键路径 / 健康度 / OKR / AC 验证 / 搜索 / 时间线 / CI 质量门禁）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Flow 度量工具 — 计算 CycleTime/LeadTime/Throughput/FlowEfficiency
+ * 对标 Linear 的 Insights 面板和 DORA 四大度量
+ */
+export function createTaskFlowMetricsTool(): AnyAgentTool {
+  return {
+    label: "Task Flow Metrics",
+    name: "task_flow_metrics",
+    description:
+      "Calculate Flow Metrics for a project: CycleTime (in-progress→done), LeadTime (created→done), Throughput (tasks/week), FlowEfficiency (active vs wait time). " +
+      "Based on DORA 2024 and Mik Kersten Flow Framework. Use this to diagnose delivery bottlenecks and identify improvement areas. " +
+      "Returns p50/p85/p95 percentiles for cycle and lead time, WIP snapshot, and health insights.",
+    parameters: Type.Object({
+      projectId: Type.String({ description: "[REQUIRED] Project ID to calculate metrics for" }),
+      fromDays: Type.Optional(Type.Number({ description: "Lookback window in days (default 30)", minimum: 1, maximum: 365 })),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const projectId = readStringParam(params, "projectId", { required: true });
+      const fromDays = typeof params.fromDays === "number" ? params.fromDays : 30;
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("tasks.flowMetrics", gatewayOpts, {
+          projectId,
+          fromDays,
+          workspaceRoot: readStringParam(params, "workspaceRoot"),
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to get flow metrics: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * 关键路径分析工具 — 识别项目中不能延迟的任务链
+ * 对标 Linear Dependencies 视图和 Jira Advanced Roadmaps
+ */
+export function createTaskCriticalPathTool(): AnyAgentTool {
+  return {
+    label: "Task Critical Path",
+    name: "task_critical_path",
+    description:
+      "Analyze the critical path of a project using CPM (Critical Path Method). " +
+      "Identifies tasks that cannot be delayed without impacting the project end date. " +
+      "Also highlights near-critical tasks (float < 8h) and detects circular dependencies. " +
+      "Provide projectId. Returns criticalPath[], projectDurationHours, nearCriticalTaskIds.",
+    parameters: Type.Object({
+      projectId: Type.String({ description: "[REQUIRED] Project ID" }),
+      includeCompleted: Type.Optional(Type.Boolean({ description: "Include completed tasks in analysis (default false)" })),
+      hoursPerSP: Type.Optional(Type.Number({ description: "Hours per story point for duration estimation (default 4)" })),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const projectId = readStringParam(params, "projectId", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("tasks.criticalPath", gatewayOpts, {
+          projectId,
+          includeCompleted: params.includeCompleted,
+          hoursPerSP: params.hoursPerSP,
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to get critical path: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * 任务健康度检查工具 — 一次识别项目所有高风险任务
+ * 对标 Linear Task Health 和 Jira Issue Health Score
+ */
+export function createTaskHealthCheckTool(): AnyAgentTool {
+  return {
+    label: "Task Health Check",
+    name: "task_health_check",
+    description:
+      "Evaluate health scores for all tasks in a project. Returns green/yellow/red ratings based on aging, " +
+      "acceptance criteria coverage, due date proximity, blocked status, and dependency risk. " +
+      "Use this daily or at sprint start to identify tasks that need immediate attention. " +
+      "Filter by level=red to see only critical issues.",
+    parameters: Type.Object({
+      projectId: Type.Optional(Type.String({ description: "Project ID to check (or omit for personal tasks)" })),
+      scope: Type.Optional(Type.Union([Type.Literal("personal"), Type.Literal("project")], { description: "personal or project (default project)" })),
+      levelFilter: Type.Optional(Type.Union([Type.Literal("green"), Type.Literal("yellow"), Type.Literal("red")], { description: "Filter results by health level" })),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const projectId = readStringParam(params, "projectId");
+      const scope = readStringParam(params, "scope") || "project";
+      const levelFilter = readStringParam(params, "levelFilter");
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("tasks.health", gatewayOpts, {
+          projectId,
+          scope,
+          levelFilter,
+          workspaceRoot: readStringParam(params, "workspaceRoot"),
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to get task health: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * OKR 目标列表工具 — 查看项目 OKR 目标和完成率
+ * 对标 Linear Roadmap Goals 和 Google OKR 主题
+ */
+export function createTaskOkrListTool(): AnyAgentTool {
+  return {
+    label: "Task OKR List",
+    name: "task_okr_list",
+    description:
+      "List all OKR objectives and key results for a project with completion percentages. " +
+      "Shows how many tasks are linked to each objective and their completion rate. " +
+      "Use this to check progress toward strategic goals and identify unlinked tasks. " +
+      "RECOMMENDED: run this at Sprint Review to report OKR progress to stakeholders.",
+    parameters: Type.Object({
+      projectId: Type.String({ description: "[REQUIRED] Project ID" }),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const projectId = readStringParam(params, "projectId", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("tasks.okr.list", gatewayOpts, {
+          projectId,
+          workspaceRoot: readStringParam(params, "workspaceRoot"),
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to list OKR: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * AC 逐条确认工具 — 验收标准逐条打分
+ * 防止 AI Agent “敷衍式完成” 的核心保障
+ */
+export function createTaskAcVerifyTool(): AnyAgentTool {
+  return {
+    label: "Task AC Verify",
+    name: "task_ac_verify",
+    description:
+      "Verify individual acceptance criteria for a task. Mark specific criteria as passed/failed with evidence. " +
+      "This prevents 'checkbox completion' — AI Agents MUST call this tool to prove each criterion is actually met before marking tasks done. " +
+      "Provide criteriaUpdates array: [{ criterionId, passes, note }]. Use task_get first to get criterion IDs.",
+    parameters: Type.Object({
+      taskId: Type.String({ description: "[REQUIRED] Task ID" }),
+      criteriaUpdates: Type.Array(
+        Type.Object({
+          criterionId: Type.String({ description: "AC criterion ID" }),
+          passes: Type.Boolean({ description: "true = criterion met, false = not met" }),
+          note: Type.Optional(Type.String({ description: "Evidence or reason" })),
+        }),
+        { description: "List of criteria to verify" },
+      ),
+      verifiedBy: Type.Optional(Type.String({ description: "Verifier agent ID (defaults to current agent)" })),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const taskId = readStringParam(params, "taskId", { required: true });
+      const criteriaUpdates = Array.isArray(params.criteriaUpdates) ? params.criteriaUpdates : [];
+      const verifiedBy = readStringParam(params, "verifiedBy");
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("task.ac.verify", gatewayOpts, {
+          taskId,
+          criteriaUpdates,
+          verifiedBy,
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to verify AC: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * 任务搜索工具 — 全文/关键词搜索
+ * 对标 Linear Quick Search 和 GitHub Issues 搜索
+ */
+export function createTaskSearchTool(): AnyAgentTool {
+  return {
+    label: "Task Search",
+    name: "task_search",
+    description:
+      "Search tasks by keyword across title, description, and tags. Results are ranked by relevance (title match > tag match > description match). " +
+      "Supports filtering by projectId, status, assigneeId, tag, and level. " +
+      "Use this instead of task_list when you need to find tasks by content rather than structured filters.",
+    parameters: Type.Object({
+      keyword: Type.Optional(Type.String({ description: "Search keyword (searches title, description, tags)" })),
+      projectId: Type.Optional(Type.String()),
+      status: Type.Optional(TaskStatus),
+      assigneeId: Type.Optional(Type.String()),
+      tag: Type.Optional(Type.String()),
+      level: Type.Optional(WorkItemLevel),
+      limit: Type.Optional(Type.Number({ minimum: 1, maximum: 100, description: "Max results (default 20)" })),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const keyword = readStringParam(params, "keyword");
+      const projectId = readStringParam(params, "projectId");
+      const status = readStringParam(params, "status");
+      const assigneeId = readStringParam(params, "assigneeId");
+      const tag = readStringParam(params, "tag");
+      const level = readStringParam(params, "level");
+      const limit = typeof params.limit === "number" ? params.limit : 20;
+      const gatewayOpts = readGatewayCallOptions(params);
+      if (!keyword && !projectId && !status && !assigneeId && !tag) {
+        return jsonResult({ success: false, error: "At least one of keyword/projectId/status/assigneeId/tag is required" });
+      }
+      try {
+        const result = await callGatewayTool("task.search", gatewayOpts, {
+          keyword, projectId, status, assigneeId, tag, level, limit,
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to search tasks: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * 任务生命周期时间线工具 — 查看任务各阶段持续时长
+ * 对标 Linear Cycle Time Breakdown
+ */
+export function createTaskTimelineTool(): AnyAgentTool {
+  return {
+    label: "Task Timeline",
+    name: "task_timeline",
+    description:
+      "Get the lifecycle timeline of a task: how long it spent in each status (todo→in-progress→review→done). " +
+      "Returns leadTimeHours (created→done), cycleTimeHours (started→done), and per-stage durations. " +
+      "Use this to identify which stage caused the most delay, especially for tasks that missed their due date.",
+    parameters: Type.Object({
+      taskId: Type.String({ description: "[REQUIRED] Task ID" }),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const taskId = readStringParam(params, "taskId", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("task.timeline", gatewayOpts, { taskId });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to get task timeline: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * CI 质量门禁回写工具 — CI/CD 结果自动回写 AC passes 状态
+ * 这是“产出好代码”配套管理的核心：代码质量验证与任务状态双向同步
+ */
+export function createTaskQualityGateUpdateTool(): AnyAgentTool {
+  return {
+    label: "Task Quality Gate Update",
+    name: "task_quality_gate_update",
+    description:
+      "Write CI/CD build and test results back to task acceptance criteria (AC). " +
+      "Pass gates=[ { gateName, passed, detail } ] to automatically match and update relevant AC items. " +
+      "Built-in keyword mapping: tsc→type checking AC, tests→unit test AC, lint→code style AC, build→build AC. " +
+      "If no matching AC exists, autoAppend=true (default) will create new AC items. " +
+      "If all gates pass and autoTransitionToReview=true, task status automatically moves to 'review'. " +
+      "RECOMMENDED: call this in your CI pipeline after each build run.",
+    parameters: Type.Object({
+      taskId: Type.String({ description: "[REQUIRED] Task ID" }),
+      gates: Type.Array(
+        Type.Object({
+          gateName: Type.String({ description: "Gate name: tsc | tests | lint | build | coverage | e2e | custom" }),
+          passed: Type.Boolean({ description: "Whether the gate passed" }),
+          detail: Type.Optional(Type.String({ description: "Result detail / error message" })),
+          matchCriterionKeywords: Type.Optional(Type.Array(Type.String(), { description: "Extra keywords to match against AC descriptions" })),
+        }),
+        { description: "List of CI gate results" },
+      ),
+      actor: Type.Optional(Type.String({ description: "Actor ID (default: \"ci\")" })),
+      autoAppend: Type.Optional(Type.Boolean({ description: "Auto-create AC items for unmatched gates (default true)" })),
+      autoTransitionToReview: Type.Optional(Type.Boolean({ description: "Move task to review when all gates pass (default false)" })),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const taskId = readStringParam(params, "taskId", { required: true });
+      const gates = Array.isArray(params.gates) ? params.gates : [];
+      const actor = readStringParam(params, "actor") || "ci";
+      const autoAppend = typeof params.autoAppend === "boolean" ? params.autoAppend : true;
+      const autoTransitionToReview = typeof params.autoTransitionToReview === "boolean" ? params.autoTransitionToReview : false;
+      const gatewayOpts = readGatewayCallOptions(params);
+      if (gates.length === 0) {
+        return jsonResult({ success: false, error: "gates[] array is required and must not be empty" });
+      }
+      try {
+        const result = await callGatewayTool("task.quality_gate_update", gatewayOpts, {
+          taskId, gates, actor, autoAppend, autoTransitionToReview,
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to update quality gate: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * B0: task_triage_auto — Triage Intelligence
+ * 对标 Linear 2026 Triage Intelligence：基于标题/描述/类型自动评估建议优先级/标签
+ */
+export function createTaskTriageAutoTool(): AnyAgentTool {
+  return {
+    label: "Task Triage Auto",
+    name: "task_triage_auto",
+    description:
+      "Automatically assess task priority and suggest labels using keyword analysis (Triage Intelligence). " +
+      "Pass taskId to analyze an existing task, or pass title+description for a new task. " +
+      "Returns suggestedPriority, suggestedLabels, matchedKeywords, and rationale. " +
+      "RECOMMENDED: Run this on every new task before Sprint Planning to catch under-prioritized bugs/incidents. " +
+      "If priorityUpgraded=true, update task priority accordingly with task_update.",
+    parameters: Type.Object({
+      taskId: Type.Optional(Type.String({ description: "Existing task ID to analyze" })),
+      title: Type.Optional(Type.String({ description: "Task title (if not using taskId)" })),
+      description: Type.Optional(Type.String({ description: "Task description" })),
+      type: Type.Optional(Type.String({ description: "Task type (bugfix/feature/etc.)" })),
+      priority: Type.Optional(Type.String({ description: "Current priority for comparison" })),
+      tags: Type.Optional(Type.Array(Type.String())),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("task.triage", gatewayOpts, {
+          taskId: readStringParam(params, "taskId"),
+          title: readStringParam(params, "title"),
+          description: readStringParam(params, "description"),
+          type: readStringParam(params, "type"),
+          priority: readStringParam(params, "priority"),
+          tags: params.tags,
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to triage: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * B2: task_sla_check — SLA 违约检查
+ * 对标 Linear 2026 Issue SLA 追踪：urgent=4h/high=24h/medium=72h/low=168h
+ */
+export function createTaskSlaCheckTool(): AnyAgentTool {
+  return {
+    label: "Task SLA Check",
+    name: "task_sla_check",
+    description:
+      "Check which in-progress tasks have breached or are at-risk of breaching SLA (Service Level Agreement). " +
+      "SLA standards: urgent=4h, high=24h, medium=72h, low=168h since task started. " +
+      "Returns two lists: 'breached' (already overdue) and 'atRisk' (remaining time < 25%). " +
+      "RECOMMENDED: Run at the start of each session to catch SLA violations early. " +
+      "Take immediate action on 'urgent' breached tasks.",
+    parameters: Type.Object({
+      projectId: Type.Optional(Type.String({ description: "Filter by project ID" })),
+      assigneeId: Type.Optional(Type.String({ description: "Filter by assignee agent ID" })),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("task.sla.check", gatewayOpts, {
+          projectId: readStringParam(params, "projectId"),
+          assigneeId: readStringParam(params, "assigneeId"),
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to check SLA: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * B4: task_template_upsert — 创建/更新任务模板
+ * 对标 Linear 2026 Issue Templates
+ */
+export function createTaskTemplateUpsertTool(): AnyAgentTool {
+  return {
+    label: "Task Template Upsert",
+    name: "task_template_upsert",
+    description:
+      "Create or update a reusable task template. Templates pre-fill common fields (description, type, priority, tags, storyPoints, acceptanceCriteria). " +
+      "Best practice: create templates for recurring task types like 'Bug Report', 'Feature Implementation', 'Code Review', 'Documentation Update'. " +
+      "Use task_template_apply to apply a template when creating new tasks.",
+    parameters: Type.Object({
+      name: Type.String({ description: "[REQUIRED] Template name" }),
+      id: Type.Optional(Type.String({ description: "Template ID (auto-generated if omitted)" })),
+      description: Type.Optional(Type.String({ description: "Template description" })),
+      useCases: Type.Optional(Type.String({ description: "When to use this template" })),
+      fields: Type.Object({
+        title: Type.Optional(Type.String()),
+        description: Type.Optional(Type.String()),
+        type: Type.Optional(Type.String()),
+        priority: Type.Optional(Type.String()),
+        level: Type.Optional(Type.String()),
+        tags: Type.Optional(Type.Array(Type.String())),
+        estimatedHours: Type.Optional(Type.Number()),
+        storyPoints: Type.Optional(Type.Number()),
+        acceptanceCriteria: Type.Optional(Type.Array(Type.String())),
+      }, { description: "Fields to pre-fill when template is applied" }),
+      createdBy: Type.Optional(Type.String()),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("task.template.upsert", gatewayOpts, {
+          id: readStringParam(params, "id"),
+          name: readStringParam(params, "name"),
+          description: readStringParam(params, "description"),
+          useCases: readStringParam(params, "useCases"),
+          fields: params.fields,
+          createdBy: readStringParam(params, "createdBy"),
+          workspaceRoot: readStringParam(params, "workspaceRoot"),
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to upsert template: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * B4: task_template_list — 列出任务模板
+ */
+export function createTaskTemplateListTool(): AnyAgentTool {
+  return {
+    label: "Task Template List",
+    name: "task_template_list",
+    description:
+      "List all available task templates, sorted by usage frequency. " +
+      "Use this before creating a task to find applicable templates. " +
+      "Filter by keyword to find templates for specific scenarios.",
+    parameters: Type.Object({
+      keyword: Type.Optional(Type.String({ description: "Filter keyword" })),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("task.template.list", gatewayOpts, {
+          keyword: readStringParam(params, "keyword"),
+          workspaceRoot: readStringParam(params, "workspaceRoot"),
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to list templates: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
+/**
+ * B4: task_template_apply — 应用任务模板
+ * 返回合并后的字段，直接传入 task_create
+ */
+export function createTaskTemplateApplyTool(): AnyAgentTool {
+  return {
+    label: "Task Template Apply",
+    name: "task_template_apply",
+    description:
+      "Apply a task template to get pre-filled fields for task creation. " +
+      "Returns mergedFields that can be directly used as parameters for task_create. " +
+      "Pass overrides to customize specific fields while keeping template defaults. " +
+      "Workflow: task_template_list -> task_template_apply -> task_create(mergedFields).",
+    parameters: Type.Object({
+      templateId: Type.String({ description: "[REQUIRED] Template ID from task_template_list" }),
+      overrides: Type.Optional(Type.Object({
+        title: Type.Optional(Type.String()),
+        description: Type.Optional(Type.String()),
+        type: Type.Optional(Type.String()),
+        priority: Type.Optional(Type.String()),
+        tags: Type.Optional(Type.Array(Type.String())),
+        acceptanceCriteria: Type.Optional(Type.Array(Type.String())),
+        storyPoints: Type.Optional(Type.Number()),
+      }, { description: "Override specific fields from the template" })),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const gatewayOpts = readGatewayCallOptions(params);
+      try {
+        const result = await callGatewayTool("task.template.apply", gatewayOpts, {
+          templateId: readStringParam(params, "templateId"),
+          overrides: params.overrides,
+          workspaceRoot: readStringParam(params, "workspaceRoot"),
+        });
+        return jsonResult({ success: true, ...((result as Record<string, unknown>) ?? {}) });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Failed to apply template: ${error instanceof Error ? error.message : String(error)}` });
       }
     },
   };

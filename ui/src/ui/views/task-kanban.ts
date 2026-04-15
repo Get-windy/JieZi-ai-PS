@@ -15,6 +15,54 @@ import { html, nothing, type TemplateResult } from "lit";
 // 类型定义
 // ============================================================================
 
+// 任务详情面板 Tab
+export type TaskDetailTab = "info" | "comments" | "attachments" | "worklogs" | "trace";
+
+// 链路回放 - 任务审计事件
+export type TaskTraceAuditEvent = {
+  id: string;
+  type: string;
+  actor: string;
+  timestamp: number;
+  changes?: Array<{ field: string; from: unknown; to: unknown }>;
+  statusTransition?: { from: string; to: string };
+  context?: Record<string, unknown>;
+};
+
+// 链路回放 - 工具链调用记录
+export type TaskTraceToolRecord = {
+  id: string;
+  timestamp: number;
+  runId: string;
+  toolCallId: string;
+  toolName: string;
+  phase: string;
+  args?: Record<string, unknown>;
+  output?: unknown;
+  durationMs?: number;
+  isError?: boolean;
+  validationError?: { code: string; message: string; retryHint?: string };
+  retryAttempt?: number;
+  maxRetries?: number;
+};
+
+// 链路回放 - 统计摘要
+export type TaskTraceSummary = {
+  auditEventCount: number;
+  toolCallCount: number;
+  toolErrorCount: number;
+  validationFailCount: number;
+  retryCount: number;
+};
+
+// 链路回放 - 完整数据
+export type TaskTraceData = {
+  taskId: string;
+  taskAuditEvents: TaskTraceAuditEvent[];
+  toolChainRecords: TaskTraceToolRecord[];
+  summary: TaskTraceSummary;
+};
+
 export type TaskKanbanProps = {
   loading: boolean;
   error: string | null;
@@ -38,6 +86,12 @@ export type TaskKanbanProps = {
   taskComments: TaskComment[];
   taskAttachments: TaskAttachment[];
   taskWorkLogs: TaskWorkLog[];
+  // 链路回放
+  taskTrace: TaskTraceData | null;
+  taskTraceLoading: boolean;
+  taskTraceTab: TaskDetailTab;
+  onLoadTrace: (taskId: string) => void;
+  onSelectDetailTab: (tab: TaskDetailTab) => void;
   
   // 任务创建
   createDialogOpen: boolean;
@@ -182,7 +236,6 @@ export type TaskWorkLog = {
 export type TaskFilters = {
   keyword?: string;
   status?: TaskStatus[];
-  priority?: TaskPriority[];
   assigneeId?: string;
   creatorId?: string;
   tags?: string[];
@@ -589,6 +642,15 @@ function renderTaskDetailPanel(props: TaskKanbanProps) {
   if (!props.selectedTask) return nothing;
 
   const task = props.selectedTask;
+  const tab = props.taskTraceTab ?? "info";
+
+  const tabs: Array<{ key: TaskDetailTab; label: string }> = [
+    { key: "info",        label: "📋 信息" },
+    { key: "comments",   label: "💬 评论" },
+    { key: "attachments",label: "📎 附件" },
+    { key: "worklogs",   label: "🤖 工作日志" },
+    { key: "trace",      label: "🔍 链路回放" },
+  ];
 
   return html`
     <div
@@ -597,7 +659,7 @@ function renderTaskDetailPanel(props: TaskKanbanProps) {
         position: fixed;
         top: 0;
         right: 0;
-        width: 600px;
+        width: 640px;
         height: 100vh;
         background: var(--bg);
         box-shadow: -4px 0 16px rgba(0,0,0,0.1);
@@ -608,42 +670,49 @@ function renderTaskDetailPanel(props: TaskKanbanProps) {
       "
     >
       <!-- 头部 -->
-      <div style="padding: 16px; border-bottom: 1px solid var(--border);">
+      <div style="padding: 12px 16px; border-bottom: 1px solid var(--border);">
         <div class="row" style="justify-content: space-between; align-items: center;">
-          <span style="font-weight: 600; font-size: 1.1rem;">任务详情</span>
+          <span style="font-weight: 600; font-size: 1.05rem; max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${task.title}
+          </span>
           <button
             class="btn btn--sm"
-            style="padding: 4px 8px;"
+            style="padding: 4px 8px; flex-shrink: 0;"
             @click=${props.onCloseDetailPanel}
           >
             ✕
           </button>
         </div>
+        <!-- Tab 切换栏 -->
+        <div class="row" style="gap: 4px; margin-top: 10px; flex-wrap: wrap;">
+          ${tabs.map(t => html`
+            <button
+              class="btn btn--sm ${tab === t.key ? 'btn--primary' : ''}"
+              style="padding: 4px 10px; font-size: 0.82rem;"
+              @click=${() => {
+                if (t.key === "trace" && !props.taskTrace && !props.taskTraceLoading) {
+                  props.onLoadTrace(task.id);
+                }
+                props.onSelectDetailTab(t.key);
+              }}
+            >
+              ${t.label}
+            </button>
+          `)}
+        </div>
       </div>
       
       <!-- 内容区（可滚动） -->
       <div style="flex: 1; overflow-y: auto; padding: 16px;">
-        <!-- 基本信息 -->
-        ${renderTaskBasicInfo(task, props)}
-        
-        <!-- 执行者 -->
-        ${renderTaskAssignees(task, props)}
-        
-        <!-- 描述 -->
-        ${renderTaskDescription(task, props)}
-        
-        <!-- 评论区 -->
-        ${renderTaskComments(props)}
-        
-        <!-- 附件 -->
-        ${renderTaskAttachments(props)}
-        
-        <!-- 工作日志（智能助手专用） -->
-        ${renderTaskWorkLogs(props)}
+        ${tab === "info"        ? html`${renderTaskBasicInfo(task, props)}${renderTaskAssignees(task, props)}${renderTaskDescription(task, props)}` : nothing}
+        ${tab === "comments"    ? renderTaskComments(props)    : nothing}
+        ${tab === "attachments" ? renderTaskAttachments(props) : nothing}
+        ${tab === "worklogs"    ? renderTaskWorkLogs(props)    : nothing}
+        ${tab === "trace"       ? renderTaskTracePanel(props)  : nothing}
       </div>
       
       <!-- 底部操作栏 -->
-      <div style="padding: 16px; border-top: 1px solid var(--border); background: var(--bg-secondary);">
+      <div style="padding: 12px 16px; border-top: 1px solid var(--border); background: var(--bg-secondary);">
         <div class="row" style="gap: 8px; justify-content: flex-end;">
           <button
             class="btn btn--sm"
@@ -675,6 +744,257 @@ function renderTaskDetailPanel(props: TaskKanbanProps) {
       @click=${props.onCloseDetailPanel}
     ></div>
   `;
+}
+
+// ============================================================================
+// 链路回放面板
+// ============================================================================
+
+function renderTaskTracePanel(props: TaskKanbanProps) {
+  if (props.taskTraceLoading) {
+    return html`
+      <div style="padding: 48px; text-align: center;">
+        <div class="spinner"></div>
+        <div style="margin-top: 12px; color: var(--text-muted);">正在加载链路数据...</div>
+      </div>
+    `;
+  }
+
+  if (!props.taskTrace) {
+    return html`
+      <div style="padding: 48px; text-align: center; color: var(--text-muted);">
+        <div style="font-size: 2rem; margin-bottom: 12px;">🔍</div>
+        <div style="margin-bottom: 16px;">暂无链路数据</div>
+        <button
+          class="btn btn--sm btn--primary"
+          @click=${() => props.selectedTask && props.onLoadTrace(props.selectedTask.id)}
+        >
+          加载链路回放
+        </button>
+      </div>
+    `;
+  }
+
+  const trace = props.taskTrace;
+  const s = trace.summary;
+
+  return html`
+    <!-- 统计摘要卡片 -->
+    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 16px;">
+      ${renderTraceStat("📞", "工具调用", s.toolCallCount, "var(--primary)")}
+      ${renderTraceStat("❌", "调用错误", s.toolErrorCount, "#f44336")}
+      ${renderTraceStat("⚠️", "验证失败", s.validationFailCount, "#ff9800")}
+      ${renderTraceStat("🔄", "重试次数", s.retryCount, "#9c27b0")}
+      ${renderTraceStat("📋", "审计事件", s.auditEventCount, "#4caf50")}
+    </div>
+
+    <!-- 任务审计事件时间线 -->
+    ${trace.taskAuditEvents.length > 0 ? html`
+      <div class="card" style="padding: 16px; margin-bottom: 16px;">
+        <div style="font-weight: 600; margin-bottom: 12px;">📋 任务审计事件</div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          ${trace.taskAuditEvents.map(ev => renderAuditEvent(ev))}
+        </div>
+      </div>
+    ` : nothing}
+
+    <!-- 工具链调用时间线 -->
+    ${trace.toolChainRecords.length > 0 ? html`
+      <div class="card" style="padding: 16px;">
+        <div style="font-weight: 600; margin-bottom: 12px;">🔗 工具链调用时间线</div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          ${trace.toolChainRecords.map(rec => renderToolRecord(rec))}
+        </div>
+      </div>
+    ` : html`
+      <div class="card" style="padding: 32px; text-align: center; color: var(--text-muted);">
+        该任务周期内无工具调用记录
+      </div>
+    `}
+  `;
+}
+
+function renderTraceStat(icon: string, label: string, value: number, color: string) {
+  return html`
+    <div style="
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      text-align: center;
+      background: var(--bg-secondary);
+    ">
+      <div style="font-size: 1.2rem;">${icon}</div>
+      <div style="font-size: 1.4rem; font-weight: 700; color: ${color};">${value}</div>
+      <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">${label}</div>
+    </div>
+  `;
+}
+
+function renderAuditEvent(ev: TaskTraceAuditEvent) {
+  return html`
+    <div style="
+      display: flex;
+      gap: 10px;
+      padding: 8px;
+      border-radius: 6px;
+      border-left: 3px solid var(--primary);
+      background: var(--bg-secondary);
+    ">
+      <!-- 时间点 -->
+      <div style="font-size: 0.78rem; color: var(--text-muted); min-width: 80px; padding-top: 2px;">
+        ${formatTraceTime(ev.timestamp)}
+      </div>
+      <!-- 内容 -->
+      <div style="flex: 1; min-width: 0;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span style="font-weight: 500; font-size: 0.88rem;">${ev.type}</span>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">by ${ev.actor}</span>
+          ${ev.statusTransition
+            ? html`
+                <span class="badge" style="background: #e3f2fd; color: #1565c0; font-size: 0.75rem;">
+                  ${ev.statusTransition.from} → ${ev.statusTransition.to}
+                </span>
+              `
+            : nothing}
+        </div>
+        ${ev.changes && ev.changes.length > 0
+          ? html`
+              <div style="margin-top: 4px;">
+                ${ev.changes.map(ch => html`
+                  <div style="font-size: 0.8rem; color: var(--text-muted);">
+                    <code style="font-size: 0.75rem;">${ch.field}</code>:
+                    <span style="text-decoration: line-through; color: #e57373;">${JSON.stringify(ch.from)}</span>
+                    →
+                    <span style="color: #66bb6a;">${JSON.stringify(ch.to)}</span>
+                  </div>
+                `)}
+              </div>
+            `
+          : nothing}
+      </div>
+    </div>
+  `;
+}
+
+function renderToolRecord(rec: TaskTraceToolRecord) {
+  const phaseIcon = getToolPhaseIcon(rec.phase);
+  const statusColor = rec.isError ? "#f44336" : rec.phase === "output" ? "#4caf50" : "var(--text-muted)";
+  const borderColor = rec.isError ? "#f44336" : rec.phase === "output" ? "#4caf50" : rec.phase === "validation-fail" ? "#ff9800" : "var(--border)";
+
+  return html`
+    <details style="
+      border-radius: 6px;
+      border: 1px solid ${borderColor};
+      background: var(--bg-secondary);
+      overflow: hidden;
+    ">
+      <summary style="
+        padding: 8px 12px;
+        cursor: pointer;
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        user-select: none;
+      ">
+        <!-- Phase 图标 -->
+        <span style="font-size: 1rem;">${phaseIcon}</span>
+        <!-- 工具名 -->
+        <span style="font-weight: 500; font-size: 0.88rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          ${rec.toolName}
+        </span>
+        <!-- Phase 标签 -->
+        <span style="
+          font-size: 0.72rem;
+          padding: 2px 6px;
+          border-radius: 10px;
+          background: ${borderColor}20;
+          color: ${statusColor};
+        ">${rec.phase}</span>
+        <!-- 耗时 -->
+        ${rec.durationMs !== undefined
+          ? html`<span style="font-size: 0.78rem; color: var(--text-muted);">${rec.durationMs}ms</span>`
+          : nothing}
+        <!-- 重试标记 -->
+        ${rec.retryAttempt
+          ? html`<span class="badge" style="background: #ede7f6; color: #6a1b9a; font-size: 0.72rem;">重试 ${rec.retryAttempt}/${rec.maxRetries}</span>`
+          : nothing}
+        <!-- 时间 -->
+        <span style="font-size: 0.75rem; color: var(--text-muted); flex-shrink: 0;">${formatTraceTime(rec.timestamp)}</span>
+      </summary>
+
+      <!-- 展开详情 -->
+      <div style="padding: 10px 12px; border-top: 1px solid var(--border); font-size: 0.82rem;">
+        <div style="margin-bottom: 4px; color: var(--text-muted); font-size: 0.75rem;">
+          run: <code>${rec.runId}</code> &nbsp; call: <code>${rec.toolCallId}</code>
+        </div>
+        ${rec.args
+          ? html`
+              <div style="margin-bottom: 8px;">
+                <div style="font-weight: 500; margin-bottom: 4px;">入参 (args)</div>
+                <pre style="
+                  background: var(--bg);
+                  padding: 8px;
+                  border-radius: 4px;
+                  overflow-x: auto;
+                  font-size: 0.75rem;
+                  margin: 0;
+                  max-height: 180px;
+                ">${JSON.stringify(rec.args, null, 2)}</pre>
+              </div>
+            `
+          : nothing}
+        ${rec.output !== undefined
+          ? html`
+              <div style="margin-bottom: 8px;">
+                <div style="font-weight: 500; margin-bottom: 4px;">输出 (output)</div>
+                <pre style="
+                  background: var(--bg);
+                  padding: 8px;
+                  border-radius: 4px;
+                  overflow-x: auto;
+                  font-size: 0.75rem;
+                  margin: 0;
+                  max-height: 180px;
+                ">${JSON.stringify(rec.output, null, 2)}</pre>
+              </div>
+            `
+          : nothing}
+        ${rec.validationError
+          ? html`
+              <div style="padding: 8px; border-radius: 4px; background: #ffebee; color: #c62828;">
+                <div style="font-weight: 500; margin-bottom: 2px;">验证失败 [${rec.validationError.code}]</div>
+                <div>${rec.validationError.message}</div>
+                ${rec.validationError.retryHint
+                  ? html`<div style="margin-top: 4px; font-size: 0.8rem; color: #e57373;">💡 ${rec.validationError.retryHint}</div>`
+                  : nothing}
+              </div>
+            `
+          : nothing}
+      </div>
+    </details>
+  `;
+}
+
+function getToolPhaseIcon(phase: string): string {
+  const icons: Record<string, string> = {
+    "start":             "▶️",
+    "output":            "✅",
+    "error":             "❌",
+    "validation-pass":   "✔️",
+    "validation-fail":   "⚠️",
+    "retry-scheduled":   "🔄",
+    "retry-exhausted":   "🚫",
+    "deterministic-start": "⚙️",
+    "deterministic-end":   "🏁",
+  };
+  return icons[phase] ?? "🔧";
+}
+
+function formatTraceTime(timestamp: number): string {
+  const d = new Date(timestamp);
+  return d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    + `.${String(d.getMilliseconds()).padStart(3, "0")}`;
 }
 
 function renderTaskBasicInfo(task: TaskDetail, props: TaskKanbanProps) {

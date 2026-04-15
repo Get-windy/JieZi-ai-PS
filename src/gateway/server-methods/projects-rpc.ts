@@ -601,6 +601,255 @@ export const projectsHandlers: GatewayRequestHandlers = {
   },
 
   /**
+   * Sprint 回顾报告
+   *
+   * 基于 Sprint 数据自动生成结构化 Retrospective 报告：
+   * - 速度差距分析（实际 vs 预期）
+   * - 逾期/被 block/验收失败任务统计
+   * - 写入 sprint.retrospective 字段
+   * - 提供「下次 Planning」注入建议
+   *
+   * 对标业界实践：Scrum Retrospective（4L: Liked/Learned/Lacked/Longed For）
+   */
+  "projects.sprintRetrospective": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      const sprintId = params?.sprintId ? String(params.sprintId) : "";
+
+      if (!projectId || !sprintId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "projectId and sprintId are required"),
+        );
+        return;
+      }
+
+      const { buildProjectContext, readProjectConfig } =
+        await import("../../utils/project-context.js");
+      const path = await import("path");
+      const fs = await import("fs");
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+      const configPath = path.join(ctx.workspacePath, "PROJECT_CONFIG.json");
+
+      const existing = readProjectConfig(ctx.workspacePath);
+      if (!existing) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Project config not found for "${projectId}"`),
+        );
+        return;
+      }
+
+      const sprints = existing.sprints ?? existing.milestones ?? [];
+      const sprint = sprints.find(
+        (s: import("../../utils/project-context.js").ProjectSprint) => s.id === sprintId,
+      );
+      if (!sprint) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Sprint "${sprintId}" not found`),
+        );
+        return;
+      }
+
+      const tasks = sprint.tasks ?? [];
+      const now = Date.now();
+
+      // ── 统计各类任务 ──
+      const doneTasks = tasks.filter(
+        (t: import("../../utils/project-context.js").ProjectTask) => t.status === "done",
+      );
+      const cancelledTasks = tasks.filter(
+        (t: import("../../utils/project-context.js").ProjectTask) => t.status === "cancelled",
+      );
+      const unfinishedTasks = tasks.filter(
+        (t: import("../../utils/project-context.js").ProjectTask) =>
+          t.status !== "done" && t.status !== "cancelled",
+      );
+      const blockedTasks = tasks.filter(
+        (t: import("../../utils/project-context.js").ProjectTask) =>
+          t.isBlocked === true ||
+          (t as Record<string, unknown>).blockedReason != null,
+      );
+
+      // ── 验收标准未全满足的任务 ──
+      const failedAcceptanceTasks = tasks.filter(
+        (t: import("../../utils/project-context.js").ProjectTask) => {
+          const criteria = (t as Record<string, unknown>).acceptanceCriteria;
+          if (!Array.isArray(criteria) || criteria.length === 0) return false;
+          return criteria.some(
+            (c: Record<string, unknown>) => !c.satisfied,
+          );
+        },
+      );
+
+      // ── 逾期任务（有 dueDate 且未在 dueDate 前完成，或仍未完成） ──
+      const overdueTasks = tasks.filter(
+        (t: import("../../utils/project-context.js").ProjectTask) => {
+          if (!t.dueDate) return false;
+          if (t.status === "cancelled") return false;
+          const completedAt = (t as Record<string, unknown>).completedAt as number | undefined;
+          if (t.status === "done" && completedAt != null) {
+            return completedAt > t.dueDate; // 完成了但晚于截止日
+          }
+          return Date.now() > t.dueDate; // 还未完成且已过截止日
+        },
+      );
+
+      // ── Velocity 分析 ──
+      const plannedPoints = tasks
+        .filter(
+          (t: import("../../utils/project-context.js").ProjectTask) => t.status !== "cancelled",
+        )
+        .reduce(
+          (sum: number, t: import("../../utils/project-context.js").ProjectTask) =>
+            sum + (t.storyPoints ?? 1),
+          0,
+        );
+      const actualVelocity = sprint.velocity ?? doneTasks.reduce(
+        (sum: number, t: import("../../utils/project-context.js").ProjectTask) =>
+          sum + (t.storyPoints ?? 1),
+        0,
+      );
+      const velocityGap = plannedPoints - actualVelocity;
+      const completionRate = plannedPoints === 0
+        ? 100
+        : Math.round((actualVelocity / plannedPoints) * 100);
+
+      // ── Sprint 持续时间 ──
+      const sprintDays = sprint.startDate && sprint.completedAt
+        ? Math.round((sprint.completedAt - sprint.startDate) / 86_400_000)
+        : sprint.startDate && sprint.endDate
+          ? Math.round((sprint.endDate - sprint.startDate) / 86_400_000)
+          : null;
+
+      // ── 生成回顾报告文本（4L 框架） ──
+      const lines: string[] = [
+        `## Sprint Retrospective — ${sprint.title}`,
+        `**日期**: ${new Date(now).toLocaleDateString("zh-CN")}`,
+        `**持续时间**: ${sprintDays != null ? sprintDays + " 天" : "未知"}`,
+        "",
+        "### 📊 交付数据",
+        `- 完成任务: ${doneTasks.length}/${tasks.length - cancelledTasks.length}（取消: ${cancelledTasks.length}）`,
+        `- 速度: ${actualVelocity} SP / 计划 ${plannedPoints} SP（完成率 ${completionRate}%）`,
+        velocityGap > 0
+          ? `- ⚠️ 速度缺口: ${velocityGap} SP 未交付`
+          : `- ✅ 速度达成${velocityGap < 0 ? `（超出 ${-velocityGap} SP）` : "（100% 完成）"}`,
+        "",
+      ];
+
+      // 风险事件
+      if (blockedTasks.length > 0) {
+        lines.push("### 🚧 阻塞问题");
+        for (const t of blockedTasks.slice(0, 5)) {
+          const reason = (t as Record<string, unknown>).blockedReason as string | undefined;
+          lines.push(`- ${t.title}${reason ? `: ${reason}` : ""}`);
+        }
+        if (blockedTasks.length > 5) lines.push(`- ...还有 ${blockedTasks.length - 5} 个`);
+        lines.push("");
+      }
+
+      if (overdueTasks.length > 0) {
+        lines.push("### ⏰ 逾期任务");
+        for (const t of overdueTasks.slice(0, 5)) {
+          lines.push(`- ${t.title}`);
+        }
+        if (overdueTasks.length > 5) lines.push(`- ...还有 ${overdueTasks.length - 5} 个`);
+        lines.push("");
+      }
+
+      if (failedAcceptanceTasks.length > 0) {
+        lines.push("### ❌ 验收未完全通过");
+        for (const t of failedAcceptanceTasks.slice(0, 5)) {
+          lines.push(`- ${t.title}`);
+        }
+        lines.push("");
+      }
+
+      if (unfinishedTasks.length > 0) {
+        lines.push("### 📦 未完成任务（已移至 Backlog）");
+        for (const t of unfinishedTasks.slice(0, 5)) {
+          lines.push(`- ${t.title}（${t.status}）`);
+        }
+        if (unfinishedTasks.length > 5) lines.push(`- ...还有 ${unfinishedTasks.length - 5} 个`);
+        lines.push("");
+      }
+
+      // 下次 Planning 建议
+      const planningNotes: string[] = [];
+      if (velocityGap > 0) {
+        const suggestedSP = Math.round(actualVelocity * 0.9); // 保守估算：下次用 90% 实际速度
+        planningNotes.push(`根据本次实际速度，建议下次 Sprint 规划 ≤${suggestedSP} SP`);
+      }
+      if (blockedTasks.length > 0) {
+        planningNotes.push(`需在下次 Planning 前解除 ${blockedTasks.length} 个阻塞任务`);
+      }
+      if (failedAcceptanceTasks.length > 0) {
+        planningNotes.push(`${failedAcceptanceTasks.length} 个任务验收标准未满足，建议优先放入下次 Sprint`);
+      }
+      if (planningNotes.length > 0) {
+        lines.push("### 💡 下次 Planning 建议");
+        for (const note of planningNotes) {
+          lines.push(`- ${note}`);
+        }
+      }
+
+      const retrospectiveText = lines.join("\n");
+
+      // ── 写入 sprint.retrospective ──
+      const sprintIdx = sprints.findIndex(
+        (s: import("../../utils/project-context.js").ProjectSprint) => s.id === sprintId,
+      );
+      if (sprintIdx >= 0) {
+        sprints[sprintIdx] = { ...sprints[sprintIdx], retrospective: retrospectiveText };
+        if (existing.sprints) existing.sprints = sprints;
+        else existing.milestones = sprints;
+        existing.progressUpdatedAt = now;
+
+        if (!fs.existsSync(ctx.workspacePath)) {
+          fs.mkdirSync(ctx.workspacePath, { recursive: true });
+        }
+        fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+      }
+
+      respond(
+        true,
+        {
+          success: true,
+          projectId,
+          sprintId,
+          retrospective: retrospectiveText,
+          stats: {
+            totalTasks: tasks.length,
+            doneTasks: doneTasks.length,
+            cancelledTasks: cancelledTasks.length,
+            unfinishedTasks: unfinishedTasks.length,
+            blockedTasks: blockedTasks.length,
+            overdueTasks: overdueTasks.length,
+            failedAcceptanceTasks: failedAcceptanceTasks.length,
+            plannedPoints,
+            actualVelocity,
+            velocityGap,
+            completionRate,
+          },
+          planningNotes,
+        },
+        undefined,
+      );
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to generate sprint retrospective: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
    * 完成 Sprint
    *
    * 将指定 Sprint 标记为已完成：
@@ -884,6 +1133,50 @@ export const projectsHandlers: GatewayRequestHandlers = {
       }
 
       const now = Date.now();
+
+      // Sprint Capacity 检查：比较已分配 SP 与容量上限
+      const sprintData = sprints[sprintIdx] as Record<string, unknown>;
+      const capacityPoints = sprintData["capacityPoints"] as number | undefined;
+      const assignedSP = ((sprints[sprintIdx].tasks ?? []) as Array<Record<string, unknown>>)
+        .reduce((sum, t) => sum + (Number(t.storyPoints) || 1), 0);
+      const capacityWarning = capacityPoints && assignedSP > capacityPoints
+        ? "[CAPACITY WARNING] Sprint 已分配 " + assignedSP + " SP 超过容量上限 " + capacityPoints + " SP，建议进行范围缩减再启动。"
+        : undefined;
+
+      // Definition of Ready (DoR) 门禁 — Sprint Planning 最佳实践
+      // 对标 SAFe PI Planning 和 Linear Sprint Planning 检查清单
+      // DoR 三项必备检查：(1) 描述 >= 10字 (2) 验收标准 (3) 故事点估算
+      const sprintTaskIds = ((sprints[sprintIdx].tasks ?? []) as Array<Record<string, unknown>>)
+        .map((t) => String(t.id ?? t.taskId ?? "")).filter(Boolean);
+      const dorNotReadyTasks: Array<{ taskId: string; title?: string; missing: string[] }> = [];
+      if (sprintTaskIds.length > 0) {
+        try {
+          const { listTasks } = await import("../../tasks/storage.js");
+          const sprintTasks = await listTasks({ projectId, limit: 500 });
+          const sprintTaskMap = new Map(
+            sprintTasks.filter((t) => sprintTaskIds.includes(t.id)).map((t) => [t.id, t]),
+          );
+          for (const tid of sprintTaskIds) {
+            const t = sprintTaskMap.get(tid);
+            if (!t) continue;
+            const missing: string[] = [];
+            if (!t.description || t.description.trim().length < 10) missing.push("description(<10chars)");
+            const ac = (t as Record<string, unknown>).acceptanceCriteria as unknown[] | undefined;
+            if (!ac || ac.length === 0) missing.push("acceptanceCriteria(not-set)");
+            const sp = (t as Record<string, unknown>).storyPoints as number | undefined;
+            if (sp == null || sp <= 0) missing.push("storyPoints(not-estimated)");
+            if (missing.length > 0) dorNotReadyTasks.push({ taskId: tid, title: t.title, missing });
+          }
+        } catch {
+          // DoR 检查失败不阻塞 Sprint 启动
+        }
+      }
+      const dorWarning = dorNotReadyTasks.length > 0
+        ? `[DoR WARNING] ${dorNotReadyTasks.length}/${sprintTaskIds.length} tasks not ready for Sprint. Suggest completing definition before starting: ${
+            dorNotReadyTasks.slice(0, 3).map((t) => `"${t.title ?? t.taskId}"(${t.missing.join(",")})`).join("; ")
+          }${dorNotReadyTasks.length > 3 ? " ..." : ""}`
+        : undefined;
+
       sprints[sprintIdx] = {
         ...sprints[sprintIdx],
         status: "active" as import("../../utils/project-context.js").SprintStatus,
@@ -907,7 +1200,19 @@ export const projectsHandlers: GatewayRequestHandlers = {
       }
       fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
 
-      respond(true, { success: true, projectId, sprintId, config: existing }, undefined);
+      respond(true, {
+        success: true,
+        projectId,
+        sprintId,
+        config: existing,
+        capacityCheck: capacityPoints
+          ? { capacityPoints, assignedSP, isOverloaded: assignedSP > capacityPoints, utilizationPct: Math.round((assignedSP / capacityPoints) * 100) }
+          : undefined,
+        ...(capacityWarning ? { capacityWarning } : {}),
+        ...(dorWarning ? { dorWarning, dorNotReadyTasks } : {}),
+        warnings: [capacityWarning, dorWarning].filter(Boolean),
+        tip: capacityWarning ?? dorWarning ?? "Sprint 已启动。团队成员应优先处理 Sprint 内任务，完成后调用 projects.completeSprint 完结本轮迭代。",
+      }, undefined);
     } catch (error) {
       respond(
         false,
@@ -1353,7 +1658,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
 
       const existing = ctx.config ?? ({ projectId, workspacePath: ctx.workspacePath } as import("../../utils/project-context.js").ProjectConfig);
 
-      if (!existing.objectives) existing.objectives = [];
+      if (!existing.objectives) {existing.objectives = [];}
 
       const now = Date.now();
       const title = params?.title ? String(params.title) : "";
@@ -1366,10 +1671,10 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const existingIdx = existing.objectives.findIndex((o) => o.id === objectiveId);
 
       const timeframe = ["short", "medium", "long"].includes(String(params?.timeframe))
-        ? (String(params!.timeframe) as import("../../utils/project-context.js").ProjectObjective["timeframe"])
+        ? (String(params.timeframe) as import("../../utils/project-context.js").ProjectObjective["timeframe"])
         : ("medium" as const);
       const status = ["not-started", "in-progress", "achieved", "missed", "deferred"].includes(String(params?.status))
-        ? (String(params!.status) as import("../../utils/project-context.js").ProjectObjective["status"])
+        ? (String(params.status) as import("../../utils/project-context.js").ProjectObjective["status"])
         : ("not-started" as const);
 
       const objective: import("../../utils/project-context.js").ProjectObjective = {
@@ -1481,7 +1786,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const configPath = `${ctx.workspacePath}/PROJECT_CONFIG.json`;
       const existing = ctx.config ?? ({ projectId, workspacePath: ctx.workspacePath } as import("../../utils/project-context.js").ProjectConfig);
 
-      if (!existing.timelineMilestones) existing.timelineMilestones = [];
+      if (!existing.timelineMilestones) {existing.timelineMilestones = [];}
 
       const now = Date.now();
       const title = params?.title ? String(params.title) : "";
@@ -1495,8 +1800,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
 
       const validTypes = ["release", "phase", "checkpoint", "deliverable", "other"];
       const validStatuses = ["upcoming", "in-progress", "completed", "missed", "cancelled"];
-      const msType = validTypes.includes(String(params?.type)) ? String(params!.type) as import("../../utils/project-context.js").ProjectMilestoneEntry["type"] : "phase" as const;
-      const msStatus = validStatuses.includes(String(params?.status)) ? String(params!.status) as import("../../utils/project-context.js").ProjectMilestoneEntry["status"] : "upcoming" as const;
+      const msType = validTypes.includes(String(params?.type)) ? String(params.type) as import("../../utils/project-context.js").ProjectMilestoneEntry["type"] : "phase" as const;
+      const msStatus = validStatuses.includes(String(params?.status)) ? String(params.status) as import("../../utils/project-context.js").ProjectMilestoneEntry["status"] : "upcoming" as const;
 
       const milestone: import("../../utils/project-context.js").ProjectMilestoneEntry = {
         ...(existingIdx >= 0 ? existing.timelineMilestones[existingIdx] : {}),
@@ -1616,7 +1921,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const existing = readProjectConfig(ctx.workspacePath) ?? { projectId, workspacePath: ctx.workspacePath };
 
       // 初始化 sprints 数组
-      if (!existing.sprints) existing.sprints = existing.milestones ?? [];
+      if (!existing.sprints) {existing.sprints = existing.milestones ?? [];}
 
       const now = Date.now();
       const sprintId = params?.id ? String(params.id) : `sprint_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -1652,8 +1957,12 @@ export const projectsHandlers: GatewayRequestHandlers = {
       // 将 objectiveId / milestoneId 存入配置的扩展字段
       // （ProjectSprint 无这两个字段，通过 JSON 宽松存储）
       const sprintWithMeta = sprint as Record<string, unknown>;
-      if (params?.objectiveId) sprintWithMeta["objectiveId"] = String(params.objectiveId);
-      if (params?.milestoneId) sprintWithMeta["milestoneId"] = String(params.milestoneId);
+      if (params?.objectiveId) {sprintWithMeta["objectiveId"] = String(params.objectiveId);}
+      if (params?.milestoneId) {sprintWithMeta["milestoneId"] = String(params.milestoneId);}
+      // Sprint Capacity 容量（业界标准：Jira/Linear 在规划时设置团队可承载的故事点上限）
+      if (params?.capacityPoints !== undefined) {
+        sprintWithMeta["capacityPoints"] = Number(params.capacityPoints);
+      }
 
       if (existingIdx >= 0) {
         existing.sprints[existingIdx] = sprintWithMeta as import("../../utils/project-context.js").ProjectSprint;
@@ -1665,7 +1974,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
       existing.milestones = existing.sprints;
       existing.progressUpdatedAt = now;
 
-      if (!fs.existsSync(ctx.workspacePath)) fs.mkdirSync(ctx.workspacePath, { recursive: true });
+      if (!fs.existsSync(ctx.workspacePath)) {fs.mkdirSync(ctx.workspacePath, { recursive: true });}
       fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
 
       respond(true, {
@@ -1673,9 +1982,12 @@ export const projectsHandlers: GatewayRequestHandlers = {
         projectId,
         sprint: sprintWithMeta,
         action: existingIdx >= 0 ? "updated" : "created",
+        capacityCheck: sprintWithMeta["capacityPoints"]
+          ? { capacityPoints: sprintWithMeta["capacityPoints"], note: "\u5bb9\u91cf\u5df2\u8bbe\u7f6e\uff0c\u542f\u52a8 Sprint \u65f6\u4f1a\u81ea\u52a8\u68c0\u67e5\u5df2\u5206\u914d SP \u662f\u5426\u8d85\u8fc7\u5bb9\u91cf\u3002" }
+          : { note: "\u5efa\u8bae\u901a\u8fc7 capacityPoints \u8bbe\u7f6e\u56e2\u961f\u6548\u8083\uff0c\u9632\u6b62 Sprint \u8fc7\u8f7d\uff08\u53c2\u8003\u5386\u53f2 velocity \u8bbe\u4e3a capacityPoints \u5373\u53ef\uff09\u3002" },
         tip: sprint.goal
-          ? `Sprint "${title}" 已${existingIdx >= 0 ? "更新" : "创建"}。用 projects.sprint.addTask 向 Sprint 加入任务，准备好后调用 projects.startSprint 启动。`
-          : `⚠️ 建议为 Sprint 设置 goal（Sprint目标），让团队清晰知道本轮迭代要达成什么。`,
+          ? "Sprint \"" + title + "\" \u5df2" + (existingIdx >= 0 ? "\u66f4\u65b0" : "\u521b\u5efa") + "\u3002\u7528 projects.sprint.addTask \u5411 Sprint \u52a0\u5165\u4efb\u52a1\uff0c\u51c6\u5907\u597d\u540e\u8c03\u7528 projects.startSprint \u542f\u52a8\u3002"
+          : "\u26a0\ufe0f \u5efa\u8bae\u4e3a Sprint \u8bbe\u7f6e goal\uff08Sprint\u76ee\u6807\uff09\uff0c\u8ba9\u56e2\u961f\u6e05\u6670\u77e5\u9053\u672c\u8f6e\u8fed\u4ee3\u8981\u8fbe\u6210\u4ec0\u4e48\u3002",
       }, undefined);
     } catch (error) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to upsert sprint: ${String(error)}`));
@@ -1786,7 +2098,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const { calcProjectProgress } = await import("../../utils/project-context.js");
       existing.progress = calcProjectProgress(sprints);
 
-      if (!fs.existsSync(ctx.workspacePath)) fs.mkdirSync(ctx.workspacePath, { recursive: true });
+      if (!fs.existsSync(ctx.workspacePath)) {fs.mkdirSync(ctx.workspacePath, { recursive: true });}
       fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
 
       const updatedSprint = sprints[sprintIdx];
@@ -1914,4 +2226,540 @@ export const projectsHandlers: GatewayRequestHandlers = {
       );
     }
   },
+
+  /**
+   * projects.sprintBurndown — Sprint 逐日进度快照（Burndown 数据）
+   *
+   * 返回 Sprint 期间每日的剩余故事点 vs 理想燃尽线。
+   * 业界标准（Jira/GitHub Projects）：每日生成一个进度数据点，供趋势分析。
+   */
+  "projects.sprintBurndown": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      const sprintId = params?.sprintId ? String(params.sprintId) : "";
+      if (!projectId || !sprintId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId and sprintId are required"));
+        return;
+      }
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const { buildProjectContext } = await import("../../utils/project-context.js");
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+      const config = ctx.config;
+      if (!config) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Project config not found"));
+        return;
+      }
+      // 查找目标 Sprint
+      const sprints = config.sprints ?? config.milestones ?? [];
+      type SprintLike = Record<string, unknown>;
+      const sprint = sprints.find((s: SprintLike) => s.id === sprintId || s.name === sprintId) as SprintLike | undefined;
+      if (!sprint) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Sprint not found: " + sprintId));
+        return;
+      }
+      // 获取 Sprint 任务列表
+      const { listTasks } = await import("../../tasks/storage.js");
+      const sprintTaskIds = (sprint.tasks as SprintLike[] ?? []).map((t: SprintLike) => String(t.id ?? t.taskId ?? "")).filter(Boolean);
+      const allProjectTasks = await listTasks({ projectId, limit: 2000 });
+      const sprintTasks = allProjectTasks.filter((t) => sprintTaskIds.includes(t.id));
+      // 计算 Sprint 时间范围
+      const sprintStart = Number(sprint.startDate ?? sprint.createdAt ?? Date.now());
+      const sprintEnd = Number(sprint.endDate ?? sprint.dueDate ?? (sprintStart + 14 * 24 * 3600 * 1000));
+      const totalSP = sprintTasks.reduce((sum, t) => sum + ((t as Record<string, unknown>).storyPoints as number ?? 1), 0);
+      // 生成逐日燃尽数据点
+      const dayMs = 24 * 60 * 60 * 1000;
+      const totalDays = Math.max(1, Math.round((sprintEnd - sprintStart) / dayMs));
+      const dataPoints: Array<{ date: string; remainingSP: number; idealSP: number; completedTasks: number }> = [];
+      for (let day = 0; day <= totalDays; day++) {
+        const dayTs = sprintStart + day * dayMs;
+        const completedByDay = sprintTasks.filter(
+          (t) => t.completedAt && t.completedAt <= dayTs,
+        );
+        const completedSP = completedByDay.reduce(
+          (sum, t) => sum + ((t as Record<string, unknown>).storyPoints as number ?? 1),
+          0,
+        );
+        const remainingSP = Math.max(0, totalSP - completedSP);
+        const idealSP = Math.max(0, Math.round(totalSP * (1 - day / totalDays) * 10) / 10);
+        dataPoints.push({
+          date: new Date(dayTs).toISOString().split("T")[0],
+          remainingSP,
+          idealSP,
+          completedTasks: completedByDay.length,
+        });
+      }
+      // 当前状态
+      const today = Date.now();
+      const currentDayIdx = Math.min(totalDays, Math.max(0, Math.round((today - sprintStart) / dayMs)));
+      const currentPoint = dataPoints[currentDayIdx];
+      const isOnTrack = currentPoint ? currentPoint.remainingSP <= currentPoint.idealSP : null;
+      respond(true, {
+        projectId,
+        sprintId,
+        sprintName: String(sprint.name ?? sprintId),
+        sprintStart: new Date(sprintStart).toISOString(),
+        sprintEnd: new Date(sprintEnd).toISOString(),
+        totalStoryPoints: totalSP,
+        totalTasks: sprintTasks.length,
+        dataPoints,
+        currentProgress: currentPoint,
+        isOnTrack,
+        trend: isOnTrack === null ? "数据不足" : isOnTrack ? "🟢 进度正常" : "🔴 当前滞后于理想进度，需加速",
+      }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to get sprint burndown: " + String(error)));
+    }
+  },
+
+  /**
+   * projects.portfolioHealth — 多项目汇总健康看板
+   *
+   * 跨项目汇总各项目的健康状态，一眼看全局。
+   * 返回每个项目的：overallHealth、创建任务数、完成率、超期任务数、OKR完成率。
+   */
+  "projects.portfolioHealth": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const projectIds = Array.isArray(params?.projectIds)
+        ? (params.projectIds as string[])
+        : undefined;
+      const { listAvailableProjects, buildProjectContext } = await import("../../utils/project-context.js");
+      const allProjectIds = projectIds ?? listAvailableProjects(workspaceRoot);
+      const { listTasks } = await import("../../tasks/storage.js");
+      const now = Date.now();
+      const results = await Promise.allSettled(
+        allProjectIds.map(async (pid) => {
+          const ctx = buildProjectContext(pid, workspaceRoot);
+          const tasks = await listTasks({ projectId: pid, limit: 2000 });
+          const activeTasks = tasks.filter((t) => t.status !== "done" && t.status !== "cancelled");
+          const doneTasks = tasks.filter((t) => t.status === "done");
+          const overdueTasks = activeTasks.filter((t) => t.dueDate && t.dueDate < now);
+          const blockedTasks = activeTasks.filter((t) => t.status === "blocked");
+          const completionRate = tasks.length > 0 ? Math.round((doneTasks.length / tasks.length) * 100) : 0;
+          const techDebtCount = activeTasks.filter((t) =>
+            (t.tags ?? []).some((tag) => ["tech-debt", "technical-debt", "技术债"].includes(tag)),
+          ).length;
+          // OKR 完成率
+          let okrAvgProgress: number | undefined;
+          try {
+            const { loadOkrStore, calcOkrProgress } = await import("../../tasks/okr-manager.js");
+            const store = loadOkrStore(ctx.workspacePath);
+            const objectives = store?.objectives ?? [];
+            if (objectives.length > 0) {
+              const taskStats = new Map();
+              for (const t of doneTasks) {
+                const oid = (t as Record<string, unknown>).objectiveId as string | undefined;
+                if (!oid) continue;
+                const stat = taskStats.get(oid) ?? { total: 0, completed: 0 };
+                stat.total++; stat.completed++;
+                taskStats.set(oid, stat);
+              }
+              const progress = calcOkrProgress(objectives, taskStats);
+              const allProgress = Object.values(progress).map((p) => (p as Record<string, unknown>).completionRate as number ?? 0);
+              okrAvgProgress = allProgress.length > 0 ? Math.round(allProgress.reduce((a, b) => a + b, 0) / allProgress.length) : undefined;
+            }
+          } catch { /* OKR 模块可能未初始化 */ }
+          // 健康状态评判
+          const issues: string[] = [];
+          if (overdueTasks.length > 0) issues.push("超期 " + overdueTasks.length + " 个");
+          if (blockedTasks.length > 0) issues.push("阻塞 " + blockedTasks.length + " 个");
+          if (techDebtCount > activeTasks.length * 0.2) issues.push("技术债 " + techDebtCount + " 个");
+          const overallHealth = issues.length === 0 ? "🟢 健康" : issues.length <= 1 ? "🟡 需关注" : "🔴 需干预";
+          return {
+            projectId: pid,
+            projectName: ctx.config?.name ?? pid,
+            status: ctx.config?.status ?? "unknown",
+            overallHealth,
+            issues,
+            stats: {
+              total: tasks.length,
+              active: activeTasks.length,
+              done: doneTasks.length,
+              overdue: overdueTasks.length,
+              blocked: blockedTasks.length,
+              techDebt: techDebtCount,
+              completionRate: completionRate + "%",
+            },
+            okrAvgProgress: okrAvgProgress !== undefined ? okrAvgProgress + "%" : undefined,
+          };
+        }),
+      );
+      const projects = results
+        .map((r, i) => r.status === "fulfilled" ? r.value : { projectId: allProjectIds[i], error: String((r as PromiseRejectedResult).reason) })
+        .filter(Boolean);
+      const healthCounts = { green: 0, yellow: 0, red: 0 };
+      for (const p of projects) {
+        const h = String((p as Record<string, unknown>).overallHealth ?? "");
+        if (h.includes("🟢")) healthCounts.green++;
+        else if (h.includes("🟡")) healthCounts.yellow++;
+        else if (h.includes("🔴")) healthCounts.red++;
+      }
+      respond(true, {
+        totalProjects: projects.length,
+        healthSummary: healthCounts,
+        overallPortfolioHealth: healthCounts.red > 0 ? "🔴 多项目异常" : healthCounts.yellow > 0 ? "🟡 部分项目需关注" : "🟢 整体健康",
+        projects,
+        generatedAt: new Date(now).toISOString(),
+      }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to get portfolio health: " + String(error)));
+    }
+  },
+
+  // ──────────────────────────────────────────────────────────────────
+  // Initiative 战略主题管理 RPC（对标 Linear 2025 Initiatives）
+  // ──────────────────────────────────────────────────────────────────
+
+  /**
+   * projects.initiative.upsert — 创建或更新 Initiative
+   *
+   * 战略主题是层次最高层：Initiative > Project > Sprint/Epic > Task
+   * 对标 Linear Initiatives、SAFe Portfolio Epic
+   */
+  "projects.initiative.upsert": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const { upsertInitiative } = await import("../../tasks/initiative-manager.js");
+      const initiative = upsertInitiative(root, {
+        id: params?.id ? String(params.id) : undefined,
+        title: params?.title ? String(params.title) : "",
+        description: params?.description ? String(params.description) : undefined,
+        health: (params?.health ? String(params.health) : "on-track") as import("../../tasks/initiative-manager.js").InitiativeHealth,
+        ownerId: params?.ownerId ? String(params.ownerId) : undefined,
+        projectIds: Array.isArray(params?.projectIds) ? params.projectIds.map(String) : [],
+        targetDate: params?.targetDate ? Number(params.targetDate) : undefined,
+        objectiveId: params?.objectiveId ? String(params.objectiveId) : undefined,
+        priority: ([1, 2, 3, 4].includes(Number(params?.priority)) ? Number(params.priority) : undefined) as 1 | 2 | 3 | 4 | undefined,
+        tags: Array.isArray(params?.tags) ? params.tags.map(String) : undefined,
+        createdBy: params?.createdBy ? String(params.createdBy) : "system",
+      });
+      if (!initiative.title) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "title is required"));
+        return;
+      }
+      respond(true, { success: true, initiative }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to upsert initiative: " + String(error)));
+    }
+  },
+
+  /**
+   * projects.initiative.list — 列出所有 Initiative 及其健康状态摘要
+   */
+  "projects.initiative.list": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const { listInitiatives, calcInitiativeHealthSummary } = await import("../../tasks/initiative-manager.js");
+      const filter = {
+        health: params?.health ? String(params.health) as import("../../tasks/initiative-manager.js").InitiativeHealth : undefined,
+        ownerId: params?.ownerId ? String(params.ownerId) : undefined,
+        objectiveId: params?.objectiveId ? String(params.objectiveId) : undefined,
+        projectId: params?.projectId ? String(params.projectId) : undefined,
+      };
+      const initiatives = listInitiatives(root, filter);
+      const summary = calcInitiativeHealthSummary(initiatives);
+      respond(true, {
+        initiatives,
+        total: initiatives.length,
+        healthSummary: summary,
+      }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to list initiatives: " + String(error)));
+    }
+  },
+
+  /**
+   * projects.initiative.get — 获取单个 Initiative 详情
+   */
+  "projects.initiative.get": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const id = params?.id ? String(params.id) : "";
+      if (!id) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
+        return;
+      }
+      const { getInitiative } = await import("../../tasks/initiative-manager.js");
+      const initiative = getInitiative(root, id);
+      if (!initiative) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Initiative not found: " + id));
+        return;
+      }
+      respond(true, { initiative }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to get initiative: " + String(error)));
+    }
+  },
+
+  /**
+   * projects.initiative.delete — 删除 Initiative
+   */
+  "projects.initiative.delete": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const id = params?.id ? String(params.id) : "";
+      if (!id) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
+        return;
+      }
+      const { deleteInitiative } = await import("../../tasks/initiative-manager.js");
+      const deleted = deleteInitiative(root, id);
+      respond(true, { success: deleted, id, message: deleted ? `Initiative ${id} deleted` : `Initiative ${id} not found` }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to delete initiative: " + String(error)));
+    }
+  },
+
+  /**
+   * projects.initiative.addProject — 将项目关联到 Initiative
+   */
+  "projects.initiative.addProject": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const initiativeId = params?.initiativeId ? String(params.initiativeId) : "";
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!initiativeId || !projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "initiativeId and projectId are required"));
+        return;
+      }
+      const { linkProjectToInitiative } = await import("../../tasks/initiative-manager.js");
+      const initiative = linkProjectToInitiative(root, initiativeId, projectId);
+      if (!initiative) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Initiative not found: " + initiativeId));
+        return;
+      }
+      respond(true, { success: true, initiative }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to add project to initiative: " + String(error)));
+    }
+  },
+
+  /**
+   * projects.initiative.removeProject — 从 Initiative 移除项目关联
+   */
+  "projects.initiative.removeProject": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const initiativeId = params?.initiativeId ? String(params.initiativeId) : "";
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!initiativeId || !projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "initiativeId and projectId are required"));
+        return;
+      }
+      const { unlinkProjectFromInitiative } = await import("../../tasks/initiative-manager.js");
+      const initiative = unlinkProjectFromInitiative(root, initiativeId, projectId);
+      if (!initiative) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Initiative not found: " + initiativeId));
+        return;
+      }
+      respond(true, { success: true, initiative }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to remove project from initiative: " + String(error)));
+    }
+  },
+
+  /**
+   * projects.initiative.addUpdate — 向 Initiative 添加进展更新
+   * 对标 Linear 2025 initiative updates（append-only 更新历史）
+   */
+  "projects.initiative.addUpdate": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const initiativeId = params?.initiativeId ? String(params.initiativeId) : "";
+      const content = params?.content ? String(params.content) : "";
+      const health = (params?.health ? String(params.health) : "on-track") as import("../../tasks/initiative-manager.js").InitiativeHealth;
+      const authorId = params?.authorId ? String(params.authorId) : "system";
+      if (!initiativeId || !content) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "initiativeId and content are required"));
+        return;
+      }
+      const { addInitiativeUpdate } = await import("../../tasks/initiative-manager.js");
+      const update = addInitiativeUpdate(root, initiativeId, { content, health, authorId });
+      if (!update) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Initiative not found: " + initiativeId));
+        return;
+      }
+      respond(true, { success: true, update, initiativeId }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to add initiative update: " + String(error)));
+    }
+  },
+
+  // =========================================================================
+  // B3: Velocity Trend — 多Sprint 速度趋势分析（对标 Linear Sprint 分析面板）
+  // =========================================================================
+  "projects.velocityTrend": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      const limitSprints = params?.limit ? Number(params.limit) : 5; // 默认最近 5 个 Sprint
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      if (!projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
+        return;
+      }
+
+      const { buildProjectContext, readProjectConfig } = await import("../../utils/project-context.js");
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+      const config = readProjectConfig(ctx.workspacePath);
+      if (!config) {
+        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Project config not found for "${projectId}"`));
+        return;
+      }
+
+      // 收集已完成的 Sprint（从 sprints 或 milestones 中过滤）
+      const allSprints = (config.sprints ?? config.milestones ?? []) as Array<Record<string, unknown>>;
+      const completedSprints = allSprints
+        .filter((s) => s["status"] === "completed" || s["completedAt"])
+        .sort((a, b) => Number(b["completedAt"] ?? 0) - Number(a["completedAt"] ?? 0))
+        .slice(0, limitSprints)
+        .reverse();
+
+      if (completedSprints.length === 0) {
+        respond(true, {
+          projectId,
+          sprints: [],
+          velocityTrend: [],
+          avgVelocity: 0,
+          predictedNextVelocity: 0,
+          tip: "No completed sprints found. Velocity trend requires at least 1 completed sprint.",
+        }, undefined);
+        return;
+      }
+
+      // 计算每个 Sprint 的速度（完成任务的 storyPoints 之和）
+      const { listTasks } = await import("../../tasks/storage.js");
+      const velocityTrend: Array<{ sprintId: string; sprintName: string; completedSP: number; completedTasks: number; completedAt: number }> = [];
+
+      for (const sprint of completedSprints) {
+        const sprintId = String(sprint["id"] ?? sprint["sprintId"] ?? "");
+        const sprintName = String(sprint["name"] ?? sprint["title"] ?? sprintId);
+        const completedAt = Number(sprint["completedAt"] ?? 0);
+        const startedAt = Number(sprint["startDate"] ?? sprint["startedAt"] ?? 0);
+
+        // 查询在此 Sprint 期间完成的任务
+        const sprintTasks = await listTasks({
+          projectId,
+          status: "done",
+          limit: 1000,
+        });
+
+        // 过滤在 sprint 时间段内完成的任务
+        const inSprintTasks = sprintTasks.filter((t) => {
+          const completedAtT = (t as Record<string, unknown>).completedAt as number | undefined;
+          if (!completedAtT) return false;
+          if (startedAt && completedAtT < startedAt) return false;
+          if (completedAt && completedAtT > completedAt) return false;
+          return true;
+        });
+
+        const completedSP = inSprintTasks.reduce((sum, t) => sum + (Number((t as Record<string, unknown>).storyPoints) || 1), 0);
+        velocityTrend.push({ sprintId, sprintName, completedSP, completedTasks: inSprintTasks.length, completedAt });
+      }
+
+      const avgVelocity = velocityTrend.length > 0
+        ? Math.round(velocityTrend.reduce((s, v) => s + v.completedSP, 0) / velocityTrend.length * 10) / 10
+        : 0;
+
+      // 简单线性预测（加权移动平均，最近两个 Sprint 权重更高）
+      let predictedNextVelocity = avgVelocity;
+      if (velocityTrend.length >= 2) {
+        const last = velocityTrend[velocityTrend.length - 1].completedSP;
+        const prev = velocityTrend[velocityTrend.length - 2].completedSP;
+        predictedNextVelocity = Math.round((last * 0.6 + prev * 0.3 + avgVelocity * 0.1) * 10) / 10;
+      }
+
+      // 趋势方向判断
+      const trend = velocityTrend.length >= 2
+        ? velocityTrend[velocityTrend.length - 1].completedSP > velocityTrend[velocityTrend.length - 2].completedSP
+          ? "improving" : "declining"
+        : "stable";
+
+      respond(true, {
+        projectId,
+        sprintCount: velocityTrend.length,
+        velocityTrend,
+        avgVelocity,
+        predictedNextVelocity,
+        trend,
+        summary: `Velocity trend (last ${velocityTrend.length} sprints): avg=${avgVelocity} SP, predicted=${predictedNextVelocity} SP, trend=${trend}`,
+      }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to compute velocity trend: " + String(error)));
+    }
+  },
+
+  // =========================================================================
+  // B5: 项目健康更新到期检测 — 对标 Linear 2026 对已过期未更新项目发起提醒
+  // =========================================================================
+  "projects.checkHealthUpdateDue": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const thresholdDays = params?.thresholdDays ? Number(params.thresholdDays) : 7; // 默认 7 天未更新视为过期
+      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const fs = await import("fs");
+      const path = await import("path");
+      const { readProjectConfig } = await import("../../utils/project-context.js");
+
+      const now = Date.now();
+      void thresholdDays; // referenced below
+
+      // 扫描工作空间内所有项目目录
+      const overdue: Array<{ projectId: string; name?: string; lastHealthUpdateAt?: number; daysSinceUpdate: number }> = [];
+      let scannedCount = 0;
+
+      if (fs.existsSync(root)) {
+        const entries = fs.readdirSync(root, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const projectId = entry.name;
+          const configPath = path.join(root, projectId, "PROJECT_CONFIG.json");
+          if (!fs.existsSync(configPath)) continue;
+          const config = readProjectConfig(path.join(root, projectId));
+          if (!config) continue;
+          // 只检查 active 项目
+          const status = config.status ?? "active";
+          if (status === "completed" || status === "archived" || status === "cancelled") continue;
+          scannedCount++;
+
+          const lastHealthAt = (config as Record<string, unknown>).lastHealthUpdateAt as number | undefined
+            ?? (config as Record<string, unknown>).progressUpdatedAt as number | undefined;
+
+          const daysSince = lastHealthAt
+            ? Math.floor((now - lastHealthAt) / (24 * 60 * 60 * 1000))
+            : 999;
+
+          if (daysSince >= thresholdDays) {
+            overdue.push({
+              projectId,
+              name: config.name,
+              lastHealthUpdateAt: lastHealthAt,
+              daysSinceUpdate: daysSince,
+            });
+          }
+        }
+      }
+
+      overdue.sort((a, b) => b.daysSinceUpdate - a.daysSinceUpdate);
+
+      respond(true, {
+        thresholdDays,
+        scannedCount,
+        overdueCount: overdue.length,
+        overdue,
+        summary: overdue.length > 0
+          ? `[HEALTH UPDATE OVERDUE] ${overdue.length}/${scannedCount} active projects have not posted a health update in >${thresholdDays} days: ${overdue.slice(0, 3).map((p) => `"${p.name ?? p.projectId}"(${p.daysSinceUpdate}d)`).join(", ")}${overdue.length > 3 ? " ..." : ""}`
+          : `All ${scannedCount} active projects are up to date (within ${thresholdDays} days).`,
+      }, undefined);
+    } catch (error) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to check health update due: " + String(error)));
+    }
+  },
 };
+

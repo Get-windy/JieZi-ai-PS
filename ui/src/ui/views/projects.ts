@@ -946,7 +946,7 @@ function renderDeleteProjectConfirmModal(props: ProjectsProps, project: ProjectI
     <div style="
       position:fixed; inset:0; z-index:1000;
       background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;
-    " @click=${(e: Event) => { if (e.target === e.currentTarget) props.onHideDeleteProjectConfirm(); }}>
+    " @click=${(e: Event) => { if (e.target === e.currentTarget) {props.onHideDeleteProjectConfirm();} }}>
       <div style="
         background:var(--surface, #fff); border-radius:12px; padding:28px 32px;
         min-width:380px; max-width:480px; box-shadow:0 8px 32px rgba(0,0,0,0.18);
@@ -2411,7 +2411,7 @@ function renderProjectRoadmap(props: ProjectsProps, project: ProjectInfo) {
         ${
           milestones.length === 0
             ? html`<div class="callout" style="font-size: 13px;">\u6682\u65E0\u91CC\u7A0B\u7891\uFF0C\u5728\u4E0B\u65B9\u6DFB\u52A0\u7B2C\u4E00\u4E2A\u91CC\u7A0B\u7891</div>`
-            : [...milestones].sort((a, b) => (a.targetDate ?? Infinity) - (b.targetDate ?? Infinity)).map((ms) => {
+            : [...milestones].toSorted((a, b) => (a.targetDate ?? Infinity) - (b.targetDate ?? Infinity)).map((ms) => {
                 const isPast = ms.status === "completed" || ms.status === "missed" || ms.status === "cancelled";
                 const isOverdue = ms.targetDate != null && ms.targetDate < Date.now() && (ms.status === "upcoming" || ms.status === "in-progress");
                 return html`

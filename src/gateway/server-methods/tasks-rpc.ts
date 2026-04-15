@@ -27,6 +27,13 @@
 
 import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import {
+  getTaskTimeline,
+} from "../../tasks/audit-log.js";
+import {
+  getToolChainTrace,
+  listAuditFiles,
+} from "../../agents/tool-chain-audit.js";
 import { requestHeartbeatNow } from "../../../upstream/src/infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js";
 import type { MemberType } from "../../organization/types.js";
@@ -283,12 +290,19 @@ export const tasksRpc: GatewayRequestHandlers = {
 
       // 通知所有被分配者
       for (const assignee of assignees) {
-        // 这里应该调用通知系统发送任务分配通知
-        // 在实际环境中，集成WebSocket推送或邮件通知
         console.log(`[Task Notification] Assigned task ${taskId} to ${assignee.id}`);
       }
 
-      respond(true, newTask, undefined);
+      // Triage Intelligence — 对标 Linear 2026 Triage 功能
+      // 基于标题/描述关键词+类型自动评估建议优先级、标签，warn 不 block
+      let triageSuggestion: Record<string, unknown> | undefined;
+      try {
+        triageSuggestion = calcTriageSuggestion(title, description, type, normalizedPriority, tags);
+      } catch {
+        // triage 失败不阻塞创建
+      }
+
+      respond(true, { ...newTask, ...(triageSuggestion ? { triageSuggestion } : {}) }, undefined);
     } catch (err) {
       respond(
         false,
@@ -419,6 +433,11 @@ export const tasksRpc: GatewayRequestHandlers = {
         updatedTags = removeTags ? afterAdd.filter((t) => !removeTags.includes(t)) : afterAdd;
       }
 
+      // 处理 blockedBy 动态更新（增加前置依赖 / 解除阻塞）
+      const addBlockedBy = Array.isArray(params?.addBlockedBy) ? (params.addBlockedBy as string[]) : [];
+      const removeBlockedBy = Array.isArray(params?.removeBlockedBy) ? (params.removeBlockedBy as string[]) : [];
+      const setBlockedBy = Array.isArray(params?.blockedBy) ? (params.blockedBy as string[]) : undefined;
+
       // 更新任务信息
       const updatedTask = await storage.updateTask(taskId, {
         title,
@@ -431,11 +450,62 @@ export const tasksRpc: GatewayRequestHandlers = {
         projectId,
         teamId,
         organizationId,
+        // P1: blockedBy 动态更新（增加前置依赖 / 解除阻塞）
+        ...(addBlockedBy.length > 0 || removeBlockedBy.length > 0 ? {
+          blockedBy: removeBlockedBy.length > 0
+            ? [...new Set([...(task.blockedBy ?? []), ...addBlockedBy])].filter((id) => !removeBlockedBy.includes(id))
+            : [...new Set([...(task.blockedBy ?? []), ...addBlockedBy])],
+        } : {}),
+        ...(setBlockedBy !== undefined ? { blockedBy: setBlockedBy } : {}),
       });
+
+      // blockedBy 变化自动同步 status
+      const finalBlockedBy = (updatedTask as Record<string, unknown>).blockedBy as string[] | undefined;
+      if (finalBlockedBy !== undefined && finalBlockedBy.length === 0 && task.status === "blocked" && !normalizedStatus) {
+        await storage.updateTask(taskId, { status: "in-progress" });
+      } else if (finalBlockedBy && finalBlockedBy.length > 0 && task.status !== "blocked" && !normalizedStatus) {
+        await storage.updateTask(taskId, { status: "blocked" });
+      }
 
       respond(true, updatedTask, undefined);
 
-      // 状态变更通知主控（Task State Change Event）
+      // WIP Limit 警告（warn 不 block）—— 当状态设为 in-progress 时检查项目看板 WIP 限制
+      // 对标 Kanban Best Practices：WIP limit 是减少流动效率损失的核心手段
+      if (normalizedStatus === "in-progress") {
+        const wpId = projectId ?? task.projectId;
+        if (wpId) {
+          try {
+            const { buildProjectContext } = await import("../../utils/project-context.js");
+            const ctx = buildProjectContext(wpId);
+            const wipLimit = ctx.config?.wipLimit as number | undefined;
+            if (wipLimit && wipLimit > 0) {
+              const inProgressCount = (await storage.listTasks({ projectId: wpId, status: "in-progress", limit: 500 })).length;
+              if (inProgressCount > wipLimit) {
+                // 通知主控： WIP 超限
+                const supervisorRaw = task.supervisorId ?? task.creatorId;
+                if (supervisorRaw && supervisorRaw !== "system") {
+                  notifySupervisor(supervisorRaw,
+                    `[WIP LIMIT WARNING] \u9879\u76ee "${wpId}" \u770b\u677f\u8d85\u8fc7 WIP \u9650\u5236 (\u5f53\u524d: ${inProgressCount}, \u9650\u5236: ${wipLimit})\u3002\u5efa\u8bae\u5148\u5b8c\u6210\u8fdb\u884c\u4e2d\u7684\u4efb\u52a1\u518d\u5f00\u59cb\u65b0\u4efb\u52a1\uff0c\u907f\u514d\u4efb\u52a1\u5207\u6362\u5bfc\u81f4\u7684\u6548\u7387\u635f\u5931\u3002`,
+                    `wip-limit:${wpId}`);
+                }
+              }
+            }
+          } catch { /* WIP \u68c0\u67e5\u5931\u8d25\u4e0d\u963b\u585e\u4e3b\u6d41\u7a0b */ }
+        }
+      }
+      // B1: 子任务变为 blocked 时，向父任务主控发出 at-risk 警告
+      if (normalizedStatus === "blocked" && task.parentTaskId) {
+        try {
+          const parentTask = await storage.getTask(task.parentTaskId);
+          if (parentTask && parentTask.supervisorId && parentTask.supervisorId !== "system") {
+            notifySupervisor(parentTask.supervisorId,
+              `[PARENT AT-RISK] Subtask "${task.title}" (${taskId}) is now BLOCKED. Parent task "${parentTask.title}" may be at risk. Please resolve the blocker.`,
+              `parent-at-risk:${task.parentTaskId}`);
+          }
+        } catch {
+          // 父任务警告失败不阻塞主流程
+        }
+      }
       // 业界最佳实践：任何状态变化都通知项目负责人，使其能及时感知进展
       if (normalizedStatus && normalizedStatus !== task.status) {
         const statusEmoji: Record<string, string> = {
@@ -475,7 +545,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         // 通知执行人（assignees）
         const assigneeList = task.assignees ?? [];
         for (const assignee of assigneeList) {
-          if (!assignee.id || assignee.id === "system" || assignee.id === supervisorRaw) continue;
+          if (!assignee.id || assignee.id === "system" || assignee.id === supervisorRaw) {continue;}
           const assigneeMsg = [
             `[TASK STATE CHANGE] ${emoji} 你的任务状态已更新`,
             ``,
@@ -524,8 +594,8 @@ export const tasksRpc: GatewayRequestHandlers = {
 
       // 非状态字段变更通知（标题/优先级/截止时间被编辑）
       const fieldChanges: string[] = [];
-      if (title && title !== task.title) fieldChanges.push(`标题: ${task.title} → ${title}`);
-      if (priority && priority !== task.priority) fieldChanges.push(`优先级: ${task.priority} → ${priority}`);
+      if (title && title !== task.title) {fieldChanges.push(`标题: ${task.title} → ${title}`);}
+      if (priority && priority !== task.priority) {fieldChanges.push(`优先级: ${task.priority} → ${priority}`);}
       if (dueDate !== undefined && dueDate !== task.dueDate) {
         const dueDateStr = dueDate ? new Date(dueDate).toLocaleString("zh-CN") : "无";
         fieldChanges.push(`截止时间: → ${dueDateStr}`);
@@ -550,7 +620,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         }
         // 通知执行人
         for (const assignee of task.assignees ?? []) {
-          if (!assignee.id || assignee.id === "system" || assignee.id === supervisorRaw2) continue;
+          if (!assignee.id || assignee.id === "system" || assignee.id === supervisorRaw2) {continue;}
           notifyAssignee(assignee.id, fieldEditMsg, `task:field-edit:${taskId}`);
         }
       }
@@ -661,7 +731,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         }
         // 通知执行人
         for (const assignee of task.assignees ?? []) {
-          if (!assignee.id || assignee.id === "system" || assignee.id === supervisorRaw) continue;
+          if (!assignee.id || assignee.id === "system" || assignee.id === supervisorRaw) {continue;}
           notifyAssignee(assignee.id, deleteMsg, `task:deleted:${taskId}`);
         }
       }
@@ -1727,6 +1797,30 @@ export const tasksRpc: GatewayRequestHandlers = {
       storage.archiveOldTasks().catch((archErr) => {
         console.warn(`[task.complete] archiveOldTasks failed: ${String(archErr)}`);
       });
+
+      // === B1: 子任务状态汇聚 — 对标 Linear 2026 子问题进度卷积 ===
+      // 当所有子任务完成时，自动推进父任务进入 review 状态
+      const parentTaskIdForAgg = task.parentTaskId;
+      if (parentTaskIdForAgg) {
+        try {
+          const parentTask = await storage.getTask(parentTaskIdForAgg);
+          if (parentTask && parentTask.status !== "done" && parentTask.status !== "cancelled") {
+            const siblings = await storage.listTasks({ parentTaskId: parentTaskIdForAgg, limit: 200 });
+            const allDone = siblings.length > 0 && siblings.every((s) => s.id === taskId ? true : s.status === "done" || s.status === "cancelled");
+            if (allDone && parentTask.status !== "review") {
+              await storage.updateTask(parentTaskIdForAgg, { status: "review" as TaskStatus });
+              const parentSupervisor = parentTask.supervisorId ?? parentTask.creatorId;
+              if (parentSupervisor && parentSupervisor !== "system") {
+                notifySupervisor(parentSupervisor,
+                  `[PARENT TASK READY] All subtasks of "${parentTask.title}" are complete. Parent task moved to 'review'. Please verify and close if ready.`,
+                  `parent-review:${parentTaskIdForAgg}`);
+              }
+            }
+          }
+        } catch {
+          // 子任务汇聚失败不阻塞主流程
+        }
+      }
     } catch (err) {
       respond(
         false,
@@ -2145,7 +2239,7 @@ export const tasksRpc: GatewayRequestHandlers = {
 
       // 通知执行人任务被重置
       for (const assignee of task.assignees ?? []) {
-        if (!assignee.id || assignee.id === "system" || assignee.id === resetSupRaw) continue;
+        if (!assignee.id || assignee.id === "system" || assignee.id === resetSupRaw) {continue;}
         const assigneeResetMsg = [
           `[TASK RESET] 🔄 你的任务已被重置`,
           ``,
@@ -2174,4 +2268,945 @@ export const tasksRpc: GatewayRequestHandlers = {
       );
     }
   },
+
+  /**
+   * task.trace - 获取任务追踪数据（可观测性链路回放）
+   *
+   * 返回指定任务的完整聊天记录：
+   *   - taskAuditEvents: 任务字段变更/状态转换/分配变更武勇时间线（task-events.jsonl）
+   *   - toolChainRecords: 该任务关联 runId 的完整 prompt→toolcall→output→validation 审计链（tool-chain-YYYYMMDD.jsonl）
+   *
+   * 参数：
+   *   taskId   - 必填，任务 ID
+   *   runIds   - 可选，指定要回放的 runId 列表（不传则尝试匹配全部日期）
+   *   days     - 可选，检索最近 N 天的审计日志（默认 7 天）
+   */
+  "task.trace": async ({ params, respond }) => {
+    try {
+      const taskId = params?.taskId ? String(params.taskId) : "";
+      if (!taskId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, '"taskId" is required'),
+        );
+        return;
+      }
+
+      const runIdsRaw = Array.isArray(params?.runIds) ? (params.runIds as string[]) : [];
+      const runIds = runIdsRaw.map((r) => String(r)).filter(Boolean);
+      const days = typeof params?.days === "number" && params.days > 0 ? Math.min(params.days, 30) : 7;
+
+      // 1. 任务字段变更/状态转换时间线
+      const taskAuditEvents = await getTaskTimeline(taskId);
+
+      // 2. 工具链审计记录
+      //    策略：
+      //    a) 若调用方传入了 runIds，直接按 runId 查询
+      //    b) 否则扫描最近 days 天的所有审计文件，过滤属于该任务的记录
+      //    (通过 meta.taskId 或工作日志关联)
+      let toolChainRecords: unknown[] = [];
+
+      if (runIds.length > 0) {
+        // 直接按 runIds 查询
+        const allRecords = await Promise.all(runIds.map((runId) => getToolChainTrace(runId)));
+        toolChainRecords = allRecords.flat().sort(
+          (a, b) => (a as { timestamp: number }).timestamp - (b as { timestamp: number }).timestamp
+        );
+      } else {
+        // 扫描最近 N 天的所有审计文件
+        const allFiles = await listAuditFiles();
+        // 只取最近 days 天的文件
+        const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+        const recentFiles = allFiles.filter((f) => {
+          // 文件名格式: tool-chain-YYYYMMDD.jsonl
+          const m = /tool-chain-(\d{8})\.jsonl$/.exec(f);
+          if (!m) return false;
+          const dateStr = m[1]!;
+          const year = parseInt(dateStr.slice(0, 4), 10);
+          const month = parseInt(dateStr.slice(4, 6), 10) - 1;
+          const day = parseInt(dateStr.slice(6, 8), 10);
+          return new Date(year, month, day).getTime() >= cutoff;
+        });
+
+        // 读取这些文件中 meta.taskId 匹配的记录
+        const { readFile } = await import("fs/promises");
+        for (const filePath of recentFiles) {
+          try {
+            const content = await readFile(filePath, { encoding: "utf-8" });
+            for (const line of content.split("\n")) {
+              const trimmed = line.trim();
+              if (!trimmed) continue;
+              try {
+                const rec = JSON.parse(trimmed) as Record<string, unknown>;
+                if ((rec.meta as Record<string, unknown>)?.taskId === taskId) {
+                  toolChainRecords.push(rec);
+                }
+              } catch {
+                // 跳过损坏行
+              }
+            }
+          } catch {
+            // 文件不存在或无法读取
+          }
+        }
+        toolChainRecords.sort(
+          (a, b) => (a as { timestamp: number }).timestamp - (b as { timestamp: number }).timestamp
+        );
+      }
+
+      respond(true, {
+        taskId,
+        taskAuditEvents,
+        toolChainRecords,
+        summary: {
+          auditEventCount: taskAuditEvents.length,
+          toolCallCount: toolChainRecords.filter(
+            (r) => (r as { phase: string }).phase === "tool_start"
+          ).length,
+          toolErrorCount: toolChainRecords.filter(
+            (r) => (r as { phase: string }).phase === "tool_error"
+          ).length,
+          validationFailCount: toolChainRecords.filter(
+            (r) => (r as { phase: string }).phase === "validation_fail"
+          ).length,
+          retryCount: toolChainRecords.filter(
+            (r) => (r as { phase: string }).phase === "retry_scheduled"
+          ).length,
+        },
+      });
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to get task trace: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
+  /**
+   * tasks.flowMetrics — Flow 度量指标
+   *
+   * 计算 CycleTime / LeadTime / Throughput / FlowEfficiency / WIP
+   * 基于一批任务的完成时间数据聚合，对齐 DORA 2025 下一代交付指标。
+   *
+   * 参数:
+   * - projectId: 项目 ID（可选，用于过滤任务）
+   * - windowDays: 统计窗口天数（默认 30）
+   * - wipLimits: 各状态的 WIP 限制对象（可选）
+   */
+  "tasks.flowMetrics": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : undefined;
+      const windowDays = params?.windowDays ? Math.max(1, Number(params.windowDays)) : 30;
+      const wipLimits = params?.wipLimits as Record<string, number> | undefined;
+
+      const tasks = await storage.listTasks({
+        projectId,
+        limit: 5000,
+      });
+
+      const { calcFlowMetrics, formatFlowMetricsSummary } = await import("../../tasks/flow-metrics.js");
+
+      const now = Date.now();
+      const result = calcFlowMetrics(
+        tasks,
+        {
+          windowMs: {
+            from: now - windowDays * 86_400_000,
+            to: now,
+          },
+          wipLimits: wipLimits as Partial<Record<import("../../tasks/types.js").TaskStatus, number>> | undefined,
+        },
+      );
+
+      respond(true, {
+        ...result,
+        // Map 不可 JSON 序列化，转成 plain object
+        allNodes: undefined,
+        summary: formatFlowMetricsSummary(result),
+      }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to calc flow metrics: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
+  /**
+   * tasks.criticalPath — 关键路径分析
+   *
+   * 基于任务依赖关系图（dependencies 字段）做拓扑排序 + 最长路径计算（CPM）
+   * 识别浦动=0 的关键任务，辅助 coordinator 优先护马。
+   *
+   * 参数:
+   * - projectId: 项目 ID
+   * - includeCompleted: 是否包含已完成任务（默认 false）
+   * - hoursPerSP: 每个故事点对应小时数（默认 4）
+   */
+  "tasks.criticalPath": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : undefined;
+      const includeCompleted = params?.includeCompleted === true;
+      const hoursPerSP = params?.hoursPerSP ? Number(params.hoursPerSP) : 4;
+      const nearCriticalThresholdHours = params?.nearCriticalThresholdHours
+        ? Number(params.nearCriticalThresholdHours)
+        : 8;
+
+      const tasks = await storage.listTasks({
+        projectId,
+        limit: 2000,
+      });
+
+      const { calcCriticalPath, formatCriticalPathReport } = await import("../../tasks/critical-path.js");
+
+      const result = calcCriticalPath(tasks, {
+        includeCompleted,
+        hoursPerSP,
+        nearCriticalThresholdHours,
+      });
+
+      respond(true, {
+        hasCycle: result.hasCycle,
+        cycleTaskIds: result.cycleTaskIds,
+        projectDurationHours: result.projectDurationHours,
+        criticalTaskIds: result.criticalTaskIds,
+        nearCriticalTaskIds: result.nearCriticalTaskIds,
+        criticalPath: result.criticalPath,
+        summary: result.summary,
+        report: formatCriticalPathReport(result),
+      }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to calc critical path: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
+  /**
+   * tasks.health — 任务健康度评分
+   *
+   * 使用 calcBatchTaskHealth 计算一批任务的健康度，返回 green/yellow/red 三级与分数。
+   *
+   * 参数:
+   * - projectId: 项目 ID
+   * - taskIds: 指定任务 IDs（可选）
+   */
+  "tasks.health": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : undefined;
+      const taskIds = Array.isArray(params?.taskIds)
+        ? (params.taskIds as string[])
+        : undefined;
+
+      let tasks: import("../../tasks/types.js").Task[];
+      if (taskIds && taskIds.length > 0) {
+        const results = await Promise.all(
+          taskIds.map((id) => storage.getTask(id).catch(() => null)),
+        );
+        tasks = results.filter((t): t is import("../../tasks/types.js").Task => t !== null);
+      } else {
+        tasks = await storage.listTasks({
+          projectId,
+          limit: 1000,
+        });
+      }
+
+      const { calcBatchTaskHealth, summarizeHealthScores } = await import("../../tasks/task-health.js");
+      const scores = calcBatchTaskHealth(tasks);
+      const summary = summarizeHealthScores(scores);
+
+      // Map 转 plain object
+      const scoresObj: Record<string, unknown> = {};
+      for (const [id, score] of scores.entries()) {
+        scoresObj[id] = score;
+      }
+
+      respond(true, { summary, scores: scoresObj }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to calc task health: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
+  /**
+   * tasks.okr.upsert — 创建或更新 OKR Objective
+   *
+   * 完全实现 Objective + KeyResult 的 CRUD，补全 objectiveId/keyResultId 孤儿字段关联。
+   */
+  "tasks.okr.upsert": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
+        return;
+      }
+
+      const { buildProjectContext } = await import("../../utils/project-context.js");
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+
+      const { upsertObjective, upsertKeyResult } = await import("../../tasks/okr-manager.js");
+
+      const objectiveId = params?.id ? String(params.id) : undefined;
+      const title = params?.title ? String(params.title) : "";
+      const timeframe = (params?.timeframe as "short" | "medium" | "long") ?? "medium";
+
+      if (!title) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "title is required"));
+        return;
+      }
+
+      const objective = upsertObjective(ctx.workspacePath, projectId, {
+        id: objectiveId,
+        title,
+        description: params?.description ? String(params.description) : undefined,
+        timeframe,
+        targetDate: params?.targetDate ? Number(params.targetDate) : undefined,
+        parentObjectiveId: params?.parentObjectiveId ? String(params.parentObjectiveId) : undefined,
+      });
+
+      // 如果提供了 keyResult 一并创建
+      const krParams = params?.keyResult as Record<string, unknown> | undefined;
+      let keyResult: import("../../tasks/okr-manager.js").KeyResult | null = null;
+      if (krParams && typeof krParams.description === "string") {
+        keyResult = upsertKeyResult(ctx.workspacePath, projectId, objective.id, {
+          id: krParams.id ? String(krParams.id) : undefined,
+          description: krParams.description,
+          current: krParams.current != null ? Number(krParams.current) : undefined,
+          target: krParams.target != null ? Number(krParams.target) : undefined,
+          unit: krParams.unit ? String(krParams.unit) : undefined,
+          achieved: krParams.achieved === true,
+        });
+      }
+
+      respond(true, { success: true, objective, keyResult }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to upsert OKR objective: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
+  /**
+   * task.ac.verify — 逐条更新验收标准通过状态
+   *
+   * 业界实践（Linear/Notion）：每条 AC 独立可打勾，不需要全量重写整个数组。
+   * 支持两种模式：
+   *   1. 单条更新：传入 criterionId + passes
+   *   2. 批量更新：传入 updates 数组 [{criterionId, passes, note}]
+   */
+  "task.ac.verify": async ({ params, respond }) => {
+    try {
+      const taskId =
+        (params?.taskId ? String(params.taskId) : "") ||
+        (params?.id ? String(params.id) : "");
+      if (!taskId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId is required"));
+        return;
+      }
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Task not found"));
+        return;
+      }
+      const verifiedBy = params?.verifiedBy ? String(params.verifiedBy) : "system";
+      const now = Date.now();
+      type CriterionUpdate = { criterionId: string; passes: boolean; note?: string };
+      const updateMap = new Map<string, { passes: boolean; note?: string }>();
+      if (params?.criterionId) {
+        const criterionId = String(params.criterionId);
+        const passes = params?.passes === true || params?.passes === "true";
+        const note = params?.note ? String(params.note) : undefined;
+        updateMap.set(criterionId, { passes, note });
+      }
+      if (Array.isArray(params?.updates)) {
+        for (const u of params.updates as CriterionUpdate[]) {
+          if (u?.criterionId) {
+            updateMap.set(String(u.criterionId), {
+              passes: u.passes === true || (u.passes as unknown) === "true",
+              note: u.note ? String(u.note) : undefined,
+            });
+          }
+        }
+      }
+      if (updateMap.size === 0) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Provide either criterionId+passes (single) or updates[] (batch)"));
+        return;
+      }
+      type ACEntry = { id: string; description: string; passes: boolean; verifiedAt?: number; verifiedBy?: string; note?: string; createdAt?: number };
+      const existingCriteria = (task.acceptanceCriteria ?? []) as ACEntry[];
+      let updatedCount = 0;
+      const notFoundIds: string[] = [];
+      const newCriteria = existingCriteria.map((c) => {
+        const update = updateMap.get(c.id);
+        if (!update) return c;
+        updatedCount++;
+        return { ...c, passes: update.passes, verifiedAt: now, verifiedBy, ...(update.note ? { note: update.note } : {}) };
+      });
+      for (const cid of updateMap.keys()) {
+        if (!existingCriteria.some((c) => c.id === cid)) notFoundIds.push(cid);
+      }
+      await storage.updateTask(taskId, { acceptanceCriteria: newCriteria as Task["acceptanceCriteria"] });
+      const allPassed = newCriteria.length > 0 && newCriteria.every((c) => c.passes);
+      const passedCount = newCriteria.filter((c) => c.passes).length;
+      respond(true, {
+        taskId,
+        updatedCount,
+        notFoundIds,
+        acceptanceCriteria: newCriteria,
+        summary: passedCount + "/" + newCriteria.length + " 项验收标准已通过",
+        allPassed,
+        readyToComplete: allPassed,
+        ...(notFoundIds.length > 0 ? { warning: "以下 criterionId 不存在，已忽略：" + notFoundIds.join(", ") } : {}),
+      }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to verify AC: " + String(err instanceof Error ? err.message : err)));
+    }
+  },
+
+  /**
+   * task.search — 任务全文/关键词搜索
+   *
+   * 补全 TaskFilter.keyword 能力，支持标题/描述全文检索 + 多条件组合。
+   * 结果按相关度（标题匹配>tag匹配>描述匹配）降序排列。
+   */
+  "task.search": async ({ params, respond }) => {
+    try {
+      const keyword = params?.keyword ? String(params.keyword) : undefined;
+      const projectId = params?.projectId ? String(params.projectId) : undefined;
+      const status = params?.status ? (String(params.status) as TaskStatus) : undefined;
+      const assigneeId =
+        (params?.assigneeId ? String(params.assigneeId) : null) ||
+        (params?.assignee ? String(params.assignee) : undefined);
+      const tag = params?.tag ? String(params.tag) : undefined;
+      const level = params?.level ? String(params.level) : undefined;
+      const limit = params?.limit ? Math.min(Number(params.limit), 100) : 20;
+      if (!keyword && !projectId && !status && !assigneeId && !tag) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "At least one search condition is required"));
+        return;
+      }
+      const filter: Record<string, unknown> = { keyword, projectId, status, assigneeId, limit: Math.min(limit * 3, 500) };
+      if (tag) filter.tags = [tag];
+      if (level) filter.level = level;
+      const tasks = await storage.listTasks(filter);
+      let scoredTasks = tasks;
+      if (keyword) {
+        const kw = keyword.toLowerCase();
+        scoredTasks = tasks
+          .map((t) => ({
+            task: t,
+            score:
+              (t.title?.toLowerCase().includes(kw) ? 10 : 0) +
+              (t.description?.toLowerCase().includes(kw) ? 3 : 0) +
+              ((t.tags ?? []).some((tg) => tg.toLowerCase().includes(kw)) ? 5 : 0),
+          }))
+          .filter((s) => s.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .map((s) => s.task);
+      }
+      const resultTasks = scoredTasks.slice(0, limit);
+      respond(true, {
+        tasks: resultTasks,
+        total: scoredTasks.length,
+        keyword,
+        tip: scoredTasks.length > limit ? ("共找到 " + scoredTasks.length + " 条结果，当前显示前 " + limit + " 条") : undefined,
+      }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to search tasks: " + String(err instanceof Error ? err.message : err)));
+    }
+  },
+
+  /**
+   * task.timeline — 任务生命周期时间线
+   *
+   * 对标 Linear 的 Cycle Time Breakdown，返回任务各状态阶段驻留时长。
+   * 用于识别哪个阶段耗时最长，指导流程改进。
+   */
+  "task.timeline": async ({ params, respond }) => {
+    try {
+      const taskId =
+        (params?.taskId ? String(params.taskId) : "") ||
+        (params?.id ? String(params.id) : "");
+      if (!taskId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId is required"));
+        return;
+      }
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Task not found"));
+        return;
+      }
+      const timeline = await getTaskTimeline(taskId);
+      const statusEvents = (timeline as Array<Record<string, unknown>>).filter(
+        (e) => e.eventType === "status_changed" || e.eventType === "task_created" || e.eventType === "task_completed",
+      );
+      type StageEntry = { status: string; enteredAt: number; exitedAt?: number; durationMs?: number; durationHours?: number };
+      const stages: StageEntry[] = [];
+      for (let i = 0; i < statusEvents.length; i++) {
+        const ev = statusEvents[i];
+        const nextEv = statusEvents[i + 1];
+        const enteredAt = Number(ev.timestamp ?? ev.createdAt ?? 0);
+        const exitedAt = nextEv ? Number(nextEv.timestamp ?? nextEv.createdAt ?? 0) : undefined;
+        const durationMs = exitedAt ? exitedAt - enteredAt : undefined;
+        stages.push({
+          status: String(ev.newStatus ?? ev.status ?? "unknown"),
+          enteredAt,
+          exitedAt,
+          durationMs,
+          durationHours: durationMs ? Math.round((durationMs / 3_600_000) * 10) / 10 : undefined,
+        });
+      }
+      const createdAt = task.createdAt;
+      const startedAt = task.timeTracking?.startedAt;
+      const completedAt = task.completedAt;
+      const leadTimeMs = completedAt ? completedAt - createdAt : undefined;
+      const cycleTimeMs = completedAt && startedAt ? completedAt - startedAt : undefined;
+      respond(true, {
+        taskId,
+        title: task.title,
+        status: task.status,
+        createdAt,
+        startedAt,
+        completedAt,
+        leadTimeHours: leadTimeMs ? Math.round((leadTimeMs / 3_600_000) * 10) / 10 : undefined,
+        cycleTimeHours: cycleTimeMs ? Math.round((cycleTimeMs / 3_600_000) * 10) / 10 : undefined,
+        stages,
+        rawEvents: timeline,
+      }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to get task timeline: " + String(err instanceof Error ? err.message : err)));
+    }
+  },
+
+  /**
+   * task.quality_gate_update — CI/CD 质量门禁结果批量回写
+   *
+   * 允许 CI 脚本/Agent 将构建/测试结果自动回写到任务的 AC passes 字段。
+   * 这是"产出好代码"配套管理的核心：让代码质量验证与任务状态双向同步。
+   *
+   * gates 数组每项：{ gateName, passed, detail?, matchCriterionKeywords? }
+   * 内置关键词映射：tsc→类型检查AC、tests→测试AC、lint→代码规范AC
+   * autoAppend=true（默认）：无匹配AC时自动追加
+   * autoTransitionToReview=true：全部通过时自动流转 review
+   */
+  "task.quality_gate_update": async ({ params, respond }) => {
+    try {
+      const taskId =
+        (params?.taskId ? String(params.taskId) : "") ||
+        (params?.id ? String(params.id) : "");
+      if (!taskId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId is required"));
+        return;
+      }
+      const task = await storage.getTask(taskId);
+      if (!task) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Task not found"));
+        return;
+      }
+      type GateResult = { gateName: string; passed: boolean; detail?: string; matchCriterionKeywords?: string[] };
+      const gates: GateResult[] = Array.isArray(params?.gates)
+        ? (params.gates as GateResult[])
+        : params?.gateName
+          ? [{ gateName: String(params.gateName), passed: params.passed === true || params.passed === "true", detail: params.detail ? String(params.detail) : undefined }]
+          : [];
+      if (gates.length === 0) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Provide gates[] array or single gateName+passed"));
+        return;
+      }
+      const ciActor = params?.actor ? String(params.actor) : "ci";
+      const now = Date.now();
+      type ACEntry = { id: string; description: string; passes: boolean; verifiedAt?: number; verifiedBy?: string; note?: string };
+      const criteria = (task.acceptanceCriteria ?? []) as ACEntry[];
+      const gateKeywords: Record<string, string[]> = {
+        tsc: ["tsc", "typescript", "类型检查", "typecheck", "编译"],
+        tests: ["测试", "test", "单元测试", "vitest", "jest", "spec"],
+        lint: ["lint", "eslint", "代码规范", "oxlint", "style"],
+        build: ["构建", "build", "bundle"],
+        coverage: ["覆盖率", "coverage"],
+        e2e: ["e2e", "端到端", "integration"],
+      };
+      let matchedCount = 0;
+      const matchLog: string[] = [];
+      const updatedCriteria = criteria.map((c) => {
+        const descLower = c.description.toLowerCase();
+        for (const gate of gates) {
+          const keywords = [...(gateKeywords[gate.gateName.toLowerCase()] ?? [gate.gateName.toLowerCase()]), ...(gate.matchCriterionKeywords ?? [])];
+          if (keywords.some((kw) => descLower.includes(kw.toLowerCase()))) {
+            matchedCount++;
+            matchLog.push((gate.passed ? "[PASS]" : "[FAIL]") + " \"" + c.description + "\" <- " + gate.gateName + (gate.detail ? " (" + gate.detail + ")" : ""));
+            return { ...c, passes: gate.passed, verifiedAt: now, verifiedBy: ciActor, note: gate.detail ?? (gate.gateName + (gate.passed ? " 通过" : " 未通过")) };
+          }
+        }
+        return c;
+      });
+      const appendedAC: ACEntry[] = [];
+      if (params?.autoAppend !== false) {
+        for (const gate of gates) {
+          const keywords = gateKeywords[gate.gateName.toLowerCase()] ?? [gate.gateName.toLowerCase()];
+          const alreadyMatched = criteria.some((c) => keywords.some((kw) => c.description.toLowerCase().includes(kw)));
+          if (!alreadyMatched) {
+            appendedAC.push({
+              id: "ac_ci_" + gate.gateName + "_" + now,
+              description: "[CI] " + gate.gateName + " 检查" + (gate.passed ? "通过" : "未通过"),
+              passes: gate.passed,
+              verifiedAt: now,
+              verifiedBy: ciActor,
+              note: gate.detail,
+            });
+            matchLog.push((gate.passed ? "[PASS]" : "[FAIL]") + " 新增 AC \"[CI] " + gate.gateName + "\"（无匹配项，自动追加）");
+          }
+        }
+      }
+      const finalCriteria = [...updatedCriteria, ...appendedAC];
+      await storage.updateTask(taskId, { acceptanceCriteria: finalCriteria as Task["acceptanceCriteria"] });
+      const passedCount = finalCriteria.filter((c) => c.passes).length;
+      const allPassed = finalCriteria.length > 0 && passedCount === finalCriteria.length;
+      if (allPassed && task.status === "in-progress" && params?.autoTransitionToReview === true) {
+        await storage.updateTask(taskId, { status: "review" });
+        const supervisorRaw = task.supervisorId ?? task.creatorId;
+        if (supervisorRaw && supervisorRaw !== "system") {
+          notifySupervisor(supervisorRaw, "[QUALITY GATE] 任务 \"" + task.title + "\" 所有 CI 门禁通过，已自动流转至 review。", "task:quality-gate:" + taskId);
+        }
+      }
+      respond(true, { taskId, gatesProcessed: gates.length, matchedCount, appendedCount: appendedAC.length, acceptanceCriteria: finalCriteria, passedCount, totalCount: finalCriteria.length, allPassed, readyToReview: allPassed, matchLog }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to update quality gate: " + String(err instanceof Error ? err.message : err)));
+    }
+  },
+
+  /**
+   * tasks.okr.list — 列出 OKR 目标及进度
+   */
+  "tasks.okr.list": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
+        return;
+      }
+
+      const { buildProjectContext } = await import("../../utils/project-context.js");
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const ctx = buildProjectContext(projectId, workspaceRoot);
+
+      const { loadOkrStore, calcOkrProgress, formatOkrSummary } = await import("../../tasks/okr-manager.js");
+
+      const store = loadOkrStore(ctx.workspacePath);
+      const objectives = store?.objectives ?? [];
+
+      // 计算关联任务统计
+      const allTasks = await storage.listTasks({ projectId, limit: 5000 });
+
+      const taskStats = new Map<string, { total: number; completed: number }>();
+      for (const t of allTasks) {
+        const oid = (t as Record<string, unknown>).objectiveId as string | undefined;
+        if (!oid) continue;
+        const stat = taskStats.get(oid) ?? { total: 0, completed: 0 };
+        stat.total++;
+        if (t.status === "done") stat.completed++;
+        taskStats.set(oid, stat);
+      }
+
+      const progress = calcOkrProgress(objectives, taskStats);
+      respond(true, {
+        objectives,
+        progress,
+        summary: formatOkrSummary(progress),
+      }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to list OKR: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
+  // =========================================================================
+  // B0: Triage Intelligence — 对标 Linear 2026 Triage Intelligence 功能
+  // 基于任务标题/描述/类型自动评估建议优先级、标签、负责人
+  // =========================================================================
+  "task.triage": async ({ params, respond }) => {
+    try {
+      const taskId = params?.taskId ? String(params.taskId) : "";
+      let title = params?.title ? String(params.title) : "";
+      let description = params?.description ? String(params.description) : "";
+      let taskType = params?.type ? String(params.type) : undefined;
+      let priority = params?.priority ? String(params.priority) : "medium";
+      let tags: string[] = Array.isArray(params?.tags) ? (params.tags as string[]) : [];
+
+      // 如果传入 taskId，从存储加载实际数据
+      if (taskId) {
+        const existing = await storage.getTask(taskId);
+        if (existing) {
+          title = title || existing.title;
+          description = description || existing.description || "";
+          taskType = taskType || existing.type;
+          priority = priority || existing.priority;
+          tags = tags.length > 0 ? tags : (existing.tags ?? []);
+        }
+      }
+
+      if (!title) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "title or taskId is required"));
+        return;
+      }
+
+      const suggestion = calcTriageSuggestion(title, description, taskType as import("../../tasks/types.js").TaskType | undefined, priority as import("../../tasks/types.js").TaskPriority, tags);
+      respond(true, {
+        taskId: taskId || undefined,
+        input: { title, type: taskType, priority, tags },
+        suggestion,
+        tip: suggestion.priorityUpgraded
+          ? `[TRIAGE] Priority upgraded from ${priority} to ${suggestion.suggestedPriority} based on keywords: ${suggestion.matchedKeywords.join(", ")}`
+          : "No priority change suggested.",
+      }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to triage: ${String(err instanceof Error ? err.message : err)}`));
+    }
+  },
+
+  // =========================================================================
+  // B2: SLA 检查 — 对标 Linear 2026 Issue SLA + 服务级别协议
+  // urgent=4h / high=24h / medium=72h SLA 标准
+  // =========================================================================
+  "task.sla.check": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : undefined;
+      const assigneeId = params?.assigneeId ? String(params.assigneeId) : undefined;
+      const now = Date.now();
+
+      // 按 priority 定义 SLA 时限（毫秒）
+      const SLA_HOURS: Record<string, number> = {
+        urgent: 4,
+        high: 24,
+        medium: 72,
+        low: 168, // 7天
+      };
+
+      const tasks = await storage.listTasks({
+        projectId,
+        assigneeId,
+        status: "in-progress",
+        limit: 500,
+      });
+
+      const breached: Array<{ taskId: string; title: string; priority: string; startedAt: number; slaDeadline: number; overdueMs: number; overdueHours: number }> = [];
+      const atRisk: Array<{ taskId: string; title: string; priority: string; startedAt: number; slaDeadline: number; remainingHours: number }> = [];
+
+      for (const t of tasks) {
+        const slaHours = SLA_HOURS[t.priority ?? "medium"] ?? 72;
+        const slaMs = slaHours * 60 * 60 * 1000;
+        const startedAt = (t as Record<string, unknown>).startedAt as number | undefined
+          ?? (t as Record<string, unknown>).updatedAt as number | undefined
+          ?? t.createdAt;
+        if (!startedAt) continue;
+        const slaDeadline = startedAt + slaMs;
+        if (now > slaDeadline) {
+          breached.push({ taskId: t.id, title: t.title, priority: t.priority, startedAt, slaDeadline, overdueMs: now - slaDeadline, overdueHours: Math.round((now - slaDeadline) / 3600000 * 10) / 10 });
+        } else if (now > slaDeadline - 0.25 * slaMs) {
+          // 副予预警：剩余时间 < 25%
+          atRisk.push({ taskId: t.id, title: t.title, priority: t.priority, startedAt, slaDeadline, remainingHours: Math.round((slaDeadline - now) / 3600000 * 10) / 10 });
+        }
+      }
+
+      respond(true, {
+        projectId,
+        assigneeId,
+        slaLimits: SLA_HOURS,
+        breached,
+        atRisk,
+        summary: `SLA check: ${breached.length} breached, ${atRisk.length} at-risk out of ${tasks.length} in-progress tasks.`,
+      }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to check SLA: ${String(err instanceof Error ? err.message : err)}`));
+    }
+  },
+
+  // =========================================================================
+  // B4: Task Template RPC — 对标 Linear 2026 Issue Templates
+  // 保存常用任务结构，快速创建标准化任务
+  // =========================================================================
+  "task.template.upsert": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const name = params?.name ? String(params.name) : "";
+      if (!name) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "name is required"));
+        return;
+      }
+      const { upsertTaskTemplate } = await import("../../tasks/task-template-manager.js");
+      const template = upsertTaskTemplate(root, {
+        id: params?.id ? String(params.id) : undefined,
+        name,
+        description: params?.description ? String(params.description) : undefined,
+        useCases: params?.useCases ? String(params.useCases) : undefined,
+        fields: (params?.fields as import("../../tasks/task-template-manager.js").TaskTemplate["fields"]) ?? {},
+        createdBy: params?.createdBy ? String(params.createdBy) : "system",
+      });
+      respond(true, { success: true, template }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to upsert template: ${String(err instanceof Error ? err.message : err)}`));
+    }
+  },
+
+  "task.template.list": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const keyword = params?.keyword ? String(params.keyword) : undefined;
+      const { listTaskTemplates } = await import("../../tasks/task-template-manager.js");
+      const templates = listTaskTemplates(root, { keyword });
+      respond(true, { templates, count: templates.length }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to list templates: ${String(err instanceof Error ? err.message : err)}`));
+    }
+  },
+
+  "task.template.apply": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const templateId = params?.templateId ? String(params.templateId) : "";
+      if (!templateId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "templateId is required"));
+        return;
+      }
+      const { applyTaskTemplate } = await import("../../tasks/task-template-manager.js");
+      const overrides = (params?.overrides as Record<string, unknown>) ?? {};
+      const result = applyTaskTemplate(root, templateId, overrides as Parameters<typeof applyTaskTemplate>[2]);
+      if (!result) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `Template not found: ${templateId}`));
+        return;
+      }
+      respond(true, {
+        templateId,
+        templateName: result.template.name,
+        mergedFields: result.merged,
+        tip: "Use the mergedFields as parameters when calling task.create to quickly create a task from this template.",
+      }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to apply template: ${String(err instanceof Error ? err.message : err)}`));
+    }
+  },
+
+  "task.template.delete": async ({ params, respond }) => {
+    try {
+      const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
+      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const templateId = params?.templateId ? String(params.templateId) : "";
+      if (!templateId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "templateId is required"));
+        return;
+      }
+      const { deleteTaskTemplate } = await import("../../tasks/task-template-manager.js");
+      const deleted = deleteTaskTemplate(root, templateId);
+      respond(true, { success: deleted, templateId }, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete template: ${String(err instanceof Error ? err.message : err)}`));
+    }
+  },
 };
+
+// =========================================================================
+// Triage Intelligence 辅助函数 — 纲层内部使用
+// =========================================================================
+
+function calcTriageSuggestion(
+  title: string,
+  description: string,
+  taskType: import("../../tasks/types.js").TaskType | undefined,
+  currentPriority: string,
+  tags: string[],
+): {
+  suggestedPriority: string;
+  suggestedLabels: string[];
+  priorityUpgraded: boolean;
+  matchedKeywords: string[];
+  rationale: string;
+} {
+  const text = `${title} ${description}`.toLowerCase();
+  const matchedKeywords: string[] = [];
+  let urgencyScore = 0;
+
+  // 紧急关键词集合
+  const URGENT_KEYWORDS = ["crash", "down", "outage", "p0", "critical", "紧急", "故障", "崩溃", "生产事故", "production", "security", "安全漏洞", "data loss", "cve"];
+  const HIGH_KEYWORDS = ["bug", "fix", "broken", "error", "fail", "regression", "故障", "错误", "hotfix", "blocker", "p1", "deadline", "截止日", "payment", "支付"];
+  const LABELS_MAP: Record<string, string> = {
+    "test": "testing", "spec": "testing", "unit test": "testing",
+    "doc": "documentation", "readme": "documentation", "文档": "documentation",
+    "refactor": "refactoring", "重构": "refactoring",
+    "perf": "performance", "slow": "performance", "性能": "performance",
+    "security": "security", "auth": "security", "xss": "security", "sql injection": "security",
+    "ui": "frontend", "ux": "frontend", "css": "frontend", "design": "frontend",
+    "api": "backend", "endpoint": "backend", "service": "backend",
+    "ci": "devops", "cd": "devops", "deploy": "devops", "docker": "devops", "k8s": "devops",
+    "migration": "database", "schema": "database", "sql": "database",
+  };
+
+  for (const kw of URGENT_KEYWORDS) {
+    if (text.includes(kw)) { urgencyScore += 3; matchedKeywords.push(kw); }
+  }
+  for (const kw of HIGH_KEYWORDS) {
+    if (text.includes(kw)) { urgencyScore += 1; matchedKeywords.push(kw); }
+  }
+
+  // bugfix 类型加分
+  if (taskType === "bugfix") urgencyScore += 2;
+
+  // 类型强制覆盖
+  const PRIORITY_LEVELS = ["low", "medium", "high", "urgent"];
+  const currentIdx = PRIORITY_LEVELS.indexOf(currentPriority);
+  let suggestedIdx = currentIdx < 0 ? 1 : currentIdx;
+
+  if (urgencyScore >= 5) suggestedIdx = Math.max(suggestedIdx, 3); // urgent
+  else if (urgencyScore >= 2) suggestedIdx = Math.max(suggestedIdx, 2); // high
+  else if (urgencyScore >= 1) suggestedIdx = Math.max(suggestedIdx, 1); // medium
+
+  const suggestedPriority = PRIORITY_LEVELS[Math.min(suggestedIdx, 3)];
+
+  // 自动标签推断
+  const suggestedLabels: string[] = [...tags];
+  for (const [kw, label] of Object.entries(LABELS_MAP)) {
+    if (text.includes(kw) && !suggestedLabels.includes(label)) suggestedLabels.push(label);
+  }
+
+  return {
+    suggestedPriority,
+    suggestedLabels,
+    priorityUpgraded: suggestedPriority !== currentPriority && suggestedIdx > currentIdx,
+    matchedKeywords: [...new Set(matchedKeywords)],
+    rationale: urgencyScore > 0
+      ? `Urgency score ${urgencyScore}: matched keywords [${[...new Set(matchedKeywords)].join(", ")}]${taskType === "bugfix" ? " + bugfix type" : ""}.`
+      : "No urgency signals detected.",
+  };
+}

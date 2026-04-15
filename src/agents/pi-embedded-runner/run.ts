@@ -85,6 +85,10 @@ import {
 } from "./tool-result-truncation.js";
 import type { EmbeddedPiAgentMeta, EmbeddedPiRunResult } from "./types.js";
 import { describeUnknownError } from "./utils.js";
+// ── Harness 增强：审计 / 验证反馈环 / 确定性脚本模块导出，供调用方按需引入
+// import { executeWithValidationLoop, createDefaultToolSuite } from "../tool-output-validator.js";
+// import { executeDeterministicScript, registerDeterministicScript } from "../deterministic-tool-executor.js";
+// import { getToolChainTrace } from "../tool-chain-audit.js";
 
 type ApiKeyInfo = ResolvedProviderAuth;
 
@@ -312,6 +316,47 @@ export async function runEmbeddedPiAgent(
         allowGatewaySubagentBinding: params.allowGatewaySubagentBinding,
       });
       const prevCwd = process.cwd();
+
+      // ─── P0-C: nextSessionPlan 注入 ───────────────────────────────────────────
+      // 在 Agent 启动时，尝试加载该 Agent 的跨 Session 进度文件，
+      // 将 resumeSession() 返回的摘要注入到 extraSystemPrompt。
+      // 条件：必须有 agentId，且不是 probe session
+      let effectiveExtraSystemPrompt = params.extraSystemPrompt;
+      if (workspaceResolution.agentId && !isProbeSession) {
+        try {
+          const { AgentProgressManager } = await import("../../agents/agent-progress.js");
+          const progressManager = new AgentProgressManager();
+          // projectName 优先用 params.sessionKey 中解析到的项目名，其次用 agentId
+          const sessionKey = params.sessionKey ?? params.sessionId;
+          // 从 sessionKey 中尝试提取项目名（格式: agent:{agentId}:{projectName}）
+          const sessionKeyParts = sessionKey?.split(":");
+          const projectName =
+            sessionKeyParts && sessionKeyParts.length >= 3
+              ? sessionKeyParts.slice(2).join(":")
+              : sessionKey ?? "main";
+          const progressSummary = progressManager.resumeSession(
+            workspaceResolution.agentId,
+            projectName,
+            sessionKey ?? params.sessionId,
+          );
+          if (progressSummary) {
+            effectiveExtraSystemPrompt = effectiveExtraSystemPrompt
+              ? `${progressSummary}
+
+---
+
+${effectiveExtraSystemPrompt}`
+              : progressSummary;
+            log.debug(
+              `[nextSessionPlan] injected progress summary for agent=${workspaceResolution.agentId} project=${projectName}`,
+            );
+          }
+        } catch (progressErr) {
+          // 非致命错误：进度注入失败不影响主流程
+          log.debug(`[nextSessionPlan] failed to load progress: ${String(progressErr)}`);
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────────────
 
       let provider = (params.provider ?? DEFAULT_PROVIDER).trim() || DEFAULT_PROVIDER;
       let modelId = (params.model ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
@@ -999,7 +1044,7 @@ export async function runEmbeddedPiAgent(
             onReasoningEnd: params.onReasoningEnd,
             onToolResult: params.onToolResult,
             onAgentEvent: params.onAgentEvent,
-            extraSystemPrompt: params.extraSystemPrompt,
+            extraSystemPrompt: effectiveExtraSystemPrompt,
             inputProvenance: params.inputProvenance,
             streamParams: params.streamParams,
             ownerNumbers: params.ownerNumbers,
@@ -1159,7 +1204,7 @@ export async function runEmbeddedPiAgent(
                     thinkLevel,
                     reasoningLevel: params.reasoningLevel,
                     bashElevated: params.bashElevated,
-                    extraSystemPrompt: params.extraSystemPrompt,
+                    extraSystemPrompt: effectiveExtraSystemPrompt,
                     ownerNumbers: params.ownerNumbers,
                   }),
                   runId: params.runId,

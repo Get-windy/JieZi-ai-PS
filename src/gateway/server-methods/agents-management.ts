@@ -392,7 +392,7 @@ function validateModelAccountsConfig(config: unknown): void {
     for (const field of weightFields) {
       if (
         sr[field] !== undefined &&
-        (typeof sr[field] !== "number" || (sr[field] as number) < 0 || (sr[field] as number) > 100)
+        (typeof sr[field] !== "number" || (sr[field]) < 0 || (sr[field]) > 100)
       ) {
         throw new Error(`${field} must be between 0 and 100`);
       }

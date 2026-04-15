@@ -156,6 +156,11 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     // 任务：查询类
     "task.list",
     "task.get",
+    // 任务分析：查询类（只读计算）
+    "tasks.flowMetrics",
+    "tasks.criticalPath",
+    "tasks.health",
+    "tasks.okr.list",
     // 团队监控：查询类（只读，不修改任何数据）
     "agent.team.status",
     // 组织：查询类（补充缺失）
@@ -337,6 +342,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "projects.updateProgress",
     "projects.completeSprint",
     "projects.startSprint",
+    "projects.sprintRetrospective",
     "projects.save",
     "projects.delete",
     // 项目目标（OKR）：写操作
@@ -348,10 +354,12 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     // 项目 Sprint：写操作
     "projects.sprint.upsert",
     "projects.sprint.addTask",
-    // 项目 DoD 阔关与重激活：写操作
+    // 项目 DoD 阈关与重激活：写操作
     "projects.markCriterionSatisfied",
     "projects.reactivate",
     "projects.humanSignOff",
+    // 任务分析：写操作（计算类，归入写操作分组）
+    "tasks.okr.upsert",
     // 项目 SHARP 质量门控：写操作
     // 项目跨团队协作与交付：写操作
     "project.team.assign",
