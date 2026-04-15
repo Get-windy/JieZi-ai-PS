@@ -321,8 +321,12 @@ export function createProjectListTool(): AnyAgentTool {
       "List all projects with complete info: IDs, names, status (Chinese label), progress, " +
       "allowedWork (what tasks fit this phase), recommendedRoles (which agent roles should work on it), " +
       "owner and project group members. " +
+      "CRITICAL: Each project has TWO separate directories: " +
+      "(1) workspacePath = 「项目空间」, stores AI collaboration files (memory/docs/decisions, under groups root); " +
+      "(2) codeDir = 「业务空间」, the ACTUAL directory where business work is done (e.g. code repo, sales folder). " +
+      "ALWAYS use codeDir when writing code or business files — NEVER write to workspacePath by mistake. " +
       "ALWAYS call this tool first before assigning tasks to any agent, " +
-      "to get real project IDs, current phase, and member lists. " +
+      "to get real project IDs, current phase, codeDir, and member lists. " +
       "NEVER hardcode project IDs or make up project names.",
     parameters: {},
     execute: async (_toolCallId, args) => {

@@ -659,7 +659,7 @@ function renderCodeRootBanner(props: ProjectsProps) {
           class="form-control"
           style="flex: 1; min-width: 200px; max-width: 420px;"
           .value=${props.projectCodeRoot}
-          placeholder="例如 I:\\ 或 D:\\Projects\\（新项目代码目录将自动创建为 根目录\\<项目名>）"
+          placeholder="例如 I:\\ 或 D:\\Projects\\（新项目业务空间将自动创建为 根目录\\<项目名>）"
           @input=${(e: InputEvent) => {
             props.onCodeRootChange((e.target as HTMLInputElement).value);
           }}
@@ -673,11 +673,11 @@ function renderCodeRootBanner(props: ProjectsProps) {
               `
             : html`
                 <span class="chip" style="color: var(--warning, #d97706); border-color: var(--warning, #d97706)"
-                  >⚠️ 未设置，AI 创建项目时将无法自动分配代码目录</span
+                  >⚠️ 未设置，AI 创建项目时将无法自动分配业务空间</span
                 >
               `
         }
-        <small style="color: var(--muted); font-size: 11px;">手动创建项目时可在对话框内继续指定代码目录</small>
+        <small style="color: var(--muted); font-size: 11px;">手动创建项目时可在对话框内继续指定业务空间路径</small>
       </div>
     </div>
   `;
@@ -862,11 +862,11 @@ function renderProjectOverview(props: ProjectsProps, project: ProjectInfo) {
           <div>${project.description || "暂无描述"}</div>
         </div>
         <div class="info-item">
-          <label>工作空间</label>
+          <label>项目空间</label>
           <div>${project.workspacePath || "未设置"}</div>
         </div>
         <div class="info-item">
-          <label>代码目录</label>
+          <label>业务空间</label>
           <div>${project.codeDir || "未设置"}</div>
         </div>
         <div class="info-item">
@@ -919,7 +919,7 @@ function renderProjectOverview(props: ProjectsProps, project: ProjectInfo) {
           ?disabled=${!project.workspacePath}
           @click=${() => project.workspacePath && props.onOpenWorkspace(project.workspacePath)}
         >
-          打开工作空间
+          打开项目空间
         </button>
         <button
           class="btn btn--danger"
@@ -973,11 +973,11 @@ function renderDeleteProjectConfirmModal(props: ProjectsProps, project: ProjectI
               @change=${(e: Event) => props.onDeleteProjectOptionChange("deleteWorkspace", (e.target as HTMLInputElement).checked)}
             />
             <div>
-              <div style="font-weight:600; font-size:13px;">删除工作空间目录</div>
+              <div style="font-weight:600; font-size:13px;">删除项目空间目录</div>
               <div style="font-size:12px; color:var(--muted); margin-top:2px;">
                 ${project.workspacePath
                   ? html`<code style="font-size:11px; background:#f3f4f6; padding:1px 5px; border-radius:3px;">${project.workspacePath}</code>`
-                  : '未设置工作空间路径'}
+                  : '未设置项目空间路径'}
               </div>
             </div>
           </label>
@@ -1020,7 +1020,7 @@ function renderDeleteProjectConfirmModal(props: ProjectsProps, project: ProjectI
         <!-- 提示文字 -->
         ${(!confirm.deleteWorkspace && !confirm.deleteTasks && !confirm.deleteGroups) ? html`
           <div style="font-size:12px; color:#6b7280; background:#f9fafb; padding:8px 12px; border-radius:6px; margin-bottom:16px;">
-            ℹ️ 未选择任何内容，删除后项目将仅从列表移除，工作空间/任务/群组均保留。
+            ℹ️ 未选择任何内容，删除后项目将仅从列表移除，项目空间/任务/群组均保留。
           </div>
         ` : nothing}
 
@@ -1090,7 +1090,7 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
       </div>
 
       <div class="form-group">
-        <label>工作空间路径</label>
+        <label>项目空间路径</label>
         <input 
           type="text" 
           class="form-control" 
@@ -1100,11 +1100,11 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
             props.onProjectFormChange("workspacePath", target.value);
           }}
         />
-        <small>项目工作空间根目录，将同步到所有项目群</small>
+        <small>项目空间根目录（存放 AI 记忆、文档、决策等协作文件），将同步到所有项目群</small>
       </div>
 
       <div class="form-group">
-        <label>工作目录</label>
+        <label>业务空间路径</label>
         <input 
           type="text" 
           class="form-control" 
@@ -1114,7 +1114,7 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
             props.onProjectFormChange("codeDir", target.value);
           }}
         />
-        <small>项目工作目录，可为代码仓库、设计文件夹或任意工作文件夹，可留空</small>
+        <small>业务空间路径（AI 实际开展工作的目录，如代码仓库、销售文件夹等），可留空</small>
       </div>
 
       <div class="form-group">
