@@ -9,17 +9,24 @@
  * 3. 动态切换机制 - 根据任务自动切换到对应项目环境
  */
 
+import { getGroupsWorkspaceRoot } from "../utils/project-context.js";
+
 /**
  * 生成矩阵管理模式的系统提示
  * 
  * @param agentRole - Agent 角色名称
  * @param availableProjects - 可用项目列表
+ * @param workspaceRoot - 工作组根目录（可选，默认动态解析）
  * @returns 完整的系统提示文本
  */
 export function generateMatrixManagementPrompt(
   agentRole: string,
-  availableProjects: string[] = ['wo-shi-renlei', 'PolyVault', 'LifeMirror']
+  availableProjects: string[] = ['wo-shi-renlei', 'PolyVault', 'LifeMirror'],
+  workspaceRoot?: string
 ): string {
+  const wsRoot = getGroupsWorkspaceRoot(workspaceRoot);
+  // 路径分隔符统一为正斜杠，方便提示词中展示
+  const wsRootDisplay = wsRoot.replace(/\\/g, '/');
   return `
 # 🏢 Matrix Management Mode - Working Across Multiple Projects
 
@@ -28,7 +35,7 @@ You are working in a **matrix management environment** where the same team membe
 ## 📋 Your Role: ${agentRole}
 
 You will receive tasks from different projects. Each project has its own:
-- **Project Workspace**: Located at \`H:\\OpenClaw_Workspace\\groups\\{projectId}\\\`
+- **Project Workspace**: Located at \`${wsRootDisplay}/{projectId}/\`
 - **Shared Memory**: Project-specific context and knowledge (\`SHARED_MEMORY.md\`)
 - **Code Directory**: Project source code (\`src/\`)
 - **Documentation**: Project docs (\`docs/\`)
@@ -47,25 +54,25 @@ Check the task's \`projectId\` field to determine which project it belongs to.
 
 ### Step 2: Navigate to Project Workspace
 \`\`\`bash
-cd "H:\\\\OpenClaw_Workspace\\\\groups\\\\{projectId}"
+cd "${wsRootDisplay}/{projectId}"
 \`\`\`
 
 ### Step 3: Load Project Context
 Read the project's shared memory for important context:
 \`\`\`bash
-cat "H:\\\\OpenClaw_Workspace\\\\groups\\\\{projectId}\\\\SHARED_MEMORY.md"
+cat "${wsRootDisplay}/{projectId}/SHARED_MEMORY.md"
 \`\`\`
 
 ### Step 4: Review Project Documentation
 Check project-specific requirements and docs:
-- Requirements: \`H:/OpenClaw_Workspace/groups/{projectId}/requirements/\`
-- Documentation: \`H:/OpenClaw_Workspace/groups/{projectId}/docs/\`
+- Requirements: \`${wsRootDisplay}/{projectId}/requirements/\`
+- Documentation: \`${wsRootDisplay}/{projectId}/docs/\`
 
 ### Step 5: Work in Project Directory
 Always work within the project's directory structure:
-- Code changes: \`H:/OpenClaw_Workspace/groups/{projectId}/src/\`
-- Tests: \`H:/OpenClaw_Workspace/groups/{projectId}/tests/\`
-- QA reports: \`H:/OpenClaw_Workspace/groups/{projectId}/qa/\`
+- Code changes: \`${wsRootDisplay}/{projectId}/src/\`
+- Tests: \`${wsRootDisplay}/{projectId}/tests/\`
+- QA reports: \`${wsRootDisplay}/{projectId}/qa/\`
 
 ## ⚠️ Important Rules
 
@@ -82,7 +89,7 @@ Task: "Write user stories for login feature"
 Project: wo-shi-renlei
 
 Actions:
-1. cd "H:/OpenClaw_Workspace/groups/wo-shi-renlei"
+1. cd "${wsRootDisplay}/wo-shi-renlei"
 2. Read SHARED_MEMORY.md for product context
 3. Check existing requirements in requirements/
 4. Write new requirements in requirements/user-stories/
@@ -94,11 +101,11 @@ Morning: Test wo-shi-renlei authentication
 Afternoon: Test PolyVault encryption module
 
 Workflow:
-AM: cd "H:/OpenClaw_Workspace/groups/wo-shi-renlei"
+AM: cd "${wsRootDisplay}/wo-shi-renlei"
     Run tests in tests/
     Save report in qa/test-reports/
 
-PM: cd "H:/OpenClaw_Workspace/groups/PolyVault"
+PM: cd "${wsRootDisplay}/PolyVault"
     Run tests in tests/
     Save report in qa/test-reports/
 \`\`\`
@@ -131,9 +138,9 @@ You can use the \`project-switch\` skill to quickly change project context:
 ## 📌 Quick Reference
 
 | Project | Workspace Path | Shared Memory |
-|---------|---------------|---------------|
+|---------|---------------|--------------|
 ${availableProjects.map(p => 
-`| ${p} | H:/OpenClaw_Workspace/groups/${p}/ | ${p}/SHARED_MEMORY.md |`
+`| ${p} | ${wsRootDisplay}/${p}/ | ${p}/SHARED_MEMORY.md |`
 ).join('\n')}
 
 ---

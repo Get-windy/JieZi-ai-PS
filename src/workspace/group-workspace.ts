@@ -347,8 +347,8 @@ ${workspace.admins?.map((a: string) => `- ${a}`).join("\n") || "- " + workspace.
 
 ### 项目群组特殊说明
 - **项目绑定**: 如果本群组是项目群组，则所有讨论和决策都与指定项目相关
-- **工作空间**: 项目工作空间路径：\`H:\\OpenClaw_Workspace\\groups\\{projectId}\`
-- **代码目录**: 实际代码可能在外部目录 (如 \`I:\\{projectName}\`),通过 PROJECT_CONFIG.json 配置
+- **工作空间**: 项目工作空间路径：\`${this.rootDir.replace(/\\/g, '/')}/{projectId}\`
+- **代码目录**: 实际代码可能在外部目录 (如 \`/{projectName}\`),通过 PROJECT_CONFIG.json 配置
 - **记忆隔离**: 每个项目有独立的 SHARED_MEMORY.md,存储项目特定的知识和上下文
 
 ### 常用工具
@@ -365,9 +365,9 @@ ${workspace.admins?.map((a: string) => `- ${a}`).join("\n") || "- " + workspace.
 \`\`\`json
 {
   "projectId": "{projectId}",
-  "workspacePath": "H:\\OpenClaw_Workspace\\groups\\{projectId}",
-  "codeDir": "I:\\{projectName}",  // 实际代码目录
-  "docsDir": "H:\\OpenClaw_Workspace\\groups\\{projectId}\\docs"
+  "workspacePath": "${this.rootDir.replace(/\\/g, '/')}/{projectId}",
+  "codeDir": "/{projectName}",  // 实际代码目录
+  "docsDir": "${this.rootDir.replace(/\\/g, '/')}/{projectId}/docs"
 }
 \`\`\`
 

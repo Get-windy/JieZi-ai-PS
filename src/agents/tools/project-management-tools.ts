@@ -12,7 +12,7 @@ import {
   callGatewayTool,
   readGatewayCallOptions,
 } from "../../../upstream/src/agents/tools/gateway.js";
-import { getProjectStatusMeta } from "../../utils/project-context.js";
+import { getProjectStatusMeta, getGroupsWorkspaceRoot } from "../../utils/project-context.js";
 
 /**
  * project_create 工具参数 schema
@@ -40,7 +40,7 @@ const ProjectCreateToolSchema = Type.Object({
    * 提示用户先在项目管理页面设置代码根目录。
    */
   codeRoot: Type.Optional(Type.String()),
-  /** 项目工作空间根目录（可选，默认 H:\\OpenClaw_Workspace\\groups） */
+  /** 项目工作空间根目录（可选，默认通过 getGroupsWorkspaceRoot() 动态解析） */
   workspaceRoot: Type.Optional(Type.String()),
   /**
    * 是否同时创建项目群（默认 false）
@@ -155,9 +155,8 @@ export function createProjectCreateTool(): AnyAgentTool {
           });
         }
 
-        // 计算工作空间路径 (从配置、环境变量或默认值)
-        const actualWorkspaceRoot =
-          workspaceRoot || process.env.OPENCLAW_GROUPS_ROOT || "H:\\OpenClaw_Workspace\\groups";
+        // 计算工作空间路径 (从配置、环境变量或动态解析默认值)
+        const actualWorkspaceRoot = getGroupsWorkspaceRoot(workspaceRoot);
         const workspacePath = `${actualWorkspaceRoot}\\${finalProjectId}`;
 
         // 调用后端创建项目 (如果后端有 project.create RPC)

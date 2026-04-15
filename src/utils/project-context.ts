@@ -15,6 +15,7 @@
  */
 
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 
 // 任务类型：唯一数据源 tasks/types.ts
@@ -37,7 +38,7 @@ export type ProjectTask = Task;
 export interface ProjectContext {
   /** 项目 ID */
   projectId: string;
-  /** 项目群组工作空间路径 (e.g., H:\OpenClaw_Workspace\groups\wo-shi-renlei) */
+  /** 项目群组工作空间路径 (e.g., <workspaceRoot>\wo-shi-renlei) */
   workspacePath: string;
   /** 项目共享记忆文件路径 */
   sharedMemoryPath: string;
@@ -592,9 +593,11 @@ export interface ProjectConfig {
  * 优先级:
  * 1. 环境变量 OPENCLAW_GROUPS_ROOT
  * 2. 配置文件中的 groups.workspace.root
- * 3. 默认值 H:\\OpenClaw_Workspace\\groups
+ * 3. 动态推导：{userHome}/.openclaw/groups
  */
-const DEFAULT_WORKSPACE_ROOT = process.env.OPENCLAW_GROUPS_ROOT || "H:\\OpenClaw_Workspace\\groups";
+const DEFAULT_WORKSPACE_ROOT =
+  process.env.OPENCLAW_GROUPS_ROOT ||
+  path.join(os.homedir(), ".openclaw", "groups");
 
 /**
  * 获取工作组根目录
@@ -621,12 +624,12 @@ export function getGroupsWorkspaceRoot(configRoot?: string): string {
  * 根据项目 ID 解析项目工作空间路径
  *
  * @param projectId - 项目 ID (e.g., "wo-shi-renlei", "PolyVault")
- * @param workspaceRoot - 工作组根目录，默认为 H:\OpenClaw_Workspace\groups
+ * @param workspaceRoot - 工作组根目录，默认通过 getGroupsWorkspaceRoot() 动态解析
  * @returns 项目工作空间完整路径
  *
  * @example
  * ```typescript
- * // 返回："H:\\OpenClaw_Workspace\\groups\\wo-shi-renlei"
+ * // 返回："<workspaceRoot>\\wo-shi-renlei"
  * resolveProjectWorkspace("wo-shi-renlei");
  *
  * // 返回："I:\\Projects\\PolyVault"
@@ -652,10 +655,10 @@ export function resolveProjectWorkspace(projectId: string, workspaceRoot?: strin
  * @example
  * ```typescript
  * const ctx = buildProjectContext("wo-shi-renlei");
- * console.log(ctx.workspacePath);      // H:\OpenClaw_Workspace\groups\wo-shi-renlei
- * console.log(ctx.sharedMemoryPath);   // H:\OpenClaw_Workspace\groups\wo-shi-renlei\SHARED_MEMORY.md
+ * console.log(ctx.workspacePath);      // <workspaceRoot>\wo-shi-renlei
+ * console.log(ctx.sharedMemoryPath);   // <workspaceRoot>\wo-shi-renlei\SHARED_MEMORY.md
  * console.log(ctx.codeDir);            // I:\Projects\wo-shi-renlei\src (如果配置了)
- *                                      // 或 H:\OpenClaw_Workspace\groups\wo-shi-renlei\src (默认)
+ *                                      // 或 <workspaceRoot>\wo-shi-renlei\src (默认)
  * ```
  */
 export function buildProjectContext(projectId: string, workspaceRoot?: string): ProjectContext {
@@ -810,7 +813,7 @@ export function listAvailableProjects(workspaceRoot?: string): string[] {
  * console.log(instructions);
  * // 输出:
  * // 📁 Switching to project: wo-shi-renlei
- * // 1. cd H:\OpenClaw_Workspace\groups\wo-shi-renlei
+ * // 1. cd <workspaceRoot>\wo-shi-renlei
  * // 2. Read SHARED_MEMORY.md for project context
  * // 3. Check docs/ for documentation
  * // 4. Work in src/ directory

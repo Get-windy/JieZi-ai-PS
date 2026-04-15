@@ -12,6 +12,7 @@
 import { errorShape, ErrorCodes } from "../../../upstream/src/gateway/protocol/index.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { groupManager } from "../../sessions/group-manager.js";
+import { getGroupsWorkspaceRoot } from "../../utils/project-context.js";
 
 export const projectsHandlers: GatewayRequestHandlers = {
   /**
@@ -37,8 +38,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
 
       // 计算工作空间路径
       const path = await import("path");
-      const actualWorkspaceRoot =
-        workspaceRoot || process.env.OPENCLAW_GROUPS_ROOT || "H:\\OpenClaw_Workspace\\groups";
+      const { getGroupsWorkspaceRoot } = await import("../../utils/project-context.js");
+      const actualWorkspaceRoot = getGroupsWorkspaceRoot(workspaceRoot);
       const workspacePath = path.join(actualWorkspaceRoot, projectId);
 
       // codeDir 默认为工作空间内的 src 子目录，而非硬编码到 I:\
@@ -115,7 +116,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
 
-      const { listAvailableProjects, buildProjectContext } =
+      const { listAvailableProjects, buildProjectContext, getGroupsWorkspaceRoot } =
         await import("../../utils/project-context.js");
 
       const fsDirs = listAvailableProjects(workspaceRoot);
@@ -2419,7 +2420,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
   "projects.initiative.upsert": async ({ params, respond }) => {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
-      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const root = getGroupsWorkspaceRoot(workspaceRoot);
       const { upsertInitiative } = await import("../../tasks/initiative-manager.js");
       const initiative = upsertInitiative(root, {
         id: params?.id ? String(params.id) : undefined,
@@ -2450,7 +2451,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
   "projects.initiative.list": async ({ params, respond }) => {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
-      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const root = getGroupsWorkspaceRoot(workspaceRoot);
       const { listInitiatives, calcInitiativeHealthSummary } = await import("../../tasks/initiative-manager.js");
       const filter = {
         health: params?.health ? String(params.health) as import("../../tasks/initiative-manager.js").InitiativeHealth : undefined,
@@ -2476,7 +2477,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
   "projects.initiative.get": async ({ params, respond }) => {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
-      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const root = getGroupsWorkspaceRoot(workspaceRoot);
       const id = params?.id ? String(params.id) : "";
       if (!id) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
@@ -2500,7 +2501,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
   "projects.initiative.delete": async ({ params, respond }) => {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
-      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const root = getGroupsWorkspaceRoot(workspaceRoot);
       const id = params?.id ? String(params.id) : "";
       if (!id) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
@@ -2520,7 +2521,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
   "projects.initiative.addProject": async ({ params, respond }) => {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
-      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const root = getGroupsWorkspaceRoot(workspaceRoot);
       const initiativeId = params?.initiativeId ? String(params.initiativeId) : "";
       const projectId = params?.projectId ? String(params.projectId) : "";
       if (!initiativeId || !projectId) {
@@ -2545,7 +2546,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
   "projects.initiative.removeProject": async ({ params, respond }) => {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
-      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const root = getGroupsWorkspaceRoot(workspaceRoot);
       const initiativeId = params?.initiativeId ? String(params.initiativeId) : "";
       const projectId = params?.projectId ? String(params.projectId) : "";
       if (!initiativeId || !projectId) {
@@ -2571,7 +2572,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
   "projects.initiative.addUpdate": async ({ params, respond }) => {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
-      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const root = getGroupsWorkspaceRoot(workspaceRoot);
       const initiativeId = params?.initiativeId ? String(params.initiativeId) : "";
       const content = params?.content ? String(params.content) : "";
       const health = (params?.health ? String(params.health) : "on-track") as import("../../tasks/initiative-manager.js").InitiativeHealth;
@@ -2702,7 +2703,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
       const thresholdDays = params?.thresholdDays ? Number(params.thresholdDays) : 7; // 默认 7 天未更新视为过期
-      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const root = getGroupsWorkspaceRoot(workspaceRoot);
       const fs = await import("fs");
       const path = await import("path");
       const { readProjectConfig } = await import("../../utils/project-context.js");

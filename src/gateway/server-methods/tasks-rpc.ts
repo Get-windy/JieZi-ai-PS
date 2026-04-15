@@ -59,6 +59,7 @@ import type {
   TaskDependency,
 } from "../../tasks/types.js";
 import { buildProjectContext } from "../../utils/project-context.js";
+import { getGroupsWorkspaceRoot } from "../../utils/project-context.js";
 import { scheduleNextTaskForAgent } from "./agents-management.js";
 import { inferTaskType, recordPerfOutcome } from "./evolve-rpc.js";
 
@@ -3058,8 +3059,7 @@ export const tasksRpc: GatewayRequestHandlers = {
   "task.template.upsert": async ({ params, respond }) => {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
-      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
-      const name = params?.name ? String(params.name) : "";
+      const root = getGroupsWorkspaceRoot(workspaceRoot);
       if (!name) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "name is required"));
         return;
@@ -3082,7 +3082,7 @@ export const tasksRpc: GatewayRequestHandlers = {
   "task.template.list": async ({ params, respond }) => {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
-      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const root = getGroupsWorkspaceRoot(workspaceRoot);
       const keyword = params?.keyword ? String(params.keyword) : undefined;
       const { listTaskTemplates } = await import("../../tasks/task-template-manager.js");
       const templates = listTaskTemplates(root, { keyword });
@@ -3095,7 +3095,7 @@ export const tasksRpc: GatewayRequestHandlers = {
   "task.template.apply": async ({ params, respond }) => {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
-      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const root = getGroupsWorkspaceRoot(workspaceRoot);
       const templateId = params?.templateId ? String(params.templateId) : "";
       if (!templateId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "templateId is required"));
@@ -3122,7 +3122,7 @@ export const tasksRpc: GatewayRequestHandlers = {
   "task.template.delete": async ({ params, respond }) => {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
-      const root = workspaceRoot ?? process.env.OPENCLAW_GROUPS_ROOT ?? "H:\\OpenClaw_Workspace\\groups";
+      const root = getGroupsWorkspaceRoot(workspaceRoot);
       const templateId = params?.templateId ? String(params.templateId) : "";
       if (!templateId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "templateId is required"));
