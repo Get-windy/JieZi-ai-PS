@@ -730,20 +730,46 @@ export async function scheduleNextTaskForAgent(
       // ── 依赖门控：检查 blockedBy（显式阻塞）──
       if (candidate.blockedBy && candidate.blockedBy.length > 0) {
         let allBlockersCleared = true;
+        const unmetBlockers: Task[] = [];
         for (const blockerId of candidate.blockedBy) {
           try {
             const blocker = await taskStorage.getTask(blockerId);
             if (blocker && blocker.status !== "done" && blocker.status !== "cancelled") {
               allBlockersCleared = false;
+              unmetBlockers.push(blocker);
               // Priority Inheritance：前置任务优先级低于当前任务时，自动提升
               await boostPredecessorPriority(blocker, candidate, agentId);
-              break;
             }
           } catch {
             /* 获取失败视为已解除 */
           }
         }
         if (!allBlockersCleared) {
+          // 通知主控：因前置未完成被阻塞，请安排前置任务
+          const supervisorRaw =
+            (candidate.metadata?.supervisorId as string | undefined) ??
+            candidate.supervisorId ??
+            candidate.creatorId;
+          if (supervisorRaw && supervisorRaw !== "system") {
+            injectLeaderSnapshot({
+              leaderId: supervisorRaw,
+              wakeReason: {
+                type: "dep_blocked",
+                taskId: candidate.id,
+                taskTitle: candidate.title,
+                agentId,
+                blockedBy: unmetBlockers.map((b) => ({
+                  id: b.id,
+                  title: b.title,
+                  priority: b.priority,
+                  assigneeId: b.assignees?.[0]?.id,
+                })),
+              },
+              coalesceMs: 10_000,
+            }).catch(() => {
+              /* best-effort */
+            });
+          }
           continue;
         }
       }
@@ -768,6 +794,31 @@ export async function scheduleNextTaskForAgent(
         console.log(
           `[scheduleNextTask] Task ${candidate.id} blocked by unmet deps [${unmetDeps.map((d) => d.taskId).join(", ")}] — setting blocked + boosting predecessors`,
         );
+        // 通知主控：因前置未完成被阻塞，请安排前置任务
+        const supervisorRaw =
+          (candidate.metadata?.supervisorId as string | undefined) ??
+          candidate.supervisorId ??
+          candidate.creatorId;
+        if (supervisorRaw && supervisorRaw !== "system") {
+          injectLeaderSnapshot({
+            leaderId: supervisorRaw,
+            wakeReason: {
+              type: "dep_blocked",
+              taskId: candidate.id,
+              taskTitle: candidate.title,
+              agentId,
+              blockedBy: unmetDeps.map((d) => ({
+                id: d.taskId,
+                title: d.title,
+                priority: d.priority,
+                assigneeId: d.assignees?.[0]?.id,
+              })),
+            },
+            coalesceMs: 10_000,
+          }).catch(() => {
+            /* best-effort */
+          });
+        }
         continue;
       }
 

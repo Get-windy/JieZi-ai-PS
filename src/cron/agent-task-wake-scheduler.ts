@@ -1236,6 +1236,31 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
             for (const dep of unmetDeps) {
               await boostDepPriorityInScheduler(dep, t, normalizedId);
             }
+            // 通知主控：因前置未完成被阻塞，请尽快安排前置任务
+            const supervisorRaw =
+              (t.metadata?.supervisorId as string | undefined) ??
+              ((t as Record<string, unknown>).supervisorId as string | undefined) ??
+              ((t as Record<string, unknown>).creatorId as string | undefined);
+            if (supervisorRaw && supervisorRaw !== "system") {
+              injectLeaderSnapshot({
+                leaderId: supervisorRaw,
+                wakeReason: {
+                  type: "dep_blocked",
+                  taskId: t.id,
+                  taskTitle: t.title,
+                  agentId: normalizedId,
+                  blockedBy: unmetDeps.map((d) => ({
+                    id: d.id,
+                    title: d.title,
+                    priority: d.priority,
+                    assigneeId: d.assignees?.[0]?.id,
+                  })),
+                },
+                coalesceMs: 10_000,
+              }).catch(() => {
+                /* best-effort */
+              });
+            }
             stats.skippedTasks++;
             continue;
           }
