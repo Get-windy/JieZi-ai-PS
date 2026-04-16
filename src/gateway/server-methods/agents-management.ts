@@ -54,7 +54,10 @@ import {
   resolveAgentModelAccounts,
   resolveAgentWorkspaceDir,
 } from "../../agents/agent-scope.js";
-import { injectLeaderSnapshot } from "../../agents/leader-context-snapshot.js";
+import {
+  injectLeaderSnapshot,
+  type LeaderWakeReason,
+} from "../../agents/leader-context-snapshot.js";
 import { resolveSessionTranscriptsDirForAgent } from "../../config/sessions/paths.js";
 import type { AgentConfig } from "../../config/types.agents.js";
 import type { AgentChannelBindings } from "../../config/types.channel-bindings.js";
@@ -927,6 +930,12 @@ export async function scheduleNextTaskForAgent(
       `  3. Append a progress note: task_progress_note_append (## Accomplished / ## Findings / ## Decisions / ## Next Steps)`,
       `  4. If task involved 5+ tool calls with reusable workflow value, call skill_manage action=create (or action=promote from the progress note) to save a SKILL.md.`,
       `  5. Call task_report_to_supervisor with Task ID: ${nextTask.id}`,
+      ``,
+      `⚠️ ANTI-HALLUCINATION CONTRACT (enforced by system):`,
+      `  • You MUST write at least one worklog entry (via task_worklog_add) documenting actual work performed BEFORE calling task_report_to_supervisor with status=done.`,
+      `  • If you report done with NO worklog and NO result description, the system will REJECT your report and downgrade the task to review — supervisor will be alerted.`,
+      `  • "I believe I completed it" or "It should be done" are NOT acceptable. Show your work: file changes, test output, git commit hash.`,
+      `  • If blocked or uncertain, report status=blocked with errorMessage — do NOT fabricate a completion.`,
     ]
       .filter(Boolean)
       .join("\n");
@@ -4270,9 +4279,37 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     // === 步骤1：更新任务系统中的任务状态 ===
     let task: Task | undefined;
     let supervisorId = p?.supervisorId ? p.supervisorId.trim() : undefined;
+    // 幻觉防护 P0：done 报告时导达的实际状态（可能被降级为 review）
+    let effectiveFinalStatus = finalStatus;
+    let hallucinationReason: string | undefined;
     try {
       task = await taskStorage.getTask(taskId);
       if (task) {
+        // 幻觉防护 P0-A：拒绝无工作证据的 done 报告
+        // 任务状态为 done 且 result 为空 且之前无任何 worklog — 高度痑似工具执行幻觉
+        if (finalStatus === "done") {
+          const existingWorklogs = await taskStorage.getTaskWorklogs(taskId);
+          // 仅统计有实际工作内容的 worklog（排除系统自动写入的 started 条目）
+          const substantiveWorklogs = existingWorklogs.filter(
+            (w) => w.action !== "started" && w.action !== "auto_started",
+          );
+          const hasResult = result.length > 0; // 完成描述不为空
+          if (substantiveWorklogs.length === 0 && !hasResult) {
+            // 幻觉指标成立：无 worklog + 无 result 描述
+            // 降级为 review，等待主控人工审核
+            effectiveFinalStatus = "review" as typeof finalStatus;
+            hallucinationReason = `agent ${reporterId} 试图将任务标记 done，但无任何 worklog 记录且 result 描述为空。系统拒绝直接完成，已降级为 review。`;
+            console.warn(
+              `[agent.task.report] 幻觉防抜: Task ${taskId} 报 done 但 worklog 为空，降级为 review (reporter=${reporterId})`,
+            );
+          } else if (substantiveWorklogs.length === 0 && hasResult) {
+            // 有 result 描述但无 worklog — 证据弱，标记幻觉验报信度低，但允许继续
+            console.warn(
+              `[agent.task.report] 低置信度幻觉预警: Task ${taskId} done 但无实质 worklog (reporter=${reporterId}, result长度=${result.length})。允许继续但主控将收到预警快照。`,
+            );
+          }
+        }
+
         // 如果未明确指定 supervisorId，从任务元数据中提取
         if (!supervisorId && task.metadata) {
           const meta = task.metadata;
@@ -4281,10 +4318,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             typeof rawSupervisorId === "string" && rawSupervisorId ? rawSupervisorId : undefined;
         }
         const updates: Partial<Task> = {
-          status: finalStatus,
+          status: effectiveFinalStatus,
           updatedAt: Date.now(),
         };
-        if (finalStatus === "done") {
+        if (effectiveFinalStatus === "done") {
           updates.completedAt = Date.now();
           updates.timeTracking = {
             ...task.timeTracking,
@@ -4295,30 +4332,57 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
               : task.timeTracking.timeSpent,
           };
         }
-        if (finalStatus === "cancelled") {
+        if (effectiveFinalStatus === "cancelled") {
           updates.cancelledAt = Date.now();
           if (p?.errorMessage) {
             updates.cancelReason = p.errorMessage;
           }
         }
+        // 幻觉降级时在 metadata 中记录拦截信息
+        if (hallucinationReason) {
+          updates.metadata = {
+            ...task.metadata,
+            hallucinationIntercepted: true,
+            hallucinationReason,
+            hallucinationAt: Date.now(),
+          };
+        }
         await taskStorage.updateTask(taskId, updates);
 
         // 添加工作日志
+        const workLogAction: string =
+          effectiveFinalStatus === "done"
+            ? "completed"
+            : effectiveFinalStatus === "blocked"
+              ? "blocked"
+              : effectiveFinalStatus === "review"
+                ? "review_requested"
+                : "failed";
+        const workLogResult: string =
+          effectiveFinalStatus === "done"
+            ? "success"
+            : effectiveFinalStatus === "blocked"
+              ? "partial"
+              : effectiveFinalStatus === "review"
+                ? "partial"
+                : "failure";
         const workLog: import("../../tasks/types.js").AgentWorkLog = {
           id: `wl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
           taskId,
           agentId: reporterId,
-          action:
-            finalStatus === "done" ? "completed" : finalStatus === "blocked" ? "blocked" : "failed",
-          details: result || `Task ${finalStatus} by agent ${reporterId}`,
-          result:
-            finalStatus === "done" ? "success" : finalStatus === "blocked" ? "partial" : "failure",
+          action: workLogAction,
+          details: hallucinationReason
+            ? `[幻觉防护] ${hallucinationReason}`
+            : result || `Task ${effectiveFinalStatus} by agent ${reporterId}`,
+          result: workLogResult,
           errorMessage: p?.errorMessage,
           createdAt: Date.now(),
         };
         await taskStorage.addWorklog(workLog);
         console.log(
-          `[agent.task.report] Task ${taskId} updated to ${finalStatus} by ${reporterId}`,
+          `[agent.task.report] Task ${taskId} updated to ${effectiveFinalStatus} by ${reporterId}${
+            hallucinationReason ? " (幻觉拦截: 降级为 review)" : ""
+          }`,
         );
       } else {
         console.warn(
@@ -4362,25 +4426,35 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       if (allowed.has(normalizedLeader)) {
         // === 用仪表盘快照替代多行消息推送 ===
         // 参考 Claude Code 泄露架构：主控状态外置，唤醒时注入实时快照而非堆积历史消息
-        const wakeType =
-          finalStatus === "done"
-            ? "task_done"
-            : finalStatus === "blocked"
-              ? "task_blocked"
-              : "task_done"; // cancelled 也走 done 路径
         const leaderSession = `agent:${normalizedLeader}:main`;
         try {
-          const injected = await injectLeaderSnapshot({
-            leaderId: normalizedLeader,
-            wakeReason:
-              wakeType === "task_blocked"
-                ? { type: "task_blocked", taskId, reporterId, errorMsg: p?.errorMessage ?? "" }
-                : { type: "task_done", taskId, reporterId, summary: result },
-          });
+          let wakeReason: LeaderWakeReason;
+          if (hallucinationReason && task) {
+            // 幻觉拦截：发送专用幻觉快照—不走普通 done 路径
+            wakeReason = {
+              type: "hallucination_suspected",
+              agentId: normalizeAgentId(reporterId),
+              taskId,
+              taskTitle: task.title,
+              reason: hallucinationReason,
+            };
+          } else if (effectiveFinalStatus === "blocked") {
+            wakeReason = {
+              type: "task_blocked",
+              taskId,
+              reporterId,
+              errorMsg: p?.errorMessage ?? "",
+            };
+          } else {
+            wakeReason = { type: "task_done", taskId, reporterId, summary: result };
+          }
+          const injected = await injectLeaderSnapshot({ leaderId: normalizedLeader, wakeReason });
           notifiedSupervisor = injected;
           if (injected) {
             console.log(
-              `[agent.task.report] Injected leader snapshot to ${normalizedLeader} (session: ${leaderSession}) for task ${taskId} by ${reporterId}`,
+              `[agent.task.report] Injected leader snapshot to ${normalizedLeader} (session: ${leaderSession}) for task ${taskId} by ${reporterId}${
+                hallucinationReason ? " [幻觉拦截快照]" : ""
+              }`,
             );
           }
         } catch (notifyErr) {
@@ -4394,7 +4468,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       {
         success: true,
         taskId,
-        finalStatus,
+        finalStatus: effectiveFinalStatus,
+        requestedStatus: finalStatus !== effectiveFinalStatus ? finalStatus : undefined,
+        hallucinationIntercepted: hallucinationReason ? true : undefined,
+        hallucinationReason: hallucinationReason ?? undefined,
         taskFound: !!task,
         notifiedSupervisor,
         supervisorId: resolvedLeaderId ?? null,
@@ -4403,11 +4480,14 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       undefined,
     );
 
-    // === 步骤 3：任务完成/取消/阻塞后自动驱动下一条 todo 任务 ===
-    // 先执行调度，让下一条任务立即变为 in-progress，
-    // 再把"已自动启动下一任务"的信息追加进给 supervisor 的汇报
-    // blocked：当前任务阻塞无法继续，agent 应立即切换到队列中下一条任务
-    if (finalStatus === "done" || finalStatus === "cancelled" || finalStatus === "blocked") {
+    // === 步骤 3：任务完成/取消/阻塞/review(幻觉降级)后自动驱动下一条 todo 任务 ===
+    // blocked 或 review(幻觉降级)：agent 应立即切换到队列中下一条任务
+    if (
+      effectiveFinalStatus === "done" ||
+      effectiveFinalStatus === "cancelled" ||
+      effectiveFinalStatus === "blocked" ||
+      effectiveFinalStatus === "review" // 幻觉降级：当前任务进 review，需继续处理下一条
+    ) {
       const normalizedReporterId = normalizeAgentId(reporterId);
       // 先完成调度（同步等待），使下一任务变为 in-progress
       await scheduleNextTaskForAgent(normalizedReporterId, taskId, task?.projectId);
