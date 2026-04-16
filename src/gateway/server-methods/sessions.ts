@@ -24,6 +24,8 @@ import {
   validateSessionsCompactParams,
   validateSessionsDeleteParams,
   validateSessionsListParams,
+  validateSessionsMessagesSubscribeParams,
+  validateSessionsMessagesUnsubscribeParams,
   validateSessionsPatchParams,
   validateSessionsPreviewParams,
   validateSessionsResetParams,
@@ -352,6 +354,66 @@ export const sessionsHandlers: GatewayRequestHandlers = {
     });
     respond(true, result, undefined);
   },
+  "sessions.subscribe": ({ client, context, respond }) => {
+    const connId = client?.connId?.trim();
+    if (connId) {
+      context.subscribeSessionEvents(connId);
+    }
+    respond(true, { subscribed: Boolean(connId) }, undefined);
+  },
+  "sessions.unsubscribe": ({ client, context, respond }) => {
+    const connId = client?.connId?.trim();
+    if (connId) {
+      context.unsubscribeSessionEvents(connId);
+    }
+    respond(true, { subscribed: false }, undefined);
+  },
+  "sessions.messages.subscribe": ({ params, client, context, respond }) => {
+    if (
+      !assertValidParams(
+        params,
+        validateSessionsMessagesSubscribeParams,
+        "sessions.messages.subscribe",
+        respond,
+      )
+    ) {
+      return;
+    }
+    const connId = client?.connId?.trim();
+    const key = requireSessionKey((params as { key?: unknown }).key, respond);
+    if (!key) {
+      return;
+    }
+    const { canonicalKey } = loadSessionEntry(key);
+    if (connId) {
+      context.subscribeSessionMessageEvents(connId, canonicalKey);
+      respond(true, { subscribed: true, key: canonicalKey }, undefined);
+      return;
+    }
+    respond(true, { subscribed: false, key: canonicalKey }, undefined);
+  },
+  "sessions.messages.unsubscribe": ({ params, client, context, respond }) => {
+    if (
+      !assertValidParams(
+        params,
+        validateSessionsMessagesUnsubscribeParams,
+        "sessions.messages.unsubscribe",
+        respond,
+      )
+    ) {
+      return;
+    }
+    const connId = client?.connId?.trim();
+    const key = requireSessionKey((params as { key?: unknown }).key, respond);
+    if (!key) {
+      return;
+    }
+    const { canonicalKey } = loadSessionEntry(key);
+    if (connId) {
+      context.unsubscribeSessionMessageEvents(connId, canonicalKey);
+    }
+    respond(true, { subscribed: false, key: canonicalKey }, undefined);
+  },
   "sessions.preview": ({ params, respond }) => {
     if (!assertValidParams(params, validateSessionsPreviewParams, "sessions.preview", respond)) {
       return;
@@ -359,7 +421,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
     const p = params;
     const keysRaw = Array.isArray(p.keys) ? p.keys : [];
     const keys = keysRaw
-      .map((key) => String(key ?? "").trim())
+      .map((key) => (key ?? "").trim())
       .filter(Boolean)
       .slice(0, 64);
     const limit =
