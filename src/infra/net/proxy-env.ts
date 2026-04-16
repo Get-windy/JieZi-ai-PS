@@ -53,3 +53,83 @@ export function hasEnvHttpProxyConfigured(
 ): boolean {
   return resolveEnvHttpProxyUrl(protocol, env) !== undefined;
 }
+
+/**
+ * Check whether a target URL matches the NO_PROXY / no_proxy environment
+ * variable, following undici tokenization semantics (comma and whitespace).
+ * Used by provider HTTP helpers to skip the proxy for internal/local targets.
+ */
+export function matchesNoProxy(targetUrl: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = normalizeProxyEnvValue(env.no_proxy) ?? normalizeProxyEnvValue(env.NO_PROXY);
+  if (!raw) {
+    return false;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    return false;
+  }
+
+  const targetHost = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!targetHost) {
+    return false;
+  }
+
+  const targetPort =
+    parsed.port !== ""
+      ? parsed.port
+      : parsed.protocol === "https:"
+        ? "443"
+        : parsed.protocol === "http:"
+          ? "80"
+          : "";
+
+  for (const rawEntry of raw.split(/[,\s]/)) {
+    const entry = rawEntry.trim().toLowerCase();
+    if (!entry) {
+      continue;
+    }
+    if (entry === "*") {
+      return true;
+    }
+
+    let entryHost: string;
+    let entryPort: string | undefined;
+    if (entry.startsWith("[")) {
+      const m = entry.match(/^\[([^\]]+)\](?::(\d+))?$/);
+      if (!m) {
+        continue;
+      }
+      entryHost = m[1];
+      entryPort = m[2];
+    } else {
+      const colonIdx = entry.lastIndexOf(":");
+      if (colonIdx > 0 && /^\d+$/.test(entry.slice(colonIdx + 1))) {
+        entryHost = entry.slice(0, colonIdx);
+        entryPort = entry.slice(colonIdx + 1);
+      } else {
+        entryHost = entry;
+      }
+    }
+
+    if (entryPort && entryPort !== targetPort) {
+      continue;
+    }
+
+    const normalizedEntry = entryHost.replace(/^\*?\./, "");
+    if (!normalizedEntry) {
+      continue;
+    }
+
+    if (targetHost === normalizedEntry) {
+      return true;
+    }
+    if (targetHost.endsWith("." + normalizedEntry)) {
+      return true;
+    }
+  }
+
+  return false;
+}
