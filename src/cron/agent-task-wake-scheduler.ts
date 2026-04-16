@@ -22,11 +22,16 @@ import { loadConfig } from "../../upstream/src/config/config.js";
 import { requestHeartbeatNow } from "../../upstream/src/infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
 import {
+  listAgentIds,
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId,
+} from "../agents/agent-scope.js";
+import { injectLeaderSnapshot } from "../agents/leader-context-snapshot.js";
+import {
   resolveDefaultSessionStorePath,
   resolveSessionTranscriptPath,
   updateSessionStore,
 } from "../config/sessions.js";
-import { listAgentIds, resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { getTaskTypePerfScore, inferTaskType } from "../gateway/server-methods/evolve-rpc.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { groupManager } from "../sessions/group-manager.js";
@@ -42,6 +47,108 @@ import {
   resolveStrictestThreshold,
 } from "../utils/project-context.js";
 import { groupWorkspaceManager } from "../workspace/group-workspace.js";
+
+// ============================================================================
+// 依赖感知调度辅助函数（本地版，不依赖 agents-management 防循环导入）
+// ============================================================================
+
+/** 优先级权重映射 */
+const _SCHED_PRIORITY_RANK: Record<string, number> = {
+  none: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+  urgent: 4,
+};
+
+/**
+ * 检查任务的前置依赖（blockedBy + dependencies）中是否存在未完成项
+ * 返回未完成的前置任务列表
+ */
+async function checkUnmetDepsForScheduler(task: {
+  id: string;
+  blockedBy?: string[];
+  dependencies?: string[];
+}): Promise<{ id: string; title: string; priority: string; assignees?: Array<{ id: string }> }[]> {
+  const unmet: {
+    id: string;
+    title: string;
+    priority: string;
+    assignees?: Array<{ id: string }>;
+  }[] = [];
+  const depIds = new Set<string>([...(task.blockedBy ?? []), ...(task.dependencies ?? [])]);
+  for (const depId of depIds) {
+    try {
+      const dep = await taskStorage.getTask(depId);
+      if (dep && dep.status !== "done" && dep.status !== "cancelled") {
+        unmet.push({
+          id: dep.id,
+          title: dep.title,
+          priority: dep.priority,
+          assignees: dep.assignees,
+        });
+      }
+    } catch {
+      /* 获取失败视为已解除 */
+    }
+  }
+  return unmet;
+}
+
+/**
+ * Priority Inheritance：调度器内部版本——将前置任务优先级提升至不低于后继任务
+ */
+async function boostDepPriorityInScheduler(
+  predecessor: { id: string; title: string; priority: string; assignees?: Array<{ id: string }> },
+  successor: { id: string; title: string; priority: string },
+  requestingAgentId: string,
+): Promise<void> {
+  const predRank = _SCHED_PRIORITY_RANK[predecessor.priority] ?? 0;
+  const succRank = _SCHED_PRIORITY_RANK[successor.priority] ?? 0;
+  if (predRank >= succRank) {
+    return;
+  }
+  const newPriority = successor.priority as import("../tasks/types.js").TaskPriority;
+  try {
+    await taskStorage.updateTask(predecessor.id, {
+      priority: newPriority,
+      metadata: {
+        priorityBoostedAt: Date.now(),
+        priorityBoostedBy: `dep-gate from ${successor.id}`,
+        priorityBoostedFrom: predecessor.priority,
+      },
+    });
+    console.log(
+      `[Task Wake] Priority Inheritance: ${predecessor.id} ${predecessor.priority} → ${newPriority} (blocked ${successor.id} for ${requestingAgentId})`,
+    );
+    // 通知前置任务的 assignee
+    const predAssigneeId = predecessor.assignees?.[0]?.id;
+    if (predAssigneeId && predAssigneeId !== requestingAgentId) {
+      const predSessionKey = `agent:${predAssigneeId}:main`;
+      enqueueSystemEvent(
+        [
+          `[PRIORITY BOOSTED] 你的任务优先级因下游依赖被自动提升：`,
+          ``,
+          `任务 ID: ${predecessor.id}`,
+          `任务标题: ${predecessor.title}`,
+          `优先级变更: ${predecessor.priority} → ${newPriority}`,
+          `原因: 任务 ${successor.id} ("${successor.title}") 等待此任务完成后才能开始，负责 Agent: ${requestingAgentId}`,
+          ``,
+          `请尽快完成此前置任务。`,
+        ].join("\n"),
+        { sessionKey: predSessionKey, contextKey: `dep-boost:${predecessor.id}:${successor.id}` },
+      );
+      requestHeartbeatNow({
+        reason: `dep-boost:${predecessor.id}`,
+        sessionKey: predSessionKey,
+        agentId: predAssigneeId,
+        coalesceMs: 5000,
+      });
+    }
+  } catch (err) {
+    console.warn(`[Task Wake] boostDepPriority failed for ${predecessor.id}: ${String(err)}`);
+  }
+}
 
 // ============================================================================
 // 任务完成判定设计原则
@@ -264,7 +371,9 @@ async function checkAndNotifyLowWatermark(
   const lwmCooldownMs = 60 * 60 * 1000;
   const lwmLastAlertKey = `lwm:${normalizedId}`;
   const lwmLastAlert = lowWatermarkAlertAt.get(lwmLastAlertKey);
-  if (lwmLastAlert && now - lwmLastAlert < lwmCooldownMs) {return;}
+  if (lwmLastAlert && now - lwmLastAlert < lwmCooldownMs) {
+    return;
+  }
 
   // 获取当前 todo 数量（仅 todo 状态，不含已完成/进行中）
   const currentTodoTasks = await taskStorage.listTasks({
@@ -275,9 +384,13 @@ async function checkAndNotifyLowWatermark(
 
   // 收集该 agent 所在项目（todo 任务 + 可选刚完成任务的项目 + in-progress 任务）
   const agentProjectIds = new Set<string>();
-  if (completedProjectId) {agentProjectIds.add(completedProjectId);}
+  if (completedProjectId) {
+    agentProjectIds.add(completedProjectId);
+  }
   for (const t of currentTodoTasks) {
-    if (t.projectId) {agentProjectIds.add(t.projectId);}
+    if (t.projectId) {
+      agentProjectIds.add(t.projectId);
+    }
   }
   if (agentProjectIds.size === 0) {
     const inProg = await taskStorage.listTasks({
@@ -285,7 +398,9 @@ async function checkAndNotifyLowWatermark(
       status: ["in-progress"],
     });
     for (const t of inProg) {
-      if (t.projectId) {agentProjectIds.add(t.projectId);}
+      if (t.projectId) {
+        agentProjectIds.add(t.projectId);
+      }
     }
   }
 
@@ -295,20 +410,30 @@ async function checkAndNotifyLowWatermark(
   const allGroupsForLwm = groupManager.getAllGroups();
   for (const projectId of agentProjectIds) {
     const group = allGroupsForLwm.find((g) => g.projectId === projectId);
-    if (!group) {continue;}
+    if (!group) {
+      continue;
+    }
     const groupWsDir = groupWorkspaceManager.getGroupWorkspaceDir(group.id);
-    if (!groupWsDir) {continue;}
+    if (!groupWsDir) {
+      continue;
+    }
     const projCfg = readProjectConfig(groupWsDir);
     const phase = projCfg?.status ?? undefined;
-    if (!phase) {continue;}
+    if (!phase) {
+      continue;
+    }
     phaseLabels.push(`${projectId}(阶段:${phase})`);
     thresholds.push(resolveAgentTaskThreshold(phase, normalizedId));
     recordTodoObservation(phase, normalizedId, todoCount);
   }
 
   const threshold = resolveStrictestThreshold(thresholds);
-  if (threshold.allowIdle) {return;}
-  if (todoCount >= threshold.minTodo) {return;}
+  if (threshold.allowIdle) {
+    return;
+  }
+  if (todoCount >= threshold.minTodo) {
+    return;
+  }
 
   // 找 supervisor
   let supervisorIdForLwm: string | undefined;
@@ -328,12 +453,16 @@ async function checkAndNotifyLowWatermark(
         | undefined;
     }
   }
-  if (!supervisorIdForLwm || supervisorIdForLwm === "system") {return;}
+  if (!supervisorIdForLwm || supervisorIdForLwm === "system") {
+    return;
+  }
 
   const cfgForLwm = loadConfig();
   const allowedAgents = new Set(listAgentIds(cfgForLwm).map(normalizeAgentId));
   const normalizedSup = normalizeAgentId(supervisorIdForLwm);
-  if (!allowedAgents.has(normalizedSup)) {return;}
+  if (!allowedAgents.has(normalizedSup)) {
+    return;
+  }
 
   // 记录本次告警时间（冷却）
   lowWatermarkAlertAt.set(lwmLastAlertKey, now);
@@ -628,10 +757,10 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
         //   - 直到 startedAt 累计 >= 60min 触发强制重置
         const lastReportPrompt = progressReportPromptedAt.get(activeTask.id);
         const silentMs = executionStartedAt != null ? now - executionStartedAt : null;
-        const isFirstTimeout = silentMs !== null && silentMs >= STALE_IN_PROGRESS_MS && !lastReportPrompt;
+        const isFirstTimeout =
+          silentMs !== null && silentMs >= STALE_IN_PROGRESS_MS && !lastReportPrompt;
         const isRepeatTimeout =
-          lastReportPrompt !== undefined &&
-          now - lastReportPrompt >= REPEAT_TIMEOUT_INTERVAL_MS;
+          lastReportPrompt !== undefined && now - lastReportPrompt >= REPEAT_TIMEOUT_INTERVAL_MS;
         const isStale = isFirstTimeout || isRepeatTimeout;
         // shouldForceReset 基于 startedAt 计算（表示任务持续占用时间超过 60 分钟）
         // 与 isStale 的基准不同：isStale 用最近活动时间，shouldForceReset 用任务开始时间
@@ -687,7 +816,9 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
                     stuckMinutes,
                   },
                   coalesceMs: 10_000,
-                }).catch(() => { /* best-effort */ });
+                }).catch(() => {
+                  /* best-effort */
+                });
               }
             }
             stats.wokenAgents++;
@@ -820,7 +951,9 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
                   stuckMinutes,
                 },
                 coalesceMs: 10_000,
-              }).catch(() => { /* best-effort */ });
+              }).catch(() => {
+                /* best-effort */
+              });
             }
           }
           stats.wokenAgents++;
@@ -943,7 +1076,9 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
                   overdueMinutes,
                 },
                 coalesceMs: 10_000,
-              }).catch(() => { /* best-effort */ });
+              }).catch(() => {
+                /* best-effort */
+              });
             }
           }
         }
@@ -1030,7 +1165,9 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
                     toAgent: bestAgentId,
                   },
                   coalesceMs: 15_000,
-                }).catch(() => { /* best-effort */ });
+                }).catch(() => {
+                  /* best-effort */
+                });
               }
             }
           }
@@ -1077,9 +1214,42 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
         const top2 = sortedTodos[1];
         const tasksToActivate = top2 && top2.priority === top1.priority ? [top1, top2] : [top1];
 
+        // ── 依赖门控：激活前先检查每个任务的前置任务是否完成 ──
+        const gatedTasksToActivate: typeof tasksToActivate = [];
+        for (const t of tasksToActivate) {
+          const unmetDeps = await checkUnmetDepsForScheduler(t);
+          if (unmetDeps.length > 0) {
+            // 前置未完成：将任务设为 blocked，不激活，直接提升前置优先级
+            console.log(
+              `[Task Wake] Dependency Gate: task ${t.id} ("${t.title}") has ${unmetDeps.length} unmet dep(s) [${unmetDeps.map((d) => d.id).join(", ")}] — blocking task + boosting predecessors`,
+            );
+            await taskStorage.updateTask(t.id, {
+              status: "blocked",
+              blockedBy: unmetDeps.map((d) => d.id),
+              metadata: {
+                ...t.metadata,
+                blockedReason: `前置任务未完成: ${unmetDeps.map((d) => d.id).join(", ")}`,
+                blockedAt: Date.now(),
+              },
+            });
+            // Priority Inheritance：将每个未完成的前置任务提升到至少和当前任务相同的优先级
+            for (const dep of unmetDeps) {
+              await boostDepPriorityInScheduler(dep, t, normalizedId);
+            }
+            stats.skippedTasks++;
+            continue;
+          }
+          gatedTasksToActivate.push(t);
+        }
+
+        // 所有候选任务均被前置门控拦截，本轮不激活任何任务
+        if (gatedTasksToActivate.length === 0) {
+          continue;
+        }
+
         // 批量将选中任务程序直接更新为 in-progress，不依赖 agent 自己改状态
         const activatedTasks: typeof tasksToActivate = [];
-        for (const t of tasksToActivate) {
+        for (const t of gatedTasksToActivate) {
           const updated = await taskStorage.updateTask(t.id, {
             status: "in-progress",
             timeTracking: { ...t.timeTracking, startedAt: now, lastActivityAt: now },
@@ -1218,7 +1388,9 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
                 queueSize: queueRemaining + tasksToActivate.length,
               },
               coalesceMs: 30_000,
-            }).catch(() => { /* best-effort */ });
+            }).catch(() => {
+              /* best-effort */
+            });
           }
         }
       }
@@ -1247,15 +1419,17 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
     }
 
     // 每日自适应调整：调用阈值自适应引擎（内部有间隔限制，24h 才执行一次）
-    adaptThresholds().then((result) => {
-      if (result.adjusted > 0) {
-        console.log(
-          `[Task Wake] 自适应阈值调整完成：${result.adjusted} 条配置更新，${result.skipped} 条跳过`,
-        );
-      }
-    }).catch((adaptErr) => {
-      console.warn(`[Task Wake] 阈值自适应调整失败: ${String(adaptErr)}`);
-    });
+    adaptThresholds()
+      .then((result) => {
+        if (result.adjusted > 0) {
+          console.log(
+            `[Task Wake] 自适应阈值调整完成：${result.adjusted} 条配置更新，${result.skipped} 条跳过`,
+          );
+        }
+      })
+      .catch((adaptErr) => {
+        console.warn(`[Task Wake] 阈值自适应调整失败: ${String(adaptErr)}`);
+      });
 
     return stats;
   } catch (error) {

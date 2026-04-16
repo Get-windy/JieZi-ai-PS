@@ -12,6 +12,31 @@ import { normalizeAgentId } from "../routing/session-key.js";
 import * as storage from "./storage.js";
 import type { Task } from "./types.js";
 
+/** 优先级权重映射（老化模块内部用）*/
+const AGING_PRIORITY_RANK: Record<string, number> = {
+  none: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+  urgent: 4,
+};
+
+/**
+ * 检查任务的前置依赖是否存在未完成项（老化模块内部版）
+ * 使用内存映射避免重复 DB 查询
+ */
+function checkUnmetDepsForAging(task: Task, taskMap: Map<string, Task>): Promise<Task[]> {
+  const unmet: Task[] = [];
+  const depIds = new Set<string>([...(task.blockedBy ?? []), ...(task.dependencies ?? [])]);
+  for (const depId of depIds) {
+    const dep = taskMap.get(depId);
+    if (dep && dep.status !== "done" && dep.status !== "cancelled") {
+      unmet.push(dep);
+    }
+  }
+  return Promise.resolve(unmet);
+}
+
 // ============================================================================
 // 配置参数
 // ============================================================================
@@ -433,15 +458,32 @@ export async function reassignBlockedTask(task: Task, _projectId?: string): Prom
     // ── 阻塞原因分类 ──────────────────────────────────────────────────────────
     // 依据 task.metadata.blockType 或关键词推断阻塞类型，给主控提供精准建议
     type BlockType = "dependency" | "needs-info" | "technical-block" | "unknown";
-    const rawBlockType = String(task.metadata?.blockType ?? "").toLowerCase();
-    const rawBlockReason = String(task.metadata?.blockReason ?? task.description ?? "").toLowerCase();
+    const rawBlockType = (
+      typeof task.metadata?.blockType === "string" ? task.metadata.blockType : ""
+    ).toLowerCase();
+    const rawBlockReason = (
+      typeof task.metadata?.blockReason === "string"
+        ? task.metadata.blockReason
+        : typeof task.description === "string"
+          ? task.description
+          : ""
+    ).toLowerCase();
 
     let blockType: BlockType;
-    if (rawBlockType === "dependency" || /\bwait(ing)?\s+(for|on)\b|\bdepend(s|ency)?\b|\bblockedby\b/.test(rawBlockReason)) {
+    if (
+      rawBlockType === "dependency" ||
+      /\bwait(ing)?\s+(for|on)\b|\bdepend(s|ency)?\b|\bblockedby\b/.test(rawBlockReason)
+    ) {
       blockType = "dependency";
-    } else if (/\bconfirm|clarif|detail|unclear|需求|接口|spec\b/.test(rawBlockReason) || rawBlockType === "needs-info") {
+    } else if (
+      /\bconfirm|clarif|detail|unclear|需求|接口|spec\b/.test(rawBlockReason) ||
+      rawBlockType === "needs-info"
+    ) {
       blockType = "needs-info";
-    } else if (/\btechni|arch|design|方案|implementation|integrate\b/.test(rawBlockReason) || rawBlockType === "technical-block") {
+    } else if (
+      /\btechni|arch|design|方案|implementation|integrate\b/.test(rawBlockReason) ||
+      rawBlockType === "technical-block"
+    ) {
       blockType = "technical-block";
     } else {
       blockType = "unknown";
@@ -449,10 +491,10 @@ export async function reassignBlockedTask(task: Task, _projectId?: string): Prom
 
     // 根据分类生成差异化建议（减少主控思考量）
     const BLOCK_TYPE_LABEL: Record<BlockType, string> = {
-      dependency:      "⏳ 依赖阻塞 (DEPENDENCY)",
-      "needs-info":    "❓ 需求/接口待确认 (NEEDS-INFO)",
+      dependency: "⏳ 依赖阻塞 (DEPENDENCY)",
+      "needs-info": "❓ 需求/接口待确认 (NEEDS-INFO)",
       "technical-block": "🔧 技术方案待确认 (TECHNICAL-BLOCK)",
-      unknown:         "⚠️  原因未知 (UNKNOWN)",
+      unknown: "⚠️  原因未知 (UNKNOWN)",
     };
     const BLOCK_TYPE_SUGGEST: Record<BlockType, string[]> = {
       dependency: [
@@ -607,8 +649,89 @@ export async function scanAndProcessAgingTasks(options?: {
     const doneTasks = await storage.listTasks({ projectId, status: ["done"] });
     const doneTaskIds = new Set(doneTasks.map((t) => t.id));
 
+    // 构建全量任务映射（用于依赖查找）
+    const allTaskMap = new Map(allTasks.map((task) => [task.id, task]));
+    for (const dt of doneTasks) {
+      allTaskMap.set(dt.id, dt);
+    }
+
     for (const task of allTasks) {
       try {
+        // === 运行时依赖检查：in-progress 任务如果前置未完成，自动退回 todo ===
+        // 业界实践（Temporal.io / Jira）：任务在执行中发现前置未完成，应将其退回队列而非继续占用客截资源
+        if (task.status === "in-progress") {
+          const unmetInProgress = await checkUnmetDepsForAging(task, allTaskMap);
+          if (unmetInProgress.length > 0) {
+            // 退回 todo，并设置 blockedBy
+            await storage.updateTask(task.id, {
+              status: "blocked",
+              blockedBy: unmetInProgress.map((d) => d.id),
+              timeTracking: { ...task.timeTracking, startedAt: undefined },
+              metadata: {
+                ...task.metadata,
+                blockedReason: `运行时发现前置未完成: ${unmetInProgress.map((d) => d.id).join(", ")}`,
+                blockedAt: Date.now(),
+              },
+            });
+            console.log(
+              `[Task Aging] Runtime Dep Check: in-progress task ${task.id} reverted to blocked (unmet: [${unmetInProgress.map((d) => d.id).join(", ")}])`,
+            );
+            stats.autoUnblocked--; // 占位，用负分抵消后面的++
+
+            // Priority Inheritance：提升前置任务优先级
+            for (const dep of unmetInProgress) {
+              const depRank = AGING_PRIORITY_RANK[dep.priority] ?? 0;
+              const taskRank = AGING_PRIORITY_RANK[task.priority] ?? 0;
+              if (depRank < taskRank) {
+                await storage.updateTask(dep.id, {
+                  priority: task.priority,
+                  metadata: {
+                    ...dep.metadata,
+                    priorityBoostedAt: Date.now(),
+                    priorityBoostedBy: `runtime-dep-check from ${task.id}`,
+                    priorityBoostedFrom: dep.priority,
+                  },
+                });
+                console.log(
+                  `[Task Aging] Priority Inheritance: ${dep.id} boosted ${dep.priority} → ${task.priority} (runtime blocker of in-progress ${task.id})`,
+                );
+              }
+            }
+
+            // 通知 supervisor
+            const notifyRaw =
+              (task.metadata?.supervisorId as string | undefined) ??
+              task.supervisorId ??
+              task.creatorId;
+            if (notifyRaw && notifyRaw !== "system") {
+              const notifyId = normalizeAgentId(notifyRaw);
+              const sessionKey = `agent:${notifyId}:main`;
+              enqueueSystemEvent(
+                [
+                  `[TASK REVERTED - DEP UNMET] 一个正在执行的任务因前置未完成已被自动退回到阻塞态：`,
+                  ``,
+                  `任务 ID: ${task.id}`,
+                  `标题: ${task.title}`,
+                  `未完成前置: ${unmetInProgress.map((d) => `${d.id} (${d.title}, ${d.priority})`).join("; ")}`,
+                  ``,
+                  `前置任务优先级已自动提升，请确保前置任务被尽快完成。`,
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+                { sessionKey, contextKey: `cron:dep-unmet-revert:${task.id}` },
+              );
+              requestHeartbeatNow({
+                reason: `dep-unmet-revert:${task.id}`,
+                sessionKey,
+                agentId: notifyId,
+                coalesceMs: 10000,
+              });
+            }
+            stats.autoUnblocked++;
+            continue; // 已处理，跳过后续老化扫描
+          }
+        }
+
         // === 自动解除阻塞：程序检测依赖任务是否已全部完成 ===
         // 这一部分完全由程序自动完成，不依赖 agent
         if (task.status === "blocked" && task.blockedBy && task.blockedBy.length > 0) {
