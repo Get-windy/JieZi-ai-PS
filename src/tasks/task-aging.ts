@@ -7,6 +7,7 @@
 
 import { requestHeartbeatNow } from "../../upstream/src/infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
+import { injectLeaderSnapshot } from "../agents/leader-context-snapshot.js";
 import { t } from "../i18n/index.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import * as storage from "./storage.js";
@@ -698,33 +699,29 @@ export async function scanAndProcessAgingTasks(options?: {
               }
             }
 
-            // 通知 supervisor
+            // 通知主控：即时报告 + 付带前置任务明细和行动建议
             const notifyRaw =
               (task.metadata?.supervisorId as string | undefined) ??
               task.supervisorId ??
               task.creatorId;
             if (notifyRaw && notifyRaw !== "system") {
-              const notifyId = normalizeAgentId(notifyRaw);
-              const sessionKey = `agent:${notifyId}:main`;
-              enqueueSystemEvent(
-                [
-                  `[TASK REVERTED - DEP UNMET] 一个正在执行的任务因前置未完成已被自动退回到阻塞态：`,
-                  ``,
-                  `任务 ID: ${task.id}`,
-                  `标题: ${task.title}`,
-                  `未完成前置: ${unmetInProgress.map((d) => `${d.id} (${d.title}, ${d.priority})`).join("; ")}`,
-                  ``,
-                  `前置任务优先级已自动提升，请确保前置任务被尽快完成。`,
-                ]
-                  .filter(Boolean)
-                  .join("\n"),
-                { sessionKey, contextKey: `cron:dep-unmet-revert:${task.id}` },
-              );
-              requestHeartbeatNow({
-                reason: `dep-unmet-revert:${task.id}`,
-                sessionKey,
-                agentId: notifyId,
-                coalesceMs: 10000,
+              injectLeaderSnapshot({
+                leaderId: notifyRaw,
+                wakeReason: {
+                  type: "dep_blocked",
+                  taskId: task.id,
+                  taskTitle: task.title,
+                  agentId: task.assignees?.[0]?.id ?? "unknown",
+                  blockedBy: unmetInProgress.map((d) => ({
+                    id: d.id,
+                    title: d.title,
+                    priority: d.priority,
+                    assigneeId: d.assignees?.[0]?.id,
+                  })),
+                },
+                coalesceMs: 10_000,
+              }).catch(() => {
+                /* best-effort */
               });
             }
             stats.autoUnblocked++;

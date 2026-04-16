@@ -16,11 +16,11 @@
  */
 
 import { loadConfig } from "../../upstream/src/config/config.js";
-import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
 import { requestHeartbeatNow } from "../../upstream/src/infra/heartbeat-wake.js";
+import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
 import { normalizeAgentId } from "../routing/session-key.js";
-import { listAgentIds } from "./agent-scope.js";
 import * as taskStorage from "../tasks/storage.js";
+import { listAgentIds } from "./agent-scope.js";
 
 // ─── 快照尺寸预算 ────────────────────────────────────────────────────────────
 // 严格控制注入主控上下文的字符数，防止单次注入撑爆上下文窗口
@@ -44,6 +44,13 @@ const lastSnapshotAtMap = new Map<string, number>();
 export type LeaderWakeReason =
   | { type: "task_done"; taskId: string; reporterId: string; summary: string }
   | { type: "task_blocked"; taskId: string; reporterId: string; errorMsg: string }
+  | {
+      type: "dep_blocked";
+      taskId: string;
+      taskTitle: string;
+      agentId: string;
+      blockedBy: Array<{ id: string; title: string; priority: string; assigneeId?: string }>;
+    }
   | { type: "task_timeout"; agentId: string; taskId: string; stuckMinutes: number }
   | { type: "task_reset"; agentId: string; taskId: string; stuckMinutes: number }
   | { type: "low_watermark"; agentId: string; todoCount: number; minTodo: number }
@@ -114,7 +121,9 @@ export async function injectLeaderSnapshot(params: {
 
     return true;
   } catch (err) {
-    console.warn(`[leader-snapshot] Failed to build snapshot for ${normalizedLeader}: ${String(err)}`);
+    console.warn(
+      `[leader-snapshot] Failed to build snapshot for ${normalizedLeader}: ${String(err)}`,
+    );
     return false;
   }
 }
@@ -162,7 +171,9 @@ async function buildLeaderSnapshot(
           .slice(0, MAX_IN_PROGRESS_PER_AGENT)
           .map((t) => `"${t.title.slice(0, MAX_TASK_TITLE_CHARS)}"`)
           .join(", ");
-        statusParts.push(`🔵 ${inProgress.length}进行中: ${titles}${inProgress.length > MAX_IN_PROGRESS_PER_AGENT ? "…" : ""}`);
+        statusParts.push(
+          `🔵 ${inProgress.length}进行中: ${titles}${inProgress.length > MAX_IN_PROGRESS_PER_AGENT ? "…" : ""}`,
+        );
       }
       if (blocked.length > 0) {
         statusParts.push(`🔴 ${blocked.length}阻塞`);
@@ -182,9 +193,7 @@ async function buildLeaderSnapshot(
 
       // 积压预警
       if (todo.length >= BACKLOG_WARN_THRESHOLD && alertRows.length < MAX_ALERT_AGENTS) {
-        alertRows.push(
-          `  📥 ${agentId} backlog=${todo.length} — consider reassigning`,
-        );
+        alertRows.push(`  📥 ${agentId} backlog=${todo.length} — consider reassigning`);
       }
     } catch {
       // 单个 agent 查询失败不影响其他
@@ -197,6 +206,26 @@ async function buildLeaderSnapshot(
   // 触发原因（单行，必须置顶）
   lines.push(`[LEADER DASHBOARD] ${new Date().toLocaleTimeString()} — ${triggerLine}`);
   lines.push("");
+
+  // dep_blocked 专属：前置任务明细 + 行动指引（紧跟触发行，让主控第一眼看到该做什么）
+  if (wakeReason.type === "dep_blocked") {
+    lines.push(
+      `📋 阻塞详情 — 任务 [${wakeReason.taskId}] "${wakeReason.taskTitle.slice(0, 50)}" (执行者: ${wakeReason.agentId}) 因前置未完成已退回等待:`,
+    );
+    for (const dep of wakeReason.blockedBy) {
+      const assigneePart = dep.assigneeId ? ` | 负责人: ${dep.assigneeId}` : " | ⚠️ 未分配";
+      lines.push(
+        `  🔒 [${dep.id}] "${dep.title.slice(0, 50)}" (优先级: ${dep.priority}${assigneePart})`,
+      );
+    }
+    lines.push("");
+    lines.push("💡 建议行动:");
+    lines.push("  1. 检查上方前置任务是否已分配给合适成员");
+    lines.push("  2. 若未分配 → 用 agent.assign_task 立即分配并设为 urgent");
+    lines.push("  3. 若已分配但卡住 → 用 agent.task.triage 分诊处理");
+    lines.push("  4. 前置任务完成后，系统会自动解除阻塞并重新调度");
+    lines.push("");
+  }
 
   // 全局指标行（极度紧凑，1 行）
   lines.push(
@@ -219,13 +248,18 @@ async function buildLeaderSnapshot(
   }
 
   // 操作提示（极度精简，仅关键命令）
-  lines.push("📌 常用操作: agent.task.triage(批量分诊) | agent.task.manage(cancel/reset/extend/split) | agent.task.list | agent_communicate");
+  lines.push(
+    "📌 常用操作: agent.task.triage(批量分诊) | agent.task.manage(cancel/reset/extend/split) | agent.task.list | agent_communicate",
+  );
 
   const snapshot = lines.join("\n");
 
   // 预算保护：超出则截断并提示
   if (snapshot.length > MAX_SNAPSHOT_CHARS) {
-    return snapshot.slice(0, MAX_SNAPSHOT_CHARS) + "\n…[snapshot truncated — use agent.task.list for full view]";
+    return (
+      snapshot.slice(0, MAX_SNAPSHOT_CHARS) +
+      "\n…[snapshot truncated — use agent.task.list for full view]"
+    );
   }
 
   return snapshot;
@@ -239,6 +273,8 @@ function buildTriggerLine(reason: LeaderWakeReason): string {
       return `✅ ${reason.reporterId} 完成 [${reason.taskId}]${reason.summary ? ` — ${reason.summary.slice(0, 80)}` : ""}`;
     case "task_blocked":
       return `⚠️ ${reason.reporterId} 阻塞 [${reason.taskId}]${reason.errorMsg ? ` — ${reason.errorMsg.slice(0, 80)}` : ""}`;
+    case "dep_blocked":
+      return `🔒 ${reason.agentId} 任务 [${reason.taskId}] 因前置未完成已退回 — 前置: ${reason.blockedBy.map((d) => d.id).join(", ")}，请立即安排`;
     case "task_timeout":
       return `⏱️ ${reason.agentId} 超时 [${reason.taskId}] ${reason.stuckMinutes}min — 已重唤醒`;
     case "task_reset":
@@ -262,6 +298,7 @@ function buildContextKey(reason: LeaderWakeReason): string {
   switch (reason.type) {
     case "task_done":
     case "task_blocked":
+    case "dep_blocked":
       return `leader:snapshot:task:${reason.taskId}`;
     case "task_timeout":
     case "task_reset":
