@@ -4055,6 +4055,14 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
   },
 
   /**
+   * 解析群组工作空间目录：
+   * 优先使用 groupManager 中记录的 workspacePath（项目群的自定义路径），
+   * 回退到 groupWorkspaceManager 的路径（默认根目录拼接）。
+   * 这样可避免「群组概览」与「群组文件」两张皮的问题。
+   */
+  // （内联辅助，非 RPC handler）
+
+  /**
    * groups.files.list - 列出群组工作空间的文件
    */
   "groups.files.list": async ({ params, respond }) => {
@@ -4064,7 +4072,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
     try {
-      const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(groupId);
+      const groupInfo = groupManager.getGroup(groupId);
+      const groupDir =
+        groupInfo?.workspacePath?.trim() || groupWorkspaceManager.getGroupWorkspaceDir(groupId);
       // 确保目录存在
       await fs.mkdir(groupDir, { recursive: true });
       const entries = await fs.readdir(groupDir, { withFileTypes: true });
@@ -4112,7 +4122,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
     try {
-      const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(groupId);
+      const groupInfo = groupManager.getGroup(groupId);
+      const groupDir =
+        groupInfo?.workspacePath?.trim() || groupWorkspaceManager.getGroupWorkspaceDir(groupId);
       const filePath = path.resolve(path.join(groupDir, name));
       // 安全检查：不允许路径穿越
       if (!filePath.startsWith(path.resolve(groupDir))) {
@@ -4166,7 +4178,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
     try {
-      const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(groupId);
+      const groupInfo = groupManager.getGroup(groupId);
+      const groupDir =
+        groupInfo?.workspacePath?.trim() || groupWorkspaceManager.getGroupWorkspaceDir(groupId);
       const filePath = path.resolve(path.join(groupDir, name));
       // 安全检查
       if (!filePath.startsWith(path.resolve(groupDir))) {
@@ -4214,7 +4228,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       return;
     }
     try {
-      const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(groupId);
+      const groupInfo = groupManager.getGroup(groupId);
+      const groupDir =
+        groupInfo?.workspacePath?.trim() || groupWorkspaceManager.getGroupWorkspaceDir(groupId);
       const filePath = path.resolve(path.join(groupDir, name));
       if (!filePath.startsWith(path.resolve(groupDir))) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Invalid file path"));
