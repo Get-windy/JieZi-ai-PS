@@ -48,13 +48,13 @@ import { enqueueSystemEvent } from "../../../upstream/src/infra/system-events.js
 import { resolveUserPath } from "../../../upstream/src/utils.js";
 import { addAgentToAllowList } from "../../agents/agent-config-manager.js";
 import { getAgentProgressManager } from "../../agents/agent-progress.js";
-import { injectLeaderSnapshot } from "../../agents/leader-context-snapshot.js";
 import {
   listAgentIds,
   resolveAgentDir,
   resolveAgentModelAccounts,
   resolveAgentWorkspaceDir,
 } from "../../agents/agent-scope.js";
+import { injectLeaderSnapshot } from "../../agents/leader-context-snapshot.js";
 import { resolveSessionTranscriptsDirForAgent } from "../../config/sessions/paths.js";
 import type { AgentConfig } from "../../config/types.agents.js";
 import type { AgentChannelBindings } from "../../config/types.channel-bindings.js";
@@ -393,7 +393,7 @@ function validateModelAccountsConfig(config: unknown): void {
     for (const field of weightFields) {
       if (
         sr[field] !== undefined &&
-        (typeof sr[field] !== "number" || (sr[field]) < 0 || (sr[field]) > 100)
+        (typeof sr[field] !== "number" || sr[field] < 0 || sr[field] > 100)
       ) {
         throw new Error(`${field} must be between 0 and 100`);
       }
@@ -468,7 +468,9 @@ function getAgentChannelBindings(
 
   const channelBindings =
     // 优先从 params.channelBindings 读取（新存储位置）
-    ((agent as { params?: Record<string, unknown> }).params?.channelBindings as AgentChannelBindings | undefined) ??
+    ((agent as { params?: Record<string, unknown> }).params?.channelBindings as
+      | AgentChannelBindings
+      | undefined) ??
     // 兼容旧数据：直接写在顶层的 channelBindings
     (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
   if (channelBindings) {
@@ -526,7 +528,9 @@ async function updateAgentField(
   const LOCAL_FIELDS_IN_PARAMS = ["modelAccounts", "channelBindings", "permissions"] as const;
   let updatedAgent: Record<string, unknown>;
   if ((LOCAL_FIELDS_IN_PARAMS as readonly string[]).includes(fieldName)) {
-    const existingParams = (agents[agentIndex] as Record<string, unknown>).params as Record<string, unknown> | undefined;
+    const existingParams = (agents[agentIndex] as Record<string, unknown>).params as
+      | Record<string, unknown>
+      | undefined;
     updatedAgent = {
       ...agents[agentIndex],
       params: {
@@ -571,6 +575,115 @@ async function updateAgentField(
  */
 const _scheduleNextTaskLocks = new Map<string, Promise<void>>();
 
+// ============================================================================
+// 依赖感知调度辅助函数（Dependency-Aware Scheduling）
+// 参考业界实践：Priority Inheritance（RTOS经典）+ Dependency Gate（Temporal.io/Jira）
+// ============================================================================
+
+/** 优先级权重映射（数字越大优先级越高） */
+const PRIORITY_RANK: Record<string, number> = {
+  none: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+  urgent: 4,
+};
+
+/** 优先级升级路径（备用：当 successor 优先级不适用时逐级提升）*/
+const PRIORITY_UPGRADE: Record<string, string> = {
+  none: "medium",
+  low: "medium",
+  medium: "high",
+  high: "urgent",
+  urgent: "urgent",
+};
+void PRIORITY_UPGRADE; // suppress unused-var lint
+
+/**
+ * Priority Inheritance（优先级继承）：
+ * 当前置任务（predecessor）的优先级低于后继任务（successor）时，
+ * 自动将前置任务优先级提升至与后继相同（或至少 urgent），并通知 supervisor。
+ *
+ * 业界依据：Linux RTOS priority inheritance protocol — 防止优先级反转（Priority Inversion）
+ */
+async function boostPredecessorPriority(
+  predecessor: Task,
+  successor: Task,
+  requestingAgentId: string,
+): Promise<void> {
+  const predRank = PRIORITY_RANK[predecessor.priority] ?? 0;
+  const succRank = PRIORITY_RANK[successor.priority] ?? 0;
+  if (predRank >= succRank) {
+    return;
+  } // 前置优先级已足够高，无需提升
+
+  const newPriority = successor.priority;
+  try {
+    await taskStorage.updateTask(predecessor.id, {
+      priority: newPriority,
+      metadata: {
+        ...predecessor.metadata,
+        priorityBoostedAt: Date.now(),
+        priorityBoostedBy: `dependency-inherit from ${successor.id}`,
+        priorityBoostedFrom: predecessor.priority,
+      },
+    });
+    console.log(
+      `[DepSchedule] Priority Inheritance: ${predecessor.id} boosted ${predecessor.priority} → ${newPriority} (blocked ${successor.id} assigned to ${requestingAgentId})`,
+    );
+
+    // 通知前置任务的 assignee 提高urgency
+    const predAssigneeId = predecessor.assignees?.[0]?.id;
+    if (predAssigneeId && predAssigneeId !== requestingAgentId) {
+      const predSessionKey = `agent:${predAssigneeId}:main`;
+      enqueueSystemEvent(
+        [
+          `[PRIORITY BOOSTED] 你的任务优先级因下游依赖被提升：`,
+          ``,
+          `任务 ID: ${predecessor.id}`,
+          `任务标题: ${predecessor.title}`,
+          `优先级变更: ${predecessor.priority} → ${newPriority}`,
+          `原因: 任务 ${successor.id} ("${successor.title}") 依赖此任务完成才能开始`,
+          `负责 Agent: ${requestingAgentId}`,
+          ``,
+          `请尽快完成此前置任务，以解除下游阻塞。`,
+        ].join("\n"),
+        { sessionKey: predSessionKey, contextKey: `dep-boost:${predecessor.id}:${successor.id}` },
+      );
+      requestHeartbeatNow({
+        reason: `dep-boost:${predecessor.id}`,
+        sessionKey: predSessionKey,
+        agentId: predAssigneeId,
+        coalesceMs: 5000,
+      });
+    }
+  } catch (err) {
+    console.warn(`[DepSchedule] Failed to boost priority for ${predecessor.id}: ${String(err)}`);
+  }
+}
+
+/**
+ * 检查任务的 dependencies 字段中是否存在未完成的前置任务
+ * 返回未完成的前置任务列表（Task 对象）
+ */
+async function checkUnmetDependencies(task: Task): Promise<Task[]> {
+  if (!task.dependencies || task.dependencies.length === 0) {
+    return [];
+  }
+  const unmet: Task[] = [];
+  for (const depId of task.dependencies) {
+    try {
+      const dep = await taskStorage.getTask(depId);
+      if (dep && dep.status !== "done" && dep.status !== "cancelled") {
+        unmet.push(dep);
+      }
+    } catch {
+      // 获取失败视为已解除（容错）
+    }
+  }
+  return unmet;
+}
+
 /**
  * 自动驱动 agent 的下一条 todo 任务（任务完成/取消/重置后复用）
  * 找出优先级最高且无依赖阻塞的第一条，自动设为 in-progress 并唤醒 agent
@@ -614,26 +727,52 @@ export async function scheduleNextTaskForAgent(
     // listTasks 已按优先级+权重+创建时间排序
     let nextTask: Task | undefined;
     for (const candidate of todoTasks) {
-      if (!candidate.blockedBy || candidate.blockedBy.length === 0) {
-        nextTask = candidate;
-        break;
-      }
-      let allBlockersCleared = true;
-      for (const blockerId of candidate.blockedBy) {
-        try {
-          const blocker = await taskStorage.getTask(blockerId);
-          if (blocker && blocker.status !== "done" && blocker.status !== "cancelled") {
-            allBlockersCleared = false;
-            break;
+      // ── 依赖门控：检查 blockedBy（显式阻塞）──
+      if (candidate.blockedBy && candidate.blockedBy.length > 0) {
+        let allBlockersCleared = true;
+        for (const blockerId of candidate.blockedBy) {
+          try {
+            const blocker = await taskStorage.getTask(blockerId);
+            if (blocker && blocker.status !== "done" && blocker.status !== "cancelled") {
+              allBlockersCleared = false;
+              // Priority Inheritance：前置任务优先级低于当前任务时，自动提升
+              await boostPredecessorPriority(blocker, candidate, agentId);
+              break;
+            }
+          } catch {
+            /* 获取失败视为已解除 */
           }
-        } catch {
-          /* 获取失败视为已解除 */
+        }
+        if (!allBlockersCleared) {
+          continue;
         }
       }
-      if (allBlockersCleared) {
-        nextTask = candidate;
-        break;
+
+      // ── 依赖门控：检查 dependencies 字段（结构化前置任务）──
+      const unmetDeps = await checkUnmetDependencies(candidate);
+      if (unmetDeps.length > 0) {
+        // 将当前任务标记为 blocked，防止被反复跳过但不告知
+        await taskStorage.updateTask(candidate.id, {
+          status: "blocked",
+          blockedBy: unmetDeps.map((d) => d.taskId),
+          metadata: {
+            ...candidate.metadata,
+            blockedReason: `前置任务未完成: ${unmetDeps.map((d) => d.taskId).join(", ")}`,
+            blockedAt: Date.now(),
+          },
+        });
+        // Priority Inheritance：对每个未完成的前置任务提升优先级
+        for (const dep of unmetDeps) {
+          await boostPredecessorPriority(dep, candidate, agentId);
+        }
+        console.log(
+          `[scheduleNextTask] Task ${candidate.id} blocked by unmet deps [${unmetDeps.map((d) => d.taskId).join(", ")}] — setting blocked + boosting predecessors`,
+        );
+        continue;
       }
+
+      nextTask = candidate;
+      break;
     }
 
     if (!nextTask) {
@@ -1029,8 +1168,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         continue;
       }
       const otherBindings =
-        ((agent as { params?: Record<string, unknown> }).params?.channelBindings as AgentChannelBindings | undefined) ??
-        (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
+        ((agent as { params?: Record<string, unknown> }).params?.channelBindings as
+          | AgentChannelBindings
+          | undefined) ?? (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
       if (!otherBindings?.bindings) {
         continue;
       }
@@ -1182,8 +1322,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const allBoundAccounts = new Set<string>();
     for (const agent of listAgentEntries(cfg)) {
       const agentBindings =
-        ((agent as { params?: Record<string, unknown> }).params?.channelBindings as AgentChannelBindings | undefined) ??
-        (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
+        ((agent as { params?: Record<string, unknown> }).params?.channelBindings as
+          | AgentChannelBindings
+          | undefined) ?? (agent as { channelBindings?: AgentChannelBindings }).channelBindings;
       if (!agentBindings?.bindings) {
         continue;
       }
@@ -1579,11 +1720,17 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           const prov = storage.providers.find((p: { id: string }) => p.id === pid);
           const auths = storage.auths[pid] || [];
           for (const m of mList) {
-            if (!m.enabled || m.deprecated) {continue;}
+            if (!m.enabled || m.deprecated) {
+              continue;
+            }
             const a = auths.find((au: { authId: string }) => au.authId === m.authId);
-            if (!a || !a.enabled) {continue;}
+            if (!a || !a.enabled) {
+              continue;
+            }
             const mid = `${pid}/${m.modelName}`;
-            if (boundSet.has(mid)) {continue;}
+            if (boundSet.has(mid)) {
+              continue;
+            }
             availableModels.push({
               modelId: mid,
               providerId: pid,
@@ -1609,16 +1756,20 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             enabled: !!m,
           };
         });
-        respond(true, {
-          success: true,
-          agentId,
-          modelId,
-          defaultAccountId: updatedConfig.defaultAccountId,
-          boundAccounts: newBoundAccounts,
-          boundModelDetails: boundModels,
-          availableAccounts: availableModels.map((m) => m.modelId),
-          availableModelDetails: availableModels,
-        }, undefined);
+        respond(
+          true,
+          {
+            success: true,
+            agentId,
+            modelId,
+            defaultAccountId: updatedConfig.defaultAccountId,
+            boundAccounts: newBoundAccounts,
+            boundModelDetails: boundModels,
+            availableAccounts: availableModels.map((m) => m.modelId),
+            availableModelDetails: availableModels,
+          },
+          undefined,
+        );
       }
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
@@ -1705,11 +1856,17 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
           const prov = storage.providers.find((p: { id: string }) => p.id === pid);
           const auths = storage.auths[pid] || [];
           for (const m of mList) {
-            if (!m.enabled || m.deprecated) {continue;}
+            if (!m.enabled || m.deprecated) {
+              continue;
+            }
             const a = auths.find((au: { authId: string }) => au.authId === m.authId);
-            if (!a || !a.enabled) {continue;}
+            if (!a || !a.enabled) {
+              continue;
+            }
             const mid = `${pid}/${m.modelName}`;
-            if (boundSet.has(mid)) {continue;}
+            if (boundSet.has(mid)) {
+              continue;
+            }
             availableModels.push({
               modelId: mid,
               providerId: pid,
@@ -1735,16 +1892,20 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             enabled: !!m,
           };
         });
-        respond(true, {
-          success: true,
-          agentId,
-          modelId,
-          defaultAccountId: defaultAccountId || "",
-          boundAccounts: newBoundAccounts,
-          boundModelDetails: boundModels,
-          availableAccounts: availableModels.map((m) => m.modelId),
-          availableModelDetails: availableModels,
-        }, undefined);
+        respond(
+          true,
+          {
+            success: true,
+            agentId,
+            modelId,
+            defaultAccountId: defaultAccountId || "",
+            boundAccounts: newBoundAccounts,
+            boundModelDetails: boundModels,
+            availableAccounts: availableModels.map((m) => m.modelId),
+            availableModelDetails: availableModels,
+          },
+          undefined,
+        );
       } catch {
         // 附加数据加载失败，降级为仅返回成功标志（前端会回退到独立请求刷新）
         respond(true, { success: true, agentId, modelId }, undefined);
@@ -2936,7 +3097,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const roleFilter = (p.role || "").toLowerCase().trim();
     const tagsFilter = Array.isArray(p.tags) ? p.tags.map((t) => t.toLowerCase()) : [];
     const limit = typeof p.limit === "number" && p.limit > 0 ? Math.min(p.limit, 200) : 50;
-    const requesterId = p.requesterId ? String(p.requesterId).trim() : undefined;
+    const requesterId = p.requesterId ? p.requesterId.trim() : undefined;
 
     // === 权限隔离：结合静态 subagents.allowAgents + 持久化汇报关系 ===
     const managedScope = await getAgentManagedScopeAsync(requesterId, cfg);
@@ -3194,8 +3355,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       messageId?: string;
     };
 
-    const targetAgentId = String(p?.targetAgentId ?? "").trim();
-    const message = String(p?.message ?? "").trim();
+    const targetAgentId = (p?.targetAgentId ?? "").trim();
+    const message = (p?.message ?? "").trim();
 
     if (!targetAgentId) {
       respond(
@@ -3307,8 +3468,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       messageId?: string;
     };
 
-    const groupSessionKey = String(p?.groupSessionKey ?? "").trim();
-    const message = String(p?.message ?? "").trim();
+    const groupSessionKey = (p?.groupSessionKey ?? "").trim();
+    const message = (p?.message ?? "").trim();
 
     if (!groupSessionKey) {
       respond(
@@ -3419,8 +3580,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       organizationId?: string;
     };
 
-    const targetAgentId = String(p?.targetAgentId ?? "").trim();
-    const task = String(p?.task ?? "").trim();
+    const targetAgentId = (p?.targetAgentId ?? "").trim();
+    const task = (p?.task ?? "").trim();
 
     if (!targetAgentId) {
       respond(
@@ -3441,7 +3602,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     }
 
     // === 权限校验：确认请求者是否有权限对目标 agent 分配任务（合并静态+持久化关系）===
-    const assignRequesterId = p?.requesterId ? String(p.requesterId).trim() : undefined;
+    const assignRequesterId = p?.requesterId ? p.requesterId.trim() : undefined;
     if (assignRequesterId) {
       const managedScope = await getAgentManagedScopeAsync(assignRequesterId, cfg);
       if (managedScope !== null) {
@@ -3468,7 +3629,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const title = (p?.title ?? task.slice(0, 100)).trim();
 
     // === 项目成员校验：如果指定了 projectId， targetAgentId 必须是该项目群组的成员 ===
-    const assignProjectId = p?.projectId ? String(p.projectId).trim() : undefined;
+    const assignProjectId = p?.projectId ? p.projectId.trim() : undefined;
     if (assignProjectId) {
       const allGroups = groupManager.getAllGroups();
       const projectGroup = allGroups.find((g) => g.projectId === assignProjectId);
@@ -3530,9 +3691,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         ],
         status: initialTaskStatus,
         priority,
-        organizationId: p?.organizationId ? String(p.organizationId) : undefined,
-        teamId: p?.teamId ? String(p.teamId) : undefined,
-        projectId: p?.projectId ? String(p.projectId) : undefined,
+        organizationId: p?.organizationId ? p.organizationId : undefined,
+        teamId: p?.teamId ? p.teamId : undefined,
+        projectId: p?.projectId ? p.projectId : undefined,
         dueDate: p?.deadline ? new Date(p.deadline).getTime() || undefined : undefined,
         timeTracking: {
           timeSpent: 0,
@@ -3610,7 +3771,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const taskCtx = resolveTaskContext(
       normalizeAgentId(targetAgentId),
       {
-        projectId: p?.projectId ? String(p.projectId) : undefined,
+        projectId: p?.projectId ? p.projectId : undefined,
       },
       cfg,
     );
@@ -3880,8 +4041,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * groups.files.get - 读取群组工作空间中的文件内容
    */
   "groups.files.get": async ({ params, respond }) => {
-    const groupId = String((params as { groupId?: string; name?: string })?.groupId ?? "").trim();
-    const name = String((params as { groupId?: string; name?: string })?.name ?? "").trim();
+    const groupId = ((params as { groupId?: string; name?: string })?.groupId ?? "").trim();
+    const name = ((params as { groupId?: string; name?: string })?.name ?? "").trim();
     if (!groupId || !name) {
       respond(
         false,
@@ -3928,15 +4089,14 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * groups.files.set - 写入群组工作空间中的文件
    */
   "groups.files.set": async ({ params, respond }) => {
-    const groupId = String(
-      (params as { groupId?: string; name?: string; content?: string })?.groupId ?? "",
+    const groupId = (
+      (params as { groupId?: string; name?: string; content?: string })?.groupId ?? ""
     ).trim();
-    const name = String(
-      (params as { groupId?: string; name?: string; content?: string })?.name ?? "",
+    const name = (
+      (params as { groupId?: string; name?: string; content?: string })?.name ?? ""
     ).trim();
-    const content = String(
-      (params as { groupId?: string; name?: string; content?: string })?.content ?? "",
-    );
+    const content =
+      (params as { groupId?: string; name?: string; content?: string })?.content ?? "";
     if (!groupId || !name) {
       respond(
         false,
@@ -3983,8 +4143,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * groups.files.delete - 删除群组工作空间中的文件
    */
   "groups.files.delete": async ({ params, respond }) => {
-    const groupId = String((params as { groupId?: string; name?: string })?.groupId ?? "").trim();
-    const name = String((params as { groupId?: string; name?: string })?.name ?? "").trim();
+    const groupId = ((params as { groupId?: string; name?: string })?.groupId ?? "").trim();
+    const name = ((params as { groupId?: string; name?: string })?.name ?? "").trim();
     if (!groupId || !name) {
       respond(
         false,
@@ -4029,10 +4189,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       supervisorId?: string; // 明确指定主管ID（可选）
     };
 
-    const taskId = String(p?.taskId ?? "").trim();
-    const reporterId = String(p?.reporterId ?? "").trim();
-    const rawStatus = String(p?.status ?? "done").trim();
-    const result = String(p?.result ?? "").trim();
+    const taskId = (p?.taskId ?? "").trim();
+    const reporterId = (p?.reporterId ?? "").trim();
+    const rawStatus = (p?.status ?? "done").trim();
+    const result = (p?.result ?? "").trim();
 
     if (!taskId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId is required"));
@@ -4058,7 +4218,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
     // === 步骤1：更新任务系统中的任务状态 ===
     let task: Task | undefined;
-    let supervisorId = p?.supervisorId ? String(p.supervisorId).trim() : undefined;
+    let supervisorId = p?.supervisorId ? p.supervisorId.trim() : undefined;
     try {
       task = await taskStorage.getTask(taskId);
       if (task) {
@@ -4151,9 +4311,12 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       if (allowed.has(normalizedLeader)) {
         // === 用仪表盘快照替代多行消息推送 ===
         // 参考 Claude Code 泄露架构：主控状态外置，唤醒时注入实时快照而非堆积历史消息
-        const wakeType = finalStatus === "done" ? "task_done"
-          : finalStatus === "blocked" ? "task_blocked"
-          : "task_done"; // cancelled 也走 done 路径
+        const wakeType =
+          finalStatus === "done"
+            ? "task_done"
+            : finalStatus === "blocked"
+              ? "task_blocked"
+              : "task_done"; // cancelled 也走 done 路径
         const leaderSession = `agent:${normalizedLeader}:main`;
         try {
           const injected = await injectLeaderSnapshot({
@@ -4222,9 +4385,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             }
           }
           const threshold = resolveStrictestThreshold(
-            projectPhase
-              ? [resolveAgentTaskThreshold(projectPhase, normalizedReporter2)]
-              : [],
+            projectPhase ? [resolveAgentTaskThreshold(projectPhase, normalizedReporter2)] : [],
           );
           if (!threshold.allowIdle && todoCount < threshold.minTodo) {
             // 低水位：注入快照（携带 low_watermark 触发原因）
@@ -4273,10 +4434,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       }>;
     };
 
-    const taskId = String(p?.taskId ?? "").trim();
-    const action = String(p?.action ?? "").trim() as "cancel" | "reset" | "extend" | "split";
-    const reason = String(p?.reason ?? "").trim();
-    const operatorId = String(p?.operatorId ?? "system").trim();
+    const taskId = p?.taskId ?? "";
+    const action = ((p?.action ?? "") as string).trim() as "cancel" | "reset" | "extend" | "split";
+    const reason = (p?.reason ?? "").trim();
+    const operatorId = (p?.operatorId ?? "system").trim();
     const extendMinutes = typeof p?.extendMinutes === "number" ? p.extendMinutes : 30;
 
     if (!taskId || !["cancel", "reset", "extend", "split"].includes(action)) {
@@ -4451,14 +4612,24 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
         for (const def of subtaskDefs) {
           const subId = `${taskId}-sub-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-          const subAssigneeId = String(def.assigneeId ?? defaultAssigneeId).trim();
+          const subAssigneeId = (def.assigneeId ?? defaultAssigneeId).trim();
           const subAssignees = subAssigneeId
-            ? [{ id: normalizeAgentId(subAssigneeId), type: "agent" as const, role: "assignee" as const, assignedAt: now, assignedBy: operatorId }]
+            ? [
+                {
+                  id: normalizeAgentId(subAssigneeId),
+                  type: "agent" as const,
+                  role: "assignee" as const,
+                  assignedAt: now,
+                  assignedBy: operatorId,
+                },
+              ]
             : [];
+          const subTitle = (def.title ?? "(untitled)").slice(0, 200);
+          const subDescription = def.description ? def.description : undefined;
           const subtask = {
             id: subId,
-            title: String(def.title ?? "(untitled)").slice(0, 200),
-            description: def.description ? String(def.description) : undefined,
+            title: subTitle,
+            description: subDescription,
             parentTaskId: taskId,
             creatorId: operatorId,
             creatorType: "agent" as const,
@@ -4485,7 +4656,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
                 `Title: ${subtask.title}`,
                 subtask.description ? `Description: ${subtask.description.slice(0, 150)}` : null,
                 reason ? `Note: ${reason}` : null,
-              ].filter(Boolean).join("\n"),
+              ]
+                .filter(Boolean)
+                .join("\n"),
               { sessionKey: `agent:${normalizedSub}:main`, contextKey: `manage:split:${subId}` },
             );
             requestHeartbeatNow({
@@ -4551,9 +4724,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     };
 
     try {
-      const supervisorId = p?.supervisorId ? String(p.supervisorId).trim() : undefined;
-      const agentIds = Array.isArray(p?.agentIds) ? p.agentIds.map(String) : [];
-      const projectId = p?.projectId ? String(p.projectId).trim() : undefined;
+      const supervisorId = p?.supervisorId ? p.supervisorId.trim() : undefined;
+      const agentIds = Array.isArray(p?.agentIds) ? p.agentIds : [];
+      const projectId = p?.projectId ? p.projectId.trim() : undefined;
       const includeCompleted =
         typeof p?.includeCompleted === "boolean" ? p.includeCompleted : false;
       const limit = typeof p?.limit === "number" ? Math.min(p.limit, 500) : 200;
@@ -4815,7 +4988,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "operations array is required and must not be empty"),
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          "operations array is required and must not be empty",
+        ),
       );
       return;
     }
@@ -4829,10 +5005,15 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
     const now = Date.now();
 
     for (const op of operations) {
-      const taskId = String(op.taskId ?? "").trim();
-      const action = String(op.action ?? "").trim();
-      const reason = String(op.reason ?? "").trim();
-      const operatorId = String(op.operatorId ?? "system").trim();
+      const taskId2 = (op.taskId ?? "").trim();
+      const action2 = (op.action ?? "") as string;
+      const reason2 = (op.reason ?? "").trim();
+      const operatorId2 = (op.operatorId ?? "system").trim();
+      // 为了兼容后续代码中使用的原变量名，用别名引用
+      const taskId = taskId2,
+        action = action2,
+        reason = reason2,
+        operatorId = operatorId2;
 
       if (!taskId) {
         results.push({ taskId: "(empty)", action, success: false, error: "taskId is required" });
@@ -4873,13 +5054,17 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
                 reason ? `Note from supervisor: ${reason}` : null,
                 ``,
                 `The task will be picked up by the next scheduling cycle.`,
-              ].filter(Boolean).join("\n"),
-              { sessionKey: `agent:${normalizedAssignee}:main`, contextKey: `triage:reset:${taskId}` },
+              ]
+                .filter(Boolean)
+                .join("\n"),
+              {
+                sessionKey: `agent:${normalizedAssignee}:main`,
+                contextKey: `triage:reset:${taskId}`,
+              },
             );
             await scheduleNextTaskForAgent(normalizedAssignee, taskId, task.projectId);
           }
           results.push({ taskId, action, success: true });
-
         } else if (action === "cancel") {
           await taskStorage.updateTask(taskId, {
             status: "cancelled",
@@ -4904,20 +5089,29 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
                 `Task ID: ${taskId}`,
                 `Title: ${task.title}`,
                 reason ? `Reason: ${reason}` : null,
-              ].filter(Boolean).join("\n"),
-              { sessionKey: `agent:${normalizedAssignee}:main`, contextKey: `triage:cancel:${taskId}` },
+              ]
+                .filter(Boolean)
+                .join("\n"),
+              {
+                sessionKey: `agent:${normalizedAssignee}:main`,
+                contextKey: `triage:cancel:${taskId}`,
+              },
             );
             await scheduleNextTaskForAgent(normalizedAssignee, taskId, task.projectId);
           }
           results.push({ taskId, action, success: true });
-
         } else if (action === "mark-dependency") {
           // 标记依赖阻塞：blockedBy 记录依赖任务ID，task-aging 自动在依赖完成时解除
           const blockedByTaskIds = Array.isArray(op.blockedByTaskIds)
             ? op.blockedByTaskIds.map(String).filter(Boolean)
             : [];
           if (blockedByTaskIds.length === 0) {
-            results.push({ taskId, action, success: false, error: "blockedByTaskIds is required for mark-dependency" });
+            results.push({
+              taskId,
+              action,
+              success: false,
+              error: "blockedByTaskIds is required for mark-dependency",
+            });
             continue;
           }
           await taskStorage.updateTask(taskId, {
@@ -4940,25 +5134,42 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             createdAt: now,
           });
           results.push({ taskId, action, success: true });
-
         } else if (action === "reassign") {
-          const newAssigneeId = String(op.newAssigneeId ?? "").trim();
+          const newAssigneeId = (op.newAssigneeId ?? "").trim();
           if (!newAssigneeId) {
-            results.push({ taskId, action, success: false, error: "newAssigneeId is required for reassign" });
+            results.push({
+              taskId,
+              action,
+              success: false,
+              error: "newAssigneeId is required for reassign",
+            });
             continue;
           }
           const normalizedNew = normalizeAgentId(newAssigneeId);
           const cfgForTriage = loadConfig();
           const knownIds = new Set(listAgentIds(cfgForTriage).map(normalizeAgentId));
           if (!knownIds.has(normalizedNew)) {
-            results.push({ taskId, action, success: false, error: `Agent ${newAssigneeId} not found` });
+            results.push({
+              taskId,
+              action,
+              success: false,
+              error: `Agent ${newAssigneeId} not found`,
+            });
             continue;
           }
           const oldAssigneeId = task.assignees?.[0]?.id ?? "";
           await taskStorage.updateTask(taskId, {
             status: "todo",
             blockedBy: [],
-            assignees: [{ id: normalizedNew, type: "agent" as const, role: "assignee" as const, assignedAt: now, assignedBy: operatorId }],
+            assignees: [
+              {
+                id: normalizedNew,
+                type: "agent" as const,
+                role: "assignee" as const,
+                assignedAt: now,
+                assignedBy: operatorId,
+              },
+            ],
             timeTracking: { ...task.timeTracking, startedAt: undefined, lastActivityAt: now },
           });
           await taskStorage.addWorklog({
@@ -4978,7 +5189,9 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
               `Priority: ${task.priority}`,
               task.description ? `Description: ${task.description.slice(0, 200)}` : null,
               reason ? `Note: ${reason}` : null,
-            ].filter(Boolean).join("\n"),
+            ]
+              .filter(Boolean)
+              .join("\n"),
             { sessionKey: `agent:${normalizedNew}:main`, contextKey: `triage:reassign:${taskId}` },
           );
           requestHeartbeatNow({
@@ -4988,7 +5201,6 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             coalesceMs: 5000,
           });
           results.push({ taskId, action, success: true });
-
         } else if (action === "add-note") {
           // 仅追加阻塞说明注释，不改变状态
           await taskStorage.addWorklog({
@@ -5001,7 +5213,6 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             createdAt: now,
           });
           results.push({ taskId, action, success: true });
-
         } else {
           results.push({ taskId, action, success: false, error: `Unknown action: ${action}` });
         }
@@ -5023,5 +5234,4 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       undefined,
     );
   },
-
 };
