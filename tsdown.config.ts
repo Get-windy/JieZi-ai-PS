@@ -209,6 +209,17 @@ const pluginLoaderManualChunks = (id: string): string | undefined => {
   ) {
     return "plugin-loader";
   }
+  // 将 sdk-alias 和 public-surface-loader 也固定到同一 chunk，
+  // 避免 rolldown 因多入口引用产生命名冲突（resolvePluginLoaderJitiTryNative$1 vs 原名）
+  if (norm.includes("upstream/src/plugins/sdk-alias") || norm.includes("src/plugins/sdk-alias")) {
+    return "plugin-loader";
+  }
+  if (
+    norm.includes("upstream/src/plugins/public-surface-loader") ||
+    norm.includes("src/plugins/public-surface-loader")
+  ) {
+    return "plugin-loader";
+  }
   return undefined;
 };
 
