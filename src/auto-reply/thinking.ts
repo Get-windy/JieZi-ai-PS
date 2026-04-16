@@ -11,6 +11,9 @@ export type ThinkingCatalogEntry = {
   reasoning?: boolean;
 };
 
+// 上游新增函数转发
+export { normalizeTraceLevel } from "../../upstream/src/auto-reply/thinking.shared.js";
+
 const CLAUDE_46_MODEL_RE = /claude-(?:opus|sonnet)-4(?:\.|-)6(?:$|[-.])/i;
 
 function normalizeProviderId(provider?: string | null): string {

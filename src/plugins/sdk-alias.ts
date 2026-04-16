@@ -28,6 +28,8 @@ export {
   resolvePluginSdkAliasCandidateOrder,
   resolvePluginSdkAliasFile,
   resolvePluginSdkScopedAliasMap,
+  resolvePluginLoaderJitiTryNative,
+  createPluginLoaderJitiCacheKey,
   type LoaderModuleResolveParams,
   type PluginSdkResolutionPreference,
 } from "../../upstream/src/plugins/sdk-alias.js";

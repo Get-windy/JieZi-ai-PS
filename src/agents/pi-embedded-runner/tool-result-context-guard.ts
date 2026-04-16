@@ -3,6 +3,7 @@
 // signal abort via the AbortSignal so the agent loop exits cleanly.
 // All other logic is identical to upstream.
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { ContextEngine } from "../../context-engine/types.js";
 import {
   CHARS_PER_TOKEN_ESTIMATE,
   TOOL_RESULT_CHARS_PER_TOKEN_ESTIMATE,
@@ -256,6 +257,101 @@ export function installToolResultContextGuard(params: {
     }
 
     return contextMessages;
+  }) as GuardableTransformContext;
+
+  return () => {
+    mutableAgent.transformContext = originalTransformContext;
+  };
+}
+
+/**
+ * 上游新增：安装上下文引擎循环钉（将每次 transformContext 调用接入上下文引擎）
+ * 和 upstream 实现完全相同，本地不覆盖 installToolResultContextGuard 逻辑。
+ */
+export function installContextEngineLoopHook(params: {
+  agent: GuardableAgent;
+  contextEngine: ContextEngine;
+  sessionId: string;
+  sessionKey?: string;
+  sessionFile: string;
+  tokenBudget?: number;
+  modelId: string;
+  getPrePromptMessageCount?: () => number;
+}): () => void {
+  const { contextEngine, sessionId, sessionKey, sessionFile, tokenBudget, modelId } = params;
+  const mutableAgent = params.agent as GuardableAgentRecord;
+  const originalTransformContext = mutableAgent.transformContext;
+  let lastSeenLength: number | null = null;
+  let lastAssembledView: AgentMessage[] | null = null;
+
+  mutableAgent.transformContext = (async (messages: AgentMessage[], signal: AbortSignal) => {
+    const transformed = originalTransformContext
+      ? await originalTransformContext.call(mutableAgent, messages, signal)
+      : messages;
+    const sourceMessages = Array.isArray(transformed) ? transformed : messages;
+
+    const prePromptMessageCount = Math.max(
+      0,
+      Math.min(
+        sourceMessages.length,
+        lastSeenLength ?? params.getPrePromptMessageCount?.() ?? sourceMessages.length,
+      ),
+    );
+    lastSeenLength = prePromptMessageCount;
+
+    const hasNewMessages = sourceMessages.length > prePromptMessageCount;
+    if (!hasNewMessages) {
+      return lastAssembledView ?? sourceMessages;
+    }
+
+    try {
+      if (typeof contextEngine.afterTurn === "function") {
+        await contextEngine.afterTurn({
+          sessionId,
+          sessionKey,
+          sessionFile,
+          messages: sourceMessages,
+          prePromptMessageCount,
+          tokenBudget,
+        });
+      } else {
+        const newMessages = sourceMessages.slice(prePromptMessageCount);
+        if (newMessages.length > 0) {
+          if (typeof contextEngine.ingestBatch === "function") {
+            await contextEngine.ingestBatch({
+              sessionId,
+              sessionKey,
+              messages: newMessages,
+            });
+          } else {
+            for (const message of newMessages) {
+              await contextEngine.ingest({
+                sessionId,
+                sessionKey,
+                message,
+              });
+            }
+          }
+        }
+      }
+      lastSeenLength = sourceMessages.length;
+      const assembled = await contextEngine.assemble({
+        sessionId,
+        sessionKey,
+        messages: sourceMessages,
+        tokenBudget,
+        model: modelId,
+      });
+      if (assembled && Array.isArray(assembled.messages) && assembled.messages !== sourceMessages) {
+        lastAssembledView = assembled.messages;
+        return assembled.messages;
+      }
+      lastAssembledView = null;
+    } catch {
+      // Best-effort: any engine failure falls through to the raw source messages.
+    }
+
+    return sourceMessages;
   }) as GuardableTransformContext;
 
   return () => {

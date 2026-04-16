@@ -25,6 +25,33 @@ const log = createSubsystemLogger("agent-scope");
 
 export { resolveAgentIdFromSessionKey };
 
+// 上游新增函数转发：避免上游模块导入时出现 MISSING_EXPORT 警告
+export { resolveAgentContextLimits } from "../../upstream/src/agents/agent-scope-config.js";
+
+// resolveAgentExecutionContract: 上游在 agent-scope.ts 中定义，本地直接实现避免自循环
+export function resolveAgentExecutionContract(
+  cfg: OpenClawConfig | undefined,
+  agentId?: string | null,
+):
+  | NonNullable<
+      NonNullable<
+        import("../../upstream/src/config/types.agent-defaults.js").AgentDefaultsConfig["embeddedPi"]
+      >["executionContract"]
+    >
+  | undefined {
+  const defaultContract = cfg?.agents?.defaults?.embeddedPi?.executionContract;
+  if (!cfg || !agentId) {
+    return defaultContract;
+  }
+  const entry = (cfg.agents?.list ?? []).find(
+    (a) => typeof a?.id === "string" && a.id.toLowerCase().trim() === agentId.toLowerCase().trim(),
+  );
+  const agentContract = (entry as Record<string, unknown>)?.embeddedPi as
+    | { executionContract?: unknown }
+    | undefined;
+  return (agentContract?.executionContract as typeof defaultContract) ?? defaultContract;
+}
+
 /** Strip null bytes from paths to prevent ENOTDIR errors. */
 function stripNullBytes(s: string): string {
   // eslint-disable-next-line no-control-regex
@@ -56,7 +83,7 @@ export function listAgentEntries(cfg: OpenClawConfig): AgentEntry[] {
   if (!Array.isArray(list)) {
     return [];
   }
-  return list.filter((entry): entry is AgentEntry => Boolean(entry && typeof entry === "object"));
+  return list.filter((entry): entry is AgentEntry => entry != null && typeof entry === "object");
 }
 
 export function listAgentIds(cfg: OpenClawConfig): string[] {
@@ -547,7 +574,9 @@ export function resolveAgentModelAccounts(
   // 优先从 params.modelAccounts 读取（新存储位置，避免上游 strict schema 内 Unrecognized key 报错）
   // 兼容旧数据：直接写在顶层的 modelAccounts
   const modelAccounts =
-    ((entry as unknown as { params?: Record<string, unknown> }).params?.modelAccounts as AgentModelAccountsConfig | undefined) ??
+    ((entry as unknown as { params?: Record<string, unknown> }).params?.modelAccounts as
+      | AgentModelAccountsConfig
+      | undefined) ??
     (entry as unknown as { modelAccounts?: AgentModelAccountsConfig }).modelAccounts;
 
   return modelAccounts;

@@ -13,6 +13,8 @@ export {
   resolveNonBundledProviderPluginIds,
   resolveCatalogHookProviderPluginIds,
   resolveDiscoveredProviderPluginIds,
+  resolveDiscoverableProviderOwnerPluginIds,
+  resolveActivatableProviderOwnerPluginIds,
 } from "../../upstream/src/plugins/providers.js";
 
 // 运行时 provider 函数（依赖已加载的插件）
