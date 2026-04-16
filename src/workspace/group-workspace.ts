@@ -27,17 +27,17 @@ function resolveGroupRootFromConfig(): string | undefined {
     // 读取 openclaw.json 配置文件
     const stateDir = resolveStateDir(process.env);
     const configPath = path.join(stateDir, "openclaw.json");
-    if (!fs.existsSync(configPath)) {return undefined;}
+    if (!fs.existsSync(configPath)) {
+      return undefined;
+    }
     const raw = fs.readFileSync(configPath, "utf-8");
     const config = JSON.parse(raw);
     const root = config?.groups?.workspace?.root;
     if (root && typeof root === "string") {
       // 展开 ~ 前缀
       if (root.startsWith("~")) {
-        const home = process.env.OPENCLAW_HOME?.trim() ||
-          process.env.HOME ||
-          process.env.USERPROFILE ||
-          "";
+        const home =
+          process.env.OPENCLAW_HOME?.trim() || process.env.HOME || process.env.USERPROFILE || "";
         return path.resolve(home, root.slice(1).replace(/^\//, "").replace(/^\\/, ""));
       }
       return path.resolve(root);
@@ -56,14 +56,18 @@ function resolveGroupOverridesFromConfig(): Record<string, string> {
   try {
     const stateDir = resolveStateDir(process.env);
     const configPath = path.join(stateDir, "openclaw.json");
-    if (!fs.existsSync(configPath)) {return {};}
+    if (!fs.existsSync(configPath)) {
+      return {};
+    }
     const raw = fs.readFileSync(configPath, "utf-8");
     const config = JSON.parse(raw);
     const overrides = config?.groups?.overrides;
-    if (!overrides || typeof overrides !== "object") {return {};}
+    if (!overrides || typeof overrides !== "object") {
+      return {};
+    }
     const result: Record<string, string> = {};
     for (const [groupId, val] of Object.entries(overrides)) {
-      const dir = (val as any)?.workspaceDir;
+      const dir = (val as Record<string, unknown>)?.workspaceDir;
       if (dir && typeof dir === "string") {
         result[groupId] = dir;
       }
@@ -94,6 +98,46 @@ export class GroupWorkspaceManager {
     // 加载每个群组的自定义目录覆盖
     this.groupDirOverrides = resolveGroupOverridesFromConfig();
     this.ensureRootDir();
+    // 从 groups.json 预热加载所有已注册群组的工作空间
+    // 确保 SHARED_MEMORY.md 等文件在首次访问前已初始化
+    this._preloadFromGroupsJson();
+  }
+
+  /**
+   * 从 groups.json 预热加载所有已注册群组的工作空间。
+   * 若目录已存在则加载到缓存；若目录不存在则创建并初始化文件。
+   * 这样可防止 Agent 首次访问群共享记忆时因文件不存在而报 ENOENT。
+   */
+  private _preloadFromGroupsJson(): void {
+    try {
+      const groupsJsonPath = path.join(this.rootDir, "groups.json");
+      if (!fs.existsSync(groupsJsonPath)) {
+        return;
+      }
+      const raw = fs.readFileSync(groupsJsonPath, "utf-8");
+      const data = JSON.parse(raw) as {
+        groups?: Array<{ id: string; name?: string; ownerId?: string; workspacePath?: string }>;
+      };
+      if (!Array.isArray(data.groups)) {
+        return;
+      }
+      for (const g of data.groups) {
+        if (!g.id || this.workspaces.has(g.id)) {
+          continue;
+        }
+        const override = this.groupDirOverrides[g.id];
+        const groupDir = override ?? g.workspacePath ?? path.join(this.rootDir, g.id);
+        if (fs.existsSync(groupDir)) {
+          // 目录已存在：加载进缓存
+          this.loadExistingWorkspace(g.id);
+        } else {
+          // 目录不存在：创建并初始化工作空间文件（含 SHARED_MEMORY.md）
+          this.createNewWorkspace(g.id, g.name ?? g.id, g.ownerId ?? "system");
+        }
+      }
+    } catch {
+      // 预加载失败不影响正常启动，静默跳过
+    }
   }
 
   /**
@@ -347,7 +391,7 @@ ${workspace.admins?.map((a: string) => `- ${a}`).join("\n") || "- " + workspace.
 
 ### 项目群组特殊说明
 - **项目绑定**: 如果本群组是项目群组，则所有讨论和决策都与指定项目相关
-- **工作空间**: 项目工作空间路径：\`${this.rootDir.replace(/\\/g, '/')}/{projectId}\`
+- **工作空间**: 项目工作空间路径：\`${this.rootDir.replace(/\\/g, "/")}/{projectId}\`
 - **代码目录**: 实际代码可能在外部目录 (如 \`/{projectName}\`),通过 PROJECT_CONFIG.json 配置
 - **记忆隔离**: 每个项目有独立的 SHARED_MEMORY.md,存储项目特定的知识和上下文
 
@@ -365,9 +409,9 @@ ${workspace.admins?.map((a: string) => `- ${a}`).join("\n") || "- " + workspace.
 \`\`\`json
 {
   "projectId": "{projectId}",
-  "workspacePath": "${this.rootDir.replace(/\\/g, '/')}/{projectId}",
+  "workspacePath": "${this.rootDir.replace(/\\/g, "/")}/{projectId}",
   "codeDir": "/{projectName}",  // 实际代码目录
-  "docsDir": "${this.rootDir.replace(/\\/g, '/')}/{projectId}/docs"
+  "docsDir": "${this.rootDir.replace(/\\/g, "/")}/{projectId}/docs"
 }
 \`\`\`
 
