@@ -57,7 +57,31 @@ export type LeaderWakeReason =
   | { type: "kpi_reassign"; taskId: string; fromAgent: string; toAgent: string }
   | { type: "overdue"; taskId: string; title: string; overdueMinutes: number }
   | { type: "backlog"; agentId: string; queueSize: number }
-  | { type: "compaction_restore" };
+  | { type: "compaction_restore" }
+  /**
+   * 幻觉防护 — 空闲疑似幻觉告警
+   * 当 in-progress 任务超过 30 分钟无任何 worklog 记录时触发，
+   * 提示主控该 agent 可能产生工具执行幻觉（假报进展但未实际操作）
+   */
+  | {
+      type: "suspicion_idle";
+      agentId: string;
+      taskId: string;
+      taskTitle: string;
+      idleMinutes: number; // 距上次 worklog 或 startedAt 已过去的分钟数
+      lastWorklogAt: number | null; // 最后一次 worklog 时间戳（null=从未记录）
+    }
+  /**
+   * 幻觉防护 — 空 worklog 完成报告被系统降级
+   * agent 试图以 done 汇报但 worklog 为空，系统拒绝并降为 review
+   */
+  | {
+      type: "hallucination_suspected";
+      agentId: string;
+      taskId: string;
+      taskTitle: string;
+      reason: string; // 拒绝原因描述
+    };
 
 /**
  * 构建并注入主控仪表盘快照
@@ -207,6 +231,40 @@ async function buildLeaderSnapshot(
   lines.push(`[LEADER DASHBOARD] ${new Date().toLocaleTimeString()} — ${triggerLine}`);
   lines.push("");
 
+  // ── 幻觉防护告警块（suspicion_idle / hallucination_suspected）──
+  if (wakeReason.type === "suspicion_idle") {
+    lines.push(
+      `🕵️ 幻觉预警 — Agent [${wakeReason.agentId}] 执行任务 [${wakeReason.taskId}] "${wakeReason.taskTitle.slice(0, 50)}" 已 ${wakeReason.idleMinutes} 分钟无 worklog：`,
+    );
+    lines.push(
+      wakeReason.lastWorklogAt
+        ? `  最后活动: ${new Date(wakeReason.lastWorklogAt).toLocaleTimeString()} (${wakeReason.idleMinutes}min ago)`
+        : `  ⚠️ 自任务开始从未写入 worklog`,
+    );
+    lines.push("");
+    lines.push("💡 建议行动（AI 幻觉事中监督）:");
+    lines.push("  1. 用 agent_communicate 询问 agent 当前实际操作状态");
+    lines.push("  2. 若 agent 无法提供具体操作证据 → 用 agent.task.manage action=reset 重置任务");
+    lines.push("  3. 检查 agent 最近 worklog，确认每步操作均有记录");
+    lines.push("  4. 若确认幻觉，将案例记录到项目共享记忆（hallucination_cases）");
+    lines.push("");
+  }
+
+  if (wakeReason.type === "hallucination_suspected") {
+    lines.push(
+      `🚨 幻觉拦截 — Agent [${wakeReason.agentId}] 任务 [${wakeReason.taskId}] "${wakeReason.taskTitle.slice(0, 50)}" 完成报告已被系统降级为 review：`,
+    );
+    lines.push(`  拒绝原因: ${wakeReason.reason}`);
+    lines.push("");
+    lines.push("💡 建议行动（AI 幻觉事后管控）:");
+    lines.push("  1. 进入 review 状态 — 核实 agent 是否真实完成了任务");
+    lines.push("  2. 检查代码仓库 git log / 文件变更，验证工作成果");
+    lines.push("  3. 若确认完成 → 用 agent.task.manage action=approve 批准");
+    lines.push("  4. 若确认幻觉 → 用 agent.task.manage action=reset 重置，要求重做");
+    lines.push("  5. 将此案例记录到共享记忆，作为事后管控证据");
+    lines.push("");
+  }
+
   // dep_blocked 专属：前置任务明细 + 行动指引（紧跟触发行，让主控第一眼看到该做什么）
   if (wakeReason.type === "dep_blocked") {
     lines.push(
@@ -289,6 +347,10 @@ function buildTriggerLine(reason: LeaderWakeReason): string {
       return `📥 ${reason.agentId} 积压 ${reason.queueSize} 条任务 — 建议重分配或取消`;
     case "compaction_restore":
       return "🔄 compaction 后恢复 — 当前任务状态如下";
+    case "suspicion_idle":
+      return `🕵️ ${reason.agentId} 任务 [${reason.taskId}] 已 ${reason.idleMinutes}min 无 worklog — 疑似幻觉，请介入核查`;
+    case "hallucination_suspected":
+      return `🚨 ${reason.agentId} 任务 [${reason.taskId}] 完成报告被拒 — worklog 为空，已降为 review 等待审核`;
     default:
       return "状态更新";
   }
@@ -313,6 +375,9 @@ function buildContextKey(reason: LeaderWakeReason): string {
       return `leader:snapshot:backlog:${reason.agentId}`;
     case "compaction_restore":
       return `leader:snapshot:compaction:${Date.now()}`;
+    case "suspicion_idle":
+    case "hallucination_suspected":
+      return `leader:snapshot:hallucination:${reason.taskId}`;
     default:
       return `leader:snapshot:${Date.now()}`;
   }

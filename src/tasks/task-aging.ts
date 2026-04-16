@@ -729,6 +729,77 @@ export async function scanAndProcessAgingTasks(options?: {
           }
         }
 
+        // === 幻觉防抜 — Worklog 密度检查（P1）===
+        // 业界最佳实践 (arXiv 2603.10060 Tool Receipts / Anthropic RLAIF)：
+        // in-progress 任务超过 SUSPICION_IDLE_MINS 分钟未写入任何 worklog — 疑似工具执行幻觉
+        // (假报进展但未实际操作)，商主控介入核查
+        if (task.status === "in-progress") {
+          const SUSPICION_IDLE_MINS = 30;
+          const SUSPICION_IDLE_MS = SUSPICION_IDLE_MINS * 60 * 1000;
+          // 冷却：同一任务 60 分钟内不重复告警
+          const SUSPICION_COOLDOWN_MS = 60 * 60 * 1000;
+          const lastHallucinationAlertAt =
+            (task.metadata?.lastHallucinationAlertAt as number | undefined) ?? 0;
+          if (Date.now() - lastHallucinationAlertAt < SUSPICION_COOLDOWN_MS) {
+            // 冷却期内跳过
+          } else {
+            // 尝试读取 worklog，查看最近是否有实质操作
+            try {
+              const worklogs = await storage.getTaskWorklogs(task.id);
+              const substantiveLogs = worklogs.filter(
+                (w) => w.action !== "started" && w.action !== "auto_started",
+              );
+              const startedAt = task.timeTracking?.startedAt ?? task.createdAt;
+              const lastLogTs =
+                substantiveLogs.length > 0
+                  ? Math.max(...substantiveLogs.map((w) => w.createdAt))
+                  : null;
+              // 参照基准：最后一条 worklog 时间，如未记录则用 startedAt
+              const referenceTs = lastLogTs ?? startedAt;
+              const idleMs = Date.now() - referenceTs;
+
+              if (idleMs >= SUSPICION_IDLE_MS) {
+                const idleMinutes = Math.round(idleMs / 60_000);
+                const supervisorRaw =
+                  (task.metadata?.supervisorId as string | undefined) ??
+                  task.supervisorId ??
+                  task.creatorId;
+
+                console.warn(
+                  `[Task Aging] 幻觉预警: Task ${task.id} in-progress ${idleMinutes}min 无 worklog (agent=${task.assignees?.[0]?.id ?? "unknown"})`,
+                );
+
+                // 更新元数据记录告警时间，防止冷却期内重复告警
+                await storage.updateTask(task.id, {
+                  metadata: {
+                    ...task.metadata,
+                    lastHallucinationAlertAt: Date.now(),
+                  },
+                });
+
+                if (supervisorRaw && supervisorRaw !== "system") {
+                  injectLeaderSnapshot({
+                    leaderId: supervisorRaw,
+                    wakeReason: {
+                      type: "suspicion_idle",
+                      agentId: task.assignees?.[0]?.id ?? "unknown",
+                      taskId: task.id,
+                      taskTitle: task.title,
+                      idleMinutes,
+                      lastWorklogAt: lastLogTs,
+                    },
+                    coalesceMs: 10_000,
+                  }).catch(() => {
+                    /* best-effort */
+                  });
+                }
+              }
+            } catch {
+              // worklog 查询失败不影响老化主流程
+            }
+          }
+        }
+
         // === 自动解除阻塞：程序检测依赖任务是否已全部完成 ===
         // 这一部分完全由程序自动完成，不依赖 agent
         if (task.status === "blocked" && task.blockedBy && task.blockedBy.length > 0) {
