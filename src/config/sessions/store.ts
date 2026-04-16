@@ -153,12 +153,30 @@ export function resolveSessionStoreEntry(params: {
   };
 }
 
+function normalizeSessionEntrySkillsSnapshot(entry: SessionEntry): SessionEntry {
+  const snapshot = entry.skillsSnapshot;
+  // 迁移旧格式：skillsSnapshot 存在但 skills 字段缺失或非数组（旧版本序列化为空对象 {}）
+  if (snapshot !== undefined && snapshot !== null && !Array.isArray(snapshot.skills)) {
+    return {
+      ...entry,
+      skillsSnapshot: {
+        ...snapshot,
+        prompt: typeof snapshot.prompt === "string" ? snapshot.prompt : "",
+        skills: [],
+      },
+    };
+  }
+  return entry;
+}
+
 function normalizeSessionStore(store: Record<string, SessionEntry>): void {
   for (const [key, entry] of Object.entries(store)) {
     if (!entry) {
       continue;
     }
-    const normalized = normalizeSessionEntryDelivery(normalizeSessionRuntimeModelFields(entry));
+    const normalized = normalizeSessionEntrySkillsSnapshot(
+      normalizeSessionEntryDelivery(normalizeSessionRuntimeModelFields(entry)),
+    );
     if (normalized !== entry) {
       store[key] = normalized;
     }
