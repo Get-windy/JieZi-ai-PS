@@ -10,6 +10,8 @@ import {
 export {
   createOutboundPayloadPlan,
   projectOutboundPayloadPlanForMirror,
+  projectOutboundPayloadPlanForJson,
+  projectOutboundPayloadPlanForOutbound,
 } from "../../../upstream/src/infra/outbound/payloads.js";
 
 export type NormalizedOutboundPayload = {
