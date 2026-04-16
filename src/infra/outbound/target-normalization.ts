@@ -2,6 +2,9 @@ import { getChannelPlugin, normalizeChannelId } from "../../channels/plugins/ind
 import type { ChannelId } from "../../channels/plugins/types.js";
 import { getActivePluginRegistryVersion } from "../../plugins/runtime.js";
 
+// 上游新增函数转发
+export { maybeResolvePluginMessagingTarget } from "../../../upstream/src/infra/outbound/target-normalization.js";
+
 export function normalizeChannelTargetInput(raw: string): string {
   return raw.trim();
 }

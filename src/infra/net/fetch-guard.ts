@@ -17,6 +17,7 @@ type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respo
 export const GUARDED_FETCH_MODE = {
   STRICT: "strict",
   TRUSTED_ENV_PROXY: "trusted_env_proxy",
+  TRUSTED_EXPLICIT_PROXY: "trusted_explicit_proxy",
 } as const;
 
 export type GuardedFetchMode = (typeof GUARDED_FETCH_MODE)[keyof typeof GUARDED_FETCH_MODE];
@@ -78,6 +79,12 @@ export function withTrustedEnvProxyGuardedFetchMode(
   params: GuardedFetchPresetOptions,
 ): GuardedFetchOptions {
   return { ...params, mode: GUARDED_FETCH_MODE.TRUSTED_ENV_PROXY };
+}
+
+export function withTrustedExplicitProxyGuardedFetchMode(
+  params: GuardedFetchPresetOptions,
+): GuardedFetchOptions {
+  return { ...params, mode: GUARDED_FETCH_MODE.TRUSTED_EXPLICIT_PROXY };
 }
 
 function resolveGuardedFetchMode(params: GuardedFetchOptions): GuardedFetchMode {

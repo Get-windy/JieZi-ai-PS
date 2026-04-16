@@ -1,10 +1,16 @@
 import { parseReplyDirectives } from "../../../upstream/src/auto-reply/reply/reply-directives.js";
+import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import {
   formatBtwTextForExternalDelivery,
   isRenderablePayload,
   shouldSuppressReasoningPayload,
 } from "../../auto-reply/reply/reply-payloads.js";
-import type { ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
+
+// 上游新增函数转发
+export {
+  createOutboundPayloadPlan,
+  projectOutboundPayloadPlanForMirror,
+} from "../../../upstream/src/infra/outbound/payloads.js";
 
 export type NormalizedOutboundPayload = {
   text: string;
