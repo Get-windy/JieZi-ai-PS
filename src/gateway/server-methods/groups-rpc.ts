@@ -5,7 +5,11 @@
  */
 
 import { listAgentEntries } from "../../../upstream/src/commands/agents.config.js";
-import { readConfigFileSnapshot } from "../../../upstream/src/config/config.js";
+import {
+  readConfigFileSnapshot,
+  loadConfig,
+  writeConfigFile,
+} from "../../../upstream/src/config/config.js";
 import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
@@ -1113,8 +1117,35 @@ export const groupsHandlers: GatewayRequestHandlers = {
         m.GroupWorkspaceManager.getInstance(),
       );
 
-      // 更新群组工作空间目录映射
+      // 更新群组工作空间目录映射（内存）
       groupWorkspaceManager.updateGroupWorkspaceDir(groupId, projectWorkspacePath);
+
+      // 持久化到 openclaw.json： groups.overrides.<groupId>.workspaceDir
+      // 确保服务重启后预热加载时能读到正确路径
+      try {
+        const currentConfig = loadConfig();
+        const existingOverrides =
+          ((currentConfig as Record<string, unknown> & { groups?: Record<string, unknown> })?.groups
+            ?.overrides as Record<string, unknown>) ?? {};
+        const updatedConfig = {
+          ...currentConfig,
+          groups: {
+            ...((currentConfig as Record<string, unknown>).groups as Record<string, unknown>),
+            overrides: {
+              ...existingOverrides,
+              [groupId]: {
+                ...(existingOverrides[groupId] as Record<string, unknown>),
+                workspaceDir: projectWorkspacePath,
+              },
+            },
+          },
+        };
+        await writeConfigFile(updatedConfig);
+      } catch (persistErr) {
+        console.warn(
+          `[Group Upgrade] Failed to persist workspace override to openclaw.json: ${String(persistErr)}`,
+        );
+      }
 
       // 同步 PROJECT_CONFIG.json 配置（如果存在）
       const fs = await import("fs");

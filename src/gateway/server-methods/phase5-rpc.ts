@@ -3,24 +3,28 @@
  * 智能助手管理、组织架构和权限管理的 RPC 方法处理器
  */
 
-import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
-import { listAgentIds } from "../../agents/agent-scope.js";
-import { loadConfig, writeConfigFile } from "../../../upstream/src/config/config.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { approvalSystem } from "../../permissions/approval-system.js";
-import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
+import { loadConfig, writeConfigFile } from "../../../upstream/src/config/config.js";
 import { ErrorCodes, errorShape } from "../../../upstream/src/gateway/protocol/index.js";
+import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
+import { listAgentIds } from "../../agents/agent-scope.js";
+import { approvalSystem } from "../../permissions/approval-system.js";
+import { groupManager } from "../../sessions/group-manager.js";
+import { groupWorkspaceManager } from "../../workspace/group-workspace.js";
 
 /**
  * 辅助函数：查找智能助手
  * 支持配置文件中的 agent 和系统中存在的虚拟 agent
  */
-function findAgent(config: any, agentId: string): any | undefined {
-  const agents = config?.agents?.list || [];
+function findAgent(
+  config: Record<string, unknown>,
+  agentId: string,
+): Record<string, unknown> | undefined {
+  const agents = (config?.agents as { list?: Record<string, unknown>[] })?.list || [];
 
   // 首先在配置文件中查找
-  const configuredAgent = agents.find((a: any) => a.id === agentId);
+  const configuredAgent = agents.find((a) => a.id === agentId);
   if (configuredAgent) {
     return configuredAgent;
   }
@@ -48,14 +52,14 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
    */
   "agent.modelAccounts.get": async ({ params, respond }) => {
     try {
-      const agentId = String(params?.agentId ?? "").trim();
+      const agentId = ((params?.agentId as string) ?? "").trim();
       if (!agentId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
         return;
       }
 
       const config = loadConfig();
-      const agent = findAgent(config, agentId);
+      const agent = findAgent(config as Record<string, unknown>, agentId);
 
       if (!agent) {
         const systemAgentIds = listAgentIds(config);
@@ -72,7 +76,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
       }
 
       // 返回模型账号配置
-      const modelAccountsConfig = (agent).modelAccounts || {
+      const modelAccountsConfig = (agent["modelAccounts"] as Record<string, unknown>) || {
         accounts: [],
         routingMode: "manual",
       };
@@ -92,31 +96,31 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
    */
   "agent.channelPolicies.get": async ({ params, respond }) => {
     try {
-      const agentId = String(params?.agentId ?? "").trim();
-      if (!agentId) {
+      const agentId2 = ((params?.agentId as string) ?? "").trim();
+      if (!agentId2) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
         return;
       }
 
-      const config = loadConfig();
-      const agent = findAgent(config, agentId);
+      const config2 = loadConfig();
+      const agent2 = findAgent(config2 as Record<string, unknown>, agentId2);
 
-      if (!agent) {
-        const systemAgentIds = listAgentIds(config);
+      if (!agent2) {
+        const systemAgentIds = listAgentIds(config2);
         const availableIds = systemAgentIds.join(", ");
         respond(
           false,
           undefined,
           errorShape(
             ErrorCodes.INVALID_REQUEST,
-            `Agent "${agentId}" not found. Available agents: ${availableIds}`,
+            `Agent "${agentId2}" not found. Available agents: ${availableIds}`,
           ),
         );
         return;
       }
 
       // 返回通道策略配置
-      const channelPoliciesConfig = (agent).channelPolicies || {
+      const channelPoliciesConfig = (agent2["channelPolicies"] as Record<string, unknown>) || {
         bindings: [],
         defaultPolicy: "private",
       };
@@ -155,7 +159,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
    */
   "groups.workspace.setDir": async ({ params, respond }) => {
     try {
-      const dir = params?.dir ? String(params.dir).trim() : "";
+      const dir = params?.dir ? (params.dir as string).trim() : "";
       if (!dir) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "dir is required"));
         return;
@@ -169,9 +173,13 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
       const updatedConfig = {
         ...currentConfig,
         groups: {
-          ...(currentConfig as any).groups,
+          ...((currentConfig as Record<string, unknown>).groups as Record<string, unknown>),
           workspace: {
-            ...(currentConfig as any).groups?.workspace,
+            ...(
+              currentConfig as Record<string, unknown> & {
+                groups?: { workspace?: Record<string, unknown> };
+              }
+            ).groups?.workspace,
             root: dir,
           },
         },
@@ -191,17 +199,14 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
   /**
    * 获取权限配置
    */
-  "permissions.get": async ({ params, respond }) => {
+  "permissions.get": async ({ respond }) => {
     try {
-      const agentId = params?.agentId ? String(params.agentId).trim() : undefined;
-
-      console.log(`[Phase5] Get permissions for agent: ${agentId || "all"}`);
+      console.log(`[Phase5] Get permissions`);
 
       // 临时返回空数据 - TODO: 集成 Phase 3 权限系统
       respond(
         true,
         {
-          agentId,
           permissions: [],
           scope: [],
           constraints: [],
@@ -231,7 +236,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
         | undefined;
       const limit = typeof params?.limit === "number" ? params.limit : 100;
       const offset = typeof params?.offset === "number" ? params.offset : 0;
-      const approverId = params?.approverId ? String(params.approverId) : undefined;
+      const approverId = params?.approverId ? (params.approverId as string) : undefined;
 
       console.log(`[Phase5] List approvals: status=${status}, limit=${limit}, offset=${offset}`);
 
@@ -279,7 +284,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
    */
   "permissions.history": async ({ params, respond }) => {
     try {
-      const agentId = params?.agentId ? String(params.agentId).trim() : undefined;
+      const agentId = params?.agentId ? (params.agentId as string).trim() : undefined;
       const limit = typeof params?.limit === "number" ? params.limit : 100;
       const offset = typeof params?.offset === "number" ? params.offset : 0;
 
@@ -310,10 +315,10 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
    */
   "approvals.respond": async ({ params, respond }) => {
     try {
-      const requestId = String(params?.requestId ?? "").trim();
-      const approverId = String(params?.approverId ?? "").trim();
+      const requestId = ((params?.requestId as string) ?? "").trim();
+      const approverId = ((params?.approverId as string) ?? "").trim();
       const action = params?.action as "approve" | "reject";
-      const comment = params?.comment ? String(params.comment) : undefined;
+      const comment = params?.comment ? (params.comment as string) : undefined;
 
       if (!requestId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "requestId is required"));
@@ -359,10 +364,10 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
    */
   "approvals.cancel": async ({ params, respond }) => {
     try {
-      const requestId = String(params?.requestId ?? "").trim();
-      const cancellerId = String(params?.cancellerId ?? "").trim();
+      const requestId2 = ((params?.requestId as string) ?? "").trim();
+      const cancellerId = ((params?.cancellerId as string) ?? "").trim();
 
-      if (!requestId) {
+      if (!requestId2) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "requestId is required"));
         return;
       }
@@ -376,7 +381,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      await approvalSystem.cancel(requestId, cancellerId);
+      await approvalSystem.cancel(requestId2, cancellerId);
 
       respond(true, { success: true }, undefined);
     } catch (error) {
@@ -391,7 +396,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
   /**
    * 获取审批统计信息
    */
-  "approvals.stats": async ({ params, respond }) => {
+  "approvals.stats": async ({ respond }) => {
     try {
       const stats = approvalSystem.getStats();
       respond(true, stats, undefined);
@@ -409,52 +414,48 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
    */
   "agent.modelAccounts.update": async ({ params, respond }) => {
     try {
-      const agentId = String(params?.agentId ?? "").trim();
-      if (!agentId) {
+      const agentId3 = ((params?.agentId as string) ?? "").trim();
+      if (!agentId3) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
         return;
       }
 
-      const config = params?.config;
-      if (!config || typeof config !== "object") {
+      const newConfig = params?.config;
+      if (!newConfig || typeof newConfig !== "object") {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "config is required"));
         return;
       }
 
-      // 加载当前配置
-      const currentConfig = loadConfig();
-      const agents = currentConfig?.agents?.list || [];
-      const agentIndex = agents.findIndex((a: any) => a.id === agentId);
+      const config3 = loadConfig();
+      const agents3 = (config3?.agents?.list || []) as Record<string, unknown>[];
+      const agentIndex3 = agents3.findIndex((a) => a.id === agentId3);
 
-      if (agentIndex === -1) {
+      if (agentIndex3 === -1) {
         // 如果 agent 不在配置文件中，检查是否是系统中存在的虚拟 agent
-        const systemAgentIds = listAgentIds(currentConfig);
-        if (!systemAgentIds.includes(agentId)) {
+        const systemAgentIds = listAgentIds(config3);
+        if (!systemAgentIds.includes(agentId3)) {
           respond(
             false,
             undefined,
-            errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+            errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId3} not found`),
           );
           return;
         }
 
         // 自动添加虚拟 agent 到配置文件
-        (agents as any[]).push({ id: agentId, modelAccounts: config } as any);
+        agents3.push({ id: agentId3, modelAccounts: newConfig });
       } else {
         // 更新现有 agent 的模型账号配置
-        (agents[agentIndex] as any).modelAccounts = config;
+        agents3[agentIndex3] = { ...agents3[agentIndex3], modelAccounts: newConfig };
       }
 
-      // 保存配置
-      const updatedConfig = {
-        ...currentConfig,
+      await writeConfigFile({
+        ...config3,
         agents: {
-          ...currentConfig.agents,
-          list: agents,
+          ...config3.agents,
+          list: agents3 as import("../../config/types.agents.js").AgentConfig[],
         },
-      };
-
-      await writeConfigFile(updatedConfig);
+      });
 
       respond(true, { success: true }, undefined);
     } catch (error) {
@@ -463,7 +464,7 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
         undefined,
         errorShape(
           ErrorCodes.UNAVAILABLE,
-          `Failed to update model accounts config: ${String(error)}`,
+          `Failed to update channel policies config: ${String(error)}`,
         ),
       );
     }
@@ -474,52 +475,44 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
    */
   "agent.channelPolicies.update": async ({ params, respond }) => {
     try {
-      const agentId = String(params?.agentId ?? "").trim();
-      if (!agentId) {
+      const agentId4 = ((params?.agentId as string) ?? "").trim();
+      if (!agentId4) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
         return;
       }
 
-      const config = params?.config;
-      if (!config || typeof config !== "object") {
+      const newPoliciesConfig = params?.config;
+      if (!newPoliciesConfig || typeof newPoliciesConfig !== "object") {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "config is required"));
         return;
       }
 
-      // 加载当前配置
-      const currentConfig = loadConfig();
-      const agents = currentConfig?.agents?.list || [];
-      const agentIndex = agents.findIndex((a: any) => a.id === agentId);
+      const config4 = loadConfig();
+      const agents4 = (config4?.agents?.list || []) as Record<string, unknown>[];
+      const agentIndex4 = agents4.findIndex((a) => a.id === agentId4);
 
-      if (agentIndex === -1) {
-        // 如果 agent 不在配置文件中，检查是否是系统中存在的虚拟 agent
-        const systemAgentIds = listAgentIds(currentConfig);
-        if (!systemAgentIds.includes(agentId)) {
+      if (agentIndex4 === -1) {
+        const systemAgentIds = listAgentIds(config4);
+        if (!systemAgentIds.includes(agentId4)) {
           respond(
             false,
             undefined,
-            errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId} not found`),
+            errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId4} not found`),
           );
           return;
         }
-
-        // 自动添加虚拟 agent 到配置文件
-        (agents as any[]).push({ id: agentId, channelPolicies: config } as any);
+        agents4.push({ id: agentId4, channelPolicies: newPoliciesConfig });
       } else {
-        // 更新现有 agent 的通道策略配置
-        (agents[agentIndex] as any).channelPolicies = config;
+        agents4[agentIndex4] = { ...agents4[agentIndex4], channelPolicies: newPoliciesConfig };
       }
 
-      // 保存配置
-      const updatedConfig = {
-        ...currentConfig,
+      await writeConfigFile({
+        ...config4,
         agents: {
-          ...currentConfig.agents,
-          list: agents,
+          ...config4.agents,
+          list: agents4 as import("../../config/types.agents.js").AgentConfig[],
         },
-      };
-
-      await writeConfigFile(updatedConfig);
+      });
 
       respond(true, { success: true }, undefined);
     } catch (error) {
@@ -539,8 +532,8 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
    */
   "groups.workspace.migrate": async ({ params, respond }) => {
     try {
-      const groupId = params?.groupId ? String(params.groupId).trim() : "";
-      const newDir = params?.newDir ? String(params.newDir).trim() : "";
+      const groupId = params?.groupId ? (params.groupId as string).trim() : "";
+      const newDir = params?.newDir ? (params.newDir as string).trim() : "";
 
       if (!groupId || !newDir) {
         respond(
@@ -551,7 +544,11 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const oldDir = groupWorkspaceManager.getGroupWorkspaceDir(groupId);
+      // 优先使用 groupManager 中记录的 workspacePath（项目群自定义路径），
+      // 回退到 groupWorkspaceManager 的默认路径，与 groups.files.* 保持一致
+      const groupInfo = groupManager.getGroup(groupId);
+      const oldDir =
+        groupInfo?.workspacePath?.trim() || groupWorkspaceManager.getGroupWorkspaceDir(groupId);
       if (!oldDir) {
         respond(
           false,
@@ -600,7 +597,11 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
       } catch (copyErr) {
         // 源目录不存在则只创建目标目录，否则抛出真实错误
         let isNotExist = false;
-        try { await fs.access(oldDirResolved); } catch { isNotExist = true; }
+        try {
+          await fs.access(oldDirResolved);
+        } catch {
+          isNotExist = true;
+        }
         if (isNotExist) {
           await fs.mkdir(newDirResolved, { recursive: true });
         } else {
@@ -611,17 +612,23 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
       // 更新群组工作空间管理器中的路径（内存）
       groupWorkspaceManager.updateGroupWorkspaceDir(groupId, newDirResolved);
 
+      // 同步更新 groupManager 中的 workspacePath（写入 groups.json）
+      await groupManager.updateGroup(groupId, { workspacePath: newDirResolved });
+
       // 持久化到 openclaw.json： groups.overrides.<groupId>.workspaceDir
       const currentConfig = loadConfig();
-      const existingOverrides = (currentConfig as any)?.groups?.overrides ?? {};
+      const cfgGroups = (currentConfig as Record<string, unknown>).groups as
+        | Record<string, unknown>
+        | undefined;
+      const existingOverrides = (cfgGroups?.overrides as Record<string, unknown>) ?? {};
       const updatedConfig = {
         ...currentConfig,
         groups: {
-          ...(currentConfig as any).groups,
+          ...cfgGroups,
           overrides: {
             ...existingOverrides,
             [groupId]: {
-              ...existingOverrides[groupId],
+              ...(existingOverrides[groupId] as Record<string, unknown>),
               workspaceDir: newDirResolved,
             },
           },
@@ -629,7 +636,18 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
       };
       await writeConfigFile(updatedConfig);
 
-      respond(true, { success: true, groupId, oldDir: oldDirResolved, newDir: newDirResolved, migrated, fileCount }, undefined);
+      respond(
+        true,
+        {
+          success: true,
+          groupId,
+          oldDir: oldDirResolved,
+          newDir: newDirResolved,
+          migrated,
+          fileCount,
+        },
+        undefined,
+      );
     } catch (error) {
       respond(
         false,
