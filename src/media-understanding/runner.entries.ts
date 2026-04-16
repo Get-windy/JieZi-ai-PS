@@ -400,7 +400,7 @@ export function findDecisionReason(
   return undefined;
 }
 
-function normalizeDecisionReason(reason?: string): string | undefined {
+export function normalizeDecisionReason(reason?: string): string | undefined {
   const trimmed = typeof reason === "string" ? reason.trim() : "";
   if (!trimmed) {
     return undefined;
