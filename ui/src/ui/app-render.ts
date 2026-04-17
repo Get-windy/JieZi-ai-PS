@@ -3834,7 +3834,63 @@ export function renderApp(state: AppViewState) {
                       }
                     })();
                   },
-                  // 跨团队协作 Handoff Props
+                  // 单一数据源：用户在前端创建的任务直接写入 SQLite Task 系统
+                  onCreateSprintTask: (projectId, sprintId, title, status) => {
+                    return (async () => {
+                      if (!state.client) {
+                        return null;
+                      }
+                      try {
+                        const taskId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+                        // 将 sprint 看板状态映射为 SQLite TaskStatus
+                        const taskStatus = (status === "todo" || status === "backlog") ? "todo"
+                          : status === "in-progress" ? "in-progress"
+                          : status === "review" ? "review"
+                          : status === "blocked" ? "blocked"
+                          : status === "done" ? "done"
+                          : "todo";
+                        await state.client.request("task.create", {
+                          id: taskId,
+                          title,
+                          description: title, // 标题即描述（内联方式创建，后续可编辑）
+                          status: taskStatus,
+                          priority: "medium",
+                          projectId,
+                          scope: "project",
+                          createdAt: Date.now(),
+                          creatorType: "human",
+                          // 将 sprintId 存到 tags 中以便后续查询
+                          tags: sprintId ? [`sprint:${sprintId}`] : [],
+                        });
+                        return { taskId };
+                      } catch (err) {
+                        console.warn(`[Sprint Task Create] 写入 SQLite 失败（快照仍保留）: ${err instanceof Error ? err.message : String(err)}`);
+                        return null;
+                      }
+                    })();
+                  },
+                  // 单一数据源：用户在前端变更任务状态直接写入 SQLite
+                  onUpdateSprintTaskStatus: (taskId, newStatus) => {
+                    void (async () => {
+                      if (!state.client) {
+                        return;
+                      }
+                      // 展开的 id 可能是临时 id（task- 开头）或真实 id（task_ 开头）
+                      if (!taskId.startsWith("task_")) {
+                        // 临时 id， SQLite 里还没有这条记录，跳过
+                        return;
+                      }
+                      try {
+                        await state.client.request("task.update", {
+                          id: taskId,
+                          status: newStatus,
+                          ...(newStatus === "done" ? { completedAt: Date.now() } : {}),
+                        });
+                      } catch (err) {
+                        console.warn(`[Sprint Task Update] 状态同步失败: ${err instanceof Error ? err.message : String(err)}`);
+                      }
+                    })();
+                  },
                   projectTeamRelations: state.projectTeamRelations,
                   projectTeamRelationsLoading: state.projectTeamRelationsLoading,
                   handoffForm: state.handoffForm,

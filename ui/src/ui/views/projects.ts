@@ -421,6 +421,20 @@ export type ProjectsProps = {
   ) => void;
   /** 开始 Sprint */
   onStartSprint: (projectId: string, sprintId: string) => void;
+  /**
+   * 在 Sprint 或 Backlog 中创建任务 — 同步写入 SQLite Task 系统（单一数据源）。
+   * 返回 Promise<{ taskId: string }> 以便调用方将 id 填回快照。
+   */
+  onCreateSprintTask: (
+    projectId: string,
+    sprintId: string | null,
+    title: string,
+    status: string,
+  ) => Promise<{ taskId: string } | null>;
+  /**
+   * 更新 SQLite 中某个任务的状态（前端看板拖拽/select 切换时调用）。
+   */
+  onUpdateSprintTaskStatus: (taskId: string, newStatus: string) => void;
   /** 标记单条验收标准状态 */
   onMarkCriterionSatisfied: (
     projectId: string,
@@ -1855,6 +1869,8 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
                                           : s,
                                       ),
                                     );
+                                    // 同步写入 SQLite 单一数据源
+                                    props.onUpdateSprintTaskStatus(task.id, newStatus);
                                   }}
                                 >
                                   ${Object.entries(TASK_STATUS_CONFIG).map(([v, c]) => html`<option value=${v}>${c.label}</option>`)}
@@ -1877,19 +1893,33 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
                                   if (!title) {
                                     return;
                                   }
+                                  // 先写快照（临时 id）展示任务卡片，再异步写入 SQLite
+                                  const tempId = `task-${Date.now()}`;
                                   const newTask: ProjectTask = {
-                                    id: `task-${Date.now()}`,
+                                    id: tempId,
                                     title,
                                     status: col.status,
                                     priority: "medium",
                                     createdAt: Date.now(),
                                   };
-                                  patchSprints(
-                                    sprints.map((s, i) =>
-                                      i === si ? { ...s, tasks: [...s.tasks, newTask] } : s,
-                                    ),
+                                  const sprintsCopy = sprints.map((s, i) =>
+                                    i === si ? { ...s, tasks: [...s.tasks, newTask] } : s,
                                   );
+                                  patchSprints(sprintsCopy);
                                   input.value = "";
+                                  // 异步写入 SQLite，将真实任务 id 回写到快照
+                                  void props.onCreateSprintTask(project.projectId, sprint.id, title, col.status).then((res) => {
+                                    if (res?.taskId && res.taskId !== tempId) {
+                                      // 用真实 id 替换临时 id
+                                      patchSprints(
+                                        sprints.map((s, i) =>
+                                          i === si
+                                            ? { ...s, tasks: [...s.tasks.filter((t) => t.id !== tempId), { ...newTask, id: res.taskId }] }
+                                            : s
+                                        ),
+                                      );
+                                    }
+                                  });
                                 }}
                               />
                             </div>
@@ -1931,14 +1961,21 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
             if (!title?.trim()) {
               return;
             }
+            const tempId = `task-${Date.now()}`;
             const t: ProjectTask = {
-              id: `task-${Date.now()}`,
+              id: tempId,
               title: title.trim(),
               status: "backlog",
               priority: "none",
               createdAt: Date.now(),
             };
             patchBacklog([...backlog, t]);
+            // 异步写入 SQLite
+            void props.onCreateSprintTask(project.projectId, null, title.trim(), "todo").then((res) => {
+              if (res?.taskId && res.taskId !== tempId) {
+                patchBacklog([...backlog.filter((b) => b.id !== tempId), { ...t, id: res.taskId }]);
+              }
+            });
           }}>+ 添加</button>
         </div>
         ${
