@@ -1810,6 +1810,55 @@ export const tasksRpc: GatewayRequestHandlers = {
         console.warn(`[task.complete] archiveOldTasks failed: ${String(archErr)}`);
       });
 
+      // === 自动同步 PROJECT_CONFIG.json Sprint 快照 ===
+      // 根本问题：task.complete 只写 SQLite，PROJECT_CONFIG.json 是独立数据源，
+      // 前端进度页面读的是 PROJECT_CONFIG.json，两者不同步导致进度永远不更新。
+      // 修复：任务完成时，如果任务属于某个项目，自动将 PROJECT_CONFIG.json
+      // 中对应 sprint task 的 status 更新为 done，并重算整体 progress。
+      const completedProjectId = updatedTask?.projectId ?? task.projectId;
+      if (completedProjectId) {
+        try {
+          const pathMod = await import("path");
+          const fsMod = await import("fs");
+          const { buildProjectContext, readProjectConfig, calcProjectProgress } =
+            await import("../../utils/project-context.js");
+          const ctx = buildProjectContext(completedProjectId);
+          const configPath = pathMod.join(ctx.workspacePath, "PROJECT_CONFIG.json");
+          const cfg = readProjectConfig(ctx.workspacePath);
+          if (cfg) {
+            const sprints = cfg.sprints ?? cfg.milestones ?? [];
+            let patched = false;
+            const now = Date.now();
+            for (const sprint of sprints) {
+              const idx = sprint.tasks.findIndex((t) => t.id === taskId);
+              if (idx >= 0) {
+                sprint.tasks[idx] = {
+                  ...sprint.tasks[idx],
+                  status: "done",
+                  completedAt: completedAt,
+                  updatedAt: now,
+                };
+                patched = true;
+                break;
+              }
+            }
+            if (patched) {
+              if (cfg.sprints) cfg.sprints = sprints;
+              else cfg.milestones = sprints;
+              cfg.progress = calcProjectProgress(sprints);
+              cfg.progressUpdatedAt = now;
+              fsMod.writeFileSync(configPath, JSON.stringify(cfg, null, 2), "utf-8");
+              console.log(
+                `[task.complete] Sprint snapshot synced: task ${taskId} → done in project ${completedProjectId} (progress=${cfg.progress}%)`,
+              );
+            }
+          }
+        } catch (syncErr) {
+          // 同步失败不阻塞主流程，仅记录警告
+          console.warn(`[task.complete] sprint snapshot sync failed: ${String(syncErr)}`);
+        }
+      }
+
       // === B1: 子任务状态汇聚 — 对标 Linear 2026 子问题进度卷积 ===
       // 当所有子任务完成时，自动推进父任务进入 review 状态
       const parentTaskIdForAgg = task.parentTaskId;
