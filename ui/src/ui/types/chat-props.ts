@@ -41,6 +41,13 @@ export type ChatProps = {
   toolMessages: unknown[];
   stream: string | null;
   streamStartedAt: number | null;
+  /**
+   * 多 Agent 并发流式支持（Open WebUI / AutoGen Studio 最佳实践）
+   * key = agentId 或 sessionKey，value = 该 agent 的当前流式输出状态
+   * 与原 props.stream 共存（向下兼容），单 agent 场景仅设置 props.stream，
+   * 多 agent 群组场景建议设置 props.streams
+   */
+  streams?: Map<string, { text: string; startedAt: number; senderName?: string }>;
   assistantAvatarUrl?: string | null;
   draft: string;
   queue: ChatQueueItem[];
@@ -69,6 +76,12 @@ export type ChatProps = {
   onToggleFocusMode: () => void;
   onDraftChange: (next: string) => void;
   onSend: () => void;
+  /**
+   * Reply Quote 打通：发送时将当前引用状态附加到消息元数据
+   * replyText: 被引用消息摘要，replyWho: 发言者名
+   * 后端可将此信息写入消息的 replyTarget 字段
+   */
+  onSendWithReply?: (replyText: string, replyWho: string) => void;
   onAbort?: () => void;
   onQueueRemove: (id: string) => void;
   onNewSession: () => void;
