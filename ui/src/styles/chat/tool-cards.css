@@ -1,4 +1,57 @@
 /* Tool Card Styles */
+
+/* =============================================
+   PINCHCHAT-STYLE TOOL BADGES
+   Coloured per-tool pill badges in tool call summaries.
+   Colours injected as inline style rgba() for theme safety.
+   ============================================= */
+
+.chat-tool-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* colour injected via inline style */
+}
+
+.chat-tool-badge-more {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Hide old plain-text name label when badges are shown */
+.chat-tools-summary__names,
+.chat-tool-msg-summary__names {
+  display: none;
+}
+
+/* Keep preview label if present */
+.chat-tool-msg-summary__preview {
+  font-size: 10px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
 .chat-tool-card {
   border: 1px solid var(--border);
   border-radius: 8px;

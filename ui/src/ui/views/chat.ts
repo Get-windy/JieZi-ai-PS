@@ -8,18 +8,26 @@ import { html, nothing } from "lit";
 import { ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import {
+  renderParticipantsPanel,
+  buildParticipants,
+  extractActiveSenderIds,
+} from "../chat/chat-participants-panel.ts";
+import {
   renderMessageGroup,
   renderReadingIndicatorGroup,
   renderStreamingGroup,
+  renderReplyQuoteCard,
+  renderGroupTypingIndicators,
 } from "../chat/grouped-render.ts";
 import { detectMentionToken, openMentionDropdown, closeMentionDropdown } from "../chat/mention.ts";
 import type { MentionCandidate } from "../chat/mention.ts";
+import { initMessageSearch, isSearchOpen, focusSearchBar } from "../chat/message-search.ts";
 import { t } from "../i18n.ts";
 import { icons } from "../icons.ts";
 import { detectTextDirection } from "../text-direction.ts";
 import { renderChatNavigationTree } from "./chat-navigation-tree.ts";
-import { renderMarkdownSidebar } from "./markdown-sidebar.ts";
 import "../components/resizable-divider.ts";
+import { renderMarkdownSidebar } from "./markdown-sidebar.ts";
 
 // Re-export shared types for backwards compatibility
 export type {
@@ -27,7 +35,11 @@ export type {
   CompactionIndicatorStatus,
   FallbackIndicatorStatus,
 } from "../types/chat-props.ts";
-import { renderContextWarning, getUsageRatio } from "../chat/context-warning.ts";
+import {
+  renderContextWarning,
+  getUsageRatio,
+  renderTokenProgressBar,
+} from "../chat/context-warning.ts";
 import { handleDragOver, handleDragLeave, handleDrop } from "../chat/drag-drop.ts";
 import { chatInputHistory, getInputHistory } from "../chat/input-history.ts";
 import { initSidebarResize, getSavedSidebarWidth } from "../chat/sidebar-resize.ts";
@@ -59,8 +71,21 @@ export { resolveConversationInfo, renderChatParticipantsInline };
  * 切换 tab 时重置聊天视图临时状态（导入历史、斜杠轮换 UI 等）
  * 上游版本会停止 STT 并清空临时状态，本地版本无状态需要重置。
  */
+// ── Module-level reply state (Discord-style Reply Quote) ────────────────
+// Since renderChat is a pure function, we store reply state at module level.
+// It resets on context change (resetChatViewState) or on explicit clear.
+const _replyState: { replyText: string; replyWho: string } = {
+  replyText: "",
+  replyWho: "",
+};
+function _getReplyState() {
+  return _replyState;
+}
+
 export function resetChatViewState(): void {
   // 本地 chat 视图不使用上游的模块内状态，暂无需要重置
+  _replyState.replyText = "";
+  _replyState.replyWho = "";
 }
 
 /** @deprecated 居用 resetChatViewState */
@@ -68,7 +93,10 @@ export const cleanupChatModuleState = resetChatViewState;
 
 export function renderChat(props: ChatProps) {
   // 调试日志：记录 Chat 渲染关键状态
-  if (typeof window !== "undefined" && (window as unknown as { __DEBUG_UI__?: boolean }).__DEBUG_UI__) {
+  if (
+    typeof window !== "undefined" &&
+    (window as unknown as { __DEBUG_UI__?: boolean }).__DEBUG_UI__
+  ) {
     console.log("[DEBUG:Chat] renderChat called with:", {
       connected: props.connected,
       loading: props.loading,
@@ -147,6 +175,14 @@ export function renderChat(props: ChatProps) {
     }
     btn.dataset.sending = "1";
     inputHistory.add(props.draft);
+    // Reply Quote 打通：发送时如有引用状态，先通知后端附加 replyTarget 元数据
+    const replySnapshot = _getReplyState();
+    if (replySnapshot.replyText && props.onSendWithReply) {
+      props.onSendWithReply(replySnapshot.replyText, replySnapshot.replyWho);
+    }
+    // 清除引用状态（无论是否成功）
+    replySnapshot.replyText = "";
+    replySnapshot.replyWho = "";
     props.onSend();
     setTimeout(() => {
       delete btn.dataset.sending;
@@ -169,6 +205,36 @@ export function renderChat(props: ChatProps) {
 
   const splitRatio = props.splitRatio ?? 0.6;
   const sidebarOpen = Boolean(props.sidebarOpen && props.onCloseSidebar);
+
+  // ── Reply Quote state (Discord-style) ─────────────────────────────────────
+  // Reply quote state is stored in DOM data-attributes on the compose area
+  // to avoid external state dependencies (same pattern as collapsible messages).
+  // The reply card renders above the textarea via renderReplyQuoteCard().
+  // We use a module-level WeakMap keyed by the chat-main-area element.
+  const isGroupCtxForParticipants =
+    props.navCurrentContext?.type === "dept-room" || props.navCurrentContext?.type === "group";
+
+  // ── Participants panel data ────────────────────────────────────────────────
+  const participants = isGroupCtxForParticipants
+    ? buildParticipants(props.navCurrentContext, props.agentsList)
+    : [];
+  const activeSenderIds = isGroupCtxForParticipants
+    ? extractActiveSenderIds(props.messages)
+    : new Set<string>();
+  // Agents that are currently streaming = the current stream sender if any
+  const streamingSenderIds = new Set<string>();
+  if (props.stream && props.navCurrentContext?.type === "group") {
+    // For group contexts, the assistantName is the streaming sender
+    if (props.assistantName) {
+      streamingSenderIds.add(props.assistantName);
+    }
+  }
+  // Multi-agent concurrent streaming: add all agents from props.streams
+  if (props.streams && props.streams.size > 0 && isGroupCtxForParticipants) {
+    for (const [agentId, streamState] of props.streams) {
+      streamingSenderIds.add(streamState.senderName ?? agentId);
+    }
+  }
 
   // Slash command detection
   const slashToken = detectSlashToken(props.draft);
@@ -236,34 +302,27 @@ export function renderChat(props: ChatProps) {
     Date.now() - (props.streamStartedAt ?? 0) > STREAM_STALL_MS;
 
   const thread = html`
-    <div
-      class="chat-thread"
-      role="log"
-      aria-live="polite"
-      @scroll=${props.onChatScroll}
-    >
-      ${
-        props.loading
+    <div class="chat-thread" role="log" aria-live="polite" @scroll=${props.onChatScroll}>
+      ${props.loading
+        ? html`
+            <div class="chat-empty-state">
+              <div class="muted">${t("chat.loading")}</div>
+            </div>
+          `
+        : !hasMessages
           ? html`
-              <div class="chat-empty-state">
-                <div class="muted">${t("chat.loading")}</div>
-              </div>
-            `
-          : !hasMessages
-            ? html`
               <div class="chat-empty-state">
                 <div class="chat-empty-state__icon">💬</div>
                 <div class="chat-empty-state__title">${t("chat.empty.title")}</div>
                 <div class="chat-empty-state__desc">${t("chat.empty.desc")}</div>
-                ${
-                  props.onRefresh
-                    ? html`<button class="btn btn--sm" type="button" @click=${props.onRefresh}>${t("chat.empty.refresh")}</button>`
-                    : nothing
-                }
+                ${props.onRefresh
+                  ? html`<button class="btn btn--sm" type="button" @click=${props.onRefresh}>
+                      ${t("chat.empty.refresh")}
+                    </button>`
+                  : nothing}
               </div>
             `
-            : nothing
-      }
+          : nothing}
       ${repeat(
         buildChatItems(props),
         (item) => item.key,
@@ -279,16 +338,24 @@ export function renderChat(props: ChatProps) {
           }
 
           if (item.kind === "reading-indicator") {
-            return renderReadingIndicatorGroup(assistantIdentity, props.basePath);
+            // Support per-sender name for multi-agent concurrent streaming
+            const multiSenderName = (item as unknown as { senderName?: string }).senderName;
+            return renderReadingIndicatorGroup(
+              multiSenderName ? { name: multiSenderName, avatar: null } : assistantIdentity,
+              props.basePath,
+            );
           }
 
           if (item.kind === "stream") {
+            // Support per-sender name for multi-agent concurrent streaming
+            const multiSenderName = (item as unknown as { senderName?: string }).senderName;
             return renderStreamingGroup(
               item.text,
               item.startedAt,
               props.onOpenSidebar,
               assistantIdentity,
               props.basePath,
+              multiSenderName,
             );
           }
 
@@ -307,15 +374,27 @@ export function renderChat(props: ChatProps) {
                 const newDraft = current ? `${quoted}${current}` : quoted;
                 props.onDraftChange(newDraft);
               },
+              // Discord-style Reply Quote
+              onReply: (replyText: string, replyWho: string) => {
+                _replyState.replyText = replyText;
+                _replyState.replyWho = replyWho;
+                // Trigger re-render via synthetic event
+                document.dispatchEvent(new CustomEvent("chat:reply-set"));
+                // Focus compose textarea
+                const ta = document.querySelector<HTMLTextAreaElement>(".chat-compose textarea");
+                ta?.focus();
+              },
               // Edit & Regenerate（方向1）
               // 通过匹配 group 内第一条消息的时间戳查找在 messages 中的真实索引
               onEditMessage: props.onEditMessage
                 ? (newText: string) => {
                     const group = item;
-                    const firstMsg = group.messages[0]?.message as Record<string, unknown> | undefined;
+                    const firstMsg = group.messages[0]?.message as
+                      | Record<string, unknown>
+                      | undefined;
                     const targetTs = firstMsg?.timestamp as number | undefined;
                     const msgIndex = targetTs
-                      ? (props.messages).findIndex(
+                      ? props.messages.findIndex(
                           (m) => (m as Record<string, unknown>).timestamp === targetTs,
                         )
                       : -1;
@@ -328,23 +407,49 @@ export function renderChat(props: ChatProps) {
           return nothing;
         },
       )}
-      ${
-        isStreamStalled
-          ? html`
+      ${isStreamStalled
+        ? html`
             <div class="chat-stall-warning" role="alert" aria-live="assertive">
               <span class="chat-stall-warning__icon" aria-hidden="true">⚠️</span>
               <span class="chat-stall-warning__text">Agent 可能已断开连接，请稍候或尝试中断</span>
-              ${
-                props.onAbort
-                  ? html`<button class="btn btn--xs chat-stall-warning__abort" type="button" @click=${props.onAbort}>中断</button>`
-                  : nothing
-              }
+              ${props.onAbort
+                ? html`<button
+                    class="btn btn--xs chat-stall-warning__abort"
+                    type="button"
+                    @click=${props.onAbort}
+                  >
+                    中断
+                  </button>`
+                : nothing}
             </div>
           `
-          : nothing
-      }
+        : nothing}
+      ${renderGroupTypingIndicators(
+        Array.from(streamingSenderIds).filter((_id) => {
+          // Only show typing for group contexts with multiple agents
+          return isGroupCtxForParticipants;
+        }),
+        new Map(participants.map((p) => [p.id, p.name])),
+      )}
     </div>
   `;
+
+  // ── Participants panel (right-side floating) ─────────────────────────
+  const participantsPanel = isGroupCtxForParticipants
+    ? renderParticipantsPanel(participants, activeSenderIds, streamingSenderIds)
+    : nothing;
+
+  // ── Reply quote state (DOM-driven, module-level map) ──────────────────
+  // We keep per-chat-main-area reply state in a WeakMap so it survives re-renders.
+  const replyState = _getReplyState();
+  const replyQuoteCard = replyState.replyText
+    ? renderReplyQuoteCard(replyState.replyText, replyState.replyWho, () => {
+        replyState.replyText = "";
+        replyState.replyWho = "";
+        // Trigger re-render by dispatching a synthetic event
+        document.dispatchEvent(new CustomEvent("chat:reply-cleared"));
+      })
+    : nothing;
 
   return html`
     <section class="card chat">
@@ -380,296 +485,330 @@ export function renderChat(props: ChatProps) {
         </div>
 
         <!-- 右侧聊天主区域 -->
-        <div class="chat-main-area"
+        <div
+          class="chat-main-area"
           @dragover=${handleDragOver}
           @dragleave=${handleDragLeave}
-          @drop=${(e: DragEvent) => handleDrop(e, props.attachments ?? [], props.onAttachmentsChange)}
+          @drop=${(e: DragEvent) =>
+            handleDrop(e, props.attachments ?? [], props.onAttachmentsChange)}
+          @keydown=${(e: KeyboardEvent) => {
+            // Ctrl/Cmd + F: 打开聊天内搜索（PinchChat 功能）
+            if ((e.ctrlKey || e.metaKey) && e.key === "f" && !e.shiftKey && !e.altKey) {
+              e.preventDefault();
+              const mainArea = e.currentTarget as HTMLElement;
+              if (isSearchOpen()) {
+                focusSearchBar();
+                return;
+              }
+              initMessageSearch(mainArea, () => mainArea.querySelector(".chat-thread"));
+            }
+          }}
+          tabindex="-1"
         >
-      <!-- Drag-drop overlay -->
-      <div class="chat-dropzone">
-        <span class="chat-dropzone__label">${t("chat.dropzone.label")}</span>
-        <span class="chat-dropzone__hint">${t("chat.dropzone.hint")}</span>
-      </div>
-      <!-- Mobile hamburger toggle -->
-      <button
-        class="chat-nav-mobile-toggle"
-        type="button"
-        aria-label="Toggle navigation"
-        @click=${(e: Event) => {
-          const wrap = (e.target as HTMLElement).closest(".chat-with-nav");
-          wrap?.querySelector(".chat-nav-sidebar")?.classList.toggle("chat-nav-sidebar--open");
-          wrap?.querySelector(".chat-nav-backdrop")?.classList.toggle("chat-nav-backdrop--visible");
-        }}
-      >${icons.menu}</button>
-      ${props.disabledReason ? html`<div class="callout">${props.disabledReason}</div>` : nothing}
-
-      ${props.error ? html`<div class="callout danger">${props.error}</div>` : nothing}
-
-      ${
-        props.focusMode
-          ? html`
-            <button
-              class="chat-focus-exit"
-              type="button"
-              @click=${props.onToggleFocusMode}
-              aria-label="Exit focus mode"
-              title="Exit focus mode"
-            >
-              ${icons.x}
-            </button>
-          `
-          : nothing
-      }
-
-      ${renderDeptIsolationWarning(props.navCurrentContext)}
-
-      ${
-        isReadOnly && isChannelObserve
-          ? html`
-            <div class="chat-readonly-bar">
-              <span>${t("chat.readonly.channel_bar", { channel: (props.navCurrentContext as { channelName?: string } | null)?.channelName ?? "" })}</span>
-              <button
-                class="btn btn--sm"
-                type="button"
-                @click=${props.onNavChannelForceJoinToggle}
-              >
-                ${t("chat.readonly.force_join")}
-              </button>
-            </div>
-          `
-          : nothing
-      }
-
-      ${
-        isChannelObserve && props.navChannelForceJoined
-          ? html`
-            <div class="chat-force-joined-bar">
-              <span>${t("chat.readonly.force_joined_warning")}</span>
-              <button
-                class="btn btn--sm"
-                type="button"
-                @click=${props.onNavChannelForceJoinToggle}
-              >
-                ${t("chat.readonly.exit_join")}
-              </button>
-            </div>
-          `
-          : nothing
-      }
-
-      <div
-        class="chat-split-container ${sidebarOpen ? "chat-split-container--open" : ""}"
-      >
-        <div
-          class="chat-main"
-          style="flex: ${sidebarOpen ? `0 0 ${splitRatio * 100}%` : "1 1 100%"}"
-        >
-          ${thread}
-        </div>
-
-        ${
-          sidebarOpen
+          <!-- Drag-drop overlay -->
+          <div class="chat-dropzone">
+            <span class="chat-dropzone__label">${t("chat.dropzone.label")}</span>
+            <span class="chat-dropzone__hint">${t("chat.dropzone.hint")}</span>
+          </div>
+          <!-- Mobile hamburger toggle -->
+          <button
+            class="chat-nav-mobile-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            @click=${(e: Event) => {
+              const wrap = (e.target as HTMLElement).closest(".chat-with-nav");
+              wrap?.querySelector(".chat-nav-sidebar")?.classList.toggle("chat-nav-sidebar--open");
+              wrap
+                ?.querySelector(".chat-nav-backdrop")
+                ?.classList.toggle("chat-nav-backdrop--visible");
+            }}
+          >
+            ${icons.menu}
+          </button>
+          ${props.disabledReason
+            ? html`<div class="callout">${props.disabledReason}</div>`
+            : nothing}
+          ${props.error ? html`<div class="callout danger">${props.error}</div>` : nothing}
+          ${props.focusMode
             ? html`
-              <resizable-divider
-                .splitRatio=${splitRatio}
-                @resize=${(e: CustomEvent) => props.onSplitRatioChange?.(e.detail.splitRatio)}
-              ></resizable-divider>
-              <div class="chat-sidebar">
-                ${renderMarkdownSidebar({
-                  content: props.sidebarContent ?? null,
-                  error: props.sidebarError ?? null,
-                  onClose: props.onCloseSidebar!,
-                  onViewRawText: () => {
-                    if (!props.sidebarContent || !props.onOpenSidebar) {
-                      return;
-                    }
-                    props.onOpenSidebar(`\`\`\`\n${props.sidebarContent}\n\`\`\``);
-                  },
-                })}
-              </div>
-            `
-            : nothing
-        }
-      </div>
+                <button
+                  class="chat-focus-exit"
+                  type="button"
+                  @click=${props.onToggleFocusMode}
+                  aria-label="Exit focus mode"
+                  title="Exit focus mode"
+                >
+                  ${icons.x}
+                </button>
+              `
+            : nothing}
+          ${renderDeptIsolationWarning(props.navCurrentContext)}
+          ${isReadOnly && isChannelObserve
+            ? html`
+                <div class="chat-readonly-bar">
+                  <span
+                    >${t("chat.readonly.channel_bar", {
+                      channel:
+                        (props.navCurrentContext as { channelName?: string } | null)?.channelName ??
+                        "",
+                    })}</span
+                  >
+                  <button
+                    class="btn btn--sm"
+                    type="button"
+                    @click=${props.onNavChannelForceJoinToggle}
+                  >
+                    ${t("chat.readonly.force_join")}
+                  </button>
+                </div>
+              `
+            : nothing}
+          ${isChannelObserve && props.navChannelForceJoined
+            ? html`
+                <div class="chat-force-joined-bar">
+                  <span>${t("chat.readonly.force_joined_warning")}</span>
+                  <button
+                    class="btn btn--sm"
+                    type="button"
+                    @click=${props.onNavChannelForceJoinToggle}
+                  >
+                    ${t("chat.readonly.exit_join")}
+                  </button>
+                </div>
+              `
+            : nothing}
 
-      ${
-        props.queue.length
-          ? html`
-            <div class="chat-queue" role="status" aria-live="polite">
-              <div class="chat-queue__title">${t("chat.queue.title")} (${props.queue.length})</div>
-              <div class="chat-queue__list">
-                ${props.queue.map(
-                  (item) => html`
-                    <div class="chat-queue__item">
-                      <div class="chat-queue__text">
-                        ${
-                          item.text ||
-                          (item.attachments?.length
-                            ? `${t("chat.queue.image")} (${item.attachments.length})`
-                            : "")
+          <div class="chat-split-container ${sidebarOpen ? "chat-split-container--open" : ""}">
+            <div
+              class="chat-main"
+              style="flex: ${sidebarOpen ? `0 0 ${splitRatio * 100}%` : "1 1 100%"}"
+            >
+              ${thread}
+            </div>
+
+            ${sidebarOpen
+              ? html`
+                  <resizable-divider
+                    .splitRatio=${splitRatio}
+                    @resize=${(e: CustomEvent) => props.onSplitRatioChange?.(e.detail.splitRatio)}
+                  ></resizable-divider>
+                  <div class="chat-sidebar">
+                    ${renderMarkdownSidebar({
+                      content: props.sidebarContent ?? null,
+                      error: props.sidebarError ?? null,
+                      onClose: props.onCloseSidebar!,
+                      onViewRawText: () => {
+                        if (!props.sidebarContent || !props.onOpenSidebar) {
+                          return;
                         }
-                      </div>
-                      <button
-                        class="btn chat-queue__remove"
-                        type="button"
-                        aria-label="Remove queued message"
-                        @click=${() => props.onQueueRemove(item.id)}
-                      >
-                        ${icons.x}
-                      </button>
-                    </div>
-                  `,
-                )}
+                        props.onOpenSidebar(`\`\`\`\n${props.sidebarContent}\n\`\`\``);
+                      },
+                    })}
+                  </div>
+                `
+              : nothing}
+          </div>
+
+          ${props.queue.length
+            ? html`
+                <div class="chat-queue" role="status" aria-live="polite">
+                  <div class="chat-queue__title">
+                    ${t("chat.queue.title")} (${props.queue.length})
+                  </div>
+                  <div class="chat-queue__list">
+                    ${props.queue.map(
+                      (item) => html`
+                        <div class="chat-queue__item">
+                          <div class="chat-queue__text">
+                            ${item.text ||
+                            (item.attachments?.length
+                              ? `${t("chat.queue.image")} (${item.attachments.length})`
+                              : "")}
+                          </div>
+                          <button
+                            class="btn chat-queue__remove"
+                            type="button"
+                            aria-label="Remove queued message"
+                            @click=${() => props.onQueueRemove(item.id)}
+                          >
+                            ${icons.x}
+                          </button>
+                        </div>
+                      `,
+                    )}
+                  </div>
+                </div>
+              `
+            : nothing}
+          ${renderFallbackIndicator(props.fallbackStatus)}
+          ${renderCompactionIndicator(props.compactionStatus)}
+          ${renderContextWarning(props.contextUsage, () => {
+            // 对抗-P1 修复：优先使用 onCompact 回调，如不存在才列退回字符串注入方式
+            if (props.onCompact) {
+              props.onCompact();
+            } else {
+              // fallback: 字符串注入（将来删除）
+              props.onDraftChange("/compact");
+              setTimeout(() => props.onSend(), 0);
+            }
+          })}
+          ${props.showNewMessages
+            ? html`
+                <button
+                  class="btn chat-new-messages"
+                  type="button"
+                  @click=${props.onScrollToBottom}
+                >
+                  ${t("chat.new_messages")} ${icons.arrowDown}
+                </button>
+              `
+            : nothing}
+
+          <div class="chat-compose">
+            ${participantsPanel} ${replyQuoteCard} ${renderTokenProgressBar(props.contextUsage)}
+            ${renderAttachmentPreview(props)}
+            <div class="chat-compose__row">
+              <label class="field chat-compose__field">
+                <span>${t("chat.compose.message")}</span>
+                <div class="chat-compose__mention-wrap" style="position:relative">
+                  ${slashCommands.length > 0
+                    ? renderSlashDropdown(slashCommands, onSlashSelect)
+                    : nothing}
+                  <textarea
+                    ${ref((el) => el && adjustTextareaHeight(el as HTMLTextAreaElement))}
+                    .value=${props.draft}
+                    dir=${detectTextDirection(props.draft)}
+                    ?disabled=${!canCompose}
+                    @keydown=${(e: KeyboardEvent) => {
+                      // Input history navigation (only when textarea is empty or single line)
+                      if (
+                        e.key === "ArrowUp" &&
+                        !e.shiftKey &&
+                        !e.altKey &&
+                        !e.ctrlKey &&
+                        !e.metaKey
+                      ) {
+                        const ta = e.target as HTMLTextAreaElement;
+                        // Only navigate history when cursor is at the start or field is single-line
+                        if (ta.selectionStart === 0 || !ta.value.includes("\n")) {
+                          const prev = chatInputHistory.older(ta.value);
+                          if (prev !== null) {
+                            e.preventDefault();
+                            props.onDraftChange(prev);
+                            return;
+                          }
+                        }
+                      }
+                      if (
+                        e.key === "ArrowDown" &&
+                        !e.shiftKey &&
+                        !e.altKey &&
+                        !e.ctrlKey &&
+                        !e.metaKey
+                      ) {
+                        if (chatInputHistory.isNavigating) {
+                          const next = chatInputHistory.newer();
+                          if (next !== null) {
+                            e.preventDefault();
+                            props.onDraftChange(next);
+                            return;
+                          }
+                        }
+                      }
+                      if (e.key !== "Enter") {
+                        return;
+                      }
+                      if (e.isComposing || e.keyCode === 229) {
+                        return;
+                      }
+                      if (e.shiftKey) {
+                        return;
+                      } // Allow Shift+Enter for line breaks
+                      if (!canCompose) {
+                        return;
+                      }
+                      e.preventDefault();
+                      if (canCompose) {
+                        chatInputHistory.add(props.draft);
+                        // Reply Quote 打通：键盘 Enter 发送时同样传递引用元数据
+                        const rs = _getReplyState();
+                        if (rs.replyText && props.onSendWithReply) {
+                          props.onSendWithReply(rs.replyText, rs.replyWho);
+                        }
+                        rs.replyText = "";
+                        rs.replyWho = "";
+                        props.onSend();
+                      }
+                    }}
+                    @input=${(e: Event) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      adjustTextareaHeight(target);
+                      props.onDraftChange(target.value);
+                      // @ mention 提及逻辑（仅在群聊 context）
+                      const isGroupCtx = props.navCurrentContext?.type === "group";
+                      const wrap = target.closest(".chat-compose__mention-wrap");
+                      if (isGroupCtx && wrap) {
+                        const cursor = target.selectionStart ?? target.value.length;
+                        const mention = detectMentionToken(target.value, cursor);
+                        if (mention) {
+                          const { participants } = resolveConversationInfo(
+                            props.navCurrentContext,
+                            props.agentsList,
+                            props.assistantName,
+                          );
+                          const filtered = participants
+                            .filter((p) => !p.isUser)
+                            .filter(
+                              (p) =>
+                                mention.token === "" ||
+                                p.label.toLowerCase().includes(mention.token) ||
+                                p.id.toLowerCase().includes(mention.token),
+                            ) as MentionCandidate[];
+                          openMentionDropdown(
+                            wrap,
+                            target,
+                            filtered,
+                            mention.start,
+                            (newDraft) => props.onDraftChange(newDraft),
+                            adjustTextareaHeight,
+                          );
+                        } else {
+                          closeMentionDropdown(wrap);
+                        }
+                      }
+                    }}
+                    @paste=${(e: ClipboardEvent) => handlePaste(e, props)}
+                    placeholder=${composePlaceholder}
+                  ></textarea>
+                </div>
+              </label>
+              <div class="chat-compose__actions">
+                <button
+                  class="btn"
+                  ?disabled=${!canCompose || (!canAbort && props.sending)}
+                  @click=${canAbort ? props.onAbort : props.onNewSession}
+                >
+                  ${canAbort ? t("chat.compose.stop") : t("chat.compose.new_session")}
+                </button>
+                <button
+                  class="btn primary ${props.sending ? "btn--sending" : ""}"
+                  ?disabled=${!canCompose}
+                  @click=${handleSendThrottled}
+                >
+                  ${isBusy ? t("chat.compose.queue") : t("chat.compose.send")}<kbd class="btn-kbd"
+                    >↵</kbd
+                  >
+                  ${props.queue.length > 0
+                    ? html`<span class="chat-compose__queue-badge">${props.queue.length}</span>`
+                    : nothing}
+                </button>
               </div>
             </div>
-          `
-          : nothing
-      }
-
-      ${renderFallbackIndicator(props.fallbackStatus)}
-      ${renderCompactionIndicator(props.compactionStatus)}
-      ${renderContextWarning(props.contextUsage, () => {
-        // 对抗-P1 修复：优先使用 onCompact 回调，如不存在才列退回字符串注入方式
-        if (props.onCompact) {
-          props.onCompact();
-        } else {
-          // fallback: 字符串注入（将来删除）
-          props.onDraftChange("/compact");
-          setTimeout(() => props.onSend(), 0);
-        }
-      })}
-
-      ${
-        props.showNewMessages
-          ? html`
-            <button
-              class="btn chat-new-messages"
-              type="button"
-              @click=${props.onScrollToBottom}
-            >
-              ${t("chat.new_messages")} ${icons.arrowDown}
-            </button>
-          `
-          : nothing
-      }
-
-      <div class="chat-compose">
-        ${renderAttachmentPreview(props)}
-        <div class="chat-compose__row">
-          <label class="field chat-compose__field">
-            <span>${t("chat.compose.message")}</span>
-            <div class="chat-compose__mention-wrap" style="position:relative">
-            ${slashCommands.length > 0 ? renderSlashDropdown(slashCommands, onSlashSelect) : nothing}
-            <textarea
-              ${ref((el) => el && adjustTextareaHeight(el as HTMLTextAreaElement))}
-              .value=${props.draft}
-              dir=${detectTextDirection(props.draft)}
-              ?disabled=${!canCompose}
-              @keydown=${(e: KeyboardEvent) => {
-                // Input history navigation (only when textarea is empty or single line)
-                if (e.key === "ArrowUp" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
-                  const ta = e.target as HTMLTextAreaElement;
-                  // Only navigate history when cursor is at the start or field is single-line
-                  if (ta.selectionStart === 0 || !ta.value.includes("\n")) {
-                    const prev = chatInputHistory.older(ta.value);
-                    if (prev !== null) {
-                      e.preventDefault();
-                      props.onDraftChange(prev);
-                      return;
-                    }
-                  }
-                }
-                if (e.key === "ArrowDown" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
-                  if (chatInputHistory.isNavigating) {
-                    const next = chatInputHistory.newer();
-                    if (next !== null) {
-                      e.preventDefault();
-                      props.onDraftChange(next);
-                      return;
-                    }
-                  }
-                }
-                if (e.key !== "Enter") {
-                  return;
-                }
-                if (e.isComposing || e.keyCode === 229) {
-                  return;
-                }
-                if (e.shiftKey) {
-                  return;
-                } // Allow Shift+Enter for line breaks
-                if (!canCompose) {
-                  return;
-                }
-                e.preventDefault();
-                if (canCompose) {
-                  chatInputHistory.add(props.draft);
-                  props.onSend();
-                }
-              }}
-              @input=${(e: Event) => {
-                const target = e.target as HTMLTextAreaElement;
-                adjustTextareaHeight(target);
-                props.onDraftChange(target.value);
-                // @ mention 提及逻辑（仅在群聊 context）
-                const isGroupCtx = props.navCurrentContext?.type === "group";
-                const wrap = target.closest(".chat-compose__mention-wrap");
-                if (isGroupCtx && wrap) {
-                  const cursor = target.selectionStart ?? target.value.length;
-                  const mention = detectMentionToken(target.value, cursor);
-                  if (mention) {
-                    const { participants } = resolveConversationInfo(
-                      props.navCurrentContext,
-                      props.agentsList,
-                      props.assistantName,
-                    );
-                    const filtered = participants
-                      .filter((p) => !p.isUser)
-                      .filter(
-                        (p) =>
-                          mention.token === "" ||
-                          p.label.toLowerCase().includes(mention.token) ||
-                          p.id.toLowerCase().includes(mention.token),
-                      ) as MentionCandidate[];
-                    openMentionDropdown(
-                      wrap,
-                      target,
-                      filtered,
-                      mention.start,
-                      (newDraft) => props.onDraftChange(newDraft),
-                      adjustTextareaHeight,
-                    );
-                  } else {
-                    closeMentionDropdown(wrap);
-                  }
-                }
-              }}
-              @paste=${(e: ClipboardEvent) => handlePaste(e, props)}
-              placeholder=${composePlaceholder}
-            ></textarea>
-            </div>
-          </label>
-          <div class="chat-compose__actions">
-            <button
-              class="btn"
-              ?disabled=${!canCompose || (!canAbort && props.sending)}
-              @click=${canAbort ? props.onAbort : props.onNewSession}
-            >
-              ${canAbort ? t("chat.compose.stop") : t("chat.compose.new_session")}
-            </button>
-            <button
-              class="btn primary ${props.sending ? "btn--sending" : ""}"
-              ?disabled=${!canCompose}
-              @click=${handleSendThrottled}
-            >
-              ${isBusy ? t("chat.compose.queue") : t("chat.compose.send")}<kbd class="btn-kbd">↵</kbd>
-              ${props.queue.length > 0 ? html`<span class="chat-compose__queue-badge">${props.queue.length}</span>` : nothing}
-            </button>
           </div>
         </div>
+        <!-- .chat-main-area -->
       </div>
-        </div><!-- .chat-main-area -->
-      </div><!-- .chat-with-nav -->
+      <!-- .chat-with-nav -->
     </section>
   `;
 }

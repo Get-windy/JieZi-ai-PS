@@ -169,8 +169,9 @@ export function resolveConversationInfo(
 
 /**
  * 渲染参与者信息（内联紧凑版，用于顶部 header 控制栏）
+ * Discord 最佳实践：显示参与者总数和当前在线数量
  */
-export function renderChatParticipantsInline(props: ChatProps) {
+export function renderChatParticipantsInline(props: ChatProps, streamingSenderIds?: Set<string>) {
   const { title, icon, participants } = resolveConversationInfo(
     props.navCurrentContext,
     props.agentsList,
@@ -181,6 +182,13 @@ export function renderChatParticipantsInline(props: ChatProps) {
   const visible = participants.slice(0, MAX_VISIBLE);
   const overflow = participants.length - MAX_VISIBLE;
 
+  // Discord 风格在线人数：将 streaming agent 和最近有消息的 agent 计为“在线”
+  // 简化实现：多于1个参与者时显示总数
+  const isGroup =
+    props.navCurrentContext?.type === "group" || props.navCurrentContext?.type === "dept-room";
+  const agentParticipants = participants.filter((p) => !p.isUser);
+  const streamingCount = streamingSenderIds?.size ?? 0;
+
   return html`
     <div class="chat-participants-inline">
       <span class="chat-participants-inline__icon">${icon}</span>
@@ -190,17 +198,33 @@ export function renderChatParticipantsInline(props: ChatProps) {
         ${visible.map(
           (p) => html`
             <div
-              class="chat-participant-avatar-sm ${p.isUser ? "chat-participant-avatar-sm--you" : ""}"
+              class="chat-participant-avatar-sm ${p.isUser
+                ? "chat-participant-avatar-sm--you"
+                : ""}"
               title=${p.label}
-            >${p.emoji}</div>
+            >
+              ${p.emoji}
+            </div>
           `,
         )}
-        ${
-          overflow > 0
-            ? html`<div class="chat-participant-avatar-sm chat-participant-avatar-sm--overflow" title=${t("chat.participants.overflow", { count: overflow })}>+${overflow}</div>`
-            : nothing
-        }
+        ${overflow > 0
+          ? html`<div
+              class="chat-participant-avatar-sm chat-participant-avatar-sm--overflow"
+              title=${t("chat.participants.overflow", { count: overflow })}
+            >
+              +${overflow}
+            </div>`
+          : nothing}
       </div>
+      ${isGroup && agentParticipants.length > 1
+        ? html`<span class="chat-participants-inline__count">
+            ${agentParticipants.length} agents
+            ${streamingCount > 0
+              ? html`·
+                  <span class="chat-participants-inline__active">${streamingCount} active</span>`
+              : nothing}
+          </span>`
+        : nothing}
     </div>
   `;
 }
@@ -215,7 +239,11 @@ export function renderCompactionIndicator(status: CompactionIndicatorStatus | nu
   // Show "compacting..." while active
   if (status.active) {
     return html`
-      <div class="compaction-indicator compaction-indicator--active" role="status" aria-live="polite">
+      <div
+        class="compaction-indicator compaction-indicator--active"
+        role="status"
+        aria-live="polite"
+      >
         ${icons.loader} ${t("chat.compacting")}
       </div>
     `;
@@ -226,7 +254,11 @@ export function renderCompactionIndicator(status: CompactionIndicatorStatus | nu
     const elapsed = Date.now() - status.completedAt;
     if (elapsed < COMPACTION_TOAST_DURATION_MS) {
       return html`
-        <div class="compaction-indicator compaction-indicator--complete" role="status" aria-live="polite">
+        <div
+          class="compaction-indicator compaction-indicator--complete"
+          role="status"
+          aria-live="polite"
+        >
           ${icons.check} ${t("chat.compacted")}
         </div>
       `;
@@ -252,7 +284,10 @@ export function renderDeptIsolationWarning(context: ChatConversationContext | nu
   if (context.type === "dept-room" && context.isMember === false) {
     const name = context.deptName ?? context.deptId;
     return html`
-      <div class="chat-readonly-bar" style="background:rgba(234,179,8,0.08);border-color:#eab308;color:#a16207;">
+      <div
+        class="chat-readonly-bar"
+        style="background:rgba(234,179,8,0.08);border-color:#eab308;color:#a16207;"
+      >
         <span>🔒 您不是「${name}」的成员，当前为只读观察模式</span>
       </div>
     `;
@@ -262,13 +297,19 @@ export function renderDeptIsolationWarning(context: ChatConversationContext | nu
     const name = context.deptName ?? context.deptId;
     if (context.isAdmin) {
       return html`
-        <div class="chat-force-joined-bar" style="background:rgba(99,102,241,0.08);border-color:#6366f1;color:#4338ca;">
+        <div
+          class="chat-force-joined-bar"
+          style="background:rgba(99,102,241,0.08);border-color:#6366f1;color:#4338ca;"
+        >
           <span>📢 您正在向「${name}」发布广播（管理员）</span>
         </div>
       `;
     }
     return html`
-      <div class="chat-readonly-bar" style="background:rgba(99,102,241,0.06);border-color:#6366f1;color:#4338ca;">
+      <div
+        class="chat-readonly-bar"
+        style="background:rgba(99,102,241,0.06);border-color:#6366f1;color:#4338ca;"
+      >
         <span>📢「${name}」广播频道（只读）</span>
       </div>
     `;
@@ -322,12 +363,7 @@ export function renderFallbackIndicator(status: FallbackIndicatorStatus | null |
       : "compaction-indicator compaction-indicator--fallback";
   const icon = phase === "cleared" ? icons.check : icons.brain;
   return html`
-    <div
-      class=${className}
-      role="status"
-      aria-live="polite"
-      title=${details}
-    >
+    <div class=${className} role="status" aria-live="polite" title=${details}>
       ${icon} ${message}
     </div>
   `;

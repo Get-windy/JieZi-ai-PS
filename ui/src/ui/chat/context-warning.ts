@@ -107,14 +107,55 @@ export function renderContextWarning(
       </div>
       <div class="context-warning__body">
         <span class="context-warning__text">
-          ${
-            level === "danger"
-              ? t("chat.context.danger", { pct, used: usedK, max: maxK })
-              : t("chat.context.warn", { pct, used: usedK, max: maxK })
-          }
+          ${level === "danger"
+            ? t("chat.context.danger", { pct, used: usedK, max: maxK })
+            : t("chat.context.warn", { pct, used: usedK, max: maxK })}
         </span>
         <span class="context-warning__hint">${t(hintKey)}</span>
       </div>
+    </div>
+  `;
+}
+
+/**
+ * PinchChat-style context token progress bar.
+ * Always rendered (unlike renderContextWarning which only shows above 85%).
+ * Provides a subtle thin bar at the top of the compose area with
+ * colour coding: green → yellow (>60%) → orange (>80%) → red (>92%).
+ */
+export function renderTokenProgressBar(info: ContextUsageInfo | null | undefined) {
+  if (!info || info.maxTokens <= 0) {
+    return nothing;
+  }
+  const ratio = Math.min(info.usedTokens / info.maxTokens, 1);
+  const pct = Math.round(ratio * 100);
+  const usedK = (info.usedTokens / 1000).toFixed(1);
+  const maxK = (info.maxTokens / 1000).toFixed(0);
+
+  // Colour logic: matches PinchChat Header.tsx token bar thresholds
+  const colorClass =
+    ratio >= 0.92
+      ? "ctx-bar--danger"
+      : ratio >= 0.8
+        ? "ctx-bar--warn"
+        : ratio >= 0.6
+          ? "ctx-bar--mid"
+          : "ctx-bar--ok";
+
+  return html`
+    <div
+      class="chat-ctx-bar"
+      title="Context: ${usedK}k / ${maxK}k tokens (${pct}%)"
+      aria-label="Context usage ${pct} percent"
+      role="progressbar"
+      aria-valuenow=${pct}
+      aria-valuemin="0"
+      aria-valuemax="100"
+    >
+      <div class="chat-ctx-bar__track">
+        <div class="chat-ctx-bar__fill ${colorClass}" style="width:${pct}%"></div>
+      </div>
+      <span class="chat-ctx-bar__label">${pct}% ctx</span>
     </div>
   `;
 }

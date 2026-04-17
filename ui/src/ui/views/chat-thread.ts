@@ -11,15 +11,55 @@ import type { ChatItem, MessageGroup } from "../types/chat-types.ts";
 
 export const CHAT_HISTORY_RENDER_LIMIT = 200;
 
+/**
+ * Slack/Discord 风格：同一发言者连续消息超过此时间窗口则断开新建分组
+ * 标准业界实践：5 分钟（Discord = 7min，Slack = 5min，取 Slack 标准）
+ */
+const GROUP_TIME_WINDOW_MS = 5 * 60 * 1000;
+
+// ── groupMessages memoization (业界最佳实践：避免每帧 O(n) 重算) ───────────────────
+// Cache keyed by (items.length, last message key, last message timestamp).
+// This handles the common case where only new messages are appended.
+// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+let _groupCache: {
+  itemsLength: number;
+  lastKey: string;
+  lastTs: number;
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+  result: Array<ChatItem | MessageGroup>;
+} | null = null;
+// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 export function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup> {
+  // Memoization: return cached result if input hasn't changed
+  // Cache key: items.length + last item's key + last message item's timestamp
+  const lastItem = items.length > 0 ? items[items.length - 1] : null;
+  const lastKey = lastItem?.key ?? "";
+  const lastTs =
+    lastItem?.kind === "message"
+      ? (((lastItem.message as Record<string, unknown>).timestamp as number) ?? 0)
+      : 0;
+  if (
+    _groupCache !== null &&
+    _groupCache.itemsLength === items.length &&
+    _groupCache.lastKey === lastKey &&
+    _groupCache.lastTs === lastTs
+  ) {
+    return _groupCache.result;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
   const result: Array<ChatItem | MessageGroup> = [];
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
   let currentGroup: MessageGroup | null = null;
+  // Track the timestamp of the last message in the current group (for time-window check)
+  let lastMsgTimestamp: number = 0;
 
   for (const item of items) {
     if (item.kind !== "message") {
       if (currentGroup) {
         result.push(currentGroup);
         currentGroup = null;
+        lastMsgTimestamp = 0;
       }
       result.push(item);
       continue;
@@ -40,7 +80,13 @@ export function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup>
     const senderChanged =
       groupSenderId !== undefined && currentGroup?.groupSenderId !== groupSenderId;
 
-    if (!currentGroup || currentGroup.role !== role || senderChanged) {
+    // Slack/Discord style: break group when time gap exceeds the time window
+    const timeWindowExpired =
+      currentGroup !== null &&
+      lastMsgTimestamp > 0 &&
+      timestamp - lastMsgTimestamp > GROUP_TIME_WINDOW_MS;
+
+    if (!currentGroup || currentGroup.role !== role || senderChanged || timeWindowExpired) {
       if (currentGroup) {
         result.push(currentGroup);
       }
@@ -57,14 +103,18 @@ export function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup>
     } else {
       currentGroup.messages.push({ message: item.message, key: item.key });
     }
+    lastMsgTimestamp = timestamp;
   }
 
   if (currentGroup) {
     result.push(currentGroup);
   }
+  // Update memoization cache
+  _groupCache = { itemsLength: items.length, lastKey, lastTs, result };
   return result;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 export function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
   const items: ChatItem[] = [];
   const history = Array.isArray(props.messages) ? props.messages : [];
@@ -142,6 +192,33 @@ export function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup>
     }
   }
 
+  // Multi-agent concurrent streaming (Open WebUI / AutoGen Studio style)
+  // If props.streams is set, render each agent's stream independently.
+  // Agents already covered by props.stream (same key) are skipped to avoid duplication.
+  if (props.streams && props.streams.size > 0) {
+    for (const [agentId, streamState] of props.streams) {
+      const key = `streams:${agentId}:${streamState.startedAt}`;
+      if (streamState.text.trim().length > 0) {
+        items.push({
+          kind: "stream",
+          key,
+          text: streamState.text,
+          startedAt: streamState.startedAt,
+          // Pass senderName via extra field for multi-agent display
+          senderName: streamState.senderName ?? agentId,
+          // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+        } as ChatItem & { senderName?: string });
+      } else {
+        items.push({
+          kind: "reading-indicator",
+          key,
+          senderName: streamState.senderName ?? agentId,
+          // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+        } as ChatItem & { senderName?: string });
+      }
+    }
+  }
+
   return groupMessages(items);
 }
 
@@ -177,7 +254,8 @@ function messageKey(message: unknown, index: number): string {
     contentSnippet = content.slice(0, 32).replace(/\s+/g, "");
   } else if (Array.isArray(content) && content.length > 0) {
     const first = content[0] as Record<string, unknown>;
-    contentSnippet = typeof first.text === "string" ? first.text.slice(0, 32).replace(/\s+/g, "") : "";
+    contentSnippet =
+      typeof first.text === "string" ? first.text.slice(0, 32).replace(/\s+/g, "") : "";
   }
   if (contentSnippet) {
     return `msg:${role}:cs:${contentSnippet}:${index}`;

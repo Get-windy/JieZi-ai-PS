@@ -20,6 +20,34 @@ import { isToolResultMessage, normalizeRoleForGrouping } from "./message-normali
 import { isTtsSupported, speakText, stopTts, isTtsSpeaking } from "./speech.ts";
 import { extractToolCards, renderToolCardSidebar } from "./tool-cards.ts";
 
+// ── Group-chat per-sender color palette (Discord / AutoGen Studio style) ────
+// Mirrors MONITOR_PALETTE from chat-monitor.ts but expressed as RGB triplets
+// for theme-safe rgba() usage (same technique as TOOL_RGB).
+const GROUP_SENDER_PALETTE_RGB = [
+  "37,99,235", // blue
+  "217,119,6", // amber
+  "22,163,74", // green
+  "147,51,234", // purple
+  "225,29,72", // rose
+  "13,148,136", // teal
+  "234,88,12", // orange
+  "6,182,212", // cyan
+];
+
+/** Stable numeric hash of a string (djb2). */
+function hashString(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h) ^ s.charCodeAt(i);
+  }
+  return Math.abs(h);
+}
+
+/** Return RGB triplet for a given sender id. */
+function getSenderRgb(senderId: string): string {
+  return GROUP_SENDER_PALETTE_RGB[hashString(senderId) % GROUP_SENDER_PALETTE_RGB.length];
+}
+
 /** Local inter-agent communication metadata (not exported; mirrors upstream AgentCommMeta shape) */
 type AgentCommMeta = {
   type: "command" | "request" | "query" | "notification";
@@ -122,6 +150,37 @@ function extractAudioClips(message: unknown): AudioClip[] {
   return clips;
 }
 
+/**
+ * AutoGen Studio 风格：群聊中 per-sender 多个 Agent 同时打字指示器
+ * senderIds: 正在输入的 agent id 列表，senderNames: id -> 显示名映射
+ */
+export function renderGroupTypingIndicators(senderIds: string[], senderNames: Map<string, string>) {
+  if (senderIds.length === 0) {
+    return nothing;
+  }
+  return html`
+    <div class="chat-group-typing">
+      ${senderIds.map((sid) => {
+        const rgb = getSenderRgb(sid);
+        const name = senderNames.get(sid) ?? sid;
+        return html`
+          <div class="chat-group-typing__item" style="--typing-rgb:${rgb}">
+            <span
+              class="chat-group-typing__avatar"
+              style="background:rgba(${rgb},0.15);color:rgb(${rgb});border-color:rgba(${rgb},0.3)"
+              >${name.charAt(0).toUpperCase()}</span
+            >
+            <span class="chat-group-typing__name" style="color:rgb(${rgb})">${name}</span>
+            <span class="chat-group-typing__dots" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </span>
+          </div>
+        `;
+      })}
+    </div>
+  `;
+}
+
 export function renderReadingIndicatorGroup(assistant?: AssistantIdentity, basePath?: string) {
   return html`
     <div class="chat-group assistant">
@@ -153,14 +212,29 @@ export function renderStreamingGroup(
   onOpenSidebar?: (content: string) => void,
   assistant?: AssistantIdentity,
   basePath?: string,
+  /** 多 agent 并发流式时用此字段覆盖 assistant.name，显示实际流式小进 agent 的名字 */
+  streamSenderName?: string,
 ) {
   const timestamp = formatMessageTimestamp(startedAt);
-  const name = assistant?.name ?? t("chat.role.assistant_default");
+  const name = streamSenderName ?? assistant?.name ?? t("chat.role.assistant_default");
+  // For multi-agent concurrent streams with a custom sender, compute a stable color
+  const senderRgb = streamSenderName ? getSenderRgb(streamSenderName) : null;
 
   return html`
     <div class="chat-group assistant">
-      ${renderAvatar("assistant", assistant, basePath)}
+      ${senderRgb
+        ? html`<div
+            class="chat-avatar agent-comm"
+            title="${name}"
+            style="background:rgba(${senderRgb},0.15);color:rgb(${senderRgb});border-color:rgba(${senderRgb},0.3)"
+          >
+            ${name.charAt(0).toUpperCase()}
+          </div>`
+        : renderAvatar("assistant", assistant, basePath)}
       <div class="chat-group-messages">
+        ${senderRgb
+          ? html`<div class="chat-agent-name" style="color:rgb(${senderRgb})">${name}</div>`
+          : nothing}
         ${renderGroupedMessage(
           {
             role: "assistant",
@@ -171,7 +245,7 @@ export function renderStreamingGroup(
           onOpenSidebar,
         )}
         <div class="chat-group-footer">
-          <span class="chat-sender-name">${name}</span>
+          ${!senderRgb ? html`<span class="chat-sender-name">${name}</span>` : nothing}
           <span class="chat-group-timestamp">${timestamp}</span>
         </div>
       </div>
@@ -196,6 +270,12 @@ export function renderMessageGroup(
      * text: 用户编辑后的新内容
      */
     onEditMessage?: (text: string) => void;
+    /**
+     * Reply Quote 回复（Discord-style）
+     * 点击 Reply 后，被引用消息摘要显示在输入框上方
+     * replyText: 被引用消息的纯文本，replyWho: 发言者显示名
+     */
+    onReply?: (replyText: string, replyWho: string) => void;
   },
 ) {
   const normalizedRole = normalizeRoleForGrouping(group.role);
@@ -242,7 +322,7 @@ export function renderMessageGroup(
       : null;
   const firstCommMeta =
     firstInteragent && typeof firstInteragent.senderId === "string"
-      ? { senderId: String(firstInteragent.senderId) }
+      ? { senderId: firstInteragent.senderId }
       : provenanceAgentId
         ? { senderId: provenanceAgentId }
         : firstTextContent
@@ -258,6 +338,8 @@ export function renderMessageGroup(
   const isGroupChatMsg = Boolean(group.groupSenderId);
   const groupSenderName = group.groupSenderName ?? group.groupSenderId ?? "Agent";
   const isGroupUser = group.groupSenderId === "user";
+  // Per-sender color for group chat (Discord-style)
+  const groupSenderRgb = isGroupChatMsg && !isGroupUser ? getSenderRgb(group.groupSenderId) : null;
 
   const who = isGroupChatMsg
     ? isGroupUser
@@ -290,23 +372,36 @@ export function renderMessageGroup(
 
   return html`
     <div class="chat-group ${roleClass}">
-      ${
-        isGroupChatMsg
-          ? isGroupUser
-            ? renderAvatar("user", { name: t("chat.you"), avatar: null }, opts.basePath)
-            : html`<div class="chat-avatar agent-comm" title="${groupSenderName}">${groupSenderInitial}</div>`
-          : renderAvatar(
-              isAgentComm ? "agent-comm" : group.role,
-              {
-                name: assistantName,
-                avatar: opts.assistantAvatar ?? null,
-              },
-              opts.basePath,
-            )
-      }
+      ${isGroupChatMsg
+        ? isGroupUser
+          ? renderAvatar("user", { name: t("chat.you"), avatar: null }, opts.basePath)
+          : html`<div
+              class="chat-avatar agent-comm"
+              title="${groupSenderName}"
+              style="background:rgba(${groupSenderRgb},0.15);color:rgb(${groupSenderRgb});border-color:rgba(${groupSenderRgb},0.3)"
+            >
+              ${groupSenderInitial}
+            </div>`
+        : renderAvatar(
+            isAgentComm ? "agent-comm" : group.role,
+            {
+              name: assistantName,
+              avatar: opts.assistantAvatar ?? null,
+            },
+            opts.basePath,
+          )}
       <div class="chat-group-messages">
-        ${isAgentComm && !isGroupChatMsg ? html`<div class="chat-agent-name">${who}</div>` : nothing}
-        ${isGroupChatMsg ? html`<div class="chat-agent-name">${who}</div>` : nothing}
+        ${isAgentComm && !isGroupChatMsg
+          ? html`<div class="chat-agent-name">${who}</div>`
+          : nothing}
+        ${isGroupChatMsg
+          ? html`<div
+              class="chat-agent-name"
+              style=${groupSenderRgb ? `color:rgb(${groupSenderRgb})` : ""}
+            >
+              ${who}
+            </div>`
+          : nothing}
         ${group.messages.map((item, index) =>
           renderGroupedMessage(
             item.message,
@@ -315,25 +410,24 @@ export function renderMessageGroup(
               showReasoning: opts.showReasoning,
               showToolCalls: opts.showToolCalls ?? true,
               onQuote: opts.onQuote,
+              // Discord 最佳实践：Reply/Edit 移至 bubble hover bar
+              onReply: opts.onReply,
+              replyWho: who,
+              onEditMessage: normalizedRole === "user" ? opts.onEditMessage : undefined,
             },
             opts.onOpenSidebar,
           ),
         )}
         <div class="chat-group-footer">
-          ${!isAgentComm && !isGroupChatMsg ? html`<span class="chat-sender-name">${who}</span>` : nothing}
+          ${!isAgentComm && !isGroupChatMsg
+            ? html`<span class="chat-sender-name">${who}</span>`
+            : nothing}
           <span class="chat-group-timestamp">${timestamp}</span>
           ${renderMessageMeta(meta)}
           ${normalizedRole === "assistant" && isTtsSupported() ? renderTtsButton(group) : nothing}
-          ${
-            normalizedRole === "user" && opts.onEditMessage
-              ? renderEditButton(extractGroupText(group), opts.onEditMessage)
-              : nothing
-          }
-          ${
-            opts.onDelete
-              ? renderDeleteButton(opts.onDelete, normalizedRole === "user" ? "left" : "right")
-              : nothing
-          }
+          ${opts.onDelete
+            ? renderDeleteButton(opts.onDelete, normalizedRole === "user" ? "left" : "right")
+            : nothing}
         </div>
       </div>
     </div>
@@ -350,9 +444,7 @@ function renderAvatar(
   const assistantAvatar = assistant?.avatar?.trim() || "";
   // agent-comm: robot emoji avatar
   if (role === "agent-comm") {
-    return html`
-      <div class="chat-avatar agent-comm" title="Agent">🤖</div>
-    `;
+    return html` <div class="chat-avatar agent-comm" title="Agent">🤖</div> `;
   }
   const initial =
     normalized === "user"
@@ -676,84 +768,25 @@ function renderTtsButton(group: MessageGroup) {
 }
 
 /**
- * Edit & Regenerate 按钮（参考 Helix AI Interaction.tsx）
- * 点击后在消息气泡内展开行内编辑模式，支持确认/取消
+ * Render a Discord-style reply-quote card above the compose area.
+ * Returns nothing if no reply is set.
  */
-function renderEditButton(originalText: string, onEdit: (text: string) => void) {
-  const handleEdit = (e: Event) => {
-    e.stopPropagation();
-    const btn = e.currentTarget as HTMLElement;
-    const footer = btn.closest(".chat-group-footer");
-    const groupMessages = btn.closest(".chat-group-messages");
-    if (!footer || !groupMessages) {return;}
-
-    // 已经在编辑模式则关闭
-    const existing = groupMessages.querySelector(".chat-edit-inline");
-    if (existing) {
-      existing.remove();
-      return;
-    }
-
-    // 创建行内编辑器
-    const editWrap = document.createElement("div");
-    editWrap.className = "chat-edit-inline";
-
-    const textarea = document.createElement("textarea");
-    textarea.className = "chat-edit-textarea";
-    textarea.value = originalText;
-    textarea.rows = Math.min(Math.max(originalText.split("\n").length, 2), 10);
-
-    const actions = document.createElement("div");
-    actions.className = "chat-edit-actions";
-
-    const cancelBtn = document.createElement("button");
-    cancelBtn.type = "button";
-    cancelBtn.className = "chat-edit-cancel";
-    cancelBtn.textContent = "取消";
-    cancelBtn.addEventListener("click", () => editWrap.remove());
-
-    const confirmBtn = document.createElement("button");
-    confirmBtn.type = "button";
-    confirmBtn.className = "chat-edit-confirm";
-    confirmBtn.textContent = "确认并重新生成";
-    confirmBtn.addEventListener("click", () => {
-      const newText = textarea.value.trim();
-      if (newText && newText !== originalText) {
-        editWrap.remove();
-        onEdit(newText);
-      } else {
-        editWrap.remove();
-      }
-    });
-
-    // Ctrl+Enter 快捷确认
-    textarea.addEventListener("keydown", (ke: KeyboardEvent) => {
-      if (ke.key === "Enter" && (ke.ctrlKey || ke.metaKey)) {
-        ke.preventDefault();
-        confirmBtn.click();
-      }
-      if (ke.key === "Escape") {
-        editWrap.remove();
-      }
-    });
-
-    actions.append(cancelBtn, confirmBtn);
-    editWrap.append(textarea, actions);
-
-    // 插入到 footer 之前
-    groupMessages.insertBefore(editWrap, footer);
-    textarea.focus();
-    textarea.select();
-  };
-
+export function renderReplyQuoteCard(replyText: string, replyWho: string, onClear: () => void) {
+  if (!replyText) {
+    return nothing;
+  }
+  const preview = replyText.length > 120 ? replyText.slice(0, 120) + "…" : replyText;
   return html`
-    <button
-      class="btn btn--xs chat-edit-btn"
-      type="button"
-      title="编辑并重新生成"
-      aria-label="编辑并重新生成"
-      @click=${handleEdit}
-    >✏️</button>
+    <div class="chat-reply-quote">
+      <div class="chat-reply-quote__bar"></div>
+      <div class="chat-reply-quote__body">
+        <span class="chat-reply-quote__who">${replyWho}</span>
+        <span class="chat-reply-quote__text">${preview}</span>
+      </div>
+      <button class="chat-reply-quote__close" type="button" title="取消引用" @click=${onClear}>
+        ×
+      </button>
+    </div>
   `;
 }
 
@@ -769,24 +802,32 @@ const AGENT_COMM_TYPE_LABELS: Record<AgentCommMeta["type"], { label: string; cls
  * ThinkingWidget \u2014 \u53c2\u8003 Helix AI ThinkingWidget.tsx
  * \u5c06\u63a8\u7406\u8fc7\u7a0b\u6e32\u67d3\u4e3a\u53ef\u6298\u53e0\u7684 <details>\uff0c\u6d41\u5f0f\u65f6\u5c55\u5f00\uff0b\u663e\u793a\u8bba\u8bc1\u4e2d\u52a8\u753b\uff0c\u5b8c\u6210\u540e\u9ed8\u8ba4\u6298\u53e0
  */
-function renderThinkingWidget(reasoningMarkdown: string, isStreaming: boolean) {
+function renderThinkingWidget(reasoningMarkdown: string, isStreaming: boolean, elapsedMs?: number) {
   const html_content = unsafeHTML(toSanitizedMarkdownHtml(reasoningMarkdown));
   if (isStreaming) {
     return html`
       <details class="chat-thinking-widget" open>
         <summary class="chat-thinking-widget__summary">
           <span class="chat-thinking-widget__spinner" aria-hidden="true"></span>
-          <span class="chat-thinking-widget__label">\u63a8\u7406\u4e2d\u2026</span>
+          <span class="chat-thinking-widget__label">推理中…</span>
         </summary>
         <div class="chat-thinking-widget__body">${html_content}</div>
       </details>
     `;
   }
+  // PinchChat-style: show elapsed time in summary
+  const elapsedLabel =
+    elapsedMs && elapsedMs > 0
+      ? `\u00a0\u00b7\u00a0${elapsedMs >= 1000 ? (elapsedMs / 1000).toFixed(1) + "s" : elapsedMs + "ms"}`
+      : "";
   return html`
     <details class="chat-thinking-widget chat-thinking-widget--done">
       <summary class="chat-thinking-widget__summary">
-        <span class="chat-thinking-widget__icon" aria-hidden="true">\u{1f9e0}</span>
-        <span class="chat-thinking-widget__label">\u67e5\u770b\u63a8\u7406\u8fc7\u7a0b</span>
+        <span class="chat-thinking-widget__icon" aria-hidden="true">🧠</span>
+        <span class="chat-thinking-widget__label">查看推理过程</span>
+        ${elapsedLabel
+          ? html`<span class="chat-thinking-widget__elapsed">${elapsedLabel}</span>`
+          : nothing}
       </summary>
       <div class="chat-thinking-widget__body">${html_content}</div>
     </details>
@@ -823,11 +864,11 @@ function renderAgentCommMessage(
         <span class="agent-comm-sender">${meta.senderId}</span>
         <span class="agent-comm-badge ${cls}">${label}</span>
       </div>
-      ${
-        meta.body
-          ? html`<div class="chat-text agent-comm-body" dir=${detectTextDirection(meta.body)}>${unsafeHTML(bodyHtml)}</div>`
-          : nothing
-      }
+      ${meta.body
+        ? html`<div class="chat-text agent-comm-body" dir=${detectTextDirection(meta.body)}>
+            ${unsafeHTML(bodyHtml)}
+          </div>`
+        : nothing}
     </div>
   `;
 }
@@ -876,6 +917,72 @@ function renderMessageAudio(clips: AudioClip[]) {
   `;
 }
 
+// ── PinchChat-style tool colour palette ──────────────────────────────────────
+// Mirrors PinchChat ToolCall.tsx toolRGBs, expressed as CSS rgb() values for
+// theme-safe rgba() usage.
+const TOOL_RGB: Record<string, string> = {
+  exec: "245,158,11", // amber
+  web_search: "16,185,129", // emerald
+  web_fetch: "16,185,129", // emerald
+  search: "16,185,129",
+  Read: "14,165,233", // sky
+  read: "14,165,233",
+  Write: "139,92,246", // violet
+  write: "139,92,246",
+  Edit: "139,92,246",
+  edit: "139,92,246",
+  browser: "6,182,212", // cyan
+  image: "236,72,153", // pink
+  message: "99,102,241", // indigo
+  memory_search: "244,63,94", // rose
+  memory_get: "244,63,94",
+  cron: "249,115,22", // orange
+  sessions_spawn: "20,184,166", // teal
+  task_create: "34,197,94", // green
+  task_update: "34,197,94",
+};
+const TOOL_EMOJI: Record<string, string> = {
+  exec: "⚡",
+  web_search: "🔍",
+  web_fetch: "🌐",
+  search: "🔍",
+  Read: "📖",
+  read: "📖",
+  Write: "✏️",
+  write: "✏️",
+  Edit: "✏️",
+  edit: "✏️",
+  browser: "🌐",
+  image: "🖼️",
+  message: "💬",
+  memory_search: "🧠",
+  memory_get: "🧠",
+  cron: "⏰",
+  sessions_spawn: "🚀",
+  task_create: "📝",
+  task_update: "📝",
+};
+const DEFAULT_TOOL_RGB = "161,161,170"; // zinc
+
+function getToolRgb(name: string): string {
+  return TOOL_RGB[name] ?? DEFAULT_TOOL_RGB;
+}
+function getToolEmoji(name: string): string {
+  return TOOL_EMOJI[name] ?? "🔧";
+}
+
+/** Render a single PinchChat-style coloured tool badge. */
+function renderToolBadge(name: string) {
+  const rgb = getToolRgb(name);
+  const emoji = getToolEmoji(name);
+  return html`<span
+    class="chat-tool-badge"
+    style="border-color:rgba(${rgb},0.35);background:rgba(${rgb},0.12);color:rgb(${rgb})"
+    title=${name}
+    >${emoji} ${name}</span
+  >`;
+}
+
 /** Render tool cards inside a collapsed `<details>` element. */
 function renderCollapsedToolCards(
   toolCards: ToolCard[],
@@ -897,6 +1004,10 @@ function renderCollapsedToolCards(
         <span class="chat-tools-summary__count"
           >${totalTools} tool${totalTools === 1 ? "" : "s"}</span
         >
+        ${toolNames.slice(0, 4).map((n) => renderToolBadge(n))}
+        ${toolNames.length > 4
+          ? html`<span class="chat-tool-badge-more">+${toolNames.length - 4}</span>`
+          : nothing}
         <span class="chat-tools-summary__names">${summaryLabel}</span>
       </summary>
       <div class="chat-tools-collapse__body">
@@ -911,6 +1022,54 @@ function renderCollapsedToolCards(
  * Prevents DoS from large JSON payloads in assistant/tool messages.
  */
 const MAX_JSON_AUTOPARSE_CHARS = 20_000;
+
+/**
+ * PinchChat-style collapsible long-message wrapper.
+ * Messages from assistant exceeding COLLAPSE_THRESHOLD characters are
+ * shown truncated with a gradient fade and a "Show more" button.
+ * Uses DOM data-attributes + inline event to avoid external state.
+ */
+const COLLAPSE_THRESHOLD = 2000; // characters
+const COLLAPSED_MAX_HEIGHT_PX = 380; // px
+
+function renderCollapsibleContent(
+  markdown: string,
+  isStreaming: boolean,
+  inner: ReturnType<typeof html>,
+) {
+  if (isStreaming || markdown.length <= COLLAPSE_THRESHOLD) {
+    return inner;
+  }
+  const toggleCollapse = (e: Event) => {
+    const btn = e.currentTarget as HTMLButtonElement;
+    const wrap = btn.closest(".chat-collapsible-msg") as HTMLElement | null;
+    if (!wrap) {
+      return;
+    }
+    const expanded = wrap.dataset.expanded === "1";
+    wrap.dataset.expanded = expanded ? "0" : "1";
+    btn.textContent = expanded ? "展开全文" : "收起";
+    const body = wrap.querySelector<HTMLElement>(".chat-collapsible-msg__body");
+    if (body) {
+      body.style.maxHeight = expanded ? `${COLLAPSED_MAX_HEIGHT_PX}px` : "none";
+    }
+    const fade = wrap.querySelector<HTMLElement>(".chat-collapsible-msg__fade");
+    if (fade) {
+      fade.style.display = expanded ? "block" : "none";
+    }
+  };
+  return html`
+    <div class="chat-collapsible-msg" data-expanded="0">
+      <div class="chat-collapsible-msg__body" style="max-height:${COLLAPSED_MAX_HEIGHT_PX}px">
+        ${inner}
+      </div>
+      <div class="chat-collapsible-msg__fade"></div>
+      <button class="chat-collapsible-msg__btn" type="button" @click=${toggleCollapse}>
+        展开全文
+      </button>
+    </div>
+  `;
+}
 
 /**
  * Detect whether a trimmed string is a JSON object or array.
@@ -968,9 +1127,16 @@ function renderTokenCard(token: string) {
         btn.setAttribute("data-copied", "1");
         setTimeout(() => btn.removeAttribute("data-copied"), 1500);
       })
-      .catch(() => { /* ignore */ });
+      .catch(() => {
+        /* ignore */
+      });
   };
-  return html`<span class="chat-token-card"><code class="chat-token-card__text">${token}</code><button class="chat-token-card__copy" type="button" title="复制令牌" @click=${handleCopy}><span data-default>📋</span><span data-copied>✅</span></button></span>`;
+  return html`<span class="chat-token-card"
+    ><code class="chat-token-card__text">${token}</code
+    ><button class="chat-token-card__copy" type="button" title="复制令牌" @click=${handleCopy}>
+      <span data-default>📋</span><span data-copied>✅</span>
+    </button></span
+  >`;
 }
 
 /**
@@ -980,7 +1146,9 @@ function renderTokenCard(token: string) {
 function renderChatMarkdownWithTokens(markdown: string) {
   if (!CONFIRM_TOKEN_RE.test(markdown)) {
     // Fast path: no tokens, render as plain markdown
-    return html`<div class="chat-text" dir="${detectTextDirection(markdown)}">${unsafeHTML(toSanitizedMarkdownHtml(markdown))}</div>`;
+    return html`<div class="chat-text" dir="${detectTextDirection(markdown)}">
+      ${unsafeHTML(toSanitizedMarkdownHtml(markdown))}
+    </div>`;
   }
   CONFIRM_TOKEN_RE.lastIndex = 0;
   const parts: Array<{ type: "text" | "token"; value: string }> = [];
@@ -996,11 +1164,11 @@ function renderChatMarkdownWithTokens(markdown: string) {
   if (last < markdown.length) {
     parts.push({ type: "text", value: markdown.slice(last) });
   }
-  return html`<div class="chat-text" dir="${detectTextDirection(markdown)}">${parts.map((p) =>
-    p.type === "token"
-      ? renderTokenCard(p.value)
-      : unsafeHTML(toSanitizedMarkdownHtml(p.value)),
-  )}</div>`;
+  return html`<div class="chat-text" dir="${detectTextDirection(markdown)}">
+    ${parts.map((p) =>
+      p.type === "token" ? renderTokenCard(p.value) : unsafeHTML(toSanitizedMarkdownHtml(p.value)),
+    )}
+  </div>`;
 }
 
 function renderExpandButton(markdown: string, onOpenSidebar: (content: string) => void) {
@@ -1024,6 +1192,12 @@ function renderGroupedMessage(
     showReasoning: boolean;
     showToolCalls?: boolean;
     onQuote?: (text: string) => void;
+    /** Discord-style Reply: hover bar 回复按钮 */
+    onReply?: (replyText: string, replyWho: string) => void;
+    /** 回复时显示的发言者名（用于 reply quote 卡片） */
+    replyWho?: string;
+    /** Edit & Regenerate: hover bar 编辑按钮（仅 user 消息） */
+    onEditMessage?: (text: string) => void;
   },
   onOpenSidebar?: (content: string) => void,
 ) {
@@ -1057,7 +1231,7 @@ function renderGroupedMessage(
             : "notification";
     const commMeta: AgentCommMeta = {
       type: commType,
-      senderId: String(interagentMeta.senderId),
+      senderId: interagentMeta.senderId,
       body:
         typeof interagentMeta.body === "string"
           ? interagentMeta.body
@@ -1105,6 +1279,24 @@ function renderGroupedMessage(
     opts.showReasoning && role === "assistant" ? extractThinkingCached(message) : null;
   const markdownBase = extractedText?.trim() ? extractedText : null;
   const reasoningMarkdown = extractedThinking ? formatReasoningMarkdown(extractedThinking) : null;
+  // PinchChat-style: extract thinking elapsed time from message metadata
+  const thinkingElapsedMs: number | undefined = (() => {
+    const msgRaw = message as Record<string, unknown>;
+    if (typeof msgRaw.thinkingMs === "number") {
+      return msgRaw.thinkingMs;
+    }
+    // Anthropic extended_thinking block may carry budgetMs or elapsed
+    const content = msgRaw.content;
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        const b = block as Record<string, unknown>;
+        if (b.type === "thinking" && typeof b.elapsedMs === "number") {
+          return b.elapsedMs;
+        }
+      }
+    }
+    return undefined;
+  })();
   const markdown = markdownBase;
   const canCopyMarkdown = role === "assistant" && Boolean(markdown?.trim());
   const canExpand = role === "assistant" && Boolean(onOpenSidebar && markdown?.trim());
@@ -1142,91 +1334,98 @@ function renderGroupedMessage(
 
   const hasActions = canCopyMarkdown || canExpand;
 
-  // Hover action bar — copy + quote (only for non-streaming messages with text)
+  // Hover action bar — copy + quote + reply + edit (only for non-streaming messages with text)
   const actionBar =
-    !opts.isStreaming && markdown ? renderMessageActions(markdown, opts.onQuote) : nothing;
+    !opts.isStreaming && markdown
+      ? renderMessageActions(
+          markdown,
+          opts.onQuote,
+          opts.onReply,
+          opts.replyWho,
+          opts.onEditMessage,
+        )
+      : nothing;
 
   return html`
     <div class="${bubbleClasses}">
-      ${
-        hasActions
-          ? html`<div class="chat-bubble-actions">
+      ${hasActions
+        ? html`<div class="chat-bubble-actions">
             ${canExpand ? renderExpandButton(markdown, onOpenSidebar!) : nothing}
             ${canCopyMarkdown ? renderCopyAsMarkdownButton(markdown) : nothing}
           </div>`
-          : nothing
-      }
+        : nothing}
       ${!hasActions && !opts.isStreaming && markdown ? actionBar : nothing}
-      ${
-        isToolMessage
-          ? html`
+      ${isToolMessage
+        ? html`
             <details class="chat-tool-msg-collapse">
               <summary class="chat-tool-msg-summary">
                 <span class="chat-tool-msg-summary__icon">${icons.zap}</span>
                 <span class="chat-tool-msg-summary__label">Tool output</span>
-                ${
-                  toolSummaryLabel
-                    ? html`<span class="chat-tool-msg-summary__names">${toolSummaryLabel}</span>`
-                    : toolPreview
-                      ? html`<span class="chat-tool-msg-summary__preview">${toolPreview}</span>`
-                      : nothing
-                }
+                ${toolNames.slice(0, 3).map((n) => renderToolBadge(n))}
+                ${toolNames.length > 3
+                  ? html`<span class="chat-tool-badge-more">+${toolNames.length - 3}</span>`
+                  : nothing}
+                ${!toolSummaryLabel && toolPreview
+                  ? html`<span class="chat-tool-msg-summary__preview">${toolPreview}</span>`
+                  : nothing}
               </summary>
               <div class="chat-tool-msg-body">
                 ${renderMessageImages(images)} ${renderMessageAudio(audioClips)}
-                ${
-                  reasoningMarkdown
-                    ? renderThinkingWidget(reasoningMarkdown, opts.isStreaming)
-                    : nothing
-                }
-                ${
-                  jsonResult
-                    ? html`<details class="chat-json-collapse">
+                ${reasoningMarkdown
+                  ? renderThinkingWidget(reasoningMarkdown, opts.isStreaming, thinkingElapsedMs)
+                  : nothing}
+                ${jsonResult
+                  ? html`<details class="chat-json-collapse">
                       <summary class="chat-json-summary">
                         <span class="chat-json-badge">JSON</span>
                         <span class="chat-json-label">${jsonSummaryLabel(jsonResult.parsed)}</span>
                       </summary>
                       <pre class="chat-json-content"><code>${jsonResult.pretty}</code></pre>
                     </details>`
-                    : markdown
-                      ? renderChatMarkdownWithTokens(markdown)
-                      : nothing
-                }
+                  : markdown
+                    ? renderChatMarkdownWithTokens(markdown)
+                    : nothing}
                 ${hasToolCards ? renderCollapsedToolCards(toolCards, onOpenSidebar) : nothing}
               </div>
             </details>
           `
-          : html`
+        : html`
             ${renderMessageImages(images)} ${renderMessageAudio(audioClips)}
-            ${
-              reasoningMarkdown
-                ? renderThinkingWidget(reasoningMarkdown, opts.isStreaming)
-                : nothing
-            }
-            ${
-              jsonResult
-                ? html`<details class="chat-json-collapse">
+            ${reasoningMarkdown
+              ? renderThinkingWidget(reasoningMarkdown, opts.isStreaming, thinkingElapsedMs)
+              : nothing}
+            ${jsonResult
+              ? html`<details class="chat-json-collapse">
                   <summary class="chat-json-summary">
                     <span class="chat-json-badge">JSON</span>
                     <span class="chat-json-label">${jsonSummaryLabel(jsonResult.parsed)}</span>
                   </summary>
                   <pre class="chat-json-content"><code>${jsonResult.pretty}</code></pre>
                 </details>`
-                : markdown
-                  ? renderChatMarkdownWithTokens(markdown)
-                  : nothing
-            }
+              : markdown
+                ? renderCollapsibleContent(
+                    markdown,
+                    opts.isStreaming,
+                    renderChatMarkdownWithTokens(markdown),
+                  )
+                : nothing}
             ${hasToolCards ? renderCollapsedToolCards(toolCards, onOpenSidebar) : nothing}
-          `
-      }
+          `}
     </div>
   `;
 }
 
 /**
- * Render hover action buttons (Copy, Quote) for a message bubble.
+ * Render hover action buttons (Copy, Quote, Reply, Edit) for a message bubble.
+ * Discord/Notion 最佳实践：Reply 和 Edit 按钮放在 bubble hover bar 里，而非永久 footer
  */
-function renderMessageActions(text: string, onQuote?: (text: string) => void) {
+function renderMessageActions(
+  text: string,
+  onQuote?: (text: string) => void,
+  onReply?: (replyText: string, replyWho: string) => void,
+  replyWho?: string,
+  onEditMessage?: (text: string) => void,
+) {
   const handleCopy = (e: Event) => {
     e.stopPropagation();
     const btn = e.currentTarget as HTMLElement;
@@ -1246,8 +1445,6 @@ function renderMessageActions(text: string, onQuote?: (text: string) => void) {
         e.stopPropagation();
         const lines = text.split("\n");
         const MAX_QUOTE_LINES = 5;
-        // 布局-P1 修复：引用超过 5 行时无截断提示，用户无法感知内容被截断。
-        // 现在在引用块末尾附加“...”指示截断（业界实践：GitHub PR review 风格）
         const truncated = lines.length > MAX_QUOTE_LINES;
         const quoteLines = lines.slice(0, MAX_QUOTE_LINES).map((line) => `> ${line}`);
         if (truncated) {
@@ -1258,6 +1455,83 @@ function renderMessageActions(text: string, onQuote?: (text: string) => void) {
       }
     : null;
 
+  // Discord-style Reply: 回复按钮
+  const handleReply = onReply
+    ? (e: Event) => {
+        e.stopPropagation();
+        const preview = text.trim().slice(0, 200);
+        onReply(preview, replyWho ?? "");
+      }
+    : null;
+
+  // Edit & Regenerate: 编辑按钮
+  const handleEdit = onEditMessage
+    ? (e: Event) => {
+        e.stopPropagation();
+        const btn = e.currentTarget as HTMLElement;
+        const bubble = btn.closest(".chat-bubble");
+        const groupMessages = btn.closest(".chat-group-messages");
+        const footer = groupMessages?.querySelector(".chat-group-footer");
+        if (!bubble || !groupMessages || !footer) {
+          return;
+        }
+
+        // 已在编辑模式则关闭
+        const existing = groupMessages.querySelector(".chat-edit-inline");
+        if (existing) {
+          existing.remove();
+          return;
+        }
+
+        const editWrap = document.createElement("div");
+        editWrap.className = "chat-edit-inline";
+
+        const textarea = document.createElement("textarea");
+        textarea.className = "chat-edit-textarea";
+        textarea.value = text;
+        textarea.rows = Math.min(Math.max(text.split("\n").length, 2), 10);
+
+        const actions = document.createElement("div");
+        actions.className = "chat-edit-actions";
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "chat-edit-cancel";
+        cancelBtn.textContent = "\u53d6\u6d88";
+        cancelBtn.addEventListener("click", () => editWrap.remove());
+
+        const confirmBtn = document.createElement("button");
+        confirmBtn.type = "button";
+        confirmBtn.className = "chat-edit-confirm";
+        confirmBtn.textContent = "\u786e\u8ba4\u5e76\u91cd\u65b0\u751f\u6210";
+        confirmBtn.addEventListener("click", () => {
+          const newText = textarea.value.trim();
+          if (newText && newText !== text) {
+            editWrap.remove();
+            onEditMessage(newText);
+          } else {
+            editWrap.remove();
+          }
+        });
+
+        textarea.addEventListener("keydown", (ke: KeyboardEvent) => {
+          if (ke.key === "Enter" && (ke.ctrlKey || ke.metaKey)) {
+            ke.preventDefault();
+            confirmBtn.click();
+          }
+          if (ke.key === "Escape") {
+            editWrap.remove();
+          }
+        });
+
+        actions.append(cancelBtn, confirmBtn);
+        editWrap.append(textarea, actions);
+        groupMessages.insertBefore(editWrap, footer);
+        textarea.focus();
+        textarea.select();
+      }
+    : null;
+
   return html`
     <div class="chat-msg-actions">
       <button
@@ -1265,17 +1539,39 @@ function renderMessageActions(text: string, onQuote?: (text: string) => void) {
         type="button"
         title="${t("chat.action.copy")}"
         @click=${handleCopy}
-      >📋</button>
-      ${
-        handleQuote
-          ? html`<button
+      >
+        📋
+      </button>
+      ${handleQuote
+        ? html`<button
             class="chat-msg-action-btn"
             type="button"
             title="${t("chat.action.quote")}"
             @click=${handleQuote}
-          >💬</button>`
-          : nothing
-      }
+          >
+            💬
+          </button>`
+        : nothing}
+      ${handleReply
+        ? html`<button
+            class="chat-msg-action-btn chat-msg-action-btn--reply"
+            type="button"
+            title="回复"
+            @click=${handleReply}
+          >
+            ↩
+          </button>`
+        : nothing}
+      ${handleEdit
+        ? html`<button
+            class="chat-msg-action-btn chat-msg-action-btn--edit"
+            type="button"
+            title="编辑并重新生成"
+            @click=${handleEdit}
+          >
+            ✏️
+          </button>`
+        : nothing}
     </div>
   `;
 }

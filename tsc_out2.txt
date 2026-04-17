@@ -1,4 +1,0 @@
-npm warn Unknown project config "allow-build-scripts". This will stop working in the next major version of npm.
-npm warn Unknown project config "node_llama_cpp_skip_download". This will stop working in the next major version of npm.
-npm warn Unknown project config "node_llama_cpp_gpu". This will stop working in the next major version of npm.
-npm warn Unknown project config "git-shallow-hosts". This will stop working in the next major version of npm.
