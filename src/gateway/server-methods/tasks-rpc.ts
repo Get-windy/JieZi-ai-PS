@@ -1418,6 +1418,17 @@ export const tasksRpc: GatewayRequestHandlers = {
 
       await storage.addWorklog(newWorklog);
 
+      // 写入 worklog 同步刷新 lastActivityAt，防止调度器将正在工作的 Agent 误判为僵尸
+      // 等同于隐式 task_ping_activity：只要 Agent 在记录进展，就不会被误判超时
+      if (task.status === "in-progress") {
+        await storage.updateTask(taskId, {
+          timeTracking: {
+            ...(task.timeTracking ?? { timeSpent: 0 }),
+            lastActivityAt: Date.now(),
+          },
+        });
+      }
+
       respond(true, newWorklog, undefined);
     } catch (err) {
       respond(
