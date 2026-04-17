@@ -143,7 +143,11 @@ export const projectsHandlers: GatewayRequestHandlers = {
         }
       }
 
-      const projects = Array.from(projectIdMap.values()).map((projectId) => {
+      // 预加载 listTasks，供所有项目并发查询
+      const { listTasks } = await import("../../tasks/storage.js");
+
+      const projects = await Promise.all(
+        Array.from(projectIdMap.values()).map(async (projectId) => {
         const projectCtx = buildProjectContext(projectId, workspaceRoot);
 
         // 大小写不敏感匹配群组：群组的 projectId 与当前目录名等价
@@ -154,6 +158,57 @@ export const projectsHandlers: GatewayRequestHandlers = {
 
         // 项目负责人：取第一个绑定群的 ownerId
         const ownerId = projectGroups[0]?.ownerId || undefined;
+
+          // ===== 进度计算：优先使用 SQLite 真实任务数据 =====
+          // SQLite 中存放的是 Agent 实际执行的任务，是进度的权威数据源；
+          // PROJECT_CONFIG.json 的 sprint 快照仅作降级后备（项目初期 Agent 尚未建任务时使用）
+          let progress: number | undefined;
+          try {
+            const dbTasks = await listTasks({ projectId, limit: 5000 });
+            const activeTasks = dbTasks.filter((t) => t.status !== "cancelled");
+            if (activeTasks.length > 0) {
+              const total = activeTasks.reduce((sum, t) => sum + ((t as Record<string,unknown>).storyPoints as number ?? 1), 0);
+              const done = activeTasks
+                .filter((t) => t.status === "done")
+                .reduce((sum, t) => sum + ((t as Record<string,unknown>).storyPoints as number ?? 1), 0);
+              progress = total === 0 ? 0 : Math.round((done / total) * 100);
+            }
+          } catch {
+            // ignore, fall through to config-based progress
+          }
+          // 降级：SQLite 无任务时读 PROJECT_CONFIG.json sprint 快照
+          if (progress === undefined) {
+            const sprints = projectCtx.config?.sprints ?? projectCtx.config?.milestones;
+            if (sprints && sprints.length > 0) {
+              const allCfgTasks = sprints
+                .flatMap((s: import("../../utils/project-context.js").ProjectSprint) => s.tasks)
+                .filter(
+                  (t: import("../../utils/project-context.js").ProjectTask) =>
+                    t.status !== "cancelled",
+                );
+              if (allCfgTasks.length > 0) {
+                const total = allCfgTasks.reduce(
+                  (sum: number, t: import("../../utils/project-context.js").ProjectTask) =>
+                    sum + (t.storyPoints ?? 1),
+                  0,
+                );
+                const done = allCfgTasks
+                  .filter(
+                    (t: import("../../utils/project-context.js").ProjectTask) =>
+                      t.status === "done",
+                  )
+                  .reduce(
+                    (sum: number, t: import("../../utils/project-context.js").ProjectTask) =>
+                      sum + (t.storyPoints ?? 1),
+                    0,
+                  );
+                progress = total === 0 ? 0 : Math.round((done / total) * 100);
+              }
+            }
+            if (progress === undefined) {
+              progress = projectCtx.config?.progress;
+            }
+          }
 
         return {
           projectId,
@@ -168,37 +223,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
           createdAt: projectCtx.config?.createdAt,
           // ===== 进度管理字段 =====
           status: projectCtx.config?.status,
-          // 进度优先由 sprints 自动计算
-          progress: (() => {
-            const sprints = projectCtx.config?.sprints ?? projectCtx.config?.milestones;
-            if (sprints && sprints.length > 0) {
-              const allTasks = sprints
-                .flatMap((s: import("../../utils/project-context.js").ProjectSprint) => s.tasks)
-                .filter(
-                  (t: import("../../utils/project-context.js").ProjectTask) =>
-                    t.status !== "cancelled",
-                );
-              if (allTasks.length > 0) {
-                const total = allTasks.reduce(
-                  (sum: number, t: import("../../utils/project-context.js").ProjectTask) =>
-                    sum + (t.storyPoints ?? 1),
-                  0,
-                );
-                const done = allTasks
-                  .filter(
-                    (t: import("../../utils/project-context.js").ProjectTask) =>
-                      t.status === "done",
-                  )
-                  .reduce(
-                    (sum: number, t: import("../../utils/project-context.js").ProjectTask) =>
-                      sum + (t.storyPoints ?? 1),
-                    0,
-                  );
-                return total === 0 ? 0 : Math.round((done / total) * 100);
-              }
-            }
-            return projectCtx.config?.progress;
-          })(),
+          progress,
           deadline: projectCtx.config?.deadline,
           sprints: projectCtx.config?.sprints,
           milestones: projectCtx.config?.milestones,
@@ -216,7 +241,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
             memberCount: g.members?.length || 0,
           })),
         };
-      });
+        }),
+      );
 
       respond(true, { projects, total: projects.length }, undefined);
     } catch (error) {
