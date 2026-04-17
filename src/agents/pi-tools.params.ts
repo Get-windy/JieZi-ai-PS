@@ -13,6 +13,27 @@ import type { RequiredParamGroup } from "../../upstream/src/agents/pi-tools.para
 import { assertRequiredParams } from "../../upstream/src/agents/pi-tools.params.js";
 import type { AnyAgentTool } from "../../upstream/src/agents/pi-tools.types.js";
 
+// 校验 edits 数组：每项必须含非空 oldText 字符串和 newText 字符串
+function hasValidEditsArray(record: Record<string, unknown>): boolean {
+  const edits = record.edits;
+  if (!Array.isArray(edits) || edits.length === 0) {
+    return false;
+  }
+  return edits.every(
+    (entry) =>
+      entry &&
+      typeof entry === "object" &&
+      typeof (entry as Record<string, unknown>).oldText === "string" &&
+      ((entry as Record<string, unknown>).oldText as string).trim().length > 0 &&
+      typeof (entry as Record<string, unknown>).newText === "string",
+  );
+}
+
+// 校验 old_string（平铺格式，兼容旧调用方式）
+function hasValidOldString(record: Record<string, unknown>): boolean {
+  return typeof record.old_string === "string" && record.old_string.trim().length > 0;
+}
+
 // CLAUDE_PARAM_GROUPS: shorthand for the most common required-param groups.
 export const CLAUDE_PARAM_GROUPS = {
   read: [{ keys: ["path"], label: "path" }],
@@ -22,7 +43,13 @@ export const CLAUDE_PARAM_GROUPS = {
   ],
   edit: [
     { keys: ["path"], label: "path" },
-    { keys: ["edits", "old_string"], label: "edits or old_string" },
+    {
+      keys: ["edits", "old_string"],
+      label: "edits or old_string",
+      // 修复：edits 是数组类型，不能用字符串校验；需自定义 validator 兼容两种格式
+      validator: (record: Record<string, unknown>) =>
+        hasValidEditsArray(record) || hasValidOldString(record),
+    },
   ],
 } as const satisfies Record<string, readonly RequiredParamGroup[]>;
 
