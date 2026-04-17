@@ -57,7 +57,10 @@ import {
   setHeartbeatWakeHandler,
 } from "../../upstream/src/infra/heartbeat-wake.js";
 import { buildOutboundSessionContext } from "../../upstream/src/infra/outbound/session-context.js";
-import { peekSystemEventEntries } from "../../upstream/src/infra/system-events.js";
+import {
+  enqueueSystemEvent,
+  peekSystemEventEntries,
+} from "../../upstream/src/infra/system-events.js";
 import { createSubsystemLogger } from "../../upstream/src/logging/subsystem.js";
 import { getQueueSize, resetAllLanes } from "../../upstream/src/process/command-queue.js";
 import { defaultRuntime, type RuntimeEnv } from "../../upstream/src/runtime.js";
@@ -245,7 +248,7 @@ export function resolveHeartbeatIntervalMs(
   if (!raw) {
     return null;
   }
-  const trimmed = String(raw).trim();
+  const trimmed = raw.trim();
   if (!trimmed) {
     return null;
   }
@@ -947,8 +950,12 @@ export async function runHeartbeatOnce(opts: {
           // ── 当前活跃目标注入 ──
           // 使用 buildActiveObjectivesSummary 生成标准化目标摘要，让团队知道当前项目目标
           try {
-            const { buildActiveObjectivesSummary, formatObjectivesSummaryForPrompt, buildSprintWorkSnapshot, formatSprintWorkSnapshotForPrompt } =
-              await import("../utils/project-context.js");
+            const {
+              buildActiveObjectivesSummary,
+              formatObjectivesSummaryForPrompt,
+              buildSprintWorkSnapshot,
+              formatSprintWorkSnapshotForPrompt,
+            } = await import("../utils/project-context.js");
             const objSummary = buildActiveObjectivesSummary(id);
             if (objSummary) {
               const formatted = formatObjectivesSummaryForPrompt(objSummary, 40);
@@ -1048,9 +1055,7 @@ export async function runHeartbeatOnce(opts: {
               hasIdleMembers = true;
               loadLines.push(`   ⚠️ 该成员完全空闲！请立即调用 task_create 为其安排工作任务。`);
             } else if (load.activeTotal < 5) {
-              loadLines.push(
-                `   ℹ️ 活跃任务不足 5 条，如有 backlog 任务可安排给该成员。`,
-              );
+              loadLines.push(`   ℹ️ 活跃任务不足 5 条，如有 backlog 任务可安排给该成员。`);
             }
           }
 
@@ -1220,8 +1225,7 @@ export async function runHeartbeatOnce(opts: {
         const sessionStoreForGate = loadSessionStore(runStorePath);
         const sessionEntryForGate = sessionStoreForGate[runSessionKey];
         const totalTokensForGate = sessionEntryForGate?.totalTokens;
-        const contextTokensForGate =
-          sessionEntryForGate?.contextTokens ?? agentContextTokens;
+        const contextTokensForGate = sessionEntryForGate?.contextTokens ?? agentContextTokens;
         const isFreshGate = sessionEntryForGate?.totalTokensFresh !== false;
         // 65% 阈值（业界参考：VNX 65%、claudefa.st 50%，取中间偏保守值）
         const TOKEN_ROTATE_THRESHOLD = 0.65;
@@ -1235,7 +1239,17 @@ export async function runHeartbeatOnce(opts: {
           // 检查是否有 in-progress 任务（只对有任务的 agent 做 handover）
           const usagePct = Math.round((totalTokensForGate / contextTokensForGate) * 100);
           let hasActiveTask = false;
-          let activeTaskForHandover: import("../tasks/storage.js").Task | undefined;
+          let activeTaskForHandover:
+            | {
+                id: string;
+                title: string;
+                priority: string;
+                type?: string;
+                projectId?: string;
+                description?: string;
+                workLogs?: Array<{ action: string; details: string; result?: string }>;
+              }
+            | undefined;
           if (runSessionKey.startsWith("agent:")) {
             const agentIdForGate = runSessionKey.split(":")[1];
             if (agentIdForGate) {
@@ -1251,7 +1265,13 @@ export async function runHeartbeatOnce(opts: {
           if (hasActiveTask && activeTaskForHandover) {
             log.warn(
               `heartbeat: context at ${usagePct}% (${totalTokensForGate}/${contextTokensForGate} tokens) — proactive rotate for agent "${agentId}" (task ${activeTaskForHandover.id})`,
-              { agentId, sessionKey: runSessionKey, usagePct, totalTokensForGate, contextTokensForGate },
+              {
+                agentId,
+                sessionKey: runSessionKey,
+                usagePct,
+                totalTokensForGate,
+                contextTokensForGate,
+              },
             );
             // 构建 handover 消息（对标 VNX handover contract：Completed / Remaining / Next Steps）
             const recentWorkLogs = (activeTaskForHandover.workLogs ?? []).slice(-5);
@@ -1265,7 +1285,9 @@ export async function runHeartbeatOnce(opts: {
               `Status: in-progress`,
               `Priority: ${activeTaskForHandover.priority}`,
               activeTaskForHandover.type ? `Type: ${activeTaskForHandover.type}` : null,
-              activeTaskForHandover.projectId ? `Project: ${activeTaskForHandover.projectId}` : null,
+              activeTaskForHandover.projectId
+                ? `Project: ${activeTaskForHandover.projectId}`
+                : null,
               activeTaskForHandover.description
                 ? `Description: ${activeTaskForHandover.description.slice(0, 300)}`
                 : null,
@@ -1273,8 +1295,8 @@ export async function runHeartbeatOnce(opts: {
                 ? `\n=== RECENT WORK LOG (last ${recentWorkLogs.length} entries) ===`
                 : null,
               ...recentWorkLogs.map(
-                (log) =>
-                  `  [${log.action}] ${log.details.slice(0, 200)}${log.result ? ` → ${log.result}` : ""}`,
+                (wl) =>
+                  `  [${wl.action}] ${wl.details.slice(0, 200)}${wl.result ? ` → ${wl.result}` : ""}`,
               ),
               ``,
               `=== WORKING CONTEXT ===`,
@@ -1311,7 +1333,9 @@ export async function runHeartbeatOnce(opts: {
         }
       } catch (gateErr) {
         // 门控逻辑失败不影响心跳主流程
-        log.warn(`heartbeat: proactive token gate error (non-fatal): ${String(gateErr)}`, { agentId });
+        log.warn(`heartbeat: proactive token gate error (non-fatal): ${String(gateErr)}`, {
+          agentId,
+        });
       }
     }
     // ─────────────────────────────────────────────────────────────────
