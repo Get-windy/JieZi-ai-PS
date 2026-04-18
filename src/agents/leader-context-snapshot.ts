@@ -16,6 +16,11 @@
  */
 
 import { loadConfig } from "../../upstream/src/config/config.js";
+import {
+  loadSessionStore,
+  resolveAgentMainSessionKey,
+  resolveStorePath,
+} from "../../upstream/src/config/sessions.js";
 import { requestHeartbeatNow } from "../../upstream/src/infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../upstream/src/infra/system-events.js";
 import { normalizeAgentId } from "../routing/session-key.js";
@@ -36,6 +41,17 @@ const MAX_ALERT_AGENTS = 8;
 // 全局 todo 积压预警阈值
 const BACKLOG_WARN_THRESHOLD = 5;
 
+/**
+ * Validation Gate 阈值（借鉴 Praetorian Platform 确定性 Hook 模式）：
+ * 主控收到 task_blocked 快照后，若超过此时间仍未调用 triage 处理阻塞任务，
+ * 系统在下次仪表盘快照中将该任务从普通告警升级为「强制处理项」
+ *
+ * 业界依据：Augment Code Supervisor Pattern — "Output validation gates:
+ * evaluates outcomes before any output advances the workflow"
+ */
+const BLOCKED_ESCALATION_THRESHOLD_MS = 30 * 60 * 1_000; // 30 分钟未处理 → 升级
+const BLOCKED_CRITICAL_THRESHOLD_MS = 2 * 60 * 60 * 1_000; // 2 小时未处理 → 危急
+
 // ─── 快照缓存（防止同一批事件多次重建快照）────────────────────────────────────
 // 使用 agentId+时间戳 做 debounce，2s 内同一主控只生成一次快照
 const snapshotDebounceMs = 2_000;
@@ -43,7 +59,27 @@ const lastSnapshotAtMap = new Map<string, number>();
 
 export type LeaderWakeReason =
   | { type: "task_done"; taskId: string; reporterId: string; summary: string }
-  | { type: "task_blocked"; taskId: string; reporterId: string; errorMsg: string }
+  | {
+      type: "task_blocked";
+      taskId: string;
+      reporterId: string;
+      errorMsg: string;
+      /** 任务标题（供快照详情区展示，无需主控再查） */
+      taskTitle?: string;
+      /** 最近 worklog 条目（已在上报侧读取，注入快照作为证据链） */
+      recentWorklogs?: Array<{
+        action: string;
+        details: string;
+        result: string;
+        createdAt: number;
+      }>;
+      /**
+       * 快照派发时间戳 — Validation Gate 后置验证所需
+       * 若主控收到快照后超过阈值时间尚未处理，下次快照中会升级告警
+       * （将在下一次构建快照时从 task metadata.snapshotSentAt 读取）
+       */
+      priorSnapshotSentAt?: number;
+    }
   | {
       type: "dep_blocked";
       taskId: string;
@@ -124,7 +160,24 @@ export async function injectLeaderSnapshot(params: {
   lastSnapshotAtMap.set(normalizedLeader, Date.now());
 
   try {
-    const snapshot = await buildLeaderSnapshot(normalizedLeader, wakeReason);
+    // 从 session store 读取主控连续无操作次数，注入快照让主控自我感知
+    // 业界最佳实践（LangGraph interrupt_count）：在 state 中携带连续中断次数，LLM 能意识到自己反复无操作
+    let noActionCount = 0;
+    try {
+      const cfg2 = loadConfig();
+      const storePath2 = resolveStorePath(cfg2);
+      const sessionKey2 = resolveAgentMainSessionKey({ cfg: cfg2, agentId: normalizedLeader });
+      const store2 = loadSessionStore(storePath2);
+      const entry2 = store2[sessionKey2];
+      const raw = (entry2 as Record<string, unknown> | undefined)?.noActionCount;
+      if (typeof raw === "number" && raw > 0) {
+        noActionCount = raw;
+      }
+    } catch {
+      // 读取失败静默，不影响快照生成
+    }
+
+    const snapshot = await buildLeaderSnapshot(normalizedLeader, wakeReason, noActionCount);
     if (!snapshot) {
       return false;
     }
@@ -157,6 +210,7 @@ export async function injectLeaderSnapshot(params: {
 async function buildLeaderSnapshot(
   leaderId: string,
   wakeReason: LeaderWakeReason,
+  noActionCount = 0,
 ): Promise<string | null> {
   // === 1. 读取触发事件的单行摘要（置顶，让主控第一眼看到触发原因）===
   const triggerLine = buildTriggerLine(wakeReason);
@@ -191,9 +245,13 @@ async function buildLeaderSnapshot(
       // 每个 agent 一行摘要
       const statusParts: string[] = [];
       if (inProgress.length > 0) {
+        // 带 projectId 标注：让主控明确区分各任务属于哪个项目，避免跨项目变更被归纳合并
         const titles = inProgress
           .slice(0, MAX_IN_PROGRESS_PER_AGENT)
-          .map((t) => `"${t.title.slice(0, MAX_TASK_TITLE_CHARS)}"`)
+          .map((t) => {
+            const projTag = t.projectId ? `[${t.projectId}] ` : "";
+            return `"${projTag}${t.title.slice(0, MAX_TASK_TITLE_CHARS)}"`;
+          })
           .join(", ");
         statusParts.push(
           `🔵 ${inProgress.length}进行中: ${titles}${inProgress.length > MAX_IN_PROGRESS_PER_AGENT ? "…" : ""}`,
@@ -201,11 +259,35 @@ async function buildLeaderSnapshot(
       }
       if (blocked.length > 0) {
         statusParts.push(`🔴 ${blocked.length}阻塞`);
-        // 阻塞任务加入告警区
+        // 阻塞任务加入告警区（带 projectId + blockReason + 阻塞时长升级标识）
         if (alertRows.length < MAX_ALERT_AGENTS) {
           const bt = blocked[0];
+          const projTag = bt.projectId ? `[${bt.projectId}] ` : "";
+          // 优先读取 blockReason（agent 上报阻塞时写入的具体原因）
+          const blockReason =
+            typeof bt.metadata?.blockReason === "string" && bt.metadata.blockReason
+              ? ` | 阻塞原因: ${bt.metadata.blockReason.slice(0, 60)}`
+              : "";
+          // Validation Gate 升级逻辑：检查 snapshotSentAt 判断主控是否长时间欠健处理
+          // 借鉴 Praetorian Platform 确定性 Hook 模式：Validation 在 LLM 上下文外强制执行
+          const snapshotSentAt =
+            typeof bt.metadata?.snapshotSentAt === "number" ? bt.metadata.snapshotSentAt : null;
+          const now2 = Date.now();
+          let escalationTag = "";
+          let blockAgeStr = "";
+          if (snapshotSentAt) {
+            const ageMs = now2 - snapshotSentAt;
+            const ageMin = Math.floor(ageMs / 60_000);
+            if (ageMs >= BLOCKED_CRITICAL_THRESHOLD_MS) {
+              escalationTag = ` ⛔[危急未处理 ${ageMin}min]`;
+            } else if (ageMs >= BLOCKED_ESCALATION_THRESHOLD_MS) {
+              escalationTag = ` 🚨[超时未处理 ${ageMin}min]`;
+            } else {
+              blockAgeStr = ` (快照已发出 ${ageMin}min前)`;
+            }
+          }
           alertRows.push(
-            `  ⚠️ ${agentId} blocked [${bt.id}] "${bt.title.slice(0, MAX_TASK_TITLE_CHARS)}" — use agent.task.triage to batch-resolve`,
+            `  ${escalationTag || "⚠️"} ${agentId} blocked ${projTag}[${bt.id}] "${bt.title.slice(0, MAX_TASK_TITLE_CHARS)}"${blockReason}${blockAgeStr}${escalationTag ? " — 必须立即调用 agent.task.triage 处理" : " — use agent.task.triage to resolve"}`,
           );
         }
       }
@@ -228,7 +310,26 @@ async function buildLeaderSnapshot(
   const lines: string[] = [];
 
   // 触发原因（单行，必须置顶）
-  lines.push(`[LEADER DASHBOARD] ${new Date().toLocaleTimeString()} — ${triggerLine}`);
+  // 若有连续无操作历史，在标题行用醒目标记提示主控自我感知（LangGraph interrupt_count 模式）
+  const noActionBadge =
+    noActionCount >= 3
+      ? ` ⛔[你已连续 ${noActionCount} 次只汇报未操作 — 系统强制要求立即行动]`
+      : noActionCount === 2
+        ? ` 🚨[上次心跳仍无工具调用，共 2 次 — 请立即处理]`
+        : noActionCount === 1
+          ? ` ⚠️[上次心跳无工具操作]`
+          : "";
+  lines.push(
+    `[LEADER DASHBOARD] ${new Date().toLocaleTimeString()} — ${triggerLine}${noActionBadge}`,
+  );
+  lines.push("");
+  // 必题规则：跟踪各项目独立标注，禁止将不同项目的变更合并描述
+  lines.push(
+    "⚠️ 注意：每个任务均已标注所属项目 ID（[projectId]）。汇报时必须按项目独立描述，禁止以「与XX项目共享相同变更」代替具体内容。",
+  );
+  lines.push(
+    "⚠️ 项目隔离规则：处理 A 项目的任务时，不得将 B 项目的情况混入回复。每个项目的业务空间（codeDir）和项目空间均相互独立。",
+  );
   lines.push("");
 
   // ── 幻觉防护告警块（suspicion_idle / hallucination_suspected）──
@@ -265,6 +366,92 @@ async function buildLeaderSnapshot(
     lines.push("");
   }
 
+  // ── task_blocked 专属：阻塞详情 + 证据链 + 强制验证决策流程 ──
+  // 核心原则：主控不能只看标题就「汇报已解决」，必须核实原因真实性后再行动
+  if (wakeReason.type === "task_blocked") {
+    // Validation Gate 后置检查：该任务是否有历史快照已派发但主控没有处理的记录
+    let validationGateWarn = "";
+    if (wakeReason.priorSnapshotSentAt) {
+      const ageMs = Date.now() - wakeReason.priorSnapshotSentAt;
+      const ageMin = Math.floor(ageMs / 60_000);
+      if (ageMs >= BLOCKED_CRITICAL_THRESHOLD_MS) {
+        validationGateWarn = `\n  ⛔ [Validation Gate 危急] 该任务属于备押性第二次上报！快照已发出 ${ageMin} 分钟但主控一直未调用 triage 处理。`;
+        validationGateWarn += `\n  ❗️ 业界最佳实践（Augment Code Supervisor Pattern）：Validation Gate 要求主控对每个 blocked 任务实际执行处理操作才能升级工作流，不能仅靠口头汇报。`;
+      } else if (ageMs >= BLOCKED_ESCALATION_THRESHOLD_MS) {
+        validationGateWarn = `\n  🚨 [Validation Gate 超时] 快照已发出 ${ageMin} 分钟，主控说「已处理」但未调用 triage 工具。`;
+        validationGateWarn += `\n  系统将在下次快照中将此任务升级为 🚨[超时未处理]，请立即采取行动。`;
+      }
+    }
+
+    lines.push(
+      `🔴 阻塞详情 — Agent [${wakeReason.reporterId}] 任务 [${wakeReason.taskId}]${
+        wakeReason.taskTitle ? ` "${wakeReason.taskTitle.slice(0, 50)}"` : ""
+      } 主动上报阻塞：${validationGateWarn}`,
+    );
+    if (wakeReason.errorMsg) {
+      lines.push(`  上报原因: ${wakeReason.errorMsg}`);
+    } else {
+      lines.push(`  上报原因: (未填写)`);
+    }
+    lines.push("");
+
+    // 证据链：注入最近的 worklog 条目，让主控看到「agent 真正做了什么」
+    if (wakeReason.recentWorklogs && wakeReason.recentWorklogs.length > 0) {
+      lines.push(`📋 最近工作记录（核实证据）：`);
+      for (const wl of wakeReason.recentWorklogs) {
+        const timeStr = new Date(wl.createdAt).toLocaleTimeString();
+        lines.push(
+          `  [${timeStr}] [${wl.action}] ${wl.details.slice(0, 150)}${
+            wl.result ? ` → ${wl.result}` : ""
+          }`,
+        );
+      }
+      lines.push("");
+    } else {
+      lines.push(`📋 工作记录: ⚠️ 无 worklog — agent 可能未实际执行即上报阻塞（高度疑似幻觉）`);
+      lines.push("");
+    }
+
+    lines.push("🔍 强制验证决策流程（主控必须按此步骤处理，不得跳过）:");
+    lines.push(`  Step 1 [核实真实性]: 检查上方 worklog，判断阻塞原因是否真实存在`);
+    lines.push(
+      `    - 若 worklog 空 或 操作记录与阻塞原因无关 → 疑似幻觉，用 agent_communicate 追问具体证据`,
+    );
+    lines.push(`    - 若有充分工作记录 → 阻塞原因可信，进入 Step 2`);
+    lines.push(
+      `  Step 2 [分类决策]: 根据阻塞类型选择处理方式（resolutionType “[ ]” 为必填枚举值）：`,
+    );
+    lines.push(`    A) [external_unready] 外部依赖未就绪 (API Key缺失/环境问题/权限不足等)`);
+    lines.push(
+      `       → 用 agent_communicate 与相关方协调，再 agent.task.triage action=reset resolutionType=external_unready`,
+    );
+    lines.push(`    B) [dep_incomplete] 前置任务未完成 (等待其他 agent 的工作产出)`);
+    lines.push(
+      `       → 用 agent.task.triage action=mark-dependency resolutionType=dep_incomplete 标记依赖，系统自动在依赖完成后解除`,
+    );
+    lines.push(`    C) [unclear_scope] 任务描述不清/范围过大 (agent 无法理解或执行)`);
+    lines.push(
+      `       → 拆分任务或补充说明，再 agent.task.triage action=reassign|reset resolutionType=unclear_scope`,
+    );
+    lines.push(`    D) [capability_gap] 技术障碍确实无法解决 (当前 agent 能力不足)`);
+    lines.push(
+      `       → agent.task.triage action=reassign resolutionType=capability_gap 换分配给更合适的 agent`,
+    );
+    lines.push(`    E) [hallucination] agent 阻塞声明为幻觉 (worklog 不支撑其说法)`);
+    lines.push(
+      `       → agent.task.triage action=reset resolutionType=hallucination + 向 agent 明确要求充分记录 worklog`,
+    );
+    lines.push(`    F) [requirement_change] 需求已变更/任务已无必要`);
+    lines.push(
+      `       → agent.task.triage action=cancel resolutionType=requirement_change 并说明原因`,
+    );
+    lines.push(
+      `  Step 3 [行动记录]: 处理完毕后，用 agent.task.triage action=add-note 记录你的决策原因`,
+    );
+    lines.push(`  ⚠️ 严禁行为: 看完仪表盘后直接「汇报已解决」而不执行以上任何操作！`);
+    lines.push("");
+  }
+
   // dep_blocked 专属：前置任务明细 + 行动指引（紧跟触发行，让主控第一眼看到该做什么）
   if (wakeReason.type === "dep_blocked") {
     lines.push(
@@ -298,6 +485,17 @@ async function buildLeaderSnapshot(
     lines.push("");
   }
 
+  // ── 有效 Agent 列表（防幽灵 agent 机制）──
+  // 明确列出系统中所有已注册的有效 agent，防止主控凭记忆幻觉出不存在的 agent ID
+  lines.push(
+    "🔒 系统有效 Agent 列表（ONLY use agents from this list — do NOT invent agent IDs from memory or context）:",
+  );
+  lines.push(`  ${agentIds.join(" | ")}`);
+  lines.push(
+    "  ⚠️ 严禁使用不在此列表中的任何 agent 名称！若列表中找不到合适 agent，请用 agent_discover 工具重新查询，不得自行构造。",
+  );
+  lines.push("");
+
   // 告警区（需要主控关注的事项）
   if (alertRows.length > 0) {
     lines.push("🚨 需关注:");
@@ -305,10 +503,29 @@ async function buildLeaderSnapshot(
     lines.push("");
   }
 
-  // 操作提示（极度精简，仅关键命令）
+  // 操作提示 + 强制行动指令
   lines.push(
     "📌 常用操作: agent.task.triage(批量分诊) | agent.task.manage(cancel/reset/extend/split) | agent.task.list | agent_communicate",
   );
+
+  // ── 强制行动指令（有阻塞任务时）──────────────────────────────────────────
+  // 业界最佳实践（OpenHands Orchestrator + LangGraph Supervisor Pattern）：
+  // 仪表盘快照结尾强制说明「工具操作先于汇报文字」，
+  // 防止主控读完快照后只生成一段分析报告而不执行任何工具调用。
+  if (totalBlocked > 0 || alertRows.length > 0) {
+    lines.push("");
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    lines.push("🔴 强制行动要求（ACTION REQUIRED — 非可选建议，必须执行）:");
+    lines.push(
+      "  1. 你现在必须对上方阻塞/告警任务执行至少一次工具调用（triage / manage / communicate）。",
+    );
+    lines.push("  2. 工具调用完成后，才允许生成面向用户的汇报文字。");
+    lines.push("  3. 严禁路径：读完仪表盘 → 直接生成分析报告 → 结束。这等同于什么都没做。");
+    lines.push(
+      `  4. 本仪表盘显示 ${totalBlocked} 个阻塞任务，若你本次心跳未调用任何工具，系统将在下次快照中标记「主控无操作」并升级告警。`,
+    );
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  }
 
   const snapshot = lines.join("\n");
 

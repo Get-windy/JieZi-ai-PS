@@ -1352,6 +1352,30 @@ export async function runHeartbeatOnce(opts: {
           bootstrapContextMode,
         }
       : { isHeartbeat: true, suppressToolErrorWarnings, bootstrapContextMode };
+
+    // ── 「只汇报无行动」后置检测：运行前快照阻塞任务 IDs ────────────────
+    // 业界最佳实践（OpenHands Orchestrator Pattern）：
+    // 主控心跳结束后，若发出了实质性回复（非 HEARTBEAT_OK），
+    // 但阻塞任务集合完全没有变化（无任务被 triage/reset/cancel），
+    // 则判定为「只汇报无工具操作」，注入强化警告并再次触发心跳。
+    let preRunBlockedIds: Set<string> | null = null;
+    if (isDefaultAgent && !hasExecCompletion && !hasCronEvents && !hasTaskDrivenEvents) {
+      try {
+        const { listTasks: listTasksForGate } = await import("../tasks/storage.js");
+        const { listAgentIds: listAgentIdsForGate } = await import("../agents/agent-scope.js");
+        const allAgentIdsForGate = listAgentIdsForGate(cfg);
+        const allBlockedBeforeRaw = await Promise.all(
+          allAgentIdsForGate.map((aid) =>
+            listTasksForGate({ assigneeId: aid, status: ["blocked"] }).catch(() => []),
+          ),
+        );
+        preRunBlockedIds = new Set(allBlockedBeforeRaw.flat().map((t) => t.id));
+      } catch {
+        // 快照失败不阻塞心跳
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────
+
     const replyResult = await getReplyFromConfig(ctx, replyOpts, cfg);
 
     // ── 心跳结束后压缩 HEARTBEAT.md（滚动摘要，控制文件大小）────────
@@ -1397,6 +1421,203 @@ export async function runHeartbeatOnce(opts: {
     const reasoningPayloads = includeReasoning
       ? resolveHeartbeatReasoningPayloads(replyResult).filter((payload) => payload !== replyPayload)
       : [];
+
+    // ── 「只汇报无行动」后置检测（OpenHands Orchestrator + Augment Code Validation Gate）──
+    // 放在所有提前 return 分支之前，确保任何路径都能检测。
+    // 条件：
+    //   1. 是默认 agent（主控）且非 task/exec/cron 驱动
+    //   2. 有前置快照的阻塞任务（preRunBlockedIds 非空且非零）
+    //   3. 主控回复了实质性内容（有 text，而不是空体）
+    //   4. 运行后阻塞列表与运行前完全相同（没有任何任务被处理）
+    if (
+      preRunBlockedIds !== null &&
+      preRunBlockedIds.size > 0 &&
+      isDefaultAgent &&
+      !hasExecCompletion &&
+      !hasCronEvents &&
+      !hasTaskDrivenEvents &&
+      replyPayload?.text?.trim()
+    ) {
+      void (async () => {
+        try {
+          const { listTasks: listTasksAfter } = await import("../tasks/storage.js");
+          const { listAgentIds: listAgentIdsAfter } = await import("../agents/agent-scope.js");
+          const allAgentIdsAfter = listAgentIdsAfter(cfg);
+          const allBlockedAfterRaw = await Promise.all(
+            allAgentIdsAfter.map((aid) =>
+              listTasksAfter({ assigneeId: aid, status: ["blocked"] }).catch(() => []),
+            ),
+          );
+          const postRunBlockedIds = new Set(
+            allBlockedAfterRaw.flat().map((t: { id: string }) => t.id),
+          );
+          const anyResolved = [...preRunBlockedIds].some((id) => !postRunBlockedIds.has(id));
+          const anyNewBlocked = [...postRunBlockedIds].some((id) => !preRunBlockedIds.has(id));
+          // ── 缺口3补全：部分处理豁免阈值（业界实践 Augment "minimum viable action" threshold）──
+          // 主控可能只处理 1/16 个阻塞任务来绕过「anyResolved=true」检测
+          // 当阻塞数 >= 5 且解除比例 < 20% 时，仍视为「实质未处理」
+          const resolvedCount = [...preRunBlockedIds].filter(
+            (id) => !postRunBlockedIds.has(id),
+          ).length;
+          const resolvedRatio =
+            preRunBlockedIds.size > 0 ? resolvedCount / preRunBlockedIds.size : 1;
+          const isSubstantiallyActioned =
+            anyResolved && (preRunBlockedIds.size < 5 || resolvedRatio >= 0.2);
+
+          // 阻塞列表完全不变（既无解除也无新增）或部分处理比例极低 → 判定为「只汇报无工具操作」
+          if ((!anyResolved && !anyNewBlocked) || (!isSubstantiallyActioned && !anyNewBlocked)) {
+            const blockedCount = preRunBlockedIds.size;
+            // ── 连续无操作计数（Augment 递进惩罚模式）──
+            // 使用 session store 中的 noActionCount 持久化计数，
+            // 让警告随次数升级，避免 LLM 学会忽略重复内容相同的系统消息
+            let noActionCount = 1;
+            try {
+              const storeForCount = loadSessionStore(storePath);
+              const entryForCount = storeForCount[sessionKey];
+              const prevCount =
+                typeof (entryForCount as Record<string, unknown>)?.noActionCount === "number"
+                  ? ((entryForCount as Record<string, unknown>).noActionCount as number)
+                  : 0;
+              noActionCount = prevCount + 1;
+              storeForCount[sessionKey] = {
+                ...entryForCount,
+                noActionCount,
+              };
+              await saveSessionStore(storePath, storeForCount);
+            } catch {
+              // 计数失败不影响主流程
+            }
+            // ── 具体未处理任务 ID 列表（OpenHands Orchestrator interrupt 带完整列表）──
+            const pendingBlockedIds = [...preRunBlockedIds].slice(0, 10);
+            const pendingListStr = pendingBlockedIds.map((id) => `    - ${id}`).join("\n");
+            // 根据连续次数升级警告强度
+            const urgencyPrefix =
+              noActionCount >= 3
+                ? `🚨🚨 [第 ${noActionCount} 次无操作 — 系统强制升级] 🚨🚨`
+                : noActionCount === 2
+                  ? `🚨 [第 ${noActionCount} 次无操作 — 再次警告]`
+                  : `⚠️ [第 ${noActionCount} 次无操作]`;
+            // 部分处理时增加补充说明
+            const partialNote =
+              anyResolved && !isSubstantiallyActioned
+                ? `\n\n⚠️ [部分处理不足] 你处理了 ${resolvedCount}/${preRunBlockedIds.size} 个阻塞任务（${Math.round(resolvedRatio * 100)}%），低于 20% 最低阈值，仍视为实质未处理。请继续处理剩余任务。`
+                : "";
+            const noActionMsg = [
+              `[NO-ACTION DETECTED] ${urgencyPrefix} — 主控心跳检测到「只汇报无工具操作」。`,
+              ``,
+              `当前有 ${blockedCount} 个阻塞任务，但你在本次心跳中只生成了文字回复，没有调用任何工具。`,
+              `这是「汇报替代行动」违规行为，不会让阻塞任务得到处理。${partialNote}`,
+              ``,
+              `📋 待处理阻塞任务 ID（必须逐一通过工具处理）：`,
+              pendingListStr,
+              blockedCount > pendingBlockedIds.length
+                ? `    ... 还有 ${blockedCount - pendingBlockedIds.length} 个`
+                : "",
+              ``,
+              `⚠️ 必须立即执行以下操作之一（文字回复不算数）：`,
+              `  a) agent.task.triage operations=[{taskId:"<上方ID>", action:"reset|cancel|reassign", resolutionType:"...", reason:"..."}]`,
+              `  b) agent.task.manage action=reset taskId=<上方ID>`,
+              `  c) agent_communicate — 向负责 agent 确认具体阻塞原因`,
+              noActionCount >= 3
+                ? `  ⛔ 你已连续 ${noActionCount} 次未调用任何工具。系统已记录此行为，请立即处理。`
+                : "",
+            ]
+              .filter((l) => l !== "")
+              .join("\n");
+            const leaderSession = `agent:${agentId}:main`;
+            enqueueSystemEvent(noActionMsg, {
+              sessionKey: leaderSession,
+              contextKey: `leader:no-action:${Date.now()}`,
+            });
+            log.warn(
+              `heartbeat: [NO-ACTION x${noActionCount}] coordinator text-only reply, ${blockedCount} blocked tasks unchanged — re-injecting enforcement`,
+              { agentId, blockedCount, noActionCount },
+            );
+
+            // ── 缺口2补全：noActionCount 上限熔断（OpenHands max_iterations + force-terminate 模式）──
+            // 连续 ≥5 次完全无工具操作时，自动将积压最久的阻塞任务批量 reset，
+            // 避免系统陷入无限「再次心跳→再次只汇报」死循环
+            const NO_ACTION_CIRCUIT_BREAKER = 5;
+            if (noActionCount >= NO_ACTION_CIRCUIT_BREAKER) {
+              void (async () => {
+                try {
+                  const { forceResetTask } = await import("../tasks/storage.js");
+                  const allBlockedTasks = allBlockedAfterRaw.flat() as Array<{
+                    id: string;
+                    assigneeId: string;
+                    title: string;
+                    metadata?: Record<string, unknown>;
+                    createdAt?: number;
+                  }>;
+                  // 取积压最久的前 3 个自动 reset
+                  const oldestBlocked = allBlockedTasks
+                    .toSorted((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
+                    .slice(0, 3);
+                  for (const t of oldestBlocked) {
+                    await forceResetTask(
+                      t.id,
+                      "todo",
+                      "system:heartbeat-circuit-breaker",
+                      `[系统熔断] 主控连续 ${noActionCount} 次无工具操作，系统自动重置以打破死循环`,
+                    );
+                    log.warn(
+                      `heartbeat: [CIRCUIT BREAKER] auto-reset blocked task "${t.id}" after ${noActionCount} consecutive no-action cycles`,
+                      { agentId, taskId: t.id, noActionCount },
+                    );
+                  }
+                  // 重置计数，给主控一次干净重来的机会
+                  const storeForBreaker = loadSessionStore(storePath);
+                  const entryForBreaker = storeForBreaker[sessionKey];
+                  storeForBreaker[sessionKey] = { ...entryForBreaker, noActionCount: 0 };
+                  await saveSessionStore(storePath, storeForBreaker);
+                  // 注入熔断通知
+                  const breakerMsg = [
+                    `[CIRCUIT BREAKER TRIGGERED] 主控已连续 ${noActionCount} 次心跳无工具操作，系统已自动介入。`,
+                    ``,
+                    `系统已自动将以下最旧阻塞任务重置为 todo 状态：`,
+                    ...oldestBlocked.map((t) => `  - [${t.id}] "${t.title.slice(0, 50)}"`),
+                    ``,
+                    `无操作计数已重置为 0，请从现在起正常处理任务。`,
+                    `⚠️ 若继续只汇报不操作，系统将再次触发熔断并上报日志。`,
+                  ].join("\n");
+                  enqueueSystemEvent(breakerMsg, {
+                    sessionKey: leaderSession,
+                    contextKey: `leader:circuit-breaker:${Date.now()}`,
+                  });
+                } catch (breakerErr) {
+                  log.warn(`heartbeat: circuit breaker failed (non-fatal): ${String(breakerErr)}`, {
+                    agentId,
+                  });
+                }
+              })();
+            }
+
+            requestHeartbeatNow({
+              reason: `leader:no-action:enforcement`,
+              sessionKey: leaderSession,
+              agentId,
+              coalesceMs: 3_000,
+            });
+          } else {
+            // 有处理行为 → 重置计数
+            try {
+              const storeForReset = loadSessionStore(storePath);
+              const entryForReset = storeForReset[sessionKey];
+              if (entryForReset && (entryForReset as Record<string, unknown>).noActionCount) {
+                storeForReset[sessionKey] = { ...entryForReset, noActionCount: 0 };
+                await saveSessionStore(storePath, storeForReset);
+              }
+            } catch {
+              // 重置失败不影响主流程
+            }
+          }
+        } catch {
+          // 后置检测失败不影响心跳主流程
+        }
+      })();
+    }
+    // ────────────────────────────────────────────────────────────────────
+
     if (
       !replyPayload ||
       (!replyPayload.text && !replyPayload.mediaUrl && !replyPayload.mediaUrls?.length)

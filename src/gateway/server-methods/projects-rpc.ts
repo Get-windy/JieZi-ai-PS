@@ -116,7 +116,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
 
-      const { listAvailableProjects, buildProjectContext, getGroupsWorkspaceRoot } =
+      const { listAvailableProjects, buildProjectContext } =
         await import("../../utils/project-context.js");
 
       const fsDirs = listAvailableProjects(workspaceRoot);
@@ -148,16 +148,16 @@ export const projectsHandlers: GatewayRequestHandlers = {
 
       const projects = await Promise.all(
         Array.from(projectIdMap.values()).map(async (projectId) => {
-        const projectCtx = buildProjectContext(projectId, workspaceRoot);
+          const projectCtx = buildProjectContext(projectId, workspaceRoot);
 
-        // 大小写不敏感匹配群组：群组的 projectId 与当前目录名等价
-        const projectIdLower = projectId.toLowerCase();
-        const projectGroups = allGroups.filter(
-          (g) => g.projectId && g.projectId.toLowerCase() === projectIdLower,
-        );
+          // 大小写不敏感匹配群组：群组的 projectId 与当前目录名等价
+          const projectIdLower = projectId.toLowerCase();
+          const projectGroups = allGroups.filter(
+            (g) => g.projectId && g.projectId.toLowerCase() === projectIdLower,
+          );
 
-        // 项目负责人：取第一个绑定群的 ownerId
-        const ownerId = projectGroups[0]?.ownerId || undefined;
+          // 项目负责人：取第一个绑定群的 ownerId
+          const ownerId = projectGroups[0]?.ownerId || undefined;
 
           // ===== 进度计算：优先使用 SQLite 真实任务数据 =====
           // SQLite 中存放的是 Agent 实际执行的任务，是进度的权威数据源；
@@ -167,10 +167,16 @@ export const projectsHandlers: GatewayRequestHandlers = {
             const dbTasks = await listTasks({ projectId, limit: 5000 });
             const activeTasks = dbTasks.filter((t) => t.status !== "cancelled");
             if (activeTasks.length > 0) {
-              const total = activeTasks.reduce((sum, t) => sum + ((t as Record<string,unknown>).storyPoints as number ?? 1), 0);
+              const total = activeTasks.reduce(
+                (sum, t) => sum + (((t as Record<string, unknown>).storyPoints as number) ?? 1),
+                0,
+              );
               const done = activeTasks
                 .filter((t) => t.status === "done")
-                .reduce((sum, t) => sum + ((t as Record<string,unknown>).storyPoints as number ?? 1), 0);
+                .reduce(
+                  (sum, t) => sum + (((t as Record<string, unknown>).storyPoints as number) ?? 1),
+                  0,
+                );
               progress = total === 0 ? 0 : Math.round((done / total) * 100);
             }
           } catch {
@@ -210,37 +216,37 @@ export const projectsHandlers: GatewayRequestHandlers = {
             }
           }
 
-        return {
-          projectId,
-          // 项目名称：优先读 PROJECT_CONFIG.json 中的 name 字段，如果没有则用 projectId
-          name: projectCtx.config?.name || projectId,
-          description: projectCtx.config?.description,
-          workspacePath: projectCtx.workspacePath,
-          codeDir: projectCtx.codeDir,
-          docsDir: projectCtx.docsDir,
-          requirementsDir: projectCtx.config?.requirementsDir,
-          ownerId,
-          createdAt: projectCtx.config?.createdAt,
-          // ===== 进度管理字段 =====
-          status: projectCtx.config?.status,
-          progress,
-          deadline: projectCtx.config?.deadline,
-          sprints: projectCtx.config?.sprints,
-          milestones: projectCtx.config?.milestones,
-          backlog: projectCtx.config?.backlog,
-          acceptanceCriteria: projectCtx.config?.acceptanceCriteria,
-          progressNotes: projectCtx.config?.progressNotes,
-          progressUpdatedAt: projectCtx.config?.progressUpdatedAt,
+          return {
+            projectId,
+            // 项目名称：优先读 PROJECT_CONFIG.json 中的 name 字段，如果没有则用 projectId
+            name: projectCtx.config?.name || projectId,
+            description: projectCtx.config?.description,
+            workspacePath: projectCtx.workspacePath,
+            codeDir: projectCtx.codeDir,
+            docsDir: projectCtx.docsDir,
+            requirementsDir: projectCtx.config?.requirementsDir,
+            ownerId,
+            createdAt: projectCtx.config?.createdAt,
+            // ===== 进度管理字段 =====
+            status: projectCtx.config?.status,
+            progress,
+            deadline: projectCtx.config?.deadline,
+            sprints: projectCtx.config?.sprints,
+            milestones: projectCtx.config?.milestones,
+            backlog: projectCtx.config?.backlog,
+            acceptanceCriteria: projectCtx.config?.acceptanceCriteria,
+            progressNotes: projectCtx.config?.progressNotes,
+            progressUpdatedAt: projectCtx.config?.progressUpdatedAt,
 
-          groups: projectGroups.map((g) => ({
-            groupId: g.id,
-            name: g.name,
-            description: g.description,
-            ownerId: g.ownerId,
-            createdAt: g.createdAt,
-            memberCount: g.members?.length || 0,
-          })),
-        };
+            groups: projectGroups.map((g) => ({
+              groupId: g.id,
+              name: g.name,
+              description: g.description,
+              ownerId: g.ownerId,
+              createdAt: g.createdAt,
+              memberCount: g.members?.length || 0,
+            })),
+          };
         }),
       );
 
@@ -436,10 +442,25 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const prevStatus = existing.status;
 
       // 状态回退检测：从 completed/cancelled 回退到活跃状态 → 自动解除 scopeFrozen
-      const activeStatuses = ["requirements", "design", "planning", "development", "testing", "review", "active", "dev_done", "operating", "maintenance", "paused"];
-      const isReactivating = params?.status !== undefined &&
+      const activeStatuses = [
+        "requirements",
+        "design",
+        "planning",
+        "development",
+        "testing",
+        "review",
+        "active",
+        "dev_done",
+        "operating",
+        "maintenance",
+        "paused",
+      ];
+      const isReactivating =
+        params?.status !== undefined &&
         activeStatuses.includes(String(params.status)) &&
-        (prevStatus === "completed" || prevStatus === "cancelled" || existing.completionGate?.scopeFrozen === true);
+        (prevStatus === "completed" ||
+          prevStatus === "cancelled" ||
+          existing.completionGate?.scopeFrozen === true);
       if (isReactivating && existing.completionGate?.scopeFrozen) {
         existing.completionGate.scopeFrozen = false;
         delete existing.completionGate.scopeFrozenAt;
@@ -449,12 +470,17 @@ export const projectsHandlers: GatewayRequestHandlers = {
       // completed / cancelled 状态 → 自动冻结范围
       if (newStatus === "completed" || newStatus === "cancelled") {
         if (!existing.completionGate) {
-          existing.completionGate = { criteria: [], requireHumanSignOff: false, scopeFrozen: false };
+          existing.completionGate = {
+            criteria: [],
+            requireHumanSignOff: false,
+            scopeFrozen: false,
+          };
         }
         if (!existing.completionGate.scopeFrozen) {
           existing.completionGate.scopeFrozen = true;
           existing.completionGate.scopeFrozenAt = Date.now();
-          existing.completionGate.scopeFrozenReason = newStatus === "completed" ? "completed" : "cancelled";
+          existing.completionGate.scopeFrozenReason =
+            newStatus === "completed" ? "completed" : "cancelled";
         }
       }
 
@@ -479,7 +505,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
         };
         if (isReactivating) {
           completionGateStatus.reactivated = true;
-          completionGateStatus.reactivatedHint = "✅ 项目已重新激活，范围冻结已解除，可继续创建新任务";
+          completionGateStatus.reactivatedHint =
+            "✅ 项目已重新激活，范围冻结已解除，可继续创建新任务";
         }
       }
 
@@ -699,26 +726,29 @@ export const projectsHandlers: GatewayRequestHandlers = {
       );
       const blockedTasks = tasks.filter(
         (t: import("../../utils/project-context.js").ProjectTask) =>
-          t.isBlocked === true ||
-          (t as Record<string, unknown>).blockedReason != null,
+          t.isBlocked === true || (t as Record<string, unknown>).blockedReason != null,
       );
 
       // ── 验收标准未全满足的任务 ──
       const failedAcceptanceTasks = tasks.filter(
         (t: import("../../utils/project-context.js").ProjectTask) => {
           const criteria = (t as Record<string, unknown>).acceptanceCriteria;
-          if (!Array.isArray(criteria) || criteria.length === 0) {return false;}
-          return criteria.some(
-            (c: Record<string, unknown>) => !c.satisfied,
-          );
+          if (!Array.isArray(criteria) || criteria.length === 0) {
+            return false;
+          }
+          return criteria.some((c: Record<string, unknown>) => !c.satisfied);
         },
       );
 
       // ── 逾期任务（有 dueDate 且未在 dueDate 前完成，或仍未完成） ──
       const overdueTasks = tasks.filter(
         (t: import("../../utils/project-context.js").ProjectTask) => {
-          if (!t.dueDate) {return false;}
-          if (t.status === "cancelled") {return false;}
+          if (!t.dueDate) {
+            return false;
+          }
+          if (t.status === "cancelled") {
+            return false;
+          }
           const completedAt = (t as Record<string, unknown>).completedAt as number | undefined;
           if (t.status === "done" && completedAt != null) {
             return completedAt > t.dueDate; // 完成了但晚于截止日
@@ -737,22 +767,24 @@ export const projectsHandlers: GatewayRequestHandlers = {
             sum + (t.storyPoints ?? 1),
           0,
         );
-      const actualVelocity = sprint.velocity ?? doneTasks.reduce(
-        (sum: number, t: import("../../utils/project-context.js").ProjectTask) =>
-          sum + (t.storyPoints ?? 1),
-        0,
-      );
+      const actualVelocity =
+        sprint.velocity ??
+        doneTasks.reduce(
+          (sum: number, t: import("../../utils/project-context.js").ProjectTask) =>
+            sum + (t.storyPoints ?? 1),
+          0,
+        );
       const velocityGap = plannedPoints - actualVelocity;
-      const completionRate = plannedPoints === 0
-        ? 100
-        : Math.round((actualVelocity / plannedPoints) * 100);
+      const completionRate =
+        plannedPoints === 0 ? 100 : Math.round((actualVelocity / plannedPoints) * 100);
 
       // ── Sprint 持续时间 ──
-      const sprintDays = sprint.startDate && sprint.completedAt
-        ? Math.round((sprint.completedAt - sprint.startDate) / 86_400_000)
-        : sprint.startDate && sprint.endDate
-          ? Math.round((sprint.endDate - sprint.startDate) / 86_400_000)
-          : null;
+      const sprintDays =
+        sprint.startDate && sprint.completedAt
+          ? Math.round((sprint.completedAt - sprint.startDate) / 86_400_000)
+          : sprint.startDate && sprint.endDate
+            ? Math.round((sprint.endDate - sprint.startDate) / 86_400_000)
+            : null;
 
       // ── 生成回顾报告文本（4L 框架） ──
       const lines: string[] = [
@@ -776,7 +808,9 @@ export const projectsHandlers: GatewayRequestHandlers = {
           const reason = (t as Record<string, unknown>).blockedReason as string | undefined;
           lines.push(`- ${t.title}${reason ? `: ${reason}` : ""}`);
         }
-        if (blockedTasks.length > 5) {lines.push(`- ...还有 ${blockedTasks.length - 5} 个`);}
+        if (blockedTasks.length > 5) {
+          lines.push(`- ...还有 ${blockedTasks.length - 5} 个`);
+        }
         lines.push("");
       }
 
@@ -785,7 +819,9 @@ export const projectsHandlers: GatewayRequestHandlers = {
         for (const t of overdueTasks.slice(0, 5)) {
           lines.push(`- ${t.title}`);
         }
-        if (overdueTasks.length > 5) {lines.push(`- ...还有 ${overdueTasks.length - 5} 个`);}
+        if (overdueTasks.length > 5) {
+          lines.push(`- ...还有 ${overdueTasks.length - 5} 个`);
+        }
         lines.push("");
       }
 
@@ -802,7 +838,9 @@ export const projectsHandlers: GatewayRequestHandlers = {
         for (const t of unfinishedTasks.slice(0, 5)) {
           lines.push(`- ${t.title}（${t.status}）`);
         }
-        if (unfinishedTasks.length > 5) {lines.push(`- ...还有 ${unfinishedTasks.length - 5} 个`);}
+        if (unfinishedTasks.length > 5) {
+          lines.push(`- ...还有 ${unfinishedTasks.length - 5} 个`);
+        }
         lines.push("");
       }
 
@@ -816,7 +854,9 @@ export const projectsHandlers: GatewayRequestHandlers = {
         planningNotes.push(`需在下次 Planning 前解除 ${blockedTasks.length} 个阻塞任务`);
       }
       if (failedAcceptanceTasks.length > 0) {
-        planningNotes.push(`${failedAcceptanceTasks.length} 个任务验收标准未满足，建议优先放入下次 Sprint`);
+        planningNotes.push(
+          `${failedAcceptanceTasks.length} 个任务验收标准未满足，建议优先放入下次 Sprint`,
+        );
       }
       if (planningNotes.length > 0) {
         lines.push("### 💡 下次 Planning 建议");
@@ -833,8 +873,11 @@ export const projectsHandlers: GatewayRequestHandlers = {
       );
       if (sprintIdx >= 0) {
         sprints[sprintIdx] = { ...sprints[sprintIdx], retrospective: retrospectiveText };
-        if (existing.sprints) {existing.sprints = sprints;}
-        else {existing.milestones = sprints;}
+        if (existing.sprints) {
+          existing.sprints = sprints;
+        } else {
+          existing.milestones = sprints;
+        }
         existing.progressUpdatedAt = now;
 
         if (!fs.existsSync(ctx.workspacePath)) {
@@ -871,7 +914,10 @@ export const projectsHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, `Failed to generate sprint retrospective: ${String(error)}`),
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to generate sprint retrospective: ${String(error)}`,
+        ),
       );
     }
   },
@@ -1164,17 +1210,24 @@ export const projectsHandlers: GatewayRequestHandlers = {
       // Sprint Capacity 检查：比较已分配 SP 与容量上限
       const sprintData = sprints[sprintIdx] as Record<string, unknown>;
       const capacityPoints = sprintData["capacityPoints"] as number | undefined;
-      const assignedSP = ((sprints[sprintIdx].tasks ?? []) as Array<Record<string, unknown>>)
-        .reduce((sum, t) => sum + (Number(t.storyPoints) || 1), 0);
-      const capacityWarning = capacityPoints && assignedSP > capacityPoints
-        ? "[CAPACITY WARNING] Sprint 已分配 " + assignedSP + " SP 超过容量上限 " + capacityPoints + " SP，建议进行范围缩减再启动。"
-        : undefined;
+      const assignedSP = (
+        (sprints[sprintIdx].tasks ?? []) as Array<Record<string, unknown>>
+      ).reduce((sum, t) => sum + (Number(t.storyPoints) || 1), 0);
+      const capacityWarning =
+        capacityPoints && assignedSP > capacityPoints
+          ? "[CAPACITY WARNING] Sprint 已分配 " +
+            assignedSP +
+            " SP 超过容量上限 " +
+            capacityPoints +
+            " SP，建议进行范围缩减再启动。"
+          : undefined;
 
       // Definition of Ready (DoR) 门禁 — Sprint Planning 最佳实践
       // 对标 SAFe PI Planning 和 Linear Sprint Planning 检查清单
       // DoR 三项必备检查：(1) 描述 >= 10字 (2) 验收标准 (3) 故事点估算
       const sprintTaskIds = ((sprints[sprintIdx].tasks ?? []) as Array<Record<string, unknown>>)
-        .map((t) => String(t.id ?? t.taskId ?? "")).filter(Boolean);
+        .map((t) => String(t.id ?? t.taskId ?? ""))
+        .filter(Boolean);
       const dorNotReadyTasks: Array<{ taskId: string; title?: string; missing: string[] }> = [];
       if (sprintTaskIds.length > 0) {
         try {
@@ -1185,24 +1238,36 @@ export const projectsHandlers: GatewayRequestHandlers = {
           );
           for (const tid of sprintTaskIds) {
             const t = sprintTaskMap.get(tid);
-            if (!t) {continue;}
+            if (!t) {
+              continue;
+            }
             const missing: string[] = [];
-            if (!t.description || t.description.trim().length < 10) {missing.push("description(<10chars)");}
+            if (!t.description || t.description.trim().length < 10) {
+              missing.push("description(<10chars)");
+            }
             const ac = (t as Record<string, unknown>).acceptanceCriteria as unknown[] | undefined;
-            if (!ac || ac.length === 0) {missing.push("acceptanceCriteria(not-set)");}
+            if (!ac || ac.length === 0) {
+              missing.push("acceptanceCriteria(not-set)");
+            }
             const sp = (t as Record<string, unknown>).storyPoints as number | undefined;
-            if (sp == null || sp <= 0) {missing.push("storyPoints(not-estimated)");}
-            if (missing.length > 0) {dorNotReadyTasks.push({ taskId: tid, title: t.title, missing });}
+            if (sp == null || sp <= 0) {
+              missing.push("storyPoints(not-estimated)");
+            }
+            if (missing.length > 0) {
+              dorNotReadyTasks.push({ taskId: tid, title: t.title, missing });
+            }
           }
         } catch {
           // DoR 检查失败不阻塞 Sprint 启动
         }
       }
-      const dorWarning = dorNotReadyTasks.length > 0
-        ? `[DoR WARNING] ${dorNotReadyTasks.length}/${sprintTaskIds.length} tasks not ready for Sprint. Suggest completing definition before starting: ${
-            dorNotReadyTasks.slice(0, 3).map((t) => `"${t.title ?? t.taskId}"(${t.missing.join(",")})`).join("; ")
-          }${dorNotReadyTasks.length > 3 ? " ..." : ""}`
-        : undefined;
+      const dorWarning =
+        dorNotReadyTasks.length > 0
+          ? `[DoR WARNING] ${dorNotReadyTasks.length}/${sprintTaskIds.length} tasks not ready for Sprint. Suggest completing definition before starting: ${dorNotReadyTasks
+              .slice(0, 3)
+              .map((t) => `"${t.title ?? t.taskId}"(${t.missing.join(",")})`)
+              .join("; ")}${dorNotReadyTasks.length > 3 ? " ..." : ""}`
+          : undefined;
 
       sprints[sprintIdx] = {
         ...sprints[sprintIdx],
@@ -1227,19 +1292,31 @@ export const projectsHandlers: GatewayRequestHandlers = {
       }
       fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
 
-      respond(true, {
-        success: true,
-        projectId,
-        sprintId,
-        config: existing,
-        capacityCheck: capacityPoints
-          ? { capacityPoints, assignedSP, isOverloaded: assignedSP > capacityPoints, utilizationPct: Math.round((assignedSP / capacityPoints) * 100) }
-          : undefined,
-        ...(capacityWarning ? { capacityWarning } : {}),
-        ...(dorWarning ? { dorWarning, dorNotReadyTasks } : {}),
-        warnings: [capacityWarning, dorWarning].filter(Boolean),
-        tip: capacityWarning ?? dorWarning ?? "Sprint 已启动。团队成员应优先处理 Sprint 内任务，完成后调用 projects.completeSprint 完结本轮迭代。",
-      }, undefined);
+      respond(
+        true,
+        {
+          success: true,
+          projectId,
+          sprintId,
+          config: existing,
+          capacityCheck: capacityPoints
+            ? {
+                capacityPoints,
+                assignedSP,
+                isOverloaded: assignedSP > capacityPoints,
+                utilizationPct: Math.round((assignedSP / capacityPoints) * 100),
+              }
+            : undefined,
+          ...(capacityWarning ? { capacityWarning } : {}),
+          ...(dorWarning ? { dorWarning, dorNotReadyTasks } : {}),
+          warnings: [capacityWarning, dorWarning].filter(Boolean),
+          tip:
+            capacityWarning ??
+            dorWarning ??
+            "Sprint 已启动。团队成员应优先处理 Sprint 内任务，完成后调用 projects.completeSprint 完结本轮迭代。",
+        },
+        undefined,
+      );
     } catch (error) {
       respond(
         false,
@@ -1418,7 +1495,18 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const prevScopeFrozen = existing.completionGate?.scopeFrozen ?? false;
 
       // 目标活跃状态（默认 development）
-      const activeStatuses = ["requirements", "design", "planning", "development", "testing", "review", "active", "dev_done", "operating", "maintenance"];
+      const activeStatuses = [
+        "requirements",
+        "design",
+        "planning",
+        "development",
+        "testing",
+        "review",
+        "active",
+        "dev_done",
+        "operating",
+        "maintenance",
+      ];
       const targetStatus = params?.status ? String(params.status) : "development";
       if (!activeStatuses.includes(targetStatus)) {
         respond(
@@ -1426,7 +1514,7 @@ export const projectsHandlers: GatewayRequestHandlers = {
           undefined,
           errorShape(
             ErrorCodes.INVALID_REQUEST,
-            `Invalid target status "${targetStatus}". Must be one of: ${activeStatuses.join(", ")}`
+            `Invalid target status "${targetStatus}". Must be one of: ${activeStatuses.join(", ")}`,
           ),
         );
         return;
@@ -1450,7 +1538,10 @@ export const projectsHandlers: GatewayRequestHandlers = {
       if (!existing.metadata) {
         (existing as unknown as Record<string, unknown>).metadata = {};
       }
-      const meta = (existing as unknown as Record<string, unknown>).metadata as Record<string, unknown>;
+      const meta = (existing as unknown as Record<string, unknown>).metadata as Record<
+        string,
+        unknown
+      >;
       meta.lastReactivatedAt = now;
       meta.lastReactivatedReason = reason;
       meta.lastReactivatedFrom = prevStatus;
@@ -1668,9 +1759,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const { buildProjectContext, projectWorkspaceExists } = await import(
-        "../../utils/project-context.js"
-      );
+      const { buildProjectContext, projectWorkspaceExists } =
+        await import("../../utils/project-context.js");
       if (!projectWorkspaceExists(projectId)) {
         respond(
           false,
@@ -1683,9 +1773,16 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const ctx = buildProjectContext(projectId);
       const configPath = `${ctx.workspacePath}/PROJECT_CONFIG.json`;
 
-      const existing = ctx.config ?? ({ projectId, workspacePath: ctx.workspacePath } as import("../../utils/project-context.js").ProjectConfig);
+      const existing =
+        ctx.config ??
+        ({
+          projectId,
+          workspacePath: ctx.workspacePath,
+        } as import("../../utils/project-context.js").ProjectConfig);
 
-      if (!existing.objectives) {existing.objectives = [];}
+      if (!existing.objectives) {
+        existing.objectives = [];
+      }
 
       const now = Date.now();
       const title = params?.title ? String(params.title) : "";
@@ -1694,14 +1791,22 @@ export const projectsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const objectiveId = params?.id ? String(params.id) : `obj_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const objectiveId = params?.id
+        ? String(params.id)
+        : `obj_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
       const existingIdx = existing.objectives.findIndex((o) => o.id === objectiveId);
 
       const timeframe = ["short", "medium", "long"].includes(String(params?.timeframe))
-        ? (String(params.timeframe) as import("../../utils/project-context.js").ProjectObjective["timeframe"])
+        ? (String(
+            params.timeframe,
+          ) as import("../../utils/project-context.js").ProjectObjective["timeframe"])
         : ("medium" as const);
-      const status = ["not-started", "in-progress", "achieved", "missed", "deferred"].includes(String(params?.status))
-        ? (String(params.status) as import("../../utils/project-context.js").ProjectObjective["status"])
+      const status = ["not-started", "in-progress", "achieved", "missed", "deferred"].includes(
+        String(params?.status),
+      )
+        ? (String(
+            params.status,
+          ) as import("../../utils/project-context.js").ProjectObjective["status"])
         : ("not-started" as const);
 
       const objective: import("../../utils/project-context.js").ProjectObjective = {
@@ -1712,7 +1817,11 @@ export const projectsHandlers: GatewayRequestHandlers = {
         timeframe,
         status,
         targetDate: params?.targetDate ? Number(params.targetDate) : undefined,
-        keyResults: params?.keyResults ? (params.keyResults as import("../../utils/project-context.js").KeyResult[]) : (existingIdx >= 0 ? existing.objectives[existingIdx].keyResults : undefined),
+        keyResults: params?.keyResults
+          ? (params.keyResults as import("../../utils/project-context.js").KeyResult[])
+          : existingIdx >= 0
+            ? existing.objectives[existingIdx].keyResults
+            : undefined,
         parentObjectiveId: params?.parentObjectiveId ? String(params.parentObjectiveId) : undefined,
         lastUpdateNote: params?.note ? String(params.note) : undefined,
         createdAt: existingIdx >= 0 ? existing.objectives[existingIdx].createdAt : now,
@@ -1755,15 +1864,22 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const projectId = params?.projectId ? String(params.projectId) : "";
       const objectiveId = params?.id ? String(params.id) : "";
       if (!projectId || !objectiveId) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId and id are required"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "projectId and id are required"),
+        );
         return;
       }
 
-      const { buildProjectContext, projectWorkspaceExists } = await import(
-        "../../utils/project-context.js"
-      );
+      const { buildProjectContext, projectWorkspaceExists } =
+        await import("../../utils/project-context.js");
       if (!projectWorkspaceExists(projectId)) {
-        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`),
+        );
         return;
       }
 
@@ -1782,7 +1898,11 @@ export const projectsHandlers: GatewayRequestHandlers = {
       fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
       respond(true, { success: true, projectId, objectiveId, deleted }, undefined);
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete objective: ${String(error)}`));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete objective: ${String(error)}`),
+      );
     }
   },
 
@@ -1801,19 +1921,29 @@ export const projectsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const { buildProjectContext, projectWorkspaceExists } = await import(
-        "../../utils/project-context.js"
-      );
+      const { buildProjectContext, projectWorkspaceExists } =
+        await import("../../utils/project-context.js");
       if (!projectWorkspaceExists(projectId)) {
-        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`),
+        );
         return;
       }
 
       const ctx = buildProjectContext(projectId);
       const configPath = `${ctx.workspacePath}/PROJECT_CONFIG.json`;
-      const existing = ctx.config ?? ({ projectId, workspacePath: ctx.workspacePath } as import("../../utils/project-context.js").ProjectConfig);
+      const existing =
+        ctx.config ??
+        ({
+          projectId,
+          workspacePath: ctx.workspacePath,
+        } as import("../../utils/project-context.js").ProjectConfig);
 
-      if (!existing.timelineMilestones) {existing.timelineMilestones = [];}
+      if (!existing.timelineMilestones) {
+        existing.timelineMilestones = [];
+      }
 
       const now = Date.now();
       const title = params?.title ? String(params.title) : "";
@@ -1822,13 +1952,23 @@ export const projectsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const milestoneId = params?.id ? String(params.id) : `ms_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const milestoneId = params?.id
+        ? String(params.id)
+        : `ms_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
       const existingIdx = existing.timelineMilestones.findIndex((m) => m.id === milestoneId);
 
       const validTypes = ["release", "phase", "checkpoint", "deliverable", "other"];
       const validStatuses = ["upcoming", "in-progress", "completed", "missed", "cancelled"];
-      const msType = validTypes.includes(String(params?.type)) ? String(params.type) as import("../../utils/project-context.js").ProjectMilestoneEntry["type"] : "phase" as const;
-      const msStatus = validStatuses.includes(String(params?.status)) ? String(params.status) as import("../../utils/project-context.js").ProjectMilestoneEntry["status"] : "upcoming" as const;
+      const msType = validTypes.includes(String(params?.type))
+        ? (String(
+            params.type,
+          ) as import("../../utils/project-context.js").ProjectMilestoneEntry["type"])
+        : ("phase" as const);
+      const msStatus = validStatuses.includes(String(params?.status))
+        ? (String(
+            params.status,
+          ) as import("../../utils/project-context.js").ProjectMilestoneEntry["status"])
+        : ("upcoming" as const);
 
       const milestone: import("../../utils/project-context.js").ProjectMilestoneEntry = {
         ...(existingIdx >= 0 ? existing.timelineMilestones[existingIdx] : {}),
@@ -1838,9 +1978,20 @@ export const projectsHandlers: GatewayRequestHandlers = {
         type: msType,
         status: msStatus,
         targetDate: params?.targetDate ? Number(params.targetDate) : undefined,
-        completedAt: msStatus === "completed" && params?.completedAt ? Number(params.completedAt) : (msStatus === "completed" && existingIdx < 0 ? now : (existingIdx >= 0 ? existing.timelineMilestones[existingIdx].completedAt : undefined)),
+        completedAt:
+          msStatus === "completed" && params?.completedAt
+            ? Number(params.completedAt)
+            : msStatus === "completed" && existingIdx < 0
+              ? now
+              : existingIdx >= 0
+                ? existing.timelineMilestones[existingIdx].completedAt
+                : undefined,
         objectiveId: params?.objectiveId ? String(params.objectiveId) : undefined,
-        sprintIds: params?.sprintIds ? (params.sprintIds as string[]) : (existingIdx >= 0 ? existing.timelineMilestones[existingIdx].sprintIds : undefined),
+        sprintIds: params?.sprintIds
+          ? (params.sprintIds as string[])
+          : existingIdx >= 0
+            ? existing.timelineMilestones[existingIdx].sprintIds
+            : undefined,
         ownerId: params?.ownerId ? String(params.ownerId) : undefined,
         createdAt: existingIdx >= 0 ? existing.timelineMilestones[existingIdx].createdAt : now,
         updatedAt: now,
@@ -1866,7 +2017,11 @@ export const projectsHandlers: GatewayRequestHandlers = {
         undefined,
       );
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to upsert milestone: ${String(error)}`));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to upsert milestone: ${String(error)}`),
+      );
     }
   },
 
@@ -1878,15 +2033,22 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const projectId = params?.projectId ? String(params.projectId) : "";
       const milestoneId = params?.id ? String(params.id) : "";
       if (!projectId || !milestoneId) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId and id are required"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "projectId and id are required"),
+        );
         return;
       }
 
-      const { buildProjectContext, projectWorkspaceExists } = await import(
-        "../../utils/project-context.js"
-      );
+      const { buildProjectContext, projectWorkspaceExists } =
+        await import("../../utils/project-context.js");
       if (!projectWorkspaceExists(projectId)) {
-        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`),
+        );
         return;
       }
 
@@ -1899,13 +2061,19 @@ export const projectsHandlers: GatewayRequestHandlers = {
       }
 
       const before = existing.timelineMilestones?.length ?? 0;
-      existing.timelineMilestones = (existing.timelineMilestones ?? []).filter((m) => m.id !== milestoneId);
+      existing.timelineMilestones = (existing.timelineMilestones ?? []).filter(
+        (m) => m.id !== milestoneId,
+      );
       const deleted = before > (existing.timelineMilestones?.length ?? 0);
 
       fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
       respond(true, { success: true, projectId, milestoneId, deleted }, undefined);
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete milestone: ${String(error)}`));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete milestone: ${String(error)}`),
+      );
     }
   },
 
@@ -1934,90 +2102,150 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const projectId = params?.projectId ? String(params.projectId) : "";
       const title = params?.title ? String(params.title) : "";
       if (!projectId || !title) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId and title are required"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "projectId and title are required"),
+        );
         return;
       }
 
-      const { buildProjectContext, readProjectConfig } = await import("../../utils/project-context.js");
+      const { buildProjectContext, readProjectConfig } =
+        await import("../../utils/project-context.js");
       const path = await import("path");
       const fs = await import("fs");
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
       const ctx = buildProjectContext(projectId, workspaceRoot);
       const configPath = path.join(ctx.workspacePath, "PROJECT_CONFIG.json");
 
-      const existing = readProjectConfig(ctx.workspacePath) ?? { projectId, workspacePath: ctx.workspacePath };
+      const existing = readProjectConfig(ctx.workspacePath) ?? {
+        projectId,
+        workspacePath: ctx.workspacePath,
+      };
 
       // 初始化 sprints 数组
-      if (!existing.sprints) {existing.sprints = existing.milestones ?? [];}
+      if (!existing.sprints) {
+        existing.sprints = existing.milestones ?? [];
+      }
 
       const now = Date.now();
-      const sprintId = params?.id ? String(params.id) : `sprint_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const sprintId = params?.id
+        ? String(params.id)
+        : `sprint_${now.toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
       const existingIdx = existing.sprints.findIndex(
         (s: import("../../utils/project-context.js").ProjectSprint) => s.id === sprintId,
       );
 
       // 自动计算 order：新建时追加到末尾
       const maxOrder = existing.sprints.reduce(
-        (m: number, s: import("../../utils/project-context.js").ProjectSprint) => Math.max(m, s.order ?? 0),
+        (m: number, s: import("../../utils/project-context.js").ProjectSprint) =>
+          Math.max(m, s.order ?? 0),
         0,
       );
-      const order = params?.order ? Number(params.order) : (existingIdx >= 0 ? existing.sprints[existingIdx].order : maxOrder + 1);
+      const order = params?.order
+        ? Number(params.order)
+        : existingIdx >= 0
+          ? existing.sprints[existingIdx].order
+          : maxOrder + 1;
 
       const sprint: import("../../utils/project-context.js").ProjectSprint = {
         ...(existingIdx >= 0 ? existing.sprints[existingIdx] : {}),
         id: sprintId,
         title,
-        goal: params?.goal ? String(params.goal) : (existingIdx >= 0 ? existing.sprints[existingIdx].goal : undefined),
+        goal: params?.goal
+          ? String(params.goal)
+          : existingIdx >= 0
+            ? existing.sprints[existingIdx].goal
+            : undefined,
         order,
         status: params?.status
           ? (String(params.status) as import("../../utils/project-context.js").SprintStatus)
-          : (existingIdx >= 0 ? existing.sprints[existingIdx].status : "planning"),
-        startDate: params?.startDate ? Number(params.startDate) : (existingIdx >= 0 ? existing.sprints[existingIdx].startDate : undefined),
-        endDate: params?.endDate ? Number(params.endDate) : (existingIdx >= 0 ? existing.sprints[existingIdx].endDate : undefined),
+          : existingIdx >= 0
+            ? existing.sprints[existingIdx].status
+            : "planning",
+        startDate: params?.startDate
+          ? Number(params.startDate)
+          : existingIdx >= 0
+            ? existing.sprints[existingIdx].startDate
+            : undefined,
+        endDate: params?.endDate
+          ? Number(params.endDate)
+          : existingIdx >= 0
+            ? existing.sprints[existingIdx].endDate
+            : undefined,
         tasks: existingIdx >= 0 ? existing.sprints[existingIdx].tasks : [],
         // 扩展字段：存入 metadata
-        ...(params?.objectiveId || params?.milestoneId ? {
-          retrospective: existingIdx >= 0 ? existing.sprints[existingIdx].retrospective : undefined,
-        } : {}),
+        ...(params?.objectiveId || params?.milestoneId
+          ? {
+              retrospective:
+                existingIdx >= 0 ? existing.sprints[existingIdx].retrospective : undefined,
+            }
+          : {}),
       };
 
       // 将 objectiveId / milestoneId 存入配置的扩展字段
       // （ProjectSprint 无这两个字段，通过 JSON 宽松存储）
       const sprintWithMeta = sprint as Record<string, unknown>;
-      if (params?.objectiveId) {sprintWithMeta["objectiveId"] = String(params.objectiveId);}
-      if (params?.milestoneId) {sprintWithMeta["milestoneId"] = String(params.milestoneId);}
+      if (params?.objectiveId) {
+        sprintWithMeta["objectiveId"] = String(params.objectiveId);
+      }
+      if (params?.milestoneId) {
+        sprintWithMeta["milestoneId"] = String(params.milestoneId);
+      }
       // Sprint Capacity 容量（业界标准：Jira/Linear 在规划时设置团队可承载的故事点上限）
       if (params?.capacityPoints !== undefined) {
         sprintWithMeta["capacityPoints"] = Number(params.capacityPoints);
       }
 
       if (existingIdx >= 0) {
-        existing.sprints[existingIdx] = sprintWithMeta as import("../../utils/project-context.js").ProjectSprint;
+        existing.sprints[existingIdx] =
+          sprintWithMeta as import("../../utils/project-context.js").ProjectSprint;
       } else {
-        existing.sprints.push(sprintWithMeta as import("../../utils/project-context.js").ProjectSprint);
+        existing.sprints.push(
+          sprintWithMeta as import("../../utils/project-context.js").ProjectSprint,
+        );
       }
 
       // 同步到 milestones（向后兼容）
       existing.milestones = existing.sprints;
       existing.progressUpdatedAt = now;
 
-      if (!fs.existsSync(ctx.workspacePath)) {fs.mkdirSync(ctx.workspacePath, { recursive: true });}
+      if (!fs.existsSync(ctx.workspacePath)) {
+        fs.mkdirSync(ctx.workspacePath, { recursive: true });
+      }
       fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
 
-      respond(true, {
-        success: true,
-        projectId,
-        sprint: sprintWithMeta,
-        action: existingIdx >= 0 ? "updated" : "created",
-        capacityCheck: sprintWithMeta["capacityPoints"]
-          ? { capacityPoints: sprintWithMeta["capacityPoints"], note: "\u5bb9\u91cf\u5df2\u8bbe\u7f6e\uff0c\u542f\u52a8 Sprint \u65f6\u4f1a\u81ea\u52a8\u68c0\u67e5\u5df2\u5206\u914d SP \u662f\u5426\u8d85\u8fc7\u5bb9\u91cf\u3002" }
-          : { note: "\u5efa\u8bae\u901a\u8fc7 capacityPoints \u8bbe\u7f6e\u56e2\u961f\u6548\u8083\uff0c\u9632\u6b62 Sprint \u8fc7\u8f7d\uff08\u53c2\u8003\u5386\u53f2 velocity \u8bbe\u4e3a capacityPoints \u5373\u53ef\uff09\u3002" },
-        tip: sprint.goal
-          ? "Sprint \"" + title + "\" \u5df2" + (existingIdx >= 0 ? "\u66f4\u65b0" : "\u521b\u5efa") + "\u3002\u7528 projects.sprint.addTask \u5411 Sprint \u52a0\u5165\u4efb\u52a1\uff0c\u51c6\u5907\u597d\u540e\u8c03\u7528 projects.startSprint \u542f\u52a8\u3002"
-          : "\u26a0\ufe0f \u5efa\u8bae\u4e3a Sprint \u8bbe\u7f6e goal\uff08Sprint\u76ee\u6807\uff09\uff0c\u8ba9\u56e2\u961f\u6e05\u6670\u77e5\u9053\u672c\u8f6e\u8fed\u4ee3\u8981\u8fbe\u6210\u4ec0\u4e48\u3002",
-      }, undefined);
+      respond(
+        true,
+        {
+          success: true,
+          projectId,
+          sprint: sprintWithMeta,
+          action: existingIdx >= 0 ? "updated" : "created",
+          capacityCheck: sprintWithMeta["capacityPoints"]
+            ? {
+                capacityPoints: sprintWithMeta["capacityPoints"],
+                note: "\u5bb9\u91cf\u5df2\u8bbe\u7f6e\uff0c\u542f\u52a8 Sprint \u65f6\u4f1a\u81ea\u52a8\u68c0\u67e5\u5df2\u5206\u914d SP \u662f\u5426\u8d85\u8fc7\u5bb9\u91cf\u3002",
+              }
+            : {
+                note: "\u5efa\u8bae\u901a\u8fc7 capacityPoints \u8bbe\u7f6e\u56e2\u961f\u6548\u8083\uff0c\u9632\u6b62 Sprint \u8fc7\u8f7d\uff08\u53c2\u8003\u5386\u53f2 velocity \u8bbe\u4e3a capacityPoints \u5373\u53ef\uff09\u3002",
+              },
+          tip: sprint.goal
+            ? 'Sprint "' +
+              title +
+              '" \u5df2' +
+              (existingIdx >= 0 ? "\u66f4\u65b0" : "\u521b\u5efa") +
+              "\u3002\u7528 projects.sprint.addTask \u5411 Sprint \u52a0\u5165\u4efb\u52a1\uff0c\u51c6\u5907\u597d\u540e\u8c03\u7528 projects.startSprint \u542f\u52a8\u3002"
+            : "\u26a0\ufe0f \u5efa\u8bae\u4e3a Sprint \u8bbe\u7f6e goal\uff08Sprint\u76ee\u6807\uff09\uff0c\u8ba9\u56e2\u961f\u6e05\u6670\u77e5\u9053\u672c\u8f6e\u8fed\u4ee3\u8981\u8fbe\u6210\u4ec0\u4e48\u3002",
+        },
+        undefined,
+      );
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to upsert sprint: ${String(error)}`));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to upsert sprint: ${String(error)}`),
+      );
     }
   },
 
@@ -2040,11 +2268,16 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const action = params?.action ? String(params.action) : "add";
 
       if (!projectId || !sprintId || !taskId) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId, sprintId, and taskId are required"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "projectId, sprintId, and taskId are required"),
+        );
         return;
       }
 
-      const { buildProjectContext, readProjectConfig } = await import("../../utils/project-context.js");
+      const { buildProjectContext, readProjectConfig } =
+        await import("../../utils/project-context.js");
       const path = await import("path");
       const fs = await import("fs");
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
@@ -2053,7 +2286,11 @@ export const projectsHandlers: GatewayRequestHandlers = {
 
       const existing = readProjectConfig(ctx.workspacePath);
       if (!existing) {
-        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Project config not found for "${projectId}"`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Project config not found for "${projectId}"`),
+        );
         return;
       }
 
@@ -2062,7 +2299,11 @@ export const projectsHandlers: GatewayRequestHandlers = {
         (s: import("../../utils/project-context.js").ProjectSprint) => s.id === sprintId,
       );
       if (sprintIdx === -1) {
-        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Sprint "${sprintId}" not found`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Sprint "${sprintId}" not found`),
+        );
         return;
       }
 
@@ -2086,14 +2327,29 @@ export const projectsHandlers: GatewayRequestHandlers = {
           newTasks[taskIdx] = updatedTask;
           sprints[sprintIdx] = { ...sprint, tasks: newTasks };
         } else {
-          respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Task "${taskId}" not found in sprint`));
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.UNAVAILABLE, `Task "${taskId}" not found in sprint`),
+          );
           return;
         }
       } else {
         // action === "add"
         const alreadyIn = sprint.tasks.some((t) => t.id === taskId);
         if (alreadyIn) {
-          respond(true, { success: true, projectId, sprintId, taskId, action: "already_in", message: "任务已在 Sprint 中" }, undefined);
+          respond(
+            true,
+            {
+              success: true,
+              projectId,
+              sprintId,
+              taskId,
+              action: "already_in",
+              message: "任务已在 Sprint 中",
+            },
+            undefined,
+          );
           return;
         }
         const title = params?.title ? String(params.title) : taskId;
@@ -2101,9 +2357,15 @@ export const projectsHandlers: GatewayRequestHandlers = {
           id: taskId,
           title,
           scope: "project",
-          status: (params?.status ? String(params.status) : "todo") as import("../../utils/project-context.js").TaskStatus,
-          priority: (params?.priority ? String(params.priority) : "medium") as import("../../utils/project-context.js").TaskPriority,
-          type: (params?.taskType ? String(params.taskType) : "other") as import("../../utils/project-context.js").TaskType,
+          status: (params?.status
+            ? String(params.status)
+            : "todo") as import("../../utils/project-context.js").TaskStatus,
+          priority: (params?.priority
+            ? String(params.priority)
+            : "medium") as import("../../utils/project-context.js").TaskPriority,
+          type: (params?.taskType
+            ? String(params.taskType)
+            : "other") as import("../../utils/project-context.js").TaskType,
           projectId,
           storyPoints: params?.storyPoints ? Number(params.storyPoints) : undefined,
           timeTracking: { timeSpent: 0 },
@@ -2125,22 +2387,32 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const { calcProjectProgress } = await import("../../utils/project-context.js");
       existing.progress = calcProjectProgress(sprints);
 
-      if (!fs.existsSync(ctx.workspacePath)) {fs.mkdirSync(ctx.workspacePath, { recursive: true });}
+      if (!fs.existsSync(ctx.workspacePath)) {
+        fs.mkdirSync(ctx.workspacePath, { recursive: true });
+      }
       fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
 
       const updatedSprint = sprints[sprintIdx];
       const { calcSprintProgress } = await import("../../utils/project-context.js");
-      respond(true, {
-        success: true,
-        projectId,
-        sprintId,
-        taskId,
-        action,
-        sprintTaskCount: updatedSprint.tasks.length,
-        sprintProgress: calcSprintProgress(updatedSprint),
-      }, undefined);
+      respond(
+        true,
+        {
+          success: true,
+          projectId,
+          sprintId,
+          taskId,
+          action,
+          sprintTaskCount: updatedSprint.tasks.length,
+          sprintProgress: calcSprintProgress(updatedSprint),
+        },
+        undefined,
+      );
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to update sprint task: ${String(error)}`));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to update sprint task: ${String(error)}`),
+      );
     }
   },
 
@@ -2166,6 +2438,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const deleteWorkspace = params?.deleteWorkspace === true;
       const deleteTasks = params?.deleteTasks === true;
       const deleteGroups = params?.deleteGroups === true;
+      // 是否清理各 agent MEMORY.md 及群组 SHARED_MEMORY.md 中关于此项目的记忆段落
+      const purgeMemory = params?.purgeMemory === true;
 
       const { buildProjectContext } = await import("../../utils/project-context.js");
       const fs = await import("fs");
@@ -2231,20 +2505,153 @@ export const projectsHandlers: GatewayRequestHandlers = {
         }
       }
 
-      respond(true, {
-        success: true,
-        projectId,
-        ...summary,
-        message: [
-          `项目 "${projectId}" 删除操作完成。`,
-          `- 删除任务: ${deleteTasks ? `${summary.tasksDeleted} 个` : '已跳过（保留）'}`,
-          `- 删除群组: ${deleteGroups ? `${summary.groupsRemoved.length} 个 (${summary.groupsRemoved.join(", ") || "无"})` : '已跳过（保留）'}`,
-          `- 工作空间: ${deleteWorkspace ? (summary.workspaceDeleted ? "已删除" : "不存在/删除跳过") : '已跳过（保留）'}`,
-          summary.errors.length > 0 ? `- 警告: ${summary.errors.join("; ")}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      }, undefined);
+      // ④ 清理记忆残留：从各 agent MEMORY.md 和项目群组 SHARED_MEMORY.md 中
+      //    删除所有包含该 projectId 的段落，防止已删项目的信息在记忆中残留
+      //    导致主控或心跳任务仍回复该项目相关内容
+      const memorySummary: { agentsPurged: string[]; sharedMemoryPurged: boolean } = {
+        agentsPurged: [],
+        sharedMemoryPurged: false,
+      };
+      if (purgeMemory) {
+        try {
+          const { loadConfig } = await import("../../../upstream/src/config/config.js");
+          const { resolveAgentWorkspaceDir } = await import("../../agents/agent-scope.js");
+          const path2 = await import("path");
+          const cfg = loadConfig();
+          const agentIds = (cfg.agents?.list ?? [])
+            .map((a: { id: string }) => a.id)
+            .filter(Boolean);
+          const pidLower = projectId.toLowerCase();
+
+          /**
+           * 从 Markdown 文件中删除含有 projectId 的段落（## 级别）
+           * 规则：遇到「## 标题」或「---」作为段落分隔，整段包含 projectId 则删除
+           * 返回是否实际修改了文件
+           */
+          function purgeProjectSectionsFromMemory(filePath: string): boolean {
+            if (!fs.existsSync(filePath)) {
+              return false;
+            }
+            const content = fs.readFileSync(filePath, "utf8");
+            // 按 ## 级标题分割段落（保留 # 主标题不动）
+            // 策略：逐行扫描，遇到 ## 开头则进入新段落，段落结束时判断是否含 projectId
+            const lines = content.split("\n");
+            const outputLines: string[] = [];
+            let currentSectionLines: string[] = [];
+            let sectionContainsProject = false;
+
+            const flushSection = () => {
+              if (!sectionContainsProject) {
+                outputLines.push(...currentSectionLines);
+              }
+              currentSectionLines = [];
+              sectionContainsProject = false;
+            };
+
+            for (const line of lines) {
+              if (line.startsWith("## ")) {
+                // 新段落开始，先提交上一段落
+                flushSection();
+                currentSectionLines.push(line);
+                // 标题本身含 projectId 也算
+                if (line.toLowerCase().includes(pidLower)) {
+                  sectionContainsProject = true;
+                }
+              } else {
+                currentSectionLines.push(line);
+                if (line.toLowerCase().includes(pidLower)) {
+                  sectionContainsProject = true;
+                }
+              }
+            }
+            // 提交最后一段
+            flushSection();
+
+            const newContent = outputLines.join("\n");
+            if (newContent === content) {
+              return false;
+            }
+            fs.writeFileSync(filePath, newContent, "utf8");
+            return true;
+          }
+
+          // 清理各 agent 的 MEMORY.md
+          for (const agentId of agentIds) {
+            try {
+              const wsDir = resolveAgentWorkspaceDir(cfg, agentId);
+              const memoryPath = path2.join(wsDir, "MEMORY.md");
+              const changed = purgeProjectSectionsFromMemory(memoryPath);
+              if (changed) {
+                memorySummary.agentsPurged.push(agentId);
+              }
+              // 同时清理归档子目录下的 memory/*.md 文件
+              const memArchiveDir = path2.join(wsDir, "memory");
+              if (fs.existsSync(memArchiveDir)) {
+                const archiveFiles = fs
+                  .readdirSync(memArchiveDir)
+                  .filter((f: string) => f.endsWith(".md"));
+                for (const file of archiveFiles) {
+                  purgeProjectSectionsFromMemory(path2.join(memArchiveDir, file));
+                }
+              }
+            } catch {
+              // 单个 agent 清理失败不影响其他
+            }
+          }
+
+          // 清理项目群组的 SHARED_MEMORY.md（若群组未被删除或自定义路径时仍存在）
+          const { groupWorkspaceManager } = await import("../../workspace/group-workspace.js");
+          const allGroupsNow = groupManager.getAllGroups();
+          const projectGroupsAll = allGroupsNow.filter(
+            (g) => g.projectId && g.projectId.toLowerCase() === pidLower,
+          );
+          for (const group of projectGroupsAll) {
+            try {
+              const groupDir = groupWorkspaceManager.getGroupWorkspaceDir(group.id);
+              const sharedMemPath = path2.join(groupDir, "SHARED_MEMORY.md");
+              purgeProjectSectionsFromMemory(sharedMemPath);
+              // 同时清理归档子目录
+              const sharedArchiveDir = path2.join(groupDir, "shared_memory");
+              if (fs.existsSync(sharedArchiveDir)) {
+                const archiveFiles = fs
+                  .readdirSync(sharedArchiveDir)
+                  .filter((f: string) => f.endsWith(".md"));
+                for (const file of archiveFiles) {
+                  purgeProjectSectionsFromMemory(path2.join(sharedArchiveDir, file));
+                }
+              }
+              memorySummary.sharedMemoryPurged = true;
+            } catch {
+              // 失败不影响主流程
+            }
+          }
+        } catch (memErr) {
+          summary.errors.push(`清理记忆残留时出错: ${String(memErr)}`);
+        }
+      }
+
+      respond(
+        true,
+        {
+          success: true,
+          projectId,
+          ...summary,
+          memorySummary: purgeMemory ? memorySummary : undefined,
+          message: [
+            `项目 "${projectId}" 删除操作完成。`,
+            `- 删除任务: ${deleteTasks ? `${summary.tasksDeleted} 个` : "已跳过（保留）"}`,
+            `- 删除群组: ${deleteGroups ? `${summary.groupsRemoved.length} 个 (${summary.groupsRemoved.join(", ") || "无"})` : "已跳过（保留）"}`,
+            `- 工作空间: ${deleteWorkspace ? (summary.workspaceDeleted ? "已删除" : "不存在/删除跳过") : "已跳过（保留）"}`,
+            purgeMemory
+              ? `- 记忆清理: ${memorySummary.agentsPurged.length} 个 agent 的 MEMORY.md 已清理${memorySummary.sharedMemoryPurged ? "，共享记忆已清理" : ""}`
+              : "- 记忆清理: 已跳过（保留）",
+            summary.errors.length > 0 ? `- 警告: ${summary.errors.join("; ")}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        },
+        undefined,
+      );
     } catch (error) {
       respond(
         false,
@@ -2265,7 +2672,11 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const projectId = params?.projectId ? String(params.projectId) : "";
       const sprintId = params?.sprintId ? String(params.sprintId) : "";
       if (!projectId || !sprintId) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId and sprintId are required"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "projectId and sprintId are required"),
+        );
         return;
       }
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
@@ -2273,37 +2684,59 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const ctx = buildProjectContext(projectId, workspaceRoot);
       const config = ctx.config;
       if (!config) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Project config not found"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "Project config not found"),
+        );
         return;
       }
       // 查找目标 Sprint
       const sprints = config.sprints ?? config.milestones ?? [];
       type SprintLike = Record<string, unknown>;
-      const sprint = sprints.find((s: SprintLike) => s.id === sprintId || s.name === sprintId) as SprintLike | undefined;
+      const sprint = sprints.find((s: SprintLike) => s.id === sprintId || s.name === sprintId) as
+        | SprintLike
+        | undefined;
       if (!sprint) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Sprint not found: " + sprintId));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "Sprint not found: " + sprintId),
+        );
         return;
       }
       // 获取 Sprint 任务列表
       const { listTasks } = await import("../../tasks/storage.js");
-      const sprintTaskIds = new Set((sprint.tasks as SprintLike[] ?? []).map((t: SprintLike) => String(t.id ?? t.taskId ?? "")).filter(Boolean));
+      const sprintTaskIds = new Set(
+        ((sprint.tasks as SprintLike[]) ?? [])
+          .map((t: SprintLike) => String(t.id ?? t.taskId ?? ""))
+          .filter(Boolean),
+      );
       const allProjectTasks = await listTasks({ projectId, limit: 2000 });
       const sprintTasks = allProjectTasks.filter((t) => sprintTaskIds.has(t.id));
       // 计算 Sprint 时间范围
       const sprintStart = Number(sprint.startDate ?? sprint.createdAt ?? Date.now());
-      const sprintEnd = Number(sprint.endDate ?? sprint.dueDate ?? (sprintStart + 14 * 24 * 3600 * 1000));
-      const totalSP = sprintTasks.reduce((sum, t) => sum + ((t as Record<string, unknown>).storyPoints as number ?? 1), 0);
+      const sprintEnd = Number(
+        sprint.endDate ?? sprint.dueDate ?? sprintStart + 14 * 24 * 3600 * 1000,
+      );
+      const totalSP = sprintTasks.reduce(
+        (sum, t) => sum + (((t as Record<string, unknown>).storyPoints as number) ?? 1),
+        0,
+      );
       // 生成逐日燃尽数据点
       const dayMs = 24 * 60 * 60 * 1000;
       const totalDays = Math.max(1, Math.round((sprintEnd - sprintStart) / dayMs));
-      const dataPoints: Array<{ date: string; remainingSP: number; idealSP: number; completedTasks: number }> = [];
+      const dataPoints: Array<{
+        date: string;
+        remainingSP: number;
+        idealSP: number;
+        completedTasks: number;
+      }> = [];
       for (let day = 0; day <= totalDays; day++) {
         const dayTs = sprintStart + day * dayMs;
-        const completedByDay = sprintTasks.filter(
-          (t) => t.completedAt && t.completedAt <= dayTs,
-        );
+        const completedByDay = sprintTasks.filter((t) => t.completedAt && t.completedAt <= dayTs);
         const completedSP = completedByDay.reduce(
-          (sum, t) => sum + ((t as Record<string, unknown>).storyPoints as number ?? 1),
+          (sum, t) => sum + (((t as Record<string, unknown>).storyPoints as number) ?? 1),
           0,
         );
         const remainingSP = Math.max(0, totalSP - completedSP);
@@ -2317,24 +2750,40 @@ export const projectsHandlers: GatewayRequestHandlers = {
       }
       // 当前状态
       const today = Date.now();
-      const currentDayIdx = Math.min(totalDays, Math.max(0, Math.round((today - sprintStart) / dayMs)));
+      const currentDayIdx = Math.min(
+        totalDays,
+        Math.max(0, Math.round((today - sprintStart) / dayMs)),
+      );
       const currentPoint = dataPoints[currentDayIdx];
       const isOnTrack = currentPoint ? currentPoint.remainingSP <= currentPoint.idealSP : null;
-      respond(true, {
-        projectId,
-        sprintId,
-        sprintName: String(sprint.name ?? sprintId),
-        sprintStart: new Date(sprintStart).toISOString(),
-        sprintEnd: new Date(sprintEnd).toISOString(),
-        totalStoryPoints: totalSP,
-        totalTasks: sprintTasks.length,
-        dataPoints,
-        currentProgress: currentPoint,
-        isOnTrack,
-        trend: isOnTrack === null ? "数据不足" : isOnTrack ? "🟢 进度正常" : "🔴 当前滞后于理想进度，需加速",
-      }, undefined);
+      respond(
+        true,
+        {
+          projectId,
+          sprintId,
+          sprintName: String(sprint.name ?? sprintId),
+          sprintStart: new Date(sprintStart).toISOString(),
+          sprintEnd: new Date(sprintEnd).toISOString(),
+          totalStoryPoints: totalSP,
+          totalTasks: sprintTasks.length,
+          dataPoints,
+          currentProgress: currentPoint,
+          isOnTrack,
+          trend:
+            isOnTrack === null
+              ? "数据不足"
+              : isOnTrack
+                ? "🟢 进度正常"
+                : "🔴 当前滞后于理想进度，需加速",
+        },
+        undefined,
+      );
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to get sprint burndown: " + String(error)));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to get sprint burndown: " + String(error)),
+      );
     }
   },
 
@@ -2350,7 +2799,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const projectIds = Array.isArray(params?.projectIds)
         ? (params.projectIds as string[])
         : undefined;
-      const { listAvailableProjects, buildProjectContext } = await import("../../utils/project-context.js");
+      const { listAvailableProjects, buildProjectContext } =
+        await import("../../utils/project-context.js");
       const allProjectIds = projectIds ?? listAvailableProjects(workspaceRoot);
       const { listTasks } = await import("../../tasks/storage.js");
       const now = Date.now();
@@ -2362,7 +2812,8 @@ export const projectsHandlers: GatewayRequestHandlers = {
           const doneTasks = tasks.filter((t) => t.status === "done");
           const overdueTasks = activeTasks.filter((t) => t.dueDate && t.dueDate < now);
           const blockedTasks = activeTasks.filter((t) => t.status === "blocked");
-          const completionRate = tasks.length > 0 ? Math.round((doneTasks.length / tasks.length) * 100) : 0;
+          const completionRate =
+            tasks.length > 0 ? Math.round((doneTasks.length / tasks.length) * 100) : 0;
           const techDebtCount = activeTasks.filter((t) =>
             (t.tags ?? []).some((tag) => ["tech-debt", "technical-debt", "技术债"].includes(tag)),
           ).length;
@@ -2376,22 +2827,39 @@ export const projectsHandlers: GatewayRequestHandlers = {
               const taskStats = new Map();
               for (const t of doneTasks) {
                 const oid = (t as Record<string, unknown>).objectiveId as string | undefined;
-                if (!oid) {continue;}
+                if (!oid) {
+                  continue;
+                }
                 const stat = taskStats.get(oid) ?? { total: 0, completed: 0 };
-                stat.total++; stat.completed++;
+                stat.total++;
+                stat.completed++;
                 taskStats.set(oid, stat);
               }
               const progress = calcOkrProgress(objectives, taskStats);
-              const allProgress = Object.values(progress).map((p) => (p as Record<string, unknown>).completionRate as number ?? 0);
-              okrAvgProgress = allProgress.length > 0 ? Math.round(allProgress.reduce((a, b) => a + b, 0) / allProgress.length) : undefined;
+              const allProgress = Object.values(progress).map(
+                (p) => ((p as Record<string, unknown>).completionRate as number) ?? 0,
+              );
+              okrAvgProgress =
+                allProgress.length > 0
+                  ? Math.round(allProgress.reduce((a, b) => a + b, 0) / allProgress.length)
+                  : undefined;
             }
-          } catch { /* OKR 模块可能未初始化 */ }
+          } catch {
+            /* OKR 模块可能未初始化 */
+          }
           // 健康状态评判
           const issues: string[] = [];
-          if (overdueTasks.length > 0) {issues.push("超期 " + overdueTasks.length + " 个");}
-          if (blockedTasks.length > 0) {issues.push("阻塞 " + blockedTasks.length + " 个");}
-          if (techDebtCount > activeTasks.length * 0.2) {issues.push("技术债 " + techDebtCount + " 个");}
-          const overallHealth = issues.length === 0 ? "🟢 健康" : issues.length <= 1 ? "🟡 需关注" : "🔴 需干预";
+          if (overdueTasks.length > 0) {
+            issues.push("超期 " + overdueTasks.length + " 个");
+          }
+          if (blockedTasks.length > 0) {
+            issues.push("阻塞 " + blockedTasks.length + " 个");
+          }
+          if (techDebtCount > activeTasks.length * 0.2) {
+            issues.push("技术债 " + techDebtCount + " 个");
+          }
+          const overallHealth =
+            issues.length === 0 ? "🟢 健康" : issues.length <= 1 ? "🟡 需关注" : "🔴 需干预";
           return {
             projectId: pid,
             projectName: ctx.config?.name ?? pid,
@@ -2412,24 +2880,45 @@ export const projectsHandlers: GatewayRequestHandlers = {
         }),
       );
       const projects = results
-        .map((r, i) => r.status === "fulfilled" ? r.value : { projectId: allProjectIds[i], error: String((r).reason) })
+        .map((r, i) =>
+          r.status === "fulfilled"
+            ? r.value
+            : { projectId: allProjectIds[i], error: String(r.reason) },
+        )
         .filter(Boolean);
       const healthCounts = { green: 0, yellow: 0, red: 0 };
       for (const p of projects) {
         const h = String((p as Record<string, unknown>).overallHealth ?? "");
-        if (h.includes("🟢")) {healthCounts.green++;}
-        else if (h.includes("🟡")) {healthCounts.yellow++;}
-        else if (h.includes("🔴")) {healthCounts.red++;}
+        if (h.includes("🟢")) {
+          healthCounts.green++;
+        } else if (h.includes("🟡")) {
+          healthCounts.yellow++;
+        } else if (h.includes("🔴")) {
+          healthCounts.red++;
+        }
       }
-      respond(true, {
-        totalProjects: projects.length,
-        healthSummary: healthCounts,
-        overallPortfolioHealth: healthCounts.red > 0 ? "🔴 多项目异常" : healthCounts.yellow > 0 ? "🟡 部分项目需关注" : "🟢 整体健康",
-        projects,
-        generatedAt: new Date(now).toISOString(),
-      }, undefined);
+      respond(
+        true,
+        {
+          totalProjects: projects.length,
+          healthSummary: healthCounts,
+          overallPortfolioHealth:
+            healthCounts.red > 0
+              ? "🔴 多项目异常"
+              : healthCounts.yellow > 0
+                ? "🟡 部分项目需关注"
+                : "🟢 整体健康",
+          projects,
+          generatedAt: new Date(now).toISOString(),
+        },
+        undefined,
+      );
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to get portfolio health: " + String(error)));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to get portfolio health: " + String(error)),
+      );
     }
   },
 
@@ -2452,12 +2941,16 @@ export const projectsHandlers: GatewayRequestHandlers = {
         id: params?.id ? String(params.id) : undefined,
         title: params?.title ? String(params.title) : "",
         description: params?.description ? String(params.description) : undefined,
-        health: (params?.health ? String(params.health) : "on-track") as import("../../tasks/initiative-manager.js").InitiativeHealth,
+        health: (params?.health
+          ? String(params.health)
+          : "on-track") as import("../../tasks/initiative-manager.js").InitiativeHealth,
         ownerId: params?.ownerId ? String(params.ownerId) : undefined,
         projectIds: Array.isArray(params?.projectIds) ? params.projectIds.map(String) : [],
         targetDate: params?.targetDate ? Number(params.targetDate) : undefined,
         objectiveId: params?.objectiveId ? String(params.objectiveId) : undefined,
-        priority: ([1, 2, 3, 4].includes(Number(params?.priority)) ? Number(params.priority) : undefined) as 1 | 2 | 3 | 4 | undefined,
+        priority: ([1, 2, 3, 4].includes(Number(params?.priority))
+          ? Number(params.priority)
+          : undefined) as 1 | 2 | 3 | 4 | undefined,
         tags: Array.isArray(params?.tags) ? params.tags.map(String) : undefined,
         createdBy: params?.createdBy ? String(params.createdBy) : "system",
       });
@@ -2467,7 +2960,11 @@ export const projectsHandlers: GatewayRequestHandlers = {
       }
       respond(true, { success: true, initiative }, undefined);
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to upsert initiative: " + String(error)));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to upsert initiative: " + String(error)),
+      );
     }
   },
 
@@ -2478,22 +2975,33 @@ export const projectsHandlers: GatewayRequestHandlers = {
     try {
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
       const root = getGroupsWorkspaceRoot(workspaceRoot);
-      const { listInitiatives, calcInitiativeHealthSummary } = await import("../../tasks/initiative-manager.js");
+      const { listInitiatives, calcInitiativeHealthSummary } =
+        await import("../../tasks/initiative-manager.js");
       const filter = {
-        health: params?.health ? String(params.health) as import("../../tasks/initiative-manager.js").InitiativeHealth : undefined,
+        health: params?.health
+          ? (String(params.health) as import("../../tasks/initiative-manager.js").InitiativeHealth)
+          : undefined,
         ownerId: params?.ownerId ? String(params.ownerId) : undefined,
         objectiveId: params?.objectiveId ? String(params.objectiveId) : undefined,
         projectId: params?.projectId ? String(params.projectId) : undefined,
       };
       const initiatives = listInitiatives(root, filter);
       const summary = calcInitiativeHealthSummary(initiatives);
-      respond(true, {
-        initiatives,
-        total: initiatives.length,
-        healthSummary: summary,
-      }, undefined);
+      respond(
+        true,
+        {
+          initiatives,
+          total: initiatives.length,
+          healthSummary: summary,
+        },
+        undefined,
+      );
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to list initiatives: " + String(error)));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to list initiatives: " + String(error)),
+      );
     }
   },
 
@@ -2512,12 +3020,20 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const { getInitiative } = await import("../../tasks/initiative-manager.js");
       const initiative = getInitiative(root, id);
       if (!initiative) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Initiative not found: " + id));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "Initiative not found: " + id),
+        );
         return;
       }
       respond(true, { initiative }, undefined);
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to get initiative: " + String(error)));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to get initiative: " + String(error)),
+      );
     }
   },
 
@@ -2535,9 +3051,21 @@ export const projectsHandlers: GatewayRequestHandlers = {
       }
       const { deleteInitiative } = await import("../../tasks/initiative-manager.js");
       const deleted = deleteInitiative(root, id);
-      respond(true, { success: deleted, id, message: deleted ? `Initiative ${id} deleted` : `Initiative ${id} not found` }, undefined);
+      respond(
+        true,
+        {
+          success: deleted,
+          id,
+          message: deleted ? `Initiative ${id} deleted` : `Initiative ${id} not found`,
+        },
+        undefined,
+      );
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to delete initiative: " + String(error)));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to delete initiative: " + String(error)),
+      );
     }
   },
 
@@ -2551,18 +3079,30 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const initiativeId = params?.initiativeId ? String(params.initiativeId) : "";
       const projectId = params?.projectId ? String(params.projectId) : "";
       if (!initiativeId || !projectId) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "initiativeId and projectId are required"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "initiativeId and projectId are required"),
+        );
         return;
       }
       const { linkProjectToInitiative } = await import("../../tasks/initiative-manager.js");
       const initiative = linkProjectToInitiative(root, initiativeId, projectId);
       if (!initiative) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Initiative not found: " + initiativeId));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "Initiative not found: " + initiativeId),
+        );
         return;
       }
       respond(true, { success: true, initiative }, undefined);
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to add project to initiative: " + String(error)));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to add project to initiative: " + String(error)),
+      );
     }
   },
 
@@ -2576,18 +3116,33 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const initiativeId = params?.initiativeId ? String(params.initiativeId) : "";
       const projectId = params?.projectId ? String(params.projectId) : "";
       if (!initiativeId || !projectId) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "initiativeId and projectId are required"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "initiativeId and projectId are required"),
+        );
         return;
       }
       const { unlinkProjectFromInitiative } = await import("../../tasks/initiative-manager.js");
       const initiative = unlinkProjectFromInitiative(root, initiativeId, projectId);
       if (!initiative) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Initiative not found: " + initiativeId));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "Initiative not found: " + initiativeId),
+        );
         return;
       }
       respond(true, { success: true, initiative }, undefined);
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to remove project from initiative: " + String(error)));
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          "Failed to remove project from initiative: " + String(error),
+        ),
+      );
     }
   },
 
@@ -2601,21 +3156,35 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const root = getGroupsWorkspaceRoot(workspaceRoot);
       const initiativeId = params?.initiativeId ? String(params.initiativeId) : "";
       const content = params?.content ? String(params.content) : "";
-      const health = (params?.health ? String(params.health) : "on-track") as import("../../tasks/initiative-manager.js").InitiativeHealth;
+      const health = (
+        params?.health ? String(params.health) : "on-track"
+      ) as import("../../tasks/initiative-manager.js").InitiativeHealth;
       const authorId = params?.authorId ? String(params.authorId) : "system";
       if (!initiativeId || !content) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "initiativeId and content are required"));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "initiativeId and content are required"),
+        );
         return;
       }
       const { addInitiativeUpdate } = await import("../../tasks/initiative-manager.js");
       const update = addInitiativeUpdate(root, initiativeId, { content, health, authorId });
       if (!update) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Initiative not found: " + initiativeId));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "Initiative not found: " + initiativeId),
+        );
         return;
       }
       respond(true, { success: true, update, initiativeId }, undefined);
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to add initiative update: " + String(error)));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to add initiative update: " + String(error)),
+      );
     }
   },
 
@@ -2632,16 +3201,23 @@ export const projectsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const { buildProjectContext, readProjectConfig } = await import("../../utils/project-context.js");
+      const { buildProjectContext, readProjectConfig } =
+        await import("../../utils/project-context.js");
       const ctx = buildProjectContext(projectId, workspaceRoot);
       const config = readProjectConfig(ctx.workspacePath);
       if (!config) {
-        respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Project config not found for "${projectId}"`));
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, `Project config not found for "${projectId}"`),
+        );
         return;
       }
 
       // 收集已完成的 Sprint（从 sprints 或 milestones 中过滤）
-      const allSprints = (config.sprints ?? config.milestones ?? []) as Array<Record<string, unknown>>;
+      const allSprints = (config.sprints ?? config.milestones ?? []) as Array<
+        Record<string, unknown>
+      >;
       const completedSprints = allSprints
         .filter((s) => s["status"] === "completed" || s["completedAt"])
         .toSorted((a, b) => Number(b["completedAt"] ?? 0) - Number(a["completedAt"] ?? 0))
@@ -2649,20 +3225,30 @@ export const projectsHandlers: GatewayRequestHandlers = {
         .toReversed();
 
       if (completedSprints.length === 0) {
-        respond(true, {
-          projectId,
-          sprints: [],
-          velocityTrend: [],
-          avgVelocity: 0,
-          predictedNextVelocity: 0,
-          tip: "No completed sprints found. Velocity trend requires at least 1 completed sprint.",
-        }, undefined);
+        respond(
+          true,
+          {
+            projectId,
+            sprints: [],
+            velocityTrend: [],
+            avgVelocity: 0,
+            predictedNextVelocity: 0,
+            tip: "No completed sprints found. Velocity trend requires at least 1 completed sprint.",
+          },
+          undefined,
+        );
         return;
       }
 
       // 计算每个 Sprint 的速度（完成任务的 storyPoints 之和）
       const { listTasks } = await import("../../tasks/storage.js");
-      const velocityTrend: Array<{ sprintId: string; sprintName: string; completedSP: number; completedTasks: number; completedAt: number }> = [];
+      const velocityTrend: Array<{
+        sprintId: string;
+        sprintName: string;
+        completedSP: number;
+        completedTasks: number;
+        completedAt: number;
+      }> = [];
 
       for (const sprint of completedSprints) {
         const sprintId = String(sprint["id"] ?? sprint["sprintId"] ?? "");
@@ -2680,19 +3266,37 @@ export const projectsHandlers: GatewayRequestHandlers = {
         // 过滤在 sprint 时间段内完成的任务
         const inSprintTasks = sprintTasks.filter((t) => {
           const completedAtT = (t as Record<string, unknown>).completedAt as number | undefined;
-          if (!completedAtT) {return false;}
-          if (startedAt && completedAtT < startedAt) {return false;}
-          if (completedAt && completedAtT > completedAt) {return false;}
+          if (!completedAtT) {
+            return false;
+          }
+          if (startedAt && completedAtT < startedAt) {
+            return false;
+          }
+          if (completedAt && completedAtT > completedAt) {
+            return false;
+          }
           return true;
         });
 
-        const completedSP = inSprintTasks.reduce((sum, t) => sum + (Number((t as Record<string, unknown>).storyPoints) || 1), 0);
-        velocityTrend.push({ sprintId, sprintName, completedSP, completedTasks: inSprintTasks.length, completedAt });
+        const completedSP = inSprintTasks.reduce(
+          (sum, t) => sum + (Number((t as Record<string, unknown>).storyPoints) || 1),
+          0,
+        );
+        velocityTrend.push({
+          sprintId,
+          sprintName,
+          completedSP,
+          completedTasks: inSprintTasks.length,
+          completedAt,
+        });
       }
 
-      const avgVelocity = velocityTrend.length > 0
-        ? Math.round(velocityTrend.reduce((s, v) => s + v.completedSP, 0) / velocityTrend.length * 10) / 10
-        : 0;
+      const avgVelocity =
+        velocityTrend.length > 0
+          ? Math.round(
+              (velocityTrend.reduce((s, v) => s + v.completedSP, 0) / velocityTrend.length) * 10,
+            ) / 10
+          : 0;
 
       // 简单线性预测（加权移动平均，最近两个 Sprint 权重更高）
       let predictedNextVelocity = avgVelocity;
@@ -2703,22 +3307,33 @@ export const projectsHandlers: GatewayRequestHandlers = {
       }
 
       // 趋势方向判断
-      const trend = velocityTrend.length >= 2
-        ? velocityTrend[velocityTrend.length - 1].completedSP > velocityTrend[velocityTrend.length - 2].completedSP
-          ? "improving" : "declining"
-        : "stable";
+      const trend =
+        velocityTrend.length >= 2
+          ? velocityTrend[velocityTrend.length - 1].completedSP >
+            velocityTrend[velocityTrend.length - 2].completedSP
+            ? "improving"
+            : "declining"
+          : "stable";
 
-      respond(true, {
-        projectId,
-        sprintCount: velocityTrend.length,
-        velocityTrend,
-        avgVelocity,
-        predictedNextVelocity,
-        trend,
-        summary: `Velocity trend (last ${velocityTrend.length} sprints): avg=${avgVelocity} SP, predicted=${predictedNextVelocity} SP, trend=${trend}`,
-      }, undefined);
+      respond(
+        true,
+        {
+          projectId,
+          sprintCount: velocityTrend.length,
+          velocityTrend,
+          avgVelocity,
+          predictedNextVelocity,
+          trend,
+          summary: `Velocity trend (last ${velocityTrend.length} sprints): avg=${avgVelocity} SP, predicted=${predictedNextVelocity} SP, trend=${trend}`,
+        },
+        undefined,
+      );
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to compute velocity trend: " + String(error)));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to compute velocity trend: " + String(error)),
+      );
     }
   },
 
@@ -2738,25 +3353,39 @@ export const projectsHandlers: GatewayRequestHandlers = {
       void thresholdDays; // referenced below
 
       // 扫描工作空间内所有项目目录
-      const overdue: Array<{ projectId: string; name?: string; lastHealthUpdateAt?: number; daysSinceUpdate: number }> = [];
+      const overdue: Array<{
+        projectId: string;
+        name?: string;
+        lastHealthUpdateAt?: number;
+        daysSinceUpdate: number;
+      }> = [];
       let scannedCount = 0;
 
       if (fs.existsSync(root)) {
         const entries = fs.readdirSync(root, { withFileTypes: true });
         for (const entry of entries) {
-          if (!entry.isDirectory()) {continue;}
+          if (!entry.isDirectory()) {
+            continue;
+          }
           const projectId = entry.name;
           const configPath = path.join(root, projectId, "PROJECT_CONFIG.json");
-          if (!fs.existsSync(configPath)) {continue;}
+          if (!fs.existsSync(configPath)) {
+            continue;
+          }
           const config = readProjectConfig(path.join(root, projectId));
-          if (!config) {continue;}
+          if (!config) {
+            continue;
+          }
           // 只检查 active 项目
           const status = config.status ?? "active";
-          if (status === "completed" || status === "archived" || status === "cancelled") {continue;}
+          if (status === "completed" || status === "archived" || status === "cancelled") {
+            continue;
+          }
           scannedCount++;
 
-          const lastHealthAt = (config as Record<string, unknown>).lastHealthUpdateAt as number | undefined
-            ?? (config as Record<string, unknown>).progressUpdatedAt as number | undefined;
+          const lastHealthAt =
+            ((config as Record<string, unknown>).lastHealthUpdateAt as number | undefined) ??
+            ((config as Record<string, unknown>).progressUpdatedAt as number | undefined);
 
           const daysSince = lastHealthAt
             ? Math.floor((now - lastHealthAt) / (24 * 60 * 60 * 1000))
@@ -2775,18 +3404,29 @@ export const projectsHandlers: GatewayRequestHandlers = {
 
       overdue.sort((a, b) => b.daysSinceUpdate - a.daysSinceUpdate);
 
-      respond(true, {
-        thresholdDays,
-        scannedCount,
-        overdueCount: overdue.length,
-        overdue,
-        summary: overdue.length > 0
-          ? `[HEALTH UPDATE OVERDUE] ${overdue.length}/${scannedCount} active projects have not posted a health update in >${thresholdDays} days: ${overdue.slice(0, 3).map((p) => `"${p.name ?? p.projectId}"(${p.daysSinceUpdate}d)`).join(", ")}${overdue.length > 3 ? " ..." : ""}`
-          : `All ${scannedCount} active projects are up to date (within ${thresholdDays} days).`,
-      }, undefined);
+      respond(
+        true,
+        {
+          thresholdDays,
+          scannedCount,
+          overdueCount: overdue.length,
+          overdue,
+          summary:
+            overdue.length > 0
+              ? `[HEALTH UPDATE OVERDUE] ${overdue.length}/${scannedCount} active projects have not posted a health update in >${thresholdDays} days: ${overdue
+                  .slice(0, 3)
+                  .map((p) => `"${p.name ?? p.projectId}"(${p.daysSinceUpdate}d)`)
+                  .join(", ")}${overdue.length > 3 ? " ..." : ""}`
+              : `All ${scannedCount} active projects are up to date (within ${thresholdDays} days).`,
+        },
+        undefined,
+      );
     } catch (error) {
-      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "Failed to check health update due: " + String(error)));
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to check health update due: " + String(error)),
+      );
     }
   },
 };
-

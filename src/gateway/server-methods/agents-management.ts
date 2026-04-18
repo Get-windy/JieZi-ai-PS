@@ -69,6 +69,7 @@ import * as taskStorage from "../../tasks/storage.js";
 import type { Task } from "../../tasks/types.js";
 import {
   readProjectConfig,
+  buildProjectContext,
   resolveAgentTaskThreshold,
   resolveStrictestThreshold,
 } from "../../utils/project-context.js";
@@ -257,6 +258,28 @@ async function getAgentManagedScopeAsync(
     // 如果存储不可用，仅依赖静态配置
   }
 
+  // 项目成员互信：若请求者是某个项目的成员，自动将同项目的其他成员加入权限范围
+  // 业务逃辑：项目组内的 agent 应能互相发现和协作，不应因 allowAgents 静态配置缺失而被拦截
+  try {
+    const allGroups = groupManager.getAllGroups();
+    for (const group of allGroups) {
+      if (!group.projectId) {
+        continue;
+      }
+      const isMember = group.members.some(
+        (m) => normalizeAgentId(m.agentId) === normalizedRequesterId,
+      );
+      if (isMember) {
+        // 请求者是该项目组成员，将同组所有成员加入权限范围
+        for (const m of group.members) {
+          managed.add(normalizeAgentId(m.agentId));
+        }
+      }
+    }
+  } catch {
+    // 群组查询失败不影响其他权限判断
+  }
+
   // 如果最终集合只有自身且尚未配置 allowAgents，则该 agent 没有任何下属
   // 返回只包含自身的集合（不能给别人分配任务）
   return managed;
@@ -315,6 +338,10 @@ function resolveTaskContext(
   privateMemoryPath: string;
   sharedMemoryPath: string | null;
   projectGroupSessionKey: string | null;
+  /** 业务空间（代码目录）路径，来自项目配置的 codeDir 字段 */
+  codeDir: string | null;
+  /** 项目空间（文档/记忆/决策）路径 */
+  projectWorkspacePath: string | null;
 } {
   const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
   const privateMemoryPath = path.join(workspaceDir, "MEMORY.md");
@@ -324,6 +351,9 @@ function resolveTaskContext(
 
   let projectGroupSessionKey: string | null = null;
   let sharedMemoryPath: string | null = null;
+  let codeDir: string | null = null;
+  let projectWorkspacePath: string | null = null;
+
   if (projectId) {
     const allGroups = groupManager.getAllGroups();
     const projectGroup = allGroups.find((g) => g.projectId === projectId);
@@ -334,9 +364,28 @@ function resolveTaskContext(
         sharedMemoryPath = path.join(groupWorkspaceDir, "SHARED_MEMORY.md");
       }
     }
+    // 从项目配置读取 codeDir（业务空间）和 projectWorkspacePath（项目空间）
+    try {
+      const projectCtx = buildProjectContext(projectId);
+      codeDir = projectCtx.codeDir || null;
+      projectWorkspacePath = projectCtx.workspacePath || null;
+      // 若 sharedMemoryPath 尚未通过群组解析到，用项目配置补充
+      if (!sharedMemoryPath && projectCtx.sharedMemoryPath) {
+        sharedMemoryPath = projectCtx.sharedMemoryPath;
+      }
+    } catch {
+      // 项目配置读取失败不影响任务下发
+    }
   }
 
-  return { workspaceDir, privateMemoryPath, sharedMemoryPath, projectGroupSessionKey };
+  return {
+    workspaceDir,
+    privateMemoryPath,
+    sharedMemoryPath,
+    projectGroupSessionKey,
+    codeDir,
+    projectWorkspacePath,
+  };
 }
 
 /**
@@ -907,7 +956,11 @@ export async function scheduleNextTaskForAgent(
       nextTask.description ? `Description: ${nextTask.description}` : null,
       ``,
       `Working Context:`,
-      `- Working Directory: ${ctx.workspaceDir}`,
+      `- Working Directory (agent personal space, configs): ${ctx.workspaceDir}`,
+      ctx.projectWorkspacePath
+        ? `- Project Workspace (项目空间, docs/decisions/memory): ${ctx.projectWorkspacePath}`
+        : null,
+      ctx.codeDir ? `- Business Code Directory (业务空间, 写代码在这里): ${ctx.codeDir}` : null,
       `- Your Personal Memory (only YOU may write this): ${ctx.privateMemoryPath}`,
       ctx.sharedMemoryPath
         ? `- Project Shared Memory (all team members read/write): ${ctx.sharedMemoryPath}`
@@ -915,6 +968,15 @@ export async function scheduleNextTaskForAgent(
       ctx.projectGroupSessionKey
         ? `- Project Group: sessionKey=${ctx.projectGroupSessionKey}`
         : null,
+      ``,
+      `❗️ CRITICAL - Space Separation Rules:`,
+      ctx.codeDir
+        ? `  • Business Code (业务空间): ALL source code, business logic, application files MUST be written to: ${ctx.codeDir}`
+        : `  • No codeDir configured. Use your working directory: ${ctx.workspaceDir}`,
+      ctx.projectWorkspacePath
+        ? `  • Project Docs (项目空间): docs, decisions, SHARED_MEMORY.md go to: ${ctx.projectWorkspacePath}`
+        : null,
+      `  • NEVER write business code to the project workspace, and NEVER write project docs to the code directory`,
       ``,
       `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
       ``,
@@ -3850,7 +3912,13 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       p?.context ? `\nContext: ${JSON.stringify(p.context, null, 2)}` : null,
       ``,
       `Working Context:`,
-      `- Working Directory (code lives here): ${taskCtx.workspaceDir}`,
+      `- Working Directory (agent personal space, configs): ${taskCtx.workspaceDir}`,
+      taskCtx.projectWorkspacePath
+        ? `- Project Workspace (项目空间, docs/decisions/memory): ${taskCtx.projectWorkspacePath}`
+        : null,
+      taskCtx.codeDir
+        ? `- Business Code Directory (业务空间, 写代码在这里): ${taskCtx.codeDir}`
+        : null,
       `- Your Personal Memory (only YOU may write this): ${taskCtx.privateMemoryPath}`,
       taskCtx.sharedMemoryPath
         ? `- Project Shared Memory (all team members read/write): ${taskCtx.sharedMemoryPath}`
@@ -3858,6 +3926,15 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       taskCtx.projectGroupSessionKey
         ? `- Project Group Channel (for team communication): sessionKey=${taskCtx.projectGroupSessionKey}`
         : null,
+      ``,
+      `❗️ CRITICAL - Space Separation Rules:`,
+      taskCtx.codeDir
+        ? `  • Business Code (业务空间): ALL source code, business logic, application files MUST be written to: ${taskCtx.codeDir}`
+        : `  • No codeDir configured. Use your working directory: ${taskCtx.workspaceDir}`,
+      taskCtx.projectWorkspacePath
+        ? `  • Project Docs (项目空间): docs, decisions, SHARED_MEMORY.md go to: ${taskCtx.projectWorkspacePath}`
+        : null,
+      `  • NEVER write business code to the project workspace directory, and NEVER write project docs to the code directory`,
       ``,
       `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
       ``,
@@ -4455,11 +4532,60 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
               reason: hallucinationReason,
             };
           } else if (effectiveFinalStatus === "blocked") {
+            // 读取最近 worklog（证据链）：注入快照让主控看到 agent 实际做了什么
+            // 防止主控看完摘要就「汇报已解决」而不真正处理
+            let recentWorklogs: Array<{
+              action: string;
+              details: string;
+              result: string;
+              createdAt: number;
+            }> = [];
+            try {
+              const allWorklogs = await taskStorage.getTaskWorklogs(taskId);
+              // 取最近 5 条有实际工作内容的 worklog（排除系统自动写入的 started 条目）
+              recentWorklogs = allWorklogs
+                .filter((w) => w.action !== "started" && w.action !== "auto_started")
+                .slice(-5)
+                .map((w) => ({
+                  action: w.action,
+                  details: w.details,
+                  result: w.result ?? "",
+                  createdAt: w.createdAt,
+                }));
+            } catch {
+              // 静默降级：读取失败不影响快照发送
+            }
+            // 将阻塞原因写入 metadata.blockReason，供全局仪表盘告警区使用
+            // 同时记录 snapshotSentAt（快照派发时间戳），用于 Validation Gate 后置验证：
+            // 若主控收到快照后一定时间内未调用 triage 处理，下次唤醒时将升级为强制处理项
+            // 读取当前已有的 snapshotSentAt，防止连续多次上报重覆时间戳
+            const priorSnapshotSentAt =
+              typeof task?.metadata?.snapshotSentAt === "number"
+                ? task.metadata.snapshotSentAt
+                : undefined;
+            if (task) {
+              try {
+                await taskStorage.updateTask(taskId, {
+                  metadata: {
+                    ...task.metadata,
+                    ...(p?.errorMessage ? { blockReason: p.errorMessage } : {}),
+                    blockedAt: Date.now(),
+                    // 只在首次上报时设置 — 若已有旧快照时间戳则保留原值，保留最早的派发时间用于升级计算
+                    snapshotSentAt: priorSnapshotSentAt ?? Date.now(), // Validation Gate: 快照已派发给主控的时间
+                  },
+                });
+              } catch {
+                /* best-effort */
+              }
+            }
             wakeReason = {
               type: "task_blocked",
               taskId,
               reporterId,
               errorMsg: p?.errorMessage ?? "",
+              taskTitle: task?.title,
+              recentWorklogs,
+              priorSnapshotSentAt, // Validation Gate: 将旧快照时间戳传入快照，让主控看到验证状态
             };
           } else {
             wakeReason = { type: "task_done", taskId, reporterId, summary: result };
@@ -5107,7 +5233,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    *
    * 设计背景（参考 Praetorian Platform Triage Phase 最佳实践）：
    * 主控每次只能用 agent.task.manage 处理 1 个任务，21 个阻塞任务需要 21 次调用，
-   * 每次调用消耗大量上下文，主控很快就因上下文耗尽而"忘记"前面的决策。
+   * 每次调用消耗大量上下文，主控很快就因上下文耗尽而“忘记”前面的决策。
    *
    * 此工具允许主控一次性传入多个操作指令，程序批量执行，大幅降低上下文消耗。
    *
@@ -5117,6 +5243,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
    * - mark-dependency:  标记为依赖阻塞（设置 blockedBy），当依赖完成时程序自动解除
    * - reassign:         重新分配给另一个 agent
    * - add-note:         仅添加阻塞说明注释（不改变状态，记录阻塞原因供后续参考）
+   *
+   * 借鉴 LangGraph Supervisor Pattern 结构化输出最佳实践：
+   * 每个操作必须包含 resolutionType 枚举字段，识别主控的实际决策类型，
+   * 而非仅用自由文本描述（局限了可观测性）。
    */
   "agent.task.triage": async ({ params, respond }) => {
     const p = params as {
@@ -5124,6 +5254,28 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
         taskId: string;
         action: "reset" | "cancel" | "mark-dependency" | "reassign" | "add-note";
         reason?: string;
+        /**
+         * 结构化决策类型 — 借鉴 LangGraph 结构化输出最佳实践
+         * 主控必须声明处理类型，而非仅用自由文本 (reason)。这一字段将被写入 worklog
+         * 供后续分析主控决策质量。
+         *
+         * 可选值：
+         *   external_unready  — 外部依赖未就绪 (API Key/认证/环境/权限)
+         *   dep_incomplete    — 前置任务未完成
+         *   unclear_scope     — 任务描述不清/范围过大
+         *   capability_gap    — 当前 agent 技术能力不足
+         *   hallucination     — agent 需求为幻觉 (worklog不支撑阻塞声明)
+         *   requirement_change — 需求已变更/任务已无必要
+         *   other             — 其他原因（需在 reason 中详述）
+         */
+        resolutionType?:
+          | "external_unready"
+          | "dep_incomplete"
+          | "unclear_scope"
+          | "capability_gap"
+          | "hallucination"
+          | "requirement_change"
+          | "other";
         blockedByTaskIds?: string[];
         newAssigneeId?: string;
         operatorId?: string;
@@ -5156,6 +5308,8 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
       const action2 = (op.action ?? "") as string;
       const reason2 = (op.reason ?? "").trim();
       const operatorId2 = (op.operatorId ?? "system").trim();
+      // 结构化决策类型 — 借鉴 LangGraph 结构化输出，写入 worklog 中供后续分析主控决策质量
+      const resolutionType = (op.resolutionType ?? "other") as string;
       // 为了兼容后续代码中使用的原变量名，用别名引用
       const taskId = taskId2,
         action = action2,
@@ -5176,9 +5330,15 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
 
         if (action === "reset") {
           // 重置回 todo，清除阻塞标记
+          // Validation Gate 闭环：清除 snapshotSentAt，表示主控已实际处理了该阻塞任务
           await taskStorage.updateTask(taskId, {
             status: "todo",
             blockedBy: [],
+            metadata: {
+              ...task.metadata,
+              snapshotSentAt: undefined, // 清除：主控已处理，停止 Validation Gate 升级
+              blockReason: undefined, // 任务已解除，清理阻塞原因
+            },
             timeTracking: { ...task.timeTracking, startedAt: undefined, lastActivityAt: now },
           });
           await taskStorage.addWorklog({
@@ -5186,7 +5346,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             taskId,
             agentId: operatorId,
             action: "reset",
-            details: `[Triage] Reset to todo. ${reason || "Blocker resolved or will be bypassed."}`,
+            details: `[Triage][${resolutionType}] Reset to todo. ${reason || "Blocker resolved or will be bypassed."}`,
             result: "partial",
             createdAt: now,
           });
@@ -5217,13 +5377,17 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             status: "cancelled",
             cancelledAt: now,
             cancelReason: reason || "Cancelled during blocked task triage",
+            metadata: {
+              ...task.metadata,
+              snapshotSentAt: undefined, // Validation Gate 闭环: 主控已决策取消
+            },
           });
           await taskStorage.addWorklog({
             id: `wl_${now}_${Math.random().toString(36).slice(2, 9)}`,
             taskId,
             agentId: operatorId,
             action: "cancelled",
-            details: `[Triage] Cancelled. ${reason || "Task deemed unresolvable during triage."}`,
+            details: `[Triage][${resolutionType}] Cancelled. ${reason || "Task deemed unresolvable during triage."}`,
             result: "failure",
             createdAt: now,
           });
@@ -5276,7 +5440,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             taskId,
             agentId: operatorId,
             action: "blocked",
-            details: `[Triage] Dependency-blocked. Waiting for: ${blockedByTaskIds.join(", ")}. ${reason}`,
+            details: `[Triage][${resolutionType}] Dependency-blocked. Waiting for: ${blockedByTaskIds.join(", ")}. ${reason}`,
             result: "partial",
             createdAt: now,
           });
@@ -5317,6 +5481,10 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
                 assignedBy: operatorId,
               },
             ],
+            metadata: {
+              ...task.metadata,
+              snapshotSentAt: undefined, // Validation Gate 闭环: 主控已决策重指派
+            },
             timeTracking: { ...task.timeTracking, startedAt: undefined, lastActivityAt: now },
           });
           await taskStorage.addWorklog({
@@ -5324,7 +5492,7 @@ export const agentsManagementHandlers: GatewayRequestHandlers = {
             taskId,
             agentId: operatorId,
             action: "reassigned",
-            details: `[Triage] Reassigned from ${oldAssigneeId || "(unassigned)"} to ${normalizedNew}. ${reason}`,
+            details: `[Triage][${resolutionType}] Reassigned from ${oldAssigneeId || "(unassigned)"} to ${normalizedNew}. ${reason}`,
             result: "partial",
             createdAt: now,
           });

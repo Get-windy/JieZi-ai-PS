@@ -57,7 +57,9 @@ function buildMemorySection(params: {
   const hasList = params.availableTools.has("memory_list");
   const hasProjectMemorySave = params.availableTools.has("project_memory_save");
   // 工具注册名为 project_memory_get（见 memory-core/index.ts），兼容两种名称
-  const hasProjectMemoryRead = params.availableTools.has("project_memory_get") || params.availableTools.has("project_memory_read");
+  const hasProjectMemoryRead =
+    params.availableTools.has("project_memory_get") ||
+    params.availableTools.has("project_memory_read");
 
   if (!hasSearch && !hasGet && !hasSave) {
     return [];
@@ -423,12 +425,22 @@ function buildObjectiveAlignmentSection(params: {
  *   2. 可追源性   — 产出物路径必须登记到 SHARED_MEMORY.md，供后续 Agent 读取
  *   3. 完成信号   — 完成任务前必须在 task_progress_note_append 中记录产出物证据
  */
-function buildRoleDeliverableSection(params: { isMinimal: boolean; agentRole?: string }) {
+function buildRoleDeliverableSection(params: {
+  isMinimal: boolean;
+  agentRole?: string;
+  projectWorkspacePath?: string;
+  codeDir?: string;
+}) {
   if (params.isMinimal || !params.agentRole) {
     return [];
   }
 
   const role = params.agentRole.toLowerCase();
+  // 展示实际路径，没有配置时显示占位提示
+  const projectWorkspace =
+    params.projectWorkspacePath ||
+    "{projectWorkspace: 请通过 project_list 工具查询项目空间实际路径}";
+  const codeDir = params.codeDir || "{codeDir: 请通过 project_list 工具查询业务空间实际路径}";
 
   if (role === "doc-writer") {
     return [
@@ -436,11 +448,11 @@ function buildRoleDeliverableSection(params: { isMinimal: boolean; agentRole?: s
       "你是文档专家，每次完成文档任务必须遵守以下交付规范：",
       "",
       "**产出物路径约定**",
-      "  - 技术文档 / API 规范  → {projectWorkspace}/docs/",
-      "  - 架构决策记录 (ADR)  → {projectWorkspace}/decisions/ADR-{序号}-{主题}.md",
-      "  - 需求文档 / 用户故事  → {projectWorkspace}/requirements/",
-      "  - README / 入门指南   → {projectWorkspace}/README.md 或 {codeDir}/README.md",
-      "  - 会议纪要            → {projectWorkspace}/docs/meetings/YYYY-MM-DD-{主题}.md",
+      `  - 技术文档 / API 规范  → ${projectWorkspace}/docs/`,
+      `  - 架构决策记录 (ADR)  → ${projectWorkspace}/decisions/ADR-{序号}-{主题}.md`,
+      `  - 需求文档 / 用户故事  → ${projectWorkspace}/requirements/`,
+      `  - README / 入门指南   → ${projectWorkspace}/README.md 或 ${codeDir}/README.md`,
+      `  - 会议纪要            → ${projectWorkspace}/docs/meetings/YYYY-MM-DD-{主题}.md`,
       "",
       "**完成任务前必须执行（缺一不可）**",
       "  1. 将文档写入上述对应路径（不得只回复内容而不写文件）",
@@ -462,10 +474,10 @@ function buildRoleDeliverableSection(params: { isMinimal: boolean; agentRole?: s
       "你是质量保障专家，每次完成测试任务必须遵守以下交付规范：",
       "",
       "**产出物路径约定**",
-      "  - 测试脚本 / 用例       → {projectWorkspace}/tests/ 或 {codeDir}/tests/",
-      "  - 测试报告（每次执行后） → {projectWorkspace}/qa/test-reports/YYYY-MM-DD-{场景}.md",
-      "  - 性能测试报告          → {projectWorkspace}/qa/perf-reports/",
-      "  - Bug 列表              → {projectWorkspace}/qa/bugs/YYYY-MM-DD-bugs.md",
+      `  - 测试脚本 / 用例       → ${projectWorkspace}/tests/ 或 ${codeDir}/tests/`,
+      `  - 测试报告（每次执行后） → ${projectWorkspace}/qa/test-reports/YYYY-MM-DD-{场景}.md`,
+      `  - 性能测试报告          → ${projectWorkspace}/qa/perf-reports/`,
+      `  - Bug 列表              → ${projectWorkspace}/qa/bugs/YYYY-MM-DD-bugs.md`,
       "",
       "**完成任务前必须执行（缺一不可）**",
       "  1. 将测试报告写入 qa/test-reports/（包含：通过/失败数、失败详情、覆盖率）",
@@ -590,12 +602,100 @@ export function buildAgentSystemPrompt(params: {
    * 支持的角色："doc-writer" | "qa-lead" | "coordinator" | "team-member" | "devops-engineer" | "product-analyst"
    */
   agentRole?: string;
+  /**
+   * 项目空间路径（存放 docs/decisions/记忆 的目录）
+   * 若提供，将替换角色交付规范中的 {projectWorkspace} 占位符为实际路径
+   */
+  projectWorkspacePath?: string;
+  /**
+   * 业务空间（代码目录）路径
+   * 若提供，将替换角色交付规范中的 {codeDir} 占位符为实际路径
+   */
+  codeDir?: string;
+  /**
+   * 项目路径自动推断回调（兑底机制）
+   *
+   * 当 projectWorkspacePath 和 codeDir 均未传入时，系统会调用此回调尝试自动并入实际路径。
+   * 调用方可以在此回调中查询 groupManager + buildProjectContext 实现同步兑底。
+   *
+   * @example
+   * ```ts
+   * resolveProjectPaths: () => {
+   *   const agentId = runtimeInfo?.agentId;
+   *   if (!agentId) return {};
+   *   const groups = groupManager.getAllGroups();
+   *   const memberGroups = groups.filter(g => g.members.some(m => m.agentId === agentId));
+   *   if (memberGroups.length !== 1) return {}; // 多项目不自动推断
+   *   const ctx = buildProjectContext(memberGroups[0].projectId!);
+   *   return { projectWorkspacePath: ctx.workspacePath, codeDir: ctx.codeDir };
+   * }
+   * ```
+   */
+  resolveProjectPaths?: () => { projectWorkspacePath?: string; codeDir?: string };
 }) {
   const acpEnabled = params.acpEnabled !== false;
   // 从 runtimeInfo.agentId 自动推导角色（当调用方未传入 agentRole 时）
   // agentId 即角色 ID：doc-writer、qa-lead、team-member 等
   // 这样 attempt.ts（upstream）无需修改即可自动获得角色专属提示
   const resolvedAgentRole = params.agentRole ?? params.runtimeInfo?.agentId ?? undefined;
+
+  // 兜底路径自动推断：当调用方未传入 projectWorkspacePath/codeDir 时，
+  // 尝试通过 resolveProjectPaths 回调自动并入实际路径（同步，不影响其他逻辑）
+  let resolvedProjectWorkspacePath = params.projectWorkspacePath;
+  let resolvedCodeDir = params.codeDir;
+  if ((!resolvedProjectWorkspacePath || !resolvedCodeDir) && params.resolveProjectPaths) {
+    try {
+      const autoResolved = params.resolveProjectPaths();
+      if (!resolvedProjectWorkspacePath && autoResolved.projectWorkspacePath) {
+        resolvedProjectWorkspacePath = autoResolved.projectWorkspacePath;
+      }
+      if (!resolvedCodeDir && autoResolved.codeDir) {
+        resolvedCodeDir = autoResolved.codeDir;
+      }
+    } catch {
+      // 外部推断失败不影响主要逻辑，继续使用 fallback 提示文字
+    }
+  }
+  // 内置最终兜底：若经过回调后仍缺路径，且 agentId 已知，
+  // 则直接在函数内部通过 groupManager + buildProjectContext 同步推断一次
+  // （延迟 require 避免模块初始化时循环依赖）
+  if ((!resolvedProjectWorkspacePath || !resolvedCodeDir) && params.runtimeInfo?.agentId) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { groupManager } = require("../sessions/group-manager.js") as {
+        groupManager: {
+          getAllGroups(): Array<{
+            id: string;
+            projectId?: string;
+            members: Array<{ agentId: string }>;
+          }>;
+        };
+      };
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const projectContextModule = require("../utils/project-context.js") as {
+        buildProjectContext: (projectId: string) => { workspacePath: string; codeDir: string };
+      };
+      const buildProjectContextFn = (projectId: string) =>
+        projectContextModule.buildProjectContext(projectId);
+      const agentIdNorm = params.runtimeInfo.agentId.toLowerCase();
+      const allGroups = groupManager.getAllGroups();
+      const memberGroups = allGroups.filter(
+        (g) => g.projectId && g.members.some((m) => m.agentId.toLowerCase() === agentIdNorm),
+      );
+      // 仅属于唯一项目时才自动填充，多项目时无法确定应用哪个，跳过
+      if (memberGroups.length === 1 && memberGroups[0].projectId) {
+        const ctx = buildProjectContextFn(memberGroups[0].projectId);
+        if (!resolvedProjectWorkspacePath && ctx.workspacePath) {
+          resolvedProjectWorkspacePath = ctx.workspacePath;
+        }
+        if (!resolvedCodeDir && ctx.codeDir) {
+          resolvedCodeDir = ctx.codeDir;
+        }
+      }
+    } catch {
+      // 内置兜底失败不影响主要逻辑
+    }
+  }
   const sandboxedRuntime = params.sandboxInfo?.enabled === true;
   const acpSpawnRuntimeEnabled = acpEnabled && !sandboxedRuntime;
   const coreToolSummaries: Record<string, string> = {
@@ -732,7 +832,7 @@ export function buildAgentSystemPrompt(params: {
   const runtimeInfo = params.runtimeInfo;
   const runtimeChannel = runtimeInfo?.channel?.trim().toLowerCase();
   const runtimeCapabilities = (runtimeInfo?.capabilities ?? [])
-    .map((cap) => String(cap).trim())
+    .map((cap) => cap.trim())
     .filter(Boolean);
   const runtimeCapabilitiesLower = new Set(runtimeCapabilities.map((cap) => cap.toLowerCase()));
   const inlineButtonsEnabled = runtimeCapabilitiesLower.has("inlinebuttons");
@@ -796,6 +896,8 @@ export function buildAgentSystemPrompt(params: {
   const roleDeliverableSection = buildRoleDeliverableSection({
     isMinimal,
     agentRole: resolvedAgentRole,
+    projectWorkspacePath: resolvedProjectWorkspacePath,
+    codeDir: resolvedCodeDir,
   });
   // 项目目标对齐 section
   const objectiveAlignmentSection = buildObjectiveAlignmentSection({
@@ -905,6 +1007,15 @@ export function buildAgentSystemPrompt(params: {
     "## Workspace",
     `Your working directory is: ${displayWorkspaceDir}`,
     workspaceGuidance,
+    ...(resolvedProjectWorkspacePath
+      ? [`Project Workspace (项目空间 — docs/decisions/memory): ${resolvedProjectWorkspacePath}`]
+      : []),
+    ...(resolvedCodeDir
+      ? [
+          `Business Code Directory (业务空间 — write ALL source code here): ${resolvedCodeDir}`,
+          `⚠️ CRITICAL: Write code/business files to Business Code Directory, NOT to Project Workspace or working directory.`,
+        ]
+      : []),
     ...workspaceNotes,
     "",
     ...docsSection,

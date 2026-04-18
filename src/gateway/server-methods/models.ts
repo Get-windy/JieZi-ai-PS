@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import AjvPkg from "ajv";
 import { resolveOpenClawAgentDir } from "../../../upstream/src/agents/agent-paths.js";
 import { resetModelCatalogCacheForTest } from "../../../upstream/src/agents/model-catalog.js";
 import { resolveDefaultModelForAgent } from "../../../upstream/src/agents/model-selection.js";
@@ -13,9 +14,10 @@ import {
   errorShape,
   formatValidationErrors,
 } from "../../../upstream/src/gateway/protocol/index.js";
+import { buildAuthHealthSummary, DEFAULT_OAUTH_WARN_MS } from "../../agents/auth-health.js";
+import { ensureAuthProfileStore, saveAuthProfileStore } from "../../agents/auth-profiles.js";
 // 使用本地扩展的 schema 验证（允许 probe 和 timeoutMs 参数）
 import { ModelsListParamsSchema } from "../protocol/schema/agents-models-skills.js";
-import AjvPkg from "ajv";
 const ajv = new (AjvPkg as unknown as new (opts?: object) => import("ajv").default)({
   allErrors: true,
   strict: false,
@@ -23,9 +25,13 @@ const ajv = new (AjvPkg as unknown as new (opts?: object) => import("ajv").defau
 });
 const validateModelsListParams = ajv.compile(ModelsListParamsSchema);
 import type { GatewayRequestHandlers } from "../../../upstream/src/gateway/server-methods/types.js";
-import { resolveDefaultAgentId, resolveAgentDir, listAgentEntries } from "../../agents/agent-scope.js";
-import { normalizeAgentId } from "../../routing/session-key.js";
+import {
+  resolveDefaultAgentId,
+  resolveAgentDir,
+  listAgentEntries,
+} from "../../agents/agent-scope.js";
 import { forceRefreshBenchmarkData } from "../../agents/arena-benchmarks.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
 
 // 模型管理配置文件路径 - UI 管理系统的主存储
 const MODEL_MANAGEMENT_FILE = path.join(STATE_DIR, "model-management.json");
@@ -672,6 +678,9 @@ export function computeQuotaResetTime(cycle: AuthQuotaCycle, now: number = Date.
       const cyclesPassed = Math.floor(elapsed / cycleMs);
       return start + (cyclesPassed + 1) * cycleMs;
     }
+    default:
+      // 未知周期类型，返回 24 小时后
+      return now + 24 * 60 * 60 * 1000;
   }
 }
 
@@ -3738,7 +3747,6 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       if (auth.provider === "qwen-portal" && auth.apiKey.startsWith("qwen-oauth:")) {
         try {
-          const { ensureAuthProfileStore } = await import("../../agents/auth-profiles.js");
           const store = ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
           const profileId = `${auth.provider}:default`;
           const profile = store.profiles[profileId];
@@ -3947,10 +3955,6 @@ export const modelsHandlers: GatewayRequestHandlers = {
       }
 
       // 检查OAuth认证状态
-      const { ensureAuthProfileStore } = await import("../../agents/auth-profiles.js");
-      const { buildAuthHealthSummary, DEFAULT_OAUTH_WARN_MS } =
-        await import("../../agents/auth-health.js");
-
       const store = ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
       const health = buildAuthHealthSummary({
         store,
@@ -4037,8 +4041,6 @@ export const modelsHandlers: GatewayRequestHandlers = {
       }
 
       // 检查是否为OAuth认证
-      const { ensureAuthProfileStore, saveAuthProfileStore } =
-        await import("../../agents/auth-profiles.js");
       const store = ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
 
       // 查找OAuth profile
@@ -4421,8 +4423,6 @@ export const modelsHandlers: GatewayRequestHandlers = {
       // 更新OAuth凭据
       // 保存到 AuthProfileStore
       try {
-        const { ensureAuthProfileStore, saveAuthProfileStore } =
-          await import("../../agents/auth-profiles.js");
         const store = ensureAuthProfileStore(undefined, { allowKeychainPrompt: false });
 
         const profileId = `${auth.provider}:default`;
