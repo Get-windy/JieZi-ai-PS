@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { buildSubagentSystemPrompt } from "../../upstream/src/agents/subagent-announce.js";
 import { SILENT_REPLY_TOKEN } from "../../upstream/src/auto-reply/tokens.js";
 import { typedCases } from "../../upstream/src/test-utils/typed-cases.js";
-import { buildSubagentSystemPrompt } from "../../upstream/src/agents/subagent-announce.js";
 import { buildAgentSystemPrompt, buildRuntimeLine } from "./system-prompt.js";
 
 describe("buildAgentSystemPrompt", () => {
@@ -573,8 +573,9 @@ describe("buildAgentSystemPrompt", () => {
 
     expect(prompt).toContain("## 文档交付规范（doc-writer 专属）");
     expect(prompt).toContain("project_memory_save");
-    expect(prompt).toContain("{projectWorkspace}/docs/");
-    expect(prompt).toContain("{projectWorkspace}/decisions/ADR-");
+    // 未传入实际路径时，应显示 fallback 占位提示文字
+    expect(prompt).toContain("/docs/");
+    expect(prompt).toContain("/decisions/ADR-");
     expect(prompt).toContain("将文档写入上述对应路径");
     expect(prompt).toContain("task_complete");
   });
@@ -636,6 +637,42 @@ describe("buildAgentSystemPrompt", () => {
     });
 
     expect(prompt).not.toContain("文档交付规范");
+  });
+
+  it("resolveProjectPaths 兕底回调：当未传入路径时自动填充实际路径", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      agentRole: "doc-writer",
+      toolNames: ["project_memory_save", "task_complete"],
+      resolveProjectPaths: () => ({
+        projectWorkspacePath: "/workspace/my-project",
+        codeDir: "/code/my-project/src",
+      }),
+    });
+
+    // 应使用实际路径而非 fallback 占位提示
+    expect(prompt).toContain("/workspace/my-project/docs/");
+    expect(prompt).toContain("/workspace/my-project/decisions/ADR-");
+    // Workspace 节也应包含实际路径
+    expect(prompt).toContain("Project Workspace");
+    expect(prompt).toContain("/workspace/my-project");
+    expect(prompt).toContain("Business Code Directory");
+    expect(prompt).toContain("/code/my-project/src");
+  });
+
+  it("resolveProjectPaths 兕底回调：外部推断失败时不影响主流", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      agentRole: "doc-writer",
+      resolveProjectPaths: () => {
+        throw new Error("测试错误");
+      },
+    });
+
+    // 即使回调报错，也应返回有效的 prompt
+    expect(prompt).toContain("## 文档交付规范（doc-writer 专属）");
+    // fallback 占位提示应仍然存在
+    expect(prompt).toContain("/docs/");
   });
 });
 

@@ -1,6 +1,5 @@
 import { html, nothing } from "lit";
 import { parseAgentSessionKey } from "../../../upstream/src/routing/session-key.js";
-import { resolveAgentIdFromSessionKey } from "./session-key.ts";
 import { refreshChatAvatar } from "./app-chat.ts";
 import { startMonitorPolling, stopMonitorPolling } from "./app-polling.ts";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
@@ -183,6 +182,7 @@ import {
   changeFilterSource,
 } from "./controllers/skills.ts";
 import { loadSuperAdmins } from "./controllers/super-admin.ts";
+import { resolveAgentIdFromSessionKey } from "./session-key.ts";
 
 type LazyState<T> = { mod: T | null; promise: Promise<T> | null };
 let _pendingUpdate: (() => void) | undefined = undefined;
@@ -418,7 +418,9 @@ async function resetTeamTask(
  */
 async function submitEditTeamTask(state: AppViewState): Promise<void> {
   const form = state.teamMonitorEditDialogTask;
-  if (!form || !form.title.trim()) {return;}
+  if (!form || !form.title.trim()) {
+    return;
+  }
   state.teamMonitorEditSaving = true;
   state.teamMonitorEditError = null;
   try {
@@ -597,7 +599,12 @@ export function renderApp(state: AppViewState) {
   );
 
   return html`
-    <div class="shell ${isChat ? "shell--chat" : ""} ${chatFocus ? "shell--chat-focus" : ""} ${state.settings.navCollapsed ? "shell--nav-collapsed" : ""} ${state.onboarding ? "shell--onboarding" : ""}">
+    <div
+      class="shell ${isChat ? "shell--chat" : ""} ${chatFocus ? "shell--chat-focus" : ""} ${state
+        .settings.navCollapsed
+        ? "shell--nav-collapsed"
+        : ""} ${state.onboarding ? "shell--onboarding" : ""}"
+    >
       <header class="topbar">
         <div class="topbar-left">
           <button
@@ -636,7 +643,9 @@ export function renderApp(state: AppViewState) {
           const isGroupCollapsed = state.settings.navGroupsCollapsed[group.label] ?? false;
           const hasActiveTab = group.tabs.some((tab) => tab === state.tab);
           return html`
-            <div class="nav-group ${isGroupCollapsed && !hasActiveTab ? "nav-group--collapsed" : ""}">
+            <div
+              class="nav-group ${isGroupCollapsed && !hasActiveTab ? "nav-group--collapsed" : ""}"
+            >
               <button
                 class="nav-label"
                 @click=${() => {
@@ -652,9 +661,7 @@ export function renderApp(state: AppViewState) {
                 <span class="nav-label__text">${t(group.label)}</span>
                 <span class="nav-label__chevron">${isGroupCollapsed ? "+" : "−"}</span>
               </button>
-              <div class="nav-group__items">
-                ${group.tabs.map((tab) => renderTab(state, tab))}
-              </div>
+              <div class="nav-group__items">${group.tabs.map((tab) => renderTab(state, tab))}</div>
             </div>
           `;
         })}
@@ -662,7 +669,11 @@ export function renderApp(state: AppViewState) {
           const resourcesLabel = "nav.resources";
           const isResourcesCollapsed = state.settings.navGroupsCollapsed[resourcesLabel] ?? false;
           return html`
-            <div class="nav-group nav-group--links ${isResourcesCollapsed ? "nav-group--collapsed" : ""}">
+            <div
+              class="nav-group nav-group--links ${isResourcesCollapsed
+                ? "nav-group--collapsed"
+                : ""}"
+            >
               <button
                 class="nav-label"
                 @click=${() => {
@@ -697,8 +708,12 @@ export function renderApp(state: AppViewState) {
       <main class="content ${isChat ? "content--chat" : ""}">
         <section class="content-header">
           <div>
-            ${state.tab === "usage" ? nothing : html`<div class="page-title">${titleForTab(state.tab)}</div>`}
-            ${state.tab === "usage" ? nothing : html`<div class="page-sub">${subtitleForTab(state.tab)}</div>`}
+            ${state.tab === "usage"
+              ? nothing
+              : html`<div class="page-title">${titleForTab(state.tab)}</div>`}
+            ${state.tab === "usage"
+              ? nothing
+              : html`<div class="page-sub">${subtitleForTab(state.tab)}</div>`}
           </div>
           <div class="page-meta">
             ${state.lastError ? html`<div class="pill danger">${state.lastError}</div>` : nothing}
@@ -706,2102 +721,2107 @@ export function renderApp(state: AppViewState) {
           </div>
         </section>
 
-        ${
-          state.tab === "overview"
-            ? renderOverview({
-                connected: state.connected,
-                hello: state.hello,
-                settings: state.settings,
-                password: state.password,
-                lastError: state.lastError,
-                lastErrorCode: state.lastErrorCode,
-                presenceCount,
-                sessionsCount,
-                cronEnabled: state.cronStatus?.enabled ?? null,
-                cronNext,
-                lastChannelsRefresh: state.channelsLastSuccess,
-                workspacesDir: (state as unknown as { workspacesDir: string }).workspacesDir ?? "",
-                onSettingsChange: (next) => state.applySettings(next),
-                onPasswordChange: (next) => (state.password = next),
-                onSessionKeyChange: (next) => {
-                  state.sessionKey = next;
-                  state.chatMessage = "";
-                  state.resetToolStream();
-                  state.applySettings({
-                    ...state.settings,
-                    sessionKey: next,
-                    lastActiveSessionKey: next,
-                  });
-                  void state.loadAssistantIdentity();
-                },
-                onConnect: () => state.connect(),
-                onRefresh: () => state.loadOverview(),
-                onWorkspacesDirSave: async (newDir) => {
-                  await setDefaultWorkspace(state, newDir);
-                  (state as unknown as { workspacesDir: string }).workspacesDir = newDir;
-                },
-                onWorkspaceBackup: async (backupDir) => {
-                  const result = await state.client!.request(
-                    "workspace.backup",
-                    backupDir ? { backupDir } : {},
-                  );
-                  const r = result as { backupDir?: string; fileCount?: number };
-                  return { backupDir: r.backupDir ?? "", fileCount: r.fileCount ?? 0 };
-                },
-                onWorkspaceMigrateAll: async (newRoot) => {
-                  const result = await state.client!.request("workspace.migrate.all", { newRoot });
-                  const r = result as {
-                    oldRoot?: string;
-                    newRoot?: string;
-                    filesCopied?: number;
-                    agentsMigrated?: number;
-                  };
-                  (state as unknown as { workspacesDir: string }).workspacesDir =
-                    r.newRoot ?? newRoot;
-                  return {
-                    oldRoot: r.oldRoot ?? "",
-                    newRoot: r.newRoot ?? newRoot,
-                    filesCopied: r.filesCopied ?? 0,
-                    agentsMigrated: r.agentsMigrated ?? 0,
-                  };
-                },
-              })
-            : nothing
-        }
+        ${state.tab === "overview"
+          ? renderOverview({
+              connected: state.connected,
+              hello: state.hello,
+              settings: state.settings,
+              password: state.password,
+              lastError: state.lastError,
+              lastErrorCode: state.lastErrorCode,
+              presenceCount,
+              sessionsCount,
+              cronEnabled: state.cronStatus?.enabled ?? null,
+              cronNext,
+              lastChannelsRefresh: state.channelsLastSuccess,
+              workspacesDir: (state as unknown as { workspacesDir: string }).workspacesDir ?? "",
+              onSettingsChange: (next) => state.applySettings(next),
+              onPasswordChange: (next) => (state.password = next),
+              onSessionKeyChange: (next) => {
+                state.sessionKey = next;
+                state.chatMessage = "";
+                state.resetToolStream();
+                state.applySettings({
+                  ...state.settings,
+                  sessionKey: next,
+                  lastActiveSessionKey: next,
+                });
+                void state.loadAssistantIdentity();
+              },
+              onConnect: () => state.connect(),
+              onRefresh: () => state.loadOverview(),
+              onWorkspacesDirSave: async (newDir) => {
+                await setDefaultWorkspace(state, newDir);
+                (state as unknown as { workspacesDir: string }).workspacesDir = newDir;
+              },
+              onWorkspaceBackup: async (backupDir) => {
+                const result = await state.client!.request(
+                  "workspace.backup",
+                  backupDir ? { backupDir } : {},
+                );
+                const r = result as { backupDir?: string; fileCount?: number };
+                return { backupDir: r.backupDir ?? "", fileCount: r.fileCount ?? 0 };
+              },
+              onWorkspaceMigrateAll: async (newRoot) => {
+                const result = await state.client!.request("workspace.migrate.all", { newRoot });
+                const r = result as {
+                  oldRoot?: string;
+                  newRoot?: string;
+                  filesCopied?: number;
+                  agentsMigrated?: number;
+                };
+                (state as unknown as { workspacesDir: string }).workspacesDir =
+                  r.newRoot ?? newRoot;
+                return {
+                  oldRoot: r.oldRoot ?? "",
+                  newRoot: r.newRoot ?? newRoot,
+                  filesCopied: r.filesCopied ?? 0,
+                  agentsMigrated: r.agentsMigrated ?? 0,
+                };
+              },
+            })
+          : nothing}
+        ${state.tab === "channels"
+          ? renderChannels({
+              connected: state.connected,
+              loading: state.channelsLoading,
+              snapshot: state.channelsSnapshot,
+              lastError: state.channelsError,
+              lastSuccessAt: state.channelsLastSuccess,
+              whatsappMessage: state.whatsappLoginMessage,
+              whatsappQrDataUrl: state.whatsappLoginQrDataUrl,
+              whatsappConnected: state.whatsappLoginConnected,
+              whatsappBusy: state.whatsappBusy,
+              configSchema: state.configSchema,
+              configSchemaLoading: state.configSchemaLoading,
+              configForm: state.configForm,
+              configUiHints: state.configUiHints,
+              configSaving: state.configSaving,
+              configFormDirty: state.configFormDirty,
+              nostrProfileFormState: state.nostrProfileFormState,
+              nostrProfileAccountId: state.nostrProfileAccountId,
+              // 账号管理状态
+              editingChannelAccount: state.editingChannelAccount,
+              viewingChannelAccount: state.viewingChannelAccount,
+              creatingChannelAccount: state.creatingChannelAccount,
+              deletingChannelAccount: state.deletingChannelAccount,
+              managingChannelId: state.managingChannelId,
+              showAllChannelsModal: state.showAllChannelsModal,
+              debuggingChannel: state.debuggingChannel,
+              editingChannelGlobalConfig: state.editingChannelGlobalConfig,
+              showPairingModal: state.showPairingModal,
+              onRefresh: (probe) => loadChannels(state, probe),
+              onWhatsAppStart: (force) => state.handleWhatsAppStart(force),
+              onWhatsAppWait: () => state.handleWhatsAppWait(),
+              onWhatsAppLogout: () => state.handleWhatsAppLogout(),
+              onConfigPatch: (path, value) => updateConfigFormValue(state, path, value),
+              onConfigSave: () => state.handleChannelConfigSave(),
+              onConfigReload: () => state.handleChannelConfigReload(),
+              onNostrProfileEdit: (accountId, profile) =>
+                state.handleNostrProfileEdit(accountId, profile),
+              onNostrProfileCancel: () => state.handleNostrProfileCancel(),
+              onNostrProfileFieldChange: (field, value) =>
+                state.handleNostrProfileFieldChange(field, value),
+              onNostrProfileSave: () => state.handleNostrProfileSave(),
+              onNostrProfileImport: () => state.handleNostrProfileImport(),
+              onNostrProfileToggleAdvanced: () => state.handleNostrProfileToggleAdvanced(),
+              // 账号管理回调
+              onManageAccounts: (channelId) => {
+                state.managingChannelId = channelId;
+                // 关闭其他弹窗
+                state.editingChannelAccount = null;
+                state.viewingChannelAccount = null;
+              },
+              onAddAccount: (channelId) => {
+                (state as unknown as OpenClawApp).handleAddAccount(channelId);
+              },
+              onViewAccount: (channelId, accountId) => {
+                (state as unknown as OpenClawApp).handleViewAccount(channelId, accountId);
+              },
+              onEditAccount: (channelId, accountId) => {
+                (state as unknown as OpenClawApp).handleEditAccount(channelId, accountId);
+              },
+              onDeleteAccount: (channelId, accountId) => {
+                void (state as unknown as OpenClawApp).handleDeleteAccount(channelId, accountId);
+              },
+              onSaveAccount: () => {
+                void (state as unknown as OpenClawApp).handleSaveAccount();
+              },
+              onCancelAccountEdit: () => {
+                (state as unknown as OpenClawApp).handleCancelAccountEdit();
+              },
+              onCancelAccountView: () => {
+                (state as unknown as OpenClawApp).handleCancelAccountView();
+              },
+              onAccountFormChange: (field, value) => {
+                (state as unknown as OpenClawApp).handleAccountFormChange(field, value);
+              },
+              onToggleAllChannelsModal: () => {
+                state.showAllChannelsModal = !state.showAllChannelsModal;
+              },
+              onToggleChannelVisibility: (channelId) => {
+                // TODO: 实现显示/隐藏逻辑
+                console.log("Toggle channel visibility:", channelId);
+              },
+              onDebugChannel: (channelId, accountId) => {
+                state.debuggingChannel = { channelId, accountId };
+              },
+              onCloseDebug: () => {
+                state.debuggingChannel = null;
+              },
+              onEditChannelGlobalConfig: (channelId) => {
+                state.editingChannelGlobalConfig = channelId;
+              },
+              onCancelChannelGlobalConfig: () => {
+                state.editingChannelGlobalConfig = null;
+              },
+              onSaveChannelGlobalConfig: () => {
+                // TODO: 保存全局配置
+                state.editingChannelGlobalConfig = null;
+              },
+              // 配对管理回调
+              onShowPairingModal: () => {
+                state.showPairingModal = true;
+              },
+              onClosePairingModal: () => {
+                state.showPairingModal = false;
+              },
+              onApproveAllPairing: async () => {
+                const pairingRequests = state.channelsSnapshot?.channelPairingRequests ?? {};
+                const allRequests: Array<{ channelId: string; code: string }> = [];
 
-        ${
-          state.tab === "channels"
-            ? renderChannels({
-                connected: state.connected,
-                loading: state.channelsLoading,
-                snapshot: state.channelsSnapshot,
-                lastError: state.channelsError,
-                lastSuccessAt: state.channelsLastSuccess,
-                whatsappMessage: state.whatsappLoginMessage,
-                whatsappQrDataUrl: state.whatsappLoginQrDataUrl,
-                whatsappConnected: state.whatsappLoginConnected,
-                whatsappBusy: state.whatsappBusy,
-                configSchema: state.configSchema,
-                configSchemaLoading: state.configSchemaLoading,
-                configForm: state.configForm,
-                configUiHints: state.configUiHints,
-                configSaving: state.configSaving,
-                configFormDirty: state.configFormDirty,
-                nostrProfileFormState: state.nostrProfileFormState,
-                nostrProfileAccountId: state.nostrProfileAccountId,
-                // 账号管理状态
-                editingChannelAccount: state.editingChannelAccount,
-                viewingChannelAccount: state.viewingChannelAccount,
-                creatingChannelAccount: state.creatingChannelAccount,
-                deletingChannelAccount: state.deletingChannelAccount,
-                managingChannelId: state.managingChannelId,
-                showAllChannelsModal: state.showAllChannelsModal,
-                debuggingChannel: state.debuggingChannel,
-                editingChannelGlobalConfig: state.editingChannelGlobalConfig,
-                showPairingModal: state.showPairingModal,
-                onRefresh: (probe) => loadChannels(state, probe),
-                onWhatsAppStart: (force) => state.handleWhatsAppStart(force),
-                onWhatsAppWait: () => state.handleWhatsAppWait(),
-                onWhatsAppLogout: () => state.handleWhatsAppLogout(),
-                onConfigPatch: (path, value) => updateConfigFormValue(state, path, value),
-                onConfigSave: () => state.handleChannelConfigSave(),
-                onConfigReload: () => state.handleChannelConfigReload(),
-                onNostrProfileEdit: (accountId, profile) =>
-                  state.handleNostrProfileEdit(accountId, profile),
-                onNostrProfileCancel: () => state.handleNostrProfileCancel(),
-                onNostrProfileFieldChange: (field, value) =>
-                  state.handleNostrProfileFieldChange(field, value),
-                onNostrProfileSave: () => state.handleNostrProfileSave(),
-                onNostrProfileImport: () => state.handleNostrProfileImport(),
-                onNostrProfileToggleAdvanced: () => state.handleNostrProfileToggleAdvanced(),
-                // 账号管理回调
-                onManageAccounts: (channelId) => {
-                  state.managingChannelId = channelId;
-                  // 关闭其他弹窗
-                  state.editingChannelAccount = null;
-                  state.viewingChannelAccount = null;
-                },
-                onAddAccount: (channelId) => {
-                  (state as unknown as OpenClawApp).handleAddAccount(channelId);
-                },
-                onViewAccount: (channelId, accountId) => {
-                  (state as unknown as OpenClawApp).handleViewAccount(channelId, accountId);
-                },
-                onEditAccount: (channelId, accountId) => {
-                  (state as unknown as OpenClawApp).handleEditAccount(channelId, accountId);
-                },
-                onDeleteAccount: (channelId, accountId) => {
-                  void (state as unknown as OpenClawApp).handleDeleteAccount(channelId, accountId);
-                },
-                onSaveAccount: () => {
-                  void (state as unknown as OpenClawApp).handleSaveAccount();
-                },
-                onCancelAccountEdit: () => {
-                  (state as unknown as OpenClawApp).handleCancelAccountEdit();
-                },
-                onCancelAccountView: () => {
-                  (state as unknown as OpenClawApp).handleCancelAccountView();
-                },
-                onAccountFormChange: (field, value) => {
-                  (state as unknown as OpenClawApp).handleAccountFormChange(field, value);
-                },
-                onToggleAllChannelsModal: () => {
-                  state.showAllChannelsModal = !state.showAllChannelsModal;
-                },
-                onToggleChannelVisibility: (channelId) => {
-                  // TODO: 实现显示/隐藏逻辑
-                  console.log("Toggle channel visibility:", channelId);
-                },
-                onDebugChannel: (channelId, accountId) => {
-                  state.debuggingChannel = { channelId, accountId };
-                },
-                onCloseDebug: () => {
-                  state.debuggingChannel = null;
-                },
-                onEditChannelGlobalConfig: (channelId) => {
-                  state.editingChannelGlobalConfig = channelId;
-                },
-                onCancelChannelGlobalConfig: () => {
-                  state.editingChannelGlobalConfig = null;
-                },
-                onSaveChannelGlobalConfig: () => {
-                  // TODO: 保存全局配置
-                  state.editingChannelGlobalConfig = null;
-                },
-                // 配对管理回调
-                onShowPairingModal: () => {
-                  state.showPairingModal = true;
-                },
-                onClosePairingModal: () => {
-                  state.showPairingModal = false;
-                },
-                onApproveAllPairing: async () => {
-                  const pairingRequests = state.channelsSnapshot?.channelPairingRequests ?? {};
-                  const allRequests: Array<{ channelId: string; code: string }> = [];
-
-                  // 收集所有配对请求
-                  for (const [channelId, requests] of Object.entries(pairingRequests)) {
-                    for (const req of requests) {
-                      allRequests.push({ channelId, code: req.code });
-                    }
+                // 收集所有配对请求
+                for (const [channelId, requests] of Object.entries(pairingRequests)) {
+                  for (const req of requests) {
+                    allRequests.push({ channelId, code: req.code });
                   }
+                }
 
-                  if (allRequests.length === 0) {
-                    alert("ℹ️ 没有待处理的配对请求");
-                    return;
-                  }
+                if (allRequests.length === 0) {
+                  alert("ℹ️ 没有待处理的配对请求");
+                  return;
+                }
 
-                  if (!confirm(`确定要批准所有 ${allRequests.length} 个配对请求吗？`)) {
-                    return;
-                  }
+                if (!confirm(`确定要批准所有 ${allRequests.length} 个配对请求吗？`)) {
+                  return;
+                }
 
-                  let successCount = 0;
-                  let failCount = 0;
+                let successCount = 0;
+                let failCount = 0;
 
-                  // 逐个批准
-                  for (const { channelId, code } of allRequests) {
-                    try {
-                      const result = await state.client?.request("pairing.approve", {
-                        channel: channelId,
-                        code: code,
-                        notify: true,
-                      });
-                      if (result && (result as { success?: boolean }).success) {
-                        successCount++;
-                      } else {
-                        failCount++;
-                      }
-                    } catch (err) {
-                      console.error(`Failed to approve ${channelId}/${code}:`, err);
+                // 逐个批准
+                for (const { channelId, code } of allRequests) {
+                  try {
+                    const result = await state.client?.request("pairing.approve", {
+                      channel: channelId,
+                      code: code,
+                      notify: true,
+                    });
+                    if (result && (result as { success?: boolean }).success) {
+                      successCount++;
+                    } else {
                       failCount++;
                     }
+                  } catch (err) {
+                    console.error(`Failed to approve ${channelId}/${code}:`, err);
+                    failCount++;
                   }
+                }
 
-                  // 刷新数据
-                  await loadChannels(state, true);
+                // 刷新数据
+                await loadChannels(state, true);
 
-                  // 显示结果
-                  if (failCount === 0) {
-                    alert(`✅ 成功批准所有 ${successCount} 个配对请求！`);
-                  } else {
-                    alert(`✅ 成功 ${successCount} 个\n❌ 失败 ${failCount} 个`);
-                  }
-                },
-                onApprovePairing: async (channelId, code) => {
-                  console.log("Approve pairing:", channelId, code);
-                  if (confirm(`确定要批准通道 ${channelId} 的配对请求（配对码：${code}）吗？`)) {
-                    try {
-                      const result = await state.client?.request("pairing.approve", {
-                        channel: channelId,
-                        code: code,
-                        notify: true,
-                      });
-                      if (result && (result as { success?: boolean }).success) {
-                        await loadChannels(state, true);
-                        alert("✅ 配对请求已批准！");
-                      } else {
-                        alert(
-                          `❌ 批准失败：${(result as { error?: string })?.error || "未知错误"}`,
-                        );
-                      }
-                    } catch (err) {
-                      alert(`❌ 批准失败：${String(err)}`);
+                // 显示结果
+                if (failCount === 0) {
+                  alert(`✅ 成功批准所有 ${successCount} 个配对请求！`);
+                } else {
+                  alert(`✅ 成功 ${successCount} 个\n❌ 失败 ${failCount} 个`);
+                }
+              },
+              onApprovePairing: async (channelId, code) => {
+                console.log("Approve pairing:", channelId, code);
+                if (confirm(`确定要批准通道 ${channelId} 的配对请求（配对码：${code}）吗？`)) {
+                  try {
+                    const result = await state.client?.request("pairing.approve", {
+                      channel: channelId,
+                      code: code,
+                      notify: true,
+                    });
+                    if (result && (result as { success?: boolean }).success) {
+                      await loadChannels(state, true);
+                      alert("✅ 配对请求已批准！");
+                    } else {
+                      alert(`❌ 批准失败：${(result as { error?: string })?.error || "未知错误"}`);
                     }
+                  } catch (err) {
+                    alert(`❌ 批准失败：${String(err)}`);
                   }
-                },
-                onRejectPairing: async (channelId, code) => {
-                  console.log("Reject pairing:", channelId, code);
-                  if (confirm(`确定要拒绝通道 ${channelId} 的配对请求（配对码：${code}）吗？`)) {
-                    try {
-                      const result = await state.client?.request("pairing.reject", {
-                        channel: channelId,
-                        code: code,
-                      });
-                      if (result && (result as { success?: boolean }).success) {
-                        await loadChannels(state, true);
-                        alert("✅ 配对请求已拒绝！");
-                      } else {
-                        alert(
-                          `❌ 拒绝失败：${(result as { error?: string })?.error || "未知错误"}`,
-                        );
-                      }
-                    } catch (err) {
-                      alert(`❌ 拒绝失败：${String(err)}`);
+                }
+              },
+              onRejectPairing: async (channelId, code) => {
+                console.log("Reject pairing:", channelId, code);
+                if (confirm(`确定要拒绝通道 ${channelId} 的配对请求（配对码：${code}）吗？`)) {
+                  try {
+                    const result = await state.client?.request("pairing.reject", {
+                      channel: channelId,
+                      code: code,
+                    });
+                    if (result && (result as { success?: boolean }).success) {
+                      await loadChannels(state, true);
+                      alert("✅ 配对请求已拒绝！");
+                    } else {
+                      alert(`❌ 拒绝失败：${(result as { error?: string })?.error || "未知错误"}`);
                     }
+                  } catch (err) {
+                    alert(`❌ 拒绝失败：${String(err)}`);
                   }
-                },
-              })
-            : nothing
-        }
+                }
+              },
+            })
+          : nothing}
+        ${state.tab === "models"
+          ? renderModels({
+              snapshot: state.modelsSnapshot,
+              loading: state.modelsLoading,
+              error: state.modelsError,
+              testingAuthId: state.testingAuthId,
+              oauthReauth: state.oauthReauth, // OAuth重认证状态
+              managingAuthProvider: state.managingAuthProvider,
+              editingAuth: state.editingAuth,
+              viewingAuth: state.viewingAuth,
+              managingModelsProvider: state.managingModelsProvider,
+              editingModelConfig: state.editingModelConfig,
+              importableModels: state.importableModels,
+              importingAuthId: state.importingAuthId,
+              importingProvider: state.importingProvider,
+              selectedImportModels: state.selectedImportModels,
+              addingProvider: state.addingProvider,
+              viewingProviderId: state.viewingProviderId,
+              providerForm: state.providerForm,
+              onRefresh: () => loadModels(state, false),
+              onManageAuths: (provider) => {
+                state.managingAuthProvider = provider;
+              },
+              onAddAuth: (provider) => {
+                // 从 providerInstances 获取供应商的默认 Base URL
+                const providerInstance = state.modelsSnapshot?.providerInstances?.find(
+                  (p) => p.id === provider,
+                );
+                const defaultBaseUrl = providerInstance?.defaultBaseUrl || "";
 
-        ${
-          state.tab === "models"
-            ? renderModels({
-                snapshot: state.modelsSnapshot,
-                loading: state.modelsLoading,
-                error: state.modelsError,
-                testingAuthId: state.testingAuthId,
-                oauthReauth: state.oauthReauth, // OAuth重认证状态
-                managingAuthProvider: state.managingAuthProvider,
-                editingAuth: state.editingAuth,
-                viewingAuth: state.viewingAuth,
-                managingModelsProvider: state.managingModelsProvider,
-                editingModelConfig: state.editingModelConfig,
-                importableModels: state.importableModels,
-                importingAuthId: state.importingAuthId,
-                importingProvider: state.importingProvider,
-                selectedImportModels: state.selectedImportModels,
-                addingProvider: state.addingProvider,
-                viewingProviderId: state.viewingProviderId,
-                providerForm: state.providerForm,
-                onRefresh: () => loadModels(state, false),
-                onManageAuths: (provider) => {
-                  state.managingAuthProvider = provider;
-                },
-                onAddAuth: (provider) => {
-                  // 从 providerInstances 获取供应商的默认 Base URL
-                  const providerInstance = state.modelsSnapshot?.providerInstances?.find(
-                    (p) => p.id === provider,
-                  );
-                  const defaultBaseUrl = providerInstance?.defaultBaseUrl || "";
-
+                state.editingAuth = {
+                  provider,
+                  name: "",
+                  apiKey: "",
+                  baseUrl: defaultBaseUrl, // 默认填入供应商的 Base URL
+                };
+              },
+              onEditAuth: (authId) => {
+                const auth = Object.values(state.modelsSnapshot?.auths ?? {})
+                  .flat()
+                  .find((a) => a.authId === authId);
+                if (auth) {
                   state.editingAuth = {
-                    provider,
-                    name: "",
+                    authId: auth.authId,
+                    provider: auth.provider,
+                    name: auth.name,
                     apiKey: "",
-                    baseUrl: defaultBaseUrl, // 默认填入供应商的 Base URL
+                    baseUrl: auth.baseUrl ?? undefined,
+                    dispatchPolicy: auth.dispatchPolicy ?? undefined,
+                    quotaCycle: auth.quotaCycle ?? undefined,
                   };
-                },
-                onEditAuth: (authId) => {
-                  const auth = Object.values(state.modelsSnapshot?.auths ?? {})
-                    .flat()
-                    .find((a) => a.authId === authId);
-                  if (auth) {
-                    state.editingAuth = {
-                      authId: auth.authId,
-                      provider: auth.provider,
-                      name: auth.name,
-                      apiKey: "",
-                      baseUrl: auth.baseUrl ?? undefined,
-                      dispatchPolicy: auth.dispatchPolicy ?? undefined,
-                      quotaCycle: auth.quotaCycle ?? undefined,
-                    };
+                }
+              },
+              onDeleteAuth: async (authId) => {
+                if (confirm("确定要删除此认证吗？")) {
+                  await deleteAuth(state, authId);
+                }
+              },
+              onSetDefaultAuth: async (authId) => {
+                await setDefaultAuth(state, authId);
+              },
+              onSaveAuth: async (params) => {
+                await saveAuth(state, params);
+                state.editingAuth = null;
+                state.managingAuthProvider = null;
+              },
+              onCancelAuthEdit: () => {
+                state.editingAuth = null;
+                state.viewingAuth = null;
+                state.managingAuthProvider = null;
+              },
+              onTestAuth: async (authId) => {
+                state.testingAuthId = authId;
+                try {
+                  const result = await testAuth(state, authId);
+                  if (result.ok) {
+                    alert(`✅ 连接成功！\n响应时间：${result.responseTime || 0}ms`);
+                  } else {
+                    alert(`❌ 连接失败\n${result.error || result.message || "未知错误"}`);
                   }
-                },
-                onDeleteAuth: async (authId) => {
-                  if (confirm("确定要删除此认证吗？")) {
-                    await deleteAuth(state, authId);
-                  }
-                },
-                onSetDefaultAuth: async (authId) => {
-                  await setDefaultAuth(state, authId);
-                },
-                onSaveAuth: async (params) => {
-                  await saveAuth(state, params);
-                  state.editingAuth = null;
-                  state.managingAuthProvider = null;
-                },
-                onCancelAuthEdit: () => {
-                  state.editingAuth = null;
-                  state.viewingAuth = null;
-                  state.managingAuthProvider = null;
-                },
-                onTestAuth: async (authId) => {
-                  state.testingAuthId = authId;
-                  try {
-                    const result = await testAuth(state, authId);
-                    if (result.ok) {
-                      alert(`✅ 连接成功！\n响应时间：${result.responseTime || 0}ms`);
-                    } else {
-                      alert(`❌ 连接失败\n${result.error || result.message || "未知错误"}`);
-                    }
-                  } finally {
-                    state.testingAuthId = null;
-                  }
-                },
-                onRefreshAuthBalance: async (authId) => {
-                  await refreshAuthBalance(state, authId);
-                },
-                onReauth: async (authId, provider) => {
-                  console.log("[OAuth Reauth] Button clicked", { authId, provider });
-                  try {
-                    const { startOAuthReauth } = await import("./controllers/models.js");
-                    const { startDeviceCodeAuth } = await import("./utils/oauth-manager.js");
+                } finally {
+                  state.testingAuthId = null;
+                }
+              },
+              onRefreshAuthBalance: async (authId) => {
+                await refreshAuthBalance(state, authId);
+              },
+              onReauth: async (authId, provider) => {
+                console.log("[OAuth Reauth] Button clicked", { authId, provider });
+                try {
+                  const { startOAuthReauth } = await import("./controllers/models.js");
+                  const { startDeviceCodeAuth } = await import("./utils/oauth-manager.js");
 
-                    console.log("[OAuth Reauth] Starting reauth...");
-                    const result = await startOAuthReauth(state, authId);
-                    console.log("[OAuth Reauth] Result:", result);
+                  console.log("[OAuth Reauth] Starting reauth...");
+                  const result = await startOAuthReauth(state, authId);
+                  console.log("[OAuth Reauth] Result:", result);
 
-                    if (result) {
-                      // 使用通用OAuth管理器
-                      await startDeviceCodeAuth(
-                        {
-                          deviceCode: result.deviceCode,
-                          verificationUrl: result.verificationUrl,
-                          userCode: result.userCode,
-                          expiresIn: result.expiresIn,
-                          interval: result.interval,
-                          authId: result.authId,
-                          provider:
-                            result.provider as import("./utils/oauth-manager.js").OAuthProvider,
-                          verifier: (result as { verifier?: string }).verifier,
+                  if (result) {
+                    // 使用通用OAuth管理器
+                    await startDeviceCodeAuth(
+                      {
+                        deviceCode: result.deviceCode,
+                        verificationUrl: result.verificationUrl,
+                        userCode: result.userCode,
+                        expiresIn: result.expiresIn,
+                        interval: result.interval,
+                        authId: result.authId,
+                        provider:
+                          result.provider as import("./utils/oauth-manager.js").OAuthProvider,
+                        verifier: (result as { verifier?: string }).verifier,
+                      },
+                      {
+                        onPollRequest: async (params) => {
+                          const pollResult = await state.client?.request(
+                            "models.auth.poll",
+                            params,
+                          );
+                          return (pollResult || { status: "pending" }) as {
+                            status: "pending" | "success" | "slow_down";
+                            message?: string;
+                          };
                         },
-                        {
-                          onPollRequest: async (params) => {
-                            const pollResult = await state.client?.request(
-                              "models.auth.poll",
-                              params,
-                            );
-                            return (pollResult || { status: "pending" }) as {
-                              status: "pending" | "success" | "slow_down";
-                              message?: string;
-                            };
-                          },
-                          onSuccess: async () => {
-                            alert("✅ OAuth授权成功！");
-                            await loadModels(state, false);
-                          },
-                          onError: (error) => {
-                            alert(`❌ 授权失败：${error}`);
-                          },
-                          onCancel: () => {
-                            console.log("[OAuth Reauth] User cancelled");
-                          },
+                        onSuccess: async () => {
+                          alert("✅ OAuth授权成功！");
+                          await loadModels(state, false);
                         },
-                        {
-                          windowWidth: 600,
-                          windowHeight: 700,
-                          pollInterval: result.interval * 1000,
-                          maxAttempts: Math.floor(result.expiresIn / result.interval),
+                        onError: (error) => {
+                          alert(`❌ 授权失败：${error}`);
                         },
-                      );
-                    } else {
-                      console.error("[OAuth Reauth] No result returned");
-                      alert("⚠️ 启动重认证失败，请稍后重试");
-                    }
-                  } catch (err) {
-                    console.error("[OAuth Reauth] Error:", err);
-                    alert(`❌ 启动重认证失败：${String(err)}`);
+                        onCancel: () => {
+                          console.log("[OAuth Reauth] User cancelled");
+                        },
+                      },
+                      {
+                        windowWidth: 600,
+                        windowHeight: 700,
+                        pollInterval: result.interval * 1000,
+                        maxAttempts: Math.floor(result.expiresIn / result.interval),
+                      },
+                    );
+                  } else {
+                    console.error("[OAuth Reauth] No result returned");
+                    alert("⚠️ 启动重认证失败，请稍后重试");
                   }
-                },
-                onStartOAuthPolling: async (_authId) => {
-                  if (!state.oauthReauth) {
-                    return;
-                  }
-                  state.oauthReauth = { ...state.oauthReauth, isPolling: true };
-                  // TODO: 实现轮询逻辑
-                  alert("🕑 轮询功能待实现，请手动刷新页面查看状态");
-                },
-                onCancelOAuthReauth: () => {
-                  state.oauthReauth = null;
-                },
-                onResetAuthCircuit: async (authId) => {
-                  await resetAuthCircuit(state, authId);
-                },
-                onToggleAuthEnabled: async (authId, enabled) => {
-                  try {
-                    await toggleAuthEnabled(state, authId, enabled);
-                  } catch (err) {
-                    // 配额耗尽时后端会返回错误，明确提示用户
-                    alert(`⚠️ 无法启用认证\n\n${String(err)}`);
-                  }
-                },
-                onManageModels: (provider) => {
-                  state.managingModelsProvider = provider;
-                },
-                onCloseModelsList: () => {
-                  state.managingModelsProvider = null;
-                },
-                onAddModelConfig: (authId, modelName) => {
-                  const auth = Object.values(state.modelsSnapshot?.auths ?? {})
-                    .flat()
-                    .find((a) => a.authId === authId);
-                  if (auth) {
-                    state.editingModelConfig = {
-                      authId,
-                      provider: auth.provider,
-                      modelName,
-                      enabled: true,
-                    };
-                  }
-                },
-                onEditModelConfig: (configId) => {
-                  const config = Object.values(state.modelsSnapshot?.modelConfigs ?? {})
-                    .flat()
-                    .find((c) => c.configId === configId);
-                  if (config) {
-                    state.editingModelConfig = {
-                      configId: config.configId,
-                      authId: config.authId,
-                      provider: config.provider,
-                      modelName: config.modelName,
-                      nickname: config.nickname ?? undefined,
-                      enabled: config.enabled,
-                      temperature: config.temperature ?? undefined,
-                      topP: config.topP ?? undefined,
-                      maxTokens: config.maxTokens ?? undefined,
-                      frequencyPenalty: config.frequencyPenalty ?? undefined,
-                      systemPrompt: config.systemPrompt ?? undefined,
-                      conversationRounds: config.conversationRounds ?? undefined,
-                      maxIterations: config.maxIterations ?? undefined,
-                      usageLimits: config.usageLimits
-                        ? {
-                            maxRequestsPerDay: config.usageLimits.maxRequestsPerDay ?? undefined,
-                            maxTokensPerRequest:
-                              config.usageLimits.maxTokensPerRequest ?? undefined,
-                          }
-                        : undefined,
-                    };
-                  }
-                },
-                onDeleteModelConfig: async (configId) => {
-                  if (confirm("确定要删除此模型配置吗？")) {
-                    await deleteModelConfig(state, configId);
-                  }
-                },
-                onToggleModelConfig: async (configId, enabled) => {
-                  await toggleModelConfig(state, configId, enabled);
-                },
-                onRefreshAuthModels: async (authId) => {
-                  state.importableModels = null;
-                  state.importingAuthId = authId;
-                  state.selectedImportModels.clear();
+                } catch (err) {
+                  console.error("[OAuth Reauth] Error:", err);
+                  alert(`❌ 启动重认证失败：${String(err)}`);
+                }
+              },
+              onStartOAuthPolling: async (_authId) => {
+                if (!state.oauthReauth) {
+                  return;
+                }
+                state.oauthReauth = { ...state.oauthReauth, isPolling: true };
+                // TODO: 实现轮询逻辑
+                alert("🕑 轮询功能待实现，请手动刷新页面查看状态");
+              },
+              onCancelOAuthReauth: () => {
+                state.oauthReauth = null;
+              },
+              onResetAuthCircuit: async (authId) => {
+                await resetAuthCircuit(state, authId);
+              },
+              onToggleAuthEnabled: async (authId, enabled) => {
+                try {
+                  await toggleAuthEnabled(state, authId, enabled);
+                } catch (err) {
+                  // 配额耗尽时后端会返回错误，明确提示用户
+                  alert(`⚠️ 无法启用认证\n\n${String(err)}`);
+                }
+              },
+              onManageModels: (provider) => {
+                state.managingModelsProvider = provider;
+              },
+              onCloseModelsList: () => {
+                state.managingModelsProvider = null;
+              },
+              onAddModelConfig: (authId, modelName) => {
+                const auth = Object.values(state.modelsSnapshot?.auths ?? {})
+                  .flat()
+                  .find((a) => a.authId === authId);
+                if (auth) {
+                  state.editingModelConfig = {
+                    authId,
+                    provider: auth.provider,
+                    modelName,
+                    enabled: true,
+                  };
+                }
+              },
+              onEditModelConfig: (configId) => {
+                const config = Object.values(state.modelsSnapshot?.modelConfigs ?? {})
+                  .flat()
+                  .find((c) => c.configId === configId);
+                if (config) {
+                  state.editingModelConfig = {
+                    configId: config.configId,
+                    authId: config.authId,
+                    provider: config.provider,
+                    modelName: config.modelName,
+                    nickname: config.nickname ?? undefined,
+                    enabled: config.enabled,
+                    temperature: config.temperature ?? undefined,
+                    topP: config.topP ?? undefined,
+                    maxTokens: config.maxTokens ?? undefined,
+                    frequencyPenalty: config.frequencyPenalty ?? undefined,
+                    systemPrompt: config.systemPrompt ?? undefined,
+                    conversationRounds: config.conversationRounds ?? undefined,
+                    maxIterations: config.maxIterations ?? undefined,
+                    usageLimits: config.usageLimits
+                      ? {
+                          maxRequestsPerDay: config.usageLimits.maxRequestsPerDay ?? undefined,
+                          maxTokensPerRequest: config.usageLimits.maxTokensPerRequest ?? undefined,
+                        }
+                      : undefined,
+                  };
+                }
+              },
+              onDeleteModelConfig: async (configId) => {
+                if (confirm("确定要删除此模型配置吗？")) {
+                  await deleteModelConfig(state, configId);
+                }
+              },
+              onToggleModelConfig: async (configId, enabled) => {
+                await toggleModelConfig(state, configId, enabled);
+              },
+              onRefreshAuthModels: async (authId) => {
+                state.importableModels = null;
+                state.importingAuthId = authId;
+                state.selectedImportModels.clear();
 
-                  // 获取供应商ID
-                  const auth = Object.values(state.modelsSnapshot?.auths ?? {})
-                    .flat()
-                    .find((a) => a.authId === authId);
+                // 获取供应商ID
+                const auth = Object.values(state.modelsSnapshot?.auths ?? {})
+                  .flat()
+                  .find((a) => a.authId === authId);
 
-                  if (auth) {
-                    state.importingProvider = auth.provider;
-                  }
+                if (auth) {
+                  state.importingProvider = auth.provider;
+                }
 
-                  try {
-                    // 使用 refreshAuthModels 从平台查询可用模型列表
-                    console.log("[Models] Calling refreshAuthModels, authId:", authId);
-                    const models = await refreshAuthModels(state, authId);
-                    console.log("[Models] Got models:", models.length, models);
+                try {
+                  // 使用 refreshAuthModels 从平台查询可用模型列表
+                  console.log("[Models] Calling refreshAuthModels, authId:", authId);
+                  const models = await refreshAuthModels(state, authId);
+                  console.log("[Models] Got models:", models.length, models);
 
-                    // 检查是否成功获取到模型
-                    if (models.length === 0) {
-                      // 读取失败（API调用失败或供应商不支持）
-                      alert(
-                        "❌ 无法从供应商平台获取模型列表\n\n" +
-                          "可能原因：\n" +
-                          "1. 该供应商不支持自动获取模型列表\n" +
-                          "2. API Key 权限不足\n" +
-                          "3. Base URL 配置错误\n" +
-                          "4. 网络连接问题\n\n" +
-                          "建议：请手动添加模型",
-                      );
-                      state.importableModels = null;
-                      state.importingAuthId = null;
-                      state.importingProvider = null;
-                      return;
-                    }
-
-                    // 统计新模型数量
-                    const newModelsCount = models.filter((m) => !m.isConfigured).length;
-
-                    if (newModelsCount === 0) {
-                      // 读取成功但没有新模型
-                      alert(
-                        "\u2705 \u5237\u65b0\u6210\u529f\n\n" +
-                          `\u4ece\u5e73\u53f0\u83b7\u53d6\u5230 ${models.length} \u4e2a\u6a21\u578b\uff0c\u4f46\u5168\u90e8\u5df2\u6dfb\u52a0\u3002\n\n` +
-                          "\u5982\u9700\u4fee\u6539\u73b0\u6709\u6a21\u578b\u914d\u7f6e\uff0c\u8bf7\u70b9\u51fb\u6a21\u578b\u5361\u7247\u4e0a\u7684\u914d\u7f6e\u6309\u94ae\u3002",
-                      );
-                      state.importableModels = null;
-                      state.importingAuthId = null;
-                      state.importingProvider = null;
-                      return;
-                    }
-
-                    // 有新模型，显示导入窗口
-                    state.importableModels = models;
-
-                    // 刷新完成后重新加载模型数据以更新界面
-                    await loadModels(state, false);
-                  } catch (err) {
-                    // 捕获异常，明确是读取失败
+                  // 检查是否成功获取到模型
+                  if (models.length === 0) {
+                    // 读取失败（API调用失败或供应商不支持）
                     alert(
-                      "❌ 刷新模型列表失败\n\n" +
-                        `错误信息：${String(err)}\n\n` +
-                        "请检查网络连接和认证配置",
+                      "❌ 无法从供应商平台获取模型列表\n\n" +
+                        "可能原因：\n" +
+                        "1. 该供应商不支持自动获取模型列表\n" +
+                        "2. API Key 权限不足\n" +
+                        "3. Base URL 配置错误\n" +
+                        "4. 网络连接问题\n\n" +
+                        "建议：请手动添加模型",
                     );
                     state.importableModels = null;
                     state.importingAuthId = null;
                     state.importingProvider = null;
+                    return;
                   }
-                },
-                onImportModels: async (authId, modelNames) => {
-                  const auth = Object.values(state.modelsSnapshot?.auths ?? {})
-                    .flat()
-                    .find((a) => a.authId === authId);
-                  if (auth) {
-                    for (const modelName of modelNames) {
-                      await saveModelConfig(state, {
-                        authId,
-                        provider: auth.provider,
-                        modelName,
-                        enabled: true,
-                      });
-                    }
-                  }
-                  state.selectedImportModels.clear();
-                  state.importableModels = null;
-                  state.importingAuthId = null;
-                  state.importingProvider = null;
-                },
-                onToggleImportModel: (modelName) => {
-                  if (state.selectedImportModels.has(modelName)) {
-                    state.selectedImportModels.delete(modelName);
-                  } else {
-                    state.selectedImportModels.add(modelName);
-                  }
-                },
-                onCancelImport: () => {
-                  state.importableModels = null;
-                  state.importingAuthId = null;
-                  state.importingProvider = null;
-                  state.selectedImportModels.clear();
-                },
-                onSaveModelConfig: async (params) => {
-                  await saveModelConfig(state, params);
-                  state.editingModelConfig = null;
-                },
-                onCancelModelConfigEdit: () => {
-                  state.editingModelConfig = null;
-                  state.importableModels = null;
-                  state.importingAuthId = null;
-                  state.selectedImportModels.clear();
-                },
-                onAddProvider: () => {
-                  state.addingProvider = true;
-                  state.providerForm = {
-                    selectedTemplateId: null,
-                    id: "",
-                    name: "",
-                    icon: "🤖",
-                    website: "",
-                    defaultBaseUrl: "",
-                    apiKeyPlaceholder: "请输入API密钥",
-                  };
-                },
-                onViewProvider: (id) => {
-                  state.viewingProviderId = id;
-                },
-                onEditProvider: (id) => {
-                  // 从 providerInstances 中查找供应商
-                  const provider = state.modelsSnapshot?.providerInstances?.find(
-                    (p) => p.id === id,
-                  );
-                  if (provider) {
-                    state.addingProvider = true; // 显示模态框
-                    state.providerForm = {
-                      selectedTemplateId: provider.templateId || null,
-                      id: provider.id,
-                      name: provider.name,
-                      icon: provider.icon || "🤖",
-                      website: provider.website || "",
-                      defaultBaseUrl: provider.defaultBaseUrl || "",
-                      apiKeyPlaceholder: provider.apiKeyPlaceholder || "请输入API密钥",
-                      isEditing: true,
-                      originalId: provider.id,
-                    };
-                  }
-                },
-                onTemplateSelect: (templateId) => {
-                  if (state.providerForm) {
-                    const template = state.modelsSnapshot?.apiTemplates?.find(
-                      (t) => t.id === templateId,
+
+                  // 统计新模型数量
+                  const newModelsCount = models.filter((m) => !m.isConfigured).length;
+
+                  if (newModelsCount === 0) {
+                    // 读取成功但没有新模型
+                    alert(
+                      "\u2705 \u5237\u65b0\u6210\u529f\n\n" +
+                        `\u4ece\u5e73\u53f0\u83b7\u53d6\u5230 ${models.length} \u4e2a\u6a21\u578b\uff0c\u4f46\u5168\u90e8\u5df2\u6dfb\u52a0\u3002\n\n` +
+                        "\u5982\u9700\u4fee\u6539\u73b0\u6709\u6a21\u578b\u914d\u7f6e\uff0c\u8bf7\u70b9\u51fb\u6a21\u578b\u5361\u7247\u4e0a\u7684\u914d\u7f6e\u6309\u94ae\u3002",
                     );
-                    if (template) {
-                      state.providerForm = {
-                        ...state.providerForm,
-                        selectedTemplateId: templateId,
-                        id: template.id,
-                        name: template.name,
-                        icon: template.icon || "🤖",
-                        website: template.website || "",
-                        defaultBaseUrl: template.defaultBaseUrl || "",
-                        apiKeyPlaceholder: template.apiKeyPlaceholder || "请输入API密钥",
-                      };
-                    }
+                    state.importableModels = null;
+                    state.importingAuthId = null;
+                    state.importingProvider = null;
+                    return;
                   }
-                },
-                onProviderFormChange: (patch) => {
-                  if (state.providerForm) {
+
+                  // 有新模型，显示导入窗口
+                  state.importableModels = models;
+
+                  // 刷新完成后重新加载模型数据以更新界面
+                  await loadModels(state, false);
+                } catch (err) {
+                  // 捕获异常，明确是读取失败
+                  alert(
+                    "❌ 刷新模型列表失败\n\n" +
+                      `错误信息：${String(err)}\n\n` +
+                      "请检查网络连接和认证配置",
+                  );
+                  state.importableModels = null;
+                  state.importingAuthId = null;
+                  state.importingProvider = null;
+                }
+              },
+              onImportModels: async (authId, modelNames) => {
+                const auth = Object.values(state.modelsSnapshot?.auths ?? {})
+                  .flat()
+                  .find((a) => a.authId === authId);
+                if (auth) {
+                  for (const modelName of modelNames) {
+                    await saveModelConfig(state, {
+                      authId,
+                      provider: auth.provider,
+                      modelName,
+                      enabled: true,
+                    });
+                  }
+                }
+                state.selectedImportModels.clear();
+                state.importableModels = null;
+                state.importingAuthId = null;
+                state.importingProvider = null;
+              },
+              onToggleImportModel: (modelName) => {
+                if (state.selectedImportModels.has(modelName)) {
+                  state.selectedImportModels.delete(modelName);
+                } else {
+                  state.selectedImportModels.add(modelName);
+                }
+              },
+              onCancelImport: () => {
+                state.importableModels = null;
+                state.importingAuthId = null;
+                state.importingProvider = null;
+                state.selectedImportModels.clear();
+              },
+              onSaveModelConfig: async (params) => {
+                await saveModelConfig(state, params);
+                state.editingModelConfig = null;
+              },
+              onCancelModelConfigEdit: () => {
+                state.editingModelConfig = null;
+                state.importableModels = null;
+                state.importingAuthId = null;
+                state.selectedImportModels.clear();
+              },
+              onAddProvider: () => {
+                state.addingProvider = true;
+                state.providerForm = {
+                  selectedTemplateId: null,
+                  id: "",
+                  name: "",
+                  icon: "🤖",
+                  website: "",
+                  defaultBaseUrl: "",
+                  apiKeyPlaceholder: "请输入API密钥",
+                };
+              },
+              onViewProvider: (id) => {
+                state.viewingProviderId = id;
+              },
+              onEditProvider: (id) => {
+                // 从 providerInstances 中查找供应商
+                const provider = state.modelsSnapshot?.providerInstances?.find((p) => p.id === id);
+                if (provider) {
+                  state.addingProvider = true; // 显示模态框
+                  state.providerForm = {
+                    selectedTemplateId: provider.templateId || null,
+                    id: provider.id,
+                    name: provider.name,
+                    icon: provider.icon || "🤖",
+                    website: provider.website || "",
+                    defaultBaseUrl: provider.defaultBaseUrl || "",
+                    apiKeyPlaceholder: provider.apiKeyPlaceholder || "请输入API密钥",
+                    isEditing: true,
+                    originalId: provider.id,
+                  };
+                }
+              },
+              onTemplateSelect: (templateId) => {
+                if (state.providerForm) {
+                  const template = state.modelsSnapshot?.apiTemplates?.find(
+                    (t) => t.id === templateId,
+                  );
+                  if (template) {
                     state.providerForm = {
                       ...state.providerForm,
-                      ...patch,
+                      selectedTemplateId: templateId,
+                      id: template.id,
+                      name: template.name,
+                      icon: template.icon || "🤖",
+                      website: template.website || "",
+                      defaultBaseUrl: template.defaultBaseUrl || "",
+                      apiKeyPlaceholder: template.apiKeyPlaceholder || "请输入API密钥",
                     };
                   }
-                },
-                onSaveProvider: async (params) => {
-                  if (state.providerForm?.isEditing) {
-                    await updateProvider(state, params);
-                  } else {
-                    await addProvider(state, params);
+                }
+              },
+              onProviderFormChange: (patch) => {
+                if (state.providerForm) {
+                  state.providerForm = {
+                    ...state.providerForm,
+                    ...patch,
+                  };
+                }
+              },
+              onSaveProvider: async (params) => {
+                if (state.providerForm?.isEditing) {
+                  await updateProvider(state, params);
+                } else {
+                  await addProvider(state, params);
+                }
+                state.addingProvider = false;
+                state.providerForm = null;
+              },
+              onDeleteProvider: async (id) => {
+                // 获取供应商信息
+                const providerInstance = state.modelsSnapshot?.providerInstances?.find(
+                  (p) => p.id === id,
+                );
+                const providerName = providerInstance?.name || id;
+
+                // 第一次尝试删除（不级联）
+                const result = await deleteProvider(state, id, false);
+
+                if (result.success) {
+                  // 删除成功
+                  return;
+                }
+
+                // 如果需要级联删除，弹出确认对话框
+                if (result.requiresCascade) {
+                  const authCount = result.authCount || 0;
+                  const modelCount = result.modelCount || 0;
+
+                  let message = `确定要删除供应商「${providerName}」吗？\n\n`;
+                  message += `该供应商下有：\n`;
+                  if (authCount > 0) {
+                    message += `• ${authCount} 个认证配置\n`;
                   }
-                  state.addingProvider = false;
-                  state.providerForm = null;
-                },
-                onDeleteProvider: async (id) => {
-                  // 获取供应商信息
-                  const providerInstance = state.modelsSnapshot?.providerInstances?.find(
-                    (p) => p.id === id,
-                  );
-                  const providerName = providerInstance?.name || id;
-
-                  // 第一次尝试删除（不级联）
-                  const result = await deleteProvider(state, id, false);
-
-                  if (result.success) {
-                    // 删除成功
-                    return;
+                  if (modelCount > 0) {
+                    message += `• ${modelCount} 个模型配置\n`;
                   }
+                  message += `\n删除供应商将同时删除以上所有关联数据，此操作不可撤销！`;
 
-                  // 如果需要级联删除，弹出确认对话框
-                  if (result.requiresCascade) {
-                    const authCount = result.authCount || 0;
-                    const modelCount = result.modelCount || 0;
-
-                    let message = `确定要删除供应商「${providerName}」吗？\n\n`;
-                    message += `该供应商下有：\n`;
-                    if (authCount > 0) {
-                      message += `• ${authCount} 个认证配置\n`;
+                  if (confirm(message)) {
+                    // 用户确认，执行级联删除
+                    const cascadeResult = await deleteProvider(state, id, true);
+                    if (cascadeResult.success) {
+                      alert(`✅ 已成功删除供应商「${providerName}」及其所有关联数据`);
+                    } else {
+                      alert(`❌ 删除失败，请稍后重试`);
                     }
-                    if (modelCount > 0) {
-                      message += `• ${modelCount} 个模型配置\n`;
-                    }
-                    message += `\n删除供应商将同时删除以上所有关联数据，此操作不可撤销！`;
-
-                    if (confirm(message)) {
-                      // 用户确认，执行级联删除
-                      const cascadeResult = await deleteProvider(state, id, true);
-                      if (cascadeResult.success) {
-                        alert(`✅ 已成功删除供应商「${providerName}」及其所有关联数据`);
-                      } else {
-                        alert(`❌ 删除失败，请稍后重试`);
-                      }
-                    }
-                  } else {
-                    // 其他错误
-                    alert(`❌ 删除供应商「${providerName}」失败，请稍后重试`);
                   }
-                },
-                onCancelProviderEdit: () => {
-                  state.addingProvider = false;
-                  state.providerForm = null;
-                },
-                onCancelProviderView: () => {
-                  state.viewingProviderId = null;
-                },
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "instances"
-            ? renderInstances({
-                loading: state.presenceLoading,
-                entries: state.presenceEntries,
-                lastError: state.presenceError,
-                statusMessage: state.presenceStatus,
-                onRefresh: () => loadPresence(state),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "sessions"
-            ? renderSessions({
-                loading: state.sessionsLoading,
-                result: state.sessionsResult,
-                error: state.sessionsError,
-                activeMinutes: state.sessionsFilterActive,
-                limit: state.sessionsFilterLimit,
-                includeGlobal: state.sessionsIncludeGlobal,
-                includeUnknown: state.sessionsIncludeUnknown,
-                basePath: state.basePath,
-                searchQuery: state.sessionsSearchQuery,
-                sortColumn: state.sessionsSortColumn,
-                sortDir: state.sessionsSortDir,
-                page: state.sessionsPage,
-                pageSize: state.sessionsPageSize,
-                selectedKeys: state.sessionsSelectedKeys,
-                expandedCheckpointKey: state.sessionsExpandedCheckpointKey,
-                checkpointItemsByKey: state.sessionsCheckpointItemsByKey,
-                checkpointLoadingKey: state.sessionsCheckpointLoadingKey,
-                checkpointBusyKey: state.sessionsCheckpointBusyKey,
-                checkpointErrorByKey: state.sessionsCheckpointErrorByKey,
-                onFiltersChange: (next) => {
-                  state.sessionsFilterActive = next.activeMinutes;
-                  state.sessionsFilterLimit = next.limit;
-                  state.sessionsIncludeGlobal = next.includeGlobal;
-                  state.sessionsIncludeUnknown = next.includeUnknown;
-                },
-                onSearchChange: (q) => {
-                  state.sessionsSearchQuery = q;
-                  state.sessionsPage = 0;
-                },
-                onSortChange: (col, dir) => {
-                  state.sessionsSortColumn = col;
-                  state.sessionsSortDir = dir;
-                  state.sessionsPage = 0;
-                },
-                onPageChange: (p) => {
-                  state.sessionsPage = p;
-                },
-                onPageSizeChange: (s) => {
-                  state.sessionsPageSize = s;
-                  state.sessionsPage = 0;
-                },
-                onRefresh: () => loadSessions(state),
-                onPatch: (key, patch) => patchSession(state, key, patch),
-                onToggleSelect: (key) => {
+                } else {
+                  // 其他错误
+                  alert(`❌ 删除供应商「${providerName}」失败，请稍后重试`);
+                }
+              },
+              onCancelProviderEdit: () => {
+                state.addingProvider = false;
+                state.providerForm = null;
+              },
+              onCancelProviderView: () => {
+                state.viewingProviderId = null;
+              },
+            })
+          : nothing}
+        ${state.tab === "instances"
+          ? renderInstances({
+              loading: state.presenceLoading,
+              entries: state.presenceEntries,
+              lastError: state.presenceError,
+              statusMessage: state.presenceStatus,
+              onRefresh: () => loadPresence(state),
+            })
+          : nothing}
+        ${state.tab === "sessions"
+          ? renderSessions({
+              loading: state.sessionsLoading,
+              result: state.sessionsResult,
+              error: state.sessionsError,
+              activeMinutes: state.sessionsFilterActive,
+              limit: state.sessionsFilterLimit,
+              includeGlobal: state.sessionsIncludeGlobal,
+              includeUnknown: state.sessionsIncludeUnknown,
+              basePath: state.basePath,
+              searchQuery: state.sessionsSearchQuery,
+              sortColumn: state.sessionsSortColumn,
+              sortDir: state.sessionsSortDir,
+              page: state.sessionsPage,
+              pageSize: state.sessionsPageSize,
+              selectedKeys: state.sessionsSelectedKeys,
+              expandedCheckpointKey: state.sessionsExpandedCheckpointKey,
+              checkpointItemsByKey: state.sessionsCheckpointItemsByKey,
+              checkpointLoadingKey: state.sessionsCheckpointLoadingKey,
+              checkpointBusyKey: state.sessionsCheckpointBusyKey,
+              checkpointErrorByKey: state.sessionsCheckpointErrorByKey,
+              onFiltersChange: (next) => {
+                state.sessionsFilterActive = next.activeMinutes;
+                state.sessionsFilterLimit = next.limit;
+                state.sessionsIncludeGlobal = next.includeGlobal;
+                state.sessionsIncludeUnknown = next.includeUnknown;
+              },
+              onSearchChange: (q) => {
+                state.sessionsSearchQuery = q;
+                state.sessionsPage = 0;
+              },
+              onSortChange: (col, dir) => {
+                state.sessionsSortColumn = col;
+                state.sessionsSortDir = dir;
+                state.sessionsPage = 0;
+              },
+              onPageChange: (p) => {
+                state.sessionsPage = p;
+              },
+              onPageSizeChange: (s) => {
+                state.sessionsPageSize = s;
+                state.sessionsPage = 0;
+              },
+              onRefresh: () => loadSessions(state),
+              onPatch: (key, patch) => patchSession(state, key, patch),
+              onToggleSelect: (key) => {
+                const next = new Set(state.sessionsSelectedKeys);
+                if (next.has(key)) {
+                  next.delete(key);
+                } else {
+                  next.add(key);
+                }
+                state.sessionsSelectedKeys = next;
+              },
+              onSelectPage: (keys) => {
+                const next = new Set(state.sessionsSelectedKeys);
+                for (const k of keys) {
+                  next.add(k);
+                }
+                state.sessionsSelectedKeys = next;
+              },
+              onDeselectPage: (keys) => {
+                const next = new Set(state.sessionsSelectedKeys);
+                for (const k of keys) {
+                  next.delete(k);
+                }
+                state.sessionsSelectedKeys = next;
+              },
+              onDeselectAll: () => {
+                state.sessionsSelectedKeys = new Set();
+              },
+              onDeleteSelected: async () => {
+                const keys = [...state.sessionsSelectedKeys];
+                const deleted = await deleteSessionsAndRefresh(
+                  state as unknown as Parameters<typeof deleteSessionsAndRefresh>[0],
+                  keys,
+                );
+                if (deleted.length > 0) {
                   const next = new Set(state.sessionsSelectedKeys);
-                  if (next.has(key)) {
-                    next.delete(key);
-                  } else {
-                    next.add(key);
+                  for (const k of deleted) {
+                    next.delete(k);
                   }
                   state.sessionsSelectedKeys = next;
+                }
+              },
+              onToggleCheckpointDetails: (sessionKey) => {
+                state.sessionsExpandedCheckpointKey =
+                  state.sessionsExpandedCheckpointKey === sessionKey ? null : sessionKey;
+              },
+              onBranchFromCheckpoint: () => Promise.resolve(),
+              onRestoreCheckpoint: () => Promise.resolve(),
+            })
+          : nothing}
+        ${state.tab === "usage"
+          ? renderUsage({
+              data: {
+                loading: state.usageLoading,
+                error: state.usageError,
+                sessions: state.usageResult?.sessions ?? [],
+                sessionsLimitReached: (state.usageResult?.sessions?.length ?? 0) >= 1000,
+                totals: state.usageResult?.totals ?? null,
+                aggregates: state.usageResult?.aggregates ?? null,
+                costDaily: state.usageCostSummary?.daily ?? [],
+              },
+              filters: {
+                startDate: state.usageStartDate,
+                endDate: state.usageEndDate,
+                selectedSessions: state.usageSelectedSessions,
+                selectedDays: state.usageSelectedDays,
+                selectedHours: state.usageSelectedHours,
+                query: state.usageQuery,
+                queryDraft: state.usageQueryDraft,
+                timeZone: state.usageTimeZone,
+              },
+              display: {
+                chartMode: state.usageChartMode,
+                dailyChartMode: state.usageDailyChartMode,
+                sessionSort: state.usageSessionSort,
+                sessionSortDir: state.usageSessionSortDir,
+                recentSessions: state.usageRecentSessions,
+                sessionsTab: state.usageSessionsTab,
+                visibleColumns:
+                  state.usageVisibleColumns as import("./views/usage.ts").UsageColumnId[],
+                contextExpanded: state.usageContextExpanded,
+                headerPinned: state.usageHeaderPinned,
+              },
+              detail: {
+                timeSeriesMode: state.usageTimeSeriesMode,
+                timeSeriesBreakdownMode: state.usageTimeSeriesBreakdownMode,
+                timeSeries: state.usageTimeSeries,
+                timeSeriesLoading: state.usageTimeSeriesLoading,
+                timeSeriesCursorStart: state.usageTimeSeriesCursorStart,
+                timeSeriesCursorEnd: state.usageTimeSeriesCursorEnd,
+                sessionLogs: state.usageSessionLogs,
+                sessionLogsLoading: state.usageSessionLogsLoading,
+                sessionLogsExpanded: state.usageSessionLogsExpanded,
+                logFilters: {
+                  roles: state.usageLogFilterRoles,
+                  tools: state.usageLogFilterTools,
+                  hasTools: state.usageLogFilterHasTools,
+                  query: state.usageLogFilterQuery,
                 },
-                onSelectPage: (keys) => {
-                  const next = new Set(state.sessionsSelectedKeys);
-                  for (const k of keys) {next.add(k);}
-                  state.sessionsSelectedKeys = next;
-                },
-                onDeselectPage: (keys) => {
-                  const next = new Set(state.sessionsSelectedKeys);
-                  for (const k of keys) {next.delete(k);}
-                  state.sessionsSelectedKeys = next;
-                },
-                onDeselectAll: () => {
-                  state.sessionsSelectedKeys = new Set();
-                },
-                onDeleteSelected: async () => {
-                  const keys = [...state.sessionsSelectedKeys];
-                  const deleted = await deleteSessionsAndRefresh(
-                    state as unknown as Parameters<typeof deleteSessionsAndRefresh>[0],
-                    keys,
-                  );
-                  if (deleted.length > 0) {
-                    const next = new Set(state.sessionsSelectedKeys);
-                    for (const k of deleted) {next.delete(k);}
-                    state.sessionsSelectedKeys = next;
-                  }
-                },
-                onToggleCheckpointDetails: (sessionKey) => {
-                  state.sessionsExpandedCheckpointKey =
-                    state.sessionsExpandedCheckpointKey === sessionKey ? null : sessionKey;
-                },
-                onBranchFromCheckpoint: () => Promise.resolve(),
-                onRestoreCheckpoint: () => Promise.resolve(),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "usage"
-            ? renderUsage({
-                data: {
-                  loading: state.usageLoading,
-                  error: state.usageError,
-                  sessions: state.usageResult?.sessions ?? [],
-                  sessionsLimitReached: (state.usageResult?.sessions?.length ?? 0) >= 1000,
-                  totals: state.usageResult?.totals ?? null,
-                  aggregates: state.usageResult?.aggregates ?? null,
-                  costDaily: state.usageCostSummary?.daily ?? [],
-                },
+              },
+              callbacks: {
                 filters: {
-                  startDate: state.usageStartDate,
-                  endDate: state.usageEndDate,
-                  selectedSessions: state.usageSelectedSessions,
-                  selectedDays: state.usageSelectedDays,
-                  selectedHours: state.usageSelectedHours,
-                  query: state.usageQuery,
-                  queryDraft: state.usageQueryDraft,
-                  timeZone: state.usageTimeZone,
+                  onStartDateChange: (date) => {
+                    state.usageStartDate = date;
+                    state.usageSelectedDays = [];
+                    state.usageSelectedHours = [];
+                    state.usageSelectedSessions = [];
+                    debouncedLoadUsage(state);
+                  },
+                  onEndDateChange: (date) => {
+                    state.usageEndDate = date;
+                    state.usageSelectedDays = [];
+                    state.usageSelectedHours = [];
+                    state.usageSelectedSessions = [];
+                    debouncedLoadUsage(state);
+                  },
+                  onRefresh: () => loadUsage(state),
+                  onTimeZoneChange: (zone) => {
+                    state.usageTimeZone = zone;
+                    state.usageSelectedDays = [];
+                    state.usageSelectedHours = [];
+                    state.usageSelectedSessions = [];
+                    void loadUsage(state);
+                  },
+                  onToggleHeaderPinned: () => {
+                    state.usageHeaderPinned = !state.usageHeaderPinned;
+                  },
+                  onSelectHour: (hour, shiftKey) => {
+                    if (shiftKey && state.usageSelectedHours.length > 0) {
+                      const allHours = Array.from({ length: 24 }, (_, i) => i);
+                      const lastSelected =
+                        state.usageSelectedHours[state.usageSelectedHours.length - 1];
+                      const lastIdx = allHours.indexOf(lastSelected);
+                      const thisIdx = allHours.indexOf(hour);
+                      if (lastIdx !== -1 && thisIdx !== -1) {
+                        const [start, end] =
+                          lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
+                        const range = allHours.slice(start, end + 1);
+                        state.usageSelectedHours = [
+                          ...new Set([...state.usageSelectedHours, ...range]),
+                        ];
+                      }
+                    } else if (state.usageSelectedHours.includes(hour)) {
+                      state.usageSelectedHours = state.usageSelectedHours.filter((h) => h !== hour);
+                    } else {
+                      state.usageSelectedHours = [...state.usageSelectedHours, hour];
+                    }
+                  },
+                  onQueryDraftChange: (query) => {
+                    state.usageQueryDraft = query;
+                    if (state.usageQueryDebounceTimer) {
+                      window.clearTimeout(state.usageQueryDebounceTimer);
+                    }
+                    state.usageQueryDebounceTimer = window.setTimeout(() => {
+                      state.usageQuery = state.usageQueryDraft;
+                      state.usageQueryDebounceTimer = null;
+                    }, 250);
+                  },
+                  onApplyQuery: () => {
+                    if (state.usageQueryDebounceTimer) {
+                      window.clearTimeout(state.usageQueryDebounceTimer);
+                      state.usageQueryDebounceTimer = null;
+                    }
+                    state.usageQuery = state.usageQueryDraft;
+                  },
+                  onClearQuery: () => {
+                    if (state.usageQueryDebounceTimer) {
+                      window.clearTimeout(state.usageQueryDebounceTimer);
+                      state.usageQueryDebounceTimer = null;
+                    }
+                    state.usageQueryDraft = "";
+                    state.usageQuery = "";
+                  },
+                  onSelectDay: (day, shiftKey) => {
+                    if (shiftKey && state.usageSelectedDays.length > 0) {
+                      const allDays = (state.usageCostSummary?.daily ?? []).map((d) => d.date);
+                      const lastSelected =
+                        state.usageSelectedDays[state.usageSelectedDays.length - 1];
+                      const lastIdx = allDays.indexOf(lastSelected);
+                      const thisIdx = allDays.indexOf(day);
+                      if (lastIdx !== -1 && thisIdx !== -1) {
+                        const [start, end] =
+                          lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
+                        const range = allDays.slice(start, end + 1);
+                        state.usageSelectedDays = [
+                          ...new Set([...state.usageSelectedDays, ...range]),
+                        ];
+                      }
+                    } else if (state.usageSelectedDays.includes(day)) {
+                      state.usageSelectedDays = state.usageSelectedDays.filter((d) => d !== day);
+                    } else {
+                      state.usageSelectedDays = [day];
+                    }
+                  },
+                  onClearDays: () => {
+                    state.usageSelectedDays = [];
+                  },
+                  onClearHours: () => {
+                    state.usageSelectedHours = [];
+                  },
+                  onClearSessions: () => {
+                    state.usageSelectedSessions = [];
+                    state.usageTimeSeries = null;
+                    state.usageSessionLogs = null;
+                  },
+                  onClearFilters: () => {
+                    state.usageSelectedDays = [];
+                    state.usageSelectedHours = [];
+                    state.usageSelectedSessions = [];
+                    state.usageTimeSeries = null;
+                    state.usageSessionLogs = null;
+                  },
                 },
                 display: {
-                  chartMode: state.usageChartMode,
-                  dailyChartMode: state.usageDailyChartMode,
-                  sessionSort: state.usageSessionSort,
-                  sessionSortDir: state.usageSessionSortDir,
-                  recentSessions: state.usageRecentSessions,
-                  sessionsTab: state.usageSessionsTab,
-                  visibleColumns:
-                    state.usageVisibleColumns as import("./views/usage.ts").UsageColumnId[],
-                  contextExpanded: state.usageContextExpanded,
-                  headerPinned: state.usageHeaderPinned,
-                },
-                detail: {
-                  timeSeriesMode: state.usageTimeSeriesMode,
-                  timeSeriesBreakdownMode: state.usageTimeSeriesBreakdownMode,
-                  timeSeries: state.usageTimeSeries,
-                  timeSeriesLoading: state.usageTimeSeriesLoading,
-                  timeSeriesCursorStart: state.usageTimeSeriesCursorStart,
-                  timeSeriesCursorEnd: state.usageTimeSeriesCursorEnd,
-                  sessionLogs: state.usageSessionLogs,
-                  sessionLogsLoading: state.usageSessionLogsLoading,
-                  sessionLogsExpanded: state.usageSessionLogsExpanded,
-                  logFilters: {
-                    roles: state.usageLogFilterRoles,
-                    tools: state.usageLogFilterTools,
-                    hasTools: state.usageLogFilterHasTools,
-                    query: state.usageLogFilterQuery,
+                  onChartModeChange: (mode) => {
+                    state.usageChartMode = mode;
                   },
-                },
-                callbacks: {
-                  filters: {
-                    onStartDateChange: (date) => {
-                      state.usageStartDate = date;
-                      state.usageSelectedDays = [];
-                      state.usageSelectedHours = [];
-                      state.usageSelectedSessions = [];
-                      debouncedLoadUsage(state);
-                    },
-                    onEndDateChange: (date) => {
-                      state.usageEndDate = date;
-                      state.usageSelectedDays = [];
-                      state.usageSelectedHours = [];
-                      state.usageSelectedSessions = [];
-                      debouncedLoadUsage(state);
-                    },
-                    onRefresh: () => loadUsage(state),
-                    onTimeZoneChange: (zone) => {
-                      state.usageTimeZone = zone;
-                      state.usageSelectedDays = [];
-                      state.usageSelectedHours = [];
-                      state.usageSelectedSessions = [];
-                      void loadUsage(state);
-                    },
-                    onToggleHeaderPinned: () => {
-                      state.usageHeaderPinned = !state.usageHeaderPinned;
-                    },
-                    onSelectHour: (hour, shiftKey) => {
-                      if (shiftKey && state.usageSelectedHours.length > 0) {
-                        const allHours = Array.from({ length: 24 }, (_, i) => i);
-                        const lastSelected =
-                          state.usageSelectedHours[state.usageSelectedHours.length - 1];
-                        const lastIdx = allHours.indexOf(lastSelected);
-                        const thisIdx = allHours.indexOf(hour);
-                        if (lastIdx !== -1 && thisIdx !== -1) {
-                          const [start, end] =
-                            lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
-                          const range = allHours.slice(start, end + 1);
-                          state.usageSelectedHours = [
-                            ...new Set([...state.usageSelectedHours, ...range]),
-                          ];
-                        }
-                      } else if (state.usageSelectedHours.includes(hour)) {
-                        state.usageSelectedHours = state.usageSelectedHours.filter((h) => h !== hour);
-                      } else {
-                        state.usageSelectedHours = [...state.usageSelectedHours, hour];
-                      }
-                    },
-                    onQueryDraftChange: (query) => {
-                      state.usageQueryDraft = query;
-                      if (state.usageQueryDebounceTimer) {
-                        window.clearTimeout(state.usageQueryDebounceTimer);
-                      }
-                      state.usageQueryDebounceTimer = window.setTimeout(() => {
-                        state.usageQuery = state.usageQueryDraft;
-                        state.usageQueryDebounceTimer = null;
-                      }, 250);
-                    },
-                    onApplyQuery: () => {
-                      if (state.usageQueryDebounceTimer) {
-                        window.clearTimeout(state.usageQueryDebounceTimer);
-                        state.usageQueryDebounceTimer = null;
-                      }
-                      state.usageQuery = state.usageQueryDraft;
-                    },
-                    onClearQuery: () => {
-                      if (state.usageQueryDebounceTimer) {
-                        window.clearTimeout(state.usageQueryDebounceTimer);
-                        state.usageQueryDebounceTimer = null;
-                      }
-                      state.usageQueryDraft = "";
-                      state.usageQuery = "";
-                    },
-                    onSelectDay: (day, shiftKey) => {
-                      if (shiftKey && state.usageSelectedDays.length > 0) {
-                        const allDays = (state.usageCostSummary?.daily ?? []).map((d) => d.date);
-                        const lastSelected =
-                          state.usageSelectedDays[state.usageSelectedDays.length - 1];
-                        const lastIdx = allDays.indexOf(lastSelected);
-                        const thisIdx = allDays.indexOf(day);
-                        if (lastIdx !== -1 && thisIdx !== -1) {
-                          const [start, end] =
-                            lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
-                          const range = allDays.slice(start, end + 1);
-                          state.usageSelectedDays = [...new Set([...state.usageSelectedDays, ...range])];
-                        }
-                      } else if (state.usageSelectedDays.includes(day)) {
-                        state.usageSelectedDays = state.usageSelectedDays.filter((d) => d !== day);
-                      } else {
-                        state.usageSelectedDays = [day];
-                      }
-                    },
-                    onClearDays: () => {
-                      state.usageSelectedDays = [];
-                    },
-                    onClearHours: () => {
-                      state.usageSelectedHours = [];
-                    },
-                    onClearSessions: () => {
-                      state.usageSelectedSessions = [];
-                      state.usageTimeSeries = null;
-                      state.usageSessionLogs = null;
-                    },
-                    onClearFilters: () => {
-                      state.usageSelectedDays = [];
-                      state.usageSelectedHours = [];
-                      state.usageSelectedSessions = [];
-                      state.usageTimeSeries = null;
-                      state.usageSessionLogs = null;
-                    },
+                  onDailyChartModeChange: (mode) => {
+                    state.usageDailyChartMode = mode;
                   },
-                  display: {
-                    onChartModeChange: (mode) => {
-                      state.usageChartMode = mode;
-                    },
-                    onDailyChartModeChange: (mode) => {
-                      state.usageDailyChartMode = mode;
-                    },
-                    onSessionSortChange: (sort) => {
-                      state.usageSessionSort = sort;
-                    },
-                    onSessionSortDirChange: (dir) => {
-                      state.usageSessionSortDir = dir;
-                    },
-                    onSessionsTabChange: (tab) => {
-                      state.usageSessionsTab = tab;
-                    },
-                    onToggleColumn: (column) => {
-                      if (state.usageVisibleColumns.includes(column)) {
-                        state.usageVisibleColumns = state.usageVisibleColumns.filter(
-                          (entry) => entry !== column,
-                        );
-                      } else {
-                        state.usageVisibleColumns = [...state.usageVisibleColumns, column];
-                      }
-                    },
+                  onSessionSortChange: (sort) => {
+                    state.usageSessionSort = sort;
                   },
-                  details: {
-                    onToggleContextExpanded: () => {
-                      state.usageContextExpanded = !state.usageContextExpanded;
-                    },
-                    onToggleSessionLogsExpanded: () => {
-                      state.usageSessionLogsExpanded = !state.usageSessionLogsExpanded;
-                    },
-                    onLogFilterRolesChange: (next) => {
-                      state.usageLogFilterRoles = next;
-                    },
-                    onLogFilterToolsChange: (next) => {
-                      state.usageLogFilterTools = next;
-                    },
-                    onLogFilterHasToolsChange: (next) => {
-                      state.usageLogFilterHasTools = next;
-                    },
-                    onLogFilterQueryChange: (next) => {
-                      state.usageLogFilterQuery = next;
-                    },
-                    onLogFilterClear: () => {
-                      state.usageLogFilterRoles = [];
-                      state.usageLogFilterTools = [];
-                      state.usageLogFilterHasTools = false;
-                      state.usageLogFilterQuery = "";
-                    },
-                    onSelectSession: (key, shiftKey) => {
-                      state.usageTimeSeries = null;
-                      state.usageSessionLogs = null;
-                      state.usageRecentSessions = [
-                        key,
-                        ...state.usageRecentSessions.filter((entry) => entry !== key),
-                      ].slice(0, 8);
-
-                      if (shiftKey && state.usageSelectedSessions.length > 0) {
-                        const isTokenMode = state.usageChartMode === "tokens";
-                        const sortedSessions = [...(state.usageResult?.sessions ?? [])].toSorted(
-                          (a, b) => {
-                            const valA = isTokenMode
-                              ? (a.usage?.totalTokens ?? 0)
-                              : (a.usage?.totalCost ?? 0);
-                            const valB = isTokenMode
-                              ? (b.usage?.totalTokens ?? 0)
-                              : (b.usage?.totalCost ?? 0);
-                            return valB - valA;
-                          },
-                        );
-                        const allKeys = sortedSessions.map((s) => s.key);
-                        const lastSelected =
-                          state.usageSelectedSessions[state.usageSelectedSessions.length - 1];
-                        const lastIdx = allKeys.indexOf(lastSelected);
-                        const thisIdx = allKeys.indexOf(key);
-                        if (lastIdx !== -1 && thisIdx !== -1) {
-                          const [start, end] =
-                            lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
-                          const range = allKeys.slice(start, end + 1);
-                          state.usageSelectedSessions = [
-                            ...new Set([...state.usageSelectedSessions, ...range]),
-                          ];
-                        }
-                      } else if (
-                        state.usageSelectedSessions.length === 1 &&
-                        state.usageSelectedSessions[0] === key
-                      ) {
-                        state.usageSelectedSessions = [];
-                      } else {
-                        state.usageSelectedSessions = [key];
-                      }
-
-                      state.usageTimeSeriesCursorStart = null;
-                      state.usageTimeSeriesCursorEnd = null;
-
-                      if (state.usageSelectedSessions.length === 1) {
-                        void loadSessionTimeSeries(state, state.usageSelectedSessions[0]);
-                        void loadSessionLogs(state, state.usageSelectedSessions[0]);
-                      }
-                    },
-                    onTimeSeriesModeChange: (mode) => {
-                      state.usageTimeSeriesMode = mode;
-                    },
-                    onTimeSeriesBreakdownChange: (mode) => {
-                      state.usageTimeSeriesBreakdownMode = mode;
-                    },
-                    onTimeSeriesCursorRangeChange: (start, end) => {
-                      state.usageTimeSeriesCursorStart = start;
-                      state.usageTimeSeriesCursorEnd = end;
-                    },
+                  onSessionSortDirChange: (dir) => {
+                    state.usageSessionSortDir = dir;
                   },
-                },
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "cron"
-            ? renderCron({
-                loading: state.cronLoading,
-                status: state.cronStatus,
-                jobs: state.cronJobs,
-                jobsLoadingMore: state.cronJobsLoadingMore,
-                jobsTotal: state.cronJobsTotal,
-                jobsHasMore: state.cronJobsHasMore,
-                jobsQuery: state.cronJobsQuery,
-                jobsEnabledFilter: state.cronJobsEnabledFilter as import("./views/cron.ts").CronJobsEnabledFilter,
-                jobsScheduleKindFilter: state.cronJobsScheduleKindFilter as import("./views/cron.ts").CronJobsScheduleKindFilter,
-                jobsLastStatusFilter: state.cronJobsLastStatusFilter as import("./views/cron.ts").CronJobsLastStatusFilter,
-                jobsSortBy: state.cronJobsSortBy as import("./views/cron.ts").CronJobsSortBy,
-                jobsSortDir: state.cronJobsSortDir as import("./views/cron.ts").CronSortDir,
-                editingJobId: state.cronEditingJobId,
-                error: state.cronError,
-                busy: state.cronBusy,
-                form: state.cronForm,
-                channels: state.channelsSnapshot?.channelMeta?.length
-                  ? state.channelsSnapshot.channelMeta.map((entry) => entry.id)
-                  : (state.channelsSnapshot?.channelOrder ?? []),
-                channelLabels: state.channelsSnapshot?.channelLabels ?? {},
-                channelMeta: state.channelsSnapshot?.channelMeta ?? [],
-                runsJobId: state.cronRunsJobId,
-                runs: state.cronRuns,
-                runsTotal: state.cronRunsTotal,
-                runsHasMore: state.cronRunsHasMore,
-                runsLoadingMore: state.cronRunsLoadingMore,
-                runsScope: state.cronRunsScope,
-                runsStatuses: state.cronRunsStatuses,
-                runsDeliveryStatuses: state.cronRunsDeliveryStatuses,
-                runsStatusFilter: state.cronRunsStatusFilter,
-                runsQuery: state.cronRunsQuery,
-                runsSortDir: state.cronRunsSortDir,
-                fieldErrors: state.cronFieldErrors,
-                canSubmit: Object.keys(state.cronFieldErrors).length === 0,
-                agentSuggestions: [],
-                modelSuggestions: [],
-                thinkingSuggestions: [],
-                timezoneSuggestions: [],
-                deliveryToSuggestions: [],
-                accountSuggestions: [],
-                basePath: state.basePath,
-                onFormChange: (patch) => (state.cronForm = { ...state.cronForm, ...patch }),
-                onRefresh: () => state.loadCron(),
-                onAdd: () => addCronJob(state as unknown as CronState),
-                onEdit: (job) => { state.cronEditingJobId = job.id; },
-                onClone: (job) => { state.cronForm = { ...state.cronForm, name: job.name + " (copy)" }; },
-                onCancelEdit: () => { state.cronEditingJobId = null; },
-                onToggle: (job, enabled) =>
-                  toggleCronJob(state as unknown as CronState, job, enabled),
-                onRun: (job, mode) => runCronJob(state as unknown as CronState, job, mode ?? "force"),
-                onRemove: (job) => removeCronJob(state as unknown as CronState, job),
-                onLoadRuns: (jobId) => loadCronRuns(state as unknown as CronState, jobId),
-                onLoadMoreJobs: () => Promise.resolve(),
-                onJobsFiltersChange: (patch) => {
-                  if (patch.cronJobsQuery !== undefined) {state.cronJobsQuery = patch.cronJobsQuery;}
-                  if (patch.cronJobsEnabledFilter !== undefined) {state.cronJobsEnabledFilter = patch.cronJobsEnabledFilter;}
-                  if (patch.cronJobsScheduleKindFilter !== undefined) {state.cronJobsScheduleKindFilter = patch.cronJobsScheduleKindFilter;}
-                  if (patch.cronJobsLastStatusFilter !== undefined) {state.cronJobsLastStatusFilter = patch.cronJobsLastStatusFilter;}
-                  if (patch.cronJobsSortBy !== undefined) {state.cronJobsSortBy = patch.cronJobsSortBy;}
-                  if (patch.cronJobsSortDir !== undefined) {state.cronJobsSortDir = patch.cronJobsSortDir;}
-                },
-                onJobsFiltersReset: () => {
-                  state.cronJobsQuery = "";
-                  state.cronJobsEnabledFilter = "all";
-                  state.cronJobsScheduleKindFilter = "all";
-                  state.cronJobsLastStatusFilter = "all";
-                  state.cronJobsSortBy = "nextRunAtMs";
-                  state.cronJobsSortDir = "asc";
-                },
-                onLoadMoreRuns: () => Promise.resolve(),
-                onRunsFiltersChange: (patch) => {
-                  if (patch.cronRunsStatuses !== undefined) {state.cronRunsStatuses = patch.cronRunsStatuses;}
-                  if (patch.cronRunsDeliveryStatuses !== undefined) {state.cronRunsDeliveryStatuses = patch.cronRunsDeliveryStatuses;}
-                  if (patch.cronRunsStatusFilter !== undefined) {state.cronRunsStatusFilter = patch.cronRunsStatusFilter;}
-                  if (patch.cronRunsQuery !== undefined) {state.cronRunsQuery = patch.cronRunsQuery;}
-                  if (patch.cronRunsSortDir !== undefined) {state.cronRunsSortDir = patch.cronRunsSortDir;}
-                  if (patch.cronRunsScope !== undefined) {state.cronRunsScope = patch.cronRunsScope;}
-                },
-                onRunsFiltersReset: () => {
-                  state.cronRunsStatuses = [];
-                  state.cronRunsDeliveryStatuses = [];
-                  state.cronRunsStatusFilter = "";
-                  state.cronRunsQuery = "";
-                  state.cronRunsSortDir = "desc";
-                },
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "agents"
-            ? renderAgents({
-                basePath: state.basePath ?? "",
-                loading: state.agentsLoading,
-                error: state.agentsError,
-                agentsList: state.agentsList,
-                selectedAgentId: resolvedAgentId,
-                activePanel: state.agentsPanel,
-                toolsCatalog: {
-                  loading: state.toolsCatalogLoading,
-                  error: state.toolsCatalogError,
-                  result: state.toolsCatalogResult,
-                },
-                toolsEffective: {
-                  loading: state.toolsEffectiveLoading,
-                  error: state.toolsEffectiveError,
-                  result: state.toolsEffectiveResult,
-                },
-                runtimeSessionKey: state.sessionKey ?? "",
-                runtimeSessionMatchesSelectedAgent: toolsPanelUsesActiveSession,
-                modelCatalog: state.chatModelCatalog ?? [],
-                configForm: configValue,
-                configLoading: state.configLoading,
-                configSaving: state.configSaving,
-                configDirty: state.configFormDirty,
-                channelsLoading: state.channelsLoading,
-                channelsError: state.channelsError,
-                channelsSnapshot: state.channelsSnapshot,
-                channelsLastSuccess: state.channelsLastSuccess,
-                cronLoading: state.cronLoading,
-                cronStatus: state.cronStatus,
-                cronJobs: state.cronJobs,
-                cronError: state.cronError,
-                agentFilesLoading: state.agentFilesLoading,
-                agentFilesError: state.agentFilesError,
-                agentFilesList: state.agentFilesList,
-                agentFileActive: state.agentFileActive,
-                agentFileContents: state.agentFileContents,
-                agentFileDrafts: state.agentFileDrafts,
-                agentFileSaving: state.agentFileSaving,
-                agentIdentityLoading: state.agentIdentityLoading,
-                agentIdentityError: state.agentIdentityError,
-                agentIdentityById: state.agentIdentityById,
-                // 三文件身份体系
-                agentSoulFiles: state.agentSoulFiles,
-                agentSoulFilesLoading: state.agentSoulFilesLoading,
-                agentSoulFilesError: state.agentSoulFilesError,
-                agentSoulDrafts: state.agentSoulDrafts,
-                agentSoulSaving: state.agentSoulSaving,
-                agentSkillsLoading: state.agentSkillsLoading,
-                agentSkillsReport: state.agentSkillsReport,
-                agentSkillsError: state.agentSkillsError,
-                agentSkillsAgentId: state.agentSkillsAgentId,
-                skillsFilter: state.skillsFilter,
-                // oxlint-disable-next-line typescript/no-explicit-any
-                modelAccountsConfig: state.modelAccountsConfig as any,
-                modelAccountsLoading: state.modelAccountsLoading,
-                modelAccountsError: state.modelAccountsError,
-                modelAccountsSaving: state.modelAccountsSaving || false,
-                modelAccountsSaveSuccess: state.modelAccountsSaveSuccess || false,
-                // 模型账号绑定管理
-                boundModelAccounts: state.boundModelAccounts,
-                boundModelDetails: state.boundModelDetails,
-                boundModelAccountsLoading: state.boundModelAccountsLoading,
-                boundModelAccountsError: state.boundModelAccountsError,
-                availableModelAccounts: state.availableModelAccounts,
-                availableModelDetails: state.availableModelDetails,
-                availableModelAccountsLoading: state.availableModelAccountsLoading,
-                availableModelAccountsError: state.availableModelAccountsError,
-                availableModelAccountsExpanded: state.availableModelAccountsExpanded,
-                defaultModelAccountId: state.defaultModelAccountId,
-                modelAccountOperationError: state.modelAccountOperationError,
-                // oxlint-disable-next-line typescript/no-explicit-any
-                channelPoliciesConfig: state.channelPoliciesConfig as any,
-                channelPoliciesLoading: state.channelPoliciesLoading,
-                channelPoliciesError: state.channelPoliciesError,
-                channelPoliciesSaving: state.channelPoliciesSaving || false,
-                channelPoliciesSaveSuccess: state.channelPoliciesSaveSuccess || false,
-                // 通道账号绑定管理
-                boundChannelAccounts: state.boundChannelAccounts,
-                boundChannelAccountsLoading: state.boundChannelAccountsLoading,
-                boundChannelAccountsError: state.boundChannelAccountsError,
-                availableChannelAccounts: state.availableChannelAccounts,
-                availableChannelAccountsLoading: state.availableChannelAccountsLoading,
-                availableChannelAccountsError: state.availableChannelAccountsError,
-                availableChannelAccountsExpanded: state.availableChannelAccountsExpanded,
-                channelAccountOperationError: state.channelAccountOperationError,
-                editingAgent: state.editingAgent || null,
-                creatingAgent: state.creatingAgent || false,
-                deletingAgent: state.deletingAgent || false,
-                // Phase 3: 权限管理数据
-                permissionsConfig: state.permissionsConfig,
-                permissionsLoading: state.permissionsLoading,
-                permissionsError: state.permissionsError,
-                permissionsActiveTab: state.permissionsManagementActiveTab,
-                permissionsConfigSaving: state.permissionsSaving,
-                approvalRequests: state.approvalRequests,
-                approvalsLoading: state.approvalsLoading,
-                approvalStats: state.approvalStats,
-                permissionChangeHistory: state.permissionChangeHistory,
-                permissionHistoryLoading: state.permissionHistoryLoading,
-                onRefresh: async () => {
-                  await loadAgents(state);
-                  const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
-                  if (agentIds.length > 0) {
-                    void loadAgentIdentities(state, agentIds);
-                  }
-                  const refreshedAgentId =
-                    state.agentsSelectedId ??
-                    state.agentsList?.defaultId ??
-                    state.agentsList?.agents?.[0]?.id ??
-                    null;
-                  if (state.agentsPanel === "tools" && refreshedAgentId) {
-                    void loadToolsCatalog(state, refreshedAgentId);
-                    if (refreshedAgentId === resolveAgentIdFromSessionKey(state.sessionKey)) {
-                      void loadToolsEffective(state, {
-                        agentId: refreshedAgentId,
-                        sessionKey: state.sessionKey ?? "",
-                      });
-                    }
-                  }
-                },
-                onSelectAgent: (agentId) => {
-                  if (state.agentsSelectedId === agentId) {
-                    return;
-                  }
-                  state.agentsSelectedId = agentId;
-                  state.agentFilesList = null;
-                  state.agentFilesError = null;
-                  state.agentFilesLoading = false;
-                  state.agentFileActive = null;
-                  state.agentFileContents = {};
-                  state.agentFileDrafts = {};
-                  state.agentSkillsReport = null;
-                  state.agentSkillsError = null;
-                  state.agentSkillsAgentId = null;
-                  // 重置 tools 状态
-                  resetToolsEffectiveState(state);
-                  state.toolsCatalogResult = null;
-                  state.toolsCatalogError = null;
-                  state.toolsCatalogLoading = false;
-                  state.toolsCatalogLoadingAgentId = null;
-                  void loadAgentIdentity(state, agentId);
-                  if (state.agentsPanel === "files") {
-                    void loadAgentFiles(state, agentId);
-                  }
-                  if (state.agentsPanel === "skills") {
-                    void loadAgentSkills(state, agentId);
-                  }
-                  // 如果当前在 tools 面板，重新加载工具目录
-                  if (state.agentsPanel === "tools") {
-                    void loadToolsCatalog(state, agentId);
-                    if (agentId === resolveAgentIdFromSessionKey(state.sessionKey)) {
-                      void loadToolsEffective(state, {
-                        agentId,
-                        sessionKey: state.sessionKey ?? "",
-                      });
-                    }
-                  }
-                  // 如果当前在通道策略面板，重新加载通道配置数据
-                  if (state.agentsPanel === "channelPolicies") {
-                    void loadChannelPolicies(state as unknown as AgentPhase5State, agentId);
-                    void loadBoundChannelAccounts(
-                      state as unknown as AgentChannelAccountsState,
-                      agentId,
-                    );
-                    void loadAvailableChannelAccounts(
-                      state as unknown as AgentChannelAccountsState,
-                      agentId,
-                    );
-                  }
-                  // 如果当前在模型账号面板，重新加载模型账号数据
-                  if (state.agentsPanel === "modelAccounts") {
-                    void loadModelAccounts(state as unknown as AgentPhase5State, agentId);
-                    void loadBoundModelAccounts(
-                      state as unknown as AgentModelAccountsState,
-                      agentId,
-                    );
-                    void loadAvailableModelAccounts(
-                      state as unknown as AgentModelAccountsState,
-                      agentId,
-                    );
-                  }
-                  // 如果当前在权限配置面板，重新加载权限数据
-                  if (state.agentsPanel === "permissionsConfig") {
-                    void loadAgentPermissions(state, agentId);
-                  }
-                  // 如果当前在定时任务面板，重新加载 cron 数据
-                  if (state.agentsPanel === "cron") {
-                    void state.loadCron();
-                  }
-                },
-                onSelectPanel: (panel) => {
-                  state.agentsPanel = panel;
-                  if (panel === "files" && resolvedAgentId) {
-                    if (state.agentFilesList?.agentId !== resolvedAgentId) {
-                      state.agentFilesList = null;
-                      state.agentFilesError = null;
-                      state.agentFileActive = null;
-                      state.agentFileContents = {};
-                      state.agentFileDrafts = {};
-                      void loadAgentFiles(state, resolvedAgentId);
-                    }
-                  }
-                  if (panel === "skills") {
-                    if (resolvedAgentId) {
-                      void loadAgentSkills(state, resolvedAgentId);
-                    }
-                  }
-                  if (panel === "tools" && resolvedAgentId) {
-                    if (
-                      state.toolsCatalogResult?.agentId !== resolvedAgentId ||
-                      state.toolsCatalogError
-                    ) {
-                      void loadToolsCatalog(state, resolvedAgentId);
-                    }
-                    if (resolvedAgentId === resolveAgentIdFromSessionKey(state.sessionKey)) {
-                      const toolsRequestKey = buildToolsEffectiveRequestKey(state, {
-                        agentId: resolvedAgentId,
-                        sessionKey: state.sessionKey ?? "",
-                      });
-                      if (
-                        state.toolsEffectiveResultKey !== toolsRequestKey ||
-                        state.toolsEffectiveError
-                      ) {
-                        void loadToolsEffective(state, {
-                          agentId: resolvedAgentId,
-                          sessionKey: state.sessionKey ?? "",
-                        });
-                      }
+                  onSessionsTabChange: (tab) => {
+                    state.usageSessionsTab = tab;
+                  },
+                  onToggleColumn: (column) => {
+                    if (state.usageVisibleColumns.includes(column)) {
+                      state.usageVisibleColumns = state.usageVisibleColumns.filter(
+                        (entry) => entry !== column,
+                      );
                     } else {
-                      resetToolsEffectiveState(state);
+                      state.usageVisibleColumns = [...state.usageVisibleColumns, column];
                     }
-                  }
-                  if (panel === "channels") {
-                    void loadChannels(state, false);
-                    // 加载通道账号绑定管理数据
-                    if (resolvedAgentId) {
-                      void loadBoundChannelAccounts(
-                        state as unknown as AgentChannelAccountsState,
-                        resolvedAgentId,
+                  },
+                },
+                details: {
+                  onToggleContextExpanded: () => {
+                    state.usageContextExpanded = !state.usageContextExpanded;
+                  },
+                  onToggleSessionLogsExpanded: () => {
+                    state.usageSessionLogsExpanded = !state.usageSessionLogsExpanded;
+                  },
+                  onLogFilterRolesChange: (next) => {
+                    state.usageLogFilterRoles = next;
+                  },
+                  onLogFilterToolsChange: (next) => {
+                    state.usageLogFilterTools = next;
+                  },
+                  onLogFilterHasToolsChange: (next) => {
+                    state.usageLogFilterHasTools = next;
+                  },
+                  onLogFilterQueryChange: (next) => {
+                    state.usageLogFilterQuery = next;
+                  },
+                  onLogFilterClear: () => {
+                    state.usageLogFilterRoles = [];
+                    state.usageLogFilterTools = [];
+                    state.usageLogFilterHasTools = false;
+                    state.usageLogFilterQuery = "";
+                  },
+                  onSelectSession: (key, shiftKey) => {
+                    state.usageTimeSeries = null;
+                    state.usageSessionLogs = null;
+                    state.usageRecentSessions = [
+                      key,
+                      ...state.usageRecentSessions.filter((entry) => entry !== key),
+                    ].slice(0, 8);
+
+                    if (shiftKey && state.usageSelectedSessions.length > 0) {
+                      const isTokenMode = state.usageChartMode === "tokens";
+                      const sortedSessions = [...(state.usageResult?.sessions ?? [])].toSorted(
+                        (a, b) => {
+                          const valA = isTokenMode
+                            ? (a.usage?.totalTokens ?? 0)
+                            : (a.usage?.totalCost ?? 0);
+                          const valB = isTokenMode
+                            ? (b.usage?.totalTokens ?? 0)
+                            : (b.usage?.totalCost ?? 0);
+                          return valB - valA;
+                        },
                       );
-                      void loadAvailableChannelAccounts(
-                        state as unknown as AgentChannelAccountsState,
-                        resolvedAgentId,
-                      );
+                      const allKeys = sortedSessions.map((s) => s.key);
+                      const lastSelected =
+                        state.usageSelectedSessions[state.usageSelectedSessions.length - 1];
+                      const lastIdx = allKeys.indexOf(lastSelected);
+                      const thisIdx = allKeys.indexOf(key);
+                      if (lastIdx !== -1 && thisIdx !== -1) {
+                        const [start, end] =
+                          lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx];
+                        const range = allKeys.slice(start, end + 1);
+                        state.usageSelectedSessions = [
+                          ...new Set([...state.usageSelectedSessions, ...range]),
+                        ];
+                      }
+                    } else if (
+                      state.usageSelectedSessions.length === 1 &&
+                      state.usageSelectedSessions[0] === key
+                    ) {
+                      state.usageSelectedSessions = [];
+                    } else {
+                      state.usageSelectedSessions = [key];
                     }
-                  }
-                  if (panel === "cron") {
-                    void state.loadCron();
-                  }
-                  // Phase 5: 加载模型账号和通道策略
-                  if (panel === "modelAccounts" && resolvedAgentId) {
-                    void loadModelAccounts(state as unknown as AgentPhase5State, resolvedAgentId);
-                    void loadBoundModelAccounts(
-                      state as unknown as AgentModelAccountsState,
-                      resolvedAgentId,
-                    );
-                    void loadAvailableModelAccounts(
-                      state as unknown as AgentModelAccountsState,
-                      resolvedAgentId,
-                    );
-                  }
-                  if (panel === "channelPolicies" && resolvedAgentId) {
-                    void loadChannelPolicies(state as unknown as AgentPhase5State, resolvedAgentId);
-                    // 加载通道账号绑定管理数据
-                    void loadBoundChannelAccounts(
-                      state as unknown as AgentChannelAccountsState,
-                      resolvedAgentId,
-                    );
-                    void loadAvailableChannelAccounts(
-                      state as unknown as AgentChannelAccountsState,
-                      resolvedAgentId,
-                    );
-                  }
-                  // Phase 3: 加载权限配置（针对具体助手）
-                  if (panel === "permissionsConfig" && resolvedAgentId) {
-                    void loadAgentPermissions(state, resolvedAgentId);
-                    void loadApprovalRequests(state);
-                    void loadPermissionApprovalStats(state);
-                  }
-                  // f3: 加载三文件身份（identity 面板）
-                  if (panel === "identity" && resolvedAgentId) {
-                    void loadAgentSoulFiles(state, resolvedAgentId);
-                  }
+
+                    state.usageTimeSeriesCursorStart = null;
+                    state.usageTimeSeriesCursorEnd = null;
+
+                    if (state.usageSelectedSessions.length === 1) {
+                      void loadSessionTimeSeries(state, state.usageSelectedSessions[0]);
+                      void loadSessionLogs(state, state.usageSelectedSessions[0]);
+                    }
+                  },
+                  onTimeSeriesModeChange: (mode) => {
+                    state.usageTimeSeriesMode = mode;
+                  },
+                  onTimeSeriesBreakdownChange: (mode) => {
+                    state.usageTimeSeriesBreakdownMode = mode;
+                  },
+                  onTimeSeriesCursorRangeChange: (start, end) => {
+                    state.usageTimeSeriesCursorStart = start;
+                    state.usageTimeSeriesCursorEnd = end;
+                  },
                 },
-                onLoadFiles: (agentId) => loadAgentFiles(state, agentId),
-                onSelectFile: (name) => {
-                  state.agentFileActive = name;
-                  if (!resolvedAgentId) {
-                    return;
-                  }
-                  void loadAgentFileContent(state, resolvedAgentId, name);
-                },
-                onFileDraftChange: (name, content) => {
-                  state.agentFileDrafts = { ...state.agentFileDrafts, [name]: content };
-                },
-                onFileReset: (name) => {
-                  const base = state.agentFileContents[name] ?? "";
-                  state.agentFileDrafts = { ...state.agentFileDrafts, [name]: base };
-                },
-                onFileSave: (name) => {
-                  if (!resolvedAgentId) {
-                    return;
-                  }
-                  const content =
-                    state.agentFileDrafts[name] ?? state.agentFileContents[name] ?? "";
-                  void saveAgentFile(state, resolvedAgentId, name, content);
-                },
-                onAddFile: (agentId, name) => {
-                  // 创建空文件：直接以空内容调用 saveAgentFile
-                  void saveAgentFile(state, agentId, name, "").then(() => {
-                    // 创建后自动选中
-                    state.agentFileActive = name;
-                    void loadAgentFileContent(state, agentId, name, { force: true });
-                  });
-                },
-                onOpenFolder: (folderPath) => {
-                  if (!state.client) {
-                    return;
-                  }
-                  void state.client
-                    .request("workspace.openFolder", { path: folderPath })
-                    .catch(() => {});
-                },
-                onToolsProfileChange: (agentId, profile, clearAllow) => {
-                  if (!configValue) {
-                    return;
-                  }
-                  const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
-                  if (!Array.isArray(list)) {
-                    return;
-                  }
-                  const index = list.findIndex(
-                    (entry) =>
-                      entry &&
-                      typeof entry === "object" &&
-                      "id" in entry &&
-                      (entry as { id?: string }).id === agentId,
-                  );
-                  if (index < 0) {
-                    return;
-                  }
-                  const basePath = ["agents", "list", index, "tools"];
-                  if (profile) {
-                    updateConfigFormValue(state, [...basePath, "profile"], profile);
-                  } else {
-                    removeConfigFormValue(state, [...basePath, "profile"]);
-                  }
-                  if (clearAllow) {
-                    removeConfigFormValue(state, [...basePath, "allow"]);
-                  }
-                },
-                onToolsOverridesChange: (agentId, alsoAllow, deny) => {
-                  if (!configValue) {
-                    return;
-                  }
-                  const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
-                  if (!Array.isArray(list)) {
-                    return;
-                  }
-                  const index = list.findIndex(
-                    (entry) =>
-                      entry &&
-                      typeof entry === "object" &&
-                      "id" in entry &&
-                      (entry as { id?: string }).id === agentId,
-                  );
-                  if (index < 0) {
-                    return;
-                  }
-                  const basePath = ["agents", "list", index, "tools"];
-                  if (alsoAllow.length > 0) {
-                    updateConfigFormValue(state, [...basePath, "alsoAllow"], alsoAllow);
-                  } else {
-                    removeConfigFormValue(state, [...basePath, "alsoAllow"]);
-                  }
-                  if (deny.length > 0) {
-                    updateConfigFormValue(state, [...basePath, "deny"], deny);
-                  } else {
-                    removeConfigFormValue(state, [...basePath, "deny"]);
-                  }
-                },
-                onConfigReload: () => loadConfig(state),
-                onConfigSave: () => saveConfig(state),
-                onChannelsRefresh: () => loadChannels(state, false),
-                onCronRefresh: () => state.loadCron(),
-                // f3: 三文件身份回调
-                onLoadSoulFiles: (agentId) => {
-                  void loadAgentSoulFiles(state, agentId);
-                },
-                onSoulDraftChange: (file, content) => {
-                  state.agentSoulDrafts = { ...state.agentSoulDrafts, [file]: content };
-                },
-                onSoulFilesSave: async (agentId) => {
-                  if (!state.client) {
-                    return;
-                  }
-                  state.agentSoulSaving = true;
-                  try {
-                    await state.client.request("agent.identity.set", {
-                      agentId,
-                      soul: state.agentSoulDrafts.soul,
-                      agent: state.agentSoulDrafts.agent,
-                      user: state.agentSoulDrafts.user,
+              },
+            })
+          : nothing}
+        ${state.tab === "cron"
+          ? renderCron({
+              loading: state.cronLoading,
+              status: state.cronStatus,
+              jobs: state.cronJobs,
+              jobsLoadingMore: state.cronJobsLoadingMore,
+              jobsTotal: state.cronJobsTotal,
+              jobsHasMore: state.cronJobsHasMore,
+              jobsQuery: state.cronJobsQuery,
+              jobsEnabledFilter:
+                state.cronJobsEnabledFilter as import("./views/cron.ts").CronJobsEnabledFilter,
+              jobsScheduleKindFilter:
+                state.cronJobsScheduleKindFilter as import("./views/cron.ts").CronJobsScheduleKindFilter,
+              jobsLastStatusFilter:
+                state.cronJobsLastStatusFilter as import("./views/cron.ts").CronJobsLastStatusFilter,
+              jobsSortBy: state.cronJobsSortBy as import("./views/cron.ts").CronJobsSortBy,
+              jobsSortDir: state.cronJobsSortDir as import("./views/cron.ts").CronSortDir,
+              editingJobId: state.cronEditingJobId,
+              error: state.cronError,
+              busy: state.cronBusy,
+              form: state.cronForm,
+              channels: state.channelsSnapshot?.channelMeta?.length
+                ? state.channelsSnapshot.channelMeta.map((entry) => entry.id)
+                : (state.channelsSnapshot?.channelOrder ?? []),
+              channelLabels: state.channelsSnapshot?.channelLabels ?? {},
+              channelMeta: state.channelsSnapshot?.channelMeta ?? [],
+              runsJobId: state.cronRunsJobId,
+              runs: state.cronRuns,
+              runsTotal: state.cronRunsTotal,
+              runsHasMore: state.cronRunsHasMore,
+              runsLoadingMore: state.cronRunsLoadingMore,
+              runsScope: state.cronRunsScope,
+              runsStatuses: state.cronRunsStatuses,
+              runsDeliveryStatuses: state.cronRunsDeliveryStatuses,
+              runsStatusFilter: state.cronRunsStatusFilter,
+              runsQuery: state.cronRunsQuery,
+              runsSortDir: state.cronRunsSortDir,
+              fieldErrors: state.cronFieldErrors,
+              canSubmit: Object.keys(state.cronFieldErrors).length === 0,
+              agentSuggestions: [],
+              modelSuggestions: [],
+              thinkingSuggestions: [],
+              timezoneSuggestions: [],
+              deliveryToSuggestions: [],
+              accountSuggestions: [],
+              basePath: state.basePath,
+              onFormChange: (patch) => (state.cronForm = { ...state.cronForm, ...patch }),
+              onRefresh: () => state.loadCron(),
+              onAdd: () => addCronJob(state as unknown as CronState),
+              onEdit: (job) => {
+                state.cronEditingJobId = job.id;
+              },
+              onClone: (job) => {
+                state.cronForm = { ...state.cronForm, name: job.name + " (copy)" };
+              },
+              onCancelEdit: () => {
+                state.cronEditingJobId = null;
+              },
+              onToggle: (job, enabled) =>
+                toggleCronJob(state as unknown as CronState, job, enabled),
+              onRun: (job, mode) => runCronJob(state as unknown as CronState, job, mode ?? "force"),
+              onRemove: (job) => removeCronJob(state as unknown as CronState, job),
+              onLoadRuns: (jobId) => loadCronRuns(state as unknown as CronState, jobId),
+              onLoadMoreJobs: () => Promise.resolve(),
+              onJobsFiltersChange: (patch) => {
+                if (patch.cronJobsQuery !== undefined) {
+                  state.cronJobsQuery = patch.cronJobsQuery;
+                }
+                if (patch.cronJobsEnabledFilter !== undefined) {
+                  state.cronJobsEnabledFilter = patch.cronJobsEnabledFilter;
+                }
+                if (patch.cronJobsScheduleKindFilter !== undefined) {
+                  state.cronJobsScheduleKindFilter = patch.cronJobsScheduleKindFilter;
+                }
+                if (patch.cronJobsLastStatusFilter !== undefined) {
+                  state.cronJobsLastStatusFilter = patch.cronJobsLastStatusFilter;
+                }
+                if (patch.cronJobsSortBy !== undefined) {
+                  state.cronJobsSortBy = patch.cronJobsSortBy;
+                }
+                if (patch.cronJobsSortDir !== undefined) {
+                  state.cronJobsSortDir = patch.cronJobsSortDir;
+                }
+              },
+              onJobsFiltersReset: () => {
+                state.cronJobsQuery = "";
+                state.cronJobsEnabledFilter = "all";
+                state.cronJobsScheduleKindFilter = "all";
+                state.cronJobsLastStatusFilter = "all";
+                state.cronJobsSortBy = "nextRunAtMs";
+                state.cronJobsSortDir = "asc";
+              },
+              onLoadMoreRuns: () => Promise.resolve(),
+              onRunsFiltersChange: (patch) => {
+                if (patch.cronRunsStatuses !== undefined) {
+                  state.cronRunsStatuses = patch.cronRunsStatuses;
+                }
+                if (patch.cronRunsDeliveryStatuses !== undefined) {
+                  state.cronRunsDeliveryStatuses = patch.cronRunsDeliveryStatuses;
+                }
+                if (patch.cronRunsStatusFilter !== undefined) {
+                  state.cronRunsStatusFilter = patch.cronRunsStatusFilter;
+                }
+                if (patch.cronRunsQuery !== undefined) {
+                  state.cronRunsQuery = patch.cronRunsQuery;
+                }
+                if (patch.cronRunsSortDir !== undefined) {
+                  state.cronRunsSortDir = patch.cronRunsSortDir;
+                }
+                if (patch.cronRunsScope !== undefined) {
+                  state.cronRunsScope = patch.cronRunsScope;
+                }
+              },
+              onRunsFiltersReset: () => {
+                state.cronRunsStatuses = [];
+                state.cronRunsDeliveryStatuses = [];
+                state.cronRunsStatusFilter = "";
+                state.cronRunsQuery = "";
+                state.cronRunsSortDir = "desc";
+              },
+            })
+          : nothing}
+        ${state.tab === "agents"
+          ? renderAgents({
+              basePath: state.basePath ?? "",
+              loading: state.agentsLoading,
+              error: state.agentsError,
+              agentsList: state.agentsList,
+              selectedAgentId: resolvedAgentId,
+              activePanel: state.agentsPanel,
+              toolsCatalog: {
+                loading: state.toolsCatalogLoading,
+                error: state.toolsCatalogError,
+                result: state.toolsCatalogResult,
+              },
+              toolsEffective: {
+                loading: state.toolsEffectiveLoading,
+                error: state.toolsEffectiveError,
+                result: state.toolsEffectiveResult,
+              },
+              runtimeSessionKey: state.sessionKey ?? "",
+              runtimeSessionMatchesSelectedAgent: toolsPanelUsesActiveSession,
+              modelCatalog: state.chatModelCatalog ?? [],
+              configForm: configValue,
+              configLoading: state.configLoading,
+              configSaving: state.configSaving,
+              configDirty: state.configFormDirty,
+              channelsLoading: state.channelsLoading,
+              channelsError: state.channelsError,
+              channelsSnapshot: state.channelsSnapshot,
+              channelsLastSuccess: state.channelsLastSuccess,
+              cronLoading: state.cronLoading,
+              cronStatus: state.cronStatus,
+              cronJobs: state.cronJobs,
+              cronError: state.cronError,
+              agentFilesLoading: state.agentFilesLoading,
+              agentFilesError: state.agentFilesError,
+              agentFilesList: state.agentFilesList,
+              agentFileActive: state.agentFileActive,
+              agentFileContents: state.agentFileContents,
+              agentFileDrafts: state.agentFileDrafts,
+              agentFileSaving: state.agentFileSaving,
+              agentIdentityLoading: state.agentIdentityLoading,
+              agentIdentityError: state.agentIdentityError,
+              agentIdentityById: state.agentIdentityById,
+              // 三文件身份体系
+              agentSoulFiles: state.agentSoulFiles,
+              agentSoulFilesLoading: state.agentSoulFilesLoading,
+              agentSoulFilesError: state.agentSoulFilesError,
+              agentSoulDrafts: state.agentSoulDrafts,
+              agentSoulSaving: state.agentSoulSaving,
+              agentSkillsLoading: state.agentSkillsLoading,
+              agentSkillsReport: state.agentSkillsReport,
+              agentSkillsError: state.agentSkillsError,
+              agentSkillsAgentId: state.agentSkillsAgentId,
+              skillsFilter: state.skillsFilter,
+              // oxlint-disable-next-line typescript/no-explicit-any
+              modelAccountsConfig: state.modelAccountsConfig as any,
+              modelAccountsLoading: state.modelAccountsLoading,
+              modelAccountsError: state.modelAccountsError,
+              modelAccountsSaving: state.modelAccountsSaving || false,
+              modelAccountsSaveSuccess: state.modelAccountsSaveSuccess || false,
+              // 模型账号绑定管理
+              boundModelAccounts: state.boundModelAccounts,
+              boundModelDetails: state.boundModelDetails,
+              boundModelAccountsLoading: state.boundModelAccountsLoading,
+              boundModelAccountsError: state.boundModelAccountsError,
+              availableModelAccounts: state.availableModelAccounts,
+              availableModelDetails: state.availableModelDetails,
+              availableModelAccountsLoading: state.availableModelAccountsLoading,
+              availableModelAccountsError: state.availableModelAccountsError,
+              availableModelAccountsExpanded: state.availableModelAccountsExpanded,
+              defaultModelAccountId: state.defaultModelAccountId,
+              modelAccountOperationError: state.modelAccountOperationError,
+              // oxlint-disable-next-line typescript/no-explicit-any
+              channelPoliciesConfig: state.channelPoliciesConfig as any,
+              channelPoliciesLoading: state.channelPoliciesLoading,
+              channelPoliciesError: state.channelPoliciesError,
+              channelPoliciesSaving: state.channelPoliciesSaving || false,
+              channelPoliciesSaveSuccess: state.channelPoliciesSaveSuccess || false,
+              // 通道账号绑定管理
+              boundChannelAccounts: state.boundChannelAccounts,
+              boundChannelAccountsLoading: state.boundChannelAccountsLoading,
+              boundChannelAccountsError: state.boundChannelAccountsError,
+              availableChannelAccounts: state.availableChannelAccounts,
+              availableChannelAccountsLoading: state.availableChannelAccountsLoading,
+              availableChannelAccountsError: state.availableChannelAccountsError,
+              availableChannelAccountsExpanded: state.availableChannelAccountsExpanded,
+              channelAccountOperationError: state.channelAccountOperationError,
+              editingAgent: state.editingAgent || null,
+              creatingAgent: state.creatingAgent || false,
+              deletingAgent: state.deletingAgent || false,
+              // Phase 3: 权限管理数据
+              permissionsConfig: state.permissionsConfig,
+              permissionsLoading: state.permissionsLoading,
+              permissionsError: state.permissionsError,
+              permissionsActiveTab: state.permissionsManagementActiveTab,
+              permissionsConfigSaving: state.permissionsSaving,
+              approvalRequests: state.approvalRequests,
+              approvalsLoading: state.approvalsLoading,
+              approvalStats: state.approvalStats,
+              permissionChangeHistory: state.permissionChangeHistory,
+              permissionHistoryLoading: state.permissionHistoryLoading,
+              onRefresh: async () => {
+                await loadAgents(state);
+                const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
+                if (agentIds.length > 0) {
+                  void loadAgentIdentities(state, agentIds);
+                }
+                const refreshedAgentId =
+                  state.agentsSelectedId ??
+                  state.agentsList?.defaultId ??
+                  state.agentsList?.agents?.[0]?.id ??
+                  null;
+                if (state.agentsPanel === "tools" && refreshedAgentId) {
+                  void loadToolsCatalog(state, refreshedAgentId);
+                  if (refreshedAgentId === resolveAgentIdFromSessionKey(state.sessionKey)) {
+                    void loadToolsEffective(state, {
+                      agentId: refreshedAgentId,
+                      sessionKey: state.sessionKey ?? "",
                     });
-                    state.agentSoulFiles = { agentId, ...state.agentSoulDrafts };
-                  } catch (err) {
-                    state.agentSoulFilesError = String(err);
-                  } finally {
-                    state.agentSoulSaving = false;
                   }
-                },
-                onSkillsFilterChange: (next) => (state.skillsFilter = next),
-                onSkillsRefresh: () => {
+                }
+              },
+              onSelectAgent: (agentId) => {
+                if (state.agentsSelectedId === agentId) {
+                  return;
+                }
+                state.agentsSelectedId = agentId;
+                state.agentFilesList = null;
+                state.agentFilesError = null;
+                state.agentFilesLoading = false;
+                state.agentFileActive = null;
+                state.agentFileContents = {};
+                state.agentFileDrafts = {};
+                state.agentSkillsReport = null;
+                state.agentSkillsError = null;
+                state.agentSkillsAgentId = null;
+                // 重置 tools 状态
+                resetToolsEffectiveState(state);
+                state.toolsCatalogResult = null;
+                state.toolsCatalogError = null;
+                state.toolsCatalogLoading = false;
+                state.toolsCatalogLoadingAgentId = null;
+                void loadAgentIdentity(state, agentId);
+                if (state.agentsPanel === "files") {
+                  void loadAgentFiles(state, agentId);
+                }
+                if (state.agentsPanel === "skills") {
+                  void loadAgentSkills(state, agentId);
+                }
+                // 如果当前在 tools 面板，重新加载工具目录
+                if (state.agentsPanel === "tools") {
+                  void loadToolsCatalog(state, agentId);
+                  if (agentId === resolveAgentIdFromSessionKey(state.sessionKey)) {
+                    void loadToolsEffective(state, {
+                      agentId,
+                      sessionKey: state.sessionKey ?? "",
+                    });
+                  }
+                }
+                // 如果当前在通道策略面板，重新加载通道配置数据
+                if (state.agentsPanel === "channelPolicies") {
+                  void loadChannelPolicies(state as unknown as AgentPhase5State, agentId);
+                  void loadBoundChannelAccounts(
+                    state as unknown as AgentChannelAccountsState,
+                    agentId,
+                  );
+                  void loadAvailableChannelAccounts(
+                    state as unknown as AgentChannelAccountsState,
+                    agentId,
+                  );
+                }
+                // 如果当前在模型账号面板，重新加载模型账号数据
+                if (state.agentsPanel === "modelAccounts") {
+                  void loadModelAccounts(state as unknown as AgentPhase5State, agentId);
+                  void loadBoundModelAccounts(state as unknown as AgentModelAccountsState, agentId);
+                  void loadAvailableModelAccounts(
+                    state as unknown as AgentModelAccountsState,
+                    agentId,
+                  );
+                }
+                // 如果当前在权限配置面板，重新加载权限数据
+                if (state.agentsPanel === "permissionsConfig") {
+                  void loadAgentPermissions(state, agentId);
+                }
+                // 如果当前在定时任务面板，重新加载 cron 数据
+                if (state.agentsPanel === "cron") {
+                  void state.loadCron();
+                }
+              },
+              onSelectPanel: (panel) => {
+                state.agentsPanel = panel;
+                if (panel === "files" && resolvedAgentId) {
+                  if (state.agentFilesList?.agentId !== resolvedAgentId) {
+                    state.agentFilesList = null;
+                    state.agentFilesError = null;
+                    state.agentFileActive = null;
+                    state.agentFileContents = {};
+                    state.agentFileDrafts = {};
+                    void loadAgentFiles(state, resolvedAgentId);
+                  }
+                }
+                if (panel === "skills") {
                   if (resolvedAgentId) {
                     void loadAgentSkills(state, resolvedAgentId);
                   }
-                },
-                onAgentSkillToggle: (agentId, skillName, enabled) => {
-                  if (!configValue) {
-                    return;
+                }
+                if (panel === "tools" && resolvedAgentId) {
+                  if (
+                    state.toolsCatalogResult?.agentId !== resolvedAgentId ||
+                    state.toolsCatalogError
+                  ) {
+                    void loadToolsCatalog(state, resolvedAgentId);
                   }
-                  const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
-                  if (!Array.isArray(list)) {
-                    return;
-                  }
-                  const index = list.findIndex(
-                    (entry) =>
-                      entry &&
-                      typeof entry === "object" &&
-                      "id" in entry &&
-                      (entry as { id?: string }).id === agentId,
-                  );
-                  if (index < 0) {
-                    return;
-                  }
-                  const entry = list[index] as { skills?: unknown };
-                  const normalizedSkill = skillName.trim();
-                  if (!normalizedSkill) {
-                    return;
-                  }
-                  const allSkills =
-                    state.agentSkillsReport?.skills?.map((skill) => skill.name).filter(Boolean) ??
-                    [];
-                  const existing = Array.isArray(entry.skills)
-                    ? entry.skills.map((name) => String(name).trim()).filter(Boolean)
-                    : undefined;
-                  const base = existing ?? allSkills;
-                  const next = new Set(base);
-                  if (enabled) {
-                    next.add(normalizedSkill);
-                  } else {
-                    next.delete(normalizedSkill);
-                  }
-                  updateConfigFormValue(state, ["agents", "list", index, "skills"], [...next]);
-                },
-                onAgentSkillsClear: (agentId) => {
-                  if (!configValue) {
-                    return;
-                  }
-                  const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
-                  if (!Array.isArray(list)) {
-                    return;
-                  }
-                  const index = list.findIndex(
-                    (entry) =>
-                      entry &&
-                      typeof entry === "object" &&
-                      "id" in entry &&
-                      (entry as { id?: string }).id === agentId,
-                  );
-                  if (index < 0) {
-                    return;
-                  }
-                  removeConfigFormValue(state, ["agents", "list", index, "skills"]);
-                },
-                onAgentSkillsDisableAll: (agentId) => {
-                  if (!configValue) {
-                    return;
-                  }
-                  const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
-                  if (!Array.isArray(list)) {
-                    return;
-                  }
-                  const index = list.findIndex(
-                    (entry) =>
-                      entry &&
-                      typeof entry === "object" &&
-                      "id" in entry &&
-                      (entry as { id?: string }).id === agentId,
-                  );
-                  if (index < 0) {
-                    return;
-                  }
-                  updateConfigFormValue(state, ["agents", "list", index, "skills"], []);
-                },
-                onModelChange: (agentId, modelId) => {
-                  if (!configValue) {
-                    return;
-                  }
-                  const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
-                  if (!Array.isArray(list)) {
-                    return;
-                  }
-                  const index = list.findIndex(
-                    (entry) =>
-                      entry &&
-                      typeof entry === "object" &&
-                      "id" in entry &&
-                      (entry as { id?: string }).id === agentId,
-                  );
-                  if (index < 0) {
-                    return;
-                  }
-                  const basePath = ["agents", "list", index, "model"];
-                  if (!modelId) {
-                    removeConfigFormValue(state, basePath);
-                    return;
-                  }
-                  const entry = list[index] as { model?: unknown };
-                  const existing = entry?.model;
-                  if (existing && typeof existing === "object" && !Array.isArray(existing)) {
-                    const fallbacks = (existing as { fallbacks?: unknown }).fallbacks;
-                    const next = {
-                      primary: modelId,
-                      ...(Array.isArray(fallbacks) ? { fallbacks } : {}),
-                    };
-                    updateConfigFormValue(state, basePath, next);
-                  } else {
-                    updateConfigFormValue(state, basePath, modelId);
-                  }
-                },
-                onModelFallbacksChange: (agentId, fallbacks) => {
-                  if (!configValue) {
-                    return;
-                  }
-                  const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
-                  if (!Array.isArray(list)) {
-                    return;
-                  }
-                  const index = list.findIndex(
-                    (entry) =>
-                      entry &&
-                      typeof entry === "object" &&
-                      "id" in entry &&
-                      (entry as { id?: string }).id === agentId,
-                  );
-                  if (index < 0) {
-                    return;
-                  }
-                  const basePath = ["agents", "list", index, "model"];
-                  const entry = list[index] as { model?: unknown };
-                  const normalized = fallbacks.map((name) => name.trim()).filter(Boolean);
-                  const existing = entry.model;
-                  const resolvePrimary = () => {
-                    if (typeof existing === "string") {
-                      return existing.trim() || null;
+                  if (resolvedAgentId === resolveAgentIdFromSessionKey(state.sessionKey)) {
+                    const toolsRequestKey = buildToolsEffectiveRequestKey(state, {
+                      agentId: resolvedAgentId,
+                      sessionKey: state.sessionKey ?? "",
+                    });
+                    if (
+                      state.toolsEffectiveResultKey !== toolsRequestKey ||
+                      state.toolsEffectiveError
+                    ) {
+                      void loadToolsEffective(state, {
+                        agentId: resolvedAgentId,
+                        sessionKey: state.sessionKey ?? "",
+                      });
                     }
-                    if (existing && typeof existing === "object" && !Array.isArray(existing)) {
-                      const primary = (existing as { primary?: unknown }).primary;
-                      if (typeof primary === "string") {
-                        const trimmed = primary.trim();
-                        return trimmed || null;
-                      }
-                    }
-                    return null;
+                  } else {
+                    resetToolsEffectiveState(state);
+                  }
+                }
+                if (panel === "channels") {
+                  void loadChannels(state, false);
+                  // 加载通道账号绑定管理数据
+                  if (resolvedAgentId) {
+                    void loadBoundChannelAccounts(
+                      state as unknown as AgentChannelAccountsState,
+                      resolvedAgentId,
+                    );
+                    void loadAvailableChannelAccounts(
+                      state as unknown as AgentChannelAccountsState,
+                      resolvedAgentId,
+                    );
+                  }
+                }
+                if (panel === "cron") {
+                  void state.loadCron();
+                }
+                // Phase 5: 加载模型账号和通道策略
+                if (panel === "modelAccounts" && resolvedAgentId) {
+                  void loadModelAccounts(state as unknown as AgentPhase5State, resolvedAgentId);
+                  void loadBoundModelAccounts(
+                    state as unknown as AgentModelAccountsState,
+                    resolvedAgentId,
+                  );
+                  void loadAvailableModelAccounts(
+                    state as unknown as AgentModelAccountsState,
+                    resolvedAgentId,
+                  );
+                }
+                if (panel === "channelPolicies" && resolvedAgentId) {
+                  void loadChannelPolicies(state as unknown as AgentPhase5State, resolvedAgentId);
+                  // 加载通道账号绑定管理数据
+                  void loadBoundChannelAccounts(
+                    state as unknown as AgentChannelAccountsState,
+                    resolvedAgentId,
+                  );
+                  void loadAvailableChannelAccounts(
+                    state as unknown as AgentChannelAccountsState,
+                    resolvedAgentId,
+                  );
+                }
+                // Phase 3: 加载权限配置（针对具体助手）
+                if (panel === "permissionsConfig" && resolvedAgentId) {
+                  void loadAgentPermissions(state, resolvedAgentId);
+                  void loadApprovalRequests(state);
+                  void loadPermissionApprovalStats(state);
+                }
+                // f3: 加载三文件身份（identity 面板）
+                if (panel === "identity" && resolvedAgentId) {
+                  void loadAgentSoulFiles(state, resolvedAgentId);
+                }
+              },
+              onLoadFiles: (agentId) => loadAgentFiles(state, agentId),
+              onSelectFile: (name) => {
+                state.agentFileActive = name;
+                if (!resolvedAgentId) {
+                  return;
+                }
+                void loadAgentFileContent(state, resolvedAgentId, name);
+              },
+              onFileDraftChange: (name, content) => {
+                state.agentFileDrafts = { ...state.agentFileDrafts, [name]: content };
+              },
+              onFileReset: (name) => {
+                const base = state.agentFileContents[name] ?? "";
+                state.agentFileDrafts = { ...state.agentFileDrafts, [name]: base };
+              },
+              onFileSave: (name) => {
+                if (!resolvedAgentId) {
+                  return;
+                }
+                const content = state.agentFileDrafts[name] ?? state.agentFileContents[name] ?? "";
+                void saveAgentFile(state, resolvedAgentId, name, content);
+              },
+              onAddFile: (agentId, name) => {
+                // 创建空文件：直接以空内容调用 saveAgentFile
+                void saveAgentFile(state, agentId, name, "").then(() => {
+                  // 创建后自动选中
+                  state.agentFileActive = name;
+                  void loadAgentFileContent(state, agentId, name, { force: true });
+                });
+              },
+              onOpenFolder: (folderPath) => {
+                if (!state.client) {
+                  return;
+                }
+                void state.client
+                  .request("workspace.openFolder", { path: folderPath })
+                  .catch(() => {});
+              },
+              onToolsProfileChange: (agentId, profile, clearAllow) => {
+                if (!configValue) {
+                  return;
+                }
+                const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
+                if (!Array.isArray(list)) {
+                  return;
+                }
+                const index = list.findIndex(
+                  (entry) =>
+                    entry &&
+                    typeof entry === "object" &&
+                    "id" in entry &&
+                    (entry as { id?: string }).id === agentId,
+                );
+                if (index < 0) {
+                  return;
+                }
+                const basePath = ["agents", "list", index, "tools"];
+                if (profile) {
+                  updateConfigFormValue(state, [...basePath, "profile"], profile);
+                } else {
+                  removeConfigFormValue(state, [...basePath, "profile"]);
+                }
+                if (clearAllow) {
+                  removeConfigFormValue(state, [...basePath, "allow"]);
+                }
+              },
+              onToolsOverridesChange: (agentId, alsoAllow, deny) => {
+                if (!configValue) {
+                  return;
+                }
+                const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
+                if (!Array.isArray(list)) {
+                  return;
+                }
+                const index = list.findIndex(
+                  (entry) =>
+                    entry &&
+                    typeof entry === "object" &&
+                    "id" in entry &&
+                    (entry as { id?: string }).id === agentId,
+                );
+                if (index < 0) {
+                  return;
+                }
+                const basePath = ["agents", "list", index, "tools"];
+                if (alsoAllow.length > 0) {
+                  updateConfigFormValue(state, [...basePath, "alsoAllow"], alsoAllow);
+                } else {
+                  removeConfigFormValue(state, [...basePath, "alsoAllow"]);
+                }
+                if (deny.length > 0) {
+                  updateConfigFormValue(state, [...basePath, "deny"], deny);
+                } else {
+                  removeConfigFormValue(state, [...basePath, "deny"]);
+                }
+              },
+              onConfigReload: () => loadConfig(state),
+              onConfigSave: () => saveConfig(state),
+              onChannelsRefresh: () => loadChannels(state, false),
+              onCronRefresh: () => state.loadCron(),
+              // f3: 三文件身份回调
+              onLoadSoulFiles: (agentId) => {
+                void loadAgentSoulFiles(state, agentId);
+              },
+              onSoulDraftChange: (file, content) => {
+                state.agentSoulDrafts = { ...state.agentSoulDrafts, [file]: content };
+              },
+              onSoulFilesSave: async (agentId) => {
+                if (!state.client) {
+                  return;
+                }
+                state.agentSoulSaving = true;
+                try {
+                  await state.client.request("agent.identity.set", {
+                    agentId,
+                    soul: state.agentSoulDrafts.soul,
+                    agent: state.agentSoulDrafts.agent,
+                    user: state.agentSoulDrafts.user,
+                  });
+                  state.agentSoulFiles = { agentId, ...state.agentSoulDrafts };
+                } catch (err) {
+                  state.agentSoulFilesError = String(err);
+                } finally {
+                  state.agentSoulSaving = false;
+                }
+              },
+              onSkillsFilterChange: (next) => (state.skillsFilter = next),
+              onSkillsRefresh: () => {
+                if (resolvedAgentId) {
+                  void loadAgentSkills(state, resolvedAgentId);
+                }
+              },
+              onAgentSkillToggle: (agentId, skillName, enabled) => {
+                if (!configValue) {
+                  return;
+                }
+                const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
+                if (!Array.isArray(list)) {
+                  return;
+                }
+                const index = list.findIndex(
+                  (entry) =>
+                    entry &&
+                    typeof entry === "object" &&
+                    "id" in entry &&
+                    (entry as { id?: string }).id === agentId,
+                );
+                if (index < 0) {
+                  return;
+                }
+                const entry = list[index] as { skills?: unknown };
+                const normalizedSkill = skillName.trim();
+                if (!normalizedSkill) {
+                  return;
+                }
+                const allSkills =
+                  state.agentSkillsReport?.skills?.map((skill) => skill.name).filter(Boolean) ?? [];
+                const existing = Array.isArray(entry.skills)
+                  ? entry.skills.map((name) => String(name).trim()).filter(Boolean)
+                  : undefined;
+                const base = existing ?? allSkills;
+                const next = new Set(base);
+                if (enabled) {
+                  next.add(normalizedSkill);
+                } else {
+                  next.delete(normalizedSkill);
+                }
+                updateConfigFormValue(state, ["agents", "list", index, "skills"], [...next]);
+              },
+              onAgentSkillsClear: (agentId) => {
+                if (!configValue) {
+                  return;
+                }
+                const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
+                if (!Array.isArray(list)) {
+                  return;
+                }
+                const index = list.findIndex(
+                  (entry) =>
+                    entry &&
+                    typeof entry === "object" &&
+                    "id" in entry &&
+                    (entry as { id?: string }).id === agentId,
+                );
+                if (index < 0) {
+                  return;
+                }
+                removeConfigFormValue(state, ["agents", "list", index, "skills"]);
+              },
+              onAgentSkillsDisableAll: (agentId) => {
+                if (!configValue) {
+                  return;
+                }
+                const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
+                if (!Array.isArray(list)) {
+                  return;
+                }
+                const index = list.findIndex(
+                  (entry) =>
+                    entry &&
+                    typeof entry === "object" &&
+                    "id" in entry &&
+                    (entry as { id?: string }).id === agentId,
+                );
+                if (index < 0) {
+                  return;
+                }
+                updateConfigFormValue(state, ["agents", "list", index, "skills"], []);
+              },
+              onModelChange: (agentId, modelId) => {
+                if (!configValue) {
+                  return;
+                }
+                const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
+                if (!Array.isArray(list)) {
+                  return;
+                }
+                const index = list.findIndex(
+                  (entry) =>
+                    entry &&
+                    typeof entry === "object" &&
+                    "id" in entry &&
+                    (entry as { id?: string }).id === agentId,
+                );
+                if (index < 0) {
+                  return;
+                }
+                const basePath = ["agents", "list", index, "model"];
+                if (!modelId) {
+                  removeConfigFormValue(state, basePath);
+                  return;
+                }
+                const entry = list[index] as { model?: unknown };
+                const existing = entry?.model;
+                if (existing && typeof existing === "object" && !Array.isArray(existing)) {
+                  const fallbacks = (existing as { fallbacks?: unknown }).fallbacks;
+                  const next = {
+                    primary: modelId,
+                    ...(Array.isArray(fallbacks) ? { fallbacks } : {}),
                   };
-                  const primary = resolvePrimary();
-                  if (normalized.length === 0) {
-                    if (primary) {
-                      updateConfigFormValue(state, basePath, primary);
-                    } else {
-                      removeConfigFormValue(state, basePath);
+                  updateConfigFormValue(state, basePath, next);
+                } else {
+                  updateConfigFormValue(state, basePath, modelId);
+                }
+              },
+              onModelFallbacksChange: (agentId, fallbacks) => {
+                if (!configValue) {
+                  return;
+                }
+                const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
+                if (!Array.isArray(list)) {
+                  return;
+                }
+                const index = list.findIndex(
+                  (entry) =>
+                    entry &&
+                    typeof entry === "object" &&
+                    "id" in entry &&
+                    (entry as { id?: string }).id === agentId,
+                );
+                if (index < 0) {
+                  return;
+                }
+                const basePath = ["agents", "list", index, "model"];
+                const entry = list[index] as { model?: unknown };
+                const normalized = fallbacks.map((name) => name.trim()).filter(Boolean);
+                const existing = entry.model;
+                const resolvePrimary = () => {
+                  if (typeof existing === "string") {
+                    return existing.trim() || null;
+                  }
+                  if (existing && typeof existing === "object" && !Array.isArray(existing)) {
+                    const primary = (existing as { primary?: unknown }).primary;
+                    if (typeof primary === "string") {
+                      const trimmed = primary.trim();
+                      return trimmed || null;
                     }
+                  }
+                  return null;
+                };
+                const primary = resolvePrimary();
+                if (normalized.length === 0) {
+                  if (primary) {
+                    updateConfigFormValue(state, basePath, primary);
+                  } else {
+                    removeConfigFormValue(state, basePath);
+                  }
+                  return;
+                }
+                const next = primary
+                  ? { primary, fallbacks: normalized }
+                  : { fallbacks: normalized };
+                updateConfigFormValue(state, basePath, next);
+              },
+              // Phase 5: 回调函数
+              onModelAccountsChange: resolvedAgentId
+                ? async (agentId, config) => {
+                    try {
+                      await saveModelAccounts(
+                        state as unknown as AgentPhase5State,
+                        agentId,
+                        config as Record<string, unknown>,
+                      );
+                      // 保存成功后重新加载
+                      await loadModelAccounts(state as unknown as AgentPhase5State, agentId);
+                    } catch (err) {
+                      console.error("Failed to save model accounts:", err);
+                    }
+                  }
+                : undefined,
+              onChannelPoliciesChange: resolvedAgentId
+                ? async (agentId, config) => {
+                    try {
+                      await saveChannelPolicies(
+                        state as unknown as AgentPhase5State,
+                        agentId,
+                        config as Record<string, unknown>,
+                      );
+                      // 保存成功后重新加载
+                      await loadChannelPolicies(state as unknown as AgentPhase5State, agentId);
+                    } catch (err) {
+                      console.error("Failed to save channel policies:", err);
+                    }
+                  }
+                : undefined,
+              editingPolicyBinding: state.editingPolicyBinding,
+              addingPolicyBinding: state.addingPolicyBinding,
+              onEditPolicyBinding: (agentId, index, binding) => {
+                if (index === -1) {
+                  // 添加模式，切换到编辑状态
+                  state.editingPolicyBinding = { agentId, index: -1, binding };
+                  state.addingPolicyBinding = null;
+                } else {
+                  // 编辑模式
+                  state.editingPolicyBinding = { agentId, index, binding };
+                }
+              },
+              onAddPolicyBinding: (agentId) => {
+                state.addingPolicyBinding = agentId;
+              },
+              onCancelPolicyDialog: () => {
+                state.editingPolicyBinding = null;
+                state.addingPolicyBinding = null;
+              },
+              onSavePolicyBinding: async (agentId, binding, index) => {
+                try {
+                  const config = state.channelPoliciesConfig;
+                  if (!config) {
                     return;
                   }
-                  const next = primary
-                    ? { primary, fallbacks: normalized }
-                    : { fallbacks: normalized };
-                  updateConfigFormValue(state, basePath, next);
-                },
-                // Phase 5: 回调函数
-                onModelAccountsChange: resolvedAgentId
-                  ? async (agentId, config) => {
-                      try {
-                        await saveModelAccounts(
-                          state as unknown as AgentPhase5State,
-                          agentId,
-                          config as Record<string, unknown>,
-                        );
-                        // 保存成功后重新加载
-                        await loadModelAccounts(state as unknown as AgentPhase5State, agentId);
-                      } catch (err) {
-                        console.error("Failed to save model accounts:", err);
-                      }
-                    }
-                  : undefined,
-                onChannelPoliciesChange: resolvedAgentId
-                  ? async (agentId, config) => {
-                      try {
-                        await saveChannelPolicies(
-                          state as unknown as AgentPhase5State,
-                          agentId,
-                          config as Record<string, unknown>,
-                        );
-                        // 保存成功后重新加载
-                        await loadChannelPolicies(state as unknown as AgentPhase5State, agentId);
-                      } catch (err) {
-                        console.error("Failed to save channel policies:", err);
-                      }
-                    }
-                  : undefined,
-                editingPolicyBinding: state.editingPolicyBinding,
-                addingPolicyBinding: state.addingPolicyBinding,
-                onEditPolicyBinding: (agentId, index, binding) => {
-                  if (index === -1) {
-                    // 添加模式，切换到编辑状态
-                    state.editingPolicyBinding = { agentId, index: -1, binding };
-                    state.addingPolicyBinding = null;
-                  } else {
+
+                  const bindings = Array.isArray(config.bindings) ? [...config.bindings] : [];
+                  if (index !== undefined && index >= 0) {
                     // 编辑模式
-                    state.editingPolicyBinding = { agentId, index, binding };
+                    bindings[index] = binding;
+                  } else {
+                    // 添加模式
+                    bindings.push(binding);
                   }
-                },
-                onAddPolicyBinding: (agentId) => {
-                  state.addingPolicyBinding = agentId;
-                },
-                onCancelPolicyDialog: () => {
+
+                  await saveChannelPolicies(state as unknown as AgentPhase5State, agentId, {
+                    ...config,
+                    bindings,
+                  });
+
+                  // 关闭对话框
                   state.editingPolicyBinding = null;
                   state.addingPolicyBinding = null;
-                },
-                onSavePolicyBinding: async (agentId, binding, index) => {
-                  try {
-                    const config = state.channelPoliciesConfig;
-                    if (!config) {
-                      return;
-                    }
 
-                    const bindings = Array.isArray(config.bindings) ? [...config.bindings] : [];
-                    if (index !== undefined && index >= 0) {
-                      // 编辑模式
-                      bindings[index] = binding;
-                    } else {
-                      // 添加模式
-                      bindings.push(binding);
-                    }
-
-                    await saveChannelPolicies(state as unknown as AgentPhase5State, agentId, {
-                      ...config,
-                      bindings,
-                    });
-
-                    // 关闭对话框
-                    state.editingPolicyBinding = null;
-                    state.addingPolicyBinding = null;
-
-                    // 重新加载配置
-                    await loadChannelPolicies(state as unknown as AgentPhase5State, agentId);
-                  } catch (err) {
-                    console.error("Failed to save policy binding:", err);
+                  // 重新加载配置
+                  await loadChannelPolicies(state as unknown as AgentPhase5State, agentId);
+                } catch (err) {
+                  console.error("Failed to save policy binding:", err);
+                }
+              },
+              // Phase 3: 权限配置回调
+              onPermissionsRefresh: resolvedAgentId
+                ? (agentId) => {
+                    void loadAgentPermissions(state, agentId);
+                    void loadApprovalRequests(state);
+                    void loadPermissionApprovalStats(state);
                   }
-                },
-                // Phase 3: 权限配置回调
-                onPermissionsRefresh: resolvedAgentId
-                  ? (agentId) => {
+                : undefined,
+              onPermissionsTabChange: (tab) => {
+                state.permissionsManagementActiveTab = tab;
+                // 切到审计标签时自动加载权限变更历史
+                if (tab === "audit" && resolvedAgentId) {
+                  void loadPermissionHistory(state, resolvedAgentId);
+                }
+              },
+              onPermissionsConfigChange: resolvedAgentId
+                ? async (agentId, config) => {
+                    state.permissionsConfig = config;
+                    try {
+                      await saveAgentPermissions(state, agentId, config);
                       void loadAgentPermissions(state, agentId);
-                      void loadApprovalRequests(state);
-                      void loadPermissionApprovalStats(state);
+                    } catch (err) {
+                      console.error("Failed to save permissions config:", err);
+                      throw err;
                     }
-                  : undefined,
-                onPermissionsTabChange: (tab) => {
-                  state.permissionsManagementActiveTab = tab;
-                  // 切到审计标签时自动加载权限变更历史
-                  if (tab === "audit" && resolvedAgentId) {
-                    void loadPermissionHistory(state, resolvedAgentId);
                   }
-                },
-                onPermissionsConfigChange: resolvedAgentId
-                  ? async (agentId, config) => {
-                      state.permissionsConfig = config;
+                : undefined,
+              onInitPermissions: resolvedAgentId
+                ? async (agentId) => {
+                    try {
+                      const defaultConfig = {
+                        defaultAction: "deny" as const,
+                        rules: [],
+                        approvalConfig: {
+                          enabled: false,
+                          approvers: [],
+                          requiredApprovals: 1,
+                          timeout: 3600,
+                          timeoutAction: "reject" as const,
+                          requireReason: true,
+                        },
+                        enableAuditLog: true,
+                        auditLogPath: "logs/permissions-audit.jsonl",
+                      };
+                      state.permissionsConfig = defaultConfig;
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      await saveAgentPermissions(state, agentId, defaultConfig as any);
+                      await loadAgentPermissions(state, agentId);
+                      alert("工具权限配置初始化成功！");
+                    } catch (err) {
+                      console.error("Failed to initialize permissions:", err);
+                      alert(`初始化权限失败: ${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  }
+                : undefined,
+              onPermissionChange: resolvedAgentId
+                ? (agentId, _permission, _granted) => {
+                    // 更新权限配置
+                    if (state.permissionsConfig) {
+                      // 更新权限状态
+                      // TODO: 实现权限更新逻辑
+                      console.log("Permission change:", agentId, _permission, _granted);
+                    }
+                  }
+                : undefined,
+              onPermissionsSaveConfig: resolvedAgentId
+                ? async (agentId) => {
+                    if (state.permissionsConfig) {
                       try {
-                        await saveAgentPermissions(state, agentId, config);
-                        void loadAgentPermissions(state, agentId);
+                        await saveAgentPermissions(state, agentId, state.permissionsConfig);
                       } catch (err) {
-                        console.error("Failed to save permissions config:", err);
-                        throw err;
+                        console.error("Failed to save permissions:", err);
                       }
                     }
-                  : undefined,
-                onInitPermissions: resolvedAgentId
-                  ? async (agentId) => {
-                      try {
-                        const defaultConfig = {
-                          defaultAction: "deny" as const,
-                          rules: [],
-                          approvalConfig: {
-                            enabled: false,
-                            approvers: [],
-                            requiredApprovals: 1,
-                            timeout: 3600,
-                            timeoutAction: "reject" as const,
-                            requireReason: true,
-                          },
-                          enableAuditLog: true,
-                          auditLogPath: "logs/permissions-audit.jsonl",
-                        };
-                        state.permissionsConfig = defaultConfig;
-                        // oxlint-disable-next-line typescript/no-explicit-any
-                        await saveAgentPermissions(state, agentId, defaultConfig as any);
-                        await loadAgentPermissions(state, agentId);
-                        alert("工具权限配置初始化成功！");
-                      } catch (err) {
-                        console.error("Failed to initialize permissions:", err);
-                        alert(
-                          `初始化权限失败: ${err instanceof Error ? err.message : String(err)}`,
-                        );
-                      }
-                    }
-                  : undefined,
-                onPermissionChange: resolvedAgentId
-                  ? (agentId, _permission, _granted) => {
-                      // 更新权限配置
-                      if (state.permissionsConfig) {
-                        // 更新权限状态
-                        // TODO: 实现权限更新逻辑
-                        console.log("Permission change:", agentId, _permission, _granted);
-                      }
-                    }
-                  : undefined,
-                onPermissionsSaveConfig: resolvedAgentId
-                  ? async (agentId) => {
-                      if (state.permissionsConfig) {
-                        try {
-                          await saveAgentPermissions(state, agentId, state.permissionsConfig);
-                        } catch (err) {
-                          console.error("Failed to save permissions:", err);
-                        }
-                      }
-                    }
-                  : undefined,
-                onApprovalAction: async (requestId, action, comment) => {
-                  try {
-                    const approver = { type: "user" as const, id: "admin" };
-                    await respondToPermissionApproval(state, requestId, action, approver, comment);
-                  } catch (err) {
-                    console.error("Failed to respond to approval:", err);
                   }
-                },
-                onBatchApprove: async (requestIds, comment) => {
-                  try {
-                    const approver = { type: "user" as const, id: "admin" };
-                    await batchApproveRequests(state, requestIds, approver, comment);
-                  } catch (err) {
-                    console.error("Failed to batch approve:", err);
-                  }
-                },
-                onBatchDeny: async (requestIds, reason) => {
-                  try {
-                    const approver = { type: "user" as const, id: "admin" };
-                    await batchDenyRequests(state, requestIds, approver, reason);
-                  } catch (err) {
-                    console.error("Failed to batch deny:", err);
-                  }
-                },
-                onApprovalsFilterChange: (filter) => {
-                  // TODO: 实现审批过滤
-                  console.log("Approvals filter change:", filter);
-                },
-                onSelectApproval: (requestId, selected) => {
-                  // TODO: 实现审批选择
-                  console.log("Select approval:", requestId, selected);
-                },
-                onSelectAllApprovals: () => {
-                  // TODO: 实现全选
-                  console.log("Select all approvals");
-                },
-                onDeselectAllApprovals: () => {
-                  // TODO: 实现取消全选
-                  console.log("Deselect all approvals");
-                },
-                onShowApprovalDetail: (request) => {
-                  // TODO: 实现审批详情显示
-                  console.log("Show approval detail:", request);
-                },
-                // 模型账号绑定管理回调
-                onBindModelAccount: async (accountId) => {
-                  if (resolvedAgentId) {
-                    await bindModelAccount(
-                      state as unknown as AgentModelAccountsState,
-                      resolvedAgentId,
-                      accountId,
-                    );
-                  }
-                },
-                onUnbindModelAccount: async (accountId) => {
-                  if (resolvedAgentId) {
-                    await unbindModelAccount(
-                      state as unknown as AgentModelAccountsState,
-                      resolvedAgentId,
-                      accountId,
-                    );
-                  }
-                },
-                onToggleAvailableModelAccounts: () => {
-                  toggleAvailableModelAccountsExpanded(state as unknown as AgentModelAccountsState);
-                },
-                onSetDefaultModelAccount: async (accountId) => {
-                  if (resolvedAgentId) {
-                    await setDefaultModelAccount(
-                      state as unknown as AgentModelAccountsState,
-                      resolvedAgentId,
-                      accountId,
-                    );
-                  }
-                },
-                // 通道账号绑定管理回调
-                onAddChannelAccount: async (channelId, accountId) => {
-                  if (resolvedAgentId) {
-                    await addChannelAccountBinding(
-                      state as unknown as AgentChannelAccountsState,
-                      resolvedAgentId,
-                      channelId,
-                      accountId,
-                    );
-                  }
-                },
-                onRemoveChannelAccount: async (channelId, accountId) => {
-                  if (resolvedAgentId) {
-                    await removeChannelAccountBinding(
-                      state as unknown as AgentChannelAccountsState,
-                      resolvedAgentId,
-                      channelId,
-                      accountId,
-                    );
-                  }
-                },
-                onToggleAvailableChannelAccounts: () => {
-                  toggleAvailableAccountsExpanded(state as unknown as AgentChannelAccountsState);
-                },
-                onConfigurePolicy: async (channelId, accountId, currentPolicy) => {
-                  // 打开策略配置对话框
-                  if (resolvedAgentId) {
-                    state.configuringChannelPolicy = {
-                      agentId: resolvedAgentId,
-                      channelId,
-                      accountId,
-                      currentPolicy,
-                    };
-                  }
-                },
-                onAddAgent: async () => {
-                  // 加载默认工作区根目录
-                  try {
-                    const defaultWorkspaceRoot = await getDefaultWorkspace(state);
-                    // 打开新增智能助手对话框
-                    state.editingAgent = { id: "", name: "", workspace: "" };
-                    state.isNewAgent = true; // 标记为新增模式
-                    state.defaultWorkspaceRoot = defaultWorkspaceRoot;
-                  } catch (err) {
-                    console.error("Failed to load default workspace:", err);
-                    // 即使失败也允许创建助手
-                    state.editingAgent = { id: "", name: "", workspace: "" };
-                    state.isNewAgent = true; // 标记为新增模式
-                  }
-                },
-                onEditAgent: (agentId) => {
-                  // 打开编辑智能助手对话框
-                  const agent = state.agentsList?.agents.find((a) => a.id === agentId);
-                  if (agent) {
-                    state.editingAgent = {
-                      id: agent.id,
-                      name: agent.name || "",
-                      // 使用后端返回的 workspace 字段
-                      workspace: agent.workspace || "",
-                    };
-                    state.isNewAgent = false; // 编辑模式
-                  }
-                },
-                onDeleteAgent: async (agentId) => {
-                  const agent = state.agentsList?.agents.find((a) => a.id === agentId);
-                  const workspace =
-                    (agent as { workspaceResolved?: string }).workspaceResolved || agent?.workspace;
+                : undefined,
+              onApprovalAction: async (requestId, action, comment) => {
+                try {
+                  const approver = { type: "user" as const, id: "admin" };
+                  await respondToPermissionApproval(state, requestId, action, approver, comment);
+                } catch (err) {
+                  console.error("Failed to respond to approval:", err);
+                }
+              },
+              onBatchApprove: async (requestIds, comment) => {
+                try {
+                  const approver = { type: "user" as const, id: "admin" };
+                  await batchApproveRequests(state, requestIds, approver, comment);
+                } catch (err) {
+                  console.error("Failed to batch approve:", err);
+                }
+              },
+              onBatchDeny: async (requestIds, reason) => {
+                try {
+                  const approver = { type: "user" as const, id: "admin" };
+                  await batchDenyRequests(state, requestIds, approver, reason);
+                } catch (err) {
+                  console.error("Failed to batch deny:", err);
+                }
+              },
+              onApprovalsFilterChange: (filter) => {
+                // TODO: 实现审批过滤
+                console.log("Approvals filter change:", filter);
+              },
+              onSelectApproval: (requestId, selected) => {
+                // TODO: 实现审批选择
+                console.log("Select approval:", requestId, selected);
+              },
+              onSelectAllApprovals: () => {
+                // TODO: 实现全选
+                console.log("Select all approvals");
+              },
+              onDeselectAllApprovals: () => {
+                // TODO: 实现取消全选
+                console.log("Deselect all approvals");
+              },
+              onShowApprovalDetail: (request) => {
+                // TODO: 实现审批详情显示
+                console.log("Show approval detail:", request);
+              },
+              // 模型账号绑定管理回调
+              onBindModelAccount: async (accountId) => {
+                if (resolvedAgentId) {
+                  await bindModelAccount(
+                    state as unknown as AgentModelAccountsState,
+                    resolvedAgentId,
+                    accountId,
+                  );
+                }
+              },
+              onUnbindModelAccount: async (accountId) => {
+                if (resolvedAgentId) {
+                  await unbindModelAccount(
+                    state as unknown as AgentModelAccountsState,
+                    resolvedAgentId,
+                    accountId,
+                  );
+                }
+              },
+              onToggleAvailableModelAccounts: () => {
+                toggleAvailableModelAccountsExpanded(state as unknown as AgentModelAccountsState);
+              },
+              onSetDefaultModelAccount: async (accountId) => {
+                if (resolvedAgentId) {
+                  await setDefaultModelAccount(
+                    state as unknown as AgentModelAccountsState,
+                    resolvedAgentId,
+                    accountId,
+                  );
+                }
+              },
+              // 通道账号绑定管理回调
+              onAddChannelAccount: async (channelId, accountId) => {
+                if (resolvedAgentId) {
+                  await addChannelAccountBinding(
+                    state as unknown as AgentChannelAccountsState,
+                    resolvedAgentId,
+                    channelId,
+                    accountId,
+                  );
+                }
+              },
+              onRemoveChannelAccount: async (channelId, accountId) => {
+                if (resolvedAgentId) {
+                  await removeChannelAccountBinding(
+                    state as unknown as AgentChannelAccountsState,
+                    resolvedAgentId,
+                    channelId,
+                    accountId,
+                  );
+                }
+              },
+              onToggleAvailableChannelAccounts: () => {
+                toggleAvailableAccountsExpanded(state as unknown as AgentChannelAccountsState);
+              },
+              onConfigurePolicy: async (channelId, accountId, currentPolicy) => {
+                // 打开策略配置对话框
+                if (resolvedAgentId) {
+                  state.configuringChannelPolicy = {
+                    agentId: resolvedAgentId,
+                    channelId,
+                    accountId,
+                    currentPolicy,
+                  };
+                }
+              },
+              onAddAgent: async () => {
+                // 加载默认工作区根目录
+                try {
+                  const defaultWorkspaceRoot = await getDefaultWorkspace(state);
+                  // 打开新增智能助手对话框
+                  state.editingAgent = { id: "", name: "", workspace: "" };
+                  state.isNewAgent = true; // 标记为新增模式
+                  state.defaultWorkspaceRoot = defaultWorkspaceRoot;
+                } catch (err) {
+                  console.error("Failed to load default workspace:", err);
+                  // 即使失败也允许创建助手
+                  state.editingAgent = { id: "", name: "", workspace: "" };
+                  state.isNewAgent = true; // 标记为新增模式
+                }
+              },
+              onEditAgent: (agentId) => {
+                // 打开编辑智能助手对话框
+                const agent = state.agentsList?.agents.find((a) => a.id === agentId);
+                if (agent) {
+                  state.editingAgent = {
+                    id: agent.id,
+                    name: agent.name || "",
+                    // 使用后端返回的 workspace 字段
+                    workspace: agent.workspace || "",
+                  };
+                  state.isNewAgent = false; // 编辑模式
+                }
+              },
+              onDeleteAgent: async (agentId) => {
+                const agent = state.agentsList?.agents.find((a) => a.id === agentId);
+                const workspace =
+                  (agent as { workspaceResolved?: string }).workspaceResolved || agent?.workspace;
 
-                  // 自定义对话框：二次确认并选择工作区操作
-                  const dialogHtml = `
+                // 自定义对话框：二次确认并选择工作区操作
+                const dialogHtml = `
                     <div style="font-size: 14px;">
                       <p style="margin: 0 0 16px 0; font-weight: 500;">确定要删除智能助手 "${agentId}" 吗？</p>
                       ${
@@ -2826,9 +2846,9 @@ export function renderApp(state: AppViewState) {
                     </div>
                   `;
 
-                  // 创建自定义对话框
-                  const dialog = document.createElement("div");
-                  dialog.innerHTML = `
+                // 创建自定义对话框
+                const dialog = document.createElement("div");
+                dialog.innerHTML = `
                     <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;">
                       <div style="background: white; border-radius: 8px; padding: 24px; max-width: 480px; width: 90%;">
                         ${dialogHtml}
@@ -2840,110 +2860,110 @@ export function renderApp(state: AppViewState) {
                     </div>
                   `;
 
-                  document.body.appendChild(dialog);
+                document.body.appendChild(dialog);
 
-                  const closeDialog = () => document.body.removeChild(dialog);
+                const closeDialog = () => document.body.removeChild(dialog);
 
-                  dialog.querySelector("#cancel-btn")!.addEventListener("click", closeDialog);
-                  dialog.querySelector("#confirm-btn")!.addEventListener("click", async () => {
-                    const deleteWorkspace = workspace
-                      ? (
-                          dialog.querySelector(
-                            'input[name="workspace-action"]:checked',
-                          ) as HTMLInputElement
-                        )?.value === "delete"
-                      : undefined;
-                    closeDialog();
-
-                    try {
-                      const workspaceDeleted = await deleteAgent(state, agentId, deleteWorkspace);
-
-                      if (deleteWorkspace) {
-                        if (workspaceDeleted) {
-                          alert("删除成功，工作区已清空");
-                        } else {
-                          alert("助手已删除，但工作区删除失败，请手动删除文件夹：" + workspace);
-                        }
-                      } else {
-                        alert("删除成功，工作区已保留");
-                      }
-                    } catch (err) {
-                      console.error("Failed to delete agent:", err);
-                      alert("删除失败: " + (err instanceof Error ? err.message : String(err)));
-                    }
-                  });
-                },
-                onSaveAgent: async () => {
-                  if (!state.editingAgent) {
-                    return;
-                  }
-                  // 验证输入
-                  if (!state.editingAgent.id?.trim()) {
-                    alert("请输入智能助手ID");
-                    return;
-                  }
-
-                  console.log(
-                    `[agent-form] onSaveAgent editingAgent=${JSON.stringify(state.editingAgent)}`,
-                  );
+                dialog.querySelector("#cancel-btn")!.addEventListener("click", closeDialog);
+                dialog.querySelector("#confirm-btn")!.addEventListener("click", async () => {
+                  const deleteWorkspace = workspace
+                    ? (
+                        dialog.querySelector(
+                          'input[name="workspace-action"]:checked',
+                        ) as HTMLInputElement
+                      )?.value === "delete"
+                    : undefined;
+                  closeDialog();
 
                   try {
-                    if (state.isNewAgent) {
-                      // 创建新助手
-                      await createAgent(state, {
-                        id: state.editingAgent.id,
-                        name: state.editingAgent.name || state.editingAgent.id,
-                        workspace: state.editingAgent.workspace,
-                      });
-                      alert("创建成功");
+                    const workspaceDeleted = await deleteAgent(state, agentId, deleteWorkspace);
+
+                    if (deleteWorkspace) {
+                      if (workspaceDeleted) {
+                        alert("删除成功，工作区已清空");
+                      } else {
+                        alert("助手已删除，但工作区删除失败，请手动删除文件夹：" + workspace);
+                      }
                     } else {
-                      // 更新助手
-                      console.log(
-                        `[agent-form] calling updateAgent id=${state.editingAgent.id} name=${JSON.stringify(state.editingAgent.name)}`,
-                      );
-                      await updateAgent(state, {
-                        id: state.editingAgent.id,
-                        name: state.editingAgent.name,
-                        workspace: state.editingAgent.workspace,
-                      });
-                      alert("保存成功");
+                      alert("删除成功，工作区已保留");
                     }
-                    // 关闭对话框
-                    state.editingAgent = null;
-                    state.isNewAgent = false;
                   } catch (err) {
-                    console.error("Failed to save agent:", err);
-                    alert("保存失败: " + (err instanceof Error ? err.message : String(err)));
+                    console.error("Failed to delete agent:", err);
+                    alert("删除失败: " + (err instanceof Error ? err.message : String(err)));
                   }
-                },
-                onCancelEdit: () => {
-                  // 关闭编辑对话框
+                });
+              },
+              onSaveAgent: async () => {
+                if (!state.editingAgent) {
+                  return;
+                }
+                // 验证输入
+                if (!state.editingAgent.id?.trim()) {
+                  alert("请输入智能助手ID");
+                  return;
+                }
+
+                console.log(
+                  `[agent-form] onSaveAgent editingAgent=${JSON.stringify(state.editingAgent)}`,
+                );
+
+                try {
+                  if (state.isNewAgent) {
+                    // 创建新助手
+                    await createAgent(state, {
+                      id: state.editingAgent.id,
+                      name: state.editingAgent.name || state.editingAgent.id,
+                      workspace: state.editingAgent.workspace,
+                    });
+                    alert("创建成功");
+                  } else {
+                    // 更新助手
+                    console.log(
+                      `[agent-form] calling updateAgent id=${state.editingAgent.id} name=${JSON.stringify(state.editingAgent.name)}`,
+                    );
+                    await updateAgent(state, {
+                      id: state.editingAgent.id,
+                      name: state.editingAgent.name,
+                      workspace: state.editingAgent.workspace,
+                    });
+                    alert("保存成功");
+                  }
+                  // 关闭对话框
                   state.editingAgent = null;
                   state.isNewAgent = false;
-                },
-                onAgentFormChange: (field, value) => {
-                  // 更新表单字段
+                } catch (err) {
+                  console.error("Failed to save agent:", err);
+                  alert("保存失败: " + (err instanceof Error ? err.message : String(err)));
+                }
+              },
+              onCancelEdit: () => {
+                // 关闭编辑对话框
+                state.editingAgent = null;
+                state.isNewAgent = false;
+              },
+              onAgentFormChange: (field, value) => {
+                // 更新表单字段
+                console.log(
+                  `[agent-form] onAgentFormChange field=${field} value=${JSON.stringify(value)} editingAgent=${JSON.stringify(state.editingAgent)}`,
+                );
+                if (state.editingAgent) {
+                  (state as unknown as Record<string, unknown>).editingAgent = {
+                    ...state.editingAgent,
+                    [field]: value,
+                  };
                   console.log(
-                    `[agent-form] onAgentFormChange field=${field} value=${JSON.stringify(value)} editingAgent=${JSON.stringify(state.editingAgent)}`,
+                    `[agent-form] after update editingAgent=${JSON.stringify(state.editingAgent)}`,
                   );
-                  if (state.editingAgent) {
-                    (state as unknown as Record<string, unknown>).editingAgent = {
-                      ...state.editingAgent,
-                      [field]: value,
-                    };
-                    console.log(
-                      `[agent-form] after update editingAgent=${JSON.stringify(state.editingAgent)}`,
-                    );
-                  }
-                },
-                onMigrateWorkspace: async (agentId) => {
-                  const agent = state.agentsList?.agents.find((a) => a.id === agentId);
-                  const currentWorkspace =
-                    (agent as { workspaceResolved?: string }).workspaceResolved || agent?.workspace;
+                }
+              },
+              onMigrateWorkspace: async (agentId) => {
+                const agent = state.agentsList?.agents.find((a) => a.id === agentId);
+                const currentWorkspace =
+                  (agent as { workspaceResolved?: string }).workspaceResolved || agent?.workspace;
 
-                  // 创建迁移对话框
-                  const dialog = document.createElement("div");
-                  dialog.innerHTML = `
+                // 创建迁移对话框
+                const dialog = document.createElement("div");
+                dialog.innerHTML = `
                     <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;">
                       <div style="background: white; border-radius: 8px; padding: 24px; max-width: 560px; width: 90%;">
                         <div style="font-size: 18px; font-weight: 600; margin-bottom: 16px;">迁移工作区</div>
@@ -2974,48 +2994,46 @@ export function renderApp(state: AppViewState) {
                     </div>
                   `;
 
-                  document.body.appendChild(dialog);
+                document.body.appendChild(dialog);
 
-                  const closeDialog = () => document.body.removeChild(dialog);
-                  const inputEl = dialog.querySelector("#new-workspace-input") as HTMLInputElement;
+                const closeDialog = () => document.body.removeChild(dialog);
+                const inputEl = dialog.querySelector("#new-workspace-input") as HTMLInputElement;
 
-                  // 浏览按钮
-                  dialog.querySelector("#browse-btn")!.addEventListener("click", () => {
-                    const fileInput = document.createElement("input");
-                    fileInput.type = "file";
-                    fileInput.setAttribute("webkitdirectory", "");
-                    fileInput.setAttribute("directory", "");
-                    fileInput.addEventListener("change", (e: Event) => {
-                      const files = (e.target as HTMLInputElement).files;
-                      if (files && files.length > 0) {
-                        inputEl.value = files[0].webkitRelativePath.split("/")[0];
-                      }
-                    });
-                    fileInput.click();
+                // 浏览按钮
+                dialog.querySelector("#browse-btn")!.addEventListener("click", () => {
+                  const fileInput = document.createElement("input");
+                  fileInput.type = "file";
+                  fileInput.setAttribute("webkitdirectory", "");
+                  fileInput.setAttribute("directory", "");
+                  fileInput.addEventListener("change", (e: Event) => {
+                    const files = (e.target as HTMLInputElement).files;
+                    if (files && files.length > 0) {
+                      inputEl.value = files[0].webkitRelativePath.split("/")[0];
+                    }
                   });
+                  fileInput.click();
+                });
 
-                  dialog
-                    .querySelector("#cancel-migrate-btn")!
-                    .addEventListener("click", closeDialog);
-                  dialog
-                    .querySelector("#confirm-migrate-btn")!
-                    .addEventListener("click", async () => {
-                      const newWorkspace = inputEl.value.trim();
-                      if (!newWorkspace) {
-                        alert("请输入新的工作区路径");
-                        return;
-                      }
+                dialog.querySelector("#cancel-migrate-btn")!.addEventListener("click", closeDialog);
+                dialog
+                  .querySelector("#confirm-migrate-btn")!
+                  .addEventListener("click", async () => {
+                    const newWorkspace = inputEl.value.trim();
+                    if (!newWorkspace) {
+                      alert("请输入新的工作区路径");
+                      return;
+                    }
 
-                      if (newWorkspace === currentWorkspace) {
-                        alert("新路径与当前路径相同，无需迁移");
-                        return;
-                      }
+                    if (newWorkspace === currentWorkspace) {
+                      alert("新路径与当前路径相同，无需迁移");
+                      return;
+                    }
 
-                      closeDialog();
+                    closeDialog();
 
-                      // 显示迁移进度提示
-                      const progressDialog = document.createElement("div");
-                      progressDialog.innerHTML = `
+                    // 显示迁移进度提示
+                    const progressDialog = document.createElement("div");
+                    progressDialog.innerHTML = `
                       <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10001;">
                         <div style="background: white; border-radius: 8px; padding: 24px; text-align: center;">
                           <div style="font-size: 16px; margin-bottom: 12px;">正在迁移工作区...</div>
@@ -3023,16 +3041,16 @@ export function renderApp(state: AppViewState) {
                         </div>
                       </div>
                     `;
-                      document.body.appendChild(progressDialog);
+                    document.body.appendChild(progressDialog);
 
-                      try {
-                        const result = await migrateAgentWorkspace(state, agentId, newWorkspace);
-                        document.body.removeChild(progressDialog);
+                    try {
+                      const result = await migrateAgentWorkspace(state, agentId, newWorkspace);
+                      document.body.removeChild(progressDialog);
 
-                        if (result.migrated) {
-                          // 迁移成功，询问是否删除原工作区
-                          const confirmDialog = document.createElement("div");
-                          confirmDialog.innerHTML = `
+                      if (result.migrated) {
+                        // 迁移成功，询问是否删除原工作区
+                        const confirmDialog = document.createElement("div");
+                        confirmDialog.innerHTML = `
                           <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;">
                             <div style="background: white; border-radius: 8px; padding: 24px; max-width: 480px; width: 90%;">
                               <div style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #22c55e;">✅ 迁移成功</div>
@@ -3057,28 +3075,28 @@ export function renderApp(state: AppViewState) {
                           </div>
                         `;
 
-                          document.body.appendChild(confirmDialog);
+                        document.body.appendChild(confirmDialog);
 
-                          const closeConfirmDialog = () => document.body.removeChild(confirmDialog);
+                        const closeConfirmDialog = () => document.body.removeChild(confirmDialog);
 
-                          confirmDialog
-                            .querySelector("#keep-old-btn")!
-                            .addEventListener("click", () => {
-                              closeConfirmDialog();
-                              // 刷新编辑状态
-                              if (state.editingAgent && state.editingAgent.id === agentId) {
-                                state.editingAgent.workspace = newWorkspace;
-                              }
-                            });
+                        confirmDialog
+                          .querySelector("#keep-old-btn")!
+                          .addEventListener("click", () => {
+                            closeConfirmDialog();
+                            // 刷新编辑状态
+                            if (state.editingAgent && state.editingAgent.id === agentId) {
+                              state.editingAgent.workspace = newWorkspace;
+                            }
+                          });
 
-                          confirmDialog
-                            .querySelector("#delete-old-btn")!
-                            .addEventListener("click", async () => {
-                              closeConfirmDialog();
+                        confirmDialog
+                          .querySelector("#delete-old-btn")!
+                          .addEventListener("click", async () => {
+                            closeConfirmDialog();
 
-                              // 显示删除进度
-                              const deleteProgressDialog = document.createElement("div");
-                              deleteProgressDialog.innerHTML = `
+                            // 显示删除进度
+                            const deleteProgressDialog = document.createElement("div");
+                            deleteProgressDialog.innerHTML = `
                             <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10001;">
                               <div style="background: white; border-radius: 8px; padding: 24px; text-align: center;">
                                 <div style="font-size: 16px; margin-bottom: 12px;">正在删除原工作区...</div>
@@ -3086,71 +3104,64 @@ export function renderApp(state: AppViewState) {
                               </div>
                             </div>
                           `;
-                              document.body.appendChild(deleteProgressDialog);
+                            document.body.appendChild(deleteProgressDialog);
 
-                              try {
-                                // 调用后端API删除原工作区
-                                const deleteResult = await state.client!.request(
-                                  "agent.workspace.delete",
-                                  {
-                                    workspace: result.oldWorkspace,
-                                  },
-                                );
+                            try {
+                              // 调用后端API删除原工作区
+                              const deleteResult = await state.client!.request(
+                                "agent.workspace.delete",
+                                {
+                                  workspace: result.oldWorkspace,
+                                },
+                              );
 
-                                document.body.removeChild(deleteProgressDialog);
+                              document.body.removeChild(deleteProgressDialog);
 
-                                if (
-                                  deleteResult &&
-                                  (deleteResult as { success?: boolean }).success
-                                ) {
-                                  alert("✅ 原工作区已成功删除");
-                                } else {
-                                  alert(
-                                    "⚠️ 原工作区删除失败，请手动删除：\n" + result.oldWorkspace,
-                                  );
-                                }
-                              } catch (err) {
-                                document.body.removeChild(deleteProgressDialog);
-                                console.error("Failed to delete old workspace:", err);
-                                alert(
-                                  "⚠️ 删除失败，请手动删除原工作区：\n" +
-                                    result.oldWorkspace +
-                                    "\n\n错误信息：" +
-                                    (err instanceof Error ? err.message : String(err)),
-                                );
+                              if (deleteResult && (deleteResult as { success?: boolean }).success) {
+                                alert("✅ 原工作区已成功删除");
+                              } else {
+                                alert("⚠️ 原工作区删除失败，请手动删除：\n" + result.oldWorkspace);
                               }
+                            } catch (err) {
+                              document.body.removeChild(deleteProgressDialog);
+                              console.error("Failed to delete old workspace:", err);
+                              alert(
+                                "⚠️ 删除失败，请手动删除原工作区：\n" +
+                                  result.oldWorkspace +
+                                  "\n\n错误信息：" +
+                                  (err instanceof Error ? err.message : String(err)),
+                              );
+                            }
 
-                              // 刷新编辑状态
-                              if (state.editingAgent && state.editingAgent.id === agentId) {
-                                state.editingAgent.workspace = newWorkspace;
-                              }
-                            });
-                        } else {
-                          alert(
-                            `✅ 已更新工作区配置为：\n${result.newWorkspace}\n\n（原工作区不存在，未进行文件复制）`,
-                          );
-                          // 刷新编辑状态
-                          if (state.editingAgent && state.editingAgent.id === agentId) {
-                            state.editingAgent.workspace = newWorkspace;
-                          }
-                        }
-                      } catch (err) {
-                        document.body.removeChild(progressDialog);
-                        console.error("Failed to migrate workspace:", err);
+                            // 刷新编辑状态
+                            if (state.editingAgent && state.editingAgent.id === agentId) {
+                              state.editingAgent.workspace = newWorkspace;
+                            }
+                          });
+                      } else {
                         alert(
-                          "❌ 迁移失败：\n" + (err instanceof Error ? err.message : String(err)),
+                          `✅ 已更新工作区配置为：\n${result.newWorkspace}\n\n（原工作区不存在，未进行文件复制）`,
                         );
+                        // 刷新编辑状态
+                        if (state.editingAgent && state.editingAgent.id === agentId) {
+                          state.editingAgent.workspace = newWorkspace;
+                        }
                       }
-                    });
-                },
-                onConfigureDefaultWorkspace: async () => {
-                  try {
-                    // 获取当前默认工作区
-                    const currentDefault = await getDefaultWorkspace(state);
+                    } catch (err) {
+                      document.body.removeChild(progressDialog);
+                      console.error("Failed to migrate workspace:", err);
+                      alert("❌ 迁移失败：\n" + (err instanceof Error ? err.message : String(err)));
+                    }
+                  });
+              },
+              onConfigureDefaultWorkspace: async () => {
+                try {
+                  // 获取当前默认工作区
+                  const currentDefault = await getDefaultWorkspace(state);
 
-                    // 创建配置对话框
-                    const dialog = document.createElement("div");
-                    dialog.innerHTML = `
+                  // 创建配置对话框
+                  const dialog = document.createElement("div");
+                  dialog.innerHTML = `
                       <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;">
                         <div style="background: white; border-radius: 8px; padding: 24px; max-width: 560px; width: 90%;">
                           <div style="font-size: 18px; font-weight: 600; margin-bottom: 16px;">配置默认工作区根目录</div>
@@ -3172,1489 +3183,1663 @@ export function renderApp(state: AppViewState) {
                       </div>
                     `;
 
-                    document.body.appendChild(dialog);
+                  document.body.appendChild(dialog);
 
-                    const closeDialog = () => document.body.removeChild(dialog);
-                    const inputEl = dialog.querySelector(
-                      "#default-workspace-input",
-                    ) as HTMLInputElement;
+                  const closeDialog = () => document.body.removeChild(dialog);
+                  const inputEl = dialog.querySelector(
+                    "#default-workspace-input",
+                  ) as HTMLInputElement;
 
-                    // 浏览按钮
-                    dialog.querySelector("#browse-default-btn")!.addEventListener("click", () => {
-                      const fileInput = document.createElement("input");
-                      fileInput.type = "file";
-                      fileInput.setAttribute("webkitdirectory", "");
-                      fileInput.setAttribute("directory", "");
-                      fileInput.addEventListener("change", (e: Event) => {
-                        const files = (e.target as HTMLInputElement).files;
-                        if (files && files.length > 0) {
-                          inputEl.value = files[0].webkitRelativePath.split("/")[0];
-                        }
-                      });
-                      fileInput.click();
+                  // 浏览按钮
+                  dialog.querySelector("#browse-default-btn")!.addEventListener("click", () => {
+                    const fileInput = document.createElement("input");
+                    fileInput.type = "file";
+                    fileInput.setAttribute("webkitdirectory", "");
+                    fileInput.setAttribute("directory", "");
+                    fileInput.addEventListener("change", (e: Event) => {
+                      const files = (e.target as HTMLInputElement).files;
+                      if (files && files.length > 0) {
+                        inputEl.value = files[0].webkitRelativePath.split("/")[0];
+                      }
                     });
+                    fileInput.click();
+                  });
 
-                    dialog
-                      .querySelector("#cancel-config-btn")!
-                      .addEventListener("click", closeDialog);
-                    dialog
-                      .querySelector("#confirm-config-btn")!
-                      .addEventListener("click", async () => {
-                        const newDefault = inputEl.value.trim();
-                        if (!newDefault) {
-                          alert("请输入默认工作区根目录");
-                          return;
-                        }
+                  dialog
+                    .querySelector("#cancel-config-btn")!
+                    .addEventListener("click", closeDialog);
+                  dialog
+                    .querySelector("#confirm-config-btn")!
+                    .addEventListener("click", async () => {
+                      const newDefault = inputEl.value.trim();
+                      if (!newDefault) {
+                        alert("请输入默认工作区根目录");
+                        return;
+                      }
 
-                        closeDialog();
+                      closeDialog();
 
-                        try {
-                          await setDefaultWorkspace(state, newDefault);
-                          alert(`默认工作区根目录已更新为：\n${newDefault}`);
-                        } catch (err) {
-                          console.error("Failed to set default workspace:", err);
-                          alert("设置失败: " + (err instanceof Error ? err.message : String(err)));
-                        }
-                      });
-                  } catch (err) {
-                    console.error("Failed to load default workspace:", err);
-                    alert(
-                      "加载默认工作区失败: " + (err instanceof Error ? err.message : String(err)),
-                    );
+                      try {
+                        await setDefaultWorkspace(state, newDefault);
+                        alert(`默认工作区根目录已更新为：\n${newDefault}`);
+                      } catch (err) {
+                        console.error("Failed to set default workspace:", err);
+                        alert("设置失败: " + (err instanceof Error ? err.message : String(err)));
+                      }
+                    });
+                } catch (err) {
+                  console.error("Failed to load default workspace:", err);
+                  alert(
+                    "加载默认工作区失败: " + (err instanceof Error ? err.message : String(err)),
+                  );
+                }
+              },
+              onSetDefaultAgent: async (agentId) => {
+                // 二次确认
+                if (!confirm(`确定将助手 "${agentId}" 设为默认助手吗？`)) {
+                  return;
+                }
+
+                try {
+                  await setDefaultAgent(state, agentId);
+                  alert(`已将 "${agentId}" 设为默认助手`);
+                } catch (err) {
+                  console.error("Failed to set default agent:", err);
+                  alert("设置失败: " + (err instanceof Error ? err.message : String(err)));
+                }
+              },
+            })
+          : nothing}
+        ${state.tab === "collaboration"
+          ? renderCollaboration({
+              activePanel: state.collaborationActivePanel,
+              onSelectPanel: (panel) => {
+                state.collaborationActivePanel = panel;
+                // 切换到群组面板时加载数据
+                if (panel === "groups" && !state.groupsList) {
+                  void loadGroups(state, state.client!);
+                }
+                // 切换到好友面板时加载数据
+                if (panel === "friends" && state.friendsList.length === 0) {
+                  // TODO: 加载好友列表，需要当前智能助手 ID
+                  // void loadFriends(state, "current-agent-id");
+                }
+                // 切换到团队监控时加载数据
+                if (panel === "team-monitor") {
+                  void loadTeamMonitor(state);
+                }
+                // 切换到项目管理面板时加载数据
+                if (panel === "projects" && !state.projectsList) {
+                  if (state.client && state.connected) {
+                    void loadProjects(state, state.client);
+                  }
+                }
+              },
+              groupsProps: {
+                loading: state.groupsLoading,
+                error: state.groupsError,
+                groupsList: state.groupsList,
+                selectedGroupId: state.groupsSelectedId,
+                activePanel: state.groupsActivePanel,
+                creatingGroup: state.creatingGroup,
+                editingGroup: state.editingGroup,
+                agentsList: state.agentsList,
+                onRefresh: () => loadGroups(state, state.client!),
+                onSelectGroup: (groupId) => {
+                  state.groupsSelectedId = groupId;
+                },
+                onSelectPanel: (panel) => {
+                  state.groupsActivePanel = panel;
+                },
+                onCreateGroup: () => {
+                  state.creatingGroup = true;
+                  state.editingGroup = null;
+                },
+                onEditGroup: (groupId) => {
+                  const group = state.groupsList?.groups.find((g) => g.id === groupId);
+                  if (group) {
+                    state.editingGroup = group;
+                    state.creatingGroup = false;
                   }
                 },
-                onSetDefaultAgent: async (agentId) => {
-                  // 二次确认
-                  if (!confirm(`确定将助手 "${agentId}" 设为默认助手吗？`)) {
+                onDeleteGroup: async (groupId) => {
+                  if (confirm(`确定要删除群组 ${groupId} 吗？`)) {
+                    try {
+                      await state.handleDeleteGroup(groupId);
+                    } catch (err) {
+                      alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  }
+                },
+                onSaveGroup: async () => {
+                  if (!state.editingGroup) {
                     return;
                   }
-
                   try {
-                    await setDefaultAgent(state, agentId);
-                    alert(`已将 "${agentId}" 设为默认助手`);
-                  } catch (err) {
-                    console.error("Failed to set default agent:", err);
-                    alert("设置失败: " + (err instanceof Error ? err.message : String(err)));
-                  }
-                },
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "collaboration"
-            ? renderCollaboration({
-                activePanel: state.collaborationActivePanel,
-                onSelectPanel: (panel) => {
-                  state.collaborationActivePanel = panel;
-                  // 切换到群组面板时加载数据
-                  if (panel === "groups" && !state.groupsList) {
-                    void loadGroups(state, state.client!);
-                  }
-                  // 切换到好友面板时加载数据
-                  if (panel === "friends" && state.friendsList.length === 0) {
-                    // TODO: 加载好友列表，需要当前智能助手 ID
-                    // void loadFriends(state, "current-agent-id");
-                  }
-                  // 切换到团队监控时加载数据
-                  if (panel === "team-monitor") {
-                    void loadTeamMonitor(state);
-                  }
-                  // 切换到项目管理面板时加载数据
-                  if (panel === "projects" && !state.projectsList) {
-                    if (state.client && state.connected) {
-                      void loadProjects(state, state.client);
+                    // 如果是创建模式（有 creatingGroup 标志），则调用 handleCreateGroup
+                    if (state.creatingGroup) {
+                      const defaultOwnerId = state.agentsList?.defaultId ?? "main";
+                      const groupWithOwner = {
+                        ...state.editingGroup,
+                        ownerId: state.editingGroup.ownerId || defaultOwnerId,
+                      };
+                      await state.handleCreateGroup(groupWithOwner);
+                    } else {
+                      // 否则调用 updateGroup 更新现有群组
+                      const { updateGroup } = await import("./controllers/groups.js");
+                      await updateGroup(
+                        state,
+                        state.client!,
+                        state.editingGroup.id,
+                        state.editingGroup,
+                      );
                     }
-                  }
-                },
-                groupsProps: {
-                  loading: state.groupsLoading,
-                  error: state.groupsError,
-                  groupsList: state.groupsList,
-                  selectedGroupId: state.groupsSelectedId,
-                  activePanel: state.groupsActivePanel,
-                  creatingGroup: state.creatingGroup,
-                  editingGroup: state.editingGroup,
-                  agentsList: state.agentsList,
-                  onRefresh: () => loadGroups(state, state.client!),
-                  onSelectGroup: (groupId) => {
-                    state.groupsSelectedId = groupId;
-                  },
-                  onSelectPanel: (panel) => {
-                    state.groupsActivePanel = panel;
-                  },
-                  onCreateGroup: () => {
-                    state.creatingGroup = true;
+                    state.creatingGroup = false;
                     state.editingGroup = null;
-                  },
-                  onEditGroup: (groupId) => {
-                    const group = state.groupsList?.groups.find((g) => g.id === groupId);
-                    if (group) {
-                      state.editingGroup = group;
-                      state.creatingGroup = false;
+                  } catch (err) {
+                    alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+                  }
+                },
+                onCancelEdit: () => {
+                  state.creatingGroup = false;
+                  state.editingGroup = null;
+                },
+                onGroupFormChange: (field, value) => {
+                  if (state.editingGroup) {
+                    state.editingGroup = { ...state.editingGroup, [field]: value };
+                  } else if (state.creatingGroup) {
+                    const defaultOwnerId = state.agentsList?.defaultId ?? "main";
+                    state.editingGroup = {
+                      id: "",
+                      name: "",
+                      ownerId: defaultOwnerId,
+                      createdAt: Date.now(),
+                      members: [],
+                      isPublic: false,
+                      [field]: value,
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                    } as any;
+                  }
+                },
+                onAddMember: async (groupId, agentId, role) => {
+                  try {
+                    await addGroupMember(
+                      state,
+                      state.client!,
+                      groupId,
+                      agentId,
+                      role === "owner" ? "admin" : role,
+                    );
+                  } catch (err) {
+                    alert(`添加成员失败：${err instanceof Error ? err.message : String(err)}`);
+                  }
+                },
+                onRemoveMember: async (groupId, agentId) => {
+                  try {
+                    await removeGroupMember(state, state.client!, groupId, agentId);
+                  } catch (err) {
+                    alert(`移除成员失败：${err instanceof Error ? err.message : String(err)}`);
+                  }
+                },
+                onUpdateMemberRole: async (groupId, agentId, role) => {
+                  try {
+                    await updateGroupMemberRole(
+                      state,
+                      state.client!,
+                      groupId,
+                      agentId,
+                      role === "owner" ? "admin" : role,
+                    );
+                  } catch (err) {
+                    alert(`更新角色失败：${err instanceof Error ? err.message : String(err)}`);
+                  }
+                },
+                // 群组文件管理 Props
+                groupFilesLoading: state.groupFilesLoading,
+                groupFilesError: state.groupFilesError,
+                groupFilesList: state.groupFilesList,
+                groupFileActive: state.groupFileActive,
+                groupFileContents: state.groupFileContents,
+                groupFileDrafts: state.groupFileDrafts,
+                groupFileSaving: state.groupFileSaving,
+                onLoadGroupFiles: (groupId) => {
+                  void loadGroupFiles(state, groupId);
+                },
+                onSelectGroupFile: (name) => {
+                  const groupId = state.groupsSelectedId;
+                  if (!groupId) {
+                    return;
+                  }
+                  state.groupFileActive = name;
+                  void loadGroupFileContent(state, groupId, name);
+                },
+                onGroupFileDraftChange: (name, content) => {
+                  state.groupFileDrafts = { ...state.groupFileDrafts, [name]: content };
+                },
+                onGroupFileReset: (name) => {
+                  state.groupFileDrafts = {
+                    ...state.groupFileDrafts,
+                    [name]: state.groupFileContents[name] ?? "",
+                  };
+                },
+                onGroupFileSave: (name) => {
+                  const groupId = state.groupsSelectedId;
+                  if (!groupId) {
+                    return;
+                  }
+                  const content = state.groupFileDrafts[name] ?? "";
+                  void saveGroupFile(state, groupId, name, content);
+                },
+                onAddGroupFile: (groupId, name) => {
+                  void saveGroupFile(state, groupId, name, "").then(() => {
+                    state.groupFileActive = name;
+                    void loadGroupFileContent(state, groupId, name, { force: true });
+                  });
+                },
+                onDeleteGroupFile: async (groupId, name) => {
+                  if (confirm(`确定要删除文件 ${name} 吗？`)) {
+                    await deleteGroupFile(state, groupId, name);
+                  }
+                },
+                onOpenGroupFolder: (folderPath) => {
+                  if (!state.client) {
+                    return;
+                  }
+                  void state.client
+                    .request("workspace.openFolder", { path: folderPath })
+                    .catch(() => {});
+                },
+                // 群组工作空间迁移
+                groupWorkspaceMigrating: state.groupWorkspaceMigrating,
+                onMigrateGroupWorkspace: (groupId, newDir) => {
+                  void migrateGroupWorkspace(state, groupId, newDir).then((res) => {
+                    if (res?.success) {
+                      alert(`迁移成功！共迁移 ${res.fileCount} 个文件到：${res.newDir}`);
+                    } else if (res !== null) {
+                      alert(`迁移失败，请检查错误信息。`);
                     }
-                  },
-                  onDeleteGroup: async (groupId) => {
-                    if (confirm(`确定要删除群组 ${groupId} 吗？`)) {
-                      try {
-                        await state.handleDeleteGroup(groupId);
-                      } catch (err) {
-                        alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+                  });
+                },
+                // 群组内嵌项目管理 Props
+                projectsList: state.projectsList,
+                projectsLoading: state.projectsLoading,
+                projectsError: state.projectsError,
+                selectedProjectId: state.selectedProjectId,
+                activeProjectPanel: state.activeProjectPanel as "list" | "config",
+                creatingProject: state.creatingProject,
+                editingProject: state.editingProject,
+                onProjectsRefresh: () => {
+                  void loadProjects(state, state.client!);
+                },
+                onSelectProject: (projectId) => {
+                  state.selectedProjectId = projectId;
+                },
+                onSelectProjectPanel: (panel) => {
+                  state.activeProjectPanel = panel;
+                },
+                onCreateProject: () => {
+                  state.creatingProject = true;
+                  state.editingProject = null;
+                },
+                onEditProject: (projectId) => {
+                  const proj = state.projectsList?.projects.find((p) => p.projectId === projectId);
+                  if (proj) {
+                    state.editingProject = proj;
+                    state.creatingProject = false;
+                  }
+                },
+                onSaveProject: async () => {
+                  if (!state.editingProject) {
+                    return;
+                  }
+                  const proj = state.editingProject;
+                  try {
+                    // 找到该项目绑定的群组列表
+                    const response = await state.client!.request("groups.list", {});
+                    // oxlint-disable-next-line typescript/no-explicit-any
+                    const groupsRaw = Array.isArray((response as any)?.groups)
+                      ? // oxlint-disable-next-line typescript/no-explicit-any
+                        ((response as any).groups as unknown[])
+                      : [];
+                    const boundGroups = groupsRaw.filter(
+                      (g) => (g as Record<string, unknown>).projectId === proj.projectId,
+                    );
+
+                    // 对每个绑定群组更新 metadata.codeDir
+                    for (const g of boundGroups) {
+                      const gr = g as Record<string, unknown>;
+                      const metaUpdate: Record<string, unknown> = {
+                        ...(gr.metadata as Record<string, unknown> | undefined),
+                        codeDir: proj.codeDir ?? "",
+                      };
+                      await state.client!.request("groups.update", {
+                        groupId: gr.id,
+                        metadata: metaUpdate,
+                      });
+                      // 如果 workspacePath 有变，同步到项目群
+                      if (proj.workspacePath && proj.workspacePath !== gr.workspacePath) {
+                        await state.client!.request("projects.updateWorkspace", {
+                          projectId: proj.projectId,
+                          workspacePath: proj.workspacePath,
+                        });
                       }
                     }
-                  },
-                  onSaveGroup: async () => {
-                    if (!state.editingGroup) {
+                    await loadProjects(state, state.client!);
+                    state.editingProject = null;
+                  } catch (err) {
+                    alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+                  }
+                },
+                onCancelProjectEdit: () => {
+                  state.creatingProject = false;
+                  state.editingProject = null;
+                },
+                onProjectFormChange: (field, value) => {
+                  if (state.editingProject) {
+                    state.editingProject = { ...state.editingProject, [field]: value };
+                  } else if (state.creatingProject) {
+                    state.editingProject = {
+                      projectId: "",
+                      name: "",
+                      workspacePath: "",
+                      codeDir: "",
+                      [field]: value,
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                    } as any;
+                  }
+                },
+                // 群组升级为项目
+                upgradingGroupToProject: state.upgradingGroupToProject,
+                onUpgradeGroupToProject: async (groupId, projectId) => {
+                  try {
+                    await upgradeGroupToProject(state, state.client!, groupId, projectId);
+                  } catch (err) {
+                    alert(`升级失败：${err instanceof Error ? err.message : String(err)}`);
+                  }
+                },
+                // 更换群主
+                onTransferGroupOwner: (groupId, newOwnerId) => {
+                  void (async () => {
+                    if (!state.client) {
                       return;
                     }
                     try {
-                      // 如果是创建模式（有 creatingGroup 标志），则调用 handleCreateGroup
-                      if (state.creatingGroup) {
-                        const defaultOwnerId = state.agentsList?.defaultId ?? "main";
-                        const groupWithOwner = {
-                          ...state.editingGroup,
-                          ownerId: state.editingGroup.ownerId || defaultOwnerId,
-                        };
-                        await state.handleCreateGroup(groupWithOwner);
-                      } else {
-                        // 否则调用 updateGroup 更新现有群组
-                        const { updateGroup } = await import("./controllers/groups.js");
-                        await updateGroup(
-                          state,
-                          state.client!,
-                          state.editingGroup.id,
-                          state.editingGroup,
-                        );
-                      }
-                      state.creatingGroup = false;
-                      state.editingGroup = null;
+                      await state.client.request("group.owner.transfer", { groupId, newOwnerId });
+                      await loadGroups(state, state.client);
+                      alert(`群主已成功更换为 ${newOwnerId}`);
                     } catch (err) {
-                      alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+                      alert(`更换群主失败：${err instanceof Error ? err.message : String(err)}`);
                     }
-                  },
-                  onCancelEdit: () => {
-                    state.creatingGroup = false;
-                    state.editingGroup = null;
-                  },
-                  onGroupFormChange: (field, value) => {
-                    if (state.editingGroup) {
-                      state.editingGroup = { ...state.editingGroup, [field]: value };
-                    } else if (state.creatingGroup) {
-                      const defaultOwnerId = state.agentsList?.defaultId ?? "main";
-                      state.editingGroup = {
-                        id: "",
-                        name: "",
-                        ownerId: defaultOwnerId,
-                        createdAt: Date.now(),
-                        members: [],
-                        isPublic: false,
-                        [field]: value,
+                  })();
+                },
+                // 更换项目负责人
+                onTransferProjectOwner: (projectId, newOwnerId) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    try {
+                      await state.client.request("project.owner.transfer", {
+                        projectId,
+                        newOwnerId,
+                      });
+                      await loadProjects(state, state.client);
+                      alert(`项目负责人已成功更换为 ${newOwnerId}`);
+                    } catch (err) {
+                      alert(`更换负责人失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  })();
+                },
+              },
+              projectsProps: {
+                // 项目管理 Props
+                loading: state.projectsLoading,
+                error: state.projectsError,
+                projectsList: state.projectsList,
+                selectedProjectId: state.selectedProjectId,
+                activePanel: state.activeProjectPanel,
+                creatingProject: state.creatingProject,
+                editingProject: state.editingProject,
+                agentsList: state.agentsList,
+                groupsList: state.groupsList,
+                projectCodeRoot: state.projectCodeRoot,
+                onCodeRootChange: (root) => {
+                  state.projectCodeRoot = root;
+                  if (root.trim()) {
+                    localStorage.setItem("openclaw.projectCodeRoot", root);
+                  } else {
+                    localStorage.removeItem("openclaw.projectCodeRoot");
+                  }
+                },
+                projectStatusFilter: state.projectStatusFilter,
+                onStatusFilterChange: (filter) => {
+                  state.projectStatusFilter = filter;
+                },
+                onRefresh: () => {
+                  void loadProjects(state, state.client!);
+                },
+                onSelectProject: (projectId) => {
+                  state.selectedProjectId = projectId;
+                  // 切换项目时自动加载团队关系
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    state.projectTeamRelationsLoading = true;
+                    try {
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      const res = (await state.client.request("project.team.relations", {
+                        projectId,
                         // oxlint-disable-next-line typescript/no-explicit-any
-                      } as any;
+                      })) as any;
+                      state.projectTeamRelations = res?.relations ?? [];
+                    } catch {
+                      state.projectTeamRelations = [];
+                    } finally {
+                      state.projectTeamRelationsLoading = false;
                     }
-                  },
-                  onAddMember: async (groupId, agentId, role) => {
+                  })();
+                },
+                onSelectPanel: (panel) => {
+                  state.activeProjectPanel = panel;
+                },
+                onCreateProject: () => {
+                  state.creatingProject = true;
+                  state.editingProject = null;
+                },
+                onEditProject: (projectId) => {
+                  const project = state.projectsList?.projects.find(
+                    (p) => p.projectId === projectId,
+                  );
+                  if (project) {
+                    state.editingProject = project;
+                    state.creatingProject = false;
+                  }
+                },
+                onSaveProject: async () => {
+                  if (!state.editingProject) {
+                    return;
+                  }
+                  const proj = state.editingProject;
+                  try {
+                    // ① 保存项目基本信息（名称、描述、目录等）到 PROJECT_CONFIG.json
+                    await state.client!.request("projects.save", {
+                      projectId: proj.projectId,
+                      name: proj.name,
+                      description: proj.description ?? "",
+                      codeDir: proj.codeDir ?? "",
+                      docsDir: proj.docsDir ?? "",
+                    });
+
+                    // ② 如果工作空间路径发生变化，同步到所有绑定群组
+                    const originalProject = state.projectsList?.projects.find(
+                      (p) => p.projectId === proj.projectId,
+                    );
+                    if (
+                      proj.workspacePath &&
+                      proj.workspacePath !== originalProject?.workspacePath
+                    ) {
+                      await state.client!.request("projects.updateWorkspace", {
+                        projectId: proj.projectId,
+                        workspacePath: proj.workspacePath,
+                      });
+                    }
+
+                    // ③ 同步更新绑定群组的 metadata（codeDir）
+                    const response = await state.client!.request("groups.list", {});
+                    // oxlint-disable-next-line typescript/no-explicit-any
+                    const groupsRaw = Array.isArray((response as any)?.groups)
+                      ? // oxlint-disable-next-line typescript/no-explicit-any
+                        ((response as any).groups as unknown[])
+                      : [];
+                    const boundGroups = groupsRaw.filter(
+                      (g) => (g as Record<string, unknown>).projectId === proj.projectId,
+                    );
+                    for (const g of boundGroups) {
+                      const gr = g as Record<string, unknown>;
+                      const metaUpdate: Record<string, unknown> = {
+                        ...(gr.metadata as Record<string, unknown> | undefined),
+                        codeDir: proj.codeDir ?? "",
+                      };
+                      await state.client!.request("groups.update", {
+                        groupId: gr.id,
+                        metadata: metaUpdate,
+                      });
+                    }
+
+                    await loadProjects(state, state.client!);
+                    state.editingProject = null;
+                  } catch (err) {
+                    alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+                  }
+                },
+                onCancelProjectEdit: () => {
+                  state.creatingProject = false;
+                  state.editingProject = null;
+                },
+                onProjectFormChange: (field, value) => {
+                  if (state.editingProject) {
+                    state.editingProject = { ...state.editingProject, [field]: value };
+                  } else if (state.creatingProject) {
+                    state.editingProject = {
+                      projectId: "",
+                      name: "",
+                      workspacePath: "",
+                      codeDir: "",
+                      [field]: value,
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                    } as any;
+                  }
+                },
+                onOpenWorkspace: (path) => {
+                  if (!state.client) {
+                    return;
+                  }
+                  void state.client.request("workspace.openFolder", { path }).catch(() => {});
+                },
+                // 成员管理 - 通过群组 RPC 实现
+                onAddMember: (groupId, agentId, role) => {
+                  void (async () => {
                     try {
                       await addGroupMember(
                         state,
                         state.client!,
                         groupId,
                         agentId,
-                        role === "owner" ? "admin" : role,
+                        role === "owner" ? "admin" : (role as "member" | "admin"),
                       );
+                      await loadGroups(state, state.client!);
                     } catch (err) {
                       alert(`添加成员失败：${err instanceof Error ? err.message : String(err)}`);
                     }
-                  },
-                  onRemoveMember: async (groupId, agentId) => {
+                  })();
+                },
+                onRemoveMember: (groupId, agentId) => {
+                  void (async () => {
                     try {
                       await removeGroupMember(state, state.client!, groupId, agentId);
+                      await loadGroups(state, state.client!);
                     } catch (err) {
                       alert(`移除成员失败：${err instanceof Error ? err.message : String(err)}`);
                     }
-                  },
-                  onUpdateMemberRole: async (groupId, agentId, role) => {
-                    try {
-                      await updateGroupMemberRole(
-                        state,
-                        state.client!,
-                        groupId,
-                        agentId,
-                        role === "owner" ? "admin" : role,
-                      );
-                    } catch (err) {
-                      alert(`更新角色失败：${err instanceof Error ? err.message : String(err)}`);
-                    }
-                  },
-                  // 群组文件管理 Props
-                  groupFilesLoading: state.groupFilesLoading,
-                  groupFilesError: state.groupFilesError,
-                  groupFilesList: state.groupFilesList,
-                  groupFileActive: state.groupFileActive,
-                  groupFileContents: state.groupFileContents,
-                  groupFileDrafts: state.groupFileDrafts,
-                  groupFileSaving: state.groupFileSaving,
-                  onLoadGroupFiles: (groupId) => {
-                    void loadGroupFiles(state, groupId);
-                  },
-                  onSelectGroupFile: (name) => {
-                    const groupId = state.groupsSelectedId;
-                    if (!groupId) {
-                      return;
-                    }
-                    state.groupFileActive = name;
-                    void loadGroupFileContent(state, groupId, name);
-                  },
-                  onGroupFileDraftChange: (name, content) => {
-                    state.groupFileDrafts = { ...state.groupFileDrafts, [name]: content };
-                  },
-                  onGroupFileReset: (name) => {
-                    state.groupFileDrafts = {
-                      ...state.groupFileDrafts,
-                      [name]: state.groupFileContents[name] ?? "",
-                    };
-                  },
-                  onGroupFileSave: (name) => {
-                    const groupId = state.groupsSelectedId;
-                    if (!groupId) {
-                      return;
-                    }
-                    const content = state.groupFileDrafts[name] ?? "";
-                    void saveGroupFile(state, groupId, name, content);
-                  },
-                  onAddGroupFile: (groupId, name) => {
-                    void saveGroupFile(state, groupId, name, "").then(() => {
-                      state.groupFileActive = name;
-                      void loadGroupFileContent(state, groupId, name, { force: true });
-                    });
-                  },
-                  onDeleteGroupFile: async (groupId, name) => {
-                    if (confirm(`确定要删除文件 ${name} 吗？`)) {
-                      await deleteGroupFile(state, groupId, name);
-                    }
-                  },
-                  onOpenGroupFolder: (folderPath) => {
+                  })();
+                },
+                onUpdateMemberRole: (projectId, agentId, role) => {
+                  state.handleProjectUpdateMemberRole(projectId, agentId, role);
+                },
+                // 进度管理
+                onUpdateProgress: (projectId, patch) => {
+                  // 实时更新内存中的项目字段（不发请求，仅更新本地状态）
+                  if (!state.projectsList) {
+                    return;
+                  }
+                  state.projectsList = {
+                    ...state.projectsList,
+                    projects: state.projectsList.projects.map((p) =>
+                      p.projectId === projectId ? { ...p, ...patch } : p,
+                    ),
+                  };
+                },
+                onSaveProgress: (projectId, patch) => {
+                  void (async () => {
                     if (!state.client) {
                       return;
                     }
-                    void state.client
-                      .request("workspace.openFolder", { path: folderPath })
-                      .catch(() => {});
-                  },
-                  // 群组工作空间迁移
-                  groupWorkspaceMigrating: state.groupWorkspaceMigrating,
-                  onMigrateGroupWorkspace: (groupId, newDir) => {
-                    void migrateGroupWorkspace(state, groupId, newDir).then((res) => {
-                      if (res?.success) {
-                        alert(`迁移成功！共迁移 ${res.fileCount} 个文件到：${res.newDir}`);
-                      } else if (res !== null) {
-                        alert(`迁移失败，请检查错误信息。`);
-                      }
-                    });
-                  },
-                  // 群组内嵌项目管理 Props
-                  projectsList: state.projectsList,
-                  projectsLoading: state.projectsLoading,
-                  projectsError: state.projectsError,
-                  selectedProjectId: state.selectedProjectId,
-                  activeProjectPanel: state.activeProjectPanel as "list" | "config",
-                  creatingProject: state.creatingProject,
-                  editingProject: state.editingProject,
-                  onProjectsRefresh: () => {
-                    void loadProjects(state, state.client!);
-                  },
-                  onSelectProject: (projectId) => {
-                    state.selectedProjectId = projectId;
-                  },
-                  onSelectProjectPanel: (panel) => {
-                    state.activeProjectPanel = panel;
-                  },
-                  onCreateProject: () => {
-                    state.creatingProject = true;
-                    state.editingProject = null;
-                  },
-                  onEditProject: (projectId) => {
-                    const proj = state.projectsList?.projects.find(
-                      (p) => p.projectId === projectId,
-                    );
-                    if (proj) {
-                      state.editingProject = proj;
-                      state.creatingProject = false;
-                    }
-                  },
-                  onSaveProject: async () => {
-                    if (!state.editingProject) {
-                      return;
-                    }
-                    const proj = state.editingProject;
                     try {
-                      // 找到该项目绑定的群组列表
-                      const response = await state.client!.request("groups.list", {});
-                      // oxlint-disable-next-line typescript/no-explicit-any
-                      const groupsRaw = Array.isArray((response as any)?.groups)
-                        ? // oxlint-disable-next-line typescript/no-explicit-any
-                          ((response as any).groups as unknown[])
-                        : [];
-                      const boundGroups = groupsRaw.filter(
-                        (g) => (g as Record<string, unknown>).projectId === proj.projectId,
-                      );
-
-                      // 对每个绑定群组更新 metadata.codeDir
-                      for (const g of boundGroups) {
-                        const gr = g as Record<string, unknown>;
-                        const metaUpdate: Record<string, unknown> = {
-                          ...(gr.metadata as Record<string, unknown> | undefined),
-                          codeDir: proj.codeDir ?? "",
-                        };
-                        await state.client!.request("groups.update", {
-                          groupId: gr.id,
-                          metadata: metaUpdate,
-                        });
-                        // 如果 workspacePath 有变，同步到项目群
-                        if (proj.workspacePath && proj.workspacePath !== gr.workspacePath) {
-                          await state.client!.request("projects.updateWorkspace", {
-                            projectId: proj.projectId,
-                            workspacePath: proj.workspacePath,
-                          });
-                        }
-                      }
-                      await loadProjects(state, state.client!);
-                      state.editingProject = null;
-                    } catch (err) {
-                      alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
-                    }
-                  },
-                  onCancelProjectEdit: () => {
-                    state.creatingProject = false;
-                    state.editingProject = null;
-                  },
-                  onProjectFormChange: (field, value) => {
-                    if (state.editingProject) {
-                      state.editingProject = { ...state.editingProject, [field]: value };
-                    } else if (state.creatingProject) {
-                      state.editingProject = {
-                        projectId: "",
-                        name: "",
-                        workspacePath: "",
-                        codeDir: "",
-                        [field]: value,
-                        // oxlint-disable-next-line typescript/no-explicit-any
-                      } as any;
-                    }
-                  },
-                  // 群组升级为项目
-                  upgradingGroupToProject: state.upgradingGroupToProject,
-                  onUpgradeGroupToProject: async (groupId, projectId) => {
-                    try {
-                      await upgradeGroupToProject(state, state.client!, groupId, projectId);
-                    } catch (err) {
-                      alert(`升级失败：${err instanceof Error ? err.message : String(err)}`);
-                    }
-                  },
-                  // 更换群主
-                  onTransferGroupOwner: (groupId, newOwnerId) => {
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      try {
-                        await state.client.request("group.owner.transfer", { groupId, newOwnerId });
-                        await loadGroups(state, state.client);
-                        alert(`群主已成功更换为 ${newOwnerId}`);
-                      } catch (err) {
-                        alert(`更换群主失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  // 更换项目负责人
-                  onTransferProjectOwner: (projectId, newOwnerId) => {
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      try {
-                        await state.client.request("project.owner.transfer", {
-                          projectId,
-                          newOwnerId,
-                        });
-                        await loadProjects(state, state.client);
-                        alert(`项目负责人已成功更换为 ${newOwnerId}`);
-                      } catch (err) {
-                        alert(
-                          `更换负责人失败：${err instanceof Error ? err.message : String(err)}`,
-                        );
-                      }
-                    })();
-                  },
-                },
-                projectsProps: {
-                  // 项目管理 Props
-                  loading: state.projectsLoading,
-                  error: state.projectsError,
-                  projectsList: state.projectsList,
-                  selectedProjectId: state.selectedProjectId,
-                  activePanel: state.activeProjectPanel,
-                  creatingProject: state.creatingProject,
-                  editingProject: state.editingProject,
-                  agentsList: state.agentsList,
-                  groupsList: state.groupsList,
-                  projectCodeRoot: state.projectCodeRoot,
-                  onCodeRootChange: (root) => {
-                    state.projectCodeRoot = root;
-                    if (root.trim()) {
-                      localStorage.setItem("openclaw.projectCodeRoot", root);
-                    } else {
-                      localStorage.removeItem("openclaw.projectCodeRoot");
-                    }
-                  },
-                  projectStatusFilter: state.projectStatusFilter,
-                  onStatusFilterChange: (filter) => {
-                    state.projectStatusFilter = filter;
-                  },
-                  onRefresh: () => {
-                    void loadProjects(state, state.client!);
-                  },
-                  onSelectProject: (projectId) => {
-                    state.selectedProjectId = projectId;
-                    // 切换项目时自动加载团队关系
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      state.projectTeamRelationsLoading = true;
-                      try {
-                        // oxlint-disable-next-line typescript/no-explicit-any
-                        const res = (await state.client.request("project.team.relations", {
-                          projectId,
-                          // oxlint-disable-next-line typescript/no-explicit-any
-                        })) as any;
-                        state.projectTeamRelations = res?.relations ?? [];
-                      } catch {
-                        state.projectTeamRelations = [];
-                      } finally {
-                        state.projectTeamRelationsLoading = false;
-                      }
-                    })();
-                  },
-                  onSelectPanel: (panel) => {
-                    state.activeProjectPanel = panel;
-                  },
-                  onCreateProject: () => {
-                    state.creatingProject = true;
-                    state.editingProject = null;
-                  },
-                  onEditProject: (projectId) => {
-                    const project = state.projectsList?.projects.find(
-                      (p) => p.projectId === projectId,
-                    );
-                    if (project) {
-                      state.editingProject = project;
-                      state.creatingProject = false;
-                    }
-                  },
-                  onSaveProject: async () => {
-                    if (!state.editingProject) {
-                      return;
-                    }
-                    const proj = state.editingProject;
-                    try {
-                      // ① 保存项目基本信息（名称、描述、目录等）到 PROJECT_CONFIG.json
-                      await state.client!.request("projects.save", {
-                        projectId: proj.projectId,
-                        name: proj.name,
-                        description: proj.description ?? "",
-                        codeDir: proj.codeDir ?? "",
-                        docsDir: proj.docsDir ?? "",
+                      await state.client.request("projects.updateProgress", {
+                        projectId,
+                        ...patch,
                       });
-
-                      // ② 如果工作空间路径发生变化，同步到所有绑定群组
-                      const originalProject = state.projectsList?.projects.find(
-                        (p) => p.projectId === proj.projectId,
-                      );
-                      if (
-                        proj.workspacePath &&
-                        proj.workspacePath !== originalProject?.workspacePath
-                      ) {
-                        await state.client!.request("projects.updateWorkspace", {
-                          projectId: proj.projectId,
-                          workspacePath: proj.workspacePath,
-                        });
-                      }
-
-                      // ③ 同步更新绑定群组的 metadata（codeDir）
-                      const response = await state.client!.request("groups.list", {});
-                      // oxlint-disable-next-line typescript/no-explicit-any
-                      const groupsRaw = Array.isArray((response as any)?.groups)
-                        ? // oxlint-disable-next-line typescript/no-explicit-any
-                          ((response as any).groups as unknown[])
-                        : [];
-                      const boundGroups = groupsRaw.filter(
-                        (g) => (g as Record<string, unknown>).projectId === proj.projectId,
-                      );
-                      for (const g of boundGroups) {
-                        const gr = g as Record<string, unknown>;
-                        const metaUpdate: Record<string, unknown> = {
-                          ...(gr.metadata as Record<string, unknown> | undefined),
-                          codeDir: proj.codeDir ?? "",
-                        };
-                        await state.client!.request("groups.update", {
-                          groupId: gr.id,
-                          metadata: metaUpdate,
-                        });
-                      }
-
-                      await loadProjects(state, state.client!);
-                      state.editingProject = null;
+                      // 刷新项目列表以同步持久化数据
+                      const { loadProjects } = await import("./controllers/projects.js");
+                      await loadProjects(state, state.client);
                     } catch (err) {
-                      alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+                      alert(`保存进度失败：${err instanceof Error ? err.message : String(err)}`);
                     }
-                  },
-                  onCancelProjectEdit: () => {
-                    state.creatingProject = false;
-                    state.editingProject = null;
-                  },
-                  onProjectFormChange: (field, value) => {
-                    if (state.editingProject) {
-                      state.editingProject = { ...state.editingProject, [field]: value };
-                    } else if (state.creatingProject) {
-                      state.editingProject = {
-                        projectId: "",
-                        name: "",
-                        workspacePath: "",
-                        codeDir: "",
-                        [field]: value,
-                        // oxlint-disable-next-line typescript/no-explicit-any
-                      } as any;
-                    }
-                  },
-                  onOpenWorkspace: (path) => {
+                  })();
+                },
+                onCompleteSprint: (projectId, sprintId, unfinishedAction, retrospective) => {
+                  void (async () => {
                     if (!state.client) {
                       return;
                     }
-                    void state.client.request("workspace.openFolder", { path }).catch(() => {});
-                  },
-                  // 成员管理 - 通过群组 RPC 实现
-                  onAddMember: (groupId, agentId, role) => {
-                    void (async () => {
-                      try {
-                        await addGroupMember(
-                          state,
-                          state.client!,
-                          groupId,
-                          agentId,
-                          role === "owner" ? "admin" : (role as "member" | "admin"),
-                        );
-                        await loadGroups(state, state.client!);
-                      } catch (err) {
-                        alert(`添加成员失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  onRemoveMember: (groupId, agentId) => {
-                    void (async () => {
-                      try {
-                        await removeGroupMember(state, state.client!, groupId, agentId);
-                        await loadGroups(state, state.client!);
-                      } catch (err) {
-                        alert(`移除成员失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  onUpdateMemberRole: (projectId, agentId, role) => {
-                    state.handleProjectUpdateMemberRole(projectId, agentId, role);
-                  },
-                  // 进度管理
-                  onUpdateProgress: (projectId, patch) => {
-                    // 实时更新内存中的项目字段（不发请求，仅更新本地状态）
-                    if (!state.projectsList) {
+                    try {
+                      await state.client.request("projects.completeSprint", {
+                        projectId,
+                        sprintId,
+                        unfinishedAction,
+                        retrospective,
+                      });
+                      const { loadProjects } = await import("./controllers/projects.js");
+                      await loadProjects(state, state.client);
+                    } catch (err) {
+                      alert(
+                        `完成 Sprint 失败：${err instanceof Error ? err.message : String(err)}`,
+                      );
+                    }
+                  })();
+                },
+                onStartSprint: (projectId, sprintId) => {
+                  void (async () => {
+                    if (!state.client) {
                       return;
                     }
-                    state.projectsList = {
-                      ...state.projectsList,
-                      projects: state.projectsList.projects.map((p) =>
-                        p.projectId === projectId ? { ...p, ...patch } : p,
-                      ),
-                    };
-                  },
-                  onSaveProgress: (projectId, patch) => {
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      try {
-                        await state.client.request("projects.updateProgress", {
-                          projectId,
-                          ...patch,
-                        });
-                        // 刷新项目列表以同步持久化数据
-                        const { loadProjects } = await import("./controllers/projects.js");
-                        await loadProjects(state, state.client);
-                      } catch (err) {
-                        alert(`保存进度失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  onCompleteSprint: (projectId, sprintId, unfinishedAction, retrospective) => {
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      try {
-                        await state.client.request("projects.completeSprint", {
-                          projectId,
-                          sprintId,
-                          unfinishedAction,
-                          retrospective,
-                        });
-                        const { loadProjects } = await import("./controllers/projects.js");
-                        await loadProjects(state, state.client);
-                      } catch (err) {
-                        alert(
-                          `完成 Sprint 失败：${err instanceof Error ? err.message : String(err)}`,
-                        );
-                      }
-                    })();
-                  },
-                  onStartSprint: (projectId, sprintId) => {
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      try {
-                        await state.client.request("projects.startSprint", {
-                          projectId,
-                          sprintId,
-                        });
-                        const { loadProjects } = await import("./controllers/projects.js");
-                        await loadProjects(state, state.client);
-                      } catch (err) {
-                        alert(
-                          `开始 Sprint 失败：${err instanceof Error ? err.message : String(err)}`,
-                        );
-                      }
-                    })();
-                  },
-                  // 单一数据源：用户在前端创建的任务直接写入 SQLite Task 系统
-                  onCreateSprintTask: (projectId, sprintId, title, status) => {
-                    return (async () => {
-                      if (!state.client) {
-                        return null;
-                      }
-                      try {
-                        const taskId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-                        // 将 sprint 看板状态映射为 SQLite TaskStatus
-                        const taskStatus = (status === "todo" || status === "backlog") ? "todo"
-                          : status === "in-progress" ? "in-progress"
-                          : status === "review" ? "review"
-                          : status === "blocked" ? "blocked"
-                          : status === "done" ? "done"
-                          : "todo";
-                        await state.client.request("task.create", {
-                          id: taskId,
-                          title,
-                          description: title, // 标题即描述（内联方式创建，后续可编辑）
-                          status: taskStatus,
-                          priority: "medium",
-                          projectId,
-                          scope: "project",
-                          createdAt: Date.now(),
-                          creatorType: "human",
-                          // 将 sprintId 存到 tags 中以便后续查询
-                          tags: sprintId ? [`sprint:${sprintId}`] : [],
-                        });
-                        return { taskId };
-                      } catch (err) {
-                        console.warn(`[Sprint Task Create] 写入 SQLite 失败（快照仍保留）: ${err instanceof Error ? err.message : String(err)}`);
-                        return null;
-                      }
-                    })();
-                  },
-                  // 单一数据源：用户在前端变更任务状态直接写入 SQLite
-                  onUpdateSprintTaskStatus: (taskId, newStatus) => {
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      // 展开的 id 可能是临时 id（task- 开头）或真实 id（task_ 开头）
-                      if (!taskId.startsWith("task_")) {
-                        // 临时 id， SQLite 里还没有这条记录，跳过
-                        return;
-                      }
-                      try {
-                        await state.client.request("task.update", {
-                          id: taskId,
-                          status: newStatus,
-                          ...(newStatus === "done" ? { completedAt: Date.now() } : {}),
-                        });
-                      } catch (err) {
-                        console.warn(`[Sprint Task Update] 状态同步失败: ${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  projectTeamRelations: state.projectTeamRelations,
-                  projectTeamRelationsLoading: state.projectTeamRelationsLoading,
-                  handoffForm: state.handoffForm,
-                  onHandoffFormChange: (field, value) => {
-                    state.handoffForm = { ...state.handoffForm, [field]: value };
-                  },
-                  onLoadTeamRelations: (projectId) => {
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      state.projectTeamRelationsLoading = true;
-                      try {
-                        // oxlint-disable-next-line typescript/no-explicit-any
-                        const res = (await state.client.request("project.team.relations", {
-                          projectId,
-                          // oxlint-disable-next-line typescript/no-explicit-any
-                        })) as any;
-                        state.projectTeamRelations = res?.relations ?? [];
-                      } catch {
-                        state.projectTeamRelations = [];
-                      } finally {
-                        state.projectTeamRelationsLoading = false;
-                      }
-                    })();
-                  },
-                  onAssignTeam: (projectId, teamId, role) => {
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      try {
-                        await state.client.request("project.team.assign", {
-                          projectId,
-                          teamId,
-                          role,
-                          assignedBy: "ui-user",
-                        });
-                        // 刷新团队关系
-                        // oxlint-disable-next-line typescript/no-explicit-any
-                        const res = (await state.client.request("project.team.relations", {
-                          projectId,
-                          // oxlint-disable-next-line typescript/no-explicit-any
-                        })) as any;
-                        state.projectTeamRelations = res?.relations ?? [];
-                        // 重置表单中的 toTeamId
-                        state.handoffForm = { ...state.handoffForm, toTeamId: "" };
-                      } catch (err) {
-                        alert(`关联团队失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  onHandoffProject: (projectId) => {
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      const form = state.handoffForm;
-                      if (!form.toTeamId.trim()) {
-                        alert("请填写接收方团队 ID");
-                        return;
-                      }
-                      // 找到当前 active 团队作为 fromTeam
-                      const activeTeam = state.projectTeamRelations.find(
-                        (r) => r.status === "active",
+                    try {
+                      await state.client.request("projects.startSprint", {
+                        projectId,
+                        sprintId,
+                      });
+                      const { loadProjects } = await import("./controllers/projects.js");
+                      await loadProjects(state, state.client);
+                    } catch (err) {
+                      alert(
+                        `开始 Sprint 失败：${err instanceof Error ? err.message : String(err)}`,
                       );
-                      const fromTeamId = activeTeam?.teamId;
-                      if (!fromTeamId) {
-                        alert("暂无进行中团队，请先关联团队并设置为进行中状态");
-                        return;
-                      }
-                      try {
-                        await state.client.request("project.handoff", {
-                          projectId,
-                          fromTeamId,
-                          toTeamId: form.toTeamId.trim(),
-                          toTeamRole: form.toTeamRole,
-                          fromTeamNewStatus: form.fromTeamNewStatus,
-                          toTeamNewStatus: form.toTeamNewStatus,
-                          operatorId: "ui-user",
-                          note: form.note || undefined,
-                        });
-                        // 刷新并重置表单
-                        // oxlint-disable-next-line typescript/no-explicit-any
-                        const res = (await state.client.request("project.team.relations", {
-                          projectId,
-                          // oxlint-disable-next-line typescript/no-explicit-any
-                        })) as any;
-                        state.projectTeamRelations = res?.relations ?? [];
-                        state.handoffForm = {
-                          toTeamId: "",
-                          toTeamRole: "ops",
-                          fromTeamNewStatus: "support-only",
-                          toTeamNewStatus: "active",
-                          note: "",
-                        };
-                        alert(
-                          `交付成功！${fromTeamId} 已转为 ${form.fromTeamNewStatus}，${form.toTeamId} 已接手为 ${form.toTeamNewStatus}。`,
-                        );
-                      } catch (err) {
-                        alert(`交付失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  onRemoveTeam: (projectId, teamId) => {
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      if (!confirm(`确认移除团队 ${teamId} 与项目的关联？`)) {
-                        return;
-                      }
-                      try {
-                        await state.client.request("project.team.remove", { projectId, teamId });
-                        // oxlint-disable-next-line typescript/no-explicit-any
-                        const res = (await state.client.request("project.team.relations", {
-                          projectId,
-                          // oxlint-disable-next-line typescript/no-explicit-any
-                        })) as any;
-                        state.projectTeamRelations = res?.relations ?? [];
-                      } catch (err) {
-                        alert(`移除失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  onUpdateTeamStatus: (projectId, teamId, status) => {
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      try {
-                        await state.client.request("project.team.status", {
-                          projectId,
-                          teamId,
-                          status,
-                          updatedBy: "ui-user",
-                        });
-                        // oxlint-disable-next-line typescript/no-explicit-any
-                        const res = (await state.client.request("project.team.relations", {
-                          projectId,
-                          // oxlint-disable-next-line typescript/no-explicit-any
-                        })) as any;
-                        state.projectTeamRelations = res?.relations ?? [];
-                      } catch (err) {
-                        alert(`更新状态失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  // 更换项目负责人
-                  onTransferProjectOwner: (projectId, newOwnerId) => {
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      try {
-                        await state.client.request("project.owner.transfer", {
-                          projectId,
-                          newOwnerId,
-                        });
-                        await loadProjects(state, state.client);
-                        alert(`项目负责人已成功更换为 ${newOwnerId}`);
-                      } catch (err) {
-                        alert(
-                          `更换负责人失败：${err instanceof Error ? err.message : String(err)}`,
-                        );
-                      }
-                    })();
-                  },
-                  // 删除项目相关
-                  deleteProjectConfirm: state.deleteProjectConfirm,
-                  onShowDeleteProjectConfirm: (projectId, projectName) => {
-                    state.deleteProjectConfirm = {
-                      projectId,
-                      projectName,
-                      deleteWorkspace: false,
-                      deleteTasks: false,
-                      deleteGroups: false,
-                    };
-                  },
-                  onHideDeleteProjectConfirm: () => {
-                    state.deleteProjectConfirm = null;
-                  },
-                  onDeleteProjectOptionChange: (key, value) => {
-                    if (state.deleteProjectConfirm) {
-                      state.deleteProjectConfirm = { ...state.deleteProjectConfirm, [key]: value };
                     }
-                  },
-                  onDeleteProject: (projectId, opts) => {
-                    void (async () => {
-                      if (!state.client) {
-                        return;
-                      }
-                      try {
+                  })();
+                },
+                // 单一数据源：用户在前端创建的任务直接写入 SQLite Task 系统
+                onCreateSprintTask: (projectId, sprintId, title, status) => {
+                  return (async () => {
+                    if (!state.client) {
+                      return null;
+                    }
+                    try {
+                      const taskId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+                      // 将 sprint 看板状态映射为 SQLite TaskStatus
+                      const taskStatus =
+                        status === "todo" || status === "backlog"
+                          ? "todo"
+                          : status === "in-progress"
+                            ? "in-progress"
+                            : status === "review"
+                              ? "review"
+                              : status === "blocked"
+                                ? "blocked"
+                                : status === "done"
+                                  ? "done"
+                                  : "todo";
+                      await state.client.request("task.create", {
+                        id: taskId,
+                        title,
+                        description: title, // 标题即描述（内联方式创建，后续可编辑）
+                        status: taskStatus,
+                        priority: "medium",
+                        projectId,
+                        scope: "project",
+                        createdAt: Date.now(),
+                        creatorType: "human",
+                        // 将 sprintId 存到 tags 中以便后续查询
+                        tags: sprintId ? [`sprint:${sprintId}`] : [],
+                      });
+                      return { taskId };
+                    } catch (err) {
+                      console.warn(
+                        `[Sprint Task Create] 写入 SQLite 失败（快照仍保留）: ${err instanceof Error ? err.message : String(err)}`,
+                      );
+                      return null;
+                    }
+                  })();
+                },
+                // 单一数据源：用户在前端变更任务状态直接写入 SQLite
+                onUpdateSprintTaskStatus: (taskId, newStatus) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    // 展开的 id 可能是临时 id（task- 开头）或真实 id（task_ 开头）
+                    if (!taskId.startsWith("task_")) {
+                      // 临时 id， SQLite 里还没有这条记录，跳过
+                      return;
+                    }
+                    try {
+                      await state.client.request("task.update", {
+                        id: taskId,
+                        status: newStatus,
+                        ...(newStatus === "done" ? { completedAt: Date.now() } : {}),
+                      });
+                    } catch (err) {
+                      console.warn(
+                        `[Sprint Task Update] 状态同步失败: ${err instanceof Error ? err.message : String(err)}`,
+                      );
+                    }
+                  })();
+                },
+                projectTeamRelations: state.projectTeamRelations,
+                projectTeamRelationsLoading: state.projectTeamRelationsLoading,
+                handoffForm: state.handoffForm,
+                onHandoffFormChange: (field, value) => {
+                  state.handoffForm = { ...state.handoffForm, [field]: value };
+                },
+                onLoadTeamRelations: (projectId) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    state.projectTeamRelationsLoading = true;
+                    try {
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      const res = (await state.client.request("project.team.relations", {
+                        projectId,
                         // oxlint-disable-next-line typescript/no-explicit-any
-                        const result = (await state.client.request("projects.delete", { projectId, ...opts })) as any;
-                        state.selectedProjectId = null;
-                        state.deleteProjectConfirm = null;
-                        await loadProjects(state, state.client);
-                        const msg = result?.message;
-                        alert(msg ? `删除完成：\n${msg}` : `项目 "${projectId}" 已删除。`);
-                      } catch (err) {
-                        alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  // 验收标准（DoD）管理
-                  onMarkCriterionSatisfied: (projectId, criterionId, satisfied, evidence) => {
-                    void (async () => {
-                      if (!state.client) {return;}
-                      try {
-                        await state.client.request("projects.markCriterionSatisfied", { projectId, criterionId, satisfied, evidence });
-                        const { loadProjects } = await import("./controllers/projects.js");
-                        await loadProjects(state, state.client);
-                      } catch (err) {
-                        alert(`更新验收标准失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  onHumanSignOff: (projectId, signOffBy, note) => {
-                    void (async () => {
-                      if (!state.client) {return;}
-                      try {
-                        await state.client.request("projects.humanSignOff", { projectId, signOffBy, note });
-                        const { loadProjects } = await import("./controllers/projects.js");
-                        await loadProjects(state, state.client);
-                      } catch (err) {
-                        alert(`签收失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  // 目标与里程碑管理
-                  onUpsertObjective: (projectId, objective) => {
-                    void (async () => {
-                      if (!state.client) {return;}
-                      try {
-                        await state.client.request("projects.objective.upsert", { projectId, ...objective });
-                        const { loadProjects } = await import("./controllers/projects.js");
-                        await loadProjects(state, state.client);
-                      } catch (err) {
-                        alert(`保存目标失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  onDeleteObjective: (projectId, objectiveId) => {
-                    void (async () => {
-                      if (!state.client) {return;}
-                      try {
-                        await state.client.request("projects.objective.delete", { projectId, objectiveId });
-                        const { loadProjects } = await import("./controllers/projects.js");
-                        await loadProjects(state, state.client);
-                      } catch (err) {
-                        alert(`删除目标失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  onUpsertMilestone: (projectId, milestone) => {
-                    void (async () => {
-                      if (!state.client) {return;}
-                      try {
-                        await state.client.request("projects.milestone.upsert", { projectId, ...milestone });
-                        const { loadProjects } = await import("./controllers/projects.js");
-                        await loadProjects(state, state.client);
-                      } catch (err) {
-                        alert(`保存里程碑失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
-                  onDeleteMilestone: (projectId, milestoneId) => {
-                    void (async () => {
-                      if (!state.client) {return;}
-                      try {
-                        await state.client.request("projects.milestone.delete", { projectId, milestoneId });
-                        const { loadProjects } = await import("./controllers/projects.js");
-                        await loadProjects(state, state.client);
-                      } catch (err) {
-                        alert(`删除里程碑失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    })();
-                  },
+                      })) as any;
+                      state.projectTeamRelations = res?.relations ?? [];
+                    } catch {
+                      state.projectTeamRelations = [];
+                    } finally {
+                      state.projectTeamRelationsLoading = false;
+                    }
+                  })();
                 },
-                friendsProps: {
-                  loading: state.friendsLoading,
-                  error: state.friendsError,
-                  friendsList: state.friendsList,
-                  friendsTotal: state.friendsTotal,
-                  friendRequestsLoading: state.friendRequestsLoading,
-                  friendRequestsList: state.friendRequestsList,
-                  selectedFriendId: state.selectedFriendId,
-                  activeSubPanel: state.friendsActiveSubPanel,
-                  onRefresh: () => {
-                    // TODO: 需要当前智能助手 ID
-                    // void loadFriends(state, "current-agent-id");
-                  },
-                  onSelectSubPanel: (panel) => {
-                    state.friendsActiveSubPanel = panel;
-                  },
-                  onSelectFriend: (friendId) => {
-                    state.selectedFriendId = friendId;
-                  },
-                  onAddFriend: async (_toAgentId, _message) => {
-                    // TODO: 需要当前智能助手 ID
-                    // await addFriend(state, "current-agent-id", toAgentId, message);
-                  },
-                  onRemoveFriend: async (_friendId) => {
-                    // TODO: 需要当前智能助手 ID
-                    // await removeFriend(state, "current-agent-id", friendId);
-                  },
-                  onConfirmFriend: async (_friendId, _accept) => {
-                    // TODO: 需要当前智能助手 ID
-                    // await confirmFriend(state, "current-agent-id", friendId, accept);
-                  },
-                  onNavigateToChatFriend: (friendAgentId) => {
-                    // 切换到聊天 tab，并选中对应的好友节点
-                    // 寻找导航树中匹配该好友的 contact 节点
-                    const targetSessionKey = `agent:${friendAgentId}:main`;
-                    const context = {
-                      type: "contact" as const,
-                      agentId: state.agentsList?.defaultId ?? "main",
-                      contactAgentId: friendAgentId,
-                      contactAgentName:
-                        state.friendsList.find((f) => f.agentId === friendAgentId)?.agentName ??
-                        friendAgentId,
-                      sessionKey: targetSessionKey,
-                    };
-                    // 切换到聊天 tab
-                    state.tab = "chat";
-                    // 设置导航到该好友节点
-                    state.chatNavCurrentContext = context;
-                    state.sessionKey = targetSessionKey;
-                    void loadChatHistory(
-                      state as unknown as import("./controllers/chat.ts").ChatState,
+                onAssignTeam: (projectId, teamId, role) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    try {
+                      await state.client.request("project.team.assign", {
+                        projectId,
+                        teamId,
+                        role,
+                        assignedBy: "ui-user",
+                      });
+                      // 刷新团队关系
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      const res = (await state.client.request("project.team.relations", {
+                        projectId,
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                      })) as any;
+                      state.projectTeamRelations = res?.relations ?? [];
+                      // 重置表单中的 toTeamId
+                      state.handoffForm = { ...state.handoffForm, toTeamId: "" };
+                    } catch (err) {
+                      alert(`关联团队失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  })();
+                },
+                onHandoffProject: (projectId) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    const form = state.handoffForm;
+                    if (!form.toTeamId.trim()) {
+                      alert("请填写接收方团队 ID");
+                      return;
+                    }
+                    // 找到当前 active 团队作为 fromTeam
+                    const activeTeam = state.projectTeamRelations.find(
+                      (r) => r.status === "active",
                     );
-                  },
+                    const fromTeamId = activeTeam?.teamId;
+                    if (!fromTeamId) {
+                      alert("暂无进行中团队，请先关联团队并设置为进行中状态");
+                      return;
+                    }
+                    try {
+                      await state.client.request("project.handoff", {
+                        projectId,
+                        fromTeamId,
+                        toTeamId: form.toTeamId.trim(),
+                        toTeamRole: form.toTeamRole,
+                        fromTeamNewStatus: form.fromTeamNewStatus,
+                        toTeamNewStatus: form.toTeamNewStatus,
+                        operatorId: "ui-user",
+                        note: form.note || undefined,
+                      });
+                      // 刷新并重置表单
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      const res = (await state.client.request("project.team.relations", {
+                        projectId,
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                      })) as any;
+                      state.projectTeamRelations = res?.relations ?? [];
+                      state.handoffForm = {
+                        toTeamId: "",
+                        toTeamRole: "ops",
+                        fromTeamNewStatus: "support-only",
+                        toTeamNewStatus: "active",
+                        note: "",
+                      };
+                      alert(
+                        `交付成功！${fromTeamId} 已转为 ${form.fromTeamNewStatus}，${form.toTeamId} 已接手为 ${form.toTeamNewStatus}。`,
+                      );
+                    } catch (err) {
+                      alert(`交付失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  })();
                 },
-                monitorProps: {
-                  loading: false,
-                  error: null,
-                  activeSubPanel: state.monitorActiveSubPanel,
-                  sessionsLoading: state.monitorSessionsLoading,
-                  sessionsError: state.monitorSessionsError,
-                  activeSessions: state.monitorActiveSessions,
-                  messageFlowsLoading: state.monitorMessageFlowsLoading,
-                  messageFlows: state.monitorMessageFlows,
-                  forwardingRulesLoading: state.monitorForwardingRulesLoading,
-                  forwardingRules: state.monitorForwardingRules,
-                  editingRule: state.monitorEditingRule,
-                  creatingRule: state.monitorCreatingRule,
-                  metricsLoading: state.monitorMetricsLoading,
-                  metrics: state.monitorMetrics,
-                  alertsLoading: state.monitorAlertsLoading,
-                  alerts: state.monitorAlerts,
-                  onRefresh: () => {
-                    void loadActiveSessions(state as unknown as OpenClawApp);
-                    void loadMessageFlows(state as unknown as OpenClawApp);
-                    void loadForwardingRules(state as unknown as OpenClawApp);
-                    void loadMetrics(state as unknown as OpenClawApp);
-                    void loadAlerts(state as unknown as OpenClawApp);
-                  },
-                  onSelectSubPanel: (panel) => {
-                    state.monitorActiveSubPanel = panel;
-                  },
-                  onAddForwardingRule: () => {
-                    state.monitorCreatingRule = true;
-                    state.monitorEditingRule = null;
-                  },
-                  onEditForwardingRule: (rule) => {
-                    state.monitorEditingRule = rule;
-                    state.monitorCreatingRule = false;
-                  },
-                  onDeleteForwardingRule: async (ruleId) => {
-                    await deleteForwardingRule(state as unknown as OpenClawApp, ruleId);
-                  },
-                  onSaveForwardingRule: async (rule) => {
-                    if (state.monitorEditingRule) {
-                      await updateForwardingRule(
+                onRemoveTeam: (projectId, teamId) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    if (!confirm(`确认移除团队 ${teamId} 与项目的关联？`)) {
+                      return;
+                    }
+                    try {
+                      await state.client.request("project.team.remove", { projectId, teamId });
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      const res = (await state.client.request("project.team.relations", {
+                        projectId,
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                      })) as any;
+                      state.projectTeamRelations = res?.relations ?? [];
+                    } catch (err) {
+                      alert(`移除失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  })();
+                },
+                onUpdateTeamStatus: (projectId, teamId, status) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    try {
+                      await state.client.request("project.team.status", {
+                        projectId,
+                        teamId,
+                        status,
+                        updatedBy: "ui-user",
+                      });
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      const res = (await state.client.request("project.team.relations", {
+                        projectId,
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                      })) as any;
+                      state.projectTeamRelations = res?.relations ?? [];
+                    } catch (err) {
+                      alert(`更新状态失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  })();
+                },
+                // 更换项目负责人
+                onTransferProjectOwner: (projectId, newOwnerId) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    try {
+                      await state.client.request("project.owner.transfer", {
+                        projectId,
+                        newOwnerId,
+                      });
+                      await loadProjects(state, state.client);
+                      alert(`项目负责人已成功更换为 ${newOwnerId}`);
+                    } catch (err) {
+                      alert(`更换负责人失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  })();
+                },
+                // 删除项目相关
+                deleteProjectConfirm: state.deleteProjectConfirm,
+                onShowDeleteProjectConfirm: (projectId, projectName) => {
+                  state.deleteProjectConfirm = {
+                    projectId,
+                    projectName,
+                    deleteWorkspace: false,
+                    deleteTasks: false,
+                    deleteGroups: false,
+                    purgeMemory: true,
+                  };
+                },
+                onHideDeleteProjectConfirm: () => {
+                  state.deleteProjectConfirm = null;
+                },
+                onDeleteProjectOptionChange: (key, value) => {
+                  if (state.deleteProjectConfirm) {
+                    state.deleteProjectConfirm = { ...state.deleteProjectConfirm, [key]: value };
+                  }
+                },
+                onDeleteProject: (projectId, opts) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    try {
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                      const result = (await state.client.request("projects.delete", {
+                        projectId,
+                        ...opts,
+                      })) as any;
+                      state.selectedProjectId = null;
+                      state.deleteProjectConfirm = null;
+                      await loadProjects(state, state.client);
+                      const msg = result?.message;
+                      alert(msg ? `删除完成：\n${msg}` : `项目 "${projectId}" 已删除。`);
+                    } catch (err) {
+                      alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  })();
+                },
+                // 验收标准（DoD）管理
+                onMarkCriterionSatisfied: (projectId, criterionId, satisfied, evidence) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    try {
+                      await state.client.request("projects.markCriterionSatisfied", {
+                        projectId,
+                        criterionId,
+                        satisfied,
+                        evidence,
+                      });
+                      const { loadProjects } = await import("./controllers/projects.js");
+                      await loadProjects(state, state.client);
+                    } catch (err) {
+                      alert(
+                        `更新验收标准失败：${err instanceof Error ? err.message : String(err)}`,
+                      );
+                    }
+                  })();
+                },
+                onHumanSignOff: (projectId, signOffBy, note) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    try {
+                      await state.client.request("projects.humanSignOff", {
+                        projectId,
+                        signOffBy,
+                        note,
+                      });
+                      const { loadProjects } = await import("./controllers/projects.js");
+                      await loadProjects(state, state.client);
+                    } catch (err) {
+                      alert(`签收失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  })();
+                },
+                // 目标与里程碑管理
+                onUpsertObjective: (projectId, objective) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    try {
+                      await state.client.request("projects.objective.upsert", {
+                        projectId,
+                        ...objective,
+                      });
+                      const { loadProjects } = await import("./controllers/projects.js");
+                      await loadProjects(state, state.client);
+                    } catch (err) {
+                      alert(`保存目标失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  })();
+                },
+                onDeleteObjective: (projectId, objectiveId) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    try {
+                      await state.client.request("projects.objective.delete", {
+                        projectId,
+                        objectiveId,
+                      });
+                      const { loadProjects } = await import("./controllers/projects.js");
+                      await loadProjects(state, state.client);
+                    } catch (err) {
+                      alert(`删除目标失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  })();
+                },
+                onUpsertMilestone: (projectId, milestone) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    try {
+                      await state.client.request("projects.milestone.upsert", {
+                        projectId,
+                        ...milestone,
+                      });
+                      const { loadProjects } = await import("./controllers/projects.js");
+                      await loadProjects(state, state.client);
+                    } catch (err) {
+                      alert(`保存里程碑失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  })();
+                },
+                onDeleteMilestone: (projectId, milestoneId) => {
+                  void (async () => {
+                    if (!state.client) {
+                      return;
+                    }
+                    try {
+                      await state.client.request("projects.milestone.delete", {
+                        projectId,
+                        milestoneId,
+                      });
+                      const { loadProjects } = await import("./controllers/projects.js");
+                      await loadProjects(state, state.client);
+                    } catch (err) {
+                      alert(`删除里程碑失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  })();
+                },
+              },
+              friendsProps: {
+                loading: state.friendsLoading,
+                error: state.friendsError,
+                friendsList: state.friendsList,
+                friendsTotal: state.friendsTotal,
+                friendRequestsLoading: state.friendRequestsLoading,
+                friendRequestsList: state.friendRequestsList,
+                selectedFriendId: state.selectedFriendId,
+                activeSubPanel: state.friendsActiveSubPanel,
+                onRefresh: () => {
+                  // TODO: 需要当前智能助手 ID
+                  // void loadFriends(state, "current-agent-id");
+                },
+                onSelectSubPanel: (panel) => {
+                  state.friendsActiveSubPanel = panel;
+                },
+                onSelectFriend: (friendId) => {
+                  state.selectedFriendId = friendId;
+                },
+                onAddFriend: async (_toAgentId, _message) => {
+                  // TODO: 需要当前智能助手 ID
+                  // await addFriend(state, "current-agent-id", toAgentId, message);
+                },
+                onRemoveFriend: async (_friendId) => {
+                  // TODO: 需要当前智能助手 ID
+                  // await removeFriend(state, "current-agent-id", friendId);
+                },
+                onConfirmFriend: async (_friendId, _accept) => {
+                  // TODO: 需要当前智能助手 ID
+                  // await confirmFriend(state, "current-agent-id", friendId, accept);
+                },
+                onNavigateToChatFriend: (friendAgentId) => {
+                  // 切换到聊天 tab，并选中对应的好友节点
+                  // 寻找导航树中匹配该好友的 contact 节点
+                  const targetSessionKey = `agent:${friendAgentId}:main`;
+                  const context = {
+                    type: "contact" as const,
+                    agentId: state.agentsList?.defaultId ?? "main",
+                    contactAgentId: friendAgentId,
+                    contactAgentName:
+                      state.friendsList.find((f) => f.agentId === friendAgentId)?.agentName ??
+                      friendAgentId,
+                    sessionKey: targetSessionKey,
+                  };
+                  // 切换到聊天 tab
+                  state.tab = "chat";
+                  // 设置导航到该好友节点
+                  state.chatNavCurrentContext = context;
+                  state.sessionKey = targetSessionKey;
+                  void loadChatHistory(
+                    state as unknown as import("./controllers/chat.ts").ChatState,
+                  );
+                },
+              },
+              monitorProps: {
+                loading: false,
+                error: null,
+                activeSubPanel: state.monitorActiveSubPanel,
+                sessionsLoading: state.monitorSessionsLoading,
+                sessionsError: state.monitorSessionsError,
+                activeSessions: state.monitorActiveSessions,
+                messageFlowsLoading: state.monitorMessageFlowsLoading,
+                messageFlows: state.monitorMessageFlows,
+                forwardingRulesLoading: state.monitorForwardingRulesLoading,
+                forwardingRules: state.monitorForwardingRules,
+                editingRule: state.monitorEditingRule,
+                creatingRule: state.monitorCreatingRule,
+                metricsLoading: state.monitorMetricsLoading,
+                metrics: state.monitorMetrics,
+                alertsLoading: state.monitorAlertsLoading,
+                alerts: state.monitorAlerts,
+                onRefresh: () => {
+                  void loadActiveSessions(state as unknown as OpenClawApp);
+                  void loadMessageFlows(state as unknown as OpenClawApp);
+                  void loadForwardingRules(state as unknown as OpenClawApp);
+                  void loadMetrics(state as unknown as OpenClawApp);
+                  void loadAlerts(state as unknown as OpenClawApp);
+                },
+                onSelectSubPanel: (panel) => {
+                  state.monitorActiveSubPanel = panel;
+                },
+                onAddForwardingRule: () => {
+                  state.monitorCreatingRule = true;
+                  state.monitorEditingRule = null;
+                },
+                onEditForwardingRule: (rule) => {
+                  state.monitorEditingRule = rule;
+                  state.monitorCreatingRule = false;
+                },
+                onDeleteForwardingRule: async (ruleId) => {
+                  await deleteForwardingRule(state as unknown as OpenClawApp, ruleId);
+                },
+                onSaveForwardingRule: async (rule) => {
+                  if (state.monitorEditingRule) {
+                    await updateForwardingRule(
+                      state as unknown as OpenClawApp,
+                      state.monitorEditingRule.id,
+                      rule,
+                    );
+                  } else {
+                    // oxlint-disable-next-line typescript/no-explicit-any
+                    await addForwardingRule(state as unknown as OpenClawApp, rule as any);
+                  }
+                  state.monitorCreatingRule = false;
+                  state.monitorEditingRule = null;
+                },
+                onCancelEditRule: () => {
+                  state.monitorCreatingRule = false;
+                  state.monitorEditingRule = null;
+                },
+                onRuleFormChange: (field, value) => {
+                  if (state.monitorEditingRule) {
+                    state.monitorEditingRule = { ...state.monitorEditingRule, [field]: value };
+                  } else if (state.monitorCreatingRule) {
+                    state.monitorEditingRule = {
+                      id: "",
+                      name: "",
+                      sourceChannelId: "",
+                      targetChannelId: "",
+                      enabled: true,
+                      createdAt: Date.now(),
+                      [field]: value,
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                    } as any;
+                  }
+                },
+                onToggleRule: async (ruleId, enabled) => {
+                  await updateForwardingRule(state as unknown as OpenClawApp, ruleId, {
+                    enabled,
+                  });
+                },
+                onAcknowledgeAlert: async (alertId) => {
+                  await acknowledgeAlert(state as unknown as OpenClawApp, alertId);
+                },
+                onClearAllAlerts: async () => {
+                  await clearAllAlerts(state as unknown as OpenClawApp);
+                },
+              },
+              scenariosProps: {
+                loading: state.scenariosLoading,
+                error: state.scenariosError,
+                activeSubPanel: state.scenariosActiveSubPanel,
+                scenariosList: state.scenariosList,
+                scenariosTotal: state.scenariosTotal,
+                selectedScenarioId: state.selectedScenarioId,
+                editingScenario: state.editingScenario,
+                creatingScenario: state.creatingScenario,
+                runningScenarioId: state.runningScenarioId,
+                scenarioRunsLoading: state.scenarioRunsLoading,
+                scenarioRuns: state.scenarioRuns,
+                recommendationsLoading: state.recommendationsLoading,
+                recommendations: state.recommendations,
+                onRefresh: () => {
+                  void loadScenarios(state as unknown as OpenClawApp);
+                },
+                onSelectSubPanel: (panel) => {
+                  state.scenariosActiveSubPanel = panel;
+                  if (panel === "runs" && state.scenarioRuns.length === 0) {
+                    void loadScenarioRuns(state as unknown as OpenClawApp);
+                  }
+                  if (panel === "recommendations" && state.recommendations.length === 0) {
+                    void loadRecommendations(state as unknown as OpenClawApp);
+                  }
+                },
+                onSelectScenario: (scenarioId) => {
+                  state.selectedScenarioId = scenarioId;
+                },
+                onCreateScenario: () => {
+                  state.creatingScenario = true;
+                  state.editingScenario = null;
+                },
+                onEditScenario: (scenarioId) => {
+                  const scenario = state.scenariosList.find((s) => s.id === scenarioId);
+                  if (scenario) {
+                    state.editingScenario = scenario;
+                    state.creatingScenario = false;
+                  }
+                },
+                onDeleteScenario: async (scenarioId) => {
+                  if (confirm("确定要删除此场景吗？")) {
+                    try {
+                      await deleteScenario(state as unknown as OpenClawApp, scenarioId);
+                    } catch (err) {
+                      alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+                    }
+                  }
+                },
+                onSaveScenario: async () => {
+                  try {
+                    if (state.editingScenario && state.editingScenario.id) {
+                      await updateScenario(
                         state as unknown as OpenClawApp,
-                        state.monitorEditingRule.id,
-                        rule,
+                        state.editingScenario.id,
+                        state.editingScenario,
                       );
                     } else {
-                      // oxlint-disable-next-line typescript/no-explicit-any
-                      await addForwardingRule(state as unknown as OpenClawApp, rule as any);
-                    }
-                    state.monitorCreatingRule = false;
-                    state.monitorEditingRule = null;
-                  },
-                  onCancelEditRule: () => {
-                    state.monitorCreatingRule = false;
-                    state.monitorEditingRule = null;
-                  },
-                  onRuleFormChange: (field, value) => {
-                    if (state.monitorEditingRule) {
-                      state.monitorEditingRule = { ...state.monitorEditingRule, [field]: value };
-                    } else if (state.monitorCreatingRule) {
-                      state.monitorEditingRule = {
-                        id: "",
-                        name: "",
-                        sourceChannelId: "",
-                        targetChannelId: "",
-                        enabled: true,
-                        createdAt: Date.now(),
-                        [field]: value,
+                      await createScenario(
+                        state as unknown as OpenClawApp,
                         // oxlint-disable-next-line typescript/no-explicit-any
-                      } as any;
+                        state.editingScenario as any,
+                      );
                     }
-                  },
-                  onToggleRule: async (ruleId, enabled) => {
-                    await updateForwardingRule(state as unknown as OpenClawApp, ruleId, {
-                      enabled,
-                    });
-                  },
-                  onAcknowledgeAlert: async (alertId) => {
-                    await acknowledgeAlert(state as unknown as OpenClawApp, alertId);
-                  },
-                  onClearAllAlerts: async () => {
-                    await clearAllAlerts(state as unknown as OpenClawApp);
-                  },
-                },
-                scenariosProps: {
-                  loading: state.scenariosLoading,
-                  error: state.scenariosError,
-                  activeSubPanel: state.scenariosActiveSubPanel,
-                  scenariosList: state.scenariosList,
-                  scenariosTotal: state.scenariosTotal,
-                  selectedScenarioId: state.selectedScenarioId,
-                  editingScenario: state.editingScenario,
-                  creatingScenario: state.creatingScenario,
-                  runningScenarioId: state.runningScenarioId,
-                  scenarioRunsLoading: state.scenarioRunsLoading,
-                  scenarioRuns: state.scenarioRuns,
-                  recommendationsLoading: state.recommendationsLoading,
-                  recommendations: state.recommendations,
-                  onRefresh: () => {
-                    void loadScenarios(state as unknown as OpenClawApp);
-                  },
-                  onSelectSubPanel: (panel) => {
-                    state.scenariosActiveSubPanel = panel;
-                    if (panel === "runs" && state.scenarioRuns.length === 0) {
-                      void loadScenarioRuns(state as unknown as OpenClawApp);
-                    }
-                    if (panel === "recommendations" && state.recommendations.length === 0) {
-                      void loadRecommendations(state as unknown as OpenClawApp);
-                    }
-                  },
-                  onSelectScenario: (scenarioId) => {
-                    state.selectedScenarioId = scenarioId;
-                  },
-                  onCreateScenario: () => {
-                    state.creatingScenario = true;
-                    state.editingScenario = null;
-                  },
-                  onEditScenario: (scenarioId) => {
-                    const scenario = state.scenariosList.find((s) => s.id === scenarioId);
-                    if (scenario) {
-                      state.editingScenario = scenario;
-                      state.creatingScenario = false;
-                    }
-                  },
-                  onDeleteScenario: async (scenarioId) => {
-                    if (confirm("确定要删除此场景吗？")) {
-                      try {
-                        await deleteScenario(state as unknown as OpenClawApp, scenarioId);
-                      } catch (err) {
-                        alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
-                      }
-                    }
-                  },
-                  onSaveScenario: async () => {
-                    try {
-                      if (state.editingScenario && state.editingScenario.id) {
-                        await updateScenario(
-                          state as unknown as OpenClawApp,
-                          state.editingScenario.id,
-                          state.editingScenario,
-                        );
-                      } else {
-                        await createScenario(
-                          state as unknown as OpenClawApp,
-                          // oxlint-disable-next-line typescript/no-explicit-any
-                          state.editingScenario as any,
-                        );
-                      }
-                      state.creatingScenario = false;
-                      state.editingScenario = null;
-                    } catch (err) {
-                      alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
-                    }
-                  },
-                  onCancelEdit: () => {
                     state.creatingScenario = false;
                     state.editingScenario = null;
-                  },
-                  onScenarioFormChange: (field, value) => {
-                    if (state.editingScenario) {
-                      state.editingScenario = { ...state.editingScenario, [field]: value };
-                    } else if (state.creatingScenario) {
-                      state.editingScenario = {
-                        id: "",
-                        name: "",
-                        description: "",
-                        type: "custom",
-                        enabled: false,
-                        config: {},
-                        createdAt: Date.now(),
-                        updatedAt: Date.now(),
-                        [field]: value,
-                        // oxlint-disable-next-line typescript/no-explicit-any
-                      } as any;
-                    }
-                  },
-                  onToggleScenario: async (scenarioId, enabled) => {
-                    await updateScenario(state as unknown as OpenClawApp, scenarioId, { enabled });
-                  },
-                  onRunScenario: async (scenarioId) => {
-                    try {
-                      await runScenario(state as unknown as OpenClawApp, scenarioId);
-                    } catch (err) {
-                      alert(`执行失败：${err instanceof Error ? err.message : String(err)}`);
-                    }
-                  },
-                  onApplyRecommendation: async (scenarioId) => {
-                    const scenario = state.scenariosList.find((s) => s.id === scenarioId);
-                    if (scenario) {
-                      await updateScenario(state as unknown as OpenClawApp, scenarioId, {
-                        enabled: true,
-                      });
-                    }
-                  },
+                  } catch (err) {
+                    alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+                  }
                 },
-                teamMonitorProps: {
-                  loading: state.teamMonitorLoading,
-                  error: state.teamMonitorError,
-                  teamStatus: state.teamMonitorStatus,
-                  summary: state.teamMonitorSummary,
-                  filterAgentId: state.teamMonitorFilterAgentId,
-                  filterProjectId: state.teamMonitorFilterProjectId,
-                  filterStatus: state.teamMonitorFilterStatus,
-                  searchKeyword: state.teamMonitorSearchKeyword,
-                  assignDialogOpen: state.teamMonitorAssignDialogOpen,
-                  assignForm: state.teamMonitorAssignForm,
-                  assignSaving: state.teamMonitorAssignSaving,
-                  assignError: state.teamMonitorAssignError,
-                  selectedReportTaskId: null,
-                  availableAgents: (state.agentsList?.agents ?? []).map((a) => ({
-                    id: a.id,
-                    name: (a as { name?: string; id: string }).name || a.id,
-                  })),
-                  onRefresh: () => {
-                    void loadTeamMonitor(state);
-                  },
-                  onFilterAgentChange: (agentId) => {
-                    state.teamMonitorFilterAgentId = agentId;
-                  },
-                  onFilterProjectChange: (projectId) => {
-                    state.teamMonitorFilterProjectId = projectId;
-                  },
-                  onFilterStatusChange: (status) => {
-                    state.teamMonitorFilterStatus = status;
-                  },
-                  onSearchChange: (keyword) => {
-                    state.teamMonitorSearchKeyword = keyword;
-                  },
-                  onOpenAssignDialog: (targetAgentId) => {
-                    state.teamMonitorAssignDialogOpen = true;
-                    state.teamMonitorAssignError = null;
-                    if (targetAgentId) {
-                      state.teamMonitorAssignForm = {
-                        ...state.teamMonitorAssignForm,
-                        targetAgentId,
-                      };
-                    }
-                  },
-                  onCloseAssignDialog: () => {
-                    state.teamMonitorAssignDialogOpen = false;
-                    state.teamMonitorAssignError = null;
-                    state.teamMonitorAssignForm = {
-                      targetAgentId: "",
-                      title: "",
-                      task: "",
-                      priority: "medium",
-                    };
-                  },
-                  onAssignFormChange: (field, value) => {
+                onCancelEdit: () => {
+                  state.creatingScenario = false;
+                  state.editingScenario = null;
+                },
+                onScenarioFormChange: (field, value) => {
+                  if (state.editingScenario) {
+                    state.editingScenario = { ...state.editingScenario, [field]: value };
+                  } else if (state.creatingScenario) {
+                    state.editingScenario = {
+                      id: "",
+                      name: "",
+                      description: "",
+                      type: "custom",
+                      enabled: false,
+                      config: {},
+                      createdAt: Date.now(),
+                      updatedAt: Date.now(),
+                      [field]: value,
+                      // oxlint-disable-next-line typescript/no-explicit-any
+                    } as any;
+                  }
+                },
+                onToggleScenario: async (scenarioId, enabled) => {
+                  await updateScenario(state as unknown as OpenClawApp, scenarioId, { enabled });
+                },
+                onRunScenario: async (scenarioId) => {
+                  try {
+                    await runScenario(state as unknown as OpenClawApp, scenarioId);
+                  } catch (err) {
+                    alert(`执行失败：${err instanceof Error ? err.message : String(err)}`);
+                  }
+                },
+                onApplyRecommendation: async (scenarioId) => {
+                  const scenario = state.scenariosList.find((s) => s.id === scenarioId);
+                  if (scenario) {
+                    await updateScenario(state as unknown as OpenClawApp, scenarioId, {
+                      enabled: true,
+                    });
+                  }
+                },
+              },
+              teamMonitorProps: {
+                loading: state.teamMonitorLoading,
+                error: state.teamMonitorError,
+                teamStatus: state.teamMonitorStatus,
+                summary: state.teamMonitorSummary,
+                filterAgentId: state.teamMonitorFilterAgentId,
+                filterProjectId: state.teamMonitorFilterProjectId,
+                filterStatus: state.teamMonitorFilterStatus,
+                searchKeyword: state.teamMonitorSearchKeyword,
+                assignDialogOpen: state.teamMonitorAssignDialogOpen,
+                assignForm: state.teamMonitorAssignForm,
+                assignSaving: state.teamMonitorAssignSaving,
+                assignError: state.teamMonitorAssignError,
+                selectedReportTaskId: null,
+                availableAgents: (state.agentsList?.agents ?? []).map((a) => ({
+                  id: a.id,
+                  name: (a as { name?: string; id: string }).name || a.id,
+                })),
+                onRefresh: () => {
+                  void loadTeamMonitor(state);
+                },
+                onFilterAgentChange: (agentId) => {
+                  state.teamMonitorFilterAgentId = agentId;
+                },
+                onFilterProjectChange: (projectId) => {
+                  state.teamMonitorFilterProjectId = projectId;
+                },
+                onFilterStatusChange: (status) => {
+                  state.teamMonitorFilterStatus = status;
+                },
+                onSearchChange: (keyword) => {
+                  state.teamMonitorSearchKeyword = keyword;
+                },
+                onOpenAssignDialog: (targetAgentId) => {
+                  state.teamMonitorAssignDialogOpen = true;
+                  state.teamMonitorAssignError = null;
+                  if (targetAgentId) {
                     state.teamMonitorAssignForm = {
                       ...state.teamMonitorAssignForm,
+                      targetAgentId,
+                    };
+                  }
+                },
+                onCloseAssignDialog: () => {
+                  state.teamMonitorAssignDialogOpen = false;
+                  state.teamMonitorAssignError = null;
+                  state.teamMonitorAssignForm = {
+                    targetAgentId: "",
+                    title: "",
+                    task: "",
+                    priority: "medium",
+                  };
+                },
+                onAssignFormChange: (field, value) => {
+                  state.teamMonitorAssignForm = {
+                    ...state.teamMonitorAssignForm,
+                    [field]: value,
+                  };
+                },
+                onSubmitAssign: () => {
+                  void submitTeamAssignTask(state);
+                },
+                onViewTaskDetail: (taskId) => {
+                  console.log("[team-monitor] View task detail:", taskId);
+                },
+                onResetTask: (taskId, targetStatus) => {
+                  void resetTeamTask(state, taskId, targetStatus);
+                },
+                resetingTaskId: state.teamMonitorResetingTaskId,
+                editDialogTask: state.teamMonitorEditDialogTask,
+                editSaving: state.teamMonitorEditSaving,
+                editError: state.teamMonitorEditError,
+                onOpenEditDialog: (task) => {
+                  // 将 dueDate timestamp 转为 datetime-local 字符串
+                  let dueDateStr = "";
+                  if (task.dueDate) {
+                    const d = new Date(task.dueDate);
+                    dueDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+                  }
+                  state.teamMonitorEditDialogTask = {
+                    taskId: task.id,
+                    title: task.title,
+                    priority: task.priority,
+                    status: task.status,
+                    dueDate: dueDateStr,
+                  };
+                  state.teamMonitorEditError = null;
+                },
+                onCloseEditDialog: () => {
+                  state.teamMonitorEditDialogTask = null;
+                  state.teamMonitorEditError = null;
+                },
+                onEditFormChange: (field, value) => {
+                  if (state.teamMonitorEditDialogTask) {
+                    state.teamMonitorEditDialogTask = {
+                      ...state.teamMonitorEditDialogTask,
                       [field]: value,
                     };
-                  },
-                  onSubmitAssign: () => {
-                    void submitTeamAssignTask(state);
-                  },
-                  onViewTaskDetail: (taskId) => {
-                    console.log("[team-monitor] View task detail:", taskId);
-                  },
-                  onResetTask: (taskId, targetStatus) => {
-                    void resetTeamTask(state, taskId, targetStatus);
-                  },
-                  resetingTaskId: state.teamMonitorResetingTaskId,
-                  editDialogTask: state.teamMonitorEditDialogTask,
-                  editSaving: state.teamMonitorEditSaving,
-                  editError: state.teamMonitorEditError,
-                  onOpenEditDialog: (task) => {
-                    // 将 dueDate timestamp 转为 datetime-local 字符串
-                    let dueDateStr = "";
-                    if (task.dueDate) {
-                      const d = new Date(task.dueDate);
-                      dueDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-                    }
-                    state.teamMonitorEditDialogTask = {
-                      taskId: task.id,
-                      title: task.title,
-                      priority: task.priority,
-                      status: task.status,
-                      dueDate: dueDateStr,
-                    };
-                    state.teamMonitorEditError = null;
-                  },
-                  onCloseEditDialog: () => {
-                    state.teamMonitorEditDialogTask = null;
-                    state.teamMonitorEditError = null;
-                  },
-                  onEditFormChange: (field, value) => {
-                    if (state.teamMonitorEditDialogTask) {
-                      state.teamMonitorEditDialogTask = {
-                        ...state.teamMonitorEditDialogTask,
-                        [field]: value,
-                      };
-                    }
-                  },
-                  onSubmitEdit: () => {
-                    void submitEditTeamTask(state);
-                  },
-                  deletingTaskId: state.teamMonitorDeletingTaskId,
-                  onDeleteTask: (taskId) => {
-                    void deleteTeamTask(state, taskId);
-                  },
-                  cancelingTaskId: state.teamMonitorCancelingTaskId,
-                  onCancelTask: (taskId) => {
-                    void cancelTeamTask(state, taskId);
-                  },
-                },
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "skills"
-            ? renderSkills({
-                loading: state.skillsLoading,
-                report: state.skillsReport,
-                error: state.skillsError,
-                filter: state.skillsFilter,
-                edits: state.skillEdits,
-                messages: state.skillMessages,
-                busyKey: state.skillsBusyKey,
-                onFilterChange: (next) => (state.skillsFilter = next),
-                onRefresh: () => loadSkills(state, { clearMessages: true }),
-                onToggle: (key, enabled) => updateSkillEnabled(state, key, enabled),
-                onEdit: (key, value) => updateSkillEdit(state, key, value),
-                onSaveKey: (key) => saveSkillApiKey(state, key),
-                onInstall: (skillKey, name, installId) =>
-                  installSkill(state, skillKey, name, installId),
-                // Advanced features
-                advancedMode: state.skillsAdvancedMode,
-                selectedSkills: state.skillsSelectedSkills,
-                filterStatus: state.skillsFilterStatus,
-                filterSource: state.skillsFilterSource,
-                onToggleAdvancedMode: () => toggleAdvancedMode(state),
-                onSelectSkill: (skillKey, selected) => selectSkill(state, skillKey, selected),
-                onSelectAll: () => selectAllSkills(state),
-                onDeselectAll: () => deselectAllSkills(state),
-                onBatchEnable: () => batchEnableSkills(state),
-                onBatchDisable: () => batchDisableSkills(state),
-                onFilterStatusChange: (status) => changeFilterStatus(state, status),
-                onFilterSourceChange: (source) => changeFilterSource(state, source),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "nodes"
-            ? renderNodes({
-                loading: state.nodesLoading,
-                nodes: state.nodes,
-                devicesLoading: state.devicesLoading,
-                devicesError: state.devicesError,
-                devicesList: state.devicesList,
-                configForm:
-                  state.configForm ??
-                  (state.configSnapshot?.config as Record<string, unknown> | null),
-                configLoading: state.configLoading,
-                configSaving: state.configSaving,
-                configDirty: state.configFormDirty,
-                configFormMode: state.configFormMode,
-                execApprovalsLoading: state.execApprovalsLoading,
-                execApprovalsSaving: state.execApprovalsSaving,
-                execApprovalsDirty: state.execApprovalsDirty,
-                execApprovalsSnapshot: state.execApprovalsSnapshot,
-                execApprovalsForm: state.execApprovalsForm,
-                execApprovalsSelectedAgent: state.execApprovalsSelectedAgent,
-                execApprovalsTarget: state.execApprovalsTarget,
-                execApprovalsTargetNodeId: state.execApprovalsTargetNodeId,
-                onRefresh: () => loadNodes(state),
-                onDevicesRefresh: () => loadDevices(state),
-                onDeviceApprove: (requestId) => approveDevicePairing(state, requestId),
-                onDeviceReject: (requestId) => rejectDevicePairing(state, requestId),
-                onDeviceRotate: (deviceId, role, scopes) =>
-                  rotateDeviceToken(state, { deviceId, role, scopes }),
-                onDeviceRevoke: (deviceId, role) => revokeDeviceToken(state, { deviceId, role }),
-                onLoadConfig: () => loadConfig(state),
-                onLoadExecApprovals: () => {
-                  const target =
-                    state.execApprovalsTarget === "node" && state.execApprovalsTargetNodeId
-                      ? { kind: "node" as const, nodeId: state.execApprovalsTargetNodeId }
-                      : { kind: "gateway" as const };
-                  return loadExecApprovals(state, target);
-                },
-                onBindDefault: (nodeId) => {
-                  if (nodeId) {
-                    updateConfigFormValue(state, ["tools", "exec", "node"], nodeId);
-                  } else {
-                    removeConfigFormValue(state, ["tools", "exec", "node"]);
                   }
                 },
-                onBindAgent: (agentIndex, nodeId) => {
-                  const basePath = ["agents", "list", agentIndex, "tools", "exec", "node"];
-                  if (nodeId) {
-                    updateConfigFormValue(state, basePath, nodeId);
-                  } else {
-                    removeConfigFormValue(state, basePath);
-                  }
+                onSubmitEdit: () => {
+                  void submitEditTeamTask(state);
                 },
-                onSaveBindings: () => saveConfig(state),
-                onExecApprovalsTargetChange: (kind, nodeId) => {
-                  state.execApprovalsTarget = kind;
-                  state.execApprovalsTargetNodeId = nodeId;
-                  state.execApprovalsSnapshot = null;
-                  state.execApprovalsForm = null;
-                  state.execApprovalsDirty = false;
-                  state.execApprovalsSelectedAgent = null;
+                deletingTaskId: state.teamMonitorDeletingTaskId,
+                onDeleteTask: (taskId) => {
+                  void deleteTeamTask(state, taskId);
                 },
-                onExecApprovalsSelectAgent: (agentId) => {
-                  state.execApprovalsSelectedAgent = agentId;
+                cancelingTaskId: state.teamMonitorCancelingTaskId,
+                onCancelTask: (taskId) => {
+                  void cancelTeamTask(state, taskId);
                 },
-                onExecApprovalsPatch: (path, value) =>
-                  updateExecApprovalsFormValue(state, path, value),
-                onExecApprovalsRemove: (path) => removeExecApprovalsFormValue(state, path),
-                onSaveExecApprovals: () => {
-                  const target =
-                    state.execApprovalsTarget === "node" && state.execApprovalsTargetNodeId
-                      ? { kind: "node" as const, nodeId: state.execApprovalsTargetNodeId }
-                      : { kind: "gateway" as const };
-                  return saveExecApprovals(state, target);
-                },
-              })
-            : nothing
-        }
+              },
+            })
+          : nothing}
+        ${state.tab === "skills"
+          ? renderSkills({
+              loading: state.skillsLoading,
+              report: state.skillsReport,
+              error: state.skillsError,
+              filter: state.skillsFilter,
+              edits: state.skillEdits,
+              messages: state.skillMessages,
+              busyKey: state.skillsBusyKey,
+              onFilterChange: (next) => (state.skillsFilter = next),
+              onRefresh: () => loadSkills(state, { clearMessages: true }),
+              onToggle: (key, enabled) => updateSkillEnabled(state, key, enabled),
+              onEdit: (key, value) => updateSkillEdit(state, key, value),
+              onSaveKey: (key) => saveSkillApiKey(state, key),
+              onInstall: (skillKey, name, installId) =>
+                installSkill(state, skillKey, name, installId),
+              // Advanced features
+              advancedMode: state.skillsAdvancedMode,
+              selectedSkills: state.skillsSelectedSkills,
+              filterStatus: state.skillsFilterStatus,
+              filterSource: state.skillsFilterSource,
+              onToggleAdvancedMode: () => toggleAdvancedMode(state),
+              onSelectSkill: (skillKey, selected) => selectSkill(state, skillKey, selected),
+              onSelectAll: () => selectAllSkills(state),
+              onDeselectAll: () => deselectAllSkills(state),
+              onBatchEnable: () => batchEnableSkills(state),
+              onBatchDisable: () => batchDisableSkills(state),
+              onFilterStatusChange: (status) => changeFilterStatus(state, status),
+              onFilterSourceChange: (source) => changeFilterSource(state, source),
+            })
+          : nothing}
+        ${state.tab === "nodes"
+          ? renderNodes({
+              loading: state.nodesLoading,
+              nodes: state.nodes,
+              devicesLoading: state.devicesLoading,
+              devicesError: state.devicesError,
+              devicesList: state.devicesList,
+              configForm:
+                state.configForm ??
+                (state.configSnapshot?.config as Record<string, unknown> | null),
+              configLoading: state.configLoading,
+              configSaving: state.configSaving,
+              configDirty: state.configFormDirty,
+              configFormMode: state.configFormMode,
+              execApprovalsLoading: state.execApprovalsLoading,
+              execApprovalsSaving: state.execApprovalsSaving,
+              execApprovalsDirty: state.execApprovalsDirty,
+              execApprovalsSnapshot: state.execApprovalsSnapshot,
+              execApprovalsForm: state.execApprovalsForm,
+              execApprovalsSelectedAgent: state.execApprovalsSelectedAgent,
+              execApprovalsTarget: state.execApprovalsTarget,
+              execApprovalsTargetNodeId: state.execApprovalsTargetNodeId,
+              onRefresh: () => loadNodes(state),
+              onDevicesRefresh: () => loadDevices(state),
+              onDeviceApprove: (requestId) => approveDevicePairing(state, requestId),
+              onDeviceReject: (requestId) => rejectDevicePairing(state, requestId),
+              onDeviceRotate: (deviceId, role, scopes) =>
+                rotateDeviceToken(state, { deviceId, role, scopes }),
+              onDeviceRevoke: (deviceId, role) => revokeDeviceToken(state, { deviceId, role }),
+              onLoadConfig: () => loadConfig(state),
+              onLoadExecApprovals: () => {
+                const target =
+                  state.execApprovalsTarget === "node" && state.execApprovalsTargetNodeId
+                    ? { kind: "node" as const, nodeId: state.execApprovalsTargetNodeId }
+                    : { kind: "gateway" as const };
+                return loadExecApprovals(state, target);
+              },
+              onBindDefault: (nodeId) => {
+                if (nodeId) {
+                  updateConfigFormValue(state, ["tools", "exec", "node"], nodeId);
+                } else {
+                  removeConfigFormValue(state, ["tools", "exec", "node"]);
+                }
+              },
+              onBindAgent: (agentIndex, nodeId) => {
+                const basePath = ["agents", "list", agentIndex, "tools", "exec", "node"];
+                if (nodeId) {
+                  updateConfigFormValue(state, basePath, nodeId);
+                } else {
+                  removeConfigFormValue(state, basePath);
+                }
+              },
+              onSaveBindings: () => saveConfig(state),
+              onExecApprovalsTargetChange: (kind, nodeId) => {
+                state.execApprovalsTarget = kind;
+                state.execApprovalsTargetNodeId = nodeId;
+                state.execApprovalsSnapshot = null;
+                state.execApprovalsForm = null;
+                state.execApprovalsDirty = false;
+                state.execApprovalsSelectedAgent = null;
+              },
+              onExecApprovalsSelectAgent: (agentId) => {
+                state.execApprovalsSelectedAgent = agentId;
+              },
+              onExecApprovalsPatch: (path, value) =>
+                updateExecApprovalsFormValue(state, path, value),
+              onExecApprovalsRemove: (path) => removeExecApprovalsFormValue(state, path),
+              onSaveExecApprovals: () => {
+                const target =
+                  state.execApprovalsTarget === "node" && state.execApprovalsTargetNodeId
+                    ? { kind: "node" as const, nodeId: state.execApprovalsTargetNodeId }
+                    : { kind: "gateway" as const };
+                return saveExecApprovals(state, target);
+              },
+            })
+          : nothing}
+        ${state.tab === "chat"
+          ? renderChat({
+              sessionKey: state.sessionKey,
+              onSessionKeyChange: (next) => {
+                state.sessionKey = next;
+                state.chatMessage = "";
+                state.chatAttachments = [];
+                state.chatStream = null;
+                state.chatStreamStartedAt = null;
+                state.chatRunId = null;
+                state.chatQueue = [];
+                state.resetToolStream();
+                state.resetChatScroll();
+                state.applySettings({
+                  ...state.settings,
+                  sessionKey: next,
+                  lastActiveSessionKey: next,
+                });
+                void state.loadAssistantIdentity();
+                void loadChatHistory(state);
+                void refreshChatAvatar(state);
+              },
+              thinkingLevel: state.chatThinkingLevel,
+              showThinking,
+              loading: state.chatLoading,
+              sending: state.chatSending,
+              compactionStatus: state.compactionStatus,
+              assistantAvatarUrl: chatAvatarUrl,
+              messages: state.chatMessages,
+              toolMessages: state.chatToolMessages,
+              stream: state.chatStream,
+              streamStartedAt: state.chatStreamStartedAt,
+              draft: state.chatMessage,
+              queue: state.chatQueue,
+              connected: state.connected,
+              canSend: state.connected,
+              disabledReason: chatDisabledReason,
+              error: state.lastError,
+              sessions: state.sessionsResult,
+              focusMode: chatFocus,
+              onRefresh: () => {
+                state.resetToolStream();
+                return Promise.all([loadChatHistory(state), refreshChatAvatar(state)]);
+              },
+              onToggleFocusMode: () => {
+                if (state.onboarding) {
+                  return;
+                }
+                state.applySettings({
+                  ...state.settings,
+                  chatFocusMode: !state.settings.chatFocusMode,
+                });
+              },
+              onChatScroll: (event) => state.handleChatScroll(event),
+              onDraftChange: (next) => (state.chatMessage = next),
+              attachments: state.chatAttachments,
+              onAttachmentsChange: (next) => (state.chatAttachments = next),
+              onSend: () => state.handleSendChat(),
+              canAbort: Boolean(state.chatRunId),
+              onAbort: () => void state.handleAbortChat(),
+              onQueueRemove: (id) => state.removeQueuedMessage(id),
+              onNewSession: () => state.handleSendChat("/new", { restoreDraft: true }),
+              showNewMessages: state.chatNewMessagesBelow && !state.chatManualRefreshInFlight,
+              onScrollToBottom: () => state.scrollToBottom(),
+              // Sidebar props for tool output viewing
+              sidebarOpen: state.sidebarOpen,
+              sidebarContent: state.sidebarContent,
+              sidebarError: state.sidebarError,
+              splitRatio: state.splitRatio,
+              onOpenSidebar: (content: string) => state.handleOpenSidebar(content),
+              onCloseSidebar: () => state.handleCloseSidebar(),
+              onSplitRatioChange: (ratio: number) => state.handleSplitRatioChange(ratio),
+              assistantName: state.assistantName,
+              assistantAvatar: state.assistantAvatar,
+              agentsList: state.agentsList,
+              // ============ 导航树 props ============
+              navNodes: buildNavigationTree({
+                agents: state.agentsList,
+                channelsSnapshot: state.channelsSnapshot,
+                groups: state.groupsList,
+                friends: state.friendsList,
+                // 历史会话列表，用于构建“全部会话”子树
+                sessions: state.sessionsResult,
+                // Z4: 传递未读消息计数以映射到导航树节点
+                unreadSessionMessages: state.unreadSessionMessages,
+                // channelBindings 现在直接从 agents.agents[…].channelBindings 获取
+              }),
+              navCurrentContext: state.chatNavCurrentContext,
+              navExpandedNodeIds: state.chatNavExpandedNodes,
+              navSearchQuery: state.chatNavSearchQuery,
+              navChannelForceJoined: state.chatNavChannelForceJoined,
+              navLoading: !state.agentsList && state.chatLoading,
+              navError: state.agentsError ?? state.channelsError ?? state.groupsError ?? null,
+              onNavRetry: () => {
+                // 重新加载导航树所需的数据
+                void Promise.all([
+                  loadAgents(state),
+                  loadChannels(state, false),
+                  loadGroups(state, state.client!),
+                ]).then(() => loadChatHistory(state));
+              },
+              onNavSelectContext: (context) => {
+                state.chatNavCurrentContext = context;
 
-        ${
-          state.tab === "chat"
-            ? renderChat({
-                sessionKey: state.sessionKey,
-                onSessionKeyChange: (next) => {
-                  state.sessionKey = next;
+                // V3: 监控视图轮询管理
+                const isMonitor =
+                  context.type === "contact" ||
+                  context.type === "all" ||
+                  context.type === "agent-all";
+                if (isMonitor) {
+                  startMonitorPolling(
+                    state as unknown as Parameters<typeof startMonitorPolling>[0],
+                  );
+                } else {
+                  stopMonitorPolling(state as unknown as Parameters<typeof stopMonitorPolling>[0]);
+                }
+                // Z1: 上下文感知的 sessionKey 解析，将 group/contact 解析为后端可识别的 sessionKey
+                const nextKey = resolveBackendSessionKey(context);
+                // Z4: 切换到该节点时清除对应的未读计数
+                if (state.unreadSessionMessages) {
+                  const unread = { ...state.unreadSessionMessages };
+                  // 清除当前上下文涉及的 sessionKey 的未读数
+                  delete unread[nextKey];
+                  // 对于聚合视图，清除所有匹配的未读数
+                  if (context.type === "all") {
+                    state.unreadSessionMessages = {};
+                  } else if (context.type === "agent-all" && context.agentId) {
+                    const prefix = context.agentId + ":";
+                    for (const key of Object.keys(unread)) {
+                      if (key.startsWith(prefix)) {
+                        delete unread[key];
+                      }
+                    }
+                    state.unreadSessionMessages = unread;
+                  } else if (context.type === "channels-all" && context.agentId) {
+                    const prefix = `agent:${context.agentId}:channel:`;
+                    for (const key of Object.keys(unread)) {
+                      if (key.startsWith(prefix)) {
+                        delete unread[key];
+                      }
+                    }
+                    state.unreadSessionMessages = unread;
+                  } else {
+                    state.unreadSessionMessages = unread;
+                  }
+                }
+                if (nextKey !== state.sessionKey) {
+                  state.sessionKey = nextKey;
                   state.chatMessage = "";
                   state.chatAttachments = [];
                   state.chatStream = null;
@@ -4665,787 +4850,634 @@ export function renderApp(state: AppViewState) {
                   state.resetChatScroll();
                   state.applySettings({
                     ...state.settings,
-                    sessionKey: next,
-                    lastActiveSessionKey: next,
+                    sessionKey: nextKey,
+                    lastActiveSessionKey: nextKey,
                   });
                   void state.loadAssistantIdentity();
-                  void loadChatHistory(state);
+                  if (context.type === "all") {
+                    // 全部会话聚合视图
+                    void loadAggregatedHistory(state);
+                  } else {
+                    void loadChatHistory(state);
+                  }
                   void refreshChatAvatar(state);
-                },
-                thinkingLevel: state.chatThinkingLevel,
-                showThinking,
-                loading: state.chatLoading,
-                sending: state.chatSending,
-                compactionStatus: state.compactionStatus,
-                assistantAvatarUrl: chatAvatarUrl,
-                messages: state.chatMessages,
-                toolMessages: state.chatToolMessages,
-                stream: state.chatStream,
-                streamStartedAt: state.chatStreamStartedAt,
-                draft: state.chatMessage,
-                queue: state.chatQueue,
-                connected: state.connected,
-                canSend: state.connected,
-                disabledReason: chatDisabledReason,
-                error: state.lastError,
-                sessions: state.sessionsResult,
-                focusMode: chatFocus,
-                onRefresh: () => {
-                  state.resetToolStream();
-                  return Promise.all([loadChatHistory(state), refreshChatAvatar(state)]);
-                },
-                onToggleFocusMode: () => {
-                  if (state.onboarding) {
-                    return;
-                  }
-                  state.applySettings({
-                    ...state.settings,
-                    chatFocusMode: !state.settings.chatFocusMode,
-                  });
-                },
-                onChatScroll: (event) => state.handleChatScroll(event),
-                onDraftChange: (next) => (state.chatMessage = next),
-                attachments: state.chatAttachments,
-                onAttachmentsChange: (next) => (state.chatAttachments = next),
-                onSend: () => state.handleSendChat(),
-                canAbort: Boolean(state.chatRunId),
-                onAbort: () => void state.handleAbortChat(),
-                onQueueRemove: (id) => state.removeQueuedMessage(id),
-                onNewSession: () => state.handleSendChat("/new", { restoreDraft: true }),
-                showNewMessages: state.chatNewMessagesBelow && !state.chatManualRefreshInFlight,
-                onScrollToBottom: () => state.scrollToBottom(),
-                // Sidebar props for tool output viewing
-                sidebarOpen: state.sidebarOpen,
-                sidebarContent: state.sidebarContent,
-                sidebarError: state.sidebarError,
-                splitRatio: state.splitRatio,
-                onOpenSidebar: (content: string) => state.handleOpenSidebar(content),
-                onCloseSidebar: () => state.handleCloseSidebar(),
-                onSplitRatioChange: (ratio: number) => state.handleSplitRatioChange(ratio),
-                assistantName: state.assistantName,
-                assistantAvatar: state.assistantAvatar,
-                agentsList: state.agentsList,
-                // ============ 导航树 props ============
-                navNodes: buildNavigationTree({
-                  agents: state.agentsList,
-                  channelsSnapshot: state.channelsSnapshot,
-                  groups: state.groupsList,
-                  friends: state.friendsList,
-                  // 历史会话列表，用于构建“全部会话”子树
-                  sessions: state.sessionsResult,
-                  // Z4: 传递未读消息计数以映射到导航树节点
-                  unreadSessionMessages: state.unreadSessionMessages,
-                  // channelBindings 现在直接从 agents.agents[…].channelBindings 获取
-                }),
-                navCurrentContext: state.chatNavCurrentContext,
-                navExpandedNodeIds: state.chatNavExpandedNodes,
-                navSearchQuery: state.chatNavSearchQuery,
-                navChannelForceJoined: state.chatNavChannelForceJoined,
-                navLoading: !state.agentsList && state.chatLoading,
-                navError: state.agentsError ?? state.channelsError ?? state.groupsError ?? null,
-                onNavRetry: () => {
-                  // 重新加载导航树所需的数据
-                  void Promise.all([
-                    loadAgents(state),
-                    loadChannels(state, false),
-                    loadGroups(state, state.client!),
-                  ]).then(() => loadChatHistory(state));
-                },
-                onNavSelectContext: (context) => {
-                  state.chatNavCurrentContext = context;
-
-                  // V3: 监控视图轮询管理
-                  const isMonitor =
-                    context.type === "contact" ||
-                    context.type === "all" ||
-                    context.type === "agent-all";
-                  if (isMonitor) {
-                    startMonitorPolling(
-                      state as unknown as Parameters<typeof startMonitorPolling>[0],
-                    );
+                } else {
+                  // Z1: 即使后端 sessionKey 相同，如果上下文类型变了也重新加载
+                  // （例如从 agent-direct 切换到 agent-all，虽然 sessionKey 都是 main:main）
+                  if (context.type === "all") {
+                    void loadAggregatedHistory(state);
                   } else {
-                    stopMonitorPolling(
-                      state as unknown as Parameters<typeof stopMonitorPolling>[0],
-                    );
+                    void loadChatHistory(state);
                   }
-                  // Z1: 上下文感知的 sessionKey 解析，将 group/contact 解析为后端可识别的 sessionKey
-                  const nextKey = resolveBackendSessionKey(context);
-                  // Z4: 切换到该节点时清除对应的未读计数
-                  if (state.unreadSessionMessages) {
-                    const unread = { ...state.unreadSessionMessages };
-                    // 清除当前上下文涉及的 sessionKey 的未读数
-                    delete unread[nextKey];
-                    // 对于聚合视图，清除所有匹配的未读数
-                    if (context.type === "all") {
-                      state.unreadSessionMessages = {};
-                    } else if (context.type === "agent-all" && context.agentId) {
-                      const prefix = context.agentId + ":";
-                      for (const key of Object.keys(unread)) {
-                        if (key.startsWith(prefix)) {
-                          delete unread[key];
-                        }
-                      }
-                      state.unreadSessionMessages = unread;
-                    } else if (context.type === "channels-all" && context.agentId) {
-                      const prefix = `agent:${context.agentId}:channel:`;
-                      for (const key of Object.keys(unread)) {
-                        if (key.startsWith(prefix)) {
-                          delete unread[key];
-                        }
-                      }
-                      state.unreadSessionMessages = unread;
-                    } else {
-                      state.unreadSessionMessages = unread;
-                    }
-                  }
-                  if (nextKey !== state.sessionKey) {
-                    state.sessionKey = nextKey;
-                    state.chatMessage = "";
-                    state.chatAttachments = [];
-                    state.chatStream = null;
-                    state.chatStreamStartedAt = null;
-                    state.chatRunId = null;
-                    state.chatQueue = [];
-                    state.resetToolStream();
-                    state.resetChatScroll();
-                    state.applySettings({
-                      ...state.settings,
-                      sessionKey: nextKey,
-                      lastActiveSessionKey: nextKey,
-                    });
-                    void state.loadAssistantIdentity();
-                    if (context.type === "all") {
-                      // 全部会话聚合视图
-                      void loadAggregatedHistory(state);
-                    } else {
-                      void loadChatHistory(state);
-                    }
-                    void refreshChatAvatar(state);
-                  } else {
-                    // Z1: 即使后端 sessionKey 相同，如果上下文类型变了也重新加载
-                    // （例如从 agent-direct 切换到 agent-all，虽然 sessionKey 都是 main:main）
-                    if (context.type === "all") {
-                      void loadAggregatedHistory(state);
-                    } else {
-                      void loadChatHistory(state);
-                    }
-                  }
-                },
-                onNavToggleNode: (nodeId) => {
-                  const next = new Set(state.chatNavExpandedNodes);
-                  if (next.has(nodeId)) {
-                    next.delete(nodeId);
-                  } else {
-                    next.add(nodeId);
-                  }
-                  state.chatNavExpandedNodes = next;
-                },
-                onNavSearchChange: (query) => {
-                  state.chatNavSearchQuery = query;
-                },
-                onNavChannelForceJoinToggle: () => {
-                  state.chatNavChannelForceJoined = !state.chatNavChannelForceJoined;
-                },
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "config"
-            ? renderConfig({
-                raw: state.configRaw,
-                originalRaw: state.configRawOriginal,
-                valid: state.configValid,
-                issues: state.configIssues,
-                loading: state.configLoading,
-                saving: state.configSaving,
-                applying: state.configApplying,
-                updating: state.updateRunning,
-                connected: state.connected,
-                schema: state.configSchema,
-                schemaLoading: state.configSchemaLoading,
-                uiHints: state.configUiHints,
-                formMode: state.configFormMode,
-                formValue: state.configForm,
-                originalValue: state.configFormOriginal,
-                searchQuery: state.configSearchQuery,
-                activeSection: state.configActiveSection,
-                activeSubsection: state.configActiveSubsection,
-                onRawChange: (next) => {
-                  state.configRaw = next;
-                },
-                onFormModeChange: (mode) => (state.configFormMode = mode),
-                onFormPatch: (path, value) => updateConfigFormValue(state, path, value),
-                onSearchChange: (query) => (state.configSearchQuery = query),
-                onSectionChange: (section) => {
-                  state.configActiveSection = section;
-                  state.configActiveSubsection = null;
-                },
-                onSubsectionChange: (section) => (state.configActiveSubsection = section),
-                onReload: () => loadConfig(state),
-                onSave: () => saveConfig(state),
-                onApply: () => applyConfig(state),
-                onUpdate: () => runUpdate(state),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "debug"
-            ? renderDebug({
-                loading: state.debugLoading,
-                status: state.debugStatus,
-                health: state.debugHealth,
-                models: state.debugModels,
-                heartbeat: state.debugHeartbeat,
-                eventLog: state.eventLog,
-                methods: state.debugMethods,
-                callMethod: state.debugCallMethod,
-                callParams: state.debugCallParams,
-                callResult: state.debugCallResult,
-                callError: state.debugCallError,
-                onCallMethodChange: (next) => (state.debugCallMethod = next),
-                onCallParamsChange: (next) => (state.debugCallParams = next),
-                onRefresh: () => loadDebug(state),
-                onCall: () => callDebugMethod(state),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "logs"
-            ? renderLogs({
-                loading: state.logsLoading,
-                error: state.logsError,
-                file: state.logsFile,
-                entries: state.logsEntries,
-                filterText: state.logsFilterText,
-                levelFilters: state.logsLevelFilters,
-                autoFollow: state.logsAutoFollow,
-                truncated: state.logsTruncated,
-                onFilterTextChange: (next) => (state.logsFilterText = next),
-                onLevelToggle: (level, enabled) => {
-                  state.logsLevelFilters = { ...state.logsLevelFilters, [level]: enabled };
-                },
-                onToggleAutoFollow: (next) => (state.logsAutoFollow = next),
-                onRefresh: () => loadLogs(state, { reset: true }),
-                onExport: (lines, label) => state.exportLogs(lines, label),
-                onScroll: (event) => state.handleLogsScroll(event),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "dreams"
-            ? lazyRender(lazyDreamingView, (m) => {
-                // 将当前 session 对应的 agentId 写入 state，作为默认目标备选
-                const dreamAgentId = resolveAgentIdFromSessionKey(state.sessionKey);
-                (state as unknown as { dreamingAgentId: string | null }).dreamingAgentId =
-                  dreamAgentId || null;
-
-                // 首次进入 dreams tab时加载目标列表
-                const dreamTargets =
-                  (state as unknown as { dreamTargets?: unknown[] }).dreamTargets;
-                if (!dreamTargets && !(state as unknown as { dreamTargetsLoading?: boolean }).dreamTargetsLoading) {
-                  void loadDreamTargets(state as unknown as Parameters<typeof loadDreamTargets>[0]);
                 }
-
-                // 若已加载目标列表但还未选中任何目标，自动选择默认
-                const selectedTargetId =
-                  (state as unknown as { dreamSelectedTargetId?: string | null }).dreamSelectedTargetId;
-                const targetsDefaultId =
-                  (state as unknown as { dreamTargetsDefaultId?: string }).dreamTargetsDefaultId;
-                if (!selectedTargetId && targetsDefaultId) {
-                  (state as unknown as { dreamSelectedTargetId: string | null }).dreamSelectedTargetId =
-                    targetsDefaultId;
+              },
+              onNavToggleNode: (nodeId) => {
+                const next = new Set(state.chatNavExpandedNodes);
+                if (next.has(nodeId)) {
+                  next.delete(nodeId);
+                } else {
+                  next.add(nodeId);
                 }
+                state.chatNavExpandedNodes = next;
+              },
+              onNavSearchChange: (query) => {
+                state.chatNavSearchQuery = query;
+              },
+              onNavChannelForceJoinToggle: () => {
+                state.chatNavChannelForceJoined = !state.chatNavChannelForceJoined;
+              },
+            })
+          : nothing}
+        ${state.tab === "config"
+          ? renderConfig({
+              raw: state.configRaw,
+              originalRaw: state.configRawOriginal,
+              valid: state.configValid,
+              issues: state.configIssues,
+              loading: state.configLoading,
+              saving: state.configSaving,
+              applying: state.configApplying,
+              updating: state.updateRunning,
+              connected: state.connected,
+              schema: state.configSchema,
+              schemaLoading: state.configSchemaLoading,
+              uiHints: state.configUiHints,
+              formMode: state.configFormMode,
+              formValue: state.configForm,
+              originalValue: state.configFormOriginal,
+              searchQuery: state.configSearchQuery,
+              activeSection: state.configActiveSection,
+              activeSubsection: state.configActiveSubsection,
+              onRawChange: (next) => {
+                state.configRaw = next;
+              },
+              onFormModeChange: (mode) => (state.configFormMode = mode),
+              onFormPatch: (path, value) => updateConfigFormValue(state, path, value),
+              onSearchChange: (query) => (state.configSearchQuery = query),
+              onSectionChange: (section) => {
+                state.configActiveSection = section;
+                state.configActiveSubsection = null;
+              },
+              onSubsectionChange: (section) => (state.configActiveSubsection = section),
+              onReload: () => loadConfig(state),
+              onSave: () => saveConfig(state),
+              onApply: () => applyConfig(state),
+              onUpdate: () => runUpdate(state),
+            })
+          : nothing}
+        ${state.tab === "debug"
+          ? renderDebug({
+              loading: state.debugLoading,
+              status: state.debugStatus,
+              health: state.debugHealth,
+              models: state.debugModels,
+              heartbeat: state.debugHeartbeat,
+              eventLog: state.eventLog,
+              methods: state.debugMethods,
+              callMethod: state.debugCallMethod,
+              callParams: state.debugCallParams,
+              callResult: state.debugCallResult,
+              callError: state.debugCallError,
+              onCallMethodChange: (next) => (state.debugCallMethod = next),
+              onCallParamsChange: (next) => (state.debugCallParams = next),
+              onRefresh: () => loadDebug(state),
+              onCall: () => callDebugMethod(state),
+            })
+          : nothing}
+        ${state.tab === "logs"
+          ? renderLogs({
+              loading: state.logsLoading,
+              error: state.logsError,
+              file: state.logsFile,
+              entries: state.logsEntries,
+              filterText: state.logsFilterText,
+              levelFilters: state.logsLevelFilters,
+              autoFollow: state.logsAutoFollow,
+              truncated: state.logsTruncated,
+              onFilterTextChange: (next) => (state.logsFilterText = next),
+              onLevelToggle: (level, enabled) => {
+                state.logsLevelFilters = { ...state.logsLevelFilters, [level]: enabled };
+              },
+              onToggleAutoFollow: (next) => (state.logsAutoFollow = next),
+              onRefresh: () => loadLogs(state, { reset: true }),
+              onExport: (lines, label) => state.exportLogs(lines, label),
+              onScroll: (event) => state.handleLogsScroll(event),
+            })
+          : nothing}
+        ${state.tab === "dreams"
+          ? lazyRender(lazyDreamingView, (m) => {
+              // 将当前 session 对应的 agentId 写入 state，作为默认目标备选
+              const dreamAgentId = resolveAgentIdFromSessionKey(state.sessionKey);
+              (state as unknown as { dreamingAgentId: string | null }).dreamingAgentId =
+                dreamAgentId || null;
 
-                // 梦境目标选择器：动态渲染审点
-                const allTargets =
-                  (state as unknown as { dreamTargets?: Array<{ kind: string; id: string; label: string }> }).dreamTargets ?? [];
-                const currentTargetId = selectedTargetId ?? dreamAgentId ?? "";
+              // 首次进入 dreams tab时加载目标列表
+              const dreamTargets = (state as unknown as { dreamTargets?: unknown[] }).dreamTargets;
+              if (
+                !dreamTargets &&
+                !(state as unknown as { dreamTargetsLoading?: boolean }).dreamTargetsLoading
+              ) {
+                void loadDreamTargets(state as unknown as Parameters<typeof loadDreamTargets>[0]);
+              }
 
-                const targetSelector =
-                  allTargets.length > 1
-                    ? html`<div class="dreams-target-selector">
-                        <label class="dreams-target-label">查看梦境：</label>
-                        <select
-                          class="dreams-target-select"
-                          .value=${currentTargetId}
-                          @change=${(e: Event) => {
-                            const sel = e.target as HTMLSelectElement;
-                            const nextId = sel.value;
-                            (state as unknown as { dreamSelectedTargetId: string | null }).dreamSelectedTargetId = nextId;
-                            // 重置日记状态并重新加载
-                            (state as unknown as {
+              // 若已加载目标列表但还未选中任何目标，自动选择默认
+              const selectedTargetId = (
+                state as unknown as { dreamSelectedTargetId?: string | null }
+              ).dreamSelectedTargetId;
+              const targetsDefaultId = (state as unknown as { dreamTargetsDefaultId?: string })
+                .dreamTargetsDefaultId;
+              if (!selectedTargetId && targetsDefaultId) {
+                (
+                  state as unknown as { dreamSelectedTargetId: string | null }
+                ).dreamSelectedTargetId = targetsDefaultId;
+              }
+
+              // 梦境目标选择器：动态渲染审点
+              const allTargets =
+                (
+                  state as unknown as {
+                    dreamTargets?: Array<{ kind: string; id: string; label: string }>;
+                  }
+                ).dreamTargets ?? [];
+              const currentTargetId = selectedTargetId ?? dreamAgentId ?? "";
+
+              const targetSelector =
+                allTargets.length > 1
+                  ? html`<div class="dreams-target-selector">
+                      <label class="dreams-target-label">查看梦境：</label>
+                      <select
+                        class="dreams-target-select"
+                        .value=${currentTargetId}
+                        @change=${(e: Event) => {
+                          const sel = e.target as HTMLSelectElement;
+                          const nextId = sel.value;
+                          (
+                            state as unknown as { dreamSelectedTargetId: string | null }
+                          ).dreamSelectedTargetId = nextId;
+                          // 重置日记状态并重新加载
+                          (
+                            state as unknown as {
                               dreamDiaryLoading: boolean;
                               dreamDiaryError: string | null;
                               dreamDiaryPath: string | null;
                               dreamDiaryContent: string | null;
-                            }).dreamDiaryLoading = false;
-                            (state as unknown as { dreamDiaryError: string | null }).dreamDiaryError = null;
-                            (state as unknown as { dreamDiaryPath: string | null }).dreamDiaryPath = null;
-                            (state as unknown as { dreamDiaryContent: string | null }).dreamDiaryContent = null;
-                            void loadDreamDiary(state as unknown as Parameters<typeof loadDreamDiary>[0]);
-                          }}
-                        >
-                          ${allTargets.map(
-                            (t) => html`<option value=${t.id} ?selected=${t.id === currentTargetId}>
-                              ${t.kind === "group" ? "👥 " : "🤖 "}${t.label}
-                            </option>`,
-                          )}
-                        </select>
-                      </div>`
-                    : nothing;
+                            }
+                          ).dreamDiaryLoading = false;
+                          (state as unknown as { dreamDiaryError: string | null }).dreamDiaryError =
+                            null;
+                          (state as unknown as { dreamDiaryPath: string | null }).dreamDiaryPath =
+                            null;
+                          (
+                            state as unknown as { dreamDiaryContent: string | null }
+                          ).dreamDiaryContent = null;
+                          void loadDreamDiary(
+                            state as unknown as Parameters<typeof loadDreamDiary>[0],
+                          );
+                        }}
+                      >
+                        ${allTargets.map(
+                          (t) => html`<option value=${t.id} ?selected=${t.id === currentTargetId}>
+                            ${t.kind === "group" ? "👥 " : "🤖 "}${t.label}
+                          </option>`,
+                        )}
+                      </select>
+                    </div>`
+                  : nothing;
 
-                return m.renderDreaming({
-                  active: (() => {
-                    const configValue =
-                      state.configForm ??
-                      (state.configSnapshot?.config as Record<string, unknown> | null);
-                    const configuredDreaming = resolveConfiguredDreaming(configValue);
-                    return state.dreamingStatus?.enabled ?? configuredDreaming.enabled;
-                  })(),
-                  shortTermCount: state.dreamingStatus?.shortTermCount ?? 0,
-                  totalSignalCount: state.dreamingStatus?.totalSignalCount ?? 0,
-                  phaseSignalCount: state.dreamingStatus?.phaseSignalCount ?? 0,
-                  promotedCount: state.dreamingStatus?.promotedToday ?? 0,
-                  dreamingOf: null,
-                  nextCycle: resolveDreamingNextCycle(state.dreamingStatus),
-                  timezone: state.dreamingStatus?.timezone ?? null,
-                  statusLoading: state.dreamingStatusLoading,
-                  statusError: state.dreamingStatusError,
-                  modeSaving: state.dreamingModeSaving,
-                  dreamDiaryLoading: state.dreamDiaryLoading,
-                  dreamDiaryError: state.dreamDiaryError,
-                  dreamDiaryPath: state.dreamDiaryPath,
-                  dreamDiaryContent: state.dreamDiaryContent,
-                  headerExtra: targetSelector,
-                  onRefresh: () => {
-                    void Promise.all([
-                      loadDreamingStatus(
-                        state as unknown as Parameters<typeof loadDreamingStatus>[0],
-                      ),
-                      loadDreamDiary(state as unknown as Parameters<typeof loadDreamDiary>[0]),
-                    ]);
-                  },
-                  onRefreshDiary: () =>
+              return m.renderDreaming({
+                active: (() => {
+                  const configValue =
+                    state.configForm ??
+                    (state.configSnapshot?.config as Record<string, unknown> | null);
+                  const configuredDreaming = resolveConfiguredDreaming(configValue);
+                  return state.dreamingStatus?.enabled ?? configuredDreaming.enabled;
+                })(),
+                shortTermCount: state.dreamingStatus?.shortTermCount ?? 0,
+                totalSignalCount: state.dreamingStatus?.totalSignalCount ?? 0,
+                phaseSignalCount: state.dreamingStatus?.phaseSignalCount ?? 0,
+                promotedCount: state.dreamingStatus?.promotedToday ?? 0,
+                dreamingOf: null,
+                nextCycle: resolveDreamingNextCycle(state.dreamingStatus),
+                timezone: state.dreamingStatus?.timezone ?? null,
+                statusLoading: state.dreamingStatusLoading,
+                statusError: state.dreamingStatusError,
+                modeSaving: state.dreamingModeSaving,
+                dreamDiaryLoading: state.dreamDiaryLoading,
+                dreamDiaryError: state.dreamDiaryError,
+                dreamDiaryPath: state.dreamDiaryPath,
+                dreamDiaryContent: state.dreamDiaryContent,
+                headerExtra: targetSelector,
+                onRefresh: () => {
+                  void Promise.all([
+                    loadDreamingStatus(
+                      state as unknown as Parameters<typeof loadDreamingStatus>[0],
+                    ),
                     loadDreamDiary(state as unknown as Parameters<typeof loadDreamDiary>[0]),
-                  onToggleEnabled: (enabled: boolean) => {
-                    const configValue =
-                      state.configForm ??
-                      (state.configSnapshot?.config as Record<string, unknown> | null);
-                    const configuredDreaming = resolveConfiguredDreaming(configValue);
-                    const dreamingOn = state.dreamingStatus?.enabled ?? configuredDreaming.enabled;
-                    if (state.dreamingModeSaving || dreamingOn === enabled) {
+                  ]);
+                },
+                onRefreshDiary: () =>
+                  loadDreamDiary(state as unknown as Parameters<typeof loadDreamDiary>[0]),
+                onToggleEnabled: (enabled: boolean) => {
+                  const configValue =
+                    state.configForm ??
+                    (state.configSnapshot?.config as Record<string, unknown> | null);
+                  const configuredDreaming = resolveConfiguredDreaming(configValue);
+                  const dreamingOn = state.dreamingStatus?.enabled ?? configuredDreaming.enabled;
+                  if (state.dreamingModeSaving || dreamingOn === enabled) {
+                    return;
+                  }
+                  void (async () => {
+                    const updated = await updateDreamingEnabled(
+                      state as unknown as Parameters<typeof updateDreamingEnabled>[0],
+                      enabled,
+                    );
+                    if (!updated) {
                       return;
                     }
-                    void (async () => {
-                      const updated = await updateDreamingEnabled(
-                        state as unknown as Parameters<typeof updateDreamingEnabled>[0],
-                        enabled,
-                      );
-                      if (!updated) {
-                        return;
-                      }
-                      await loadConfig(state);
-                      await loadDreamingStatus(
-                        state as unknown as Parameters<typeof loadDreamingStatus>[0],
-                      );
-                    })();
-                  },
-                  onRequestUpdate: requestHostUpdate,
-                });
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "message-queue"
-            ? renderMessageQueue({
-                activePanel: state.messageQueueActivePanel,
-                queueLoading: state.queueLoading,
-                queueError: state.queueError,
-                queueMessages: state.queueMessages,
-                queueStats: state.queueStats,
-                queueStatsLoading: state.queueStatsLoading,
-                queueConfig: state.queueConfig,
-                queueConfigLoading: state.queueConfigLoading,
-                queueConfigSaving: state.queueConfigSaving,
-                onSelectPanel: (panel) => {
-                  state.messageQueueActivePanel = panel;
-                  // 切换到相应 panel 时加载数据
-                  if (panel === "monitor") {
-                    void loadQueueStatus(state);
-                    void loadQueueStats(state);
-                  } else if (panel === "statistics") {
-                    void loadQueueStats(state);
-                  } else if (panel === "configuration") {
-                    void loadQueueConfig(state);
-                  }
+                    await loadConfig(state);
+                    await loadDreamingStatus(
+                      state as unknown as Parameters<typeof loadDreamingStatus>[0],
+                    );
+                  })();
                 },
-                onRefresh: () => {
+                onRequestUpdate: requestHostUpdate,
+              });
+            })
+          : nothing}
+        ${state.tab === "message-queue"
+          ? renderMessageQueue({
+              activePanel: state.messageQueueActivePanel,
+              queueLoading: state.queueLoading,
+              queueError: state.queueError,
+              queueMessages: state.queueMessages,
+              queueStats: state.queueStats,
+              queueStatsLoading: state.queueStatsLoading,
+              queueConfig: state.queueConfig,
+              queueConfigLoading: state.queueConfigLoading,
+              queueConfigSaving: state.queueConfigSaving,
+              onSelectPanel: (panel) => {
+                state.messageQueueActivePanel = panel;
+                // 切换到相应 panel 时加载数据
+                if (panel === "monitor") {
                   void loadQueueStatus(state);
                   void loadQueueStats(state);
-                },
-                onClearQueue: () => void clearQueue(state),
-                onSaveConfig: (config) => void saveQueueConfig(state, config),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "organization-permissions"
-            ? renderOrganizationPermissions({
-                loading: state.organizationDataLoading || state.permissionsConfigLoading,
-                error: state.organizationDataError || state.permissionsConfigError,
-                activeTab: state.orgPermActiveTab || "organization",
-                // 组织架构数据
-                organizationData: state.organizationData,
-                selectedNodeId: state.organizationChartSelectedNode,
-                viewMode: state.organizationChartViewMode,
-                organizationsLoading: state.organizationDataLoading,
-                organizationsError: state.organizationDataError,
-                // 权限配置数据
-                permissionsConfig: null, // TODO: 添加权限配置数据
-                permissionsLoading: state.permissionsConfigLoading,
-                permissionsSaving: state.permissionsConfigSaving,
-                selectedOrgForPermission: null,
-                selectedRole: null,
-                // 审批管理数据
-                approvalRequests: state.approvalRequests,
-                approvalsLoading: state.approvalRequestsLoading,
-                approvalStats: state.approvalStats,
-                approvalsFilter: {
-                  status: "all",
-                  priority: "all",
-                  type: "all",
-                  requester: "all",
-                  search: "",
-                },
-                selectedApprovals: new Set<string>(),
-                selectedApprovalDetail: null,
-                // 系统管理数据
-                superAdmins: state.superAdminsList || [],
-                superAdminsLoading: state.superAdminsLoading ?? false,
-                superAdminsError: state.superAdminsError ?? null,
-                systemRoles: [],
-                auditLogs: [],
-                // 回调函数
-                onRefresh: () => {
-                  const activeTab = state.orgPermActiveTab || "organization";
-                  if (activeTab === "organization") {
-                    void loadOrganizationData(state);
-                  } else if (activeTab === "permissions") {
-                    void loadOrganizationData(state);
-                  } else if (activeTab === "approvals") {
-                    void loadApprovals(state);
-                    void loadApprovalStats(state);
-                  } else if (activeTab === "system") {
-                    void loadSuperAdmins(state);
-                  }
-                },
-                onTabChange: (tab) => {
-                  state.orgPermActiveTab = tab;
-                  if (tab === "organization") {
-                    void loadOrganizationData(state);
-                  } else if (tab === "permissions") {
-                    void loadOrganizationData(state);
-                  } else if (tab === "approvals") {
-                    void loadApprovals(state);
-                    void loadApprovalStats(state);
-                  } else if (tab === "system") {
-                    void loadSuperAdmins(state);
-                  }
-                },
-                // 组织架构回调
-                onSelectNode: (nodeId) => {
-                  state.organizationChartSelectedNode = nodeId;
-                },
-                onViewModeChange: (mode) => {
-                  state.organizationChartViewMode = mode;
-                },
-                onCreateOrganization: () => {
-                  // 打开创建部门对话框
-                  state.editingOrganization = {
-                    mode: "create",
-                    isDepartment: true,
-                    organization: { name: "", description: "", parentId: "" },
-                    sandboxConfig: { ...DEFAULT_SANDBOX_FORM },
-                  };
-                  state.organizationsError = null;
-                },
-                onEditOrganization: (orgId) => {
-                  // 找到当前部门数据并打开编辑对话框
-                  const orgData = state.organizationData;
-                  const orgs: Array<{
-                    id: string;
-                    name: string;
-                    description?: string;
-                    parentId?: string;
-                    sandboxEnabled?: boolean;
-                  }> = orgData?.organizations || [];
-                  const found = orgs.find((o) => o.id === orgId);
-                  state.editingOrganization = {
-                    mode: "edit",
-                    isDepartment: true,
-                    organization: {
-                      id: orgId,
-                      name: found?.name || "",
-                      description: found?.description || "",
-                      parentId: found?.parentId || "",
-                    },
-                    sandboxConfig: { ...DEFAULT_SANDBOX_FORM },
-                  };
-                  state.organizationsError = null;
-                },
-                onDeleteOrganization: (orgId) => {
-                  if (!window.confirm("确定要删除该组织/部门吗？")) {
-                    return;
-                  }
-                  void state
-                    .client!.request("org.department.delete", {
-                      operatorId: "admin",
-                      id: orgId,
-                    })
-                    .then(() => void loadOrganizationData(state))
-                    .catch((err: unknown) => console.error("Delete organization failed:", err));
-                },
-                onCreateTeam: () => {
-                  const name = window.prompt("请输入团队名称");
-                  if (!name) {
-                    return;
-                  }
-                  void state
-                    .client!.request("org.team.create", {
-                      creatorId: "admin",
-                      name,
-                    })
-                    .then(() => void loadOrganizationData(state))
-                    .catch((err: unknown) => console.error("Create team failed:", err));
-                },
-                onEditTeam: (teamId) => {
-                  console.log("Edit team:", teamId);
+                } else if (panel === "statistics") {
+                  void loadQueueStats(state);
+                } else if (panel === "configuration") {
+                  void loadQueueConfig(state);
+                }
+              },
+              onRefresh: () => {
+                void loadQueueStatus(state);
+                void loadQueueStats(state);
+              },
+              onClearQueue: () => void clearQueue(state),
+              onSaveConfig: (config) => void saveQueueConfig(state, config),
+            })
+          : nothing}
+        ${state.tab === "organization-permissions"
+          ? renderOrganizationPermissions({
+              loading: state.organizationDataLoading || state.permissionsConfigLoading,
+              error: state.organizationDataError || state.permissionsConfigError,
+              activeTab: state.orgPermActiveTab || "organization",
+              // 组织架构数据
+              organizationData: state.organizationData,
+              selectedNodeId: state.organizationChartSelectedNode,
+              viewMode: state.organizationChartViewMode,
+              organizationsLoading: state.organizationDataLoading,
+              organizationsError: state.organizationDataError,
+              // 权限配置数据
+              permissionsConfig: null, // TODO: 添加权限配置数据
+              permissionsLoading: state.permissionsConfigLoading,
+              permissionsSaving: state.permissionsConfigSaving,
+              selectedOrgForPermission: null,
+              selectedRole: null,
+              // 审批管理数据
+              approvalRequests: state.approvalRequests,
+              approvalsLoading: state.approvalRequestsLoading,
+              approvalStats: state.approvalStats,
+              approvalsFilter: {
+                status: "all",
+                priority: "all",
+                type: "all",
+                requester: "all",
+                search: "",
+              },
+              selectedApprovals: new Set<string>(),
+              selectedApprovalDetail: null,
+              // 系统管理数据
+              superAdmins: state.superAdminsList || [],
+              superAdminsLoading: state.superAdminsLoading ?? false,
+              superAdminsError: state.superAdminsError ?? null,
+              systemRoles: [],
+              auditLogs: [],
+              // 回调函数
+              onRefresh: () => {
+                const activeTab = state.orgPermActiveTab || "organization";
+                if (activeTab === "organization") {
                   void loadOrganizationData(state);
-                },
-                onDeleteTeam: (teamId) => {
-                  if (!window.confirm("确定要删除该团队吗？")) {
-                    return;
-                  }
-                  console.log("Delete team:", teamId);
+                } else if (activeTab === "permissions") {
                   void loadOrganizationData(state);
-                },
-                onAssignMember: (teamId, memberId) => {
-                  void state
-                    .client!.request("org.assign_to_team", {
-                      operatorId: "admin",
-                      agentId: memberId,
-                      teamId,
-                      role: "member",
-                    })
-                    .then(() => void loadOrganizationData(state))
-                    .catch((err: unknown) => console.error("Assign member failed:", err));
-                },
-                onConfigSandbox: (deptId) => {
-                  // 打开沙箱隔离配置弹窗
-                  const orgData = state.organizationData;
-                  const orgs: Array<{ id: string; name: string }> = orgData?.organizations || [];
-                  const found = orgs.find((o) => o.id === deptId);
-                  state.editingSandbox = {
-                    deptId,
-                    deptName: found?.name || deptId,
-                    loading: false,
-                    saving: false,
-                    error: null,
-                    config: { ...DEFAULT_SANDBOX_FORM },
-                    summary: null,
-                  };
-                  // 异步加载沙箱摘要
-                  void loadSandboxSummary(state, deptId);
-                },
-                // 权限配置回调
-                onSelectOrgForPermission: (orgId) => {
-                  console.log("Select org for permission:", orgId);
-                },
-                onSelectRole: (roleId) => {
-                  console.log("Select role:", roleId);
-                },
-                onPermissionChange: (target, permission, granted) => {
-                  // 更新单个权限项：将变更暂存到 state，等用户点击保存时批量提交
-                  state.pendingPermissionChanges.push({ target, permission, granted });
-                  console.log("Permission change queued:", target, permission, granted);
-                },
-                onSavePermissions: () => {
-                  // 将暂存的权限变更批量提交到服务器
-                  const pending = state.pendingPermissionChanges;
-                  if (!pending || pending.length === 0) {
-                    return;
-                  }
-                  const agentIds = [...new Set(pending.map((p) => p.target))];
-                  void Promise.all(
-                    agentIds.map(async (agentId) => {
-                      const changes = pending.filter((p) => p.target === agentId);
-                      // 获取当前权限配置
-                      const current = await state.client!.request("permission.get", { agentId });
-                      const perms = current?.permissions || {};
-                      for (const change of changes) {
-                        if (change.granted) {
-                          perms[change.permission] = true;
-                        } else {
-                          delete perms[change.permission];
-                        }
+                } else if (activeTab === "approvals") {
+                  void loadApprovals(state);
+                  void loadApprovalStats(state);
+                } else if (activeTab === "system") {
+                  void loadSuperAdmins(state);
+                }
+              },
+              onTabChange: (tab) => {
+                state.orgPermActiveTab = tab;
+                if (tab === "organization") {
+                  void loadOrganizationData(state);
+                } else if (tab === "permissions") {
+                  void loadOrganizationData(state);
+                } else if (tab === "approvals") {
+                  void loadApprovals(state);
+                  void loadApprovalStats(state);
+                } else if (tab === "system") {
+                  void loadSuperAdmins(state);
+                }
+              },
+              // 组织架构回调
+              onSelectNode: (nodeId) => {
+                state.organizationChartSelectedNode = nodeId;
+              },
+              onViewModeChange: (mode) => {
+                state.organizationChartViewMode = mode;
+              },
+              onCreateOrganization: () => {
+                // 打开创建部门对话框
+                state.editingOrganization = {
+                  mode: "create",
+                  isDepartment: true,
+                  organization: { name: "", description: "", parentId: "" },
+                  sandboxConfig: { ...DEFAULT_SANDBOX_FORM },
+                };
+                state.organizationsError = null;
+              },
+              onEditOrganization: (orgId) => {
+                // 找到当前部门数据并打开编辑对话框
+                const orgData = state.organizationData;
+                const orgs: Array<{
+                  id: string;
+                  name: string;
+                  description?: string;
+                  parentId?: string;
+                  sandboxEnabled?: boolean;
+                }> = orgData?.organizations || [];
+                const found = orgs.find((o) => o.id === orgId);
+                state.editingOrganization = {
+                  mode: "edit",
+                  isDepartment: true,
+                  organization: {
+                    id: orgId,
+                    name: found?.name || "",
+                    description: found?.description || "",
+                    parentId: found?.parentId || "",
+                  },
+                  sandboxConfig: { ...DEFAULT_SANDBOX_FORM },
+                };
+                state.organizationsError = null;
+              },
+              onDeleteOrganization: (orgId) => {
+                if (!window.confirm("确定要删除该组织/部门吗？")) {
+                  return;
+                }
+                void state
+                  .client!.request("org.department.delete", {
+                    operatorId: "admin",
+                    id: orgId,
+                  })
+                  .then(() => void loadOrganizationData(state))
+                  .catch((err: unknown) => console.error("Delete organization failed:", err));
+              },
+              onCreateTeam: () => {
+                const name = window.prompt("请输入团队名称");
+                if (!name) {
+                  return;
+                }
+                void state
+                  .client!.request("org.team.create", {
+                    creatorId: "admin",
+                    name,
+                  })
+                  .then(() => void loadOrganizationData(state))
+                  .catch((err: unknown) => console.error("Create team failed:", err));
+              },
+              onEditTeam: (teamId) => {
+                console.log("Edit team:", teamId);
+                void loadOrganizationData(state);
+              },
+              onDeleteTeam: (teamId) => {
+                if (!window.confirm("确定要删除该团队吗？")) {
+                  return;
+                }
+                console.log("Delete team:", teamId);
+                void loadOrganizationData(state);
+              },
+              onAssignMember: (teamId, memberId) => {
+                void state
+                  .client!.request("org.assign_to_team", {
+                    operatorId: "admin",
+                    agentId: memberId,
+                    teamId,
+                    role: "member",
+                  })
+                  .then(() => void loadOrganizationData(state))
+                  .catch((err: unknown) => console.error("Assign member failed:", err));
+              },
+              onConfigSandbox: (deptId) => {
+                // 打开沙箱隔离配置弹窗
+                const orgData = state.organizationData;
+                const orgs: Array<{ id: string; name: string }> = orgData?.organizations || [];
+                const found = orgs.find((o) => o.id === deptId);
+                state.editingSandbox = {
+                  deptId,
+                  deptName: found?.name || deptId,
+                  loading: false,
+                  saving: false,
+                  error: null,
+                  config: { ...DEFAULT_SANDBOX_FORM },
+                  summary: null,
+                };
+                // 异步加载沙箱摘要
+                void loadSandboxSummary(state, deptId);
+              },
+              // 权限配置回调
+              onSelectOrgForPermission: (orgId) => {
+                console.log("Select org for permission:", orgId);
+              },
+              onSelectRole: (roleId) => {
+                console.log("Select role:", roleId);
+              },
+              onPermissionChange: (target, permission, granted) => {
+                // 更新单个权限项：将变更暂存到 state，等用户点击保存时批量提交
+                state.pendingPermissionChanges.push({ target, permission, granted });
+                console.log("Permission change queued:", target, permission, granted);
+              },
+              onSavePermissions: () => {
+                // 将暂存的权限变更批量提交到服务器
+                const pending = state.pendingPermissionChanges;
+                if (!pending || pending.length === 0) {
+                  return;
+                }
+                const agentIds = [...new Set(pending.map((p) => p.target))];
+                void Promise.all(
+                  agentIds.map(async (agentId) => {
+                    const changes = pending.filter((p) => p.target === agentId);
+                    // 获取当前权限配置
+                    const current = await state.client!.request("permission.get", { agentId });
+                    const perms = current?.permissions || {};
+                    for (const change of changes) {
+                      if (change.granted) {
+                        perms[change.permission] = true;
+                      } else {
+                        delete perms[change.permission];
                       }
-                      await state.client!.request("permission.set", {
-                        agentId,
-                        permissions: perms,
-                      });
-                    }),
-                  )
-                    .then(() => {
-                      state.pendingPermissionChanges = [];
-                      void loadOrganizationData(state);
-                    })
-                    .catch((err: unknown) => console.error("Save permissions failed:", err));
-                },
-                onCreateRole: () => console.log("Create role"),
-                onEditRole: (roleId) => console.log("Edit role:", roleId),
-                onDeleteRole: (roleId) => console.log("Delete role:", roleId),
-                onCreateTemplate: () => console.log("Create template"),
-                onApplyTemplate: (templateId, target) =>
-                  console.log("Apply template:", templateId, target),
-                // 审批管理回调
-                onApprovalAction: async (requestId, action, comment) => {
-                  try {
-                    const approvalAction: "approve" | "reject" =
-                      action === "deny" ? "reject" : "approve";
-                    await respondToApproval(state, requestId, "admin", approvalAction, comment);
-                  } catch (err) {
-                    console.error("Failed to respond to approval:", err);
-                  }
-                },
-                onBatchApprove: (requestIds, comment) =>
-                  console.log("Batch approve:", requestIds, comment),
-                onBatchDeny: (requestIds, reason) => console.log("Batch deny:", requestIds, reason),
-                onFilterChange: (filter) => console.log("Filter change:", filter),
-                onSelectApproval: (requestId, selected) =>
-                  console.log("Select approval:", requestId, selected),
-                onSelectAllApprovals: () => console.log("Select all approvals"),
-                onDeselectAllApprovals: () => console.log("Deselect all approvals"),
-                onShowApprovalDetail: (request) => console.log("Show approval detail:", request),
-                // 系统管理回调
-                onCreateAdmin: () => console.log("Create admin"),
-                onEditAdmin: (adminId) => console.log("Edit admin:", adminId),
-                onActivateAdmin: (adminId) => console.log("Activate admin:", adminId),
-                onDeactivateAdmin: (adminId) => console.log("Deactivate admin:", adminId),
-                onCreateSystemRole: () => console.log("Create system role"),
-                onEditSystemRole: (roleId) => console.log("Edit system role:", roleId),
-                onDeleteSystemRole: (roleId) => console.log("Delete system role:", roleId),
-              })
-            : nothing
-        }
-
+                    }
+                    await state.client!.request("permission.set", {
+                      agentId,
+                      permissions: perms,
+                    });
+                  }),
+                )
+                  .then(() => {
+                    state.pendingPermissionChanges = [];
+                    void loadOrganizationData(state);
+                  })
+                  .catch((err: unknown) => console.error("Save permissions failed:", err));
+              },
+              onCreateRole: () => console.log("Create role"),
+              onEditRole: (roleId) => console.log("Edit role:", roleId),
+              onDeleteRole: (roleId) => console.log("Delete role:", roleId),
+              onCreateTemplate: () => console.log("Create template"),
+              onApplyTemplate: (templateId, target) =>
+                console.log("Apply template:", templateId, target),
+              // 审批管理回调
+              onApprovalAction: async (requestId, action, comment) => {
+                try {
+                  const approvalAction: "approve" | "reject" =
+                    action === "deny" ? "reject" : "approve";
+                  await respondToApproval(state, requestId, "admin", approvalAction, comment);
+                } catch (err) {
+                  console.error("Failed to respond to approval:", err);
+                }
+              },
+              onBatchApprove: (requestIds, comment) =>
+                console.log("Batch approve:", requestIds, comment),
+              onBatchDeny: (requestIds, reason) => console.log("Batch deny:", requestIds, reason),
+              onFilterChange: (filter) => console.log("Filter change:", filter),
+              onSelectApproval: (requestId, selected) =>
+                console.log("Select approval:", requestId, selected),
+              onSelectAllApprovals: () => console.log("Select all approvals"),
+              onDeselectAllApprovals: () => console.log("Deselect all approvals"),
+              onShowApprovalDetail: (request) => console.log("Show approval detail:", request),
+              // 系统管理回调
+              onCreateAdmin: () => console.log("Create admin"),
+              onEditAdmin: (adminId) => console.log("Edit admin:", adminId),
+              onActivateAdmin: (adminId) => console.log("Activate admin:", adminId),
+              onDeactivateAdmin: (adminId) => console.log("Deactivate admin:", adminId),
+              onCreateSystemRole: () => console.log("Create system role"),
+              onEditSystemRole: (roleId) => console.log("Edit system role:", roleId),
+              onDeleteSystemRole: (roleId) => console.log("Delete system role:", roleId),
+            })
+          : nothing}
       </main>
-      ${renderExecApprovalPrompt(state)}
-      ${renderGatewayUrlConfirmation(state)}
+      ${renderExecApprovalPrompt(state)} ${renderGatewayUrlConfirmation(state)}
       ${renderChannelPolicyDialog(state)}
 
       <!-- 组织创建/编辑对话框 -->
-      ${
-        state.editingOrganization
-          ? renderOrganizationDialog({
-              isOpen: true,
-              mode: state.editingOrganization.mode,
-              isDepartment: state.editingOrganization.isDepartment,
-              organization: state.editingOrganization.organization,
-              organizations: (state.organizationData?.organizations || []).map(
-                (o: { id: string; name: string; level: number }) => ({
-                  id: o.id,
-                  name: o.name,
-                  level: o.level,
-                }),
-              ),
-              saving: state.organizationsSaving,
-              error: state.organizationsError,
-              sandboxConfig: state.editingOrganization.sandboxConfig,
-              onSave: (org) => {
-                if (state.editingOrganization?.mode === "create") {
-                  void createOrganization(
-                    state,
-                    org as { name: string; description: string; parentId: string },
-                    state.editingOrganization.sandboxConfig,
-                  );
-                } else {
-                  void updateOrganization(
-                    state,
-                    org as { id: string; name: string; description: string; parentId: string },
-                  );
-                }
-              },
-              onCancel: () => {
-                state.editingOrganization = null;
-                state.organizationsError = null;
-              },
-              onChange: (field, value) => {
-                if (state.editingOrganization) {
-                  (state.editingOrganization.organization as Record<string, string>)[field] = value;
-                }
-              },
-              onSandboxChange: (field, value) => {
-                if (state.editingOrganization) {
-                  (state.editingOrganization.sandboxConfig as Record<string, unknown>)[field] =
-                    value;
-                }
-              },
-            })
-          : nothing
-      }
+      ${state.editingOrganization
+        ? renderOrganizationDialog({
+            isOpen: true,
+            mode: state.editingOrganization.mode,
+            isDepartment: state.editingOrganization.isDepartment,
+            organization: state.editingOrganization.organization,
+            organizations: (state.organizationData?.organizations || []).map(
+              (o: { id: string; name: string; level: number }) => ({
+                id: o.id,
+                name: o.name,
+                level: o.level,
+              }),
+            ),
+            saving: state.organizationsSaving,
+            error: state.organizationsError,
+            sandboxConfig: state.editingOrganization.sandboxConfig,
+            onSave: (org) => {
+              if (state.editingOrganization?.mode === "create") {
+                void createOrganization(
+                  state,
+                  org as { name: string; description: string; parentId: string },
+                  state.editingOrganization.sandboxConfig,
+                );
+              } else {
+                void updateOrganization(
+                  state,
+                  org as { id: string; name: string; description: string; parentId: string },
+                );
+              }
+            },
+            onCancel: () => {
+              state.editingOrganization = null;
+              state.organizationsError = null;
+            },
+            onChange: (field, value) => {
+              if (state.editingOrganization) {
+                (state.editingOrganization.organization as Record<string, string>)[field] = value;
+              }
+            },
+            onSandboxChange: (field, value) => {
+              if (state.editingOrganization) {
+                (state.editingOrganization.sandboxConfig as Record<string, unknown>)[field] = value;
+              }
+            },
+          })
+        : nothing}
 
       <!-- 部门沙箱隔离配置弹窗 -->
-      ${
-        state.editingSandbox
-          ? renderOrganizationDialog({
-              isOpen: true,
-              mode: "edit",
-              isDepartment: true,
-              organization: {
-                id: state.editingSandbox.deptId,
-                name: state.editingSandbox.deptName,
-                description: "",
-                parentId: "",
-              },
-              organizations: (state.organizationData?.organizations || []).map(
-                (o: { id: string; name: string; level: number }) => ({
-                  id: o.id,
-                  name: o.name,
-                  level: o.level,
-                }),
-              ),
-              saving: state.editingSandbox.saving,
-              error: state.editingSandbox.error,
-              sandboxConfig: state.editingSandbox.config,
-              onSave: () => {
-                if (state.editingSandbox) {
-                  void saveSandboxConfig(
-                    state,
-                    state.editingSandbox.deptId,
-                    state.editingSandbox.config,
-                  );
-                }
-              },
-              onCancel: () => {
-                state.editingSandbox = null;
-              },
-              onChange: () => {
-                /* 沙箱弹窗不需要改名称 */
-              },
-              onSandboxChange: (field, value) => {
-                if (state.editingSandbox) {
-                  (state.editingSandbox.config as Record<string, unknown>)[field] = value;
-                }
-              },
-            })
-          : nothing
-      }
+      ${state.editingSandbox
+        ? renderOrganizationDialog({
+            isOpen: true,
+            mode: "edit",
+            isDepartment: true,
+            organization: {
+              id: state.editingSandbox.deptId,
+              name: state.editingSandbox.deptName,
+              description: "",
+              parentId: "",
+            },
+            organizations: (state.organizationData?.organizations || []).map(
+              (o: { id: string; name: string; level: number }) => ({
+                id: o.id,
+                name: o.name,
+                level: o.level,
+              }),
+            ),
+            saving: state.editingSandbox.saving,
+            error: state.editingSandbox.error,
+            sandboxConfig: state.editingSandbox.config,
+            onSave: () => {
+              if (state.editingSandbox) {
+                void saveSandboxConfig(
+                  state,
+                  state.editingSandbox.deptId,
+                  state.editingSandbox.config,
+                );
+              }
+            },
+            onCancel: () => {
+              state.editingSandbox = null;
+            },
+            onChange: () => {
+              /* 沙箱弹窗不需要改名称 */
+            },
+            onSandboxChange: (field, value) => {
+              if (state.editingSandbox) {
+                (state.editingSandbox.config as Record<string, unknown>)[field] = value;
+              }
+            },
+          })
+        : nothing}
     </div>
   `;
 }

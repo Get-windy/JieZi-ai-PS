@@ -360,13 +360,21 @@ export type ProjectsProps = {
   onStatusFilterChange: (filter: ProjectStatusFilter) => void;
   onRefresh: () => void;
   onSelectProject: (projectId: string) => void;
-  onSelectPanel: (panel: "list" | "config" | "members" | "progress" | "handoff" | "roadmap") => void;
+  onSelectPanel: (
+    panel: "list" | "config" | "members" | "progress" | "handoff" | "roadmap",
+  ) => void;
   /** 新增/更新战略目标 */
-  onUpsertObjective: (projectId: string, objective: Omit<ProjectObjective, "createdAt" | "updatedAt"> & { id?: string }) => void;
+  onUpsertObjective: (
+    projectId: string,
+    objective: Omit<ProjectObjective, "createdAt" | "updatedAt"> & { id?: string },
+  ) => void;
   /** 删除战略目标 */
   onDeleteObjective: (projectId: string, objectiveId: string) => void;
   /** 新增/更新时间轴里程碑 */
-  onUpsertMilestone: (projectId: string, milestone: Omit<ProjectMilestoneEntry, "createdAt" | "updatedAt"> & { id?: string }) => void;
+  onUpsertMilestone: (
+    projectId: string,
+    milestone: Omit<ProjectMilestoneEntry, "createdAt" | "updatedAt"> & { id?: string },
+  ) => void;
   /** 删除时间轴里程碑 */
   onDeleteMilestone: (projectId: string, milestoneId: string) => void;
   onCreateProject: () => void;
@@ -463,15 +471,28 @@ export type ProjectsProps = {
     deleteWorkspace: boolean;
     deleteTasks: boolean;
     deleteGroups: boolean;
+    /** 是否清理各 agent MEMORY.md 和项目 SHARED_MEMORY.md 中的项目记忆残留 */
+    purgeMemory: boolean;
   } | null;
   /** 打开删除确认 modal */
   onShowDeleteProjectConfirm: (projectId: string, projectName: string) => void;
   /** 关闭删除确认 modal */
   onHideDeleteProjectConfirm: () => void;
   /** 更改删除项目选项 */
-  onDeleteProjectOptionChange: (key: "deleteWorkspace" | "deleteTasks" | "deleteGroups", value: boolean) => void;
+  onDeleteProjectOptionChange: (
+    key: "deleteWorkspace" | "deleteTasks" | "deleteGroups" | "purgeMemory",
+    value: boolean,
+  ) => void;
   /** 确认删除项目（带选项） */
-  onDeleteProject: (projectId: string, opts: { deleteWorkspace: boolean; deleteTasks: boolean; deleteGroups: boolean }) => void;
+  onDeleteProject: (
+    projectId: string,
+    opts: {
+      deleteWorkspace: boolean;
+      deleteTasks: boolean;
+      deleteGroups: boolean;
+      purgeMemory: boolean;
+    },
+  ) => void;
 };
 
 export function renderProjects(props: ProjectsProps) {
@@ -501,138 +522,195 @@ export function renderProjects(props: ProjectsProps) {
       <!-- 项目列表主区域 -->
       <div style="flex:1; display:flex; gap:12px; min-height:0; overflow:hidden;">
         <!-- 左侧：筛选栏 + 卡片网格（选中项目时折叠为竖列） -->
-        <div style="
+        <div
+          style="
           display:flex; flex-direction:column;
-          ${selectedProject ? 'width:200px; flex-shrink:0;' : 'flex:1;'}
+          ${selectedProject ? "width:200px; flex-shrink:0;" : "flex:1;"}
           min-width:0; overflow:hidden; transition: width 0.2s ease;
-        ">
+        "
+        >
           <!-- 工具栏（未选中时显示，已选中时隐藏过滤条） -->
-          ${!selectedProject ? html`
-          <div class="card" style="padding:10px 14px; margin-bottom:10px; flex-shrink:0;">
-            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-              <!-- 状态筛选下拉 -->
-              <select
-                class="form-control"
-                style="width:auto; min-width:140px; font-size:13px;"
-                .value=${props.projectStatusFilter}
-                @change=${(e: Event) => {
-                  props.onStatusFilterChange(
-                    (e.target as HTMLSelectElement).value as ProjectStatusFilter,
-                  );
-                }}
-              >
-                ${STATUS_FILTER_OPTIONS.map(
-                  (opt) => html`
-                  <option value=${opt.value}>
-                    ${opt.label}${countByStatus(opt.value) > 0 ? ` (${countByStatus(opt.value)})` : ""}
-                  </option>
-                `,
-                )}
-              </select>
+          ${!selectedProject
+            ? html`
+                <div class="card" style="padding:10px 14px; margin-bottom:10px; flex-shrink:0;">
+                  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <!-- 状态筛选下拉 -->
+                    <select
+                      class="form-control"
+                      style="width:auto; min-width:140px; font-size:13px;"
+                      .value=${props.projectStatusFilter}
+                      @change=${(e: Event) => {
+                        props.onStatusFilterChange(
+                          (e.target as HTMLSelectElement).value as ProjectStatusFilter,
+                        );
+                      }}
+                    >
+                      ${STATUS_FILTER_OPTIONS.map(
+                        (opt) => html`
+                          <option value=${opt.value}>
+                            ${opt.label}${countByStatus(opt.value) > 0
+                              ? ` (${countByStatus(opt.value)})`
+                              : ""}
+                          </option>
+                        `,
+                      )}
+                    </select>
 
-              <!-- 状态快捷筛选 chips -->
-              <div style="display:flex; gap:4px; flex-wrap:wrap; flex:1;">
-                ${(
-                  [
-                    "all",
-                    "requirements",
-                    "design",
-                    "planning",
-                    "development",
-                    "active",
-                    "testing",
-                    "review",
-                    "dev_done",
-                    "operating",
-                    "maintenance",
-                    "paused",
-                  ] as ProjectStatusFilter[]
-                ).map((v) => {
-                  const cnt = countByStatus(v);
-                  if (v !== "all" && cnt === 0) {
-                    return nothing;
-                  }
-                  const meta = v === "all" ? null : PROJECT_STATUS_META[v];
-                  const isActive = props.projectStatusFilter === v;
-                  return html`
-                    <button
-                      style="
+                    <!-- 状态快捷筛选 chips -->
+                    <div style="display:flex; gap:4px; flex-wrap:wrap; flex:1;">
+                      ${(
+                        [
+                          "all",
+                          "requirements",
+                          "design",
+                          "planning",
+                          "development",
+                          "active",
+                          "testing",
+                          "review",
+                          "dev_done",
+                          "operating",
+                          "maintenance",
+                          "paused",
+                        ] as ProjectStatusFilter[]
+                      ).map((v) => {
+                        const cnt = countByStatus(v);
+                        if (v !== "all" && cnt === 0) {
+                          return nothing;
+                        }
+                        const meta = v === "all" ? null : PROJECT_STATUS_META[v];
+                        const isActive = props.projectStatusFilter === v;
+                        return html`
+                          <button
+                            style="
                         font-size:11px; padding:2px 8px; border-radius:12px; cursor:pointer;
-                        border: 1px solid ${isActive ? (meta?.color ?? "#2563eb") : "var(--border)"};
+                        border: 1px solid ${isActive
+                              ? (meta?.color ?? "#2563eb")
+                              : "var(--border)"};
                         background: ${isActive ? (meta?.bg ?? "#eff6ff") : "transparent"};
                         color: ${isActive ? (meta?.color ?? "#2563eb") : "var(--muted)"};
                         font-weight: ${isActive ? "600" : "400"};
                       "
-                      @click=${() => props.onStatusFilterChange(v)}
-                    >${v === "all" ? "📂 全部" : meta!.icon + " " + meta!.label} ${cnt > 0 ? `(${cnt})` : ""}</button>
-                  `;
-                })}
-              </div>
+                            @click=${() => props.onStatusFilterChange(v)}
+                          >
+                            ${v === "all" ? "📂 全部" : meta!.icon + " " + meta!.label}
+                            ${cnt > 0 ? `(${cnt})` : ""}
+                          </button>
+                        `;
+                      })}
+                    </div>
 
-              <div style="display:flex; gap:6px; margin-left:auto;">
-                <button class="btn btn--sm" ?disabled=${props.loading} @click=${props.onCreateProject}>
-                  + 新建项目
-                </button>
-                <button class="btn btn--sm" ?disabled=${props.loading} @click=${props.onRefresh}>
-                  ${props.loading ? "刷新中...🔄" : "刷新"}
-                </button>
-              </div>
-            </div>
-          </div>
-          ` : html`
-          <!-- 选中状态下的紧凑工具栏 -->
-          <div style="display:flex; gap:4px; margin-bottom:8px; flex-shrink:0;">
-            <button class="btn btn--sm" style="flex:1; font-size:11px;" ?disabled=${props.loading} @click=${props.onCreateProject}>新建</button>
-            <button class="btn btn--sm" style="font-size:11px;" ?disabled=${props.loading} @click=${props.onRefresh}>刷新</button>
-          </div>
-          `}
+                    <div style="display:flex; gap:6px; margin-left:auto;">
+                      <button
+                        class="btn btn--sm"
+                        ?disabled=${props.loading}
+                        @click=${props.onCreateProject}
+                      >
+                        + 新建项目
+                      </button>
+                      <button
+                        class="btn btn--sm"
+                        ?disabled=${props.loading}
+                        @click=${props.onRefresh}
+                      >
+                        ${props.loading ? "刷新中...🔄" : "刷新"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              `
+            : html`
+                <!-- 选中状态下的紧凑工具栏 -->
+                <div style="display:flex; gap:4px; margin-bottom:8px; flex-shrink:0;">
+                  <button
+                    class="btn btn--sm"
+                    style="flex:1; font-size:11px;"
+                    ?disabled=${props.loading}
+                    @click=${props.onCreateProject}
+                  >
+                    新建
+                  </button>
+                  <button
+                    class="btn btn--sm"
+                    style="font-size:11px;"
+                    ?disabled=${props.loading}
+                    @click=${props.onRefresh}
+                  >
+                    刷新
+                  </button>
+                </div>
+              `}
 
           <!-- 错误提示 -->
-          ${props.error ? html`<div class="callout danger" style="margin-bottom:10px;font-size:12px;">${props.error}</div>` : nothing}
+          ${props.error
+            ? html`<div class="callout danger" style="margin-bottom:10px;font-size:12px;">
+                ${props.error}
+              </div>`
+            : nothing}
 
           <!-- 卡片区 -->
           <div style="flex:1; overflow-y:auto; padding-right:2px;">
-            ${
-              filtered.length === 0
-                ? html`<div class="callout" style="text-align:center; padding:${selectedProject ? '12px 8px' : '40px 20px'};">
-                  <div style="font-size:${selectedProject ? '20px' : '32px'}; margin-bottom:8px;">📋</div>
-                  <div style="font-size:${selectedProject ? '11px' : '14px'}; color:var(--muted);">
-                    ${allProjects.length === 0 ? (selectedProject ? "暂无项目" : "暂无项目，点击「新建项目」创建第一个") : "该状态下暂无项目"}
+            ${filtered.length === 0
+              ? html`<div
+                  class="callout"
+                  style="text-align:center; padding:${selectedProject ? "12px 8px" : "40px 20px"};"
+                >
+                  <div style="font-size:${selectedProject ? "20px" : "32px"}; margin-bottom:8px;">
+                    📋
+                  </div>
+                  <div style="font-size:${selectedProject ? "11px" : "14px"}; color:var(--muted);">
+                    ${allProjects.length === 0
+                      ? selectedProject
+                        ? "暂无项目"
+                        : "暂无项目，点击「新建项目」创建第一个"
+                      : "该状态下暂无项目"}
                   </div>
                 </div>`
-                : selectedProject
-                  ? html`<div style="display:flex; flex-direction:column; gap:4px; padding-bottom:16px;">
-                    ${filtered.map((project) => renderProjectCardCompact(props, project, selectedId))}
+              : selectedProject
+                ? html`<div
+                    style="display:flex; flex-direction:column; gap:4px; padding-bottom:16px;"
+                  >
+                    ${filtered.map((project) =>
+                      renderProjectCardCompact(props, project, selectedId),
+                    )}
                   </div>`
-                  : html`<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; padding-bottom:16px;">
+                : html`<div
+                    style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; padding-bottom:16px;"
+                  >
                     ${filtered.map((project) => renderProjectCard(props, project, selectedId))}
-                  </div>`
-            }
+                  </div>`}
           </div>
         </div>
 
         <!-- 右侧：项目详情面板（选中时占满剩余空间） -->
-        ${
-          selectedProject
-            ? html`
-            <div class="card" style="flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden;">
-              <!-- 面板头部 -->
-              <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border); flex-shrink:0;">
-                <div style="font-weight:600; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                  ${selectedProject.name}
+        ${selectedProject
+          ? html`
+              <div
+                class="card"
+                style="flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden;"
+              >
+                <!-- 面板头部 -->
+                <div
+                  style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border); flex-shrink:0;"
+                >
+                  <div
+                    style="font-weight:600; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                  >
+                    ${selectedProject.name}
+                  </div>
+                  <button
+                    style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--muted);padding:2px 6px;line-height:1;"
+                    @click=${() => props.onSelectProject("")}
+                    title="关闭详情"
+                  >
+                    ×
+                  </button>
                 </div>
-                <button
-                  style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--muted);padding:2px 6px;line-height:1;"
-                  @click=${() => props.onSelectProject("")}
-                  title="关闭详情"
-                >×</button>
-              </div>
-              <!-- Tab 内容 -->
-              <div style="flex:1; overflow-y:auto; padding:12px 16px;">
-                ${renderProjectTabs(props.activePanel, props.onSelectPanel)}
-                <div style="margin-top:12px;">
-                  ${
-                    props.activePanel === "list"
+                <!-- Tab 内容 -->
+                <div style="flex:1; overflow-y:auto; padding:12px 16px;">
+                  ${renderProjectTabs(props.activePanel, props.onSelectPanel)}
+                  <div style="margin-top:12px;">
+                    ${props.activePanel === "list"
                       ? renderProjectOverview(props, selectedProject)
                       : props.activePanel === "config"
                         ? renderProjectConfig(props, selectedProject)
@@ -642,14 +720,12 @@ export function renderProjects(props: ProjectsProps) {
                             ? renderProjectRoadmap(props, selectedProject)
                             : props.activePanel === "handoff"
                               ? renderProjectHandoff(props, selectedProject)
-                              : renderProjectProgress(props, selectedProject)
-                  }
+                              : renderProjectProgress(props, selectedProject)}
+                  </div>
                 </div>
               </div>
-            </div>
-          `
-            : nothing
-        }
+            `
+          : nothing}
       </div>
     </div>
 
@@ -673,25 +749,29 @@ function renderCodeRootBanner(props: ProjectsProps) {
           class="form-control"
           style="flex: 1; min-width: 200px; max-width: 420px;"
           .value=${props.projectCodeRoot}
-          placeholder="例如 I:\\ 或 D:\\Projects\\（新项目业务空间将自动创建为 根目录\\<项目名>）"
+          placeholder="例如 I:\\ æ D:\\Projects\\ï¼æ°é¡¹ç®ä¸å¡ç©ºé´å°èªå¨åå»ºä¸º æ ¹ç®å½\\<é¡¹ç®å>ï¼"
           @input=${(e: InputEvent) => {
             props.onCodeRootChange((e.target as HTMLInputElement).value);
           }}
         />
-        ${
-          hasRoot
-            ? html`
-                <span class="chip" style="color: var(--success, #16a34a); border-color: var(--success, #16a34a)"
-                  >✓ 已设置</span
-                >
-              `
-            : html`
-                <span class="chip" style="color: var(--warning, #d97706); border-color: var(--warning, #d97706)"
-                  >⚠️ 未设置，AI 创建项目时将无法自动分配业务空间</span
-                >
-              `
-        }
-        <small style="color: var(--muted); font-size: 11px;">手动创建项目时可在对话框内继续指定业务空间路径</small>
+        ${hasRoot
+          ? html`
+              <span
+                class="chip"
+                style="color: var(--success, #16a34a); border-color: var(--success, #16a34a)"
+                >✓ 已设置</span
+              >
+            `
+          : html`
+              <span
+                class="chip"
+                style="color: var(--warning, #d97706); border-color: var(--warning, #d97706)"
+                >⚠️ 未设置，AI 创建项目时将无法自动分配业务空间</span
+              >
+            `}
+        <small style="color: var(--muted); font-size: 11px;"
+          >手动创建项目时可在对话框内继续指定业务空间路径</small
+        >
       </div>
     </div>
   `;
@@ -743,35 +823,50 @@ function renderProjectCard(
       <!-- 卡片主体 -->
       <div style="padding:12px 14px;">
         <!-- 第一行：状态 chip + 进度数字 -->
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-          <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; background:${meta.bg}; color:${meta.color};">
+        <div
+          style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;"
+        >
+          <span
+            style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; background:${meta.bg}; color:${meta.color};"
+          >
             ${meta.icon} ${meta.label}
           </span>
           <span style="font-size:13px; font-weight:700; color:${progressColor};">${progress}%</span>
         </div>
 
         <!-- 项目名称 -->
-        <div style="font-size:14px; font-weight:600; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+        <div
+          style="font-size:14px; font-weight:600; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+        >
           ${project.name}
         </div>
 
         <!-- 描述 -->
-        ${
-          project.description
-            ? html`<div style="font-size:12px; color:var(--muted); margin-bottom:8px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;">${project.description}</div>`
-            : nothing
-        }
+        ${project.description
+          ? html`<div
+              style="font-size:12px; color:var(--muted); margin-bottom:8px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;"
+            >
+              ${project.description}
+            </div>`
+          : nothing}
 
         <!-- 底部 meta -->
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:11px; color:var(--muted);">
+        <div
+          style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:11px; color:var(--muted);"
+        >
           ${totalTasks > 0 ? html`<span>📋 ${doneTasks}/${totalTasks} 任务</span>` : nothing}
-          ${project.groups?.length ? html`<span>👥 ${project.groups.length} 个群组</span>` : nothing}
-          ${
-            project.deadline
-              ? html`<span style="color:${isOverdue ? "#dc2626" : "inherit"}">${isOverdue ? "⚠️ 已超期" : "🗓️"} ${new Date(project.deadline).toLocaleDateString("zh-CN")}</span>`
-              : nothing
-          }
-          ${project.ownerId ? html`<span style="margin-left:auto;">👤 ${project.ownerId}</span>` : nothing}
+          ${project.groups?.length
+            ? html`<span>👥 ${project.groups.length} 个群组</span>`
+            : nothing}
+          ${project.deadline
+            ? html`<span style="color:${isOverdue ? "#dc2626" : "inherit"}"
+                >${isOverdue ? "⚠️ 已超期" : "🗓️"}
+                ${new Date(project.deadline).toLocaleDateString("zh-CN")}</span
+              >`
+            : nothing}
+          ${project.ownerId
+            ? html`<span style="margin-left:auto;">👤 ${project.ownerId}</span>`
+            : nothing}
         </div>
       </div>
     </div>
@@ -791,7 +886,13 @@ function renderProjectCardCompact(
   const sprints = project.sprints ?? project.milestones ?? [];
   const progress = sprints.length > 0 ? calcProjectProgress(sprints) : (project.progress ?? 0);
   const progressColor =
-    progress >= 100 ? "#2563eb" : progress >= 60 ? "#16a34a" : progress >= 30 ? "#d97706" : "#9ca3af";
+    progress >= 100
+      ? "#2563eb"
+      : progress >= 60
+        ? "#16a34a"
+        : progress >= 30
+          ? "#d97706"
+          : "#9ca3af";
   const isSelected = selectedId === project.projectId;
 
   return html`
@@ -813,10 +914,18 @@ function renderProjectCardCompact(
       <!-- 内容区 -->
       <div style="padding:8px 10px;">
         <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
-          <span style="font-size:10px; font-weight:600; padding:1px 6px; border-radius:8px; background:${meta.bg}; color:${meta.color}; flex-shrink:0;">
+          <span
+            style="font-size:10px; font-weight:600; padding:1px 6px; border-radius:8px; background:${meta.bg}; color:${meta.color}; flex-shrink:0;"
+          >
             ${meta.icon}
           </span>
-          <span style="font-size:12px; font-weight:${isSelected ? '700' : '500'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:${isSelected ? "var(--primary, #2563eb)" : "inherit"};">
+          <span
+            style="font-size:12px; font-weight:${isSelected
+              ? "700"
+              : "500"}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:${isSelected
+              ? "var(--primary, #2563eb)"
+              : "inherit"};"
+          >
             ${project.name}
           </span>
         </div>
@@ -861,7 +970,7 @@ function renderProjectOverview(props: ProjectsProps, project: ProjectInfo) {
   return html`
     <div class="project-overview">
       <h3>项目概况</h3>
-      
+
       <div class="info-grid">
         <div class="info-item">
           <label>项目 ID</label>
@@ -897,9 +1006,8 @@ function renderProjectOverview(props: ProjectsProps, project: ProjectInfo) {
         </div>
       </div>
 
-      ${
-        project.groups && project.groups.length > 0
-          ? html`
+      ${project.groups && project.groups.length > 0
+        ? html`
             <div style="margin-top: 24px;">
               <h4>关联的群组</h4>
               <div class="group-list">
@@ -920,16 +1028,12 @@ function renderProjectOverview(props: ProjectsProps, project: ProjectInfo) {
               </div>
             </div>
           `
-          : html`
-              <div class="callout info" style="margin-top: 24px">暂无关联群组</div>
-            `
-      }
+        : html` <div class="callout info" style="margin-top: 24px">暂无关联群组</div> `}
 
       <div style="margin-top: 24px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-        <button class="btn" @click=${() => props.onEditProject(project.projectId)}>
-          编辑项目
-        </button>
-        <button class="btn btn--primary" 
+        <button class="btn" @click=${() => props.onEditProject(project.projectId)}>编辑项目</button>
+        <button
+          class="btn btn--primary"
           ?disabled=${!project.workspacePath}
           @click=${() => project.workspacePath && props.onOpenWorkspace(project.workspacePath)}
         >
@@ -948,6 +1052,7 @@ function renderProjectOverview(props: ProjectsProps, project: ProjectInfo) {
       ${props.deleteProjectConfirm?.projectId === project.projectId
         ? renderDeleteProjectConfirmModal(props, project)
         : nothing}
+    </div>
   `;
 }
 
@@ -957,14 +1062,23 @@ function renderProjectOverview(props: ProjectsProps, project: ProjectInfo) {
 function renderDeleteProjectConfirmModal(props: ProjectsProps, project: ProjectInfo) {
   const confirm = props.deleteProjectConfirm!;
   return html`
-    <div style="
+    <div
+      style="
       position:fixed; inset:0; z-index:1000;
       background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center;
-    " @click=${(e: Event) => { if (e.target === e.currentTarget) {props.onHideDeleteProjectConfirm();} }}>
-      <div style="
+    "
+      @click=${(e: Event) => {
+        if (e.target === e.currentTarget) {
+          props.onHideDeleteProjectConfirm();
+        }
+      }}
+    >
+      <div
+        style="
         background:var(--surface, #fff); border-radius:12px; padding:28px 32px;
         min-width:380px; max-width:480px; box-shadow:0 8px 32px rgba(0,0,0,0.18);
-      ">
+      "
+      >
         <!-- 标题 -->
         <div style="font-size:18px; font-weight:700; margin-bottom:6px; color:#dc2626;">
           🗑️ 删除项目「${project.name}」
@@ -976,73 +1090,133 @@ function renderDeleteProjectConfirmModal(props: ProjectsProps, project: ProjectI
         <!-- 删除选项 -->
         <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:24px;">
           <!-- 工作空间 -->
-          <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;
+          <label
+            style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;
             padding:12px 14px; border-radius:8px;
-            border:1px solid ${confirm.deleteWorkspace ? '#fca5a5' : 'var(--border)'};
-            background:${confirm.deleteWorkspace ? '#fef2f2' : 'var(--surface-hover, #f9f9f9)'};
-          ">
-            <input type="checkbox"
+            border:1px solid ${confirm.deleteWorkspace ? "#fca5a5" : "var(--border)"};
+            background:${confirm.deleteWorkspace ? "#fef2f2" : "var(--surface-hover, #f9f9f9)"};
+          "
+          >
+            <input
+              type="checkbox"
               style="margin-top:2px; accent-color:#dc2626;"
               .checked=${confirm.deleteWorkspace}
-              @change=${(e: Event) => props.onDeleteProjectOptionChange("deleteWorkspace", (e.target as HTMLInputElement).checked)}
+              @change=${(e: Event) =>
+                props.onDeleteProjectOptionChange(
+                  "deleteWorkspace",
+                  (e.target as HTMLInputElement).checked,
+                )}
             />
             <div>
               <div style="font-weight:600; font-size:13px;">删除项目空间目录</div>
               <div style="font-size:12px; color:var(--muted); margin-top:2px;">
                 ${project.workspacePath
-                  ? html`<code style="font-size:11px; background:#f3f4f6; padding:1px 5px; border-radius:3px;">${project.workspacePath}</code>`
-                  : '未设置项目空间路径'}
+                  ? html`<code
+                      style="font-size:11px; background:#f3f4f6; padding:1px 5px; border-radius:3px;"
+                      >${project.workspacePath}</code
+                    >`
+                  : "未设置项目空间路径"}
               </div>
             </div>
           </label>
 
           <!-- Task 任务 -->
-          <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;
+          <label
+            style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;
             padding:12px 14px; border-radius:8px;
-            border:1px solid ${confirm.deleteTasks ? '#fca5a5' : 'var(--border)'};
-            background:${confirm.deleteTasks ? '#fef2f2' : 'var(--surface-hover, #f9f9f9)'};
-          ">
-            <input type="checkbox"
+            border:1px solid ${confirm.deleteTasks ? "#fca5a5" : "var(--border)"};
+            background:${confirm.deleteTasks ? "#fef2f2" : "var(--surface-hover, #f9f9f9)"};
+          "
+          >
+            <input
+              type="checkbox"
               style="margin-top:2px; accent-color:#dc2626;"
               .checked=${confirm.deleteTasks}
-              @change=${(e: Event) => props.onDeleteProjectOptionChange("deleteTasks", (e.target as HTMLInputElement).checked)}
+              @change=${(e: Event) =>
+                props.onDeleteProjectOptionChange(
+                  "deleteTasks",
+                  (e.target as HTMLInputElement).checked,
+                )}
             />
             <div>
               <div style="font-weight:600; font-size:13px;">删除 Task 系统任务</div>
-              <div style="font-size:12px; color:var(--muted); margin-top:2px;">将物理删除该项目下所有任务记录</div>
+              <div style="font-size:12px; color:var(--muted); margin-top:2px;">
+                将物理删除该项目下所有任务记录
+              </div>
             </div>
           </label>
 
           <!-- 群组 -->
-          <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;
+          <label
+            style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;
             padding:12px 14px; border-radius:8px;
-            border:1px solid ${confirm.deleteGroups ? '#fca5a5' : 'var(--border)'};
-            background:${confirm.deleteGroups ? '#fef2f2' : 'var(--surface-hover, #f9f9f9)'};
-          ">
-            <input type="checkbox"
+            border:1px solid ${confirm.deleteGroups ? "#fca5a5" : "var(--border)"};
+            background:${confirm.deleteGroups ? "#fef2f2" : "var(--surface-hover, #f9f9f9)"};
+          "
+          >
+            <input
+              type="checkbox"
               style="margin-top:2px; accent-color:#dc2626;"
               .checked=${confirm.deleteGroups}
-              @change=${(e: Event) => props.onDeleteProjectOptionChange("deleteGroups", (e.target as HTMLInputElement).checked)}
+              @change=${(e: Event) =>
+                props.onDeleteProjectOptionChange(
+                  "deleteGroups",
+                  (e.target as HTMLInputElement).checked,
+                )}
             />
             <div>
               <div style="font-weight:600; font-size:13px;">删除绑定群组</div>
-              <div style="font-size:12px; color:var(--muted); margin-top:2px;">删除该项目关联的所有群组</div>
+              <div style="font-size:12px; color:var(--muted); margin-top:2px;">
+                删除该项目关联的所有群组
+              </div>
+            </div>
+          </label>
+
+          <!-- 清理记忆 -->
+          <label
+            style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;
+            padding:12px 14px; border-radius:8px;
+            border:1px solid ${confirm.purgeMemory ? "#f97316" : "var(--border)"};
+            background:${confirm.purgeMemory ? "#fff7ed" : "var(--surface-hover, #f9f9f9)"};
+          "
+          >
+            <input
+              type="checkbox"
+              style="margin-top:2px; accent-color:#f97316;"
+              .checked=${confirm.purgeMemory}
+              @change=${(e: Event) =>
+                props.onDeleteProjectOptionChange(
+                  "purgeMemory",
+                  (e.target as HTMLInputElement).checked,
+                )}
+            />
+            <div>
+              <div style="font-weight:600; font-size:13px;">清除 Agent 记忆残留</div>
+              <div style="font-size:12px; color:var(--muted); margin-top:2px;">
+                自动扫描各 agent 的 MEMORY.md 和项目群组的 SHARED_MEMORY.md， 删除其中包含该项目 ID
+                的段落。 建议勾选，防止已删项目信息在记忆中残留导致 Agent 仍回复该项目内容。
+              </div>
             </div>
           </label>
         </div>
 
         <!-- 提示文字 -->
-        ${(!confirm.deleteWorkspace && !confirm.deleteTasks && !confirm.deleteGroups) ? html`
-          <div style="font-size:12px; color:#6b7280; background:#f9fafb; padding:8px 12px; border-radius:6px; margin-bottom:16px;">
-            ℹ️ 未选择任何内容，删除后项目将仅从列表移除，项目空间/任务/群组均保留。
-          </div>
-        ` : nothing}
+        ${!confirm.deleteWorkspace &&
+        !confirm.deleteTasks &&
+        !confirm.deleteGroups &&
+        !confirm.purgeMemory
+          ? html`
+              <div
+                style="font-size:12px; color:#6b7280; background:#f9fafb; padding:8px 12px; border-radius:6px; margin-bottom:16px;"
+              >
+                ℹ️ 未选择任何内容，删除后项目将仅从列表移除，项目空间/任务/群组均保留。
+              </div>
+            `
+          : nothing}
 
         <!-- 操作按鈕 -->
         <div style="display:flex; gap:10px; justify-content:flex-end;">
-          <button class="btn" @click=${() => props.onHideDeleteProjectConfirm()}>
-            取消
-          </button>
+          <button class="btn" @click=${() => props.onHideDeleteProjectConfirm()}>取消</button>
           <button
             class="btn btn--danger"
             style="background:#dc2626; color:#fff; border-color:#dc2626;"
@@ -1051,6 +1225,7 @@ function renderDeleteProjectConfirmModal(props: ProjectsProps, project: ProjectI
                 deleteWorkspace: confirm.deleteWorkspace,
                 deleteTasks: confirm.deleteTasks,
                 deleteGroups: confirm.deleteGroups,
+                purgeMemory: confirm.purgeMemory,
               });
               props.onHideDeleteProjectConfirm();
             }}
@@ -1066,23 +1241,18 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
   return html`
     <div class="project-config">
       <h3>项目配置</h3>
-      
+
       <div class="form-group">
         <label>项目 ID</label>
-        <input 
-          type="text" 
-          class="form-control" 
-          value="${project.projectId}"
-          disabled
-        />
+        <input type="text" class="form-control" value="${project.projectId}" disabled />
         <small>项目唯一标识符，创建后不可修改</small>
       </div>
 
       <div class="form-group">
         <label>项目名称</label>
-        <input 
-          type="text" 
-          class="form-control" 
+        <input
+          type="text"
+          class="form-control"
           value="${project.name}"
           @input=${(e: InputEvent) => {
             const target = e.target as HTMLInputElement;
@@ -1093,21 +1263,23 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
 
       <div class="form-group">
         <label>描述</label>
-        <textarea 
+        <textarea
           class="form-control"
           rows="3"
           @input=${(e: InputEvent) => {
             const target = e.target as HTMLTextAreaElement;
             props.onProjectFormChange("description", target.value);
           }}
-        >${project.description || ""}</textarea>
+        >
+${project.description || ""}</textarea
+        >
       </div>
 
       <div class="form-group">
         <label>项目空间路径</label>
-        <input 
-          type="text" 
-          class="form-control" 
+        <input
+          type="text"
+          class="form-control"
           value="${project.workspacePath || ""}"
           @input=${(e: InputEvent) => {
             const target = e.target as HTMLInputElement;
@@ -1119,9 +1291,9 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
 
       <div class="form-group">
         <label>业务空间路径</label>
-        <input 
-          type="text" 
-          class="form-control" 
+        <input
+          type="text"
+          class="form-control"
           value="${project.codeDir || ""}"
           @input=${(e: InputEvent) => {
             const target = e.target as HTMLInputElement;
@@ -1133,9 +1305,9 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
 
       <div class="form-group">
         <label>文档目录</label>
-        <input 
-          type="text" 
-          class="form-control" 
+        <input
+          type="text"
+          class="form-control"
           value="${project.docsDir || ""}"
           @input=${(e: InputEvent) => {
             const target = e.target as HTMLInputElement;
@@ -1146,9 +1318,9 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
 
       <div class="form-group">
         <label>测试目录</label>
-        <input 
-          type="text" 
-          class="form-control" 
+        <input
+          type="text"
+          class="form-control"
           value="${project.testsDir || ""}"
           @input=${(e: InputEvent) => {
             const target = e.target as HTMLInputElement;
@@ -1158,15 +1330,8 @@ function renderProjectConfig(props: ProjectsProps, project: ProjectInfo) {
       </div>
 
       <div style="margin-top: 24px; display: flex; gap: 8px;">
-        <button 
-          class="btn btn--primary" 
-          @click=${props.onSaveProject}
-        >
-          保存配置
-        </button>
-        <button class="btn" @click=${props.onCancelProjectEdit}>
-          取消
-        </button>
+        <button class="btn btn--primary" @click=${props.onSaveProject}>保存配置</button>
+        <button class="btn" @click=${props.onCancelProjectEdit}>取消</button>
       </div>
     </div>
   `;
@@ -1228,12 +1393,11 @@ function renderProjectMembers(props: ProjectsProps, project: ProjectInfo) {
       <!-- 当前成员列表 -->
       <div class="member-section">
         <h4>当前成员 (${currentMembers.length})</h4>
-        ${
-          currentMembers.length === 0
-            ? html`
-                <div class="muted" style="padding: 12px 0">暂无成员，请通过下方绑定项目群后添加</div>
-              `
-            : html`
+        ${currentMembers.length === 0
+          ? html`
+              <div class="muted" style="padding: 12px 0">暂无成员，请通过下方绑定项目群后添加</div>
+            `
+          : html`
               <div class="list" style="margin-top: 8px;">
                 ${currentMembers.map(
                   (m) => html`
@@ -1241,13 +1405,10 @@ function renderProjectMembers(props: ProjectsProps, project: ProjectInfo) {
                       <div style="flex: 1;">
                         <div class="list-title">${getAgentLabel(m.agentId)}</div>
                         <div class="list-sub mono" style="font-size: 11px;">${m.agentId}</div>
-                        <div class="chip-row" style="margin-top: 4px;">
-                          ${roleBadge(m.role)}
-                        </div>
+                        <div class="chip-row" style="margin-top: 4px;">${roleBadge(m.role)}</div>
                       </div>
-                      ${
-                        m.role !== "owner"
-                          ? html`
+                      ${m.role !== "owner"
+                        ? html`
                             <button
                               class="btn btn--sm btn--danger"
                               @click=${() => {
@@ -1259,77 +1420,81 @@ function renderProjectMembers(props: ProjectsProps, project: ProjectInfo) {
                               移除
                             </button>
                           `
-                          : nothing
-                      }
+                        : nothing}
                     </div>
                   `,
                 )}
               </div>
-            `
-        }
+            `}
       </div>
 
       <!-- 添加成员 -->
-      ${
-        primaryGroup
-          ? html`
-          <div class="member-section" style="margin-top: 24px;">
-            <h4>添加成员</h4>
-            <div class="form-group">
-              <div style="display: flex; gap: 8px; align-items: center;">
-                <select
-                  id="add-project-member-select-${project.projectId}"
-                  class="form-control"
-                  ?disabled=${availableAgents.length === 0}
-                >
-                  <option value="">
-                    ${availableAgents.length === 0 ? "无可添加的成员" : "选择要添加的成员..."}
-                  </option>
-                  ${availableAgents.map(
-                    (agent) => html`
-                      <option value="${agent.id}">
-                        ${agent.name ? `${agent.name} (${agent.id})` : agent.id}
-                      </option>
-                    `,
-                  )}
-                </select>
-                <button
-                  class="btn btn--sm btn--primary"
-                  ?disabled=${availableAgents.length === 0}
-                  @click=${() => {
-                    const sel = document.getElementById(
-                      `add-project-member-select-${project.projectId}`,
-                    ) as HTMLSelectElement | null;
-                    const agentId = sel?.value;
-                    if (agentId && primaryGroup) {
-                      props.onAddMember(primaryGroup.id, agentId, "member");
-                      if (sel) {
-                        sel.value = "";
+      ${primaryGroup
+        ? html`
+            <div class="member-section" style="margin-top: 24px;">
+              <h4>添加成员</h4>
+              <div class="form-group">
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <select
+                    id="add-project-member-select-${project.projectId}"
+                    class="form-control"
+                    ?disabled=${availableAgents.length === 0}
+                  >
+                    <option value="">
+                      ${availableAgents.length === 0 ? "无可添加的成员" : "选择要添加的成员..."}
+                    </option>
+                    ${availableAgents.map(
+                      (agent) => html`
+                        <option value="${agent.id}">
+                          ${agent.name ? `${agent.name} (${agent.id})` : agent.id}
+                        </option>
+                      `,
+                    )}
+                  </select>
+                  <button
+                    class="btn btn--sm btn--primary"
+                    ?disabled=${availableAgents.length === 0}
+                    @click=${() => {
+                      const sel = document.getElementById(
+                        `add-project-member-select-${project.projectId}`,
+                      ) as HTMLSelectElement | null;
+                      const agentId = sel?.value;
+                      if (agentId && primaryGroup) {
+                        props.onAddMember(primaryGroup.id, agentId, "member");
+                        if (sel) {
+                          sel.value = "";
+                        }
                       }
-                    }
-                  }}
-                >
-                  添加成员
-                </button>
+                    }}
+                  >
+                    添加成员
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        `
-          : html`
-              <div class="callout warn" style="margin-top: 16px">
-                该项目尚未绑定群组，请先在群组管理页将群组升级为项目群，或创建群组时指定项目 ID。
-              </div>
-            `
-      }
+          `
+        : html`
+            <div class="callout warn" style="margin-top: 16px">
+              该项目尚未绑定群组，请先在群组管理页将群组升级为项目群，或创建群组时指定项目 ID。
+            </div>
+          `}
 
       <!-- 更换负责人 -->
       <div style="margin-top: 24px;">
         <h4>项目负责人</h4>
         <div class="form-group">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="flex: 1; padding: 8px; background: var(--color-bg-secondary, #f5f5f5); border-radius: 4px;">
+            <span
+              style="flex: 1; padding: 8px; background: var(--color-bg-secondary, #f5f5f5); border-radius: 4px;"
+            >
               ${project.ownerId ? getAgentLabel(project.ownerId) : "未设置"}
-              ${project.ownerId ? html`<span class="mono" style="font-size: 11px; color: var(--color-muted); margin-left: 4px;">(${project.ownerId})</span>` : nothing}
+              ${project.ownerId
+                ? html`<span
+                    class="mono"
+                    style="font-size: 11px; color: var(--color-muted); margin-left: 4px;"
+                    >(${project.ownerId})</span
+                  >`
+                : nothing}
             </span>
             <button
               class="btn btn--sm btn--primary"
@@ -1467,7 +1632,6 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
 
   return html`
     <div class="project-progress">
-
       <!-- 项目概览头部 -->
       <div class="card" style="padding: 14px 16px; margin-bottom: 14px;">
         <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
@@ -1486,7 +1650,10 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
           >
             ${PROJECT_STATUS_CONFIG.map((s) => html`<option value=${s.value}>${s.label}</option>`)}
           </select>
-          <span class="chip" style="color:${currentStatus.color};border-color:${currentStatus.color};font-size:12px;">
+          <span
+            class="chip"
+            style="color:${currentStatus.color};border-color:${currentStatus.color};font-size:12px;"
+          >
             ${currentStatus.label}
           </span>
 
@@ -1503,16 +1670,20 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
               });
             }}
           />
-          ${
-            isOverdue
-              ? html`
-                  <span class="chip" style="color: #dc2626; border-color: #dc2626; font-size: 11px">⚠️ 已超期</span>
-                `
-              : nothing
-          }
+          ${isOverdue
+            ? html`
+                <span class="chip" style="color: #dc2626; border-color: #dc2626; font-size: 11px"
+                  >⚠️ 已超期</span
+                >
+              `
+            : nothing}
 
           <!-- 进度数字（由 Sprint 任务完成情况自动计算，不可手动修改） -->
-          <span style="margin-left:auto; font-size:20px; font-weight:700; color:${progressColor};" title="进度由 Sprint 任务自动计算">${computedProgress}%</span>
+          <span
+            style="margin-left:auto; font-size:20px; font-weight:700; color:${progressColor};"
+            title="进度由 Sprint 任务自动计算"
+            >${computedProgress}%</span
+          >
           <button
             class="btn btn--primary btn--sm"
             @click=${() =>
@@ -1525,145 +1696,180 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
                 acceptanceCriteria: project.acceptanceCriteria,
                 progressNotes: project.progressNotes,
               })}
-          >保存</button>
+          >
+            保存
+          </button>
         </div>
 
         <!-- 进度条 -->
         <div style="margin-top:10px;">
           <div style="height:8px; background:var(--border); border-radius:4px; overflow:hidden;">
-            <div style="height:100%; width:${computedProgress}%; background:${progressColor}; border-radius:4px; transition:width 0.4s;"></div>
+            <div
+              style="height:100%; width:${computedProgress}%; background:${progressColor}; border-radius:4px; transition:width 0.4s;"
+            ></div>
           </div>
-          <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:3px;">
-            <span>${sprints.length} 个 Sprint · ${sprints.flatMap((s) => s.tasks).length} 个任务 · ${completedSprints.length} 已完成 · <em>进度自动计算</em></span>
-            ${
-              project.progressUpdatedAt
-                ? html`<span>最后更新: ${new Date(project.progressUpdatedAt).toLocaleString("zh-CN")}</span>`
-                : nothing
-            }
+          <div
+            style="display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:3px;"
+          >
+            <span
+              >${sprints.length} 个 Sprint · ${sprints.flatMap((s) => s.tasks).length} 个任务 ·
+              ${completedSprints.length} 已完成 · <em>进度自动计算</em></span
+            >
+            ${project.progressUpdatedAt
+              ? html`<span
+                  >最后更新: ${new Date(project.progressUpdatedAt).toLocaleString("zh-CN")}</span
+                >`
+              : nothing}
           </div>
         </div>
 
         <!-- 速度统计（有完成 Sprint 时显示） -->
-        ${
-          completedSprints.length > 0
-            ? html`
-          <div style="display:flex; gap:16px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); flex-wrap:wrap;">
-            <div style="text-align:center;">
-              <div style="font-size:18px; font-weight:700; color:#2563eb;">${completedSprints.length}</div>
-              <div style="font-size:11px; color:var(--muted);">已完成 Sprint</div>
-            </div>
-            <div style="text-align:center;">
-              <div style="font-size:18px; font-weight:700; color:#16a34a;">${totalVelocity}</div>
-              <div style="font-size:11px; color:var(--muted);">累计速度 (SP)</div>
-            </div>
-            <div style="text-align:center;">
-              <div style="font-size:18px; font-weight:700; color:#d97706;">${avgVelocity}</div>
-              <div style="font-size:11px; color:var(--muted);">平均速度/Sprint</div>
-            </div>
-            ${
-              activeSprint
-                ? html`
-              <div style="text-align:center;">
-                <div style="font-size:18px; font-weight:700; color:#2563eb;">${calcSprintProgress(activeSprint)}%</div>
-                <div style="font-size:11px; color:var(--muted);">当前 Sprint</div>
+        ${completedSprints.length > 0
+          ? html`
+              <div
+                style="display:flex; gap:16px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); flex-wrap:wrap;"
+              >
+                <div style="text-align:center;">
+                  <div style="font-size:18px; font-weight:700; color:#2563eb;">
+                    ${completedSprints.length}
+                  </div>
+                  <div style="font-size:11px; color:var(--muted);">已完成 Sprint</div>
+                </div>
+                <div style="text-align:center;">
+                  <div style="font-size:18px; font-weight:700; color:#16a34a;">
+                    ${totalVelocity}
+                  </div>
+                  <div style="font-size:11px; color:var(--muted);">累计速度 (SP)</div>
+                </div>
+                <div style="text-align:center;">
+                  <div style="font-size:18px; font-weight:700; color:#d97706;">${avgVelocity}</div>
+                  <div style="font-size:11px; color:var(--muted);">平均速度/Sprint</div>
+                </div>
+                ${activeSprint
+                  ? html`
+                      <div style="text-align:center;">
+                        <div style="font-size:18px; font-weight:700; color:#2563eb;">
+                          ${calcSprintProgress(activeSprint)}%
+                        </div>
+                        <div style="font-size:11px; color:var(--muted);">当前 Sprint</div>
+                      </div>
+                    `
+                  : nothing}
               </div>
             `
-                : nothing
-            }
-          </div>
-        `
-            : nothing
-        }
+          : nothing}
       </div>
 
       <!-- Sprint 时间线概览 -->
-      ${
-        sprints.length > 0
-          ? html`
-        <div class="card" style="padding:12px 16px; margin-bottom:14px;">
-          <div style="font-size:12px; font-weight:600; margin-bottom:8px;">🗓️ Sprint 时间线</div>
-          <div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
-            ${sprints.map((sprint) => {
-              const spStatus = sprint.status ?? "planning";
-              const meta = SPRINT_STATUS_META[spStatus];
-              const sp = calcSprintProgress(sprint);
-              return html`
-                <div style="
+      ${sprints.length > 0
+        ? html`
+            <div class="card" style="padding:12px 16px; margin-bottom:14px;">
+              <div style="font-size:12px; font-weight:600; margin-bottom:8px;">
+                🗓️ Sprint 时间线
+              </div>
+              <div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
+                ${sprints.map((sprint) => {
+                  const spStatus = sprint.status ?? "planning";
+                  const meta = SPRINT_STATUS_META[spStatus];
+                  const sp = calcSprintProgress(sprint);
+                  return html`
+                    <div
+                      style="
                   display:flex; flex-direction:column; align-items:center;
                   background:${meta.bg}; border:1px solid ${meta.color}30;
                   border-radius:6px; padding:5px 8px; min-width:60px; max-width:90px;
                   font-size:11px;
-                ">
-                  <span style="font-size:14px;">${meta.icon}</span>
-                  <span style="font-weight:600; color:${meta.color}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; text-align:center;" title=${sprint.title}>${sprint.title}</span>
-                  <span style="color:var(--muted);">${sp}%</span>
-                  ${sprint.velocity !== undefined ? html`<span style="color:#16a34a; font-weight:600;">${sprint.velocity}SP</span>` : nothing}
-                </div>
-                ${
-                  sprints.indexOf(sprint) < sprints.length - 1
-                    ? html`
-                        <span style="color: var(--muted); font-size: 16px">→</span>
-                      `
-                    : nothing
-                }
-              `;
-            })}
-          </div>
-        </div>
-      `
-          : nothing
-      }
+                "
+                    >
+                      <span style="font-size:14px;">${meta.icon}</span>
+                      <span
+                        style="font-weight:600; color:${meta.color}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; text-align:center;"
+                        title=${sprint.title}
+                        >${sprint.title}</span
+                      >
+                      <span style="color:var(--muted);">${sp}%</span>
+                      ${sprint.velocity !== undefined
+                        ? html`<span style="color:#16a34a; font-weight:600;"
+                            >${sprint.velocity}SP</span
+                          >`
+                        : nothing}
+                    </div>
+                    ${sprints.indexOf(sprint) < sprints.length - 1
+                      ? html` <span style="color: var(--muted); font-size: 16px">→</span> `
+                      : nothing}
+                  `;
+                })}
+              </div>
+            </div>
+          `
+        : nothing}
 
       <!-- Sprint 列表 -->
       <div style="margin-bottom: 14px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+        <div
+          style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;"
+        >
           <strong style="font-size:13px;">🏎️ Sprints / 阶段（${sprints.length}）</strong>
-          <button class="btn btn--sm" @click=${() => {
-            const next = sprints.length + 1;
-            patchSprints([
-              ...sprints,
-              {
-                id: `sprint-${Date.now()}`,
-                title: `Sprint ${next}`,
-                order: next,
-                tasks: [],
-                status: "planning" as SprintStatus,
-              },
-            ]);
-          }}>+ 新建 Sprint</button>
+          <button
+            class="btn btn--sm"
+            @click=${() => {
+              const next = sprints.length + 1;
+              patchSprints([
+                ...sprints,
+                {
+                  id: `sprint-${Date.now()}`,
+                  title: `Sprint ${next}`,
+                  order: next,
+                  tasks: [],
+                  status: "planning" as SprintStatus,
+                },
+              ]);
+            }}
+          >
+            + 新建 Sprint
+          </button>
         </div>
 
-        ${
-          sprints.length === 0
-            ? html`
-                <div class="callout">暂无 Sprint，点击新建以为项目挂载迭代阶段</div>
-              `
-            : sprints.map((sprint, si) => {
-                const spStatus = sprint.status ?? "planning";
-                const spMeta = SPRINT_STATUS_META[spStatus];
-                const sp = calcSprintProgress(sprint);
-                const spColor =
-                  sp >= 100 ? "#2563eb" : sp >= 60 ? "#16a34a" : sp >= 30 ? "#d97706" : "#6b7280";
-                const doneCnt = sprint.tasks.filter((t) => t.status === "done").length;
-                const totalSP = sprint.tasks.reduce((s, t) => s + (t.storyPoints ?? 0), 0);
-                const doneSP = sprint.tasks
-                  .filter((t) => t.status === "done")
-                  .reduce((s, t) => s + (t.storyPoints ?? 0), 0);
-                const isCompleted = spStatus === "completed";
-                const isActive = spStatus === "active";
-                const isPlanning = spStatus === "planning" || !sprint.status;
-                return html`
-                <div class="card" style="padding:12px; margin-bottom:10px; border-left:3px solid ${spMeta.color}; opacity:${isCompleted ? "0.85" : "1"};">
+        ${sprints.length === 0
+          ? html` <div class="callout">暂无 Sprint，点击新建以为项目挂载迭代阶段</div> `
+          : sprints.map((sprint, si) => {
+              const spStatus = sprint.status ?? "planning";
+              const spMeta = SPRINT_STATUS_META[spStatus];
+              const sp = calcSprintProgress(sprint);
+              const spColor =
+                sp >= 100 ? "#2563eb" : sp >= 60 ? "#16a34a" : sp >= 30 ? "#d97706" : "#6b7280";
+              const doneCnt = sprint.tasks.filter((t) => t.status === "done").length;
+              const totalSP = sprint.tasks.reduce((s, t) => s + (t.storyPoints ?? 0), 0);
+              const doneSP = sprint.tasks
+                .filter((t) => t.status === "done")
+                .reduce((s, t) => s + (t.storyPoints ?? 0), 0);
+              const isCompleted = spStatus === "completed";
+              const isActive = spStatus === "active";
+              const isPlanning = spStatus === "planning" || !sprint.status;
+              return html`
+                <div
+                  class="card"
+                  style="padding:12px; margin-bottom:10px; border-left:3px solid ${spMeta.color}; opacity:${isCompleted
+                    ? "0.85"
+                    : "1"};"
+                >
                   <!-- Sprint 头部 -->
-                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+                  <div
+                    style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;"
+                  >
                     <!-- 状态标签 -->
-                    <span style="
+                    <span
+                      style="
                       font-size:11px; font-weight:600; padding:2px 7px; border-radius:10px;
                       background:${spMeta.bg}; color:${spMeta.color}; border:1px solid ${spMeta.color}40;
                       flex-shrink:0;
-                    ">${spMeta.icon} ${spMeta.label}</span>
+                    "
+                      >${spMeta.icon} ${spMeta.label}</span
+                    >
 
-                    <span style="font-size:11px; color:var(--muted); flex-shrink:0;">S${sprint.order}</span>
+                    <span style="font-size:11px; color:var(--muted); flex-shrink:0;"
+                      >S${sprint.order}</span
+                    >
                     <input
                       type="text"
                       class="form-control"
@@ -1679,62 +1885,74 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
                       }}
                     />
                     <!-- 操作按钮 -->
-                    ${
-                      isPlanning
-                        ? html`
-                      <button
-                        class="btn btn--sm"
-                        style="background:#eff6ff;color:#2563eb;border-color:#2563eb40;font-size:11px;padding:2px 8px;flex-shrink:0;"
-                        @click=${() => props.onStartSprint(project.projectId, sprint.id)}
-                      >▶ 开始</button>
-                    `
-                        : nothing
-                    }
-                    ${
-                      isActive
-                        ? html`
-                      <button
-                        class="btn btn--sm"
-                        style="background:#f0fdf4;color:#16a34a;border-color:#16a34a40;font-size:11px;padding:2px 8px;flex-shrink:0;"
-                        @click=${() => {
-                          const unfinished = sprint.tasks.filter(
-                            (t) => t.status !== "done" && t.status !== "cancelled",
-                          );
-                          const action =
-                            unfinished.length > 0
-                              ? confirm(
-                                  `有 ${unfinished.length} 个未完成任务，移入下一 Sprint？\n\n确认=移入下一Sprint，取消=移入Backlog`,
-                                )
-                                ? "next_sprint"
-                                : "backlog"
-                              : "backlog";
-                          props.onCompleteSprint(project.projectId, sprint.id, action);
-                        }}
-                      >✅ 完成 Sprint</button>
-                    `
-                        : nothing
-                    }
-                    <span style="font-size:12px;font-weight:700;color:${spColor};min-width:36px;text-align:right;">${sp}%</span>
-                    ${
-                      !isCompleted
-                        ? html`
-                      <button class="btn btn--sm" style="color:#dc2626;padding:2px 6px;font-size:11px;flex-shrink:0;"
-                        @click=${() => {
-                          if (confirm(`删除 Sprint「${sprint.title}」及其所有任务？`)) {
-                            patchSprints(sprints.filter((_, i) => i !== si));
-                          }
-                        }}
-                      >删</button>
-                    `
-                        : nothing
-                    }
+                    ${isPlanning
+                      ? html`
+                          <button
+                            class="btn btn--sm"
+                            style="background:#eff6ff;color:#2563eb;border-color:#2563eb40;font-size:11px;padding:2px 8px;flex-shrink:0;"
+                            @click=${() => props.onStartSprint(project.projectId, sprint.id)}
+                          >
+                            ▶ 开始
+                          </button>
+                        `
+                      : nothing}
+                    ${isActive
+                      ? html`
+                          <button
+                            class="btn btn--sm"
+                            style="background:#f0fdf4;color:#16a34a;border-color:#16a34a40;font-size:11px;padding:2px 8px;flex-shrink:0;"
+                            @click=${() => {
+                              const unfinished = sprint.tasks.filter(
+                                (t) => t.status !== "done" && t.status !== "cancelled",
+                              );
+                              const action =
+                                unfinished.length > 0
+                                  ? confirm(
+                                      `有 ${unfinished.length} 个未完成任务，移入下一 Sprint？\n\n确认=移入下一Sprint，取消=移入Backlog`,
+                                    )
+                                    ? "next_sprint"
+                                    : "backlog"
+                                  : "backlog";
+                              props.onCompleteSprint(project.projectId, sprint.id, action);
+                            }}
+                          >
+                            ✅ 完成 Sprint
+                          </button>
+                        `
+                      : nothing}
+                    <span
+                      style="font-size:12px;font-weight:700;color:${spColor};min-width:36px;text-align:right;"
+                      >${sp}%</span
+                    >
+                    ${!isCompleted
+                      ? html`
+                          <button
+                            class="btn btn--sm"
+                            style="color:#dc2626;padding:2px 6px;font-size:11px;flex-shrink:0;"
+                            @click=${() => {
+                              if (confirm(`删除 Sprint「${sprint.title}」及其所有任务？`)) {
+                                patchSprints(sprints.filter((_, i) => i !== si));
+                              }
+                            }}
+                          >
+                            删
+                          </button>
+                        `
+                      : nothing}
                   </div>
 
                   <!-- 日期行 -->
-                  <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap;">
+                  <div
+                    style="display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap;"
+                  >
                     <span style="font-size:11px;color:var(--muted);">周期:</span>
-                    <input type="date" class="form-control" style="width:130px; font-size:11px;"
-                      .value=${sprint.startDate ? new Date(sprint.startDate).toISOString().slice(0, 10) : ""}
+                    <input
+                      type="date"
+                      class="form-control"
+                      style="width:130px; font-size:11px;"
+                      .value=${sprint.startDate
+                        ? new Date(sprint.startDate).toISOString().slice(0, 10)
+                        : ""}
                       ?disabled=${isCompleted}
                       @change=${(e: Event) => {
                         const v = (e.target as HTMLInputElement).value;
@@ -1748,8 +1966,13 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
                       }}
                     />
                     <span style="font-size:11px;color:var(--muted)">→</span>
-                    <input type="date" class="form-control" style="width:130px; font-size:11px;"
-                      .value=${sprint.endDate ? new Date(sprint.endDate).toISOString().slice(0, 10) : ""}
+                    <input
+                      type="date"
+                      class="form-control"
+                      style="width:130px; font-size:11px;"
+                      .value=${sprint.endDate
+                        ? new Date(sprint.endDate).toISOString().slice(0, 10)
+                        : ""}
                       ?disabled=${isCompleted}
                       @change=${(e: Event) => {
                         const v = (e.target as HTMLInputElement).value;
@@ -1760,17 +1983,20 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
                         );
                       }}
                     />
-                    ${
-                      isCompleted && sprint.completedAt
-                        ? html`
-                      <span style="font-size:11px;color:#16a34a;">完成于 ${new Date(sprint.completedAt).toLocaleDateString("zh-CN")}</span>
-                    `
-                        : nothing
-                    }
+                    ${isCompleted && sprint.completedAt
+                      ? html`
+                          <span style="font-size:11px;color:#16a34a;"
+                            >完成于
+                            ${new Date(sprint.completedAt).toLocaleDateString("zh-CN")}</span
+                          >
+                        `
+                      : nothing}
                   </div>
 
                   <!-- Sprint 目标 -->
-                  <input type="text" class="form-control"
+                  <input
+                    type="text"
+                    class="form-control"
                     style="font-size:12px; margin-bottom:8px; color:var(--muted);"
                     .value=${sprint.goal ?? ""}
                     placeholder="Sprint 目标（可选）"
@@ -1785,259 +2011,342 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
                   />
 
                   <!-- Sprint 进度条 -->
-                  <div style="height:5px; background:var(--border); border-radius:3px; overflow:hidden; margin-bottom:6px;">
-                    <div style="height:100%; width:${sp}%; background:${spColor}; border-radius:3px; transition:width 0.3s;"></div>
+                  <div
+                    style="height:5px; background:var(--border); border-radius:3px; overflow:hidden; margin-bottom:6px;"
+                  >
+                    <div
+                      style="height:100%; width:${sp}%; background:${spColor}; border-radius:3px; transition:width 0.3s;"
+                    ></div>
                   </div>
-                  <div style="display:flex; justify-content:space-between; font-size:11px;color:var(--muted);margin-bottom:10px;">
-                    <span>${doneCnt}/${sprint.tasks.filter((t) => t.status !== "cancelled").length} 任务完成
-                    ${totalSP > 0 ? html` · ${doneSP}/${totalSP} SP` : nothing}</span>
-                    ${
-                      isCompleted && sprint.velocity !== undefined
-                        ? html`<span style="color:#16a34a;font-weight:600;">速度: ${sprint.velocity} SP ⚡</span>`
-                        : nothing
-                    }
+                  <div
+                    style="display:flex; justify-content:space-between; font-size:11px;color:var(--muted);margin-bottom:10px;"
+                  >
+                    <span
+                      >${doneCnt}/${sprint.tasks.filter((t) => t.status !== "cancelled").length}
+                      任务完成 ${totalSP > 0 ? html` · ${doneSP}/${totalSP} SP` : nothing}</span
+                    >
+                    ${isCompleted && sprint.velocity !== undefined
+                      ? html`<span style="color:#16a34a;font-weight:600;"
+                          >速度: ${sprint.velocity} SP ⚡</span
+                        >`
+                      : nothing}
                   </div>
 
                   <!-- 已完成 Sprint：回顾备注 -->
-                  ${
-                    isCompleted
-                      ? html`
-                    <div style="background:var(--card-bg-alt, #f9fafb); border-radius:6px; padding:8px; margin-bottom:8px; font-size:12px;">
-                      <div style="font-weight:600; margin-bottom:4px;">📝 Sprint 回顾</div>
-                      <textarea class="form-control" rows="2"
-                        placeholder="记录本次 Sprint 的经验教训、改进点…"
-                        style="font-size:12px;"
-                        .value=${sprint.retrospective ?? ""}
-                        @input=${(e: InputEvent) => {
-                          patchSprints(
-                            sprints.map((s, i) =>
-                              i === si
-                                ? { ...s, retrospective: (e.target as HTMLTextAreaElement).value }
-                                : s,
-                            ),
-                          );
-                        }}
-                      ></textarea>
-                    </div>
-                  `
-                      : nothing
-                  }
+                  ${isCompleted
+                    ? html`
+                        <div
+                          style="background:var(--card-bg-alt, #f9fafb); border-radius:6px; padding:8px; margin-bottom:8px; font-size:12px;"
+                        >
+                          <div style="font-weight:600; margin-bottom:4px;">📝 Sprint 回顾</div>
+                          <textarea
+                            class="form-control"
+                            rows="2"
+                            placeholder="记录本次 Sprint 的经验教训、改进点…"
+                            style="font-size:12px;"
+                            .value=${sprint.retrospective ?? ""}
+                            @input=${(e: InputEvent) => {
+                              patchSprints(
+                                sprints.map((s, i) =>
+                                  i === si
+                                    ? {
+                                        ...s,
+                                        retrospective: (e.target as HTMLTextAreaElement).value,
+                                      }
+                                    : s,
+                                ),
+                              );
+                            }}
+                          ></textarea>
+                        </div>
+                      `
+                    : nothing}
 
                   <!-- 看板（已完成 Sprint 折叠显示） -->
-                  ${
-                    !isCompleted
-                      ? html`
-                    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px;">
-                      ${KANBAN_COLUMNS.map((col) => {
-                        const colTasks = sprint.tasks.filter((t) => t.status === col.status);
-                        const cfg = TASK_STATUS_CONFIG[col.status];
-                        return html`
-                          <div style="background:${cfg.bg}; border:1px solid var(--border); border-radius:8px; padding:8px; min-height:80px;">
-                            <div style="font-size:11px; font-weight:600; color:${cfg.color}; margin-bottom:6px;">
-                              ${col.label} <span style="opacity:0.6;">(${colTasks.length})</span>
-                            </div>
-                            ${colTasks.map(
-                              (task) => html`
-                              <div style="background:var(--card-bg,#fff); border:1px solid var(--border); border-radius:6px; padding:6px 8px; margin-bottom:4px; font-size:12px;">
-                                <div style="display:flex; align-items:flex-start; gap:4px;">
-                                  <span style="color:${PRIORITY_CONFIG[task.priority].color}; flex-shrink:0;">${PRIORITY_CONFIG[task.priority].icon}</span>
-                                  <span style="flex:1; word-break:break-word;">${task.title}</span>
-                                </div>
-                                ${task.storyPoints ? html`<div style="font-size:10px;color:var(--muted);margin-top:2px;">SP: ${task.storyPoints}</div>` : nothing}
-                                <!-- 状态快捷切换 -->
-                                <select
-                                  style="font-size:10px; width:100%; margin-top:4px; border:1px solid var(--border); border-radius:4px; padding:1px 3px; background:transparent;"
-                                  .value=${task.status}
-                                  @change=${(e: Event) => {
-                                    const newStatus = (e.target as HTMLSelectElement)
-                                      .value as TaskStatus;
-                                    const updatedTask = {
-                                      ...task,
-                                      status: newStatus,
-                                      updatedAt: Date.now(),
-                                      completedAt: newStatus === "done" ? Date.now() : undefined,
-                                    };
-                                    patchSprints(
-                                      sprints.map((s, i) =>
-                                        i === si
-                                          ? {
-                                              ...s,
-                                              tasks: s.tasks.map((t) =>
-                                                t.id === task.id ? updatedTask : t,
-                                              ),
-                                            }
-                                          : s,
-                                      ),
-                                    );
-                                    // 同步写入 SQLite 单一数据源
-                                    props.onUpdateSprintTaskStatus(task.id, newStatus);
-                                  }}
+                  ${!isCompleted
+                    ? html`
+                        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px;">
+                          ${KANBAN_COLUMNS.map((col) => {
+                            const colTasks = sprint.tasks.filter((t) => t.status === col.status);
+                            const cfg = TASK_STATUS_CONFIG[col.status];
+                            return html`
+                              <div
+                                style="background:${cfg.bg}; border:1px solid var(--border); border-radius:8px; padding:8px; min-height:80px;"
+                              >
+                                <div
+                                  style="font-size:11px; font-weight:600; color:${cfg.color}; margin-bottom:6px;"
                                 >
-                                  ${Object.entries(TASK_STATUS_CONFIG).map(([v, c]) => html`<option value=${v}>${c.label}</option>`)}
-                                </select>
-                              </div>
-                            `,
-                            )}
-                            <!-- 内联添加任务 -->
-                            <div style="margin-top:4px;">
-                              <input
-                                type="text"
-                                placeholder="+ 添加任务…"
-                                style="width:100%; font-size:11px; border:1px dashed ${cfg.color}; border-radius:5px; padding:3px 6px; background:transparent; color:var(--text); outline:none; box-sizing:border-box;"
-                                @keydown=${(e: KeyboardEvent) => {
-                                  if (e.key !== "Enter") {
-                                    return;
-                                  }
-                                  const input = e.target as HTMLInputElement;
-                                  const title = input.value.trim();
-                                  if (!title) {
-                                    return;
-                                  }
-                                  // 先写快照（临时 id）展示任务卡片，再异步写入 SQLite
-                                  const tempId = `task-${Date.now()}`;
-                                  const newTask: ProjectTask = {
-                                    id: tempId,
-                                    title,
-                                    status: col.status,
-                                    priority: "medium",
-                                    createdAt: Date.now(),
-                                  };
-                                  const sprintsCopy = sprints.map((s, i) =>
-                                    i === si ? { ...s, tasks: [...s.tasks, newTask] } : s,
-                                  );
-                                  patchSprints(sprintsCopy);
-                                  input.value = "";
-                                  // 异步写入 SQLite，将真实任务 id 回写到快照
-                                  void props.onCreateSprintTask(project.projectId, sprint.id, title, col.status).then((res) => {
-                                    if (res?.taskId && res.taskId !== tempId) {
-                                      // 用真实 id 替换临时 id
-                                      patchSprints(
-                                        sprints.map((s, i) =>
-                                          i === si
-                                            ? { ...s, tasks: [...s.tasks.filter((t) => t.id !== tempId), { ...newTask, id: res.taskId }] }
-                                            : s
-                                        ),
+                                  ${col.label}
+                                  <span style="opacity:0.6;">(${colTasks.length})</span>
+                                </div>
+                                ${colTasks.map(
+                                  (task) => html`
+                                    <div
+                                      style="background:var(--card-bg,#fff); border:1px solid var(--border); border-radius:6px; padding:6px 8px; margin-bottom:4px; font-size:12px;"
+                                    >
+                                      <div style="display:flex; align-items:flex-start; gap:4px;">
+                                        <span
+                                          style="color:${PRIORITY_CONFIG[task.priority]
+                                            .color}; flex-shrink:0;"
+                                          >${PRIORITY_CONFIG[task.priority].icon}</span
+                                        >
+                                        <span style="flex:1; word-break:break-word;"
+                                          >${task.title}</span
+                                        >
+                                      </div>
+                                      ${task.storyPoints
+                                        ? html`<div
+                                            style="font-size:10px;color:var(--muted);margin-top:2px;"
+                                          >
+                                            SP: ${task.storyPoints}
+                                          </div>`
+                                        : nothing}
+                                      <!-- 状态快捷切换 -->
+                                      <select
+                                        style="font-size:10px; width:100%; margin-top:4px; border:1px solid var(--border); border-radius:4px; padding:1px 3px; background:transparent;"
+                                        .value=${task.status}
+                                        @change=${(e: Event) => {
+                                          const newStatus = (e.target as HTMLSelectElement)
+                                            .value as TaskStatus;
+                                          const updatedTask = {
+                                            ...task,
+                                            status: newStatus,
+                                            updatedAt: Date.now(),
+                                            completedAt:
+                                              newStatus === "done" ? Date.now() : undefined,
+                                          };
+                                          patchSprints(
+                                            sprints.map((s, i) =>
+                                              i === si
+                                                ? {
+                                                    ...s,
+                                                    tasks: s.tasks.map((t) =>
+                                                      t.id === task.id ? updatedTask : t,
+                                                    ),
+                                                  }
+                                                : s,
+                                            ),
+                                          );
+                                          // 同步写入 SQLite 单一数据源
+                                          props.onUpdateSprintTaskStatus(task.id, newStatus);
+                                        }}
+                                      >
+                                        ${Object.entries(TASK_STATUS_CONFIG).map(
+                                          ([v, c]) => html`<option value=${v}>${c.label}</option>`,
+                                        )}
+                                      </select>
+                                    </div>
+                                  `,
+                                )}
+                                <!-- 内联添加任务 -->
+                                <div style="margin-top:4px;">
+                                  <input
+                                    type="text"
+                                    placeholder="+ 添加任务…"
+                                    style="width:100%; font-size:11px; border:1px dashed ${cfg.color}; border-radius:5px; padding:3px 6px; background:transparent; color:var(--text); outline:none; box-sizing:border-box;"
+                                    @keydown=${(e: KeyboardEvent) => {
+                                      if (e.key !== "Enter") {
+                                        return;
+                                      }
+                                      const input = e.target as HTMLInputElement;
+                                      const title = input.value.trim();
+                                      if (!title) {
+                                        return;
+                                      }
+                                      // 先写快照（临时 id）展示任务卡片，再异步写入 SQLite
+                                      const tempId = `task-${Date.now()}`;
+                                      const newTask: ProjectTask = {
+                                        id: tempId,
+                                        title,
+                                        status: col.status,
+                                        priority: "medium",
+                                        createdAt: Date.now(),
+                                      };
+                                      const sprintsCopy = sprints.map((s, i) =>
+                                        i === si ? { ...s, tasks: [...s.tasks, newTask] } : s,
                                       );
-                                    }
-                                  });
-                                }}
-                              />
-                            </div>
-                          </div>
-                        `;
-                      })}
-                    </div>
-                  `
-                      : html`
-                    <!-- 已完成 Sprint：任务汇总 -->
-                    <details style="font-size:12px;">
-                      <summary style="cursor:pointer; color:var(--muted); user-select:none;">查看 ${sprint.tasks.length} 个任务记录 ▼</summary>
-                      <div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:4px;">
-                        ${sprint.tasks.map(
-                          (task) => html`
-                          <span style="
+                                      patchSprints(sprintsCopy);
+                                      input.value = "";
+                                      // 异步写入 SQLite，将真实任务 id 回写到快照
+                                      void props
+                                        .onCreateSprintTask(
+                                          project.projectId,
+                                          sprint.id,
+                                          title,
+                                          col.status,
+                                        )
+                                        .then((res) => {
+                                          if (res?.taskId && res.taskId !== tempId) {
+                                            // 用真实 id 替换临时 id
+                                            patchSprints(
+                                              sprints.map((s, i) =>
+                                                i === si
+                                                  ? {
+                                                      ...s,
+                                                      tasks: [
+                                                        ...s.tasks.filter((t) => t.id !== tempId),
+                                                        { ...newTask, id: res.taskId },
+                                                      ],
+                                                    }
+                                                  : s,
+                                              ),
+                                            );
+                                          }
+                                        });
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            `;
+                          })}
+                        </div>
+                      `
+                    : html`
+                        <!-- 已完成 Sprint：任务汇总 -->
+                        <details style="font-size:12px;">
+                          <summary style="cursor:pointer; color:var(--muted); user-select:none;">
+                            查看 ${sprint.tasks.length} 个任务记录 ▼
+                          </summary>
+                          <div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:4px;">
+                            ${sprint.tasks.map(
+                              (task) => html`
+                                <span
+                                  style="
                             font-size:11px; padding:2px 7px; border-radius:10px;
                             background:${TASK_STATUS_CONFIG[task.status]?.bg ?? "#f3f4f6"};
                             color:${TASK_STATUS_CONFIG[task.status]?.color ?? "#6b7280"};
-                          ">${task.title}${task.storyPoints ? ` (${task.storyPoints}SP)` : ""}</span>
-                        `,
-                        )}
-                      </div>
-                    </details>
-                  `
-                  }
+                          "
+                                  >${task.title}${task.storyPoints
+                                    ? ` (${task.storyPoints}SP)`
+                                    : ""}</span
+                                >
+                              `,
+                            )}
+                          </div>
+                        </details>
+                      `}
                 </div>
               `;
-              })
-        }
+            })}
       </div>
 
       <!-- Backlog -->
       <div class="card" style="padding:12px; margin-bottom:14px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+        <div
+          style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;"
+        >
           <strong style="font-size:13px;">📥 Backlog（${backlog.length}）</strong>
-          <button class="btn btn--sm" @click=${() => {
-            const title = prompt("新建 Backlog 任务标题");
-            if (!title?.trim()) {
-              return;
-            }
-            const tempId = `task-${Date.now()}`;
-            const t: ProjectTask = {
-              id: tempId,
-              title: title.trim(),
-              status: "backlog",
-              priority: "none",
-              createdAt: Date.now(),
-            };
-            patchBacklog([...backlog, t]);
-            // 异步写入 SQLite
-            void props.onCreateSprintTask(project.projectId, null, title.trim(), "todo").then((res) => {
-              if (res?.taskId && res.taskId !== tempId) {
-                patchBacklog([...backlog.filter((b) => b.id !== tempId), { ...t, id: res.taskId }]);
+          <button
+            class="btn btn--sm"
+            @click=${() => {
+              const title = prompt("新建 Backlog 任务标题");
+              if (!title?.trim()) {
+                return;
               }
-            });
-          }}>+ 添加</button>
-        </div>
-        ${
-          backlog.length === 0
-            ? html`
-                <div style="font-size: 12px; color: var(--muted)">暫无 Backlog 任务，点击添加待规划任务</div>
-              `
-            : backlog.map(
-                (task, bi) => html`
-            <div style="display:flex; align-items:center; gap:6px; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px;">
-              <span style="color:${PRIORITY_CONFIG[task.priority].color};">${PRIORITY_CONFIG[task.priority].icon}</span>
-              <span style="flex:1;">${task.title}</span>
-              <select
-                style="font-size:11px;border:1px solid var(--border);border-radius:3px;padding:1px 3px;"
-                .value=${task.priority}
-                @change=${(e: Event) => {
-                  patchBacklog(
-                    backlog.map((t, i) =>
-                      i === bi
-                        ? { ...t, priority: (e.target as HTMLSelectElement).value as TaskPriority }
-                        : t,
-                    ),
-                  );
-                }}
-              >
-                ${Object.entries(PRIORITY_CONFIG).map(([v, c]) => html`<option value=${v}>${c.icon} ${c.label}</option>`)}
-              </select>
-              <select
-                style="font-size:11px;border:1px solid var(--border);border-radius:3px;padding:1px 3px;"
-                @change=${(e: Event) => {
-                  const targetSprint = (e.target as HTMLSelectElement).value;
-                  if (!targetSprint) {
-                    return;
+              const tempId = `task-${Date.now()}`;
+              const t: ProjectTask = {
+                id: tempId,
+                title: title.trim(),
+                status: "backlog",
+                priority: "none",
+                createdAt: Date.now(),
+              };
+              patchBacklog([...backlog, t]);
+              // 异步写入 SQLite
+              void props
+                .onCreateSprintTask(project.projectId, null, title.trim(), "todo")
+                .then((res) => {
+                  if (res?.taskId && res.taskId !== tempId) {
+                    patchBacklog([
+                      ...backlog.filter((b) => b.id !== tempId),
+                      { ...t, id: res.taskId },
+                    ]);
                   }
-                  const moved = backlog[bi];
-                  patchBacklog(backlog.filter((_, i) => i !== bi));
-                  patchSprints(
-                    sprints.map((s) =>
-                      s.id === targetSprint
-                        ? { ...s, tasks: [...s.tasks, { ...moved, status: "todo" as TaskStatus }] }
-                        : s,
-                    ),
-                  );
-                }}
-              >
-                <option value="">分配到 Sprint...</option>
-                ${sprints.map((s) => html`<option value=${s.id}>${s.title}</option>`)}
-              </select>
-              <button style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;"
-                @click=${() => patchBacklog(backlog.filter((_, i) => i !== bi))}
-              >删</button>
-            </div>
-          `,
-              )
-        }
+                });
+            }}
+          >
+            + 添加
+          </button>
+        </div>
+        ${backlog.length === 0
+          ? html`
+              <div style="font-size: 12px; color: var(--muted)">
+                暫无 Backlog 任务，点击添加待规划任务
+              </div>
+            `
+          : backlog.map(
+              (task, bi) => html`
+                <div
+                  style="display:flex; align-items:center; gap:6px; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px;"
+                >
+                  <span style="color:${PRIORITY_CONFIG[task.priority].color};"
+                    >${PRIORITY_CONFIG[task.priority].icon}</span
+                  >
+                  <span style="flex:1;">${task.title}</span>
+                  <select
+                    style="font-size:11px;border:1px solid var(--border);border-radius:3px;padding:1px 3px;"
+                    .value=${task.priority}
+                    @change=${(e: Event) => {
+                      patchBacklog(
+                        backlog.map((t, i) =>
+                          i === bi
+                            ? {
+                                ...t,
+                                priority: (e.target as HTMLSelectElement).value as TaskPriority,
+                              }
+                            : t,
+                        ),
+                      );
+                    }}
+                  >
+                    ${Object.entries(PRIORITY_CONFIG).map(
+                      ([v, c]) => html`<option value=${v}>${c.icon} ${c.label}</option>`,
+                    )}
+                  </select>
+                  <select
+                    style="font-size:11px;border:1px solid var(--border);border-radius:3px;padding:1px 3px;"
+                    @change=${(e: Event) => {
+                      const targetSprint = (e.target as HTMLSelectElement).value;
+                      if (!targetSprint) {
+                        return;
+                      }
+                      const moved = backlog[bi];
+                      patchBacklog(backlog.filter((_, i) => i !== bi));
+                      patchSprints(
+                        sprints.map((s) =>
+                          s.id === targetSprint
+                            ? {
+                                ...s,
+                                tasks: [...s.tasks, { ...moved, status: "todo" as TaskStatus }],
+                              }
+                            : s,
+                        ),
+                      );
+                    }}
+                  >
+                    <option value="">分配到 Sprint...</option>
+                    ${sprints.map((s) => html`<option value=${s.id}>${s.title}</option>`)}
+                  </select>
+                  <button
+                    style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;"
+                    @click=${() => patchBacklog(backlog.filter((_, i) => i !== bi))}
+                  >
+                    删
+                  </button>
+                </div>
+              `,
+            )}
       </div>
 
       <!-- 验收标准 & 备注 -->
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
         <div class="card" style="padding:12px;">
-          <strong style="font-size:12px; display:block; margin-bottom:6px;">✅ 旧版验收标准（备注）</strong>
-          <textarea class="form-control" rows="4"
+          <strong style="font-size:12px; display:block; margin-bottom:6px;"
+            >✅ 旧版验收标准（备注）</strong
+          >
+          <textarea
+            class="form-control"
+            rows="4"
             placeholder="描述验收标准，Markdown 格式…（新项目建议改用下方结构化 DoD 门禁）"
             .value=${project.acceptanceCriteria ?? ""}
             @input=${(e: InputEvent) => {
@@ -2049,7 +2358,9 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
         </div>
         <div class="card" style="padding:12px;">
           <strong style="font-size:12px; display:block; margin-bottom:6px;">📝 进度备注</strong>
-          <textarea class="form-control" rows="4"
+          <textarea
+            class="form-control"
+            rows="4"
             placeholder="记录奕点、风险、下一步计划…"
             .value=${project.progressNotes ?? ""}
             @input=${(e: InputEvent) => {
@@ -2063,7 +2374,6 @@ function renderProjectProgress(props: ProjectsProps, project: ProjectInfo) {
 
       <!-- DoD 完成门禁可视化 -->
       ${renderCompletionGate(props, project)}
-
     </div>
   `;
 }
@@ -2108,84 +2418,88 @@ function renderCompletionGate(props: ProjectsProps, project: ProjectInfo) {
   };
 
   return html`
-    <div class="card" style="padding:14px 16px; margin-bottom:14px; border-left:3px solid ${gateBorderColor};">
+    <div
+      class="card"
+      style="padding:14px 16px; margin-bottom:14px; border-left:3px solid ${gateBorderColor};"
+    >
       <!-- 标题行 -->
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <div
+        style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;"
+      >
         <div style="display:flex; align-items:center; gap:8px;">
           <strong style="font-size:13px;">
-            ${isScopeFrozen ? "🔒" : isCompleted ? "✅" : allSatisfied ? "⏳" : "🛡️"}
-            DoD 完成门禁（Definition of Done）
+            ${isScopeFrozen ? "🔒" : isCompleted ? "✅" : allSatisfied ? "⏳" : "🛡️"} DoD
+            完成门禁（Definition of Done）
           </strong>
-          ${
-            isScopeFrozen
+          ${isScopeFrozen
+            ? html`
+                <span class="chip" style="color: #2563eb; border-color: #2563eb; font-size: 11px"
+                  >🔒 范围已冻结</span
+                >
+              `
+            : isCompleted
               ? html`
-                  <span class="chip" style="color: #2563eb; border-color: #2563eb; font-size: 11px"
-                    >🔒 范围已冻结</span
+                  <span class="chip" style="color: #16a34a; border-color: #16a34a; font-size: 11px"
+                    >✅ 已签收完成</span
                   >
                 `
-              : isCompleted
+              : allSatisfied
                 ? html`
-                    <span class="chip" style="color: #16a34a; border-color: #16a34a; font-size: 11px"
-                      >✅ 已签收完成</span
+                    <span
+                      class="chip"
+                      style="color: #d97706; border-color: #d97706; font-size: 11px"
+                      >⏳ 待 Agent 签收</span
                     >
                   `
-                : allSatisfied
-                  ? html`
-                      <span class="chip" style="color: #d97706; border-color: #d97706; font-size: 11px"
-                        >⏳ 待 Agent 签收</span
-                      >
-                    `
-                  : nothing
-          }
+                : nothing}
         </div>
-        <span style="font-size:16px; font-weight:700; color:${gateBorderColor};">${dodPercent}%</span>
+        <span style="font-size:16px; font-weight:700; color:${gateBorderColor};"
+          >${dodPercent}%</span
+        >
       </div>
 
       <!-- DoD 进度条 -->
-      <div style="height:6px; background:var(--border); border-radius:3px; overflow:hidden; margin-bottom:10px;">
-        <div style="height:100%; width:${dodPercent}%; background:${gateBorderColor}; border-radius:3px; transition:width 0.4s;"></div>
+      <div
+        style="height:6px; background:var(--border); border-radius:3px; overflow:hidden; margin-bottom:10px;"
+      >
+        <div
+          style="height:100%; width:${dodPercent}%; background:${gateBorderColor}; border-radius:3px; transition:width 0.4s;"
+        ></div>
       </div>
       <div style="font-size:11px; color:var(--muted); margin-bottom:12px;">
         ${satisfied}/${total} 验收标准已满足
-        ${
-          gate?.requireHumanSignOff
-            ? html`
-                · 需要 Agent 签收
-              `
-            : html`
-                · 全自动可关闭
-              `
-        }
-        ${
-          gate?.humanSignOffAt
-            ? html` · 签收 Agent: ${gate.humanSignOffBy ?? "coordinator"} · ${new Date(gate.humanSignOffAt).toLocaleString("zh-CN")}`
-            : nothing
-        }
+        ${gate?.requireHumanSignOff ? html` · 需要 Agent 签收 ` : html` · 全自动可关闭 `}
+        ${gate?.humanSignOffAt
+          ? html` · 签收 Agent: ${gate.humanSignOffBy ?? "coordinator"} ·
+            ${new Date(gate.humanSignOffAt).toLocaleString("zh-CN")}`
+          : nothing}
       </div>
 
-      ${
-        !gate || gate.criteria.length === 0
-          ? html`
-              <div class="callout" style="font-size: 12px; margin-bottom: 12px">
-                ⚠️ 未定义验收标准。请让 AI 调用 <code>projects.updateProgress</code> 传入
-                <code>completionGate</code> 参数， 或者向 coordinator 发消息要求它为该项目定义验收标准。
-              </div>
-            `
-          : html`
+      ${!gate || gate.criteria.length === 0
+        ? html`
+            <div class="callout" style="font-size: 12px; margin-bottom: 12px">
+              ⚠️ 未定义验收标准。请让 AI 调用 <code>projects.updateProgress</code> 传入
+              <code>completionGate</code> 参数， 或者向 coordinator
+              发消息要求它为该项目定义验收标准。
+            </div>
+          `
+        : html`
             <!-- 验收标准列表 -->
             <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
               ${gate.criteria.map(
                 (c) => html`
-                <div style="
+                  <div
+                    style="
                   display:flex; align-items:flex-start; gap:8px;
                   padding:8px 10px; border-radius:6px;
                   background:${c.satisfied ? "#f0fdf4" : "#f9fafb"};
                   border:1px solid ${c.satisfied ? "#86efac" : "var(--border)"};
-                ">
-                  <!-- 满足开关 -->
-                  <button
-                    title=${c.satisfied ? "点击取消满足" : "点击标记为已满足"}
-                    style="
+                "
+                  >
+                    <!-- 满足开关 -->
+                    <button
+                      title=${c.satisfied ? "点击取消满足" : "点击标记为已满足"}
+                      style="
                       width:20px; height:20px; border-radius:4px; flex-shrink:0;
                       border:2px solid ${c.satisfied ? "#16a34a" : "#d1d5db"};
                       background:${c.satisfied ? "#16a34a" : "transparent"};
@@ -2193,57 +2507,70 @@ function renderCompletionGate(props: ProjectsProps, project: ProjectInfo) {
                       display:flex; align-items:center; justify-content:center;
                       font-size:12px; color:white; padding:0;
                     "
-                    ?disabled=${isScopeFrozen}
-                    @click=${() => {
-                      if (isScopeFrozen) {
-                        return;
-                      }
-                      props.onMarkCriterionSatisfied(project.projectId, c.id, !c.satisfied);
-                    }}
-                  >${c.satisfied ? "✓" : ""}</button>
+                      ?disabled=${isScopeFrozen}
+                      @click=${() => {
+                        if (isScopeFrozen) {
+                          return;
+                        }
+                        props.onMarkCriterionSatisfied(project.projectId, c.id, !c.satisfied);
+                      }}
+                    >
+                      ${c.satisfied ? "✓" : ""}
+                    </button>
 
-                  <div style="flex:1; min-width:0;">
-                    <div style="font-size:12px; font-weight:${c.satisfied ? "400" : "500"}; color:${c.satisfied ? "var(--muted)" : "var(--text)"}; text-decoration:${c.satisfied ? "line-through" : "none"}; word-break:break-word;">
-                      ${c.description}
-                    </div>
-                    <div style="display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap;">
-                      <span style="font-size:10px; color:var(--muted);">${VERIF_LABEL[c.verificationType] ?? c.verificationType}</span>
-                      ${
-                        c.satisfied && c.satisfiedAt
-                          ? html`<span style="font-size:10px; color:#16a34a;">✓ ${c.satisfiedBy ?? ""} ${new Date(c.satisfiedAt).toLocaleDateString("zh-CN")}</span>`
-                          : nothing
-                      }
-                      ${
-                        c.evidence
-                          ? html`<span style="font-size:10px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px;" title=${c.evidence}>📄 ${c.evidence}</span>`
-                          : nothing
-                      }
+                    <div style="flex:1; min-width:0;">
+                      <div
+                        style="font-size:12px; font-weight:${c.satisfied
+                          ? "400"
+                          : "500"}; color:${c.satisfied
+                          ? "var(--muted)"
+                          : "var(--text)"}; text-decoration:${c.satisfied
+                          ? "line-through"
+                          : "none"}; word-break:break-word;"
+                      >
+                        ${c.description}
+                      </div>
+                      <div
+                        style="display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap;"
+                      >
+                        <span style="font-size:10px; color:var(--muted);"
+                          >${VERIF_LABEL[c.verificationType] ?? c.verificationType}</span
+                        >
+                        ${c.satisfied && c.satisfiedAt
+                          ? html`<span style="font-size:10px; color:#16a34a;"
+                              >✓ ${c.satisfiedBy ?? ""}
+                              ${new Date(c.satisfiedAt).toLocaleDateString("zh-CN")}</span
+                            >`
+                          : nothing}
+                        ${c.evidence
+                          ? html`<span
+                              style="font-size:10px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px;"
+                              title=${c.evidence}
+                              >📄 ${c.evidence}</span
+                            >`
+                          : nothing}
+                      </div>
                     </div>
                   </div>
-                </div>
-              `,
+                `,
               )}
             </div>
-          `
-      }
+          `}
 
       <!-- Agent 签收区域 -->
-      ${
-        canSignOff
-          ? html`
+      ${canSignOff
+        ? html`
             <div style="border-top:1px solid var(--border); padding-top:10px; margin-top:4px;">
-              <div style="font-size:12px; font-weight:600; margin-bottom:6px; color:#d97706;">⏳ 所有验收标准已满足，请 Agent 确认签收</div>
+              <div style="font-size:12px; font-weight:600; margin-bottom:6px; color:#d97706;">
+                ⏳ 所有验收标准已满足，请 Agent 确认签收
+              </div>
               <div style="font-size:11px; color:var(--muted); margin-bottom:8px;">
                 在 AI 自主开发系统中，签收由项目负责 Agent（coordinator）完成。
-                ${
-                  ownerAgent
-                    ? html`当前项目负责 Agent：<strong>${ownerAgent.name ?? ownerAgent.id}</strong>`
-                    : project.ownerId
-                      ? html`当前项目 Agent ID：<code>${project.ownerId}</code>`
-                      : html`
-                          未设置项目负责 Agent
-                        `
-                }
+                ${ownerAgent
+                  ? html`当前项目负责 Agent：<strong>${ownerAgent.name ?? ownerAgent.id}</strong>`
+                  : project.ownerId
+                    ? html`当前项目 Agent ID：<code>${project.ownerId}</code>`
+                    : html` 未设置项目负责 Agent `}
               </div>
               <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                 <select
@@ -2251,15 +2578,15 @@ function renderCompletionGate(props: ProjectsProps, project: ProjectInfo) {
                   class="form-control"
                   style="flex:1; min-width:120px; font-size:12px;"
                 >
-                  ${
-                    ownerAgent
-                      ? html`<option value=${ownerAgent.id} selected>${ownerAgent.name ?? ownerAgent.id}（项目负责人）</option>`
-                      : project.ownerId
-                        ? html`<option value=${project.ownerId} selected>${project.ownerId}（项目负责人）</option>`
-                        : html`
-                            <option value="coordinator" selected>coordinator（默认）</option>
-                          `
-                  }
+                  ${ownerAgent
+                    ? html`<option value=${ownerAgent.id} selected>
+                        ${ownerAgent.name ?? ownerAgent.id}（项目负责人）
+                      </option>`
+                    : project.ownerId
+                      ? html`<option value=${project.ownerId} selected>
+                          ${project.ownerId}（项目负责人）
+                        </option>`
+                      : html` <option value="coordinator" selected>coordinator（默认）</option> `}
                   ${agentsList
                     .filter((a) => a.id !== project.ownerId)
                     .map((a) => html`<option value=${a.id}>${a.name ?? a.id}</option>`)}
@@ -2279,32 +2606,49 @@ function renderCompletionGate(props: ProjectsProps, project: ProjectInfo) {
                       props.onHumanSignOff(project.projectId, agentId);
                     }
                   }}
-                >🤖 Agent 签收</button>
+                >
+                  🤖 Agent 签收
+                </button>
               </div>
             </div>
           `
-          : isScopeFrozen
-            ? html`
-              <div style="border-top:1px solid var(--border); padding-top:10px; margin-top:4px;">
-                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-                  <div style="font-size:12px; color:var(--muted);">
-                    🔒 项目已${gate?.scopeFrozenReason === "cancelled" ? "取消" : "完成"}并冻结，不再接受新任务。
-                    ${gate?.scopeFrozenAt ? html`<span style="margin-left:4px;">冻结于 ${new Date(gate.scopeFrozenAt).toLocaleString("zh-CN")}</span>` : nothing}
-                  </div>
-                  <button
-                    class="btn btn--sm"
-                    style="font-size:11px; background:#fffbeb; color:#d97706; border-color:#d97706; flex-shrink:0;"
-                    title="将项目状态回退为开发中，解除范围冻结，允许继续创建新任务"
-                    @click=${() => {
-                      if (confirm(`确认重新激活项目「${project.name}」？\n\n项目状态将回退为"开发中"，范围冻结解除，AI 可继续创建新任务。`)) {
-                        props.onSaveProgress(project.projectId, { status: "development" });
-                      }
-                    }}
-                  >↩ 重新激活（解冻）</button>
+        : isScopeFrozen
+          ? html` <div
+              style="border-top:1px solid var(--border); padding-top:10px; margin-top:4px;"
+            >
+              <div
+                style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;"
+              >
+                <div style="font-size:12px; color:var(--muted);">
+                  🔒
+                  项目已${gate?.scopeFrozenReason === "cancelled"
+                    ? "取消"
+                    : "完成"}并冻结，不再接受新任务。
+                  ${gate?.scopeFrozenAt
+                    ? html`<span style="margin-left:4px;"
+                        >冻结于 ${new Date(gate.scopeFrozenAt).toLocaleString("zh-CN")}</span
+                      >`
+                    : nothing}
                 </div>
-              </div>`
-            : nothing
-      }
+                <button
+                  class="btn btn--sm"
+                  style="font-size:11px; background:#fffbeb; color:#d97706; border-color:#d97706; flex-shrink:0;"
+                  title="将项目状态回退为开发中，解除范围冻结，允许继续创建新任务"
+                  @click=${() => {
+                    if (
+                      confirm(
+                        `确认重新激活项目「${project.name}」？\n\n项目状态将回退为"开发中"，范围冻结解除，AI 可继续创建新任务。`,
+                      )
+                    ) {
+                      props.onSaveProgress(project.projectId, { status: "development" });
+                    }
+                  }}
+                >
+                  ↩ 重新激活（解冻）
+                </button>
+              </div>
+            </div>`
+          : nothing}
     </div>
   `;
 }
@@ -2321,9 +2665,9 @@ function renderProjectRoadmap(props: ProjectsProps, project: ProjectInfo) {
   const objStatusLabel: Record<ProjectObjective["status"], string> = {
     "not-started": "\u2B1C \u672A\u5F00\u59CB",
     "in-progress": "\uD83D\uDFE2 \u8FDB\u884C\u4E2D",
-    "achieved": "\u2705 \u5DF2\u8FBE\u6210",
-    "missed": "\u274C \u672A\u8FBE\u6210",
-    "deferred": "\u23F8\uFE0F \u5DF2\u5EF6\u8FDF",
+    achieved: "\u2705 \u5DF2\u8FBE\u6210",
+    missed: "\u274C \u672A\u8FBE\u6210",
+    deferred: "\u23F8\uFE0F \u5DF2\u5EF6\u8FDF",
   };
   const msTypeLabel: Record<ProjectMilestoneEntry["type"], string> = {
     release: "\uD83D\uDE80 \u53D1\u5E03",
@@ -2349,157 +2693,352 @@ function renderProjectRoadmap(props: ProjectsProps, project: ProjectInfo) {
 
   return html`
     <div style="padding-bottom: 24px;">
-      <h3 style="margin: 0 0 4px 0;">\uD83D\uDDFA\uFE0F \u76EE\u6807\u4E0E\u8DEF\u7EBF\u56FE</h3>
+      <h3 style="margin: 0 0 4px 0;">🗺️ 目标与路线图</h3>
       <p style="font-size: 12px; color: var(--muted); margin: 0 0 20px 0;">
-        \u7BA1\u7406\u9879\u76EE\u77ED\u671F\u3001\u4E2D\u671F\u3001\u957F\u671F\u6218\u7565\u76EE\u6807\uFF08OKR\uFF09\u4E0E\u65F6\u95F4\u8F74\u91CC\u7A0B\u7891\uFF0C\u5E2E\u52A9\u56E2\u961F\u660E\u786E\u76EE\u6807\u3001\u5F62\u6210\u5408\u529B\u3002
+        管理项目短期、中期、长期战略目标（OKR）与时间轴里程碑，帮助团队明确目标、形成合力。
       </p>
 
       <div style="margin-bottom: 28px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-          <h4 style="margin: 0; font-size: 14px;">\uD83C\uDFAF \u6218\u7565\u76EE\u6807\uFF08Objectives\uFF09</h4>
-          <span style="font-size: 12px; color: var(--muted);">\u5171 ${objectives.length} \u4E2A\u76EE\u6807</span>
+        <div
+          style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;"
+        >
+          <h4 style="margin: 0; font-size: 14px;">🎯 战略目标（Objectives）</h4>
+          <span style="font-size: 12px; color: var(--muted);">共 ${objectives.length} 个目标</span>
         </div>
-        ${
-          objectives.length === 0
-            ? html`<div class="callout" style="font-size: 13px;">\u6682\u65E0\u6218\u7565\u76EE\u6807\uFF0C\u5728\u4E0B\u65B9\u6DFB\u52A0\u7B2C\u4E00\u4E2A\u76EE\u6807</div>`
-            : objectives.map((obj) => {
-                const krTotal = obj.keyResults?.length ?? 0;
-                const krDone = obj.keyResults?.filter((kr) => kr.achieved).length ?? 0;
-                const krPct = krTotal > 0 ? Math.round((krDone / krTotal) * 100) : 0;
-                return html`
-                  <div style="border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px;">
-                    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
-                      <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap;">
-                          <span style="font-weight: 600; font-size: 13px;">${obj.title}</span>
-                          <span class="chip" style="font-size: 11px;">${timeframeLabel[obj.timeframe]}</span>
-                          <span class="chip" style="font-size: 11px;">${objStatusLabel[obj.status]}</span>
-                        </div>
-                        ${obj.description ? html`<div style="font-size: 12px; color: var(--muted); margin-bottom: 6px;">${obj.description}</div>` : nothing}
-                        ${
-                          krTotal > 0
-                            ? html`
-                              <div style="margin-top: 6px;">
-                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                                  <span style="font-size: 11px; color: var(--muted);">KR \u8FDB\u5EA6: ${krDone}/${krTotal}</span>
-                                  <div style="flex: 1; height: 4px; background: var(--border); border-radius: 2px; max-width: 120px;">
-                                    <div style="height: 4px; background: #16a34a; border-radius: 2px; width: ${krPct}%;"></div>
-                                  </div>
-                                  <span style="font-size: 11px; color: var(--muted);">${krPct}%</span>
-                                </div>
-                                ${(obj.keyResults ?? []).map((kr) => html`
-                                  <div style="font-size: 11px; color: ${kr.achieved ? "#16a34a" : "var(--muted)"}; display: flex; align-items: center; gap: 4px;">
-                                    ${kr.achieved ? "\u2705" : "\u25CB"} <span>${kr.description}${
-                                      kr.target != null
-                                        ? html` <em style="color:var(--muted);font-size:10px;">(${kr.current ?? 0}/${kr.target} ${kr.unit ?? ""})</em>`
-                                        : nothing
-                                    }</span>
-                                  </div>
-                                `)}
-                              </div>
-                            `
-                            : nothing
-                        }
-                        ${obj.targetDate ? html`<div style="font-size: 11px; color: var(--muted); margin-top: 4px;">\uD83D\uDCC5 \u76EE\u6807\u65E5\u671F: ${new Date(obj.targetDate).toLocaleDateString()}</div>` : nothing}
+        ${objectives.length === 0
+          ? html`<div class="callout" style="font-size: 13px;">
+              暂无战略目标，在下方添加第一个目标
+            </div>`
+          : objectives.map((obj) => {
+              const krTotal = obj.keyResults?.length ?? 0;
+              const krDone = obj.keyResults?.filter((kr) => kr.achieved).length ?? 0;
+              const krPct = krTotal > 0 ? Math.round((krDone / krTotal) * 100) : 0;
+              return html`
+                <div
+                  style="border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px;"
+                >
+                  <div
+                    style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;"
+                  >
+                    <div style="flex: 1;">
+                      <div
+                        style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap;"
+                      >
+                        <span style="font-weight: 600; font-size: 13px;">${obj.title}</span>
+                        <span class="chip" style="font-size: 11px;"
+                          >${timeframeLabel[obj.timeframe]}</span
+                        >
+                        <span class="chip" style="font-size: 11px;"
+                          >${objStatusLabel[obj.status]}</span
+                        >
                       </div>
-                      <button class="btn btn--sm" style="flex-shrink:0;font-size:11px;padding:2px 6px;background:var(--danger-bg,#fee2e2);color:var(--danger,#dc2626);"
-                        @click=${() => { if (confirm(`\u786E\u8BA4\u5220\u9664\u76EE\u6807\u300C${obj.title}\u300D\uFF1F`)) { props.onDeleteObjective(project.projectId, obj.id); } }}
-                      >\u5220\u9664</button>
+                      ${obj.description
+                        ? html`<div
+                            style="font-size: 12px; color: var(--muted); margin-bottom: 6px;"
+                          >
+                            ${obj.description}
+                          </div>`
+                        : nothing}
+                      ${krTotal > 0
+                        ? html`
+                            <div style="margin-top: 6px;">
+                              <div
+                                style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;"
+                              >
+                                <span style="font-size: 11px; color: var(--muted);"
+                                  >KR 进度: ${krDone}/${krTotal}</span
+                                >
+                                <div
+                                  style="flex: 1; height: 4px; background: var(--border); border-radius: 2px; max-width: 120px;"
+                                >
+                                  <div
+                                    style="height: 4px; background: #16a34a; border-radius: 2px; width: ${krPct}%;"
+                                  ></div>
+                                </div>
+                                <span style="font-size: 11px; color: var(--muted);">${krPct}%</span>
+                              </div>
+                              ${(obj.keyResults ?? []).map(
+                                (kr) => html`
+                                  <div
+                                    style="font-size: 11px; color: ${kr.achieved
+                                      ? "#16a34a"
+                                      : "var(--muted)"}; display: flex; align-items: center; gap: 4px;"
+                                  >
+                                    ${kr.achieved ? "\u2705" : "\u25CB"}
+                                    <span
+                                      >${kr.description}${kr.target != null
+                                        ? html` <em style="color:var(--muted);font-size:10px;"
+                                            >(${kr.current ?? 0}/${kr.target} ${kr.unit ?? ""})</em
+                                          >`
+                                        : nothing}</span
+                                    >
+                                  </div>
+                                `,
+                              )}
+                            </div>
+                          `
+                        : nothing}
+                      ${obj.targetDate
+                        ? html`<div style="font-size: 11px; color: var(--muted); margin-top: 4px;">
+                            📅 目标日期: ${new Date(obj.targetDate).toLocaleDateString()}
+                          </div>`
+                        : nothing}
                     </div>
+                    <button
+                      class="btn btn--sm"
+                      style="flex-shrink:0;font-size:11px;padding:2px 6px;background:var(--danger-bg,#fee2e2);color:var(--danger,#dc2626);"
+                      @click=${() => {
+                        if (
+                          confirm(
+                            `\u786E\u8BA4\u5220\u9664\u76EE\u6807\u300C${obj.title}\u300D\uFF1F`,
+                          )
+                        ) {
+                          props.onDeleteObjective(project.projectId, obj.id);
+                        }
+                      }}
+                    >
+                      删除
+                    </button>
                   </div>
-                `;
-              })
-        }
-        <div style="border: 1px dashed var(--border); border-radius: 8px; padding: 14px; margin-top: 12px;">
-          <div style="font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--muted);">\u2795 \u65B0\u589E\u76EE\u6807</div>
-          <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: end;">
+                </div>
+              `;
+            })}
+        <div
+          style="border: 1px dashed var(--border); border-radius: 8px; padding: 14px; margin-top: 12px;"
+        >
+          <div style="font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--muted);">
+            ➕ 新增目标
+          </div>
+          <div
+            style="display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: end;"
+          >
             <div class="form-group" style="margin: 0;">
-              <label style="font-size: 11px;">\u76EE\u6807\u540D\u79F0 *</label>
-              <input type="text" class="form-control" placeholder="\u4F8B\u5982\uFF1A\u5B8C\u6210\u7B2C\u4E00\u671F\u6838\u5FC3\u529F\u80FD\u4E0A\u7EBF"
-                @input=${(e: InputEvent) => { newObjTitle = (e.target as HTMLInputElement).value; }} />
+              <label style="font-size: 11px;">目标名称 *</label>
+              <input
+                type="text"
+                class="form-control"
+                placeholder="例如：完成第一期核心功能上线"
+                @input=${(e: InputEvent) => {
+                  newObjTitle = (e.target as HTMLInputElement).value;
+                }}
+              />
             </div>
             <div class="form-group" style="margin: 0;">
-              <label style="font-size: 11px;">\u65F6\u95F4\u8303\u56F4</label>
-              <select class="form-control" @change=${(e: Event) => { newObjTimeframe = (e.target as HTMLSelectElement).value as ProjectObjective["timeframe"]; }}>
-                <option value="short">\uD83D\uDFE1 \u77ED\u671F</option>
-                <option value="medium">\uD83D\uDD35 \u4E2D\u671F</option>
-                <option value="long">\uD83D\uDFDF \u957F\u671F</option>
+              <label style="font-size: 11px;">时间范围</label>
+              <select
+                class="form-control"
+                @change=${(e: Event) => {
+                  newObjTimeframe = (e.target as HTMLSelectElement)
+                    .value as ProjectObjective["timeframe"];
+                }}
+              >
+                <option value="short">🟡 短期</option>
+                <option value="medium">🔵 中期</option>
+                <option value="long">🟟 长期</option>
               </select>
             </div>
-            <button class="btn btn--primary btn--sm" @click=${() => {
-              if (!newObjTitle.trim()) { alert("\u8BF7\u8F93\u5165\u76EE\u6807\u540D\u79F0"); return; }
-              props.onUpsertObjective(project.projectId, { id: `obj-${Date.now()}`, title: newObjTitle.trim(), description: newObjDesc.trim() || undefined, timeframe: newObjTimeframe, status: "not-started" });
-              newObjTitle = ""; newObjDesc = "";
-            }}>\u6DFB\u52A0</button>
+            <button
+              class="btn btn--primary btn--sm"
+              @click=${() => {
+                if (!newObjTitle.trim()) {
+                  alert("\u8BF7\u8F93\u5165\u76EE\u6807\u540D\u79F0");
+                  return;
+                }
+                props.onUpsertObjective(project.projectId, {
+                  id: `obj-${Date.now()}`,
+                  title: newObjTitle.trim(),
+                  description: newObjDesc.trim() || undefined,
+                  timeframe: newObjTimeframe,
+                  status: "not-started",
+                });
+                newObjTitle = "";
+                newObjDesc = "";
+              }}
+            >
+              添加
+            </button>
           </div>
           <div class="form-group" style="margin: 8px 0 0 0;">
-            <label style="font-size: 11px;">\u76EE\u6807\u63CF\u8FF0\uFF08\u53EF\u9009\uFF09</label>
-            <input type="text" class="form-control" placeholder="\u7B80\u8FF0\u8BE5\u76EE\u6807\u8981\u8FBE\u6210\u7684\u4E1A\u52A1\u6210\u679C"
-              @input=${(e: InputEvent) => { newObjDesc = (e.target as HTMLInputElement).value; }} />
+            <label style="font-size: 11px;">目标描述（可选）</label>
+            <input
+              type="text"
+              class="form-control"
+              placeholder="简述该目标要达成的业务成果"
+              @input=${(e: InputEvent) => {
+                newObjDesc = (e.target as HTMLInputElement).value;
+              }}
+            />
           </div>
         </div>
       </div>
 
       <div>
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-          <h4 style="margin: 0; font-size: 14px;">\uD83D\uDEA9 \u65F6\u95F4\u8F74\u91CC\u7A0B\u7891</h4>
-          <span style="font-size: 12px; color: var(--muted);">${milestones.filter((m) => m.status === "upcoming" || m.status === "in-progress").length} \u4E2A\u8FDB\u884C\u4E2D/\u5373\u5C06\u5230\u6765</span>
+        <div
+          style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;"
+        >
+          <h4 style="margin: 0; font-size: 14px;">🚩 时间轴里程碑</h4>
+          <span style="font-size: 12px; color: var(--muted);"
+            >${milestones.filter((m) => m.status === "upcoming" || m.status === "in-progress")
+              .length}
+            个进行中/即将到来</span
+          >
         </div>
-        ${
-          milestones.length === 0
-            ? html`<div class="callout" style="font-size: 13px;">\u6682\u65E0\u91CC\u7A0B\u7891\uFF0C\u5728\u4E0B\u65B9\u6DFB\u52A0\u7B2C\u4E00\u4E2A\u91CC\u7A0B\u7891</div>`
-            : [...milestones].toSorted((a, b) => (a.targetDate ?? Infinity) - (b.targetDate ?? Infinity)).map((ms) => {
-                const isPast = ms.status === "completed" || ms.status === "missed" || ms.status === "cancelled";
-                const isOverdue = ms.targetDate != null && ms.targetDate < Date.now() && (ms.status === "upcoming" || ms.status === "in-progress");
+        ${milestones.length === 0
+          ? html`<div class="callout" style="font-size: 13px;">
+              暂无里程碑，在下方添加第一个里程碑
+            </div>`
+          : [...milestones]
+              .toSorted((a, b) => (a.targetDate ?? Infinity) - (b.targetDate ?? Infinity))
+              .map((ms) => {
+                const isPast =
+                  ms.status === "completed" || ms.status === "missed" || ms.status === "cancelled";
+                const isOverdue =
+                  ms.targetDate != null &&
+                  ms.targetDate < Date.now() &&
+                  (ms.status === "upcoming" || ms.status === "in-progress");
                 return html`
-                  <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 14px;margin-bottom:8px;border:1px solid ${isOverdue ? "#fca5a5" : "var(--border)"};border-radius:8px;background:${isOverdue ? "#fff5f5" : isPast ? "var(--bg-subtle,#f9fafb)" : "var(--card-bg,#fff)"};opacity:${ms.status === "cancelled" ? "0.6" : "1"};">
-                    <div style="flex-shrink:0;font-size:20px;margin-top:2px;">${ms.status === "completed" ? "\u2705" : ms.status === "missed" ? "\uD83D\uDD34" : ms.status === "cancelled" ? "\u26D4" : ms.status === "in-progress" ? "\uD83D\uDFE2" : "\u23F3"}</div>
+                  <div
+                    style="display:flex;align-items:flex-start;gap:12px;padding:10px 14px;margin-bottom:8px;border:1px solid ${isOverdue
+                      ? "#fca5a5"
+                      : "var(--border)"};border-radius:8px;background:${isOverdue
+                      ? "#fff5f5"
+                      : isPast
+                        ? "var(--bg-subtle,#f9fafb)"
+                        : "var(--card-bg,#fff)"};opacity:${ms.status === "cancelled"
+                      ? "0.6"
+                      : "1"};"
+                  >
+                    <div style="flex-shrink:0;font-size:20px;margin-top:2px;">
+                      ${ms.status === "completed"
+                        ? "\u2705"
+                        : ms.status === "missed"
+                          ? "\uD83D\uDD34"
+                          : ms.status === "cancelled"
+                            ? "\u26D4"
+                            : ms.status === "in-progress"
+                              ? "\uD83D\uDFE2"
+                              : "\u23F3"}
+                    </div>
                     <div style="flex:1;">
-                      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
+                      <div
+                        style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;"
+                      >
                         <span style="font-weight:600;font-size:13px;">${ms.title}</span>
                         <span class="chip" style="font-size:11px;">${msTypeLabel[ms.type]}</span>
-                        <span class="chip" style="font-size:11px;">${msStatusLabel[ms.status]}</span>
-                        ${isOverdue ? html`<span class="chip" style="font-size:11px;color:#dc2626;border-color:#fca5a5;background:#fee2e2;">\u26A0\uFE0F \u5DF2\u8FDB\u5EA6\u6EDE\u540E</span>` : nothing}
+                        <span class="chip" style="font-size:11px;"
+                          >${msStatusLabel[ms.status]}</span
+                        >
+                        ${isOverdue
+                          ? html`<span
+                              class="chip"
+                              style="font-size:11px;color:#dc2626;border-color:#fca5a5;background:#fee2e2;"
+                              >⚠️ 已进度滞后</span
+                            >`
+                          : nothing}
                       </div>
-                      ${ms.description ? html`<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">${ms.description}</div>` : nothing}
-                      ${ms.targetDate ? html`<div style="font-size:11px;color:${isOverdue ? "#dc2626" : "var(--muted)"};">📅 \u76EE\u6807\u65E5\u671F: ${new Date(ms.targetDate).toLocaleDateString()}${ms.completedAt ? html` &middot; \u5B8C\u6210\u4E8E: ${new Date(ms.completedAt).toLocaleDateString()}` : nothing}</div>` : nothing}
+                      ${ms.description
+                        ? html`<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">
+                            ${ms.description}
+                          </div>`
+                        : nothing}
+                      ${ms.targetDate
+                        ? html`<div
+                            style="font-size:11px;color:${isOverdue ? "#dc2626" : "var(--muted)"};"
+                          >
+                            📅 目标日期:
+                            ${new Date(ms.targetDate).toLocaleDateString()}${ms.completedAt
+                              ? html` &middot; 完成于:
+                                ${new Date(ms.completedAt).toLocaleDateString()}`
+                              : nothing}
+                          </div>`
+                        : nothing}
                     </div>
-                    <button class="btn btn--sm" style="flex-shrink:0;font-size:11px;padding:2px 6px;background:var(--danger-bg,#fee2e2);color:var(--danger,#dc2626);"
-                      @click=${() => { if (confirm(`\u786E\u8BA4\u5220\u9664\u91CC\u7A0B\u7891\u300C${ms.title}\u300D\uFF1F`)) { props.onDeleteMilestone(project.projectId, ms.id); } }}
-                    >\u5220\u9664</button>
+                    <button
+                      class="btn btn--sm"
+                      style="flex-shrink:0;font-size:11px;padding:2px 6px;background:var(--danger-bg,#fee2e2);color:var(--danger,#dc2626);"
+                      @click=${() => {
+                        if (
+                          confirm(
+                            `\u786E\u8BA4\u5220\u9664\u91CC\u7A0B\u7891\u300C${ms.title}\u300D\uFF1F`,
+                          )
+                        ) {
+                          props.onDeleteMilestone(project.projectId, ms.id);
+                        }
+                      }}
+                    >
+                      删除
+                    </button>
                   </div>
                 `;
-              })
-        }
-        <div style="border: 1px dashed var(--border); border-radius: 8px; padding: 14px; margin-top: 12px;">
-          <div style="font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--muted);">\u2795 \u65B0\u589E\u91CC\u7A0B\u7891</div>
-          <div style="display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: end;">
+              })}
+        <div
+          style="border: 1px dashed var(--border); border-radius: 8px; padding: 14px; margin-top: 12px;"
+        >
+          <div style="font-size: 12px; font-weight: 600; margin-bottom: 10px; color: var(--muted);">
+            ➕ 新增里程碑
+          </div>
+          <div
+            style="display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: end;"
+          >
             <div class="form-group" style="margin: 0;">
-              <label style="font-size: 11px;">\u91CC\u7A0B\u7891\u540D\u79F0 *</label>
-              <input type="text" class="form-control" placeholder="\u4F8B\u5982\uFF1A MVP v1.0 \u53D1\u5E03"
-                @input=${(e: InputEvent) => { newMsTitle = (e.target as HTMLInputElement).value; }} />
+              <label style="font-size: 11px;">里程碑名称 *</label>
+              <input
+                type="text"
+                class="form-control"
+                placeholder="例如： MVP v1.0 发布"
+                @input=${(e: InputEvent) => {
+                  newMsTitle = (e.target as HTMLInputElement).value;
+                }}
+              />
             </div>
             <div class="form-group" style="margin: 0;">
-              <label style="font-size: 11px;">\u7C7B\u578B</label>
-              <select class="form-control" @change=${(e: Event) => { newMsType = (e.target as HTMLSelectElement).value as ProjectMilestoneEntry["type"]; }}>
-                <option value="phase">\uD83D\uDCE6 \u9636\u6BB5</option>
-                <option value="release">\uD83D\uDE80 \u53D1\u5E03</option>
-                <option value="checkpoint">\uD83D\uDD0D \u68C0\u67E5\u70B9</option>
-                <option value="deliverable">\uD83D\uDCDD \u4EA4\u4ED8\u7269</option>
-                <option value="other">\uD83D\uDCCC \u5176\u4ED6</option>
+              <label style="font-size: 11px;">类型</label>
+              <select
+                class="form-control"
+                @change=${(e: Event) => {
+                  newMsType = (e.target as HTMLSelectElement)
+                    .value as ProjectMilestoneEntry["type"];
+                }}
+              >
+                <option value="phase">📦 阶段</option>
+                <option value="release">🚀 发布</option>
+                <option value="checkpoint">🔍 检查点</option>
+                <option value="deliverable">📝 交付物</option>
+                <option value="other">📌 其他</option>
               </select>
             </div>
             <div class="form-group" style="margin: 0;">
-              <label style="font-size: 11px;">\u76EE\u6807\u65E5\u671F</label>
-              <input type="date" class="form-control"
-                @input=${(e: InputEvent) => { newMsDateStr = (e.target as HTMLInputElement).value; }} />
+              <label style="font-size: 11px;">目标日期</label>
+              <input
+                type="date"
+                class="form-control"
+                @input=${(e: InputEvent) => {
+                  newMsDateStr = (e.target as HTMLInputElement).value;
+                }}
+              />
             </div>
-            <button class="btn btn--primary btn--sm" style="margin-bottom:0;" @click=${() => {
-              if (!newMsTitle.trim()) { alert("\u8BF7\u8F93\u5165\u91CC\u7A0B\u7891\u540D\u79F0"); return; }
-              const targetDate = newMsDateStr ? new Date(newMsDateStr).getTime() : undefined;
-              props.onUpsertMilestone(project.projectId, { id: `ms-${Date.now()}`, title: newMsTitle.trim(), type: newMsType, status: "upcoming", targetDate });
-              newMsTitle = ""; newMsDateStr = "";
-            }}>\u6DFB\u52A0</button>
+            <button
+              class="btn btn--primary btn--sm"
+              style="margin-bottom:0;"
+              @click=${() => {
+                if (!newMsTitle.trim()) {
+                  alert("\u8BF7\u8F93\u5165\u91CC\u7A0B\u7891\u540D\u79F0");
+                  return;
+                }
+                const targetDate = newMsDateStr ? new Date(newMsDateStr).getTime() : undefined;
+                props.onUpsertMilestone(project.projectId, {
+                  id: `ms-${Date.now()}`,
+                  title: newMsTitle.trim(),
+                  type: newMsType,
+                  status: "upcoming",
+                  targetDate,
+                });
+                newMsTitle = "";
+                newMsDateStr = "";
+              }}
+            >
+              添加
+            </button>
           </div>
         </div>
       </div>
@@ -2530,7 +3069,9 @@ function renderProjectHandoff(props: ProjectsProps, project: ProjectInfo) {
 
   return html`
     <div class="project-handoff">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+      <div
+        style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;"
+      >
         <h3 style="margin: 0;">🤝 跨团队协作与交付</h3>
         <button
           class="btn btn--sm"
@@ -2542,73 +3083,79 @@ function renderProjectHandoff(props: ProjectsProps, project: ProjectInfo) {
       </div>
 
       <div class="callout info" style="margin-bottom: 20px; font-size: 13px;">
-        同一项目对不同团队呈现独立的「参与状态」视图。团队完成阶段性工作后可将项目交付给下一帮负责团队，交出团队转为 技术支撑 状态保留技术通道。
+        同一项目对不同团队呈现独立的「参与状态」视图。团队完成阶段性工作后可将项目交付给下一帮负责团队，交出团队转为
+        技术支撑 状态保留技术通道。
       </div>
 
       <!-- 团队关系列表 -->
       <div style="margin-bottom: 24px;">
         <h4 style="margin-bottom: 12px;">参与团队（${relations.length}）</h4>
-        ${
-          relations.length === 0
-            ? html`
-                <div class="callout">暂无团队关联，可在下方添加团队</div>
-              `
-            : relations.map(
-                (rel) => html`
-                  <div class="list-item" style="margin-bottom: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
-                    <div style="flex: 1;">
-                      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-                        <strong>${rel.teamId}</strong>
-                        <span class="chip" style="font-size: 11px;">${roleLabel[rel.role] ?? rel.role}</span>
-                        <span class="chip" style="font-size: 11px;">${statusLabel[rel.status] ?? rel.status}</span>
-                      </div>
-                      ${
-                        rel.note
-                          ? html`<div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">${rel.note}</div>`
-                          : nothing
-                      }
-                      <div style="font-size: 11px; color: var(--muted);">
-                        加入于: ${new Date(rel.joinedAt).toLocaleDateString()}
-                        ${
-                          rel.handoffHistory.length > 0
-                            ? html`&nbsp;&middot;&nbsp;交付记录: ${rel.handoffHistory.length} 条`
-                            : nothing
-                        }
-                      </div>
+        ${relations.length === 0
+          ? html` <div class="callout">暂无团队关联，可在下方添加团队</div> `
+          : relations.map(
+              (rel) => html`
+                <div
+                  class="list-item"
+                  style="margin-bottom: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 8px;"
+                >
+                  <div style="flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                      <strong>${rel.teamId}</strong>
+                      <span class="chip" style="font-size: 11px;"
+                        >${roleLabel[rel.role] ?? rel.role}</span
+                      >
+                      <span class="chip" style="font-size: 11px;"
+                        >${statusLabel[rel.status] ?? rel.status}</span
+                      >
                     </div>
-                    <div style="display: flex; gap: 6px; flex-shrink: 0;">
-                      <select
-                        class="form-control"
-                        style="font-size: 12px; padding: 2px 6px; height: auto; min-width: 100px;"
-                        .value=${rel.status}
-                        @change=${(e: Event) => {
-                          const v = (e.target as HTMLSelectElement).value as ProjectTeamStatus;
-                          props.onUpdateTeamStatus(selectedId, rel.teamId, v);
-                        }}
-                      >
-                        <option value="active">进行中</option>
-                        <option value="handed-off">已交付</option>
-                        <option value="support-only">技术支撑</option>
-                        <option value="archived">已归档</option>
-                      </select>
-                      <button
-                        class="btn btn--sm"
-                        style="font-size: 12px; padding: 2px 8px; background: var(--danger-bg, #fee2e2); color: var(--danger, #dc2626);"
-                        @click=${() => props.onRemoveTeam(selectedId, rel.teamId)}
-                      >
-                        移除
-                      </button>
+                    ${rel.note
+                      ? html`<div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">
+                          ${rel.note}
+                        </div>`
+                      : nothing}
+                    <div style="font-size: 11px; color: var(--muted);">
+                      加入于: ${new Date(rel.joinedAt).toLocaleDateString()}
+                      ${rel.handoffHistory.length > 0
+                        ? html`&nbsp;&middot;&nbsp;交付记录: ${rel.handoffHistory.length} 条`
+                        : nothing}
                     </div>
                   </div>
-                `,
-              )
-        }
+                  <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                    <select
+                      class="form-control"
+                      style="font-size: 12px; padding: 2px 6px; height: auto; min-width: 100px;"
+                      .value=${rel.status}
+                      @change=${(e: Event) => {
+                        const v = (e.target as HTMLSelectElement).value as ProjectTeamStatus;
+                        props.onUpdateTeamStatus(selectedId, rel.teamId, v);
+                      }}
+                    >
+                      <option value="active">进行中</option>
+                      <option value="handed-off">已交付</option>
+                      <option value="support-only">技术支撑</option>
+                      <option value="archived">已归档</option>
+                    </select>
+                    <button
+                      class="btn btn--sm"
+                      style="font-size: 12px; padding: 2px 8px; background: var(--danger-bg, #fee2e2); color: var(--danger, #dc2626);"
+                      @click=${() => props.onRemoveTeam(selectedId, rel.teamId)}
+                    >
+                      移除
+                    </button>
+                  </div>
+                </div>
+              `,
+            )}
       </div>
 
       <!-- 关联新团队 -->
-      <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+      <div
+        style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 24px;"
+      >
         <h4 style="margin: 0 0 12px 0;">将团队关联到项目</h4>
-        <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end;">
+        <div
+          style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end;"
+        >
           <div class="form-group" style="margin: 0;">
             <label style="font-size: 12px;">团队 ID</label>
             <input
@@ -2648,7 +3195,9 @@ function renderProjectHandoff(props: ProjectsProps, project: ProjectInfo) {
       </div>
 
       <!-- 负责交付 -->
-      <div style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: var(--card-bg-alt, rgba(251,191,36,0.05));">
+      <div
+        style="border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: var(--card-bg-alt, rgba(251,191,36,0.05));"
+      >
         <h4 style="margin: 0 0 4px 0;">📦 负责交付（Handoff）</h4>
         <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px 0;">
           将项目责任从当前团队转交给另一团队。执行后交出团队自动变为「技术支撑」，接收团队变为「进行中」。
@@ -2768,35 +3317,34 @@ function renderProjectEditModal(props: ProjectsProps) {
           <h3>${props.editingProject ? "编辑项目" : "创建项目"}</h3>
           <button class="modal-close" @click=${props.onCancelProjectEdit}>×</button>
         </div>
-        
+
         <div class="modal-body">
-          ${
-            isCreating && !props.projectCodeRoot
-              ? html`
-                  <div
-                    class="callout"
-                    style="
+          ${isCreating && !props.projectCodeRoot
+            ? html`
+                <div
+                  class="callout"
+                  style="
                       margin-bottom: 16px;
                       border-left: 3px solid var(--warning, #d97706);
                       background: var(--warning-bg, #fffbeb);
                     "
-                  >
-                    <strong>⚠️ 未设置项目代码根目录</strong>
-                    <div style="margin-top: 4px; font-size: 13px">
-                      请先关闭此对话框，在页面顶部设置「项目代码根目录」（如 <code>I:\\</code>）。 设置后 AI
-                      和手动创建的项目都会自动将代码目录定位到 <code>根目录\\<项目名></code>。
-                      如果你希望立刻创建，可在下方“工作目录”手动填写完整路径。
-                    </div>
+                >
+                  <strong>⚠️ 未设置项目代码根目录</strong>
+                  <div style="margin-top: 4px; font-size: 13px">
+                    请先关闭此对话框，在页面顶部设置「项目代码根目录」（如 <code>I:\\</code>）。
+                    设置后 AI 和手动创建的项目都会自动将代码目录定位到
+                    <code>根目录\\<é¡¹ç®å></code>。
+                    如果你希望立刻创建，可在下方“工作目录”手动填写完整路径。
                   </div>
-                `
-              : nothing
-          }
+                </div>
+              `
+            : nothing}
 
           <div class="form-group">
             <label>项目 ID</label>
-            <input 
-              type="text" 
-              class="form-control" 
+            <input
+              type="text"
+              class="form-control"
               value="${project.projectId}"
               ?disabled=${!!props.editingProject}
               placeholder="例如：project-alpha"
@@ -2810,9 +3358,9 @@ function renderProjectEditModal(props: ProjectsProps) {
 
           <div class="form-group">
             <label>项目名称</label>
-            <input 
-              type="text" 
-              class="form-control" 
+            <input
+              type="text"
+              class="form-control"
               value="${project.name}"
               placeholder="例如：Alpha 项目"
               @input=${(e: InputEvent) => {
@@ -2824,7 +3372,7 @@ function renderProjectEditModal(props: ProjectsProps) {
 
           <div class="form-group">
             <label>描述</label>
-            <textarea 
+            <textarea
               class="form-control"
               rows="3"
               placeholder="项目描述..."
@@ -2832,14 +3380,16 @@ function renderProjectEditModal(props: ProjectsProps) {
                 const target = e.target as HTMLTextAreaElement;
                 props.onProjectFormChange("description", target.value);
               }}
-            >${project.description || ""}</textarea>
+            >
+${project.description || ""}</textarea
+            >
           </div>
 
           <div class="form-group">
             <label>工作空间根目录</label>
-            <input 
-              type="text" 
-              class="form-control" 
+            <input
+              type="text"
+              class="form-control"
               value="${project.workspacePath || ""}"
               placeholder="例如：H:\\OpenClaw_Workspace\\groups\\project-alpha"
               @input=${(e: InputEvent) => {
@@ -2851,9 +3401,9 @@ function renderProjectEditModal(props: ProjectsProps) {
 
           <div class="form-group">
             <label>工作目录（代码目录）</label>
-            <input 
-              type="text" 
-              class="form-control" 
+            <input
+              type="text"
+              class="form-control"
               value="${project.codeDir || ""}"
               placeholder="${codeDirPlaceholder}"
               @input=${(e: InputEvent) => {
@@ -2861,54 +3411,48 @@ function renderProjectEditModal(props: ProjectsProps) {
                 props.onProjectFormChange("codeDir", target.value);
               }}
             />
-            ${
-              isCreating && previewCodeDir && !project.codeDir
-                ? html`<small style="color: var(--success, #16a34a);">预期路径：${previewCodeDir}（可修改）</small>`
-                : html`
-                    <small>可为代码仓库、设计文件夹或任意工作文件夹，也可留空</small>
-                  `
-            }
+            ${isCreating && previewCodeDir && !project.codeDir
+              ? html`<small style="color: var(--success, #16a34a);"
+                  >预期路径：${previewCodeDir}（可修改）</small
+                >`
+              : html` <small>可为代码仓库、设计文件夹或任意工作文件夹，也可留空</small> `}
           </div>
 
-          ${
-            isCreating
-              ? html`
-            <!-- DoD 完成门禁引导（仅新建项目时显示） -->
-            <div
-              class="callout"
-              style="
+          ${isCreating
+            ? html`
+                <!-- DoD 完成门禁引导（仅新建项目时显示） -->
+                <div
+                  class="callout"
+                  style="
                 margin-top: 16px;
                 border-left: 3px solid #2563eb;
                 background: #eff6ff;
                 padding: 12px 14px;
               "
-            >
-              <strong style="font-size: 13px;">🛡️ 建议：在创建后立即定义完成门禁（DoD）</strong>
-              <div style="font-size: 12px; margin-top: 8px; color: #1d4ed8; line-height: 1.6;">
-                项目创建后，请到「项目进度 → DoD 完成门禁」区域定义验收标准。
-                每条标准应包含:
-                <ul style="margin: 6px 0 0 16px; padding: 0;">
-                  <li>具体可验证的完成条件（禁止模糊表述如“功能完善”）</li>
-                  <li>验证方式（人工 / 自动化测试 / 可检查产出物）</li>
-                  <li>是否需要人工最终签收（强烈建议保持开启）</li>
-                </ul>
-                <div style="margin-top: 8px; color: #374151; font-size: 11px;">
-                  也可以让 AI coordinator 帮助：发送「请为项目 ${project.name || project.projectId || "XXX"}
-                  定义验收标准，调用 projects.updateProgress 设置 completionGate」
+                >
+                  <strong style="font-size: 13px;">🛡️ 建议：在创建后立即定义完成门禁（DoD）</strong>
+                  <div style="font-size: 12px; margin-top: 8px; color: #1d4ed8; line-height: 1.6;">
+                    项目创建后，请到「项目进度 → DoD 完成门禁」区域定义验收标准。 每条标准应包含:
+                    <ul style="margin: 6px 0 0 16px; padding: 0;">
+                      <li>具体可验证的完成条件（禁止模糊表述如“功能完善”）</li>
+                      <li>验证方式（人工 / 自动化测试 / 可检查产出物）</li>
+                      <li>是否需要人工最终签收（强烈建议保持开启）</li>
+                    </ul>
+                    <div style="margin-top: 8px; color: #374151; font-size: 11px;">
+                      也可以让 AI coordinator 帮助：发送「请为项目
+                      ${project.name || project.projectId || "XXX"} 定义验收标准，调用
+                      projects.updateProgress 设置 completionGate」
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          `
-              : nothing
-          }
+              `
+            : nothing}
         </div>
-        
+
         <div class="modal-footer">
-          <button class="btn" @click=${props.onCancelProjectEdit}>
-            取消
-          </button>
-          <button 
-            class="btn btn--primary" 
+          <button class="btn" @click=${props.onCancelProjectEdit}>取消</button>
+          <button
+            class="btn btn--primary"
             @click=${props.onSaveProject}
             ?disabled=${!project.projectId || !project.name}
           >

@@ -42,6 +42,7 @@ import {
   registerMissingThresholdNotifier,
 } from "../tasks/task-threshold-config.js";
 import {
+  buildProjectContext,
   readProjectConfig,
   resolveAgentTaskThreshold,
   resolveStrictestThreshold,
@@ -685,22 +686,52 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
       function resolveProjectCtx(task: { projectId?: string; scope?: string }): {
         sharedMemoryPath: string | null;
         projectGroupSessionKey: string | null;
+        /** 业务空间（代码目录）路径，来自项目配置的 codeDir 字段 */
+        codeDir: string | null;
+        /** 项目空间（文档/记忆/决策）根目录 */
+        projectWorkspacePath: string | null;
       } {
         // 私人任务（scope=personal）不注入项目共享记忆
         if (task.scope === "personal" || !task.projectId) {
-          return { sharedMemoryPath: null, projectGroupSessionKey: null };
+          return {
+            sharedMemoryPath: null,
+            projectGroupSessionKey: null,
+            codeDir: null,
+            projectWorkspacePath: null,
+          };
         }
         const allGroups = groupManager.getAllGroups();
         const projectGroup = allGroups.find((g) => g.projectId === task.projectId);
         if (!projectGroup) {
-          return { sharedMemoryPath: null, projectGroupSessionKey: null };
+          return {
+            sharedMemoryPath: null,
+            projectGroupSessionKey: null,
+            codeDir: null,
+            projectWorkspacePath: null,
+          };
         }
         const groupWorkspaceDir = groupWorkspaceManager.getGroupWorkspaceDir(projectGroup.id);
+
+        // 从项目配置读取 codeDir（业务空间）和 projectWorkspacePath（项目空间）
+        let codeDir: string | null = null;
+        let projectWorkspacePath: string | null = groupWorkspaceDir || null;
+        try {
+          const projectCtx = buildProjectContext(task.projectId);
+          codeDir = projectCtx.codeDir || null;
+          if (!projectWorkspacePath && projectCtx.workspacePath) {
+            projectWorkspacePath = projectCtx.workspacePath;
+          }
+        } catch {
+          // 项目配置读取失败不影响任务下发
+        }
+
         return {
           projectGroupSessionKey: `group:${projectGroup.id}`,
           sharedMemoryPath: groupWorkspaceDir
             ? path.join(groupWorkspaceDir, "SHARED_MEMORY.md")
             : null,
+          codeDir,
+          projectWorkspacePath,
         };
       }
 
@@ -857,7 +888,8 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
             .join("\n");
 
           const wakeMessage = (() => {
-            const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(activeTask);
+            const { sharedMemoryPath, projectGroupSessionKey, codeDir, projectWorkspacePath } =
+              resolveProjectCtx(activeTask);
             // 推断卡顿根因，生成差异化唤醒消息（借鉴业界 MAST 论文分析）
             const stuckReason = inferStuckReason(stuckMinutes, activeTask);
             const reasonTag = {
@@ -881,13 +913,22 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
               `⚠️ Failure Analysis: ${stuckReason.hint}`,
               ``,
               `Working Context:`,
-              `- Working Directory: ${agentWorkspaceDir}`,
+              `- Working Directory (agent personal space): ${agentWorkspaceDir}`,
               `- Your Personal Memory (only YOU may write this): ${agentMemoryPath}`,
+              projectWorkspacePath
+                ? `- Project Workspace (项目空间 — docs/decisions/memory): ${projectWorkspacePath}`
+                : null,
+              codeDir
+                ? `- Business Code Directory (业务空间 — write ALL source code here): ${codeDir}`
+                : null,
               sharedMemoryPath
                 ? `- Project Shared Memory (all team members read/write): ${sharedMemoryPath}`
                 : null,
               projectGroupSessionKey
                 ? `- Project Group: sessionKey=${projectGroupSessionKey}`
+                : null,
+              codeDir
+                ? `⚠️ CRITICAL: Business code MUST go to Business Code Directory. NEVER write source code to Project Workspace or working directory.`
                 : null,
               ``,
               `Memory rules: Write personal insights/decisions to Your Personal Memory only. Write project-wide knowledge to Project Shared Memory. NEVER write to another agent's personal memory file.`,
@@ -1001,7 +1042,8 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
                 `[Task Wake] Agent ${normalizedId} task ${activeTask.id} in-progress but idle ${idleMinutes}min — re-activating`,
               );
             }
-            const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(activeTask);
+            const { sharedMemoryPath, projectGroupSessionKey, codeDir, projectWorkspacePath } =
+              resolveProjectCtx(activeTask);
             const projectGroupKey = activeTask.projectId
               ? projectGroupCache.get(activeTask.projectId)
               : undefined;
@@ -1021,13 +1063,22 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
                 : null,
               ``,
               `Working Context:`,
-              `- Working Directory: ${agentWorkspaceDir}`,
+              `- Working Directory (agent personal space): ${agentWorkspaceDir}`,
               `- Your Personal Memory (only YOU may write this): ${agentMemoryPath}`,
+              projectWorkspacePath
+                ? `- Project Workspace (项目空间 — docs/decisions/memory): ${projectWorkspacePath}`
+                : null,
+              codeDir
+                ? `- Business Code Directory (业务空间 — write ALL source code here): ${codeDir}`
+                : null,
               sharedMemoryPath
                 ? `- Project Shared Memory (all team members read/write): ${sharedMemoryPath}`
                 : null,
               projectGroupSessionKey
                 ? `- Project Group: sessionKey=${projectGroupSessionKey}`
+                : null,
+              codeDir
+                ? `⚠️ CRITICAL: Business code MUST go to Business Code Directory. NEVER write source code to Project Workspace or working directory.`
                 : null,
               ``,
               `IMPORTANT: This task is already in-progress. Continue executing it NOW. When done, call task_report_to_supervisor with Task ID: ${activeTask.id}`,
@@ -1316,7 +1367,8 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
           .join("\n\n");
 
         const wakeMessage = (() => {
-          const { sharedMemoryPath, projectGroupSessionKey } = resolveProjectCtx(nextTask);
+          const { sharedMemoryPath, projectGroupSessionKey, codeDir, projectWorkspacePath } =
+            resolveProjectCtx(nextTask);
           // C3 自适应课程：若此类任务成功率偏低，加入提示警告
           let perfWarning: string | null = null;
           try {
@@ -1366,12 +1418,21 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
             taskLines,
             ``,
             `Working Context:`,
-            `- Working Directory: ${agentWorkspaceDir}`,
+            `- Working Directory (agent personal space): ${agentWorkspaceDir}`,
             `- Your Personal Memory (only YOU may write this): ${agentMemoryPath}`,
+            projectWorkspacePath
+              ? `- Project Workspace (项目空间 — docs/decisions/memory): ${projectWorkspacePath}`
+              : null,
+            codeDir
+              ? `- Business Code Directory (业务空间 — write ALL source code here): ${codeDir}`
+              : null,
             sharedMemoryPath
               ? `- Project Shared Memory (all team members read/write): ${sharedMemoryPath}`
               : null,
             projectGroupSessionKey ? `- Project Group: sessionKey=${projectGroupSessionKey}` : null,
+            codeDir
+              ? `⚠️ CRITICAL: Business code MUST go to Business Code Directory. NEVER write source code to Project Workspace or working directory.`
+              : null,
             perfWarning ? `\n${perfWarning}` : null,
             toolFocusHint ? `\n${toolFocusHint}` : null,
             ``,
