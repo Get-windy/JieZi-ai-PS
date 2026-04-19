@@ -387,12 +387,22 @@ function withWriteTx(fn: (stmts: TasksDbStatements) => void): void {
 // ============================================================================
 
 function taskToRow(task: Task, isArchived = false, archivedAt?: number) {
+  // Guard: SQLite only accepts string|number|bigint|boolean|null.
+  // NOT NULL columns must never receive undefined — coerce to safe defaults.
+  // (mirrors upstream bindTaskRecordBase in task-registry.store.sqlite.ts)
+  const safeTitle: string = typeof task.title === "string" && task.title ? task.title : task.id;
+  const safeStatus: string = typeof task.status === "string" && task.status ? task.status : "todo";
+  const safePriority: string =
+    typeof task.priority === "string" && task.priority ? task.priority : "medium";
+  const safeCreatorId: string =
+    typeof task.creatorId === "string" && task.creatorId ? task.creatorId : "system";
+  const safeCreatedAt: number = typeof task.createdAt === "number" ? task.createdAt : Date.now();
   return {
     id: task.id,
-    title: task.title,
-    status: task.status,
-    priority: task.priority,
-    creator_id: task.creatorId,
+    title: safeTitle,
+    status: safeStatus,
+    priority: safePriority,
+    creator_id: safeCreatorId,
     level: task.level ?? null,
     project_id: task.projectId ?? null,
     epic_id: task.epicId ?? null,
@@ -402,7 +412,7 @@ function taskToRow(task: Task, isArchived = false, archivedAt?: number) {
     parent_task_id: task.parentTaskId ?? null,
     story_points: task.storyPoints ?? null,
     due_date: task.dueDate ?? null,
-    created_at: task.createdAt,
+    created_at: safeCreatedAt,
     updated_at: task.updatedAt ?? null,
     completed_at: task.completedAt ?? null,
     cancelled_at: task.cancelledAt ?? null,
@@ -969,7 +979,10 @@ export async function forceResetTask(
       timeTracking: {
         ...existingTracking,
         lastActivityAt: now,
-        startedAt: targetStatus === "in-progress" ? (existingTracking.startedAt ?? now) : existingTracking.startedAt,
+        startedAt:
+          targetStatus === "in-progress"
+            ? (existingTracking.startedAt ?? now)
+            : existingTracking.startedAt,
       },
     };
 
