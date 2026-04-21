@@ -210,6 +210,14 @@ export interface ProjectSprint {
   title: string;
   /** Sprint 状态（planning/active/completed/cancelled） */
   status?: SprintStatus;
+  /**
+   * Sprint 类型
+   * - development: 正常开发迭代（默认）
+   * - correction: 纠偏修复迭代（专门用于修复之前做错的内容）
+   */
+  sprintType?: "development" | "correction";
+  /** 如果是 correction Sprint，关联被纠偏的原 Sprint ID */
+  correctionFor?: string;
   /** Sprint 目标（类似 Scrum Sprint Goal） */
   goal?: string;
   /** Sprint 开始时间 */
@@ -394,13 +402,83 @@ export interface AcceptanceCriterion {
  * 完成门禁（Completion Gate / DoD Gate）
  *
  * 这是解决"无尽开发、循环开发"问题的核心机制。
+ * 对应业界最佳实践：Ship → Pause → Feedback → Iterate（发布→暂停→收集反馈→下轮迭代）
  *
- * 设计原则（来自业界最佳实践）：
- * 1. [Scrum DoD] 所有标准全部满足才算完成，缺一不可
+ * 设计原则：
+ * 1. [Scrum DoD] 所有标准全部满足才算可交付，缺一不可
  * 2. [SAFe Feature AC] 每条标准必须有可追源的证据
  * 3. [DUN Ladder for AI] 最高级验收节点需人工最终确认，防止 Agent 自欺欺人
- * 4. [Scope Freeze] 项目完成后自动冻结范围，主控禁止再创建新任务
+ * 4. [Scope Freeze] DoD 满足后自动冻结范围，主控禁止再创建新任务
+ * 5. [Pause-First] DoD 满足后进入 paused（等待用户反馈），而非直接 completed
+ *    - paused    = 已交付本轮迭代，等待用户使用并反馈
+ *    - completed = 用户确认满意，项目永久归档
+ *    - 收到反馈后重新进入 development/active，开启下一轮迭代
  */
+/**
+ * 需求基线（Requirements Baseline）——用户确认过的需求金标准。
+ *
+ * 生命周期：
+ *   需求澄清阶段（requirements）→ coordinator 与用户反复沟通 →
+ *   产出需求文档（Given-When-Then 场景 + 不做什么边界）→
+ *   用户显式确认 → baselineLockedAt 被写入 → 基线锁定
+ *
+ * 锁定后：
+ *   - AI 团队所有开发、代码审查、DoD 验收，必须对照 baseline.scenarios 而不是自己的理解
+ *   - 任何偏离 = 错误，需立即纠偏
+ *   - 如需变更需求，必须用户确认后由 coordinator 更新 baseline 并递增 version（Change Request）
+ */
+export interface RequirementsBaseline {
+  /**
+   * 核心交付物描述（一句话价值主张）。
+   * 对应 Amazon Working Backwards 的「新闻稿第一段」。
+   * 例："用户可以在 APP 内完成登录、注册、密码找回，全程无需联系客服。"
+   */
+  valueStatement: string;
+  /**
+   * Given-When-Then 验收场景列表（BDD 格式）。
+   * 每个场景代表一个可测试的用户行为，是代码审查的直接对照依据。
+   */
+  scenarios: Array<{
+    /** 场景编号，如 "AC-01" */
+    id: string;
+    /** 场景标题，如 "正常登录" */
+    title: string;
+    /** 前置条件 */
+    given: string;
+    /** 用户操作 */
+    when: string;
+    /** 期望结果 */
+    then: string;
+    /** 优先级：must=必须实现，should=应该实现，wont=本次不做 */
+    priority: "must" | "should" | "wont";
+  }>;
+  /**
+   * 明确不在本次范围内的功能（Out of Scope）。
+   * 防止 AI 团队自行扩展范围——看到这里列出的内容必须拒绝开发。
+   */
+  outOfScope: string[];
+  /**
+   * 用户确认基线的时间戳（Unix ms）。
+   * undefined = 基线尚未锁定（禁止进入开发阶段）。
+   * 有值 = 基线已锁定，任何修改必须走 Change Request 流程。
+   */
+  baselineLockedAt?: number;
+  /** 确认人（用户姓名或 ID） */
+  baselineLockedBy?: string;
+  /**
+   * 基线版本号（从 1 开始）。
+   * 每次用户确认变更请求后 +1，记录需求演化历史。
+   */
+  version: number;
+  /**
+   * 最后一次变更请求的摘要（Change Request）。
+   * 用户发起变更时由 coordinator 填写，说明变更了什么、为什么。
+   */
+  lastChangeRequest?: string;
+  /** 最后一次变更时间（Unix ms） */
+  lastChangedAt?: number;
+}
+
 export interface ProjectCompletionGate {
   /**
    * 验收标准列表（结构化 DoD，取代原 acceptanceCriteria 字符串）。
@@ -430,7 +508,28 @@ export interface ProjectCompletionGate {
   /** 范围冻结时间戳 */
   scopeFrozenAt?: number;
   /** 冻结原因 */
-  scopeFrozenReason?: "completed" | "cancelled" | "human_decision";
+  scopeFrozenReason?: "completed" | "cancelled" | "human_decision" | "paused_for_feedback";
+  /**
+   * 当前迭代版本号（从 1 开始）。
+   * 每次 DoD 满足→发布→收到反馈→重新开发，版本号 +1。
+   * 用于追踪项目经历了多少轮"开发→发布→反馈→迭代"循环。
+   */
+  currentIteration?: number;
+  /**
+   * 最近一次发布时间（Unix ms）。
+   * DoD 满足并设为 paused 时自动记录。
+   */
+  lastReleasedAt?: number;
+  /**
+   * 最近一次收到用户反馈的时间（Unix ms）。
+   * 用户提出 bug 或改进建议、项目重新激活时记录。
+   */
+  lastFeedbackReceivedAt?: number;
+  /**
+   * 最近一次发布的版本描述（如 "v1: 核心功能上线"）。
+   * 供 coordinator 在心跳报告中展示历史发布记录。
+   */
+  lastReleaseNote?: string;
 }
 
 /**
@@ -540,8 +639,12 @@ export interface ProjectConfig {
    * ✅ 完成门禁（DoD - Definition of Done）【强烈建议在创建项目时填写】
    *
    * 这是解决"无尽开发、循环开发"问题的核心。
-   * 项目必须在此明确定义"什么时候算完成"，coordinator 每次补充任务前会检查此项。
-   * 若所有标准已满足（+ 人工确认），项目进入 completed，主控停止分配新任务。
+   * 项目必须在此明确定义"什么时候算可发布"，coordinator 每次补充任务前会检查此项。
+   *
+   * 生命周期（Ship → Pause → Feedback → Iterate）：
+   *   开发(development) → DoD 全部满足 → 发布暂停(paused，等待用户反馈)
+   *   → 收到反馈 → 重新开发(development) → DoD 满足 → 再次暂停 → ...
+   *   → 用户满意/项目完结 → 归档(completed)
    */
   completionGate?: ProjectCompletionGate;
   /**
@@ -549,6 +652,18 @@ export interface ProjectConfig {
    * 旧版验收标准字符串字段，保留向后兼容，新项目请改用 completionGate。
    */
   acceptanceCriteria?: string;
+  /**
+   * 需求基线（Requirements Baseline）——用户确认过的需求金标准。
+   *
+   * 这是解决"AI 团队自说自话"问题的核心：
+   *   1. 需求阶段：coordinator 与用户反复沟通，产出 valueStatement + scenarios + outOfScope
+   *   2. 用户显式确认后，baselineLockedAt 写入，基线锁定
+   *   3. 开发阶段：所有任务创建、代码审查、DoD 验收，必须对照此基线而非 AI 的自我理解
+   *   4. 如需变更：用户确认 Change Request → coordinator 更新 baseline，version +1
+   *
+   * ⛔ 基线未锁定（baselineLockedAt 为空）时，coordinator 禁止推进到 planning/development 阶段。
+   */
+  requirementsBaseline?: RequirementsBaseline;
   /** 最后一次进度更新的备注 */
   progressNotes?: string;
   /** 进度最后更新时间 */
@@ -585,6 +700,65 @@ export interface ProjectConfig {
    * Initiative ID（如果该项目属于更大战略计划）
    */
   initiativeId?: string;
+
+  /**
+   * 技术栈声明（Tech Stack）
+   *
+   * 列举本项目使用的语言、框架、构建工具、数据库等，
+   * 让所有 Agent 在任务开工前就知道使用什么技术。
+   *
+   * 示例（Java 微服务）：
+   * {
+   *   language: "Java 17",
+   *   framework: "Spring Boot 3 + MyBatis-Plus",
+   *   build: "Maven（多模块，父 pom 在根目录）",
+   *   database: "MySQL 8 + Redis",
+   *   moduleStyle: "聚合父模块（erp/pom.xml）+ 子模块（erp/erp-purchase/）"
+   * }
+   *
+   * 示例（Node.js 全栈）：
+   * {
+   *   language: "TypeScript 5",
+   *   framework: "Next.js 14 + Prisma",
+   *   build: "pnpm workspace",
+   *   database: "PostgreSQL + Redis"
+   * }
+   */
+  techStack?: Record<string, string>;
+
+  /**
+   * 项目规范约定（Conventions）
+   *
+   * 核心用途：防止多 Agent 并发开发时各自选不同的目录结构/包名/模块命名，
+   * 造成大量重复代码（如 erp/erp-purchase/ 和 erp-purchase/ 同时存在）。
+   *
+   * 字段说明：
+   * - dirStructure:    目录结构规范（如「所有子模块必须放在 erp/ 聚合目录下」）
+   * - packageNaming:   包命名规范（如「统一用 cn.aiedge.erp.{module}，禁止 cn.aiedge.{module}」）
+   * - moduleNaming:    模块/服务命名规范（如「模块名必须带 erp- 前缀」）
+   * - apiPathPrefix:   API 路径前缀（如「所有接口以 /api/erp/ 开头」）
+   * - codeStyle:       代码风格（如「DTO 用 record，Service 用 I 前缀接口」）
+   * - custom:          项目自定义规范（键值对，任意约定）
+   *
+   * ⚠️ 强制要求：
+   *   - coordinator 创建项目后必须在 SHARED_MEMORY.md 中写入 conventions 摘要区块
+   *   - 所有 team-member/devops-engineer 在开工前必须读取此区块
+   *   - 违反 conventions 的代码必须在 PR/code-review 中指出并重构
+   */
+  conventions?: {
+    /** 目录结构规范：描述模块如何组织（聚合 vs 独立、子目录规则等） */
+    dirStructure?: string;
+    /** 包命名规范（Java/Kotlin 等有包名的语言） */
+    packageNaming?: string;
+    /** 模块/服务文件命名规范 */
+    moduleNaming?: string;
+    /** 统一 API 路径前缀 */
+    apiPathPrefix?: string;
+    /** 代码风格约定（命名规范、DTO/VO 使用规则等） */
+    codeStyle?: string;
+    /** 其他自定义规范（键: 规范名称, 值: 规范描述） */
+    custom?: Record<string, string>;
+  };
 }
 
 /**

@@ -496,6 +496,54 @@ function buildRoleDeliverableSection(params: {
     ];
   }
 
+  if (role === "team-member" || role === "devops-engineer" || role === "ui-developer") {
+    return [
+      "## 实现前必执行的查重规范（Coding Pre-Check — team-member/devops/ui 专属）",
+      "你是代码实现专家。每次开始实现任务前，必须执行以下查重步骤（缺一不可）：",
+      "",
+      "**Step 1 — 任务查重**",
+      "  - 开工前先调用 task_list (project=<id>, selfOnly=true, limit=50) 查看自己已有哪些任务在执行",
+      "  - 如果发现同名/相似的 in-progress 任务，不得再创建新任务，直接在该任务下继续完成",
+      "",
+      "**Step 2 — 文件/模块查重（实现任务时必须）**",
+      "  - 实现任何模块/服务/类之前，必须先查该模块文件是否已存在（运行 find/ls/grep 搜索）",
+      `  - 查识别符：相同模块名、相同功能名、相同接口定义→ 已存在则复用，不存在则在 ${codeDir} 中创建`,
+      "  - 如果目标文件已存在：登录功能/预判层是否已实现；已实现则点击复用，否则在同文件内扩展",
+      "  - 禁止：创建同名文件、同功能的平行实现、在不同目录下建立内容重复的 Service/Controller/Entity",
+      "",
+      "**Step 2b — 项目规范必读（实现前必遵守，违反则代码将被拒绝合并）**",
+      "  - 任务 description 里可能会有 coordinator 写入的项目规范（如: 目录结构、包命名、模块命名、API 路径前缀）",
+      "  - 如果任务 description 中有规范约定，必须 100% 遵守，禁止「我觉得这样更好」的改动",
+      `  - 如果任务没有规范说明，必须自行读取 ${projectWorkspace}/SHARED_MEMORY.md 中的 "📌 项目规范约定" 区块`,
+      "  - 目录结构规范: 如果 \"all modules under erp/\" 则禁止在根目录建同名子模块",
+      "  - 包命名规范: 如果 \"cn.aiedge.erp.{module}\" 则禁止使用 cn.aiedge.{module} 包名",
+      "  - API 路径规范: 如果 \"/api/erp/\" 则所有接口必须以该前缀开头",
+      "  - 违反规范的代码是干扱代码，将导致 PR 被拒绝并要求重构",
+      "",
+      "**Step 2c — MIRROR 内省自评（执行前必做 — 防止错误传播的核心机制）**",
+      "  - 在执行任何文件创建/目录创建操作前，必须自问以下 3 个问题：",
+      "    Q1: 这个文件路径是否符合项目 conventions 中定义的目录结构规范？",
+      "    Q2: 这个包名是否符合项目 conventions 中定义的包命名规范？",
+      "    Q3: 是否已有同名/同功能的文件存在于其他路径下？",
+      "  - 如果任一答案为「否」或「不确定」，必须：",
+      "    a) 先读取 SHARED_MEMORY.md 确认现有模块和路径",
+      "    b) 修正你的实现计划，便其符合 conventions",
+      "    c) 禁止「先建了再说」，违反规范创建的文件将被视为无效代码",
+      "  - 如果任务 description 中没有 conventions，立即向 coordinator 报告，禁止自行决定目录结构",
+      "",
+      "**Step 3 — SHARED_MEMORY.md 查阅**",
+      `  - 开工前阅读 ${projectWorkspace}/SHARED_MEMORY.md，了解其他 Agent 已完成的模块和路径`,
+      "  - 避免重复实现其他 Agent 已建的模块（最常见的重复代码来源）",
+      "",
+      "**完成任务前必须执行（缺一不可）**",
+      "  1. 将主要产出物（文件路径）写入 task_progress_note_append",
+      "  2. 调用 project_memory_save 更新 SHARED_MEMORY.md，格式：",
+      "     [ 模块完成 ] {模块名} → {文件路径} | 说明: {一句话说明} | 时间: {ISO日期}",
+      "  3. 调用 task_complete 完成任务， note 字段填写文件路径",
+      "",
+    ];
+  }
+
   return [];
 }
 

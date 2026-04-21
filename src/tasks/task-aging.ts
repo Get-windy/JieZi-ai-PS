@@ -769,13 +769,27 @@ export async function scanAndProcessAgingTasks(options?: {
                   `[Task Aging] 幻觉预警: Task ${task.id} in-progress ${idleMinutes}min 无 worklog (agent=${task.assignees?.[0]?.id ?? "unknown"})`,
                 );
 
-                // 更新元数据记录告警时间，防止冷却期内重复告警
+                // ── 漏洞修复：幻觉超时 → 强制退回 todo 而不仅仅告警 ──
+                // 业界最佳实践（arXiv 2603.10060 / Anthropic RLAIF）：
+                // 任务长期无实质工作日志 → 视为执行幻觉，必须强制中断重置，
+                // 而不能仅发告警等 agent 自觉（agent 不会自觉）。
+                // 注意：状态机不允许 in-progress → todo 直接跳转，必须经由 blocked 中转
+                await storage.updateTask(task.id, { status: "blocked" });
                 await storage.updateTask(task.id, {
+                  status: "todo",
+                  timeTracking: { ...task.timeTracking, startedAt: undefined },
                   metadata: {
                     ...task.metadata,
                     lastHallucinationAlertAt: Date.now(),
+                    hallucinationResetAt: Date.now(),
+                    hallucinationIdleMinutes: idleMinutes,
+                    hallucinationResetReason: `in-progress ${idleMinutes}min with no worklog`,
                   },
                 });
+
+                console.warn(
+                  `[Task Aging] 幻觉强制重置: Task ${task.id} 已退回 todo (idle=${idleMinutes}min, agent=${task.assignees?.[0]?.id ?? "unknown"})`,
+                );
 
                 if (supervisorRaw && supervisorRaw !== "system") {
                   injectLeaderSnapshot({
@@ -987,4 +1001,178 @@ export function stopAgingTaskScheduler(): void {
     agingTaskSchedulerInterval = null;
     console.log(t("task.aging.scheduler_stopped"));
   }
+}
+
+// ============================================================================
+// Sprint Circuit Breaker（Shape Up / Scrum 硬截止熔断机制）
+// ============================================================================
+
+/**
+ * 扫描所有项目配置，检测已到期的 active Sprint，执行熔断：
+ *
+ * 熔断规则（参考 Basecamp Shape Up + Scrum Guide）：
+ * 1. Sprint 已过 endDate 且状态仍为 active → 触发熔断
+ * 2. Sprint 内 todo / in-progress / blocked 的任务 → 自动退回 backlog（status: backlog）
+ * 3. Sprint 自身状态改为 completed（在 PROJECT_CONFIG.json 中更新）
+ * 4. 通知 coordinator：Sprint 已熔断，请回顾未完成工作并决定是否排入下一个 Sprint
+ *
+ * 注意：Circuit Breaker 不延期 Sprint，这是 Shape Up "电路熔断" 的核心
+ * ——超时的工作必须重新评估是否值得继续，而不是顺延
+ */
+export async function runSprintCircuitBreaker(options?: {
+  /** 仅检查此 projectId，不传则扫描全部 */
+  projectId?: string;
+  /** 通知的 coordinator Agent ID */
+  coordinatorId?: string;
+}): Promise<{
+  projectsChecked: number;
+  sprintsBreached: number;
+  tasksReturnedToBacklog: number;
+}> {
+  const stats = { projectsChecked: 0, sprintsBreached: 0, tasksReturnedToBacklog: 0 };
+  const now = Date.now();
+
+  try {
+    const { listAvailableProjects, buildProjectContext } = await import("../utils/project-context.js");
+    const allProjIds = options?.projectId ? [options.projectId] : listAvailableProjects();
+
+    for (const pid of allProjIds) {
+      stats.projectsChecked++;
+      try {
+        const ctx = buildProjectContext(pid);
+        const sprints = ctx.config?.sprints ?? [];
+
+        for (const sprint of sprints) {
+          // 只处理 active 且已过 endDate 的 Sprint
+          if (sprint.status !== "active") {continue;}
+          if (!sprint.endDate || sprint.endDate > now) {continue;}
+
+          const overdueHours = Math.round((now - sprint.endDate) / (1000 * 60 * 60));
+          console.log(
+            `[SprintCircuitBreaker] Sprint "${sprint.title}" (${sprint.id}) in project ${pid} ` +
+            `is overdue by ${overdueHours}h — triggering circuit breaker.`,
+          );
+          stats.sprintsBreached++;
+
+          // ── 把未完成任务退回 backlog ──
+          const incompleteStatuses = ["todo", "in-progress", "blocked"] as const;
+          const incompleteTasks = sprint.tasks.filter(
+            (t) => incompleteStatuses.includes(t.status as (typeof incompleteStatuses)[number]),
+          );
+
+          for (const task of incompleteTasks) {
+            try {
+              // in-progress / blocked → 必须先过渡到 blocked（状态机约束：不能直接 in-progress → backlog）
+              if (task.status === "in-progress") {
+                await storage.updateTask(task.id, { status: "blocked" });
+              }
+              await storage.updateTask(task.id, {
+                status: "backlog",
+                metadata: {
+                  ...task.metadata,
+                  sprintCircuitBreakerAt: now,
+                  sprintCircuitBreakerReason:
+                    `Returned to backlog: Sprint "${sprint.title}" expired ${overdueHours}h ago. ` +
+                    `Re-evaluate and schedule in a future Sprint if still needed.`,
+                  previousSprintId: sprint.id,
+                },
+              });
+              stats.tasksReturnedToBacklog++;
+              console.log(
+                `[SprintCircuitBreaker] Task "${task.title}" (${task.id}) returned to backlog.`,
+              );
+            } catch (taskErr) {
+              console.error(
+                `[SprintCircuitBreaker] Failed to return task ${task.id} to backlog:`,
+                taskErr,
+              );
+            }
+          }
+
+          // ── 通知 coordinator ──
+          const coordId = options?.coordinatorId
+            ? normalizeAgentId(options.coordinatorId)
+            : null;
+          if (coordId) {
+            injectLeaderSnapshot({
+              leaderId: coordId,
+              wakeReason: {
+                type: "sprint-circuit-breaker" as never,
+                sprintId: sprint.id,
+                sprintTitle: sprint.title,
+                projectId: pid,
+                overdueHours,
+                tasksReturnedCount: incompleteTasks.length,
+              },
+              coalesceMs: 30_000,
+            });
+            requestHeartbeatNow(coordId);
+          }
+        }
+      } catch (projErr) {
+        console.error(`[SprintCircuitBreaker] Failed to process project ${pid}:`, projErr);
+      }
+    }
+  } catch (err) {
+    console.error("[SprintCircuitBreaker] Unexpected error:", err);
+  }
+
+  if (stats.sprintsBreached > 0) {
+    console.log(
+      `[SprintCircuitBreaker] Done: checked ${stats.projectsChecked} projects, ` +
+      `breached ${stats.sprintsBreached} sprints, ` +
+      `returned ${stats.tasksReturnedToBacklog} tasks to backlog.`,
+    );
+  }
+  return stats;
+}
+
+/**
+ * Sprint 到期预警：返回即将到期（24h内）或已超期的 active Sprint 列表。
+ * 供 heartbeat-runner 注入 coordinator 心跳使用。
+ * 注意：返回同步快照，调用方应将项目上下文传入而非依赖模块内部 require。
+ */
+export function getExpiringSprints(
+  allProjectContexts: Array<{ id: string; name: string; sprints: import("../utils/project-context.js").ProjectSprint[] }>,
+  options?: { warningWindowMs?: number },
+): Array<{
+  projectId: string;
+  projectName: string;
+  sprintId: string;
+  sprintTitle: string;
+  endDate: number;
+  overdueMs: number;   // > 0 = 已超期；< 0 = 还未到期（剩余 ms）
+  incompleteTaskCount: number;
+}> {
+  const warningWindow = options?.warningWindowMs ?? 24 * 60 * 60 * 1000; // 默认 24h 预警
+  const now = Date.now();
+  const results: ReturnType<typeof getExpiringSprints> = [];
+
+  for (const proj of allProjectContexts) {
+    for (const sprint of proj.sprints) {
+      if (sprint.status !== "active") {continue;}
+      if (!sprint.endDate) {continue;}
+
+      const overdueMs = now - sprint.endDate;
+      // 已超期 OR 24h内即将到期
+      if (overdueMs > 0 || sprint.endDate - now <= warningWindow) {
+        const incompleteStatuses = new Set(["todo", "in-progress", "blocked"]);
+        const incompleteCount = sprint.tasks.filter((t) =>
+          incompleteStatuses.has(t.status),
+        ).length;
+
+        results.push({
+          projectId: proj.id,
+          projectName: proj.name,
+          sprintId: sprint.id,
+          sprintTitle: sprint.title,
+          endDate: sprint.endDate,
+          overdueMs,
+          incompleteTaskCount: incompleteCount,
+        });
+      }
+    }
+  }
+
+  return results;
 }

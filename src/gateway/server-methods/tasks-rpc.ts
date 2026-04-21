@@ -354,13 +354,17 @@ export const tasksRpc: GatewayRequestHandlers = {
         pending: "todo",
         cancel: "cancelled",
         wip: "in-progress",
+        rework: "needs-rework",
+        needs_rework: "needs-rework",
+        reopen: "needs-rework",
+        reopened: "needs-rework",
       };
       const normalizedStatus = status
         ? (STATUS_ALIASES[status.toLowerCase()] ?? status)
         : undefined;
       if (
         normalizedStatus &&
-        !["todo", "in-progress", "review", "blocked", "done", "cancelled"].includes(
+        !["todo", "in-progress", "review", "blocked", "done", "cancelled", "needs-rework"].includes(
           normalizedStatus,
         )
       ) {
@@ -516,6 +520,7 @@ export const tasksRpc: GatewayRequestHandlers = {
           "in-progress": "▶️",
           todo: "⏸️",
           review: "🔍",
+          "needs-rework": "🔁",
         };
         const emoji = statusEmoji[normalizedStatus] ?? "🟡";
         const operatorId = (params?.requesterId ? String(params.requesterId) : null) ?? "system";
@@ -555,6 +560,9 @@ export const tasksRpc: GatewayRequestHandlers = {
             `状态变更: ${task.status} → ${normalizedStatus}`,
             task.projectId ? `项目: ${task.projectId}` : null,
             `操作者: ${operatorId}`,
+            normalizedStatus === "needs-rework"
+              ? `\n🔁 任务被标记为需要返工，请重新检视任务目标和实现，修复后重新提交。`
+              : null,
             normalizedStatus === "todo"
               ? `\n任务已被重置为待开始，请确认当前工作计划。`
               : null,
@@ -1035,7 +1043,7 @@ export const tasksRpc: GatewayRequestHandlers = {
       }
 
       // 验证状态
-      if (!["todo", "in-progress", "review", "blocked", "done", "cancelled"].includes(newStatus)) {
+      if (!["todo", "in-progress", "review", "blocked", "done", "cancelled", "needs-rework"].includes(newStatus)) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "无效的任务状态"));
         return;
       }
@@ -1074,10 +1082,11 @@ export const tasksRpc: GatewayRequestHandlers = {
       const validTransitions: Record<TaskStatus, TaskStatus[]> = {
         todo: ["in-progress", "cancelled"],
         "in-progress": ["review", "blocked", "done", "cancelled"],
-        review: ["in-progress", "done", "cancelled"],
+        review: ["in-progress", "done", "cancelled", "needs-rework"],
         blocked: ["in-progress", "done", "cancelled"], // 修复：blocked 允许直接完成（解除阻塞即完成）
-        done: ["in-progress"], // 允许重新打开
+        done: ["in-progress", "needs-rework"], // 允许重新打开 / 标记需要返工
         cancelled: ["todo"], // 允许恢复
+        "needs-rework": ["in-progress", "todo", "cancelled"], // 返工中 → 重新开始
       };
 
       if (!validTransitions[task.status].includes(newStatus)) {
@@ -1119,6 +1128,7 @@ export const tasksRpc: GatewayRequestHandlers = {
         "in-progress": "▶️",
         todo: "⏸️",
         review: "🔍",
+        "needs-rework": "🔁",
       };
       const sceEmoji = statusEmoji[newStatus] ?? "🟡";
       const sceSupRaw = task.supervisorId ?? task.creatorId;
@@ -1137,6 +1147,9 @@ export const tasksRpc: GatewayRequestHandlers = {
             : null,
           newStatus === "done"
             ? `\n任务已完成，请检查是否需要更新 Sprint 状态或进行后续工作。`
+            : null,
+          newStatus === "needs-rework"
+            ? `\n🔁 任务被标记为需要返工。原因: ${reason ?? "未指明"}。请重新检视任务目标和实现，修复后重新提交。`
             : null,
         ]
           .filter(Boolean)
@@ -1843,8 +1856,8 @@ export const tasksRpc: GatewayRequestHandlers = {
               }
             }
             if (patched) {
-              if (cfg.sprints) cfg.sprints = sprints;
-              else cfg.milestones = sprints;
+              if (cfg.sprints) {cfg.sprints = sprints;}
+              else {cfg.milestones = sprints;}
               cfg.progress = calcProjectProgress(sprints);
               cfg.progressUpdatedAt = now;
               fsMod.writeFileSync(configPath, JSON.stringify(cfg, null, 2), "utf-8");

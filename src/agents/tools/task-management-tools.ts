@@ -360,6 +360,8 @@ const TaskCompleteToolSchema = Type.Object({
   taskId: Type.String({ minLength: 1 }),
   /** 完成备注（可选） */
   note: Type.Optional(Type.String({ maxLength: 500 })),
+  /** 强制完成（仅人类明确要求时使用）— 跳过 AC 门禁 */
+  force: Type.Optional(Type.Boolean({ description: "Override AC gate block. Only use when human explicitly requests completion despite unverified AC." })),
 });
 
 /**
@@ -486,6 +488,11 @@ export function createTaskCreateTool(opts?: {
     name: "task_create",
     description:
       "Create a new task.\n\n" +
+      "⚠️ MANDATORY PRE-CHECK — BEFORE calling task_create, you MUST:\n" +
+      "  1. Call task_list (project=<id>, limit=50) to check if a task with the same or similar title already exists.\n" +
+      "  2. If a matching active task exists (status != done/cancelled): do NOT create a new one. Update or reassign the existing task instead.\n" +
+      "  3. For coding tasks: check whether the target file/module already exists in the codebase before creating an implementation task.\n" +
+      "  Skipping this check causes duplicate tasks, duplicate code, and wasted work. This is the #1 source of repeated code in multi-agent projects.\n\n" +
       "REQUIRED fields:\n" +
       '  - title: Clear task title (1-200 chars), e.g. "Implement login page"\n' +
       "  - description: What to do + why + done criteria (cannot be empty or vague)\n" +
@@ -539,6 +546,56 @@ export function createTaskCreateTool(opts?: {
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
+        // ── 相似任务查重（Duplicate Detection）：防止 AI 不进行预棄直接创建同名任务 ──
+        // 在同一项目内，标题相似度 ≥ 0.8（左包含或右包含）且状态为活跃的任务，返回警告而非阴默创建
+        if (scope === "project" && project) {
+          try {
+            const existingResp = await callGatewayTool("task.list", gatewayOpts, {
+              projectId: project,
+              limit: 80,
+            });
+            const existingTasks = (Array.isArray(existingResp)
+              ? existingResp
+              : (existingResp)?.tasks ?? []
+            ) as Array<Record<string, unknown>>;
+
+            const titleLower = title.toLowerCase().trim();
+            const ACTIVE_STATUSES = new Set(["todo", "pending", "in-progress", "review", "blocked", "backlog"]);
+
+            const duplicates = existingTasks.filter((t) => {
+              if (!ACTIVE_STATUSES.has(String(t.status ?? ""))) {return false;}
+              const existingTitle = String(t.title ?? "").toLowerCase().trim();
+              if (!existingTitle) {return false;}
+              // 标题完全相同
+              if (existingTitle === titleLower) {return true;}
+              // 单方包含：新标题包含在现有标题里，或现有标题包含在新标题里
+              if (existingTitle.includes(titleLower) || titleLower.includes(existingTitle)) {return true;}
+              return false;
+            });
+
+            if (duplicates.length > 0) {
+              const dupList = duplicates
+                .slice(0, 3)
+                .map((t) => `  - [${String(t.id)}] "${String(t.title)}" (status: ${String(t.status)}, assignee: ${String(t.assignee ?? "unassigned")})`)
+                .join("\n");
+              return jsonResult({
+                success: false,
+                blocked: true,
+                blockedReason: "duplicate_task",
+                error:
+                  `⚠️ [重复任务拦截] 项目 "${project}" 中已存在 ${duplicates.length} 个同名/相似标题的活跃任务：\n` +
+                  dupList +
+                  "\n\n✅ 正确做法：" +
+                  "\n  1. 如果这就是同一任务：调用 task_update 更新状态或重新分配负责人" +
+                  "\n  2. 如果确实是不同任务：修改标题使其更具特征性（如加上模块名、功能范围、版本号）",
+                existingDuplicates: duplicates.slice(0, 3).map((t) => ({ id: t.id, title: t.title, status: t.status, assignee: t.assignee })),
+              });
+            }
+          } catch {
+            // 查重失败不阻止创建（遭到网络错误等异常情况）
+          }
+        }
+
         // ── DoD 范围冻结检查：如果项目已完成/范围冻结，拒绝创建任务 ──
         if (scope === "project" && project) {
           try {
@@ -938,6 +995,25 @@ export function createTaskUpdateTool(_opts?: {
           removeBlockedBy: removeBlockedBy && removeBlockedBy.length > 0 ? removeBlockedBy : undefined,
         });
 
+        // ── 反思日志（Reflexion）：状态变为 cancelled 时自动写入 ──
+        if (status === "cancelled") {
+          try {
+            const prevTask = await callGatewayTool("task.get", gatewayOpts, { taskId, requesterId: _opts?.currentAgentId });
+            const prevProjectId = String((prevTask)?.projectId ?? projectId ?? "");
+            const prevTitle = String((prevTask)?.title ?? "");
+            writeReflexionLog({
+              taskId,
+              taskTitle: prevTitle,
+              projectId: prevProjectId,
+              reason: `任务被 ${_opts?.currentAgentId ?? "unknown"} 取消`,
+              operatorId: _opts?.currentAgentId,
+              gatewayOpts,
+            }).catch(() => {}); // 异步不阻塞
+          } catch {
+            // 获取前状态失败不影响更新
+          }
+        }
+
         return jsonResult({
           success: true,
           message: `Task "${taskId}" updated successfully`,
@@ -954,6 +1030,45 @@ export function createTaskUpdateTool(_opts?: {
 }
 
 /**
+ * 将任务取消/失败反思写入项目共享记忆（Reflexion 机制）
+ * 对标 Reflexion: 语言反馈强化 — 不更新权重，而是将失败经验存入记忆供后续参考
+ */
+async function writeReflexionLog(opts: {
+  taskId: string;
+  taskTitle?: string;
+  projectId?: string;
+  reason: string;
+  operatorId?: string;
+  gatewayOpts: Record<string, unknown>;
+}): Promise<void> {
+  if (!opts.projectId) {return;} // 无项目关联则不写
+  try {
+    const ts = new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+    const lines = [
+      `\u{1F4DD} [反思日志 ${ts}] 任务被取消/失败`,
+      `任务ID: ${opts.taskId}`,
+      `任务: ${opts.taskTitle ?? "(未知)"}`,
+      `操作者: ${opts.operatorId ?? "unknown"}`,
+      ``,
+      `「失败原因」`,
+      opts.reason,
+      ``,
+      `「经验教训」`,
+      `  - 此任务的失败经验应被后续同类任务参考`,
+      `  - coordinator 在分配类似任务时应注意避免相同错误`,
+      ``,
+    ];
+    await callGatewayTool("memory.project.save", opts.gatewayOpts, {
+      content: lines.join("\n"),
+      section: "反思日志（Reflexion）",
+      projectId: opts.projectId,
+    });
+  } catch {
+    // 写入反思日志失败不影响主流程
+  }
+}
+
+/**
  * 创建任务完成工具
  */
 export function createTaskCompleteTool(opts?: {
@@ -964,7 +1079,9 @@ export function createTaskCompleteTool(opts?: {
     label: "Task Complete",
     name: "task_complete",
     description:
-      "Mark a task as completed. Optionally add a completion note. This is a convenience method that sets status to 'completed' and records completion time.",
+      "Mark a task as completed. Optionally add a completion note. " +
+      "AC GATE: If acceptance criteria exist and not all pass, the task will be BLOCKED from completion (MIRROR inter-reflection enforcement). " +
+      "You must verify/fix all AC items first, or use force=true to override (only for urgent human-requested completions).",
     parameters: TaskCompleteToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -973,19 +1090,43 @@ export function createTaskCompleteTool(opts?: {
       const gatewayOpts = readGatewayCallOptions(params);
 
       try {
-        // AC 门禁检查（warn 不 block）
+        // AC 门禁检查（强制 block — MIRROR inter-reflection）
+        // 对标 MIRROR inter-reflection：执行后检查结果，不通过则阻止完成并要求修正
+        const forceComplete = params.force === true || params.force === "true";
         let acWarning: string | null = null;
+        let acBlocked = false;
         try {
           const taskData = await callGatewayTool("task.get", gatewayOpts, { taskId, requesterId: opts?.currentAgentId });
           const ac = (taskData)?.acceptanceCriteria as Array<{ passes?: boolean; description?: string }> | undefined;
           if (ac && ac.length > 0) {
             const failed = ac.filter((c) => !c.passes);
             if (failed.length > 0) {
-              acWarning = `[DoD WARNING] ${failed.length}/${ac.length} acceptance criteria not yet verified: ${failed.map((c) => c.description ?? "(unnamed)").slice(0, 3).join("; ")}${failed.length > 3 ? " ..." : ""}. It is strongly recommended to verify all criteria before marking complete.`;
+              acWarning = `[DoD BLOCKED] ${failed.length}/${ac.length} acceptance criteria not yet verified: ${failed.map((c) => c.description ?? "(unnamed)").slice(0, 5).join("; ")}`;
+              if (!forceComplete) {
+                acBlocked = true;
+              }
             }
           }
         } catch {
           // AC 检查失败不阻塞完成流程
+        }
+
+        if (acBlocked) {
+          return jsonResult({
+            success: false,
+            blocked: true,
+            blockedReason: "ac_not_verified",
+            error:
+              `\u26d4 [AC 门禁拦截] 任务 "${taskId}" 有未通过的验收标准，禁止标记完成。\n` +
+              `${acWarning}\n\n` +
+              `正确做法：\n` +
+              `  1. 逐条检查未通过的 AC，修复代码使其通过\n` +
+              `  2. 调用 task_ac_verify(taskId, acId) 标记 AC 为已验证\n` +
+              `  3. 所有 AC 通过后，再调用 task_complete\n\n` +
+              `仅在人类明确要求时，可使用 force=true 强制完成（不推荐）。`,
+            taskId,
+            acWarning,
+          });
         }
 
         // 调用 task.complete RPC
@@ -1003,7 +1144,7 @@ export function createTaskCompleteTool(opts?: {
           completedBy: opts?.currentAgentId,
           completedAt: Date.now(),
           note,
-          ...(acWarning ? { acWarning } : {}),
+          ...(acWarning && !acBlocked ? { acWarning: `${acWarning} (force override)` } : {}),
         });
       } catch (error) {
         return jsonResult({
@@ -1914,6 +2055,113 @@ export function createTaskTemplateListTool(): AnyAgentTool {
  * B4: task_template_apply — 应用任务模板
  * 返回合并后的字段，直接传入 task_create
  */
+/**
+ * 批量取消任务工具
+ * 用于「发现方向错误/重复代码」后，一次性取消某个项目下所有未完成的任务
+ * 是 project_emergency_pivot 的底层支撑工具，也可独立调用
+ */
+export function createTaskBatchCancelTool(opts?: { currentAgentId?: string }): AnyAgentTool {
+  return {
+    label: "Task Batch Cancel",
+    name: "task_batch_cancel",
+    description:
+      "Batch-cancel all pending/in-progress tasks under a project (or by explicit task IDs). " +
+      "USE WHEN: (1) Project direction is wrong and all queued tasks must be stopped immediately. " +
+      "(2) Duplicate modules discovered — cancel the redundant work stream. " +
+      "(3) Coordinator needs to halt the entire work queue before re-planning. " +
+      "Returns count of cancelled tasks and list of their IDs. " +
+      "WARNING: This is a bulk destructive operation — provide 'reason' to document why.",
+    parameters: Type.Object({
+      projectId: Type.Optional(Type.String({ description: "Cancel all non-terminal tasks under this project" })),
+      taskIds: Type.Optional(Type.Array(Type.String(), { description: "Explicit list of task IDs to cancel. Use instead of projectId for selective cancel." })),
+      reason: Type.String({ minLength: 1, maxLength: 500, description: "[REQUIRED] Why are these tasks being cancelled? This is written to task notes." }),
+      cancelStatuses: Type.Optional(Type.Array(Type.String(), {
+        description: "Which statuses to cancel (default: pending/todo/in-progress/in_progress/blocked). Set to cancel only specific statuses.",
+      })),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const projectId = readStringParam(params, "projectId");
+      const taskIds = Array.isArray(params.taskIds) ? (params.taskIds as string[]) : undefined;
+      const reason = readStringParam(params, "reason", { required: true });
+      const gatewayOpts = readGatewayCallOptions(params);
+
+      if (!projectId && (!taskIds || taskIds.length === 0)) {
+        return jsonResult({ success: false, error: "Must provide either 'projectId' or 'taskIds'" });
+      }
+
+      const cancelStatuses: string[] = Array.isArray(params.cancelStatuses)
+        ? (params.cancelStatuses as string[])
+        : ["pending", "todo", "in-progress", "in_progress", "blocked"];
+
+      try {
+        let targetIds: string[] = [];
+
+        if (taskIds && taskIds.length > 0) {
+          // 显式指定 task IDs
+          targetIds = taskIds;
+        } else if (projectId) {
+          // 查询项目下所有非终态任务
+          const listResult = await callGatewayTool("task.list", gatewayOpts, {
+            projectId,
+            limit: 500,
+          });
+          const tasks = (Array.isArray(listResult) ? listResult : (listResult)?.tasks) as Array<Record<string, unknown>> | undefined;
+          if (!tasks || tasks.length === 0) {
+            return jsonResult({ success: true, message: `No active tasks found under project "${projectId}"`, cancelledCount: 0, cancelledIds: [] });
+          }
+          targetIds = tasks
+            .filter((t) => cancelStatuses.includes(String(t.status ?? "")))
+            .map((t) => String(t.id ?? ""))
+            .filter(Boolean);
+        }
+
+        if (targetIds.length === 0) {
+          return jsonResult({ success: true, message: "No tasks match the cancel criteria", cancelledCount: 0, cancelledIds: [] });
+        }
+
+        // 逐个取消（RPC 层无批量 cancel 接口时的兜底）
+        const cancelledIds: string[] = [];
+        const failedIds: string[] = [];
+        const cancelNote = `[批量取消] ${reason} | 操作者：${opts?.currentAgentId ?? "unknown"} | 时间：${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`;
+        for (const id of targetIds) {
+          try {
+            await callGatewayTool("task.update", gatewayOpts, {
+              id,
+              status: "cancelled",
+              updatedAt: Date.now(),
+            });
+            // 追加取消原因到 worklog
+            try {
+              await callGatewayTool("task.worklog.add", gatewayOpts, {
+                taskId: id,
+                content: cancelNote,
+                authorId: opts?.currentAgentId ?? "system",
+              });
+            } catch { /* worklog 失败不影响取消 */ }
+            cancelledIds.push(id);
+          } catch {
+            failedIds.push(id);
+          }
+        }
+
+        return jsonResult({
+          success: true,
+          message: `批量取消完成：${cancelledIds.length} 个任务已取消${failedIds.length > 0 ? `，${failedIds.length} 个失败` : ""}`,
+          cancelledCount: cancelledIds.length,
+          cancelledIds,
+          failedCount: failedIds.length,
+          failedIds,
+          reason,
+        });
+      } catch (error) {
+        return jsonResult({ success: false, error: `Batch cancel failed: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    },
+  };
+}
+
 export function createTaskTemplateApplyTool(): AnyAgentTool {
   return {
     label: "Task Template Apply",

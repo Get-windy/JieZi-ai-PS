@@ -45,3 +45,8 @@ const buildInfo = {
 
 fs.mkdirSync(distDir, { recursive: true });
 fs.writeFileSync(path.join(distDir, "build-info.json"), `${JSON.stringify(buildInfo, null, 2)}\n`);
+
+// Write .buildstamp so run-node.mjs skips auto-rebuild after `pnpm build`.
+// Format must match writeBuildStamp() in scripts/run-node.mjs.
+const buildStamp = { builtAt: Date.now(), head: commit };
+fs.writeFileSync(path.join(distDir, ".buildstamp"), `${JSON.stringify(buildStamp)}\n`);

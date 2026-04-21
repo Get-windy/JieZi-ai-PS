@@ -74,6 +74,21 @@ import {
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
 import { isLikelyContextOverflowError } from "../agents/pi-embedded-helpers/errors.js";
+
+/**
+ * 检测错误消息是否为 API 限流（429 / rate limit / quota exceeded）错误。
+ * 用于触发全局限流熔断器，暂停 Task Wake 调度器的无效重试。
+ */
+function isLikelyRateLimitError(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes("rate limit") ||
+    lower.includes("429") ||
+    lower.includes("quota exceeded") ||
+    lower.includes("too many requests") ||
+    lower.includes("rate_limit")
+  );
+}
 import { getReplyFromConfig } from "../auto-reply/reply/get-reply.js";
 import {
   normalizeAgentId,
@@ -87,6 +102,7 @@ import {
   resolveHeartbeatDeliveryTarget,
   resolveHeartbeatSenderContext,
 } from "./outbound/targets.js";
+import { notifyGlobalRateLimit } from "../cron/agent-task-wake-scheduler.js";
 
 export type HeartbeatDeps = OutboundSendDeps &
   ChannelHeartbeatDeps & {
@@ -895,10 +911,15 @@ export async function runHeartbeatOnce(opts: {
           "",
           "---",
           "## [DoD 门禁] 当前活跃项目完成状态（Project Definition-of-Done Status）",
-          "▶ 主控规则：",
-          "  - 【任务全部 done ≠ 项目完成】项目开发是滚动迭代过程：完成一批任务后，应根据进展继续安排下一批任务。",
-          "  - 【DoD 验收标准驱动完成判断】只有 completionGate.criteria 中的验收标准全部满足，并得到明确确认后，才可将项目设为 completed。",
-          "  - 【scopeFrozen=true 时禁止创建任务】如发现误封冻，立即调用 projects.reactivate 或 projects.updateProgress 将 status 回退为 development/active。",
+          "▶ 主控规则（业界最佳实践：Ship → Pause → Feedback → Iterate）：",
+          "  - 【DoD 驱动交付】只有 completionGate.criteria 中的验收标准全部满足，才算达到可交付状态（可发布给用户）。",
+          "  - 【达标即暂停】DoD 满足后立即停止开发，将项目设为 paused（等待用户反馈），禁止继续创建新功能/优化任务。",
+          "  - 【反馈驱动迭代】等待用户实际使用后提出 Bug 或改进需求，收到反馈后再开启下一轮迭代，不可提前假设需求自行开发。",
+          "  - 【scopeFrozen=true 时绝对禁止创建任务】范围冻结期间严禁任何新任务，包括看似合理的优化或重构。",
+          "  - 【paused 状态不分配新任务】paused 代表等待外部反馈，主控应保持等待，不催促团队工作。",
+          "  - 【需求基线是金标准】requirementsBaseline 经用户确认后就是不可篹改的单一事实源，所有开发、审查、DoD 验收均必对照此基线而不是 AI 的自我理解。",
+          "  - 【基线未锁定禁止开发】requirementsBaseline.baselineLockedAt 为空时，禁止推进到 planning/development 阶段，必须先完成需求澳清并等待用户确认。",
+          "  - 【变更需用户授权】如用户提出新需求，必须展示变更内容和影响并等待用户确认 Change Request，确认后更新 baseline.version 并重新锁定基线，不得单方擅自扩展范围。",
           "",
         ];
 
@@ -917,6 +938,73 @@ export async function runHeartbeatOnce(opts: {
             continue;
           }
 
+          // ── 需求基线守卫 ──
+          const baseline = ctx.config?.requirementsBaseline;
+          const baselineLocked = baseline && baseline.baselineLockedAt;
+          const baselineScenarioCount = baseline?.scenarios?.length ?? 0;
+          const mustScenarios = baseline?.scenarios?.filter((s) => s.priority === "must") ?? [];
+          const isPreDev = status === "requirements" || status === "design" || status === "planning";
+          const isInDev = status === "development" || status === "active" || status === "testing" || status === "review";
+
+          if (!baseline) {
+            // 区分“新项目尚未建基线”和“老项目存量迁移”两种场景
+            // isPreDev=true → 项目还在需求/设计/规划阶段，强制阻断，必须先建基线才能开发
+            // isInDev=true  → 项目已在开发/测试中，可能是引入此机制前的存量老项目，
+            //                  降级为「建议补充」而非「强制阻断」，避免中断已有进度
+            // 其他状态     → 轻提示
+            if (isPreDev) {
+              lines.push(
+                `⚠️  项目: ${name} (${id})  状态: ${status}`,
+                `   [需求基线缺失——禁止推进开发] 项目处于需求/设计/规划阶段，尚未建立 requirementsBaseline。`,
+                `   必须操作：先与用户反复澳清需求，按 Given-When-Then 格式写出验收场景 + Out-of-Scope 列表，等用户确认后再推进。`,
+                `   就调用 projects.updateProgress(projectId="${id}") 写入 requirementsBaseline 并设置 baselineLockedAt。`,
+                `   📁 原始沟通记录保存到：${ctx.config?.requirementsDir ?? (ctx.workspacePath + "/requirements")}/REQUIREMENTS_BASELINE.md`,
+                `   📋 同时将摘要同步到 SHARED_MEMORY.md 的「📌 需求基线摘要」区块。`,
+                ``,
+              );
+            } else if (isInDev) {
+              // 存量老项目：已在开发中，需求基线机制是新引入的，补充即可，不阻断当前工作
+              lines.push(
+                `💡 项目: ${name} (${id})  状态: ${status}`,
+                `   [建议补充需求基线] 该项目缺少 requirementsBaseline（此为新引入的需求对齐机制）。`,
+                `   当前工作无需中断，但建议在合适时机补充：整理用户原始需求 → 写成 Given-When-Then 场景 → 用户确认后锁定基线。`,
+                `   补充路径：${ctx.config?.requirementsDir ?? (ctx.workspacePath + "/requirements")}/REQUIREMENTS_BASELINE.md`,
+                ``,
+              );
+            } else {
+              lines.push(
+                `💡 项目: ${name} (${id})  状态: ${status}`,
+                `   [建议] 尚未定义需求基线（requirementsBaseline），如有机会可补充以提升需求对齐质量。`,
+                ``,
+              );
+            }
+          } else if (!baselineLocked && isInDev) {
+            lines.push(
+              `🚨  项目: ${name} (${id})  状态: ${status}`,
+              `   [基线未锁定——违规开发中] requirementsBaseline 存在但用户尚未确认，当前却已进入开发阶段！`,
+              `   立即暂停创建新任务，向用户展示当前基线草稿（v${baseline.version}）并等待确认。`,
+              `   确认后再将 baselineLockedAt 写入项目配置。`,
+              ``,
+            );
+          } else if (!baselineLocked && isPreDev) {
+            lines.push(
+              `📋 项目: ${name} (${id})  状态: ${status}`,
+              `   [需求澳清中] 基线不完整或用户尚未确认。当前场景: ${baselineScenarioCount} 个 (must: ${mustScenarios.length})`,
+              `   下一步：展示当前需求理解，使用 Given-When-Then 格式确认每个场景，尝试识别歧义并向用户澳清。`,
+              ``,
+            );
+          } else if (baselineLocked) {
+            const lockedDate = new Date(baseline.baselineLockedAt!).toLocaleDateString("zh-CN");
+            lines.push(
+              `📌 项目: ${name} (${id})  状态: ${status}`,
+              `   [需求基线已锁定 v${baseline.version}] 由「${baseline.baselineLockedBy ?? "用户"}」于 ${lockedDate} 确认。`,
+              `   金标准: "${baseline.valueStatement}"`,
+              `   必实现场景: ${mustScenarios.length} 个 | Out-of-Scope: ${baseline.outOfScope.length} 项`,
+              `   ⛔ 任何超出以上范围的开发均需立即停止并向用户发起 Change Request。`,
+              ``,
+            );
+          }
+
           const gateResult = checkCompletionGate(gate);
           const statusIcon = gate.scopeFrozen ? "🔒" : gateResult.canClose ? "✅" : "🛠️";
 
@@ -931,11 +1019,13 @@ export async function runHeartbeatOnce(opts: {
             );
           } else if (gateResult.canClose) {
             lines.push(
-              `   ✅ 所有验收标准已满足。`,
-              `   ⚠️ 在设为 completed 前，请先确认：`,
-              `     (1) 项目确实不需要再迭代新功能或修复；`,
-              `     (2) DoD 验收标准定义完整无遗漏；`,
-              `     (3) 确认后再调用 projects.updateProgress(projectId="${id}", status="completed")。`,
+              `   ✅ 本轮迭代 DoD 已全部满足！达到可交付标准。`,
+              `   🚦 下一步（按顺序执行，不可跳过）：`,
+              `     ① 立即调用 projects.updateProgress(projectId="${id}", status="paused") 将项目设为【暂停等待反馈】`,
+              `     ② 停止为该项目创建任何新任务（功能/优化/重构 均禁止）`,
+              `     ③ 向负责人通报：本轮迭代已完成，等待用户实际使用后反馈`,
+              `     ④ 收到用户反馈后，再调用 projects.updateProgress 将状态改回 development/active，开启下一轮迭代`,
+              `   ⛔ 绝对禁止：在未收到用户反馈前，自行假设需求继续开发！`,
             );
           } else if (gateResult.gaps.length > 0) {
             lines.push(`   🔍 待补齐的差距（仅补这些，不要重复开发其他部分）:`);
@@ -997,13 +1087,98 @@ export async function runHeartbeatOnce(opts: {
       log.warn(`heartbeat: failed to build DoD summary for coordinator: ${String(dodErr)}`);
     }
 
+    // ── Sprint 到期预警注入（Shape Up Circuit Breaker 警示）──────────────────
+    // 在 DoD 摘要之后，告知 coordinator 哪些 Sprint 即将到期或已超期
+    // 到期超过 0ms = 立即触发 Circuit Breaker 告警；到期前 24h = 预警
+    try {
+      const { getExpiringSprints } = await import("../tasks/task-aging.js");
+      const { listAvailableProjects: _lsP, buildProjectContext: _bpC } =
+        await import("../utils/project-context.js");
+
+      const _sprintCtxList: Array<{ id: string; name: string; sprints: import("../utils/project-context.js").ProjectSprint[] }> = [];
+      for (const _pid of _lsP()) {
+        try {
+          const _ctx = _bpC(_pid);
+          _sprintCtxList.push({
+            id: _pid,
+            name: _ctx.config?.name ?? _pid,
+            sprints: _ctx.config?.sprints ?? [],
+          });
+        } catch { /* 单个项目构建失败忽略 */ }
+      }
+
+      const expiring = getExpiringSprints(_sprintCtxList);
+      if (expiring.length > 0) {
+        const sprintLines: string[] = [
+          "",
+          "---",
+          "## [Sprint 熔断预警] 即将到期或已超期的 Sprint（Shape Up Circuit Breaker）",
+          "▶ 主控规则：",
+          "  - 【Sprint 硬截止】Sprint 到期后不得自动延期，超时工作必须退回 backlog 重新评估。",
+          "  - 【到期立即熔断】Sprint 已超期 → 立即将未完成任务退回 backlog，用户反馈优先。",
+          "  - 【不延期原则】如需继续，在下一个 Sprint 中重新排期，而不是延长当前 Sprint。",
+          "",
+        ];
+
+        for (const s of expiring) {
+          const isOverdue = s.overdueMs > 0;
+          const overdueHours = Math.round(Math.abs(s.overdueMs) / (1000 * 60 * 60));
+          const endDateStr = new Date(s.endDate).toLocaleString("zh-CN");
+
+          if (isOverdue) {
+            sprintLines.push(
+              `🔴 [已超期] 项目 ${s.projectName} | Sprint: ${s.sprintTitle}`,
+              `   超期: ${overdueHours}h | 截止: ${endDateStr} | 未完成任务: ${s.incompleteTaskCount} 条`,
+              `   ⚡ 立即执行：将 ${s.incompleteTaskCount} 个未完成任务手动标记为 backlog，Sprint 设为 completed。`,
+              `   ✅ 可调用 runSprintCircuitBreaker 或手动操作完成熔断。`,
+              "",
+            );
+          } else {
+            const hoursLeft = Math.round((s.endDate - Date.now()) / (1000 * 60 * 60));
+            sprintLines.push(
+              `🟡 [即将到期] 项目 ${s.projectName} | Sprint: ${s.sprintTitle}`,
+              `   剩余: ${hoursLeft}h | 截止: ${endDateStr} | 未完成任务: ${s.incompleteTaskCount} 条`,
+              `   ⚠️ 请评估未完成任务是否能在截止前完成，否则主动退回 backlog，不要勉强。`,
+              "",
+            );
+          }
+        }
+        prompt = prompt + "\n" + sprintLines.join("\n");
+      }
+    } catch (sprintWarnErr) {
+      // Sprint 预警生成失败不影响心跳主流程
+      log.warn(`heartbeat: failed to build sprint expiry warning: ${String(sprintWarnErr)}`);
+    }
+
     // ── 团队成员活跃负载摘要注入 ──────────────────────────────────────────
     // 直接告知主控每个成员的活跃任务数量（仅计入 todo + in-progress），
     // 避免 LLM 自行调用 task_list 并误将 done 任务算入负载。
-    // 规则参考：待执行(todo)+进行中(in-progress) < MIN_ACTIVE_TASKS 时，提示主控补充任务。
+    // ⚠️ 守卫：若所有项目均已暂停/冻结，跳过空闲催促逻辑，改为"等待用户反馈"提示
     try {
       const { listTasks } = await import("../tasks/storage.js");
       const { listAgentIds } = await import("../agents/agent-scope.js");
+      const { listAvailableProjects: _lsProj, buildProjectContext: _bpCtx } =
+        await import("../utils/project-context.js");
+
+      // ── 项目级守卫：检查是否有开发中的活跃项目 ──
+      const _allProjIds = _lsProj();
+      const _frozenOrPausedProjects: string[] = [];
+      const _developingProjects: string[] = [];
+      for (const _pid of _allProjIds) {
+        try {
+          const _pCtx = _bpCtx(_pid);
+          const _pStatus = _pCtx.config?.status;
+          const _scopeFrozen = _pCtx.config?.completionGate?.scopeFrozen;
+          if (["completed", "cancelled", "deprecated"].includes(_pStatus ?? "")) {continue;}
+          if (_pStatus === "paused" || _scopeFrozen) {
+            _frozenOrPausedProjects.push(_pid);
+          } else {
+            _developingProjects.push(_pid);
+          }
+        } catch { /* 单个项目构建失败忽略 */ }
+      }
+      const _hasActiveDev = _developingProjects.length > 0;
+
       const allAgentIds = listAgentIds(cfg).filter(
         (id) => id !== agentId && id !== resolveDefaultAgentId(cfg),
       );
@@ -1040,30 +1215,51 @@ export async function runHeartbeatOnce(opts: {
             "## [团队负载] 各成员活跃任务数（仅统计 todo + in-progress，不含 done/cancelled）",
             "▶ 主控规则：",
             "  - 【负载判断依据】仅 todo + in-progress 状态的任务才算入活跃工作量，done/cancelled 不计入。",
-            "  - 【补充任务阈值】当成员活跃任务 < 5 条时，应主动从 backlog 中为其安排新任务。",
-            "  - 【空闲识别】activeTotal = 0 表示该成员当前完全空闲，需立即分配工作。",
-            "",
           ];
 
-          let hasIdleMembers = false;
-          for (const load of memberLoads) {
-            const icon = load.activeTotal === 0 ? "⚪" : load.activeTotal < 3 ? "🟡" : "🟢";
+          if (!_hasActiveDev) {
+            // 所有项目均已暂停/冻结 → 等待反馈模式，不催促
             loadLines.push(
-              `${icon} ${load.agentId}: 活跃任务 ${load.activeTotal} 条（待开始 ${load.todo} + 进行中 ${load.inProgress}）`,
+              "  - 【⏸️ 等待反馈模式】当前所有项目均已暂停或范围冻结，团队处于等待用户反馈阶段。",
+              "  - 【禁止分配新任务】在收到用户反馈前，不得为任何成员创建新的开发任务。",
+              "  - 【正确响应】若成员询问下一步，告知：本轮迭代已交付，等待用户反馈，收到反馈后再安排。",
+              "",
             );
-            if (load.activeTotal === 0) {
-              hasIdleMembers = true;
-              loadLines.push(`   ⚠️ 该成员完全空闲！请立即调用 task_create 为其安排工作任务。`);
-            } else if (load.activeTotal < 5) {
-              loadLines.push(`   ℹ️ 活跃任务不足 5 条，如有 backlog 任务可安排给该成员。`);
+            if (_frozenOrPausedProjects.length > 0) {
+              loadLines.push(
+                `   ⏸️ 暂停/冻结中的项目：${_frozenOrPausedProjects.join(", ")}`,
+                `   📬 等待用户对上述项目提供使用反馈，收到后调用 projects.updateProgress 重新激活，开启下一轮迭代。`,
+                "",
+              );
             }
-          }
-
-          if (hasIdleMembers) {
-            loadLines.push("");
+          } else {
+            // 存在开发中项目 → 正常负载补充逻辑
             loadLines.push(
-              "🚨 发现空闲成员！请立即检查 backlog 并为空闲成员分配新任务，保持团队持续运转。",
+              "  - 【补充任务阈值】当成员活跃任务 < 3 条时，从开发中项目的 backlog 为其安排新任务。",
+              "  - 【空闲识别】activeTotal = 0 表示该成员完全空闲，需立即分配工作。",
+              "",
             );
+
+            let hasIdleMembers = false;
+            for (const load of memberLoads) {
+              const icon = load.activeTotal === 0 ? "⚪" : load.activeTotal < 3 ? "🟡" : "🟢";
+              loadLines.push(
+                `${icon} ${load.agentId}: 活跃任务 ${load.activeTotal} 条（待开始 ${load.todo} + 进行中 ${load.inProgress}）`,
+              );
+              if (load.activeTotal === 0) {
+                hasIdleMembers = true;
+                loadLines.push(`   ⚠️ 该成员完全空闲！请从开发中项目的 backlog 为其安排工作任务。`);
+              } else if (load.activeTotal < 3) {
+                loadLines.push(`   ℹ️ 活跃任务不足 3 条，如有 backlog 任务可安排给该成员。`);
+              }
+            }
+
+            if (hasIdleMembers) {
+              loadLines.push("");
+              loadLines.push(
+                "🚨 发现空闲成员！请检查开发中项目的 backlog 并为空闲成员分配新任务。",
+              );
+            }
           }
           loadLines.push("");
           prompt = prompt + "\n" + loadLines.join("\n");
@@ -1073,10 +1269,128 @@ export async function runHeartbeatOnce(opts: {
       // 负载摘要生成失败不影响心跳主流程
       log.warn(`heartbeat: failed to build team load summary: ${String(loadErr)}`);
     }
-    // ────────────────────────────────────────────────────────────────────
-  }
-  // ────────────────────────────────────────────────────────────────────
 
+    // ── 项目规范约定注入（coordinator 心誺）────────────────────────────────────
+    // 在分配任务前，让 coordinator 知道每个开发中项目的运行规范。
+    // 若 conventions 未定义，明确限制分配实现任务。
+    try {
+      const { listAvailableProjects: _lsProj2, buildProjectContext: _bpCtx2 } =
+        await import("../utils/project-context.js");
+      const _allPids2 = _lsProj2();
+      const convLines: string[] = [];
+
+      for (const _pid2 of _allPids2) {
+        try {
+          const _pCtx2 = _bpCtx2(_pid2);
+          const _pCfg2 = _pCtx2.config;
+          if (!_pCfg2) {continue;}
+          const _convActiveStatuses = new Set(["development", "planning", "design", "testing", "review"]);
+          if (!_convActiveStatuses.has(_pCfg2.status ?? "")) {continue;}
+
+          const _hasTechStack = _pCfg2.techStack && Object.keys(_pCfg2.techStack).length > 0;
+          const _hasConventions = _pCfg2.conventions &&
+            Object.values(_pCfg2.conventions).some((v) => v !== undefined && v !== null && v !== "");
+
+          if (!_hasTechStack && !_hasConventions) {
+            convLines.push(
+              `\u26a0\ufe0f [\u89c4\u8303\u672a\u5b9a\u4e49] \u9879\u76ee "${_pCfg2.name ?? _pid2}" \u5c1a\u672a\u914d\u7f6e techStack + conventions\uff01`,
+              `   \u8fd9\u662f\u91cd\u590d\u4ee3\u7801\u7684\u4e3b\u8981\u8fdb\u5165\u70b9\u3002\u5728\u5b9a\u4e49\u89c4\u8303\u524d\uff0c\u7981\u6b62\u5206\u914d\u4e0d\u4f55\u5b9e\u73b0\u4efb\u52a1\u3002`,
+              `   \u8bf7\u5148\u5b8c\u5584 PROJECT_CONFIG.json \u7684 techStack + conventions \u5b57\u6bb5\uff0c\u5e76\u66f4\u65b0 SHARED_MEMORY.md\u3002`,
+              ``,
+            );
+          } else {
+            const _c = _pCfg2.conventions ?? {};
+            const _ts = _pCfg2.techStack ?? {};
+            const _cvSummary: string[] = [];
+            if (Object.keys(_ts).length > 0) {
+              _cvSummary.push(`\u6280\u672f\u6808: ${Object.entries(_ts).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+            }
+            if (_c.dirStructure) {_cvSummary.push(`\u76ee\u5f55\u7ed3\u6784: ${_c.dirStructure}`);}
+            if (_c.packageNaming) {_cvSummary.push(`\u5305\u547d\u540d: ${_c.packageNaming}`);}
+            if (_c.moduleNaming) {_cvSummary.push(`\u6a21\u5757\u547d\u540d: ${_c.moduleNaming}`);}
+            if (_c.apiPathPrefix) {_cvSummary.push(`API\u524d\u7f00: ${_c.apiPathPrefix}`);}
+            if (_c.codeStyle) {_cvSummary.push(`\u4ee3\u7801\u98ce\u683c: ${_c.codeStyle}`);}
+            if (_c.custom) {
+              for (const [_ck, _cv] of Object.entries(_c.custom)) {
+                _cvSummary.push(`${_ck}: ${_cv}`);
+              }
+            }
+            if (_cvSummary.length > 0) {
+              convLines.push(
+                `\u2705 [\u9879\u76ee\u89c4\u8303] \u9879\u76ee "${_pCfg2.name ?? _pid2}" \u7684\u5f3a\u5236\u8ba4\u8bc6\uff1a`,
+                ..._cvSummary.map((l) => `   \u2022 ${l}`),
+                `   \u26a0\ufe0f \u5206\u914d\u5b9e\u73b0\u4efb\u52a1\u65f6\u5fc5\u987b\u5c06\u4ee5\u4e0a\u89c4\u8303\u5199\u5165\u4efb\u52a1 description\uff0c\u7981\u6b62 AI \u6210\u5458\u81ea\u884c\u5224\u65ad\u76ee\u5f55\u7ed3\u6784\u548c\u5305\u547d\u540d\u3002`,
+                ``,
+              );
+            }
+          }
+        } catch { /* \u5355\u9879\u76ee\u5931\u8d25\u5ffd\u7565 */ }
+      }
+
+      if (convLines.length > 0) {
+        const _convHeader = [
+          "",
+          "---",
+          "## [\u9879\u76ee\u89c4\u8303\u7ea6\u5b9a] \u5206\u914d\u4efb\u52a1\u524d\u5fc5\u8bfb\u2014\u2014\u4e25\u7981\u8fdd\u53cd\uff08\u9632\u6b62\u91cd\u590d\u4ee3\u7801\u7684\u6838\u5fc3\u673a\u5236\uff09",
+          "",
+        ];
+        prompt = prompt + "\n" + _convHeader.join("\n") + convLines.join("\n");
+      }
+    } catch (convErr) {
+      log.warn(`heartbeat: failed to build conventions summary: ${String(convErr)}`);
+    }
+    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  }
+  // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+
+    // ── 紧急制动流程提示（coordinator 心跳）────────────────
+    try {
+      const _pivotNotice = [
+        "",
+        "---",
+        "## [紧急制动协议] 发现方向错误时的标准处置流程",
+        "",
+        "当你（coordinator）发现以下情况时，必须立即执行紧急制动：",
+        "  - 项目中出现了重复模块（如 erp/erp-purchase/ 和 erp-purchase/ 同时存在）",
+        "  - 架构方向已确认错误，需要推倒重来",
+        "  - 用户明确指出当前开发路径不对",
+        "  - 多个 agent 在错误路径上并行开发，产生了大量需废弃的代码",
+        "",
+        "紧急制动操作步骤：",
+        "  1. 调用 project_emergency_pivot(projectId, reason, newDirection?) 一键制动",
+        "     该工具会自动：暂停项目 + 批量取消所有未完成任务 + 写入共享记忆",
+        "  2. 如需只取消部分任务，使用 task_batch_cancel(projectId, reason)",
+        "  3. 清理重复/错误代码",
+        "  4. 重新规划正确的目录结构和任务",
+        "  5. 调用 project_update_status(projectId, 'development') 恢复开发",
+        "",
+        "\u26a0\ufe0f 禁止的做法：发现方向错误后继续让 agent 执行原有任务！",
+        "",
+      ];
+      prompt = prompt + "\n" + _pivotNotice.join("\n");
+    } catch (pivotNoticeErr) {
+      log.warn(`heartbeat: failed to inject pivot notice: ${String(pivotNoticeErr)}`);
+    }
+
+    // ── 反思日志提醒（Reflexion 机制）────────────────────────────────
+    try {
+      const _reflexionNotice = [
+        "",
+        "---",
+        "## [反思日志] 从失败中学习（Reflexion 机制）",
+        "",
+        "当项目中有任务被取消或失败时，反思日志会自动写入项目共享记忆的「反思日志（Reflexion）」区块。",
+        "作为 coordinator，你应当：",
+        "  1. 在分配新任务前，先读取项目的反思日志区块，了解之前失败的原因",
+        "  2. 在新任务的 description 中明确写入「避免 XX 错误」的提示",
+        "  3. 如果反思日志中频繁出现同类失败，考虑调用 project_emergency_pivot 重新评估方向",
+        "",
+      ];
+      prompt = prompt + "\n" + _reflexionNotice.join("\n");
+    } catch (reflexionErr) {
+      log.warn(`heartbeat: failed to inject reflexion notice: ${String(reflexionErr)}`);
+    }
   const ctx = {
     Body: appendCronStyleCurrentTimeLine(prompt, cfg, startedAt),
     From: sender,
@@ -1396,6 +1710,17 @@ export async function runHeartbeatOnce(opts: {
     const overflowPayload = replyPayloads.find(
       (p) => p.isError && isLikelyContextOverflowError(p.text ?? ""),
     );
+
+    // ── 限流感知：reply payload 带有 rate_limit 错误标志时上报全局熔断器 ──
+    const rateLimitPayload = replyPayloads.find(
+      (p) => p.isError && isLikelyRateLimitError(p.text ?? ""),
+    );
+    if (rateLimitPayload) {
+      notifyGlobalRateLimit(agentId);
+      log.warn(`heartbeat: rate-limit error detected for agent "${agentId}" — notified global circuit breaker`, { agentId });
+    }
+    // ─────────────────────────────────────────────────────────────────
+
     if (overflowPayload && transcriptState.transcriptPath) {
       log.warn(
         `heartbeat: context overflow detected for agent "${agentId}" session "${runSessionKey}" — auto-clearing transcript to break retry loop`,
@@ -1864,6 +2189,14 @@ export async function runHeartbeatOnce(opts: {
     if (err instanceof Error && err.stack) {
       log.error(`heartbeat failed stack: ${err.stack}`, { error: reason });
     }
+
+    // ── 限流感知：catch 到 rate_limit 错误时上报全局熔断器 ──
+    if (isLikelyRateLimitError(reason)) {
+      notifyGlobalRateLimit(agentId);
+      log.warn(`heartbeat: rate-limit error caught for agent "${agentId}" — notified global circuit breaker`, { agentId });
+    }
+    // ─────────────────────────────────────────────────────────────────
+
     emitHeartbeatEvent({
       status: "failed",
       reason,

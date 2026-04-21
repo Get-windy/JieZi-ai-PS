@@ -42,7 +42,8 @@ export type TaskStatus =
   | "review"
   | "blocked"
   | "done"
-  | "cancelled";
+  | "cancelled"
+  | "needs-rework"; // 需要返工：已完成但发现错误，需回头修复
 
 /**
  * 任务优先级
@@ -64,6 +65,10 @@ export function normalizeTaskStatus(raw: string): TaskStatus {
   const map: Record<string, TaskStatus> = {
     in_progress: "in-progress",
     in_review: "review",
+    needs_rework: "needs-rework",
+    rework: "needs-rework",
+    reopen: "needs-rework",
+    reopened: "needs-rework",
   };
   return map[raw] ?? raw;
 }

@@ -220,6 +220,94 @@ const agentLastReactivateAt = new Map<string, { lastAt: number; attempts: number
 // 低水位告警冷却记录：每个 agent 最近一次低水位告警时间（防止每轮扫描都轰炸 supervisor）
 const lowWatermarkAlertAt = new Map<string, number>();
 
+// ============================================================================
+// 全局限流熔断器（Global Rate-Limit Circuit Breaker）
+//
+// 设计背景：
+//   当阿里云 API 配额耗尽时，所有账号同时返回 429，heartbeat-runner 会对每个
+//   agent 不断重试，产生大量无效调用，加速配额消耗并形成雪崩。
+//
+// 工作原理：
+//   1. heartbeat-runner 检测到 429 错误时，调用 notifyGlobalRateLimit(agentId)
+//   2. 本模块在滑动窗口内统计「不同 agent」的 429 数量
+//   3. 超过 RATE_LIMIT_BREACH_THRESHOLD 个不同 agent 报 429 时，
+//      进入全局退避：暂停整轮 Task Wake 扫描 RATE_LIMIT_PAUSE_MS 分钟
+//   4. 退避期结束后自动恢复正常扫描
+// ============================================================================
+
+/** 滑动时间窗口（5 分钟内连续多个 agent 都 429，则认定为全局限流）*/
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+
+/** 触发全局退避所需的「不同 agent」429 数量（≥3 个不同 agent 同时 429）*/
+const RATE_LIMIT_BREACH_THRESHOLD = 3;
+
+/** 全局退避持续时间（默认 15 分钟，等待 API 配额自动恢复）*/
+const RATE_LIMIT_PAUSE_MS = 15 * 60 * 1000;
+
+/** 滑动窗口：agentId → 最近一次 429 时间戳 */
+const rateLimitWindowMap = new Map<string, number>();
+
+/** 全局退避开始时间（0 = 未在退避中）*/
+let globalRateLimitPausedAt = 0;
+
+/**
+ * 由 heartbeat-runner 在检测到 rate_limit 错误时调用。
+ * 内部维护滑动窗口，达到阈值时触发全局退避。
+ *
+ * @param agentId 触发 429 的 agent ID
+ */
+export function notifyGlobalRateLimit(agentId: string): void {
+  const now = Date.now();
+  const normalizedId = normalizeAgentId(agentId);
+
+  // 更新该 agent 的最近 429 时间
+  rateLimitWindowMap.set(normalizedId, now);
+
+  // 清理窗口外的过期记录
+  for (const [id, ts] of rateLimitWindowMap) {
+    if (now - ts > RATE_LIMIT_WINDOW_MS) {
+      rateLimitWindowMap.delete(id);
+    }
+  }
+
+  // 统计窗口内不同 agent 的 429 数量
+  const affectedCount = rateLimitWindowMap.size;
+
+  if (affectedCount >= RATE_LIMIT_BREACH_THRESHOLD && globalRateLimitPausedAt === 0) {
+    globalRateLimitPausedAt = now;
+    const pauseMin = Math.round(RATE_LIMIT_PAUSE_MS / 60000);
+    console.log(
+      "[Task Wake] Global rate-limit circuit breaker TRIGGERED: " +
+        affectedCount + " agents hit 429 within " + (RATE_LIMIT_WINDOW_MS / 60000) + "min window. " +
+        "Pausing Task Wake scans for " + pauseMin + "min.",
+    );
+  }
+}
+
+/**
+ * 检查当前是否处于全局限流退避状态。
+ * 退避期结束后自动清除状态并返回 false。
+ */
+function isGlobalRateLimitPaused(): boolean {
+  if (globalRateLimitPausedAt === 0) {return false;}
+  const now = Date.now();
+  const elapsed = now - globalRateLimitPausedAt;
+  if (elapsed >= RATE_LIMIT_PAUSE_MS) {
+    const pausedMin = Math.round(elapsed / 60000);
+    console.log(
+      "[Task Wake] Global rate-limit circuit breaker RESET after " + pausedMin + "min. Resuming normal scans.",
+    );
+    globalRateLimitPausedAt = 0;
+    rateLimitWindowMap.clear();
+    return false;
+  }
+  const remainingMin = Math.ceil((RATE_LIMIT_PAUSE_MS - elapsed) / 60000);
+  console.log(
+    "[Task Wake] Global rate-limit pause active — " + remainingMin + "min remaining. Skipping scan.",
+  );
+  return true;
+}
+
 /**
  * 对 Agent 的 session store 执行 overflow reset：
  * 生成新 sessionId 写入 store，使下次 heartbeat run 以干净的空 context 启动。
@@ -522,6 +610,14 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
     isFirstScan = false;
   }
 
+  // ── 全局限流退避门控 ──────────────────────────────────────────────────────
+  // 当多个 agent 在短时间内都触发 429 时，跳过整轮扫描，避免空转浪费重试次数。
+  // notifyGlobalRateLimit() 由 heartbeat-runner 在检测到 rate_limit 错误时调用。
+  if (isGlobalRateLimitPaused()) {
+    return stats;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   try {
     const cfg = loadConfig();
     const agentIds = listAgentIds(cfg);
@@ -815,8 +911,52 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
             // 任务卡住超过 60 分钟：强制重置回 todo，让调度器重新派发
             // 这样可以避免因模型 API 超时导致任务永久卡住
             // 注意：状态机不允许 in-progress → todo 直接跳转，必须经由 blocked 中转
+            //
+            // ── 重置计数防无限循环（漏洞修复）──
+            // 每次 force-reset 给 metadata.resetCount +1
+            // 超过 MAX_FORCE_RESET_COUNT 后直接 cancel，防止任务永远 todo→in-progress→reset
+            const MAX_FORCE_RESET_COUNT = 3;
+            const prevResetCount = typeof activeTask.metadata?.resetCount === "number"
+              ? activeTask.metadata.resetCount
+              : 0;
+            const newResetCount = prevResetCount + 1;
+
+            if (newResetCount > MAX_FORCE_RESET_COUNT) {
+              // 超过重置上限：自动 cancel，防止无限循环
+              console.warn(
+                `[Task Wake] Agent ${normalizedId} task ${activeTask.id} exceeded max reset count (${newResetCount}/${MAX_FORCE_RESET_COUNT}) — auto-cancelling to prevent infinite loop`,
+              );
+              await taskStorage.updateTask(activeTask.id, {
+                status: "cancelled",
+                cancelReason: `Auto-cancelled after ${newResetCount} force-resets with no progress (stuck ${stuckMinutes}min each time). Please review and re-create this task with clearer acceptance criteria.`,
+                metadata: {
+                  ...activeTask.metadata,
+                  resetCount: newResetCount,
+                  autoCancelledAt: now,
+                  autoCancelReason: "exceeded_max_resets",
+                },
+              });
+              // 通知 supervisor 任务因循环被自动取消
+              const supervisorRaw2 = (activeTask.metadata?.supervisorId ?? activeTask.creatorId) as string | undefined;
+              if (supervisorRaw2) {
+                injectLeaderSnapshot({
+                  leaderId: normalizeAgentId(supervisorRaw2),
+                  wakeReason: {
+                    type: "task_reset" as const,
+                    agentId: normalizedId,
+                    taskId: activeTask.id,
+                    stuckMinutes,
+                  },
+                  coalesceMs: 5_000,
+                }).catch(() => { /* best-effort */ });
+              }
+              progressReportPromptedAt.delete(activeTask.id);
+              stats.wokenAgents++;
+              continue;
+            }
+
             console.log(
-              `[Task Wake] Agent ${normalizedId} task ${activeTask.id} stuck for ${stuckMinutes}min — force resetting to todo`,
+              `[Task Wake] Agent ${normalizedId} task ${activeTask.id} stuck for ${stuckMinutes}min — force resetting to todo (reset #${newResetCount}/${MAX_FORCE_RESET_COUNT})`,
             );
             await taskStorage.updateTask(activeTask.id, { status: "blocked" });
             await taskStorage.updateTask(activeTask.id, {
@@ -824,6 +964,12 @@ export async function scanAndWakeAgentsWithPendingTasks(options?: {
               timeTracking: {
                 ...activeTask.timeTracking,
                 startedAt: undefined,
+              },
+              metadata: {
+                ...activeTask.metadata,
+                resetCount: newResetCount,
+                lastResetAt: now,
+                lastResetReason: `stuck_${stuckMinutes}min`,
               },
             });
             // 通知负责人（重置通知，24h 冷却防重复）

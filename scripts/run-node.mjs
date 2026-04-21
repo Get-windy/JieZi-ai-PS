@@ -182,7 +182,13 @@ const shouldBuild = () => {
   if (currentHead) {
     const dirty = hasDirtySourceTree();
     if (dirty === true) {
-      return true;
+      // Dirty tree: only rebuild if source files are actually newer than the stamp.
+      // This avoids a redundant rebuild right after `pnpm build` when the working
+      // tree has uncommitted changes but nothing has changed since the last build.
+      if (hasSourceMtimeChanged(stamp.mtime)) {
+        return true;
+      }
+      return false;
     }
     if (dirty === false) {
       return false;

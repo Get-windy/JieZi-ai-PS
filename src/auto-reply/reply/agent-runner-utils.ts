@@ -1,4 +1,5 @@
 import { resolveAgentModelFallbacksOverride } from "../../agents/agent-scope.js";
+import { isProviderUsableSync } from "../../gateway/server-methods/models.js";
 import type { NormalizedUsage } from "../../agents/usage.js";
 import { getChannelPlugin } from "../../channels/plugins/index.js";
 import type { ChannelId, ChannelThreadingToolContext } from "../../channels/plugins/types.js";
@@ -155,12 +156,42 @@ export const appendUsageLine = (payloads: ReplyPayload[], line: string): ReplyPa
 export const resolveEnforceFinalTag = (run: FollowupRun["run"], provider: string) =>
   Boolean(run.enforceFinalTag || isReasoningTagProvider(provider));
 
+/**
+ * 过滤掉 provider 认证已全部禁用的 fallback 候选，避免浪费重试次数在已知无效账号上。
+ * provider 未纳管（isProviderUsableSync 返回 undefined）时不过滤，保持兼容。
+ */
+function filterDisabledProviderFallbacks(fallbacks: string[] | undefined): string[] | undefined {
+  if (!fallbacks || fallbacks.length === 0) {
+    return fallbacks;
+  }
+  const filtered = fallbacks.filter((accountId) => {
+    const slashIdx = accountId.indexOf("/");
+    if (slashIdx <= 0) {
+      return true; // 无法解析 provider，不过滤
+    }
+    const providerId = accountId.substring(0, slashIdx);
+    const usable = isProviderUsableSync(providerId);
+    // usable === false 表示确定全部禁用，过滤掉；undefined 表示未纳管，保留
+    return usable !== false;
+  });
+  if (filtered.length === fallbacks.length) {
+    return fallbacks; // 无变化，返回原引用
+  }
+  const removed = fallbacks.filter((id) => !filtered.includes(id));
+  console.log(
+    `[ModelFallback] Filtered ${removed.length} fallback(s) with disabled provider auth: ${removed.join(", ")}.`,
+  );
+  return filtered.length > 0 ? filtered : undefined;
+}
+
 export function resolveModelFallbackOptions(run: FollowupRun["run"]) {
   // 优先使用智能路由提供的 fallback 列表（排序好的次优候选）
   // 如果没有，则回退到 agent 配置的 model.fallbacks
-  const fallbacksOverride =
+  const rawFallbacksOverride =
     (run as { smartRoutingFallbacks?: string[] }).smartRoutingFallbacks ??
     resolveAgentModelFallbacksOverride(run.config, resolveAgentIdFromSessionKey(run.sessionKey));
+  // 过滤掉 provider 认证已全部禁用的候选，避免 model_not_found / 无效重试浪费
+  const fallbacksOverride = filterDisabledProviderFallbacks(rawFallbacksOverride);
   return {
     cfg: run.config,
     provider: run.provider,

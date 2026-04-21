@@ -121,6 +121,8 @@ import {
   createProjectInitiativeAddUpdateTool,
   createProjectVelocityTrendTool,
   createProjectHealthUpdateReminderTool,
+  createProjectEmergencyPivotTool,
+  createProjectIssueReportTool,
 } from "./tools/project-management-tools.js";
 // 导入使用自动注册机制的工具文件，加载时注册自动生效
 import "./tools/skill-transfer-tool.js";
@@ -162,6 +164,7 @@ import {
   createTaskTemplateUpsertTool,
   createTaskTemplateListTool,
   createTaskTemplateApplyTool,
+  createTaskBatchCancelTool,
 } from "./tools/task-management-tools.js";
 import { createTeamOrchestrateTool } from "./tools/team-orchestrate-tool.js";
 import {
@@ -582,6 +585,20 @@ export function createOpenClawTools(options?: {
     // B3: Velocity Trend 多Sprint趋势 / B5: 项目健康更新到期检测（对标 Linear 2026）
     createProjectVelocityTrendTool(),
     createProjectHealthUpdateReminderTool(),
+    // 紧急制动工具：一键暂停项目 + 批量取消任务 + 写入共享记忆
+    createProjectEmergencyPivotTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
+    // 问题上报工具：发现方向错误/bug后的结构化纠偏流程
+    createProjectIssueReportTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
     // B0: Triage Intelligence 自动优先级评估 / B2: SLA 违约检查（对标 Linear 2026）
     createTaskTriageAutoTool(),
     createTaskSlaCheckTool(),
@@ -589,6 +606,13 @@ export function createOpenClawTools(options?: {
     createTaskTemplateUpsertTool(),
     createTaskTemplateListTool(),
     createTaskTemplateApplyTool(),
+    // 紧急制动工具：批量取消任务 + 项目一键 pivot
+    createTaskBatchCancelTool({
+      currentAgentId: resolveSessionAgentId({
+        sessionKey: options?.agentSessionKey,
+        config: options?.config,
+      }),
+    }),
     createAgentDiscoverTool({
       currentAgentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,
