@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { resolveUserPath } from "../utils.js";
 import { openVerifiedFileSync } from "./safe-open-sync.js";
+export { writePrivateSecretFileAtomic, PRIVATE_SECRET_DIR_MODE, PRIVATE_SECRET_FILE_MODE } from "../../upstream/src/infra/secret-file.js";
 
 export const DEFAULT_SECRET_FILE_MAX_BYTES = 16 * 1024;
 

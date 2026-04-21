@@ -220,3 +220,11 @@ export const WebLoginWaitParamsSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+export const ChannelsStartParamsSchema = Type.Object(
+  {
+    channel: NonEmptyString,
+    accountId: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);

@@ -141,3 +141,5 @@ export function formatOutboundPayloadLog(
   }
   return lines.join("\n");
 }
+
+export { projectOutboundPayloadPlanForDelivery } from "../../../upstream/src/infra/outbound/payloads.js";

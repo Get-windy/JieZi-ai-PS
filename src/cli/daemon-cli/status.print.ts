@@ -5,7 +5,7 @@ import {
   resolveGatewaySystemdServiceName,
 } from "../../../upstream/src/daemon/constants.js";
 import { renderGatewayServiceCleanupHints } from "../../../upstream/src/daemon/inspect.js";
-import { resolveGatewayLogPaths } from "../../../upstream/src/daemon/launchd.js";
+import { resolveGatewayLogPaths } from "../../../upstream/src/daemon/restart-logs.js";
 import {
   isSystemdUnavailableDetail,
   renderSystemdUnavailableHints,

@@ -278,6 +278,18 @@ export async function isWorkspaceOnboardingCompleted(dir: string): Promise<boole
   return isWorkspaceSetupCompleted(dir);
 }
 
+export async function isWorkspaceBootstrapPending(dir: string): Promise<boolean> {
+  const dir_ = resolveUserPath(dir);
+  const bootstrapExists = await fileExists(path.join(dir_, DEFAULT_BOOTSTRAP_FILENAME));
+  if (!bootstrapExists) {
+    return false;
+  }
+  const state = await readWorkspaceOnboardingStateForDir(dir);
+  return !(
+    typeof state.setupCompletedAt === "string" && state.setupCompletedAt.trim().length > 0
+  );
+}
+
 async function writeWorkspaceSetupState(
   statePath: string,
   state: WorkspaceSetupState,

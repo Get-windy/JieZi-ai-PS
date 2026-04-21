@@ -523,3 +523,5 @@ export class GatewayClient {
     return p;
   }
 }
+
+export { GatewayClientRequestError } from "../../upstream/src/gateway/client.js";

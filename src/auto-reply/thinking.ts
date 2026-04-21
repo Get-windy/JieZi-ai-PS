@@ -287,3 +287,37 @@ export function normalizeReasoningLevel(raw?: string | null): ReasoningLevel | u
   }
   return undefined;
 }
+
+export function isThinkingLevelSupported(params: {
+  provider?: string | null;
+  model?: string | null;
+  level: ThinkLevel;
+}): boolean {
+  const levels = listThinkingLevels(params.provider, params.model);
+  return levels.includes(params.level);
+}
+
+export function resolveLargestSupportedThinkingLevel(
+  provider?: string | null,
+  model?: string | null,
+): ThinkLevel {
+  const levels = listThinkingLevels(provider, model);
+  const ranked: ThinkLevel[] = ["xhigh", "high", "medium", "low", "minimal", "adaptive", "off"];
+  for (const level of ranked) {
+    if (levels.includes(level) && level !== "off") {
+      return level;
+    }
+  }
+  return "off";
+}
+
+export function resolveSupportedThinkingLevel(params: {
+  provider?: string | null;
+  model?: string | null;
+  level: ThinkLevel;
+}): ThinkLevel {
+  if (isThinkingLevelSupported(params)) {
+    return params.level;
+  }
+  return resolveLargestSupportedThinkingLevel(params.provider, params.model);
+}

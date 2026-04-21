@@ -7,6 +7,11 @@ import { SILENT_REPLY_TOKEN } from "../../upstream/src/auto-reply/tokens.js";
 import type { MemoryCitationsMode } from "../../upstream/src/config/types.memory.js";
 import { listDeliverableMessageChannels } from "../../upstream/src/utils/message-channel.js";
 import type { ReasoningLevel, ThinkLevel } from "../auto-reply/thinking.js";
+import type { BootstrapMode } from "../../upstream/src/agents/bootstrap-mode.js";
+import {
+  buildFullBootstrapPromptLines,
+  buildLimitedBootstrapPromptLines,
+} from "../../upstream/src/agents/bootstrap-prompt.js";
 
 /**
  * Controls which hardcoded sections are included in the system prompt.
@@ -1312,4 +1317,32 @@ export function buildRuntimeLine(
   ]
     .filter(Boolean)
     .join(" | ")}`;
+}
+
+export function buildAgentUserPromptPrefix(params: {
+  bootstrapMode?: BootstrapMode;
+}): string | undefined {
+  if (!params.bootstrapMode || params.bootstrapMode === "none") {
+    return undefined;
+  }
+  if (params.bootstrapMode === "limited") {
+    return [
+      "[Bootstrap pending]",
+      ...buildLimitedBootstrapPromptLines({
+        introLine:
+          "Bootstrap is still pending for this workspace, but this run cannot safely complete the full BOOTSTRAP.md workflow here.",
+        nextStepLine:
+          "Typical next steps include switching to a primary interactive run with normal workspace access or having the user complete the canonical BOOTSTRAP.md deletion afterward.",
+      }),
+    ].join("\n");
+  }
+  return [
+    "[Bootstrap pending]",
+    ...buildFullBootstrapPromptLines({
+      readLine:
+        "Please read BOOTSTRAP.md from the workspace and follow it before replying normally.",
+      firstReplyLine:
+        "Your first user-visible reply for a bootstrap-pending workspace must follow BOOTSTRAP.md, not a generic greeting.",
+    }),
+  ].join("\n");
 }

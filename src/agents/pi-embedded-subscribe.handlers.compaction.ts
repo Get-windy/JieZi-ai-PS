@@ -98,3 +98,7 @@ function clearStaleAssistantUsageOnSessionMessages(ctx: EmbeddedPiSubscribeConte
     candidate.usage = makeZeroUsageSnapshot();
   }
 }
+
+// Aliases for upstream compatibility (renamed from handleAuto* in newer upstream)
+export const handleCompactionStart = handleAutoCompactionStart;
+export const handleCompactionEnd = handleAutoCompactionEnd;

@@ -686,11 +686,7 @@ export async function runEmbeddedPiAgent(
           );
           const prompt =
             promptAdditions.length > 0
-              ? `${basePrompt}
-
-${promptAdditions.join("
-
-")}`
+              ? `${basePrompt}\n\n${promptAdditions.join("\n\n")}`
               : basePrompt;
           let resolvedStreamApiKey: string | undefined;
           if (!runtimeAuthState && apiKeyInfo) {

@@ -478,3 +478,16 @@ export function resetFacadeRuntimeStateForTest(): void {
   __overlayCBRC = undefined;
   __overlayCBRRC = undefined;
 }
+
+export function createLazyFacadeValue<TFacade extends object, K extends keyof TFacade>(
+  loadFacadeModule: () => TFacade,
+  key: K,
+): TFacade[K] {
+  return ((...args: unknown[]) => {
+    const value = loadFacadeModule()[key];
+    if (typeof value !== "function") {
+      return value;
+    }
+    return (value as (...innerArgs: unknown[]) => unknown)(...args);
+  }) as TFacade[K];
+}
