@@ -767,6 +767,8 @@ export const FIELD_HELP: Record<string, string> = {
     "Optional per-provider overrides for billing backoff (hours).",
   "auth.cooldowns.billingMaxHours": "Cap (hours) for billing backoff (default: 24).",
   "auth.cooldowns.failureWindowHours": "Failure window (hours) for backoff counters (default: 24).",
+  "auth.cooldowns.rateLimitedBackoffMs":
+    "Fixed delay (ms) before retrying a rate-limited provider/profile rotation. Mirrors overloadedBackoffMs but applies to 429 rate-limit errors (default: 0). Recommended: 3000–10000 when RPM quotas are exhausted.",
   "agents.defaults.workspace":
     "Default workspace path exposed to agent runtime tools for filesystem context and repo-aware behavior. Set this explicitly when running from wrappers so path resolution stays deterministic.",
   "agents.defaults.bootstrapMaxChars":

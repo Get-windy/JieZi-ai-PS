@@ -5,6 +5,7 @@ import {
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../../agents/agent-scope.js";
+import { isProviderUsableSync } from "../../gateway/server-methods/models.js";
 import { resolveApiKeyForProfile, ensureAuthProfileStore } from "../../../upstream/src/agents/auth-profiles.js";
 import { resolveSessionAuthProfileOverride } from "../../agents/auth-profiles/session-override.js";
 import { runCliAgent } from "../../../upstream/src/agents/cli-runner.js";
@@ -437,7 +438,24 @@ export async function runCronIsolatedAgentTurn(params: {
       provider,
       model,
       agentDir,
-      fallbacksOverride: resolveAgentModelFallbacksOverride(params.cfg, agentId),
+      fallbacksOverride: (() => {
+        const raw = resolveAgentModelFallbacksOverride(params.cfg, agentId);
+        if (!raw || raw.length === 0) {return raw;}
+        // 过滤掉 provider 认证已全部禁用的 fallback 候选
+        const filtered = raw.filter((id) => {
+          const slash = id.indexOf("/");
+          if (slash <= 0) {return true;}
+          const usable = isProviderUsableSync(id.substring(0, slash));
+          return usable !== false;
+        });
+        if (filtered.length < raw.length) {
+          const removed = raw.filter((id) => !filtered.includes(id));
+          console.log(
+            `[ModelFallback] cron: Filtered ${removed.length} fallback(s) with disabled provider auth: ${removed.join(", ")}.`,
+          );
+        }
+        return filtered.length > 0 ? filtered : undefined;
+      })(),
       run: (providerOverride, modelOverride) => {
         if (abortSignal?.aborted) {
           throw new Error(abortReason());

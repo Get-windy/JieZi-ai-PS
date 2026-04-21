@@ -647,7 +647,29 @@ function loadMeetingMessages(meetingId?: string): MeetingMessage[] {
 // ============================================================================
 
 // 单个 agent 最多允许的 todo 任务数（超出时拒绝创建新任务）
-const MAX_TODO_PER_AGENT = 8;
+// 业界最佳实践（Spotify Squad Model / Kanban LKU 2023）：每人 todo buffer = WIP 的 1.5×，WIP≤2 则 todo≤3
+// 降低至 5（原为 8），防止 backlog 无限堆积导致团队任务汐海。
+const MAX_TODO_PER_AGENT = 5;
+
+// 特殊角色的个人上限覆盖表
+// coordinator 负责任务中转而非执行，保持较低的 todo buffer 防止挂起池满
+// 参考： Microsoft AutoGen GroupChatManager minBuffer=1
+const ROLE_TODO_LIMIT_OVERRIDES: Record<string, number> = {
+  coordinator: 3,
+  supervisor: 3,
+};
+
+// 团队整体活跃 todo 水位上限（所有 agent 的 todo 总和）
+// 超过此锁将拒绝任何新任务创建，防止 coordinator 不断坹任务导致 backlog 出控
+// 参考： Kanban 全局 WIP 小于山的6 → 团队时 = 13人 × WIP=2 = 26 条活跃
+const MAX_TEAM_TODO_TOTAL = 30;
+
+// ── 任务粒度约束（Task Size Guard）──
+// 业界最佳实践（DORA / Shape Up / Basecamp）：小批次交付，单任务不超过 1天工作量
+// storyPoints 使用 Fibonacci 数列：1,2,3,5,8（8 = ~1天，13 = 明确过大需拆分）
+// estimatedHours 超过 8h = 超过 1个标准工作日，必须拆分为子任务
+const MAX_STORY_POINTS = 8;           // > 8 拒绝创建，要求拆分为更小任务
+const WARN_ESTIMATED_HOURS = 8;       // > 8h 创建时写入警告元数据，提醒 Agent 拆分
 
 /**
  * 创建任务
@@ -684,6 +706,34 @@ export async function createTask(
       if (task.level === "story" && !task.featureId) {
         throw new Error(
           `[TaskHierarchy] Story task "${task.title}" must have a featureId. Stories are user-visible increments within a Feature.`,
+        );
+      }
+    }
+
+    // ── 任务粒度约束（Task Size Guard — DORA 小批次原则）──
+    // epic / feature 层级允许大 story point，约束仅针对可执行的叶子任务（task / story）
+    const isLeafLevel = !task.level || task.level === "task" || task.level === "story";
+    if (isLeafLevel) {
+      // storyPoints > MAX_STORY_POINTS → 硬拒绝，必须拆分
+      if (task.storyPoints !== undefined && task.storyPoints > MAX_STORY_POINTS) {
+        throw new Error(
+          `[TaskSizeGuard] Task "${task.title}" has storyPoints=${task.storyPoints} which exceeds the max allowed (${MAX_STORY_POINTS}). ` +
+          `Per DORA small-batch principle, a single task should fit within ~1 day of work. ` +
+          `Please break it into smaller subtasks (storyPoints ≤ ${MAX_STORY_POINTS} each).`,
+        );
+      }
+      // estimatedHours > WARN_ESTIMATED_HOURS → 软警告，写入 metadata 提醒拆分
+      if (
+        task.timeTracking?.estimatedHours !== undefined &&
+        task.timeTracking.estimatedHours > WARN_ESTIMATED_HOURS
+      ) {
+        (task as Record<string, unknown>).metadata = {
+          ...task.metadata,
+          sizeWarning: `estimatedHours=${task.timeTracking.estimatedHours}h exceeds 1 workday (${WARN_ESTIMATED_HOURS}h). Consider splitting into subtasks for better flow and progress tracking.`,
+          sizeWarnedAt: Date.now(),
+        };
+        console.warn(
+          `[TaskSizeGuard] Task "${task.title}" estimatedHours=${task.timeTracking.estimatedHours}h exceeds ${WARN_ESTIMATED_HOURS}h. Consider splitting.`,
         );
       }
     }
@@ -729,9 +779,31 @@ export async function createTask(
               todoCount++;
             }
           }
-          if (todoCount >= MAX_TODO_PER_AGENT) {
+          // 角色级个人上限：先查特殊角色覆盖表，再回落全局默认值
+          const assigneeRoleLimit =
+            ROLE_TODO_LIMIT_OVERRIDES[assigneeId] ?? MAX_TODO_PER_AGENT;
+          if (todoCount >= assigneeRoleLimit) {
             throw new Error(
-              `[TaskStorage] Task creation rejected: agent "${assigneeId}" already has ${todoCount} todo tasks (limit: ${MAX_TODO_PER_AGENT}). Complete existing tasks before adding new ones.`,
+              `[TaskStorage] Task creation rejected: agent "${assigneeId}" already has ${todoCount} todo tasks (limit: ${assigneeRoleLimit}). Complete existing tasks before adding new ones.`,
+            );
+          }
+        }
+
+        // ── 团队级 backlog 水位检查（漏洞修复）──
+        // 防止 coordinator 导致全团 todo 总量无限增长
+        // 所有创建者（包括 coordinator）都必须遵守团队水位上限
+        {
+          let teamTodoTotal = 0;
+          for (const existing of tasks.values()) {
+            if (existing.status === "todo") {
+              teamTodoTotal++;
+            }
+          }
+          if (teamTodoTotal >= MAX_TEAM_TODO_TOTAL) {
+            throw new Error(
+              `[TaskStorage] Task creation rejected: team todo backlog has reached the global limit (${teamTodoTotal}/${MAX_TEAM_TODO_TOTAL}). ` +
+              `The team must complete or cancel existing tasks before new ones can be added. ` +
+              `This prevents backlog overflow and ensures focus on current work.`,
             );
           }
         }

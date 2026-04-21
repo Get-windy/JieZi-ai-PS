@@ -377,6 +377,10 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "agent.task.report",
     // 主控对任务进行干预：取消、重置或延时
     "agent.task.manage",
+    // 主控批量分诊阻塞任务（重置/取消/重新分配）
+    "agent.task.triage",
+    // 查询团队成员当前任务状态（读操作，归入写作用域以便主控使用）
+    "agent.team.status",
   ],
   [ADMIN_SCOPE]: [
     "channels.logout",

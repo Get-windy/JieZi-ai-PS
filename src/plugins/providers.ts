@@ -9,6 +9,7 @@ export {
   resolveBundledProviderCompatPluginIds,
   resolveEnabledProviderPluginIds,
   resolveOwningPluginIdsForProvider,
+  resolveOwningPluginIdsForModelRef,
   resolveOwningPluginIdsForModelRefs,
   resolveNonBundledProviderPluginIds,
   resolveCatalogHookProviderPluginIds,

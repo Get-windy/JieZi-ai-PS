@@ -303,3 +303,9 @@ export function collectStatusIssuesFromLastError(
     ];
   });
 }
+
+// upstream 扩展使用的函数，本覆盖文件未包含，从上游直接 re-export
+export {
+  buildWebhookChannelStatusSummary,
+  createDependentCredentialStatusIssueCollector,
+} from "../../upstream/src/plugin-sdk/status-helpers.js";

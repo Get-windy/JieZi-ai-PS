@@ -49,6 +49,30 @@ const ProjectCreateToolSchema = Type.Object({
    */
   createGroup: Type.Optional(Type.Boolean()),
   /**
+   * 技术栈声明（强烈建议填写）
+   * 这是防止重复代码的关键信息之一。
+   * 如: { language: "Java 17", framework: "Spring Boot 3", build: "Maven多模块", moduleStyle: "erp/ 聚合 + 子模块" }
+   */
+  techStack: Type.Optional(
+    Type.Record(Type.String(), Type.String(), {
+      description: "Tech stack: language, framework, build tool, database, moduleStyle etc. Prevents agents from using conflicting tech choices.",
+    }),
+  ),
+  /**
+   * 项目规范约定（强烈建议填写，是防止重复代码的核心机制）
+   * 所有 AI 团队成员开工前必须读取这些规范。
+   */
+  conventions: Type.Optional(
+    Type.Object({
+      dirStructure: Type.Optional(Type.String({ description: "Directory structure rule, e.g. 'All ERP sub-modules MUST be under erp/ aggregator, NOT as root-level directories'" })),
+      packageNaming: Type.Optional(Type.String({ description: "Package naming convention, e.g. 'Use cn.aiedge.erp.{module}, NEVER cn.aiedge.{module} directly'" })),
+      moduleNaming: Type.Optional(Type.String({ description: "Module/service naming convention, e.g. 'All ERP modules must use erp- prefix'" })),
+      apiPathPrefix: Type.Optional(Type.String({ description: "Unified API path prefix, e.g. '/api/erp/'" })),
+      codeStyle: Type.Optional(Type.String({ description: "Code style rules, e.g. 'Use I-prefix for Service interfaces, use record for DTOs'" })),
+      custom: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "Additional custom rules" })),
+    }),
+  ),
+  /**
    * 用户明确授权的确认令牌。
    * 调用此工具前，必须先向用户展示将要创建的项目信息，
    * 并要求用户回复 "CONFIRM_CREATE_PROJECT_<projectId>" 作为确认。
@@ -86,6 +110,12 @@ export function createProjectCreateTool(): AnyAgentTool {
       const workspaceRoot = readStringParam(params, "workspaceRoot");
       const createGroup = typeof params.createGroup === "boolean" ? params.createGroup : false; // 默认不创建群组
       const userConfirmation = readStringParam(params, "userConfirmation", { required: true });
+      const techStack = (typeof params.techStack === "object" && params.techStack !== null && !Array.isArray(params.techStack))
+        ? (params.techStack as Record<string, string>)
+        : undefined;
+      const conventions = (typeof params.conventions === "object" && params.conventions !== null && !Array.isArray(params.conventions))
+        ? (params.conventions as Record<string, string | Record<string, string> | undefined>)
+        : undefined;
       const gatewayOpts = readGatewayCallOptions(params);
 
       // 拦截非法 ownerId
@@ -224,6 +254,8 @@ export function createProjectCreateTool(): AnyAgentTool {
           requirementsDir: `${workspacePath}\\requirements`,
           qaDir: `${workspacePath}\\qa`,
           testsDir: `${workspacePath}\\tests`,
+          ...(techStack ? { techStack } : {}),
+          ...(conventions ? { conventions } : {}),
         };
 
         // 生成创建项目的详细指令
@@ -252,6 +284,69 @@ export function createProjectCreateTool(): AnyAgentTool {
         }
 
         const nextSteps = [
+          ``,
+          `📋 Step 0: 需求对齐（必须在开发前完成，这是金标准的来源）`,
+          `────────────────────────────────────────────────────────`,
+          `在开始任何开发任务前，coordinator 必须按以下流程完成需求对齐：`,
+          ``,
+          `① 价值主张（Working Backwards）`,
+          `   用一句话描述用户得到的价值（Amazon 新闻稿第一段格式）：`,
+          `   "用户可以 [做什么]，从而 [获得什么价值]，无需 [原来的痛点]。"`,
+          ``,
+          `② 验收场景（Given-When-Then）—— 至少 3 个 must 级场景`,
+          `   每个场景需要用户口头/文字确认，消除歧义：`,
+          `   - AC-01 [场景名]:`,
+          `       Given: [前置条件]`,
+          `       When:  [用户操作]`,
+          `       Then:  [期望结果，可量化]`,
+          ``,
+          `③ Out-of-Scope 边界（本次不做的事）`,
+          `   明确列出用户可能误以为要做但本次不包含的功能，防止范围蔓延。`,
+          ``,
+          `④ 用户确认（基线锁定）`,
+          `   将以上内容发给用户确认，等待用户回复"确认"或提出修改。`,
+          `   用户确认后，将 requirementsBaseline 写入 PROJECT_CONFIG.json：`,
+          `   requirementsBaseline.baselineLockedAt = Date.now()`,
+          `   requirementsBaseline.baselineLockedBy = "用户姓名"`,
+          ``,
+          `⑤ 变更控制（Change Request）`,
+          `   基线锁定后，任何新需求必须：展示变更内容 → 等待用户确认 → version +1 → 重新锁定`,
+          `⚠️  禁止 AI 团队自行扩展范围或添加“觉得有用的功能”。`,
+          `────────────────────────────────────────────────────────`,
+          ``,
+          `📌 Step 0a: 项目规范定义（必须在任务分配前完成，这是防止重复代码的核心机制）`,
+          `────────────────────────────────────────────────────────`,
+          `coordinator 必须完成以下规范定义，并写入 PROJECT_CONFIG.json + SHARED_MEMORY.md：`,
+          ``,
+          `① 技术栈声明（techStack）`,
+          `   明确列举以下技术选型（防止不同 Agent 选择冲突技术）：`,
+          `   - language:   编程语言 + 版本（如: Java 17）`,
+          `   - framework:  主框架（如: Spring Boot 3 + MyBatis-Plus）`,
+          `   - build:      构建工具 + 模块组织方式（如: Maven 多模块，父 pom 在根目录）`,
+          `   - database:   数据库技术（如: MySQL 8 + Redis）`,
+          `   - moduleStyle:模块组织风格（如: 聚合父模块 erp/ + 子模块 erp/erp-xxx/）`,
+          ``,
+          `② 项目规范约定（conventions）——所有 AI 开发成员的行为准则`,
+          `   必须明确定义以下规范（缺少则 AI 团队各自为政，引发大量重复代码）：`,
+          `   1. 目录结构规范（dirStructure）：`,
+          `      示例: "所有子模块必须放在 erp/ 聚合目录下，禁止在根目录单独创建同名子模块"`,
+          `   2. 包命名规范（packageNaming）：`,
+          `      示例: "统一用 cn.aiedge.erp.{module}，禁止 cn.aiedge.{module} 直接包名"`,
+          `   3. 模块/服务命名规范（moduleNaming）：`,
+          `      示例: "模块名必须带统一前缀 erp-"`,
+          `   4. 统一 API 路径前缀（apiPathPrefix）：`,
+          `      示例: "/api/erp/"`,
+          `   5. 代码风格（codeStyle）：`,
+          `      示例: "Service 接口用 I 前缀，DTO 用 record，权限注解 @SaCheckPermission"`,
+          ``,
+          `③ 将以上 conventions 内容写入两个地方：`,
+          `   a. PROJECT_CONFIG.json 的 techStack + conventions 字段（通过再次调用 project_create 或直接写入文件）`,
+          `   b. SHARED_MEMORY.md 的“🛠️ 技术栈声明”和“📌 项目规范约定”区块`,
+          ``,
+          `⚠️ 警告：如果 conventions 未定义，禁止分配任何实现任务给 team-member。`,
+          `   先定规范，再开工——这是阶段门禁。`,
+          `────────────────────────────────────────────────────────`,
+          ``,
           `🔧 Next Steps:`,
           `1. Create project workspace directory:`,
           `   \`\`\`bash`,
@@ -269,12 +364,114 @@ export function createProjectCreateTool(): AnyAgentTool {
           `   mkdir shared history meeting-notes decisions docs requirements qa tests`,
           `   \`\`\``,
           ``,
-          `4. Create SHARED_MEMORY.md:`,
-          `   \`\`\`bash`,
-          `   echo "# ${name} Shared Memory" > SHARED_MEMORY.md`,
-          `   echo "" >> SHARED_MEMORY.md`,
-          `   echo "## Project Introduction" >> SHARED_MEMORY.md`,
-          `   echo "(Add project description here)" >> SHARED_MEMORY.md`,
+          `4. Create SHARED_MEMORY.md（含需求基线摘要区块 + 项目规范区块）:`,
+          `   SHARED_MEMORY.md 必须包含以下固定区块，供所有 AI 团队成员启动时读取：`,
+          `   \`\`\`markdown`,
+          `   # ${name} 共享记忆`,
+          `   `,
+          `   ## 项目简介`,
+          `   （此处填写项目描述）`,
+          `   `,
+          `   ## 🛠️ 技术栈声明（Tech Stack — 所有 Agent 开工前必读）`,
+          `   > 本区块由 coordinator 在项目创建时写入，任何 AI 成员禁止擅自修改。`,
+          `   `,
+          `   | 类别 | 内容 |`,
+          `   |------|------|`,
+          techStack
+            ? Object.entries(techStack).map(([k, v]) => `   | ${k} | ${v} |`).join("\n          ")
+            : `   | language | （待填） |
+          | framework | （待填） |
+          | build | （待填） |
+          | database | （待填） |
+          | moduleStyle | （待填—如: Maven 多模块聚合、monorepo 等） |`,
+          `   `,
+          `   ## 📌 项目规范约定（Conventions — 全体成员开工前必读，违反则代码将被拒绝合并）`,
+          `   > 本区块是防止重复代码的核心机制。所有 AI 成员实现任何模块前必须阅读并严格遵守。`,
+          `   `,
+          `   ### 📂 目录结构规范`,
+          `   ${conventions?.dirStructure ?? '（待 coordinator 填写——如: 所有子模块必须放在 erp/ 聚合目录下，禁止在根目录平行创建同名子模块）'}`,
+          `   `,
+          `   ### 📜 包命名规范（Java/Kotlin）`,
+          `   ${conventions?.packageNaming ?? '（待 coordinator 填写——如: 统一用 cn.aiedge.erp.{module}，禁止 cn.aiedge.{module} 包名）'}`,
+          `   `,
+          `   ### 📎 模块/服务命名规范`,
+          `   ${conventions?.moduleNaming ?? '（待 coordinator 填写——如: 模块名必须带统一前缀）'}`,
+          `   `,
+          `   ### 🌐 API 路径前缀`,
+          `   ${conventions?.apiPathPrefix ?? '（待 coordinator 填写——如: /api/erp/）'}`,
+          `   `,
+          `   ### 📝 代码风格约定`,
+          `   ${conventions?.codeStyle ?? '（待 coordinator 填写——如: Service 接口用 I 前缀，DTO 用 record）'}`,
+          `   `,
+          `   ### ✔️ 已完成模块登记（实现 Agent 完成后更新）`,
+          `   | 模块名 | 文件路径 | 负责 Agent | 完成时间 |`,
+          `   |------|------|------|------|`,
+          `   | （待填） | （待填） | （待填） | （待填） |`,
+          `   `,
+          `   ## 📌 需求基线摘要（Requirements Baseline — 金标准，只读）`,
+          `   > 本区块由 coordinator 在用户确认需求后写入，任何 AI 成员禁止擅自修改。`,
+          `   > 变更需求必须走 Change Request 流程（用户确认 → version+1 → 重新写入）。`,
+          `   `,
+          `   - **基线版本**：v1（未锁定）`,
+          `   - **价值主张**：（待填写——一句话说明用户得到的价值）`,
+          `   - **确认人/时间**：（待用户确认后填写）`,
+          `   `,
+          `   ### Must 验收场景`,
+          `   | 编号 | 场景 | Given | When | Then |`,
+          `   |------|------|-------|------|------|`,
+          `   | AC-01 | （待填写） | - | - | - |`,
+          `   `,
+          `   ### Out-of-Scope（本次不做）`,
+          `   - （待填写）`,
+          `   `,
+          `   ### 变更记录`,
+          `   | 版本 | 变更内容 | 用户确认时间 |`,
+          `   |------|---------|-------------|`,
+          `   | v1 | 初始基线 | （待锁定） |`,
+          `   \`\`\``,
+          ``,
+          `4b. Create requirements/REQUIREMENTS_BASELINE.md（需求沟通原始记录）:`,
+          `   此文件保存与用户的完整沟通过程，是 SHARED_MEMORY 摘要的原始依据。`,
+          `   \`\`\`markdown`,
+          `   # ${name} 需求基线原始文档`,
+          `   `,
+          `   > 本文件记录 coordinator 与用户的完整需求澄清过程。`,
+          `   > 包括用户原话、每轮沟通、修改记录、最终确认。`,
+          `   > SHARED_MEMORY.md 中的"需求基线摘要"区块是本文档的结构化摘要。`,
+          `   `,
+          `   ## 用户原始需求（第1轮）`,
+          `   **日期**：（填写日期）`,
+          `   **用户原话**：`,
+          `   > （逐字记录用户的原始需求描述，不得改写或总结）`,
+          `   `,
+          `   ## Coordinator 理解确认（第1轮）`,
+          `   coordinator 回写给用户的"我理解你要的是……"摘要，用户回复确认/修改。`,
+          `   `,
+          `   **Coordinator 理解**：`,
+          `   - 价值主张：`,
+          `   - Must 场景：`,
+          `   - Out-of-Scope：`,
+          `   `,
+          `   **用户回复**：（记录用户的确认或修改意见）`,
+          `   `,
+          `   ## 澄清轮次 N（如有）`,
+          `   （重复以上格式，记录每轮沟通）`,
+          `   `,
+          `   ## 最终确认（基线锁定）`,
+          `   **用户确认原文**：`,
+          `   > （用户的最终确认原话）`,
+          `   **确认时间**：（Unix ms 时间戳 + 人类可读时间）`,
+          `   **基线版本**：v1`,
+          `   `,
+          `   ## 变更请求记录（Change Requests）`,
+          `   （每次变更按以下格式追加，保留完整历史）`,
+          `   `,
+          `   ### CR-001（如有）`,
+          `   - **用户变更请求原文**：`,
+          `   - **变更内容**：`,
+          `   - **影响评估**：`,
+          `   - **用户确认时间**：`,
+          `   - **新基线版本**：v2`,
           `   \`\`\``,
           ``,
           `5. Create code directory if not exists:`,
@@ -964,6 +1161,8 @@ export function createProjectSprintCompleteTool(): AnyAgentTool {
     description:
       "Complete a Sprint. Calculates velocity (story points done). " +
       "Unfinished tasks can be moved to: 'backlog' (default) or 'next_sprint'. " +
+      "DIRECTION AUDIT: After completion, automatically checks for duplicate modules / convention violations " +
+      "and writes a reflection log to project shared memory (MIRROR inter-reflection + SRE post-mortem). " +
       "After completing: hold a retrospective, update objective progress, then plan the next Sprint. " +
       "REQUIRED: projectId, sprintId.",
     parameters: Type.Object({
@@ -990,10 +1189,71 @@ export function createProjectSprintCompleteTool(): AnyAgentTool {
           unfinishedAction: params.unfinishedAction ?? "backlog",
           retrospective: params.retrospective ? String(params.retrospective) : undefined,
         });
+        // ── Sprint 完成后方向审计（MIRROR inter-reflection + SRE post-mortem）──
+        // 检查：conventions 是否被违反、是否有重复模块嫌疑
+        let auditResult: { issues: string[]; warnings: string[] } = { issues: [], warnings: [] };
+        try {
+          const { buildProjectContext, listAvailableProjects } = await import("../../utils/project-context.js");
+          const pCtx = buildProjectContext(projectId);
+          const pCfg = pCtx.config;
+          if (pCfg?.conventions) {
+            const conv = pCfg.conventions;
+            // 检查 1：conventions 已定义但任务是否有违反记录
+            const sprintTasks = await callGatewayTool("task.list", gatewayOpts, {
+              projectId,
+              limit: 100,
+            });
+            const tasks = (Array.isArray(sprintTasks) ? sprintTasks : (sprintTasks)?.tasks) as Array<Record<string, unknown>> | undefined;
+            const cancelledTasks = (tasks ?? []).filter((t) => t.status === "cancelled");
+            const failedTasks = (tasks ?? []).filter((t) =>
+              (t.workLogs as unknown[])?.some?.((w: unknown) => (w as Record<string, unknown>)?.result === "failure"),
+            );
+            if (cancelledTasks.length > 3) {
+              auditResult.issues.push(`\u26d4 ${cancelledTasks.length} 个任务被取消 — 可能表示方向错误或重复代码问题`);
+            }
+            if (failedTasks.length > 2) {
+              auditResult.warnings.push(`\u26a0\ufe0f ${failedTasks.length} 个任务执行失败 — 需要复盘根因`);
+            }
+          }
+        } catch (auditErr) {
+          // 审计失败不阻塞 Sprint 完成
+        }
+
+        // 写入方向审计日志到项目共享记忆
+        if (auditResult.issues.length > 0 || auditResult.warnings.length > 0) {
+          try {
+            const auditTs = new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+            const auditLines = [
+              `\u{1F50D} [Sprint 方向审计 ${auditTs}] Sprint ${sprintId} 完成后自动审计`,
+              `项目: ${projectId}`,
+              ``,
+              ...(auditResult.issues.length > 0
+                ? ["\u26d4 发现问题（需要立即处理）:", ...auditResult.issues.map((i) => `  - ${i}`)]
+                : []),
+              ...(auditResult.warnings.length > 0
+                ? ["", "\u26a0\ufe0f 警告（需要关注）:", ...auditResult.warnings.map((w) => `  - ${w}`)]
+                : []),
+              "",
+              "\u2192 如果方向确认有误，请立即调用 project_emergency_pivot 一键制动。",
+              "\u2192 如果仅是小范围问题，请调整下一轮 Sprint 任务描述中的规范约束。",
+            ];
+            await callGatewayTool("memory.project.save", gatewayOpts, {
+              content: auditLines.join("\n"),
+              section: "Sprint 方向审计日志",
+              projectId,
+            });
+          } catch {
+            // 写入失败不阻塞
+          }
+        }
+
         return jsonResult({
           success: true,
           ...(result),
-          tip: "本轮 Sprint 已完成。建议：回顾目标达成情况、更新 objective 状态，再谄划下一个 Sprint。",
+          auditResult: auditResult.issues.length > 0 || auditResult.warnings.length > 0 ? auditResult : undefined,
+          tip: auditResult.issues.length > 0
+            ? `\u26d4 Sprint 完成但方向审计发现问题！请查看共享记忆中的「Sprint 方向审计日志」，确认是否需要 project_emergency_pivot。`
+            : "本轮 Sprint 已完成。建议：回顾目标达成情况、更新 objective 状态，再谄划下一个 Sprint。",
         });
       } catch (error) {
         return jsonResult({
@@ -2575,6 +2835,400 @@ export function createProjectHealthUpdateReminderTool(): AnyAgentTool {
       } catch (error) {
         return jsonResult({ success: false, error: `Failed to check health update due: ${error instanceof Error ? error.message : String(error)}` });
       }
+    },
+  };
+}
+
+/**
+ * project_emergency_pivot 工具
+ *
+ * 「一键紧急制动」: 当发现项目开发方向错误、重复代码、源头不对时，由 coordinator 或用户调用。
+ * 执行: (1) 暂停项目  (2) 批量取消项目下所有 pending/in-progress 任务  (3) 将原因写入项目共享记忆
+ */
+export function createProjectEmergencyPivotTool(opts?: { currentAgentId?: string }): AnyAgentTool {
+  return {
+    label: "Project Emergency Pivot",
+    name: "project_emergency_pivot",
+    description:
+      "EMERGENCY STOP for a project that has taken the wrong direction. " +
+      "ONE CALL does everything: (1) pauses the project, (2) batch-cancels ALL pending/in-progress tasks, " +
+      "(3) writes the pivot reason to project shared memory (visible to all team members). " +
+      "USE WHEN: duplicate modules discovered, wrong architecture direction confirmed, human requests re-planning. " +
+      "After calling this tool, re-plan from scratch: define new tasks with corrected direction. " +
+      "WARNING: This is irreversible for already-cancelled tasks - always provide a detailed 'reason'.",
+    parameters: Type.Object({
+      projectId: Type.String({ description: "[REQUIRED] The project to emergency-stop" }),
+      reason: Type.String({
+        minLength: 10,
+        maxLength: 2000,
+        description:
+          "[REQUIRED] Detailed reason for the emergency pivot. Include: what was discovered wrong, " +
+          "what the correct direction should be, and what re-planning is needed.",
+      }),
+      cancelStatuses: Type.Optional(Type.Array(Type.String(), {
+        description: "Which task statuses to cancel (default: pending/todo/in-progress/in_progress/blocked).",
+      })),
+      salvageTaskIds: Type.Optional(Type.Array(Type.String(), {
+        description:
+          "Task IDs to PRESERVE (not cancel). Use this to mark completed tasks that are still valid and worth keeping. " +
+          "These tasks will have a 'salvaged' tag added to distinguish them from the cancelled work.",
+      })),
+      newDirection: Type.Optional(Type.String({
+        maxLength: 2000,
+        description: "Optional: describe the corrected project direction. Will be appended to shared memory.",
+      })),
+      workspaceRoot: Type.Optional(Type.String()),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const projectId = readStringParam(params, "projectId", { required: true });
+      const reason = readStringParam(params, "reason", { required: true });
+      const newDirection = readStringParam(params, "newDirection");
+      const gatewayOpts = readGatewayCallOptions(params);
+      const cancelStatuses: string[] = Array.isArray(params.cancelStatuses)
+        ? (params.cancelStatuses as string[])
+        : ["pending", "todo", "in-progress", "in_progress", "blocked"];
+      const salvageTaskIds: string[] = Array.isArray(params.salvageTaskIds)
+        ? (params.salvageTaskIds as string[])
+        : [];
+      const operatorId = opts?.currentAgentId ?? "unknown";
+      const timestamp = new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+
+      const results = {
+        projectPaused: false,
+        cancelledCount: 0,
+        cancelledIds: [] as string[],
+        failedIds: [] as string[],
+        memoryWritten: false,
+        errors: [] as string[],
+      };
+
+      // Step 1: 暂停项目
+      try {
+        await callGatewayTool("projects.updateProgress", gatewayOpts, {
+          projectId,
+          status: "paused",
+          progressNotes: `[紧急制动] ${reason}`,
+        });
+        results.projectPaused = true;
+      } catch (e) {
+        results.errors.push(`暂停项目失败: ${e instanceof Error ? e.message : String(e)}`);
+      }
+
+      // Step 2: 批量取消任务
+      try {
+        const listResult = await callGatewayTool("task.list", gatewayOpts, { projectId, limit: 500 });
+        const tasks = (
+          Array.isArray(listResult) ? listResult : (listResult)?.tasks
+        ) as Array<Record<string, unknown>> | undefined;
+        const targetIds = (tasks ?? [])
+          .filter((t) => cancelStatuses.includes(String(t.status ?? "")))
+          .filter((t) => !salvageTaskIds.includes(String(t.id ?? "")))
+          .map((t) => String(t.id ?? ""))
+          .filter(Boolean);
+
+        const cancelNote = `[紧急制动已取消] 原因: ${reason} | 操作者: ${operatorId} | ${timestamp}`;
+        // 对保留任务添加标记
+        for (const id of salvageTaskIds) {
+          try {
+            await callGatewayTool("task.worklog.add", gatewayOpts, {
+              taskId: id,
+              content: `[紧急制动-保留] 该任务在紧急制动中被标记为可抯救。原因: ${reason} | 操作者: ${operatorId}`,
+              authorId: operatorId,
+            });
+          } catch { /* worklog 失败不阻断 */ }
+        }
+        for (const id of targetIds) {
+          try {
+            await callGatewayTool("task.update", gatewayOpts, { id, status: "cancelled", updatedAt: Date.now() });
+            try {
+              await callGatewayTool("task.worklog.add", gatewayOpts, {
+                taskId: id,
+                content: cancelNote,
+                authorId: operatorId,
+              });
+            } catch { /* worklog 失败不阻断 */ }
+            results.cancelledIds.push(id);
+          } catch {
+            results.failedIds.push(id);
+          }
+        }
+        results.cancelledCount = results.cancelledIds.length;
+      } catch (e) {
+        results.errors.push(`批量取消任务失败: ${e instanceof Error ? e.message : String(e)}`);
+      }
+
+      // Step 3: 写入项目共享记忆
+      try {
+        const memLines = [
+          `\u26a0\ufe0f [紧急制动 ${timestamp}] 项目开发方向已重置`,
+          `操作者: ${operatorId}`,
+          ``,
+          `「错误原因」`,
+          reason,
+          ``,
+          `「已取消任务」: ${results.cancelledCount} 个任务已取消`,
+          results.failedIds.length > 0 ? `\u26a0\ufe0f 未能取消: ${results.failedIds.join(", ")}` : null,
+          salvageTaskIds.length > 0 ? `\n「抯救任务」: ${salvageTaskIds.length} 个任务被保留作为可抯救资产: ${salvageTaskIds.join(", ")}` : null,
+          newDirection ? `` : null,
+          newDirection ? `「新方向」` : null,
+          newDirection ?? null,
+          ``,
+          `\u2192 请重新规划任务，避免重覆错误路径。`,
+        ].filter((l): l is string => l !== null).join("\n");
+
+        await callGatewayTool("memory.project.save", gatewayOpts, {
+          content: memLines,
+          section: "项目方向变更日志",
+          projectId,
+        });
+        results.memoryWritten = true;
+      } catch (e) {
+        results.errors.push(`写入共享记忆失败: ${e instanceof Error ? e.message : String(e)}`);
+      }
+
+      const allOk = results.projectPaused && results.errors.length === 0;
+      return jsonResult({
+        success: allOk,
+        message: allOk
+          ? `紧急制动成功: 项目已暂停，${results.cancelledCount} 个任务已取消，原因已记录到共享记忆。请重新规划任务。`
+          : `紧急制动部分完成，但有错误发生。`,
+        projectId,
+        projectPaused: results.projectPaused,
+        cancelledCount: results.cancelledCount,
+        cancelledIds: results.cancelledIds,
+        salvageTaskIds: salvageTaskIds.length > 0 ? salvageTaskIds : undefined,
+        failedIds: results.failedIds,
+        memoryWritten: results.memoryWritten,
+        errors: results.errors.length > 0 ? results.errors : undefined,
+        nextSteps: [
+          "1. 检查共享记忆确认错误原因已记录",
+          "2. 重新设计正确的目录结户、包命名和 API 路径",
+          `3. 调用 project_update_status("${projectId}", "development") 恢复开发`,
+          "4. 初始化新一轮任务规划，确保任务 description 包含 conventions 约束",
+          "5. 清理或删除已产生的重复代码",
+        ],
+      });
+    },
+  };
+}
+
+/**
+ * project_issue_report 工具
+ *
+ * 【方向纠偏——发现问题后的结构化处置流程】
+ *
+ * 当AI团队在项目进行过程中发现错误，该工具提供:
+ * (1) 结构化问题登记和根因分析 (RCA)
+ * (2) 将涉及的已完成任务标记为 needs-rework
+ * (3) 可选创建一个纠偏 Sprint (类型: correction)
+ * (4) 将问题和修复计划写入项目共享记忆
+ */
+export function createProjectIssueReportTool(opts?: { currentAgentId?: string }): AnyAgentTool {
+  return {
+    label: "Project Issue Report",
+    name: "project_issue_report",
+    description:
+      "Report a discovered issue, wrong direction, or bug in a project with Root Cause Analysis. " +
+      "USE THIS WHEN: You discover that completed tasks have bugs, wrong direction, or need rework. " +
+      "ONE CALL does: (1) records a structured issue with RCA, (2) marks affected tasks as needs-rework, " +
+      "(3) optionally creates a Correction Sprint for the fix work, (4) writes the issue to project shared memory. " +
+      "\n\nDIFFERENCE FROM project_emergency_pivot: " +
+      "issue_report is SURGICAL — it targets specific tasks/areas needing fix without stopping the whole project. " +
+      "emergency_pivot is NUCLEAR — it stops everything and cancels all in-progress work. " +
+      "Use issue_report for: wrong task implementation, incorrect architecture in specific module, outdated direction. " +
+      "Use emergency_pivot for: fundamental wrong direction affecting the entire project. " +
+      "\n\nREQUIRED: projectId, issueTitle, rootCause.",
+    parameters: Type.Object({
+      projectId: Type.String({ description: "[REQUIRED] Project ID where the issue was found" }),
+      issueTitle: Type.String({
+        minLength: 5,
+        maxLength: 200,
+        description: "[REQUIRED] Short title describing the issue (e.g. '\u7528\u6237\u767b\u5f55\u6a21\u5757\u4f7f\u7528\u4e86\u9519\u8bef\u7684\u52a0\u5bc6\u7b97\u6cd5')",
+      }),
+      rootCause: Type.String({
+        minLength: 10,
+        maxLength: 2000,
+        description:
+          "[REQUIRED] Root cause analysis — WHY did this issue occur? " +
+          "Include: what went wrong, when it was introduced, what assumptions were incorrect.",
+      }),
+      affectedTaskIds: Type.Optional(Type.Array(Type.String(), {
+        description:
+          "Task IDs that need rework due to this issue. These tasks will be marked as needs-rework status. " +
+          "Omit if no specific tasks are affected (issue is at project/architecture level).",
+      })),
+      severity: Type.Optional(Type.Union([
+        Type.Literal("low"),
+        Type.Literal("medium"),
+        Type.Literal("high"),
+        Type.Literal("critical"),
+      ], {
+        description:
+          "Issue severity: low (minor fix), medium (some rework needed), " +
+          "high (major feature needs rework), critical (fundamental direction wrong). Default: medium.",
+      })),
+      fixPlan: Type.Optional(Type.String({
+        maxLength: 2000,
+        description: "How to fix this issue. Will guide the correction Sprint if created.",
+      })),
+      createCorrectionSprint: Type.Optional(Type.Boolean({
+        description:
+          "If true, automatically create a new Correction Sprint to house the fix tasks. " +
+          "Default: true for high/critical severity, false for low/medium.",
+      })),
+      correctionSprintGoal: Type.Optional(Type.String({
+        description: "Goal for the Correction Sprint (auto-generated if not provided).",
+      })),
+      objectiveId: Type.Optional(Type.String({
+        description: "Strategic objective ID this issue is related to.",
+      })),
+    }),
+    execute: async (_toolCallId, args) => {
+      const params = args as Record<string, unknown>;
+      const projectId = readStringParam(params, "projectId", { required: true });
+      const issueTitle = readStringParam(params, "issueTitle", { required: true });
+      const rootCause = readStringParam(params, "rootCause", { required: true });
+      const fixPlan = readStringParam(params, "fixPlan");
+      const correctionSprintGoal = readStringParam(params, "correctionSprintGoal");
+      const objectiveId = readStringParam(params, "objectiveId");
+      const gatewayOpts = readGatewayCallOptions(params);
+      const operatorId = opts?.currentAgentId ?? "unknown";
+      const timestamp = new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+
+      const severity = ["low", "medium", "high", "critical"].includes(String(params.severity ?? ""))
+        ? String(params.severity) as "low" | "medium" | "high" | "critical"
+        : "medium";
+      const affectedTaskIds: string[] = Array.isArray(params.affectedTaskIds)
+        ? (params.affectedTaskIds as string[])
+        : [];
+      const severityAutoCreateSprint = severity === "high" || severity === "critical";
+      const createSprint =
+        typeof params.createCorrectionSprint === "boolean"
+          ? params.createCorrectionSprint
+          : severityAutoCreateSprint;
+
+      const issueId = `issue-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      const severityEmoji: Record<string, string> = {
+        low: "🟡",
+        medium: "🟠",
+        high: "🔴",
+        critical: "🚨",
+      };
+      const emoji = severityEmoji[severity] ?? "🟠";
+
+      const results = {
+        issueId,
+        reworkMarked: 0,
+        reworkFailed: [] as string[],
+        correctionSprintId: undefined as string | undefined,
+        memoryWritten: false,
+        errors: [] as string[],
+      };
+
+      // Step 1: 将受影响的任务标记为 needs-rework
+      for (const taskId of affectedTaskIds) {
+        try {
+          await callGatewayTool("task.status.update", gatewayOpts, {
+            taskId,
+            newStatus: "needs-rework",
+            reason: `[Issue ${issueId}] ${issueTitle}: ${rootCause.slice(0, 200)}`,
+            updatedBy: operatorId,
+          });
+          results.reworkMarked++;
+          try {
+            await callGatewayTool("task.worklog.add", gatewayOpts, {
+              taskId,
+              content: `[返工标记 ${timestamp}] Issue: ${issueTitle}\n根因: ${rootCause}${fixPlan ? "\n修复方案: " + fixPlan : ""}`,
+              authorId: operatorId,
+            });
+          } catch { /* worklog 失败不阻断 */ }
+        } catch (e) {
+          results.reworkFailed.push(taskId);
+          results.errors.push(`标记任务 ${taskId} 返工失败: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
+      // Step 2: 创建纠偏 Sprint
+      if (createSprint) {
+        try {
+          const sprintGoal = correctionSprintGoal ??
+            `[纠偏] ${issueTitle} —— ${fixPlan ? fixPlan.slice(0, 100) : "修复已发现的错误和偏差"}`;
+          const sprintResult = await callGatewayTool("projects.sprint.upsert", gatewayOpts, {
+            projectId,
+            title: `[纠偏迭代] ${issueTitle}`,
+            goal: sprintGoal,
+            sprintType: "correction",
+            correctionFor: issueId,
+            objectiveId: objectiveId ?? undefined,
+          });
+          const sprintId = (sprintResult)?.sprintId ??
+            (sprintResult)?.id;
+          if (sprintId) {
+            results.correctionSprintId = String(sprintId);
+          }
+        } catch (e) {
+          results.errors.push(`创建纠偏 Sprint 失败: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
+      // Step 3: 写入项目共享记忆
+      try {
+        const memLines = [
+          `${emoji} [Issue 登记 ${timestamp}] ${issueTitle}`,
+          `Issue ID: ${issueId}`,
+          `严重程度: ${severity.toUpperCase()}`,
+          `操作者: ${operatorId}`,
+          ``,
+          `「根因分析 (RCA)」`,
+          rootCause,
+          affectedTaskIds.length > 0 ? `\n「受影响任务」: ${affectedTaskIds.join(", ")} (已标记为 needs-rework)` : null,
+          fixPlan ? `\n「修复方案」` : null,
+          fixPlan ?? null,
+          results.correctionSprintId ? `\n「纠偏 Sprint」: ${results.correctionSprintId} 已创建，请将修复任务加入该 Sprint` : null,
+          ``,
+          `→ 修复路径: 将返工任务重新实现后，将状态改回 in-progress → review → done。`,
+        ].filter((l): l is string => l !== null).join("\n");
+
+        await callGatewayTool("memory.project.save", gatewayOpts, {
+          content: memLines,
+          section: "项目问题日志",
+          projectId,
+        });
+        results.memoryWritten = true;
+      } catch (e) {
+        results.errors.push(`写入共享记忆失败: ${e instanceof Error ? e.message : String(e)}`);
+      }
+
+      const successMsg = [
+        `Issue 已登记 [${issueId}]，${severity.toUpperCase()} 级别`,
+        results.reworkMarked > 0 ? `${results.reworkMarked} 个任务已标记为 needs-rework` : null,
+        results.correctionSprintId ? `纠偏 Sprint ${results.correctionSprintId} 已创建` : null,
+        results.memoryWritten ? `问题记录已写入共享记忆` : null,
+      ].filter(Boolean).join("，");
+
+      return jsonResult({
+        success: results.errors.length === 0,
+        message: results.errors.length === 0 ? successMsg : `Issue 登记部分完成，但有错误发生。`,
+        issueId,
+        severity,
+        projectId,
+        reworkMarkedCount: results.reworkMarked,
+        reworkFailedIds: results.reworkFailed.length > 0 ? results.reworkFailed : undefined,
+        correctionSprintId: results.correctionSprintId,
+        memoryWritten: results.memoryWritten,
+        errors: results.errors.length > 0 ? results.errors : undefined,
+        nextSteps: [
+          affectedTaskIds.length > 0
+            ? `1. 对每个 needs-rework 任务，展开实际修复工作`
+            : `1. 分析受影响的代码模块，确定需要修复的任务`,
+          results.correctionSprintId
+            ? `2. 将修复任务加入纠偏 Sprint: project_sprint_add_task(sprintId="${results.correctionSprintId}", ...)`
+            : `2. 创建修复任务并关联到项目 backlog`,
+          `3. 修复完成后，将任务状态从 needs-rework 改为 in-progress → done`,
+          `4. 如果问题比预期更严重，可升级将 severity 调为 critical 并调用 project_emergency_pivot`,
+        ],
+      });
     },
   };
 }

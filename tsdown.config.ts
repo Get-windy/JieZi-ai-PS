@@ -1,6 +1,12 @@
-import { existsSync, readFileSync } from "node:fs";
+import fs, { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { defineConfig } from "tsdown";
+import { defineConfig, type UserConfig } from "tsdown";
+import {
+  collectBundledPluginBuildEntries,
+  listBundledPluginRuntimeDependencies,
+  NON_PACKAGED_BUNDLED_PLUGIN_DIRS,
+} from "./upstream/scripts/lib/bundled-plugin-build-entries.mjs";
+import { buildPluginSdkEntrySources } from "./upstream/scripts/lib/plugin-sdk-entries.mjs";
 
 // ========== 三层架构覆盖层插件 ==========
 // 实现 src/ 覆盖 upstream/src/ 的物理分离机制：
@@ -169,6 +175,12 @@ const env = {
 };
 
 // 外部化原生模块和问题依赖，避免 rolldown 尝试打包它们
+const explicitExternalDeps = [
+  "@lancedb/lancedb",
+  "@matrix-org/matrix-sdk-crypto-nodejs",
+  "matrix-js-sdk",
+];
+
 const external = [
   /^@reflink\//,
   /\.node$/,
@@ -180,165 +192,236 @@ const external = [
   /^@mariozechner\/pi-tui$/,
 ];
 
+const bundledPluginBuildEntries = collectBundledPluginBuildEntries();
+const bundledPluginRuntimeDependencies = listBundledPluginRuntimeDependencies();
+const shouldBuildPrivateQaEntries = process.env.OPENCLAW_BUILD_PRIVATE_QA === "1";
+
+const allNeverBundleDependencies = [
+  ...explicitExternalDeps,
+  ...bundledPluginRuntimeDependencies,
+].toSorted((a, b) => a.localeCompare(b));
+
+function shouldNeverBundleDependency(id: string): boolean {
+  return allNeverBundleDependencies.some(
+    (dep) => id === dep || id.startsWith(`${dep}/`),
+  );
+}
+
+function isPluginSdkSelfReference(id: string): boolean {
+  return (
+    id === "openclaw/plugin-sdk" ||
+    id.startsWith("openclaw/plugin-sdk/") ||
+    id === "@openclaw/plugin-sdk" ||
+    id.startsWith("@openclaw/plugin-sdk/")
+  );
+}
+
+function shouldStageBundledPluginRuntimeDependencies(packageJson: unknown): boolean {
+  return (
+    typeof packageJson === "object" &&
+    packageJson !== null &&
+    (packageJson as { openclaw?: { bundle?: { stageRuntimeDependencies?: boolean } } }).openclaw
+      ?.bundle?.stageRuntimeDependencies === true
+  );
+}
+
+function buildBundledPluginNeverBundlePredicate(packageJson: {
+  dependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+}) {
+  const runtimeDependencies = shouldStageBundledPluginRuntimeDependencies(packageJson)
+    ? [
+        ...Object.keys(packageJson.dependencies ?? {}),
+        ...Object.keys(packageJson.optionalDependencies ?? {}),
+      ].toSorted((a, b) => a.localeCompare(b))
+    : [];
+
+  return (id: string): boolean => {
+    if (isPluginSdkSelfReference(id)) {
+      return true;
+    }
+    return runtimeDependencies.some(
+      (dependency) => id === dependency || id.startsWith(`${dependency}/`),
+    );
+  };
+}
+
+function listBundledPluginEntrySources(
+  entries: Array<{ id: string; packageJson: unknown; sourceEntries: string[] }>,
+): Record<string, string> {
+  return Object.fromEntries(
+    entries.flatMap(({ id, sourceEntries }) =>
+      sourceEntries.map((entry) => {
+        const normalizedEntry = entry.replace(/^\.\//u, "");
+        const entryKey = `extensions/${id}/${normalizedEntry.replace(/\.[^.]+$/u, "")}`;
+        return [entryKey, normalizedEntry ? `extensions/${id}/${normalizedEntry}` : `extensions/${id}`];
+      }),
+    ),
+  );
+}
+
+function normalizeBundledPluginOutEntry(entry: string): string {
+  return entry.replace(/^\.\//u, "").replace(/\.[^.]+$/u, "");
+}
+
+function buildBundledHookEntries(): Record<string, string> {
+  const hooksRoot = path.join(ROOT_DIR, "src", "hooks", "bundled");
+  const entries: Record<string, string> = {};
+  if (!fs.existsSync(hooksRoot)) {
+    return entries;
+  }
+  for (const dirent of fs.readdirSync(hooksRoot, { withFileTypes: true })) {
+    if (!dirent.isDirectory()) {continue;}
+    const handlerPath = path.join(hooksRoot, dirent.name, "handler.ts");
+    if (!fs.existsSync(handlerPath)) {continue;}
+    entries[`bundled/${dirent.name}/handler`] = handlerPath;
+  }
+  return entries;
+}
+
+const bundledHookEntries = buildBundledHookEntries();
+
 // 禁用 chunkOptimization 解决 __exportAll is not a function 错误
 // 参考: https://github.com/rolldown/rolldown/issues/8184
-// 该选项会尝试将公共模块直接插入现有 chunk，可能导致循环依赖
-const inputOptions = {
-  experimental: {
-    chunkOptimization: false,
-  },
+const baseInputOptions = {
+  experimental: { chunkOptimization: false },
 };
 
 // manualChunks：将插件加载器及其缓存依赖强制提取为单一共享 chunk。
-// 背景：rolldown 在 chunkOptimization:false 模式下会将 plugins/loader.ts、
-// plugins/discovery.ts、plugins/manifest-registry.ts 内联进多个 chunk，
-// 每份内联各自持有独立的 Map/Set 实例导致缓存永远 MISS，每次调用都触发
-// 一次完整的 jiti 插件加载（每秒数十次循环）。
-// 将这三个文件固定到命名 chunk 后，所有调用方共享同一个缓存实例。
+// 背景：rolldown 在 chunkOptimization:false 模式下会将多个模块内联进多个 chunk，
+// 每份内联各自持有独立的 Map/Set 实例导致缓存永远 MISS。
 const pluginLoaderManualChunks = (id: string): string | undefined => {
   const norm = id.replace(/\\/g, "/");
-  if (norm.includes("upstream/src/plugins/loader") || norm.includes("src/plugins/loader")) {
-    return "plugin-loader";
-  }
-  if (norm.includes("upstream/src/plugins/discovery") || norm.includes("src/plugins/discovery")) {
-    return "plugin-loader";
-  }
-  if (
-    norm.includes("upstream/src/plugins/manifest-registry") ||
-    norm.includes("src/plugins/manifest-registry")
-  ) {
-    return "plugin-loader";
-  }
-  // 将 sdk-alias 和 public-surface-loader 也固定到同一 chunk，
-  // 避免 rolldown 因多入口引用产生命名冲突（resolvePluginLoaderJitiTryNative$1 vs 原名）
-  if (norm.includes("upstream/src/plugins/sdk-alias") || norm.includes("src/plugins/sdk-alias")) {
-    return "plugin-loader";
-  }
-  if (
-    norm.includes("upstream/src/plugins/public-surface-loader") ||
-    norm.includes("src/plugins/public-surface-loader")
-  ) {
-    return "plugin-loader";
-  }
+  if (norm.includes("upstream/src/plugins/loader") || norm.includes("src/plugins/loader"))
+    {return "plugin-loader";}
+  if (norm.includes("upstream/src/plugins/discovery") || norm.includes("src/plugins/discovery"))
+    {return "plugin-loader";}
+  if (norm.includes("upstream/src/plugins/manifest-registry") || norm.includes("src/plugins/manifest-registry"))
+    {return "plugin-loader";}
+  if (norm.includes("upstream/src/plugins/sdk-alias") || norm.includes("src/plugins/sdk-alias"))
+    {return "plugin-loader";}
+  if (norm.includes("upstream/src/plugins/public-surface-loader") || norm.includes("src/plugins/public-surface-loader"))
+    {return "plugin-loader";}
   return undefined;
 };
 
-const outputOptionsWithManualChunks = {
-  manualChunks: pluginLoaderManualChunks,
-};
+const outputOptionsWithManualChunks = { manualChunks: pluginLoaderManualChunks };
 
-// plugin-sdk 多入口构建：禁用 chunkOptimization，同时通过 rollupOptions 强制
-// 每个入口独立打包（不共享 chunk），规避 rolldown rc.3 多入口共享 chunk 时
-// 产生的 TDZ（Temporal Dead Zone）初始化顺序错误。
-const pluginSdkInputOptions = {
-  experimental: {
-    chunkOptimization: false,
-  },
-};
+function nodeBuildConfig(config: UserConfig): UserConfig {
+  return {
+    ...config,
+    env,
+    fixedExtension: false,
+    platform: "node",
+    plugins: [overlayPlugin, ...(config.plugins ?? [])],
+    inputOptions: baseInputOptions,
+    outputOptions: outputOptionsWithManualChunks,
+  };
+}
+
+/** 与上游 buildCoreDistEntries() 对齐，包含本项目需要的额外入口。
+ * write-cli-compat.ts 会扫描 daemon-cli 和 runner chunk，自动拼合完整导出。 */
+function buildCoreDistEntries(): Record<string, string> {
+  const upstreamEntries: Record<string, string> = {
+    index: "src/index.ts",
+    entry: "src/entry.ts",
+    // Ensure this module is bundled as an entry so legacy CLI shims can resolve its exports.
+    "cli/daemon-cli": "src/cli/daemon-cli.ts",
+    // Keep long-lived lazy runtime boundaries on stable filenames so rebuilt
+    // dist/ trees do not strand already-running gateways on stale hashed chunks.
+    "agents/auth-profiles.runtime": "src/agents/auth-profiles.runtime.ts",
+    "agents/model-catalog.runtime": "src/agents/model-catalog.runtime.ts",
+    "agents/models-config.runtime": "src/agents/models-config.runtime.ts",
+    "subagent-registry.runtime": "src/agents/subagent-registry.runtime.ts",
+    "commands/status.summary.runtime": "src/commands/status.summary.runtime.ts",
+    "infra/warning-filter": "src/infra/warning-filter.ts",
+    "plugins/provider-discovery.runtime": "src/plugins/provider-discovery.runtime.ts",
+    "plugins/provider-runtime.runtime": "src/plugins/provider-runtime.runtime.ts",
+    "plugins/public-surface-runtime": "src/plugins/public-surface-runtime.ts",
+    "plugins/sdk-alias": "src/plugins/sdk-alias.ts",
+    "facade-activation-check.runtime": "src/plugin-sdk/facade-activation-check.runtime.ts",
+    extensionAPI: "src/extensionAPI.ts",
+    "plugins/runtime/index": "src/plugins/runtime/index.ts",
+    "llm-slug-generator": "src/hooks/llm-slug-generator.ts",
+  };
+
+  // 过滤掉本地和 upstream 都不存在的入口
+  return Object.fromEntries(
+    Object.entries(upstreamEntries).filter(([, srcPath]) => {
+      const local = path.resolve(ROOT_DIR, srcPath);
+      const up = path.resolve(ROOT_DIR, "upstream", srcPath);
+      return existsSync(local) || existsSync(up);
+    }),
+  );
+}
+
+function buildUnifiedDistEntries(): Record<string, string> {
+  const coreEntries = buildCoreDistEntries();
+  const pluginSdkEntries = Object.fromEntries(
+    Object.entries(buildPluginSdkEntrySources()).map(([entry, source]) => [
+      `plugin-sdk/${entry}`,
+      source,
+    ]),
+  );
+  const qaEntries = shouldBuildPrivateQaEntries
+    ? {
+        "plugin-sdk/qa-lab": "src/plugin-sdk/qa-lab.ts",
+        "plugin-sdk/qa-runtime": "src/plugin-sdk/qa-runtime.ts",
+      }
+    : {};
+
+  const rootBundledPluginBuildEntries = bundledPluginBuildEntries.filter(
+    ({ id, packageJson }) =>
+      !shouldStageBundledPluginRuntimeDependencies(packageJson) &&
+      (shouldBuildPrivateQaEntries || !NON_PACKAGED_BUNDLED_PLUGIN_DIRS.has(id)),
+  );
+
+  return {
+    ...coreEntries,
+    // Internal compat artifact for the root-alias.cjs lazy loader.
+    "plugin-sdk/compat": "src/plugin-sdk/compat.ts",
+    ...pluginSdkEntries,
+    ...qaEntries,
+    ...listBundledPluginEntrySources(rootBundledPluginBuildEntries),
+    ...bundledHookEntries,
+  };
+}
+
+function buildBundledPluginConfigs(): UserConfig[] {
+  const stagedBundledPluginBuildEntries = bundledPluginBuildEntries.filter(
+    ({ packageJson }) => shouldStageBundledPluginRuntimeDependencies(packageJson),
+  );
+  return stagedBundledPluginBuildEntries.map(({ id, packageJson, sourceEntries }) =>
+    nodeBuildConfig({
+      clean: false,
+      entry: Object.fromEntries(
+        sourceEntries.map((entry) => [
+          normalizeBundledPluginOutEntry(entry),
+          `extensions/${id}/${entry.replace(/^\.\//u, "")}`,
+        ]),
+      ),
+      outDir: `dist/extensions/${id}`,
+      deps: {
+        neverBundle: buildBundledPluginNeverBundlePredicate(
+          (packageJson ?? {}) as {
+            dependencies?: Record<string, string>;
+            optionalDependencies?: Record<string, string>;
+          },
+        ),
+      },
+    }),
+  );
+}
 
 export default defineConfig([
-  {
-    entry: "src/index.ts",
-    env,
-    external,
-    plugins: [overlayPlugin],
-    fixedExtension: false,
-    platform: "node",
-    inputOptions,
-    outputOptions: outputOptionsWithManualChunks,
-  },
-  {
-    entry: "src/entry.ts",
-    env,
-    external,
-    plugins: [overlayPlugin],
-    fixedExtension: false,
-    platform: "node",
-    inputOptions,
-    outputOptions: outputOptionsWithManualChunks,
-  },
-  {
-    // Ensure this module is bundled as an entry so legacy CLI shims can resolve its exports.
-    entry: "src/cli/daemon-cli.ts",
-    env,
-    plugins: [overlayPlugin],
-    fixedExtension: false,
-    platform: "node",
-    outputOptions: outputOptionsWithManualChunks,
-  },
-  {
-    entry: "src/infra/warning-filter.ts",
-    env,
-    external,
-    plugins: [overlayPlugin],
-    fixedExtension: false,
-    platform: "node",
-    inputOptions,
-    outputOptions: outputOptionsWithManualChunks,
-  },
-  // plugin-sdk 各入口独立构建，避免共享 chunk 导致的 TDZ 初始化顺序错误
-  // 从 upstream/scripts/lib/plugin-sdk-entrypoints.json 动态读取所有 entry，与上游保持同步
-  ...JSON.parse(
-    readFileSync(
-      path.join(ROOT_DIR, "upstream", "scripts", "lib", "plugin-sdk-entrypoints.json"),
-      "utf-8",
-    ),
-  )
-    .map((name: string) => `src/plugin-sdk/${name}.ts`)
-    .map((entry) => {
-      // Apply overlay: if the local src/ entry doesn't exist, use upstream/src/ path
-      const absEntry = path.resolve(ROOT_DIR, entry);
-      const resolvedEntry = existsSync(absEntry)
-        ? entry
-        : (() => {
-            const rel = path.relative(SRC_DIR, absEntry);
-            const upPath = path.join(UP_SRC_DIR, rel);
-            return existsSync(upPath) ? upPath : null;
-          })();
-      if (!resolvedEntry) {
-        return null;
-      } // skip entries where neither local nor upstream file exists
-      return {
-        entry: resolvedEntry,
-        outDir: "dist/plugin-sdk",
-        env,
-        external,
-        plugins: [overlayPlugin],
-        fixedExtension: false,
-        platform: "node" as const,
-        inputOptions: pluginSdkInputOptions,
-      };
-    })
-    .filter((config): config is NonNullable<typeof config> => config !== null),
-  {
-    entry: "src/extensionAPI.ts",
-    env,
-    external,
-    plugins: [overlayPlugin],
-    fixedExtension: false,
-    platform: "node",
-    inputOptions,
-  },
-  {
-    entry: ["src/hooks/bundled/*/handler.ts", "src/hooks/llm-slug-generator.ts"],
-    env,
-    external,
-    plugins: [overlayPlugin],
-    fixedExtension: false,
-    platform: "node",
-    inputOptions,
-  },
-  {
-    // Plugin runtime entry: required for loading memory-core and other plugins at runtime.
-    // resolvePluginRuntimeModulePath() in upstream/src/plugins/loader.ts looks for
-    // dist/plugins/runtime/index.js relative to the package root.
-    entry: "src/plugins/runtime/index.ts",
-    outDir: "dist/plugins/runtime",
-    env,
-    external,
-    plugins: [overlayPlugin],
-    fixedExtension: false,
-    platform: "node",
-    inputOptions,
-  },
+  nodeBuildConfig({
+    // Build core entrypoints, plugin-sdk subpaths, bundled plugin entrypoints,
+    // and bundled hooks in one graph so runtime singletons are emitted once.
+    clean: true,
+    entry: buildUnifiedDistEntries(),
+    deps: {
+      neverBundle: shouldNeverBundleDependency,
+    },
+  }),
+  ...buildBundledPluginConfigs(),
 ]);
