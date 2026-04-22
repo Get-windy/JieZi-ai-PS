@@ -3110,40 +3110,59 @@ export const modelsHandlers: GatewayRequestHandlers = {
 
       const storage = await loadModelManagement();
 
-      // 检查ID是否已存在
-      if (storage.providers.some((p) => p.id === id)) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, "Provider ID already exists"),
-        );
-        return;
-      }
-
-      const provider: ProviderInstance = {
-        id,
-        name,
-        icon,
-        website,
-        templateId,
-        defaultBaseUrl,
-        apiKeyPlaceholder,
-        custom: !templateId, // 没有templateId则是完全自定义
-        createdAt: Date.now(),
-        knownModels, // 已知模型列表
-      };
-
-      storage.providers.push(provider);
-
       // 从删除黑名单中移除（如果存在）
       if (storage.deletedProviders?.includes(id)) {
         storage.deletedProviders = storage.deletedProviders.filter((pid) => pid !== id);
         console.log(`[Models] Removed provider from deleted blacklist: ${id}`);
       }
 
+      // upsert：ID 已存在则更新，不存在则新增
+      const existingProvider = storage.providers.find((p) => p.id === id);
+      let provider: ProviderInstance;
+      if (existingProvider) {
+        // 更新现有供应商字段
+        if (name !== undefined) {
+          existingProvider.name = name;
+        }
+        if (icon !== undefined) {
+          existingProvider.icon = icon;
+        }
+        if (website !== undefined) {
+          existingProvider.website = website;
+        }
+        if (templateId !== undefined) {
+          existingProvider.templateId = templateId;
+        }
+        if (defaultBaseUrl !== undefined) {
+          existingProvider.defaultBaseUrl = defaultBaseUrl;
+        }
+        if (apiKeyPlaceholder !== undefined) {
+          existingProvider.apiKeyPlaceholder = apiKeyPlaceholder;
+        }
+        if (knownModels !== undefined) {
+          existingProvider.knownModels = knownModels;
+        }
+        provider = existingProvider;
+        console.log(`[Models] Updated existing provider (upsert): ${id} (${name})`);
+      } else {
+        provider = {
+          id,
+          name,
+          icon,
+          website,
+          templateId,
+          defaultBaseUrl,
+          apiKeyPlaceholder,
+          custom: !templateId, // 没有templateId则是完全自定义
+          createdAt: Date.now(),
+          knownModels,
+        };
+        storage.providers.push(provider);
+        console.log(`[Models] Added custom provider: ${id} (${name})`);
+      }
+
       await saveModelManagement(storage);
 
-      console.log(`[Models] Added custom provider: ${id} (${name})`);
       respond(true, { provider }, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));

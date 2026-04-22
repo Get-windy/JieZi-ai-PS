@@ -423,6 +423,10 @@ export const OpenClawSchema = z
             billingBackoffHoursByProvider: z.record(z.string(), z.number().positive()).optional(),
             billingMaxHours: z.number().positive().optional(),
             failureWindowHours: z.number().positive().optional(),
+            rateLimitedProfileRotations: z.number().int().min(0).optional(),
+            rateLimitedBackoffMs: z.number().int().min(0).optional(),
+            overloadedProfileRotations: z.number().int().min(0).optional(),
+            overloadedBackoffMs: z.number().int().min(0).optional(),
           })
           .strict()
           .optional(),
@@ -545,7 +549,7 @@ export const OpenClawSchema = z
       .superRefine((val, ctx) => {
         if (val.sessionRetention !== undefined && val.sessionRetention !== false) {
           try {
-            parseDurationMs(String(val.sessionRetention).trim(), { defaultUnit: "h" });
+            parseDurationMs(val.sessionRetention.trim(), { defaultUnit: "h" });
           } catch {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,

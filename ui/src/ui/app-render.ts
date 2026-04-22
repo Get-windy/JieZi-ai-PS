@@ -1379,13 +1379,21 @@ export function renderApp(state: AppViewState) {
                 }
               },
               onSaveProvider: async (params) => {
-                if (state.providerForm?.isEditing) {
-                  await updateProvider(state, params);
-                } else {
-                  await addProvider(state, params);
+                try {
+                  if (state.providerForm?.isEditing) {
+                    await updateProvider(state, params);
+                  } else {
+                    await addProvider(state, params);
+                  }
+                } catch (err) {
+                  // 保存失败时也关闭模态框并刷新列表，避免模态框卡死
+                  console.error("[Models] onSaveProvider error:", err);
+                } finally {
+                  state.addingProvider = false;
+                  state.providerForm = null;
+                  // 确保列表刷新
+                  void loadModels(state, false);
                 }
-                state.addingProvider = false;
-                state.providerForm = null;
               },
               onDeleteProvider: async (id) => {
                 // 获取供应商信息
@@ -4101,7 +4109,7 @@ export function renderApp(state: AppViewState) {
                       const result = (await state.client.request("projects.delete", {
                         projectId,
                         ...opts,
-                      })) as any;
+                      })) as { message?: string };
                       state.selectedProjectId = null;
                       state.deleteProjectConfirm = null;
                       await loadProjects(state, state.client);
