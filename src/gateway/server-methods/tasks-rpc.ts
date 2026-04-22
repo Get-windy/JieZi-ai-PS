@@ -385,6 +385,41 @@ export const tasksRpc: GatewayRequestHandlers = {
         return;
       }
 
+      // 状态转换验证：在调用 storage.updateTask 之前拦截非法转换
+      if (normalizedStatus && normalizedStatus !== task.status) {
+        const VALID_TRANSITIONS: Record<string, string[]> = {
+          todo: ["in-progress", "cancelled"],
+          "in-progress": ["review", "blocked", "done", "cancelled"],
+          review: ["todo", "in-progress", "blocked", "done", "cancelled", "needs-rework"],
+          blocked: ["todo", "in-progress", "cancelled"],
+          done: [],  // 终态，不可转换
+          cancelled: [],  // 终态，不可转换
+          "needs-rework": ["todo", "in-progress", "review", "blocked", "done", "cancelled"],
+        };
+        const allowed = VALID_TRANSITIONS[task.status] ?? [];
+        if (!allowed.includes(normalizedStatus)) {
+          const statusEmoji: Record<string, string> = {
+            todo: "⏸️ 待办",
+            "in-progress": "▶️ 进行中",
+            review: "🔍 审核中",
+            blocked: "⛔ 已阻塞",
+            done: "✅ 已完成",
+            cancelled: "❌ 已取消",
+            "needs-rework": "🔁 需返工",
+          };
+          respond(
+            false,
+            undefined,
+            errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              `无效的状态转换：${statusEmoji[task.status] ?? task.status} → ${statusEmoji[normalizedStatus] ?? normalizedStatus}。\n` +
+              `允许的状态：${allowed.map(s => statusEmoji[s] ?? s).join("、") || "无（终态不可转换）"}`,
+            ),
+          );
+          return;
+        }
+      }
+
       // 权限检查 - 需要创建者、执行者或管理员权限
       const requesterId = params?.requesterId ? String(params.requesterId) : undefined;
       if (requesterId) {
