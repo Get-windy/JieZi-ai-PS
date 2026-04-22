@@ -125,8 +125,15 @@ export class GroupWorkspaceManager {
         if (!g.id || this.workspaces.has(g.id)) {
           continue;
         }
+        // 优先使用 groups.json 中配置的 workspacePath（项目空间与群组绑定后的自定义路径）
         const override = this.groupDirOverrides[g.id];
         const groupDir = override ?? g.workspacePath ?? path.join(this.rootDir, g.id);
+
+        // 将 groups.json 的 workspacePath 写入覆盖记录，确保后续调用能识别
+        if (g.workspacePath && !override) {
+          this.groupDirOverrides[g.id] = groupDir;
+        }
+
         if (fs.existsSync(groupDir)) {
           // 目录已存在：加载进缓存
           this.loadExistingWorkspace(g.id);
