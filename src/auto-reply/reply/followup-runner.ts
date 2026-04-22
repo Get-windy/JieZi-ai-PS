@@ -26,7 +26,13 @@ import { createTypingSignaler } from "../../../upstream/src/auto-reply/reply/typ
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../../../upstream/src/auto-reply/tokens.js";
 import type { GetReplyOptions, ReplyPayload } from "../../../upstream/src/auto-reply/types.js";
 import type { OriginatingChannelType } from "../templating.js";
-import { resolveRunAuthProfile } from "./agent-runner-utils.js";
+import {
+  clearProviderTimeout,
+  filterDisabledProviderFallbacks,
+  prioritizeDifferentProviderFallbacks,
+  recordProviderTimeout,
+  resolveRunAuthProfile,
+} from "./agent-runner-utils.js";
 import type { FollowupRun } from "./queue/types.js";
 import {
   applyReplyThreading,
@@ -151,8 +157,15 @@ export function createFollowupRunner(params: {
                 resolveAgentIdFromSessionKey(queued.run.sessionKey),
               ) ?? []),
             ].filter((v, i, arr) => arr.indexOf(v) === i);
-            // 只有当合并后有内容时才传入，避免空数组覆盖默认 fallback 配置
-            return merged.length > 0 ? merged : undefined;
+            // 过滤掉认证已全部禁用的备用供应商，避免浪费重试次数
+            const available = filterDisabledProviderFallbacks(merged) ?? [];
+            if (available.length === 0) {
+              return undefined;
+            }
+            // 重排序：
+            // 1. 优先选异 provider 的候选
+            // 2. 若某 provider 连续超时已达阈值，无论同/异 provider 一律排末尾
+            return prioritizeDifferentProviderFallbacks(available, queued.run.provider);
           })(),
           run: (provider, model) => {
             const authProfile = resolveRunAuthProfile(queued.run, provider);
@@ -214,6 +227,8 @@ export function createFollowupRunner(params: {
         runResult = fallbackResult.result;
         fallbackProvider = fallbackResult.provider;
         fallbackModel = fallbackResult.model;
+        // 成功响应：清除实际生效的 provider 的超时计数（恢复其优先级）
+        clearProviderTimeout(fallbackProvider);
         // 如果实际使用的模型与首选不同，说明发生了 fallback 切换，在带内容的回复前预置一条切换通知
         const didFallback =
           fallbackResult.provider !== queued.run.provider ||
@@ -238,6 +253,11 @@ export function createFollowupRunner(params: {
           isTimeoutError(err) ||
           (isFailoverError(err) && (err as { reason?: string }).reason === "timeout") ||
           (err instanceof Error && /timed? ?out/i.test(err.message));
+        // 记录超时：无论是否有 fallback，都计入连续超时计数
+        // 这样下次调用构建 fallbacksOverride 时，该 provider 会被移到末尾
+        if (isTimeout) {
+          recordProviderTimeout(queued.run.provider);
+        }
         const hasFallbacks = (queued.run.smartRoutingFallbacks?.length ?? 0) > 0;
         if (isTimeout && !hasFallbacks) {
           // agent 只绑定了一个模型，超时后无可用备用模型，发出明确错误提示

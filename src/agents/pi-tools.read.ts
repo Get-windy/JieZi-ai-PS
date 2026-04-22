@@ -488,6 +488,27 @@ export function createOpenClawReadTool(
         normalized ??
         (params && typeof params === "object" ? (params as Record<string, unknown>) : undefined);
       assertRequiredParams(record, CLAUDE_PARAM_GROUPS.read, base.name);
+      // Reject directories before opening so we never surface EISDIR to callers.
+      // Mirrors upstream fs-safe.ts openVerifiedLocalFile (issue #31186).
+      const pathParam = typeof record?.path === "string" ? record.path.trim() : "";
+      if (pathParam) {
+        try {
+          const preStat = await fs.lstat(pathParam);
+          if (preStat.isDirectory()) {
+            const content = [
+              {
+                type: "text" as const,
+                text: `read: '${pathParam}' is a directory, not a file. Use list or specify a file path.`,
+              },
+            ];
+            return { content, details: { error: "not-file" } } as unknown as Awaited<
+              ReturnType<typeof base.execute>
+            >;
+          }
+        } catch {
+          // ENOENT or other lstat errors: fall through and let base handle.
+        }
+      }
       const result = await executeReadWithAdaptivePaging({
         base,
         toolCallId,
@@ -495,7 +516,7 @@ export function createOpenClawReadTool(
         signal,
         maxBytes: resolveAdaptiveReadMaxBytes(options),
       });
-      const filePath = typeof record?.path === "string" ? String(record.path) : "<unknown>";
+      const filePath = typeof record?.path === "string" ? record.path : "<unknown>";
       const strippedDetailsResult = stripReadTruncationContentDetails(result);
       const normalizedResult = await normalizeReadImageResult(strippedDetailsResult, filePath);
       const imageResult = await sanitizeToolResultImages(

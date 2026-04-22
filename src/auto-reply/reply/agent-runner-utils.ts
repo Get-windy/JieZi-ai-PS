@@ -1,11 +1,11 @@
 import { resolveAgentModelFallbacksOverride } from "../../agents/agent-scope.js";
-import { isProviderUsableSync } from "../../gateway/server-methods/models.js";
 import type { NormalizedUsage } from "../../agents/usage.js";
 import { getChannelPlugin } from "../../channels/plugins/index.js";
 import type { ChannelId, ChannelThreadingToolContext } from "../../channels/plugins/types.js";
 import { normalizeAnyChannelId, normalizeChannelId } from "../../channels/registry.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { resolveAgentIdFromSessionKey } from "../../config/sessions.js";
+import { isProviderUsableSync } from "../../gateway/server-methods/models.js";
 import { isReasoningTagProvider } from "../../utils/provider-utils.js";
 import { estimateUsageCost, formatTokenCount, formatUsd } from "../../utils/usage-format.js";
 import type { TemplateContext } from "../templating.js";
@@ -154,13 +154,15 @@ export const appendUsageLine = (payloads: ReplyPayload[], line: string): ReplyPa
 };
 
 export const resolveEnforceFinalTag = (run: FollowupRun["run"], provider: string) =>
-  Boolean(run.enforceFinalTag || isReasoningTagProvider(provider));
+  run.enforceFinalTag === true || isReasoningTagProvider(provider);
 
 /**
  * 过滤掉 provider 认证已全部禁用的 fallback 候选，避免浪费重试次数在已知无效账号上。
  * provider 未纳管（isProviderUsableSync 返回 undefined）时不过滤，保持兼容。
  */
-function filterDisabledProviderFallbacks(fallbacks: string[] | undefined): string[] | undefined {
+export function filterDisabledProviderFallbacks(
+  fallbacks: string[] | undefined,
+): string[] | undefined {
   if (!fallbacks || fallbacks.length === 0) {
     return fallbacks;
   }
@@ -184,6 +186,129 @@ function filterDisabledProviderFallbacks(fallbacks: string[] | undefined): strin
   return filtered.length > 0 ? filtered : undefined;
 }
 
+// ---------------------------------------------------------------------------
+// Provider 连续超时计数器
+// 跨调用（进程内）记录每个 provider 的连续超时次数。
+// 达到阈值后，构建 fallbacksOverride 时将该 provider 的候选移到末尾。
+// ---------------------------------------------------------------------------
+
+/** 连续超时达到该次数后，该 provider 的候选被移到 fallback 列表末尾 */
+export const PROVIDER_TIMEOUT_SUPPRESS_THRESHOLD = 3;
+
+/**
+ * 超时降级状态的自动过期时间（ms）。
+ * 超过该时间没有新超时记录，自动清除降级状态，让该 provider 恢复优先机会。
+ */
+export const PROVIDER_TIMEOUT_EXPIRY_MS = 10 * 60 * 1000; // 10 分钟
+
+type ProviderTimeoutEntry = {
+  consecutiveCount: number;
+  lastTimeoutAt: number;
+};
+
+/** per-provider 连续超时状态（进程内，无需持久化） */
+const providerTimeoutState = new Map<string, ProviderTimeoutEntry>();
+
+function normalizeProvider(provider: string): string {
+  return provider.trim().toLowerCase();
+}
+
+/**
+ * 记录某 provider 发生了一次超时。
+ * 应在 followup-runner 捕获到超时错误时调用。
+ */
+export function recordProviderTimeout(provider: string): void {
+  const key = normalizeProvider(provider);
+  if (!key) {
+    return;
+  }
+  const now = Date.now();
+  const entry = providerTimeoutState.get(key);
+  // 如果上次超时已超过过期时间，视为重新开始计数
+  const isExpired = entry ? now - entry.lastTimeoutAt > PROVIDER_TIMEOUT_EXPIRY_MS : false;
+  const prevCount = entry && !isExpired ? entry.consecutiveCount : 0;
+  const newCount = prevCount + 1;
+  providerTimeoutState.set(key, { consecutiveCount: newCount, lastTimeoutAt: now });
+  if (newCount >= PROVIDER_TIMEOUT_SUPPRESS_THRESHOLD) {
+    console.warn(
+      `[ProviderTimeout] Provider "${key}" has timed out ${newCount} consecutive time(s) (threshold=${PROVIDER_TIMEOUT_SUPPRESS_THRESHOLD}). It will be deprioritized in fallback selection.`,
+    );
+  }
+}
+
+/**
+ * 清除某 provider 的连续超时计数（在该 provider 成功响应后调用）。
+ */
+export function clearProviderTimeout(provider: string): void {
+  const key = normalizeProvider(provider);
+  if (!key) {
+    return;
+  }
+  if (providerTimeoutState.has(key)) {
+    providerTimeoutState.delete(key);
+  }
+}
+
+/**
+ * 检查某 provider 是否已超过连续超时阈值（应被降级到 fallback 末尾）。
+ * 超过过期时间的记录视为已恢复，返回 false。
+ */
+export function isProviderTimeoutSuppressed(provider: string): boolean {
+  const key = normalizeProvider(provider);
+  if (!key) {
+    return false;
+  }
+  const entry = providerTimeoutState.get(key);
+  if (!entry) {
+    return false;
+  }
+  // 检查是否已过期
+  if (Date.now() - entry.lastTimeoutAt > PROVIDER_TIMEOUT_EXPIRY_MS) {
+    providerTimeoutState.delete(key);
+    return false;
+  }
+  return entry.consecutiveCount >= PROVIDER_TIMEOUT_SUPPRESS_THRESHOLD;
+}
+
+/**
+ * 将 fallback 列表重排序：同 provider 的候选移到末尾，异 provider 优先。
+ * 当主模型超时时，大概率是该供应商整体不稳定，应优先尝试其他供应商。
+ *
+ * 若 suppressedProviders 不为空，其中的 provider 候选无论如何都排到最末尾
+ * （在「同 provider 组」内部也排到连续超时 provider 之后）。
+ */
+export function prioritizeDifferentProviderFallbacks(
+  fallbacks: string[],
+  currentProvider: string,
+): string[] {
+  const normalizedCurrent = currentProvider.trim().toLowerCase();
+  const different: string[] = [];
+  const sameNotSuppressed: string[] = [];
+  const sameSuppressed: string[] = [];
+
+  for (const f of fallbacks) {
+    const slashIdx = f.indexOf("/");
+    const fProvider = slashIdx > 0 ? f.substring(0, slashIdx).trim().toLowerCase() : "";
+    if (fProvider && fProvider !== normalizedCurrent) {
+      // 异 provider —— 也要区分是否被超时降级
+      if (isProviderTimeoutSuppressed(fProvider)) {
+        sameSuppressed.push(f); // 超时降级的异 provider 也排末尾
+      } else {
+        different.push(f);
+      }
+    } else {
+      // 同 provider
+      if (isProviderTimeoutSuppressed(normalizedCurrent)) {
+        sameSuppressed.push(f);
+      } else {
+        sameNotSuppressed.push(f);
+      }
+    }
+  }
+  // 排序：正常异 provider → 未超时同 provider → 所有超时降级候选
+  return [...different, ...sameNotSuppressed, ...sameSuppressed];
+}
+
 export function resolveModelFallbackOptions(run: FollowupRun["run"]) {
   // 优先使用智能路由提供的 fallback 列表（排序好的次优候选）
   // 如果没有，则回退到 agent 配置的 model.fallbacks
@@ -191,7 +316,12 @@ export function resolveModelFallbackOptions(run: FollowupRun["run"]) {
     (run as { smartRoutingFallbacks?: string[] }).smartRoutingFallbacks ??
     resolveAgentModelFallbacksOverride(run.config, resolveAgentIdFromSessionKey(run.sessionKey));
   // 过滤掉 provider 认证已全部禁用的候选，避免 model_not_found / 无效重试浪费
-  const fallbacksOverride = filterDisabledProviderFallbacks(rawFallbacksOverride);
+  const filtered = filterDisabledProviderFallbacks(rawFallbacksOverride);
+  // 重排序：异 provider 优先，避免主模型超时时仍选同一供应商的备用模型
+  const fallbacksOverride =
+    filtered && filtered.length > 0
+      ? prioritizeDifferentProviderFallbacks(filtered, run.provider)
+      : filtered;
   return {
     cfg: run.config,
     provider: run.provider,
