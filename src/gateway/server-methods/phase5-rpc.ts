@@ -412,63 +412,6 @@ export const phase5RpcHandlers: GatewayRequestHandlers = {
   /**
    * 更新模型账号配置
    */
-  "agent.modelAccounts.update": async ({ params, respond }) => {
-    try {
-      const agentId3 = ((params?.agentId as string) ?? "").trim();
-      if (!agentId3) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
-        return;
-      }
-
-      const newConfig = params?.config;
-      if (!newConfig || typeof newConfig !== "object") {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "config is required"));
-        return;
-      }
-
-      const config3 = loadConfig();
-      const agents3 = (config3?.agents?.list || []) as Record<string, unknown>[];
-      const agentIndex3 = agents3.findIndex((a) => a.id === agentId3);
-
-      if (agentIndex3 === -1) {
-        // 如果 agent 不在配置文件中，检查是否是系统中存在的虚拟 agent
-        const systemAgentIds = listAgentIds(config3);
-        if (!systemAgentIds.includes(agentId3)) {
-          respond(
-            false,
-            undefined,
-            errorShape(ErrorCodes.INVALID_REQUEST, `Agent ${agentId3} not found`),
-          );
-          return;
-        }
-
-        // 自动添加虚拟 agent 到配置文件
-        agents3.push({ id: agentId3, modelAccounts: newConfig });
-      } else {
-        // 更新现有 agent 的模型账号配置
-        agents3[agentIndex3] = { ...agents3[agentIndex3], modelAccounts: newConfig };
-      }
-
-      await writeConfigFile({
-        ...config3,
-        agents: {
-          ...config3.agents,
-          list: agents3 as import("../../config/types.agents.js").AgentConfig[],
-        },
-      });
-
-      respond(true, { success: true }, undefined);
-    } catch (error) {
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.UNAVAILABLE,
-          `Failed to update channel policies config: ${String(error)}`,
-        ),
-      );
-    }
-  },
 
   /**
    * 更新通道策略配置

@@ -34,7 +34,10 @@ export function stopModelsAutoRefresh() {
 
 export async function loadModels(state: ModelsState, probe: boolean) {
   // 调试日志
-  if (typeof window !== "undefined" && (window as unknown as { __DEBUG_UI__?: boolean }).__DEBUG_UI__) {
+  if (
+    typeof window !== "undefined" &&
+    (window as unknown as { __DEBUG_UI__?: boolean }).__DEBUG_UI__
+  ) {
     console.log("[DEBUG:Models:loadModels] called:", {
       hasClient: !!state.client,
       connected: state.connected,
@@ -452,7 +455,7 @@ export async function addProvider(
   }
   try {
     await state.client.request("models.providers.add", params);
-    await loadModels(state, false);
+    // 注意：调用方负责刷新列表，此处不调用 loadModels
   } catch (err) {
     state.modelsError = String(err);
     throw err;
@@ -479,7 +482,7 @@ export async function updateProvider(
   }
   try {
     await state.client.request("models.providers.update", params);
-    await loadModels(state, false);
+    // 注意：调用方负责刷新列表，此处不调用 loadModels
   } catch (err) {
     state.modelsError = String(err);
     throw err;

@@ -322,10 +322,7 @@ export async function refreshActiveTab(host: SettingsHost) {
     const app = host as unknown as OpenClawApp;
     if (app.client && app.connected) {
       await loadConfig(app);
-      await Promise.all([
-        loadDreamingStatus(app),
-        loadDreamDiary(app),
-      ]);
+      await Promise.all([loadDreamingStatus(app), loadDreamDiary(app)]);
     }
   }
   if (host.tab === "chat") {
@@ -847,11 +844,7 @@ export async function loadChannelsTab(host: SettingsHost) {
   if (!app.client || !app.connected) {
     return;
   }
-  await Promise.all([
-    loadChannels(app, true),
-    loadConfigSchema(app),
-    loadConfig(app),
-  ]);
+  await Promise.all([loadChannels(app, true), loadConfigSchema(app), loadConfig(app)]);
 }
 
 export async function loadModelsTab(host: SettingsHost) {
@@ -860,11 +853,6 @@ export async function loadModelsTab(host: SettingsHost) {
     return;
   }
   await loadModels(app, true);
-  setTimeout(() => {
-    if (app.client && app.connected) {
-      void loadModels(app, false);
-    }
-  }, 200);
 }
 
 export async function loadCron(host: SettingsHost) {
