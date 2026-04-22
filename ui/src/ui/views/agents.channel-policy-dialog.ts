@@ -1,7 +1,7 @@
 import { html } from "lit";
+import { t } from "../i18n.ts";
 import type { ChannelsStatusSnapshot } from "../types.ts";
 import type { ChannelBinding, ChannelPolicy } from "./agents.ts";
-import { t } from "../i18n.ts";
 
 /**
  * 策略配置对话框（添加/编辑通道策略绑定）
@@ -11,7 +11,7 @@ export function renderPolicyBindingDialog(params: {
   binding: ChannelBinding | null; // null 表示新增模式
   index?: number;
   channelsSnapshot: ChannelsStatusSnapshot | null; // 添加通道快照参数
-  onChange: (field: string, value: any) => void;
+  onChange: (field: string, value: unknown) => void;
   onSave: () => void;
   onCancel: () => void;
 }) {
@@ -22,29 +22,30 @@ export function renderPolicyBindingDialog(params: {
   const isNew = params.binding === null;
 
   // 从 channelsSnapshot 提取可用通道和账号
+  // 账号数据来自 channelAccounts（ChannelAccountSnapshot[]），通道标签来自 channelLabels
   const availableChannels: Array<{
     id: string;
     label: string;
     accounts: Array<{ id: string; label: string }>;
   }> = [];
 
-  if (params.channelsSnapshot?.channels) {
-    for (const [channelId, channelData] of Object.entries(params.channelsSnapshot.channels)) {
-      const accounts: Array<{ id: string; label: string }> = [];
-
-      // 提取该通道的所有账号
-      if ((channelData as any).accounts && typeof (channelData as any).accounts === "object") {
-        for (const [accountId, accountData] of Object.entries((channelData as any).accounts)) {
-          accounts.push({
-            id: accountId,
-            label: (accountData as any).label || accountId,
-          });
-        }
-      }
-
+  if (params.channelsSnapshot) {
+    const channelLabels = params.channelsSnapshot.channelLabels ?? {};
+    const channelAccounts = params.channelsSnapshot.channelAccounts ?? {};
+    // 以 channelAccounts 的 key 为准（有账号的通道），补充 channelOrder 中无账号但有状态的通道
+    const channelIds = new Set([
+      ...(params.channelsSnapshot.channelOrder ?? []),
+      ...Object.keys(channelAccounts),
+    ]);
+    for (const channelId of channelIds) {
+      const accountList = channelAccounts[channelId] ?? [];
+      const accounts: Array<{ id: string; label: string }> = accountList.map((a) => ({
+        id: a.accountId,
+        label: a.name || a.accountId,
+      }));
       availableChannels.push({
         id: channelId,
-        label: (channelData as any).label || channelId,
+        label: channelLabels[channelId] || channelId,
         accounts,
       });
     }
@@ -276,7 +277,9 @@ export function renderPolicyBindingDialog(params: {
             <input
               type="text"
               class="form-control"
-              .value=${binding.broadcastConfig?.targetChannels?.map((t) => (t.accountId ? `${t.channelId}:${t.accountId}` : t.channelId)).join(", ") || ""}
+              .value=${binding.broadcastConfig?.targetChannels
+                ?.map((t) => (t.accountId ? `${t.channelId}:${t.accountId}` : t.channelId))
+                .join(", ") || ""}
               placeholder="例：discord:account1, telegram:account2"
               @input=${(e: Event) => {
                 const raw = (e.target as HTMLInputElement).value;
@@ -374,18 +377,24 @@ export function renderPolicyBindingDialog(params: {
 
       default:
         return html`
-          <div class="muted" style="margin-top: 16px; font-size: 0.875rem">该策略暂无额外配置项</div>
+          <div class="muted" style="margin-top: 16px; font-size: 0.875rem">
+            该策略暂无额外配置项
+          </div>
         `;
     }
   };
 
   return html`
     <div class="modal-overlay" @click=${params.onCancel}>
-      <div class="modal-content" @click=${(e: Event) => e.stopPropagation()} style="max-width: 600px;">
+      <div
+        class="modal-content"
+        @click=${(e: Event) => e.stopPropagation()}
+        style="max-width: 600px;"
+      >
         <div class="card" style="margin: 0;">
           <div class="card-title">${isNew ? "添加" : "编辑"}通道策略绑定</div>
           <div class="card-sub">配置通道的策略和行为</div>
-          
+
           <div style="margin-top: 20px;">
             <div class="form-group" style="margin-bottom: 12px;">
               <label class="form-label">通道</label>
@@ -402,80 +411,76 @@ export function renderPolicyBindingDialog(params: {
                 <option value="">请选择通道...</option>
                 ${availableChannels.map(
                   (channel) => html`
-                  <option value=${channel.id} ?selected=${binding.channelId === channel.id}>
-                    ${channel.label} (${channel.id})
-                  </option>
-                `,
+                    <option value=${channel.id} ?selected=${binding.channelId === channel.id}>
+                      ${channel.label} (${channel.id})
+                    </option>
+                  `,
                 )}
               </select>
-              ${
-                availableChannels.length === 0
-                  ? html`
-                      <small class="form-text muted" style="margin-top: 4px; color: #f59e0b">
-                        ⚠️ 暂无可用通道，请先配置通道账号
-                      </small>
-                    `
-                  : html``
-              }
+              ${availableChannels.length === 0
+                ? html`
+                    <small class="form-text muted" style="margin-top: 4px; color: #f59e0b">
+                      ⚠️ 暂无可用通道，请先配置通道账号
+                    </small>
+                  `
+                : html``}
             </div>
-            
+
             <div class="form-group" style="margin-bottom: 12px;">
               <label class="form-label">账号（可选）</label>
               <select
                 class="form-control"
                 .value=${binding.accountId || ""}
                 ?disabled=${!binding.channelId || currentChannelAccounts.length === 0}
-                @change=${(e: Event) => params.onChange("accountId", (e.target as HTMLSelectElement).value)}
+                @change=${(e: Event) =>
+                  params.onChange("accountId", (e.target as HTMLSelectElement).value)}
               >
                 <option value="">默认账号</option>
                 ${currentChannelAccounts.map(
                   (account) => html`
-                  <option value=${account.id} ?selected=${binding.accountId === account.id}>
-                    ${account.label} (${account.id})
-                  </option>
-                `,
+                    <option value=${account.id} ?selected=${binding.accountId === account.id}>
+                      ${account.label} (${account.id})
+                    </option>
+                  `,
                 )}
               </select>
-              ${
-                binding.channelId && currentChannelAccounts.length === 0
-                  ? html`
-                      <small class="form-text muted" style="margin-top: 4px; color: #f59e0b">
-                        ⚠️ 该通道暂无配置账号
-                      </small>
-                    `
-                  : html``
-              }
+              ${binding.channelId && currentChannelAccounts.length === 0
+                ? html`
+                    <small class="form-text muted" style="margin-top: 4px; color: #f59e0b">
+                      ⚠️ 该通道暂无配置账号
+                    </small>
+                  `
+                : html``}
             </div>
-            
+
             <div class="form-group" style="margin-bottom: 12px;">
               <label class="form-label">策略类型</label>
               <select
                 class="form-control"
                 .value=${binding.policy}
-                @change=${(e: Event) => params.onChange("policy", (e.target as HTMLSelectElement).value)}
+                @change=${(e: Event) =>
+                  params.onChange("policy", (e.target as HTMLSelectElement).value)}
               >
                 ${policyOptions.map(
                   (opt) => html`
-                  <option value=${opt.value} ?selected=${binding.policy === opt.value}>
-                    ${opt.label}
-                  </option>
-                `,
+                    <option value=${opt.value} ?selected=${binding.policy === opt.value}>
+                      ${opt.label}
+                    </option>
+                  `,
                 )}
               </select>
               <small class="form-text muted" style="margin-top: 4px;">
                 ${policyOptions.find((p) => p.value === binding.policy)?.description || ""}
               </small>
             </div>
-            
+
             ${renderPolicyConfig()}
           </div>
-          
+
           <div class="row" style="gap: 8px; margin-top: 20px;">
-            <button class="btn" @click=${params.onCancel}>
-              取消
-            </button>
-            <button 
-              class="btn btn--primary" 
+            <button class="btn" @click=${params.onCancel}>取消</button>
+            <button
+              class="btn btn--primary"
               ?disabled=${!binding.channelId}
               @click=${params.onSave}
             >

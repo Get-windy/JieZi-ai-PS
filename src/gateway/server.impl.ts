@@ -40,7 +40,6 @@ import { hasConnectedMobileNode } from "../../upstream/src/gateway/server-mobile
 import { loadGatewayModelCatalog } from "../../upstream/src/gateway/server-model-catalog.js";
 import { createNodeSubscriptionManager } from "../../upstream/src/gateway/server-node-subscriptions.js";
 import { loadGatewayPlugins } from "../../upstream/src/gateway/server-plugins.js";
-import { pinActivePluginChannelRegistry } from "../../upstream/src/plugins/runtime.js";
 import { createGatewayReloadHandlers } from "../../upstream/src/gateway/server-reload-handlers.js";
 import { createGatewayRuntimeState } from "../../upstream/src/gateway/server-runtime-state.js";
 import { resolveSessionKeyForRun } from "../../upstream/src/gateway/server-session-key.js";
@@ -89,6 +88,7 @@ import {
   runGlobalGatewayStopSafely,
 } from "../../upstream/src/plugins/hook-runner-global.js";
 import { createEmptyPluginRegistry } from "../../upstream/src/plugins/registry.js";
+import { pinActivePluginChannelRegistry } from "../../upstream/src/plugins/runtime.js";
 import type { PluginServicesHandle } from "../../upstream/src/plugins/services.js";
 import { getTotalQueueSize } from "../../upstream/src/process/command-queue.js";
 import type { RuntimeEnv } from "../../upstream/src/runtime.js";
@@ -296,6 +296,7 @@ export async function startGatewayServer(
   }
 
   let cfgAtStart = loadConfig();
+  log.info("[DEBUG] ensureGatewayStartupAuth start");
   const authBootstrap = await ensureGatewayStartupAuth({
     cfg: cfgAtStart,
     env: process.env,
@@ -304,6 +305,7 @@ export async function startGatewayServer(
     persist: true,
   });
   cfgAtStart = authBootstrap.cfg;
+  log.info("[DEBUG] ensureGatewayStartupAuth done");
   if (authBootstrap.generatedToken) {
     if (authBootstrap.persistedGeneratedToken) {
       log.info(
@@ -331,6 +333,7 @@ export async function startGatewayServer(
   const { pluginRegistry, gatewayMethods: baseGatewayMethods } = minimalTestGateway
     ? { pluginRegistry: emptyPluginRegistry, gatewayMethods: baseMethods }
     : (() => {
+        log.info("[DEBUG] loadGatewayPlugins start");
         const result = loadGatewayPlugins({
           cfg: cfgAtStart,
           workspaceDir: defaultWorkspaceDir,
@@ -341,6 +344,7 @@ export async function startGatewayServer(
         // 固定 channel registry，确保后续 setActivePluginRegistry（如配置重载）
         // 不会替换启动时加载的通道插件（如 feishu），与上游 loadGatewayStartupPlugins 保持一致
         pinActivePluginChannelRegistry(result.pluginRegistry);
+        log.info("[DEBUG] loadGatewayPlugins done");
         return result;
       })();
   const channelLogs = Object.fromEntries(
@@ -352,6 +356,7 @@ export async function startGatewayServer(
   const channelMethods = listChannelPlugins().flatMap((plugin) => plugin.gatewayMethods ?? []);
   const gatewayMethods = Array.from(new Set([...baseGatewayMethods, ...channelMethods]));
   let pluginServices: PluginServicesHandle | null = null;
+  log.info("[DEBUG] resolveGatewayRuntimeConfig start");
   const runtimeConfig = await resolveGatewayRuntimeConfig({
     cfg: cfgAtStart,
     port,
@@ -363,6 +368,7 @@ export async function startGatewayServer(
     auth: opts.auth,
     tailscale: opts.tailscale,
   });
+  log.info("[DEBUG] resolveGatewayRuntimeConfig done");
   const {
     bindHost,
     controlUiEnabled,
@@ -427,11 +433,13 @@ export async function startGatewayServer(
   if (cfgAtStart.gateway?.tls?.enabled && !gatewayTls.enabled) {
     throw new Error(gatewayTls.error ?? "gateway tls: failed to enable");
   }
+  log.info("[DEBUG] createGatewayRuntimeState start");
   const {
     canvasHost,
     httpServer,
     httpServers,
     httpBindHosts,
+    startListening,
     wss,
     clients,
     preauthConnectionBudget,
@@ -459,6 +467,7 @@ export async function startGatewayServer(
     openResponsesConfig,
     strictTransportSecurityHeader,
     resolvedAuth,
+    getResolvedAuth: () => resolvedAuth,
     rateLimiter: authRateLimiter,
     gatewayTls,
     hooksConfig: () => hooksConfig,
@@ -735,6 +744,7 @@ export async function startGatewayServer(
       broadcastVoiceWakeChanged,
     },
   });
+  await startListening();
   await logGatewayStartup({
     cfg: cfgAtStart,
     bindHost,

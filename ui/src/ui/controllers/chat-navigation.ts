@@ -28,18 +28,18 @@ import type { Friend } from "./friends.ts";
 
 const CHANNEL_ICONS: Record<string, string> = {
   // nav4 修复：每个平台使用独特 emoji，避免多通道无法区分
-  discord: "🎮",      // Discord 游戏社区文化
-  telegram: "✈️",    // Telegram 飞机纸船 logo 对应
-  dingtalk: "📎",    // 钉钉 - 回形针（钉）
-  slack: "#️⃣",       // Slack 井号格子 logo
-  whatsapp: "📞",    // WhatsApp 电话
-  signal: "🔒",      // Signal 加密/锁
-  imessage: "🍎",    // iMessage Apple 平台
-  nostr: "🟣",       // Nostr 紫色协议标志
-  googlechat: "🅖",  // Google Chat G
-  msteams: "🏢",     // Teams 企业/办公
-  line: "🟢",        // LINE 绿色
-  wechat: "💭",      // 微信 - 对话泡
+  discord: "🎮", // Discord 游戏社区文化
+  telegram: "✈️", // Telegram 飞机纸船 logo 对应
+  dingtalk: "📎", // 钉钉 - 回形针（钉）
+  slack: "#️⃣", // Slack 井号格子 logo
+  whatsapp: "📞", // WhatsApp 电话
+  signal: "🔒", // Signal 加密/锁
+  imessage: "🍎", // iMessage Apple 平台
+  nostr: "🟣", // Nostr 紫色协议标志
+  googlechat: "🅖", // Google Chat G
+  msteams: "🏢", // Teams 企业/办公
+  line: "🟢", // LINE 绿色
+  wechat: "💭", // 微信 - 对话泡
 };
 
 const CHANNEL_NAMES: Record<string, string> = {
@@ -219,9 +219,12 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
       continue;
     }
     // 找到最近更新的子会话作为组标题
-    const sortedChildren = [...children].toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+    const sortedChildren = [...children].toSorted(
+      (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0),
+    );
     const latestChild = sortedChildren[0];
-    const groupLabel = latestChild.displayName?.trim() ||
+    const groupLabel =
+      latestChild.displayName?.trim() ||
       latestChild.label?.trim() ||
       `${t("chat.nav.exec_group")} · ${parentKey.slice(-8)}`;
     const groupUnread = children.reduce((sum, c) => sum + (getUnread(c.key) ?? 0), 0);
@@ -246,13 +249,11 @@ export function buildNavigationTree(options: BuildNavigationTreeOptions): ChatNa
   // 将任务组节点 + 晦散节点合并（任务组排在前面）
   const allActiveSessions = [
     ...taskGroupNodes,
-    ...ungroupedSessions.filter((s) => !(unread[s.key] > 0)),
+    ...ungroupedSessions.filter((s) => !(unread[s.key] > 0)).map(makeSessionHistoryNode),
   ];
 
   const sessionChildNodes: ChatNavigationNode[] = [
-    ...activeUnreadSessions
-      .filter((s) => !s.spawnedBy)
-      .map(makeSessionHistoryNode),
+    ...activeUnreadSessions.filter((s) => !s.spawnedBy).map(makeSessionHistoryNode),
     ...allActiveSessions.slice(0, Math.max(0, MAX_SESSION_PREVIEW - activeUnreadSessions.length)),
   ];
 

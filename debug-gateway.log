@@ -1,0 +1,13 @@
+[90m2026-04-22T18:46:03.749+08:00[39m [36m[gateway][39m [36mloading configuration…[39m
+[90m2026-04-22T18:46:03.920+08:00[39m [36m[gateway][39m [36mControl UI assets are missing; first startup may spend a few seconds building them before the gateway binds. `pnpm gateway:watch` does not rebuild Control UI assets, so rerun `pnpm ui:build` after UI changes or use `pnpm ui:dev` while developing the Control UI. For a full local dist, run `pnpm build && pnpm ui:build`.[39m
+[90m2026-04-22T18:46:03.940+08:00[39m [36m[gateway][39m [36mresolving authentication…[39m
+[90m2026-04-22T18:46:04.060+08:00[39m [36m[gateway][39m [36mstarting...[39m
+2026-04-22T18:46:04.969+08:00 [Group Manager] Loaded 5 groups from disk
+2026-04-22T18:46:05.187+08:00 [ArenaBenchmarks] Built-in data is fresh (next refresh in ~23 day(s)). Skipping network fetch.
+[90m2026-04-22T18:50:04.603+08:00[39m [35m[canvas][39m [36mhost mounted at http://127.0.0.1:18789/__openclaw__/canvas/ (root C:\Users\Administrator\.openclaw\canvas)[39m
+[90m2026-04-22T18:50:04.978+08:00[39m [36m[heartbeat][39m [36mstarted[39m
+[90m2026-04-22T18:50:04.986+08:00[39m [32m[health-monitor][39m [36mstarted (interval: 300s, startup-grace: 60s, channel-connect-grace: 120s)[39m
+[90m2026-04-22T18:50:05.002+08:00[39m [36m[gateway][39m [36magent model: alayanew/glm-5[39m
+[90m2026-04-22T18:50:05.009+08:00[39m [36m[gateway][39m [36mlistening on ws://127.0.0.1:18789 (PID 32264)[39m
+[90m2026-04-22T18:50:05.015+08:00[39m [36m[gateway][39m [36mlog file: \tmp\openclaw\openclaw-2026-04-22.log[39m
+[90m2026-04-22T18:52:31.941+08:00[39m [36m[gateway][39m [36mcontrol UI opened in browser automatically[39m

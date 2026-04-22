@@ -1,0 +1,8 @@
+[90m2026-04-22T18:52:30.486+08:00[39m [35m[plugins][39m [31mwecom-openclaw-plugin failed to load from C:\Users\Administrator\.openclaw\extensions\wecom-openclaw-plugin\dist\index.esm.js: Error: Cannot find module 'openclaw/plugin-sdk'[39m
+[31mRequire stack:[39m
+[31m- C:\Users\Administrator\.openclaw\extensions\wecom-openclaw-plugin\dist\index.esm.js[39m
+[90m2026-04-22T18:52:30.511+08:00[39m [35m[plugins][39m [33m1 plugin(s) failed to initialize (load: wecom-openclaw-plugin). Run 'openclaw plugins list' for details.[39m
+[90m2026-04-22T18:52:31.681+08:00[39m [31m[bonjour][39m [33mwatchdog detected non-announced service; attempting re-advertise (gateway fqdn=SKY-20251125FUE (OpenClaw)._openclaw-gw._tcp.local. host=openclaw.local. port=18789 state=probing)[39m
+[90m2026-04-22T18:52:31.953+08:00[39m [36m[gateway][39m [33msession lock cleanup failed on startup: Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'I:\JieZI\JieZi-ai-PS\dist\paths-D-gMuVJp.js' imported from I:\JieZI\JieZi-ai-PS\dist\server.impl-CrnWQyuS.js[39m
+[90m2026-04-22T18:52:31.962+08:00[39m [31m[gateway/channels][39m [31mchannel startup failed: Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'I:\JieZI\JieZi-ai-PS\dist\model-input-BfF_Mtk4.js' imported from I:\JieZI\JieZi-ai-PS\dist\server.impl-CrnWQyuS.js[39m
+2026-04-22T18:52:31.981+08:00 Gateway failed to start: Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'I:\JieZI\JieZi-ai-PS\dist\internal-hooks-Deqhzu7t.js' imported from I:\JieZI\JieZi-ai-PS\dist\server.impl-CrnWQyuS.js

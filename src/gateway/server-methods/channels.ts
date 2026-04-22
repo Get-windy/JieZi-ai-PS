@@ -67,7 +67,7 @@ export async function logoutChannelAccount(params: {
   if (!result) {
     throw new Error(`Channel ${params.channelId} does not support logout`);
   }
-  const cleared = Boolean(result.cleared);
+  const cleared = result.cleared;
   const loggedOut = typeof result.loggedOut === "boolean" ? result.loggedOut : cleared;
   if (loggedOut) {
     params.context.markChannelLoggedOut(params.channelId, true, resolvedAccountId);
@@ -696,46 +696,33 @@ export const channelsHandlers: GatewayRequestHandlers = {
 
       const nameStr = typeof name === "string" ? name.trim() : "";
 
-      // plugin 为 null 时（内置通道未加载进 registry），直接走 config merge 路径
+      // plugin 为 null 时（内置通道未加载进 registry），始终写入 accounts 子对象
+      // 避免把账号字段（name/appId/appSecret 等）污染到 channels[ch] 顶层导致 schema 校验失败
       if (!plugin) {
         const sectionKey = channelId as string;
         const channelsNode = (cfg.channels ?? {}) as Record<string, unknown>;
         const section = (channelsNode[sectionKey] ?? {}) as Record<string, unknown>;
-        const accountsNode = section.accounts as Record<string, unknown> | undefined;
+        const accountsNode = (section.accounts ?? {}) as Record<string, unknown>;
         const incomingConfig = {
           ...(accountConfig && typeof accountConfig === "object"
             ? (accountConfig as Record<string, unknown>)
             : {}),
           ...(nameStr ? { name: nameStr } : {}),
         };
-        // 判断是否已有 accounts 子节点（多账号结构）
-        if (accountsNode !== undefined) {
-          // 多账号结构：写入 channels[ch].accounts[accountId]
-          const accounts = accountsNode as Record<string, Record<string, unknown>>;
-          const existing = accounts[accountId] ?? {};
-          cfg = {
-            ...cfg,
-            channels: {
-              ...channelsNode,
-              [sectionKey]: {
-                ...section,
-                accounts: {
-                  ...accounts,
-                  [accountId]: { ...existing, ...incomingConfig },
-                },
+        const existing = (accountsNode[accountId] ?? {}) as Record<string, unknown>;
+        cfg = {
+          ...cfg,
+          channels: {
+            ...channelsNode,
+            [sectionKey]: {
+              ...section,
+              accounts: {
+                ...accountsNode,
+                [accountId]: { ...existing, ...incomingConfig },
               },
             },
-          } as OpenClawConfig;
-        } else {
-          // 单账号/顶层结构：直接 merge 到 channels[ch]
-          cfg = {
-            ...cfg,
-            channels: {
-              ...channelsNode,
-              [sectionKey]: { ...section, ...incomingConfig },
-            },
-          } as OpenClawConfig;
-        }
+          },
+        } as OpenClawConfig;
         await writeConfigFile(cfg, writeOptions);
         respond(true, { ok: true }, undefined);
         return;

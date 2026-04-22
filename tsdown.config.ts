@@ -1,4 +1,4 @@
-import fs, { existsSync, readFileSync } from "node:fs";
+import fs, { existsSync } from "node:fs";
 import path from "node:path";
 import { defineConfig, type UserConfig } from "tsdown";
 import {
@@ -190,10 +190,39 @@ const external = [
   /^@mariozechner\/pi-ai$/,
   /^@mariozechner\/pi-agent-core$/,
   /^@mariozechner\/pi-tui$/,
+  // rolldown 在 Windows 上无法处理 jwks-rsa 内部用 require('./errors') 解析目录的场景
+  // (os error 5: 拒绝访问)，外部化该包由 Node.js 运行时负责加载
+  /^jwks-rsa($|\/)/,
 ];
 
-const bundledPluginBuildEntries = collectBundledPluginBuildEntries();
-const bundledPluginRuntimeDependencies = listBundledPluginRuntimeDependencies();
+function matchesExternal(id: string): boolean {
+  return external.some((p) => (typeof p === "string" ? id === p : p.test(id)));
+}
+
+// 收集本地 extensions/ 的构建入口
+const localBundledPluginBuildEntries = collectBundledPluginBuildEntries();
+const localBundledPluginIds = new Set(localBundledPluginBuildEntries.map((e) => e.id));
+
+// 收集 upstream/extensions/ 中、本地 extensions/ 没有完整实现的插件（仅有 src/ 子目录、无 package.json）
+// 这些插件需要以 upstream/extensions/${id} 为入口构建到 dist/extensions/${id}
+const upstreamOnlyBundledPluginBuildEntries = collectBundledPluginBuildEntries({
+  cwd: path.join(ROOT_DIR, "upstream"),
+}).filter(({ id }) => !localBundledPluginIds.has(id));
+
+// 合并：本地优先，upstream-only 补充，并添加 sourcePrefix 字段标识来源
+const bundledPluginBuildEntries = [
+  ...localBundledPluginBuildEntries.map((e) => ({ ...e, sourcePrefix: "extensions" })),
+  ...upstreamOnlyBundledPluginBuildEntries.map((e) => ({
+    ...e,
+    sourcePrefix: "upstream/extensions",
+  })),
+];
+const bundledPluginRuntimeDependencies = [
+  ...listBundledPluginRuntimeDependencies(),
+  ...listBundledPluginRuntimeDependencies({ cwd: path.join(ROOT_DIR, "upstream") }),
+]
+  .filter((dep, idx, arr) => arr.indexOf(dep) === idx)
+  .toSorted((a, b) => a.localeCompare(b));
 const shouldBuildPrivateQaEntries = process.env.OPENCLAW_BUILD_PRIVATE_QA === "1";
 
 const allNeverBundleDependencies = [
@@ -202,9 +231,10 @@ const allNeverBundleDependencies = [
 ].toSorted((a, b) => a.localeCompare(b));
 
 function shouldNeverBundleDependency(id: string): boolean {
-  return allNeverBundleDependencies.some(
-    (dep) => id === dep || id.startsWith(`${dep}/`),
-  );
+  if (matchesExternal(id)) {
+    return true;
+  }
+  return allNeverBundleDependencies.some((dep) => id === dep || id.startsWith(`${dep}/`));
 }
 
 function isPluginSdkSelfReference(id: string): boolean {
@@ -237,6 +267,9 @@ function buildBundledPluginNeverBundlePredicate(packageJson: {
     : [];
 
   return (id: string): boolean => {
+    if (matchesExternal(id)) {
+      return true;
+    }
     if (isPluginSdkSelfReference(id)) {
       return true;
     }
@@ -247,14 +280,22 @@ function buildBundledPluginNeverBundlePredicate(packageJson: {
 }
 
 function listBundledPluginEntrySources(
-  entries: Array<{ id: string; packageJson: unknown; sourceEntries: string[] }>,
+  entries: Array<{
+    id: string;
+    packageJson: unknown;
+    sourceEntries: string[];
+    sourcePrefix?: string;
+  }>,
 ): Record<string, string> {
   return Object.fromEntries(
-    entries.flatMap(({ id, sourceEntries }) =>
+    entries.flatMap(({ id, sourceEntries, sourcePrefix = "extensions" }) =>
       sourceEntries.map((entry) => {
         const normalizedEntry = entry.replace(/^\.\//u, "");
         const entryKey = `extensions/${id}/${normalizedEntry.replace(/\.[^.]+$/u, "")}`;
-        return [entryKey, normalizedEntry ? `extensions/${id}/${normalizedEntry}` : `extensions/${id}`];
+        return [
+          entryKey,
+          normalizedEntry ? `${sourcePrefix}/${id}/${normalizedEntry}` : `${sourcePrefix}/${id}`,
+        ];
       }),
     ),
   );
@@ -271,9 +312,13 @@ function buildBundledHookEntries(): Record<string, string> {
     return entries;
   }
   for (const dirent of fs.readdirSync(hooksRoot, { withFileTypes: true })) {
-    if (!dirent.isDirectory()) {continue;}
+    if (!dirent.isDirectory()) {
+      continue;
+    }
     const handlerPath = path.join(hooksRoot, dirent.name, "handler.ts");
-    if (!fs.existsSync(handlerPath)) {continue;}
+    if (!fs.existsSync(handlerPath)) {
+      continue;
+    }
     entries[`bundled/${dirent.name}/handler`] = handlerPath;
   }
   return entries;
@@ -292,16 +337,27 @@ const baseInputOptions = {
 // 每份内联各自持有独立的 Map/Set 实例导致缓存永远 MISS。
 const pluginLoaderManualChunks = (id: string): string | undefined => {
   const norm = id.replace(/\\/g, "/");
-  if (norm.includes("upstream/src/plugins/loader") || norm.includes("src/plugins/loader"))
-    {return "plugin-loader";}
-  if (norm.includes("upstream/src/plugins/discovery") || norm.includes("src/plugins/discovery"))
-    {return "plugin-loader";}
-  if (norm.includes("upstream/src/plugins/manifest-registry") || norm.includes("src/plugins/manifest-registry"))
-    {return "plugin-loader";}
-  if (norm.includes("upstream/src/plugins/sdk-alias") || norm.includes("src/plugins/sdk-alias"))
-    {return "plugin-loader";}
-  if (norm.includes("upstream/src/plugins/public-surface-loader") || norm.includes("src/plugins/public-surface-loader"))
-    {return "plugin-loader";}
+  if (norm.includes("upstream/src/plugins/loader") || norm.includes("src/plugins/loader")) {
+    return "plugin-loader";
+  }
+  if (norm.includes("upstream/src/plugins/discovery") || norm.includes("src/plugins/discovery")) {
+    return "plugin-loader";
+  }
+  if (
+    norm.includes("upstream/src/plugins/manifest-registry") ||
+    norm.includes("src/plugins/manifest-registry")
+  ) {
+    return "plugin-loader";
+  }
+  if (norm.includes("upstream/src/plugins/sdk-alias") || norm.includes("src/plugins/sdk-alias")) {
+    return "plugin-loader";
+  }
+  if (
+    norm.includes("upstream/src/plugins/public-surface-loader") ||
+    norm.includes("src/plugins/public-surface-loader")
+  ) {
+    return "plugin-loader";
+  }
   return undefined;
 };
 
@@ -371,9 +427,15 @@ function buildUnifiedDistEntries(): Record<string, string> {
     : {};
 
   const rootBundledPluginBuildEntries = bundledPluginBuildEntries.filter(
-    ({ id, packageJson }) =>
+    ({ id, hasManifest, packageJson }) =>
       !shouldStageBundledPluginRuntimeDependencies(packageJson) &&
-      (shouldBuildPrivateQaEntries || !NON_PACKAGED_BUNDLED_PLUGIN_DIRS.has(id)),
+      (shouldBuildPrivateQaEntries || !NON_PACKAGED_BUNDLED_PLUGIN_DIRS.has(id)) &&
+      // manifestes-only support packages (如 speech-core) 单独配置 outDir，不放进 unified entry
+      !(
+        !hasManifest &&
+        typeof (packageJson as Record<string, unknown> | null)?.name === "string" &&
+        ((packageJson as Record<string, unknown>).name as string).startsWith("@openclaw/")
+      ),
   );
 
   return {
@@ -388,16 +450,31 @@ function buildUnifiedDistEntries(): Record<string, string> {
 }
 
 function buildBundledPluginConfigs(): UserConfig[] {
-  const stagedBundledPluginBuildEntries = bundledPluginBuildEntries.filter(
-    ({ packageJson }) => shouldStageBundledPluginRuntimeDependencies(packageJson),
+  const stagedBundledPluginBuildEntries = bundledPluginBuildEntries.filter(({ packageJson }) =>
+    shouldStageBundledPluginRuntimeDependencies(packageJson),
   );
-  return stagedBundledPluginBuildEntries.map(({ id, packageJson, sourceEntries }) =>
+  // manifestes-only support packages（如 speech-core）：无 manifest、无 stageRuntimeDependencies，
+  // 但有 top-level public surface files（runtime-api.ts 等）。
+  // 在 overlay 架构下放进 unified entry 会被 rolldown 合并为 shared chunk，
+  // 需单独给 outDir 确保输出到 dist/extensions/<id>/。
+  const manifestlessSupportPackageEntries = bundledPluginBuildEntries.filter(
+    ({ hasManifest, packageJson }) =>
+      !hasManifest &&
+      !shouldStageBundledPluginRuntimeDependencies(packageJson) &&
+      typeof (packageJson as Record<string, unknown> | null)?.name === "string" &&
+      ((packageJson as Record<string, unknown>).name as string).startsWith("@openclaw/"),
+  );
+  const isolatedEntries = [
+    ...stagedBundledPluginBuildEntries,
+    ...manifestlessSupportPackageEntries,
+  ];
+  return isolatedEntries.map(({ id, packageJson, sourceEntries, sourcePrefix = "extensions" }) =>
     nodeBuildConfig({
       clean: false,
       entry: Object.fromEntries(
         sourceEntries.map((entry) => [
           normalizeBundledPluginOutEntry(entry),
-          `extensions/${id}/${entry.replace(/^\.\//u, "")}`,
+          `${sourcePrefix}/${id}/${entry.replace(/^\.\//u, "")}`,
         ]),
       ),
       outDir: `dist/extensions/${id}`,

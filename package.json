@@ -1,6 +1,6 @@
 {
   "name": "openclaw",
-  "version": "2026.4.15-beta.1",
+  "version": "2026.4.20",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
   "homepage": "https://github.com/openclaw/openclaw#readme",
@@ -1316,6 +1316,118 @@
     "./plugin-sdk/qa-runner-runtime": {
       "types": "./dist/plugin-sdk/qa-runner-runtime.d.ts",
       "default": "./dist/plugin-sdk/qa-runner-runtime.js"
+    },
+    "./plugin-sdk/runtime-logger": {
+      "types": "./dist/plugin-sdk/runtime-logger.d.ts",
+      "default": "./dist/plugin-sdk/runtime-logger.js"
+    },
+    "./plugin-sdk/channel-reply-options-runtime": {
+      "types": "./dist/plugin-sdk/channel-reply-options-runtime.d.ts",
+      "default": "./dist/plugin-sdk/channel-reply-options-runtime.js"
+    },
+    "./plugin-sdk/poll-runtime": {
+      "types": "./dist/plugin-sdk/poll-runtime.d.ts",
+      "default": "./dist/plugin-sdk/poll-runtime.js"
+    },
+    "./plugin-sdk/thread-bindings-session-runtime": {
+      "types": "./dist/plugin-sdk/thread-bindings-session-runtime.d.ts",
+      "default": "./dist/plugin-sdk/thread-bindings-session-runtime.js"
+    },
+    "./plugin-sdk/secret-file-runtime": {
+      "types": "./dist/plugin-sdk/secret-file-runtime.d.ts",
+      "default": "./dist/plugin-sdk/secret-file-runtime.js"
+    },
+    "./plugin-sdk/acp-binding-resolve-runtime": {
+      "types": "./dist/plugin-sdk/acp-binding-resolve-runtime.d.ts",
+      "default": "./dist/plugin-sdk/acp-binding-resolve-runtime.js"
+    },
+    "./plugin-sdk/account-resolution-runtime": {
+      "types": "./dist/plugin-sdk/account-resolution-runtime.d.ts",
+      "default": "./dist/plugin-sdk/account-resolution-runtime.js"
+    },
+    "./plugin-sdk/command-gating": {
+      "types": "./dist/plugin-sdk/command-gating.d.ts",
+      "default": "./dist/plugin-sdk/command-gating.js"
+    },
+    "./plugin-sdk/direct-dm-access": {
+      "types": "./dist/plugin-sdk/direct-dm-access.d.ts",
+      "default": "./dist/plugin-sdk/direct-dm-access.js"
+    },
+    "./plugin-sdk/direct-dm-guard-policy": {
+      "types": "./dist/plugin-sdk/direct-dm-guard-policy.d.ts",
+      "default": "./dist/plugin-sdk/direct-dm-guard-policy.js"
+    },
+    "./plugin-sdk/channel-logging": {
+      "types": "./dist/plugin-sdk/channel-logging.d.ts",
+      "default": "./dist/plugin-sdk/channel-logging.js"
+    },
+    "./plugin-sdk/channel-location": {
+      "types": "./dist/plugin-sdk/channel-location.d.ts",
+      "default": "./dist/plugin-sdk/channel-location.js"
+    },
+    "./plugin-sdk/channel-mention-gating": {
+      "types": "./dist/plugin-sdk/channel-mention-gating.d.ts",
+      "default": "./dist/plugin-sdk/channel-mention-gating.js"
+    },
+    "./plugin-sdk/channel-pairing-paths": {
+      "types": "./dist/plugin-sdk/channel-pairing-paths.d.ts",
+      "default": "./dist/plugin-sdk/channel-pairing-paths.js"
+    },
+    "./plugin-sdk/context-visibility-runtime": {
+      "types": "./dist/plugin-sdk/context-visibility-runtime.d.ts",
+      "default": "./dist/plugin-sdk/context-visibility-runtime.js"
+    },
+    "./plugin-sdk/runtime-fetch": {
+      "types": "./dist/plugin-sdk/runtime-fetch.d.ts",
+      "default": "./dist/plugin-sdk/runtime-fetch.js"
+    },
+    "./plugin-sdk/response-limit-runtime": {
+      "types": "./dist/plugin-sdk/response-limit-runtime.d.ts",
+      "default": "./dist/plugin-sdk/response-limit-runtime.js"
+    },
+    "./plugin-sdk/session-binding-runtime": {
+      "types": "./dist/plugin-sdk/session-binding-runtime.d.ts",
+      "default": "./dist/plugin-sdk/session-binding-runtime.js"
+    },
+    "./plugin-sdk/session-key-runtime": {
+      "types": "./dist/plugin-sdk/session-key-runtime.d.ts",
+      "default": "./dist/plugin-sdk/session-key-runtime.js"
+    },
+    "./plugin-sdk/ssrf-dispatcher": {
+      "types": "./dist/plugin-sdk/ssrf-dispatcher.d.ts",
+      "default": "./dist/plugin-sdk/ssrf-dispatcher.js"
+    },
+    "./plugin-sdk/string-coerce-runtime": {
+      "types": "./dist/plugin-sdk/string-coerce-runtime.d.ts",
+      "default": "./dist/plugin-sdk/string-coerce-runtime.js"
+    },
+    "./plugin-sdk/directory-config-runtime": {
+      "types": "./dist/plugin-sdk/directory-config-runtime.d.ts",
+      "default": "./dist/plugin-sdk/directory-config-runtime.js"
+    },
+    "./plugin-sdk/native-command-config-runtime": {
+      "types": "./dist/plugin-sdk/native-command-config-runtime.d.ts",
+      "default": "./dist/plugin-sdk/native-command-config-runtime.js"
+    },
+    "./plugin-sdk/qa-channel-protocol": {
+      "types": "./dist/plugin-sdk/qa-channel-protocol.d.ts",
+      "default": "./dist/plugin-sdk/qa-channel-protocol.js"
+    },
+    "./plugin-sdk/provider-transport-runtime": {
+      "types": "./dist/plugin-sdk/provider-transport-runtime.d.ts",
+      "default": "./dist/plugin-sdk/provider-transport-runtime.js"
+    },
+    "./plugin-sdk/secret-input-runtime": {
+      "types": "./dist/plugin-sdk/secret-input-runtime.d.ts",
+      "default": "./dist/plugin-sdk/secret-input-runtime.js"
+    },
+    "./plugin-sdk/telegram-command-ui": {
+      "types": "./dist/plugin-sdk/telegram-command-ui.d.ts",
+      "default": "./dist/plugin-sdk/telegram-command-ui.js"
+    },
+    "./plugin-sdk/text-autolink-runtime": {
+      "types": "./dist/plugin-sdk/text-autolink-runtime.d.ts",
+      "default": "./dist/plugin-sdk/text-autolink-runtime.js"
     }
   },
   "scripts": {
@@ -1333,7 +1445,7 @@
     "android:test:integration": "OPENCLAW_LIVE_TEST=1 OPENCLAW_LIVE_ANDROID_NODE=1 node scripts/run-vitest.mjs run --config vitest.live.config.ts src/gateway/android-node.capabilities.live.test.ts",
     "android:test:third-party": "cd apps/android && ./gradlew :app:testThirdPartyDebugUnitTest",
     "audit:seams": "node scripts/audit-seams.mjs",
-    "build": "node scripts/prebuild-sync-version.mjs && pnpm canvas:a2ui:bundle && node scripts/sync-plugin-sdk-exports.mjs && node --max-old-space-size=8192 node_modules/tsdown/dist/run.mjs && pnpm build:plugin-sdk:dts && node --import tsx scripts/write-plugin-sdk-entry-dts.ts && node --import tsx scripts/canvas-a2ui-copy.ts && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/copy-export-html-templates.ts && node --import tsx scripts/write-build-info.ts && node --import tsx scripts/write-cli-compat.ts && node --import tsx scripts/copy-plugin-sdk-root-alias.ts",
+    "build": "node scripts/prebuild-sync-version.mjs && pnpm canvas:a2ui:bundle && node scripts/sync-plugin-sdk-exports.mjs && node --max-old-space-size=8192 node_modules/tsdown/dist/run.mjs && node -e \"import('./upstream/scripts/copy-bundled-plugin-metadata.mjs').then(m=>m.copyBundledPluginMetadata())\" && node scripts/copy-upstream-plugin-metadata.mjs && pnpm build:plugin-sdk:dts && node --import tsx scripts/write-plugin-sdk-entry-dts.ts && node --import tsx scripts/canvas-a2ui-copy.ts && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/copy-export-html-templates.ts && node --import tsx scripts/write-build-info.ts && node --import tsx scripts/write-cli-compat.ts && node --import tsx scripts/copy-plugin-sdk-root-alias.ts",
     "build:docker": "node scripts/tsdown-build.mjs && node scripts/runtime-postbuild.mjs && node scripts/build-stamp.mjs && node --import tsx scripts/canvas-a2ui-copy.ts && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/copy-export-html-templates.ts && node --import tsx scripts/write-build-info.ts && node --experimental-strip-types scripts/write-cli-startup-metadata.ts && node --import tsx scripts/write-cli-compat.ts",
     "build:plugin-sdk:dts": "tsc -p tsconfig.plugin-sdk.dts.json || node -e \"process.exit(0)\"",
     "build:strict-smoke": "pnpm canvas:a2ui:bundle && node scripts/tsdown-build.mjs && node scripts/runtime-postbuild.mjs && node scripts/build-stamp.mjs && pnpm build:plugin-sdk:dts && node --import tsx scripts/write-plugin-sdk-entry-dts.ts && node scripts/check-plugin-sdk-exports.mjs",

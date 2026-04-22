@@ -1,0 +1,20 @@
+[90m2026-04-22T18:46:25.761+08:00[39m [36m[gateway][39m [36mloading configuration…[39m
+[90m2026-04-22T18:46:25.860+08:00[39m [36m[gateway][39m [36mControl UI assets are missing; first startup may spend a few seconds building them before the gateway binds. `pnpm gateway:watch` does not rebuild Control UI assets, so rerun `pnpm ui:build` after UI changes or use `pnpm ui:dev` while developing the Control UI. For a full local dist, run `pnpm build && pnpm ui:build`.[39m
+[90m2026-04-22T18:46:25.864+08:00[39m [36m[gateway][39m [36mresolving authentication…[39m
+[90m2026-04-22T18:46:25.946+08:00[39m [36m[gateway][39m [36mstarting...[39m
+2026-04-22T18:46:26.635+08:00 [Group Manager] Loaded 5 groups from disk
+2026-04-22T18:46:26.775+08:00 [ArenaBenchmarks] Built-in data is fresh (next refresh in ~23 day(s)). Skipping network fetch.
+[90m2026-04-22T18:49:44.558+08:00[39m [36m[gateway][39m [36mControl UI assets missing; building (ui:build, auto-installs UI deps)…[39m
+[90m2026-04-22T18:49:56.741+08:00[39m [35m[canvas][39m [36mhost mounted at http://127.0.0.1:18789/__openclaw__/canvas/ (root C:\Users\Administrator\.openclaw\canvas)[39m
+[90m2026-04-22T18:49:57.122+08:00[39m [36m[heartbeat][39m [36mstarted[39m
+[90m2026-04-22T18:49:57.142+08:00[39m [32m[health-monitor][39m [36mstarted (interval: 300s, startup-grace: 60s, channel-connect-grace: 120s)[39m
+[90m2026-04-22T18:49:57.155+08:00[39m [36m[gateway][39m [36magent model: alayanew/glm-5[39m
+[90m2026-04-22T18:49:57.159+08:00[39m [36m[gateway][39m [36mlistening on ws://127.0.0.1:18789 (PID 31248)[39m
+[90m2026-04-22T18:49:57.164+08:00[39m [36m[gateway][39m [36mlog file: \tmp\openclaw\openclaw-2026-04-22.log[39m
+2026-04-22T18:52:15.330+08:00 (node:31248) [OPENCLAW_PLUGIN_SDK_COMPAT_DEPRECATED] Warning: openclaw/plugin-sdk/compat is deprecated for new plugins. Migrate to focused openclaw/plugin-sdk/<subpath> imports. See https://docs.openclaw.ai/plugins/sdk-migration
+Bundled plugins must use scoped plugin-sdk subpaths. External plugins may keep compat temporarily while migrating. Migration guide: https://docs.openclaw.ai/plugins/sdk-migration
+(Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-22T18:52:15.414+08:00 [bonjour] watchdog detected non-announced service; attempting re-advertise (gateway fqdn=SKY-20251125FUE (OpenClaw)._openclaw-gw._tcp.local. host=openclaw.local. port=18789 state=probing)
+[90m2026-04-22T18:52:15.662+08:00[39m [36m[gateway][39m [36mcontrol UI opened in browser automatically[39m
+2026-04-22T18:52:16.930+08:00 [gateway] removed stale session lock: C:\Users\Administrator\.openclaw\agents\main\sessions\406b1fe9-8ecb-4799-a6f5-93a335df38c3.jsonl.lock (dead-pid)
+2026-04-22T18:52:17.051+08:00 [gateway] removed stale session lock: C:\Users\Administrator\.openclaw\agents\test-agent-1\sessions\d4b631fb-97f9-4005-8a39-e9ff4c760f98.jsonl.lock (dead-pid)

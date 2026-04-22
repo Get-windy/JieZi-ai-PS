@@ -1,7 +1,11 @@
 import { isDeepStrictEqual } from "node:util";
 import chokidar from "chokidar";
 import { type ChannelId, listChannelPlugins } from "../../upstream/src/channels/plugins/index.js";
-import type { OpenClawConfig, ConfigFileSnapshot, GatewayReloadMode } from "../../upstream/src/config/config.js";
+import type {
+  OpenClawConfig,
+  ConfigFileSnapshot,
+  GatewayReloadMode,
+} from "../../upstream/src/config/config.js";
 import { getActivePluginRegistry } from "../../upstream/src/plugins/runtime.js";
 import { isPlainObject } from "../../upstream/src/utils.js";
 
@@ -87,6 +91,7 @@ const BASE_RELOAD_RULES_TAIL: ReloadRule[] = [
   { prefix: "talk", kind: "none" },
   { prefix: "skills", kind: "none" },
   { prefix: "meta", kind: "none" }, // 元数据（时间戳等）不需要重启
+  { prefix: "channels", kind: "none" }, // 通道账号/配置变更由 channel plugin 的 configPrefixes 处理，兜底不触发整网关重启
   { prefix: "plugins", kind: "restart" },
   { prefix: "ui", kind: "none" },
   { prefix: "gateway", kind: "restart" },

@@ -37,16 +37,16 @@ export function renderChatNavigationTree(props: ChatNavigationTreeProps) {
       <div class="chat-nav-tree">
         <div class="chat-nav-error">
           <span class="chat-nav-error__icon">⚠️</span>
-          <span class="chat-nav-error__message">${t("chat.nav.error_prefix", { error: props.error })}</span>
-          ${
-            props.onRetry
-              ? html`
+          <span class="chat-nav-error__message"
+            >${t("chat.nav.error_prefix", { error: props.error })}</span
+          >
+          ${props.onRetry
+            ? html`
                 <button class="chat-nav-error__retry" type="button" @click=${props.onRetry}>
                   ${t("chat.nav.retry")}
                 </button>
               `
-              : nothing
-          }
+            : nothing}
         </div>
       </div>
     `;
@@ -70,9 +70,8 @@ export function renderChatNavigationTree(props: ChatNavigationTreeProps) {
             props.onSearchChange(target.value);
           }}
         />
-        ${
-          props.searchQuery
-            ? html`
+        ${props.searchQuery
+          ? html`
               <button
                 class="chat-nav-search__clear"
                 type="button"
@@ -82,8 +81,7 @@ export function renderChatNavigationTree(props: ChatNavigationTreeProps) {
                 ✕
               </button>
             `
-            : nothing
-        }
+          : nothing}
       </div>
 
       <!-- 通道观察模式提示 -->
@@ -91,11 +89,9 @@ export function renderChatNavigationTree(props: ChatNavigationTreeProps) {
 
       <!-- 导航树节点 -->
       <div class="chat-nav-nodes">
-        ${
-          displayNodes.length === 0
-            ? renderEmptyState(props)
-            : displayNodes.map((node) => renderRootNode(node, props))
-        }
+        ${displayNodes.length === 0
+          ? renderEmptyState(props)
+          : displayNodes.map((node) => renderRootNode(node, props))}
       </div>
     </div>
   `;
@@ -126,25 +122,20 @@ function renderRootNode(node: ChatNavigationNode, props: ChatNavigationTreeProps
           props.onSelectContext(node.context);
         }}
       >
-        ${
-          hasChildren
-            ? html`<span class="chat-nav-toggle ${expanded ? "chat-nav-toggle--expanded" : ""}">${icons.chevronRight}</span>`
-            : html`
-                <span class="chat-nav-toggle-placeholder"></span>
-              `
-        }
+        ${hasChildren
+          ? html`<span class="chat-nav-toggle ${expanded ? "chat-nav-toggle--expanded" : ""}"
+              >${icons.chevronRight}</span
+            >`
+          : html` <span class="chat-nav-toggle-placeholder"></span> `}
         <span class="chat-nav-root__icon">${node.icon}</span>
         <span class="chat-nav-root__label">${node.label}</span>
-        ${
-          showBadge
-            ? html`<span class="chat-nav-badge">${totalUnread > 99 ? "99+" : totalUnread}</span>`
-            : nothing
-        }
+        ${showBadge
+          ? html`<span class="chat-nav-badge">${totalUnread > 99 ? "99+" : totalUnread}</span>`
+          : nothing}
       </div>
 
-      ${
-        expanded && hasChildren
-          ? html`
+      ${expanded && hasChildren
+        ? html`
             <div class="chat-nav-children">
               ${
                 // 对 session-history 子节点进行时间分组渲染（当所有子节点均为 session-history 且有时间戳）
@@ -155,18 +146,19 @@ function renderRootNode(node: ChatNavigationNode, props: ChatNavigationTreeProps
                   );
                   if (allSessionHistory && children.length > 3) {
                     const timeGroups = groupSessionsByTime(children);
-                    return timeGroups.map((group) => html`
-                      ${renderTimeGroupLabel(group.label)}
-                      ${group.nodes.map((child) => renderChildNode(child, props, 1))}
-                    `);
+                    return timeGroups.map(
+                      (group) => html`
+                        ${renderTimeGroupLabel(group.label)}
+                        ${group.nodes.map((child) => renderChildNode(child, props, 1))}
+                      `,
+                    );
                   }
                   return children.map((child) => renderChildNode(child, props, 1));
                 })()
               }
             </div>
           `
-          : nothing
-      }
+        : nothing}
     </div>
   `;
 }
@@ -178,6 +170,10 @@ function renderChildNode(
   props: ChatNavigationTreeProps,
   level: number,
 ): TemplateResult {
+  // 防御：context 缺失时跳过渲染（避免运行时 TypeError）
+  if (!node?.context) {
+    return html``;
+  }
   // 部门聊天室 / 部门广播 节点路由到专属渲染器
   if (node.context.type === "dept-room" || node.context.type === "dept-broadcast") {
     return renderDeptNavNode(node, props, level);
@@ -188,7 +184,11 @@ function renderChildNode(
   const isActive = isSameContext(node.context, props.currentContext);
 
   return html`
-    <div class="chat-nav-item chat-nav-item--level-${Math.min(level, 3)} ${node.nodeType ? `chat-nav-item--${node.nodeType}` : ""}">
+    <div
+      class="chat-nav-item chat-nav-item--level-${Math.min(level, 3)} ${node.nodeType
+        ? `chat-nav-item--${node.nodeType}`
+        : ""}"
+    >
       <div
         class="chat-nav-item__content ${isActive ? "chat-nav-item--active" : ""}"
         @click=${() => {
@@ -200,34 +200,31 @@ function renderChildNode(
           props.onSelectContext(node.context);
         }}
       >
-        ${
-          hasChildren
-            ? html`<span class="chat-nav-toggle chat-nav-toggle--sm ${expanded ? "chat-nav-toggle--expanded" : ""}"
+        ${hasChildren
+          ? html`<span
+              class="chat-nav-toggle chat-nav-toggle--sm ${expanded
+                ? "chat-nav-toggle--expanded"
+                : ""}"
               >${icons.chevronRight}</span
             >`
-            : nothing
-        }
+          : nothing}
         <span class="chat-nav-item__icon">${node.icon}</span>
         <span class="chat-nav-item__label">${node.label}</span>
-        ${
-          node.unreadCount && node.unreadCount > 0
-            ? html`<span class="chat-nav-badge"
+        ${node.unreadCount && node.unreadCount > 0
+          ? html`<span class="chat-nav-badge"
               >${node.unreadCount > 99 ? "99+" : node.unreadCount}</span
             >`
-            : nothing
-        }
+          : nothing}
         ${renderRenameButton(node, props)}
       </div>
 
-      ${
-        expanded && hasChildren
-          ? html`
+      ${expanded && hasChildren
+        ? html`
             <div class="chat-nav-children">
               ${node.children!.map((child) => renderChildNode(child, props, level + 1))}
             </div>
           `
-          : nothing
-      }
+        : nothing}
     </div>
   `;
 }
@@ -242,11 +239,12 @@ function renderChannelModeIndicator(props: ChatNavigationTreeProps) {
 
   return html`
     <div
-      class="chat-nav-channel-mode ${props.channelForceJoined ? "chat-nav-channel-mode--joined" : ""}"
+      class="chat-nav-channel-mode ${props.channelForceJoined
+        ? "chat-nav-channel-mode--joined"
+        : ""}"
     >
-      ${
-        props.channelForceJoined
-          ? html`
+      ${props.channelForceJoined
+        ? html`
             <div class="chat-nav-channel-mode__text">
               <span>🔧</span>
               <span>${t("chat.nav.channel.force_joined")}</span>
@@ -259,7 +257,7 @@ function renderChannelModeIndicator(props: ChatNavigationTreeProps) {
               ${t("chat.nav.channel.exit")}
             </button>
           `
-          : html`
+        : html`
             <div class="chat-nav-channel-mode__text">
               <span>👀</span>
               <span>${t("chat.nav.channel.readonly")}</span>
@@ -271,8 +269,7 @@ function renderChannelModeIndicator(props: ChatNavigationTreeProps) {
             >
               ${t("chat.nav.channel.force_join")}
             </button>
-          `
-      }
+          `}
     </div>
   `;
 }
@@ -287,10 +284,10 @@ function groupSessionsByTime(nodes: import("../types.ts").ChatNavigationNode[]) 
   const now = Date.now();
   const DAY = 86_400_000;
   const groups: Array<{ label: string; nodes: typeof nodes }> = [
-    { label: t("chat.nav.group.today"),   nodes: [] },
-    { label: t("chat.nav.group.week"),    nodes: [] },
-    { label: t("chat.nav.group.month"),   nodes: [] },
-    { label: t("chat.nav.group.older"),   nodes: [] },
+    { label: t("chat.nav.group.today"), nodes: [] },
+    { label: t("chat.nav.group.week"), nodes: [] },
+    { label: t("chat.nav.group.month"), nodes: [] },
+    { label: t("chat.nav.group.older"), nodes: [] },
   ];
 
   for (const node of nodes) {
@@ -319,9 +316,13 @@ function groupSessionsByTime(nodes: import("../types.ts").ChatNavigationNode[]) 
 function renderRenameButton(
   node: import("../types.ts").ChatNavigationNode,
   props: import("../types.ts").ChatNavigationTreeProps,
-): import("lit").TemplateResult | typeof nothing {
-  if (!props.onRenameSession) {return nothing;}
-  if (node.context.type !== "session-history") {return nothing;}
+): TemplateResult {
+  if (!props.onRenameSession) {
+    return nothing;
+  }
+  if (node.context.type !== "session-history") {
+    return nothing;
+  }
 
   const sessionKey = node.context.sessionKey;
 
@@ -331,7 +332,9 @@ function renderRenameButton(
     const btn = e.currentTarget as HTMLElement;
     const item = btn.closest(".chat-nav-item__content")!;
     const labelEl = item.querySelector(".chat-nav-item__label") as HTMLElement | null;
-    if (!labelEl || item.querySelector(".chat-nav-rename-input")) {return;}
+    if (!labelEl || item.querySelector(".chat-nav-rename-input")) {
+      return;
+    }
 
     const original = labelEl.textContent ?? "";
     const input = document.createElement("input");
@@ -359,8 +362,14 @@ function renderRenameButton(
     };
 
     input.addEventListener("keydown", (ke: KeyboardEvent) => {
-      if (ke.key === "Enter") { ke.preventDefault(); commit(); }
-      if (ke.key === "Escape") { ke.preventDefault(); cancel(); }
+      if (ke.key === "Enter") {
+        ke.preventDefault();
+        commit();
+      }
+      if (ke.key === "Escape") {
+        ke.preventDefault();
+        cancel();
+      }
     });
     input.addEventListener("blur", commit, { once: true });
 
@@ -371,12 +380,9 @@ function renderRenameButton(
   };
 
   return html`
-    <button
-      class="chat-nav-rename-btn"
-      type="button"
-      title="重命名"
-      @click=${handleRenameClick}
-    >✏️</button>
+    <button class="chat-nav-rename-btn" type="button" title="重命名" @click=${handleRenameClick}>
+      ✏️
+    </button>
   `;
 }
 
@@ -423,7 +429,9 @@ export function renderDeptNavNode(
   const accessIcon =
     !isMember && !isAdmin && (isDeptRoom || isDeptBroadcast)
       ? html`
-          <span title="无权访问（非成员）" style="font-size: 0.75em; opacity: 0.6; margin-left: 2px">🔒</span>
+          <span title="无权访问（非成员）" style="font-size: 0.75em; opacity: 0.6; margin-left: 2px"
+            >🔒</span
+          >
         `
       : nothing;
 
@@ -446,13 +454,12 @@ export function renderDeptNavNode(
       >
         <span class="chat-nav-item__icon">${node.icon}</span>
         <span class="chat-nav-item__label">${node.label}</span>
-        ${accessIcon}
-        ${sandboxBadge}
-        ${
-          node.unreadCount && node.unreadCount > 0
-            ? html`<span class="chat-nav-badge">${node.unreadCount > 99 ? "99+" : node.unreadCount}</span>`
-            : nothing
-        }
+        ${accessIcon} ${sandboxBadge}
+        ${node.unreadCount && node.unreadCount > 0
+          ? html`<span class="chat-nav-badge"
+              >${node.unreadCount > 99 ? "99+" : node.unreadCount}</span
+            >`
+          : nothing}
       </div>
     </div>
   `;
