@@ -118,8 +118,9 @@ export { areHeartbeatsEnabled, setHeartbeatsEnabled };
 // Track when each session lane first entered in-flight state.
 // Used to auto-reset stale lanes that have been in-flight too long.
 const laneInFlightSince = new Map<string, number>();
-// Auto-reset stale in-flight lanes after 5 minutes of continuous blocking.
-const STALE_LANE_RESET_THRESHOLD_MS = 5 * 60 * 1000;
+// Auto-reset stale in-flight lanes after 10 minutes of continuous blocking.
+// 增加到 10 分钟（原 5 分钟），为复杂任务和外部 API 调用留出足够时间
+const STALE_LANE_RESET_THRESHOLD_MS = 10 * 60 * 1000;
 
 type HeartbeatConfig = AgentDefaultsConfig["heartbeat"];
 type HeartbeatAgent = {
@@ -772,9 +773,13 @@ export async function runHeartbeatOnce(opts: {
     } else if (now - since >= STALE_LANE_RESET_THRESHOLD_MS) {
       // Lane has been in-flight for too long — likely a stale taskId after a failed run.
       // Reset all lanes so queued work can drain.
+      const stalledMinutes = Math.round((now - since) / 60000);
       log.warn(
-        `heartbeat: agent "${agentId}" session lane stale (${Math.round((now - since) / 1000)}s) — resetting`,
-        { agentId },
+        `heartbeat: agent "${agentId}" session lane stale (${stalledMinutes}min) — resetting\n` +
+        `  Lane: ${agentSessionLane}\n` +
+        `  Queue ahead: ${queueSize} commands\n` +
+        `  Note: WebSocket connections may temporarily fail (1006) during reset`,
+        { agentId, stalledMinutes, queueSize },
       );
       laneInFlightSince.delete(agentSessionLane);
       resetAllLanes();

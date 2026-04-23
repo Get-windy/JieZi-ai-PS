@@ -768,9 +768,30 @@ export function createTaskCreateTool(opts?: {
           ].filter(Boolean),
         });
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        // 检测是否是 WebSocket 1006 或 lane 重置导致的临时不可用
+        const isLaneResetRelated = 
+          errorMessage.includes("gateway not connected") ||
+          errorMessage.includes("1006") ||
+          errorMessage.includes("abnormal closure") ||
+          errorMessage.includes("CommandLaneCleared") ||
+          errorMessage.includes("resetAllLanes");
+        
+        let friendlyMessage = `Failed to create task: ${errorMessage}`;
+        if (isLaneResetRelated) {
+          friendlyMessage = 
+            `任务创建临时失败：系统正在重置阻塞的命令队列（可能由于之前的任务超时）。\n` +
+            `原因：${errorMessage}\n` +
+            `建议：\n` +
+            `  1. 等待 10-30 秒后重试（WebSocket 将自动重连）\n` +
+            `  2. 如果持续失败，请检查是否有复杂任务正在执行外部 API 调用`;
+        }
+        
         return jsonResult({
           success: false,
-          error: `Failed to create task: ${error instanceof Error ? error.message : String(error)}`,
+          error: friendlyMessage,
+          retryable: isLaneResetRelated, // 标记为可重试
         });
       }
     },
@@ -2136,8 +2157,8 @@ export function createTaskBatchCancelTool(opts?: { currentAgentId?: string }): A
             try {
               await callGatewayTool("task.worklog.add", gatewayOpts, {
                 taskId: id,
-                content: cancelNote,
-                authorId: opts?.currentAgentId ?? "system",
+                agentId: opts?.currentAgentId ?? "system",
+                action: cancelNote,
               });
             } catch { /* worklog 失败不影响取消 */ }
             cancelledIds.push(id);
