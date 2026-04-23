@@ -407,8 +407,10 @@ export const tasksRpc: GatewayRequestHandlers = {
           "in-progress": ["review", "blocked", "done", "cancelled"],
           review: ["todo", "in-progress", "blocked", "done", "cancelled", "needs-rework"],
           blocked: ["todo", "in-progress", "cancelled"],
-          done: [],  // 终态，不可转换
-          cancelled: [],  // 终态，不可转换
+          // 支持回退：已完成的发现有误时可以重新打开
+          done: ["in-progress", "needs-rework", "todo"],
+          // 已取消的任务也可以重新打开
+          cancelled: ["todo", "in-progress"],
           "needs-rework": ["todo", "in-progress", "review", "blocked", "done", "cancelled"],
         };
         const allowed = VALID_TRANSITIONS[task.status] ?? [];
