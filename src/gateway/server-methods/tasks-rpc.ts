@@ -385,6 +385,21 @@ export const tasksRpc: GatewayRequestHandlers = {
         return;
       }
 
+      // 防御性检查：任务 status 字段为 undefined 属于数据异常
+      if (!task.status) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            `任务数据异常：任务 "${taskId}" 的 status 字段为 undefined。\n` +
+            `原因：任务创建时未设置状态或数据损坏。\n` +
+            `修复建议：调用 task.update(taskId="${taskId}", status="todo") 先设置初始状态。`,
+          ),
+        );
+        return;
+      }
+
       // 状态转换验证：在调用 storage.updateTask 之前拦截非法转换
       if (normalizedStatus && normalizedStatus !== task.status) {
         const VALID_TRANSITIONS: Record<string, string[]> = {
