@@ -436,17 +436,17 @@ export function generateFullLog(
 function calculateHealthTrend(
   checks: Array<{ timestamp: number; healthScore: number }>,
 ): "improving" | "stable" | "degrading" {
-  if (checks.length < 2) return "stable";
+  if (checks.length < 2) {return "stable";}
   
   const recent = checks.slice(-3);
-  if (recent.length < 2) return "stable";
+  if (recent.length < 2) {return "stable";}
   
   const first = recent[0].healthScore;
   const last = recent[recent.length - 1].healthScore;
   const diff = last - first;
   
-  if (diff > 5) return "improving";
-  if (diff < -5) return "degrading";
+  if (diff > 5) {return "improving";}
+  if (diff < -5) {return "degrading";}
   return "stable";
 }
 
@@ -547,7 +547,7 @@ export function shouldInjectProgressReport(
 export function buildMasterContext(
   summary: HeartbeatStateSummary,
   progressReport?: HeartbeatProgressReport,
-  config: ContextInjectionConfig = DEFAULT_CONTEXT_CONFIG,
+  _config: ContextInjectionConfig = DEFAULT_CONTEXT_CONFIG,
 ): string {
   const lines: string[] = [];
   
