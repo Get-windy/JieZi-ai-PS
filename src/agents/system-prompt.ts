@@ -430,11 +430,57 @@ function buildObjectiveAlignmentSection(params: {
  *   2. 可追源性   — 产出物路径必须登记到 SHARED_MEMORY.md，供后续 Agent 读取
  *   3. 完成信号   — 完成任务前必须在 task_progress_note_append 中记录产出物证据
  */
+
+/**
+ * 获取业务空间类型的图标
+ */
+function getBusinessSpaceIcon(type: string): string {
+  const icons: Record<string, string> = {
+    code: "💻",
+    docs: "📚",
+    sales: "📈",
+    contracts: "📝",
+    customers: "👥",
+    design: "🎨",
+    assets: "📦",
+    testing: "🧪",
+    requirements: "📋",
+    decisions: "💡",
+    custom: "🔧",
+  };
+  return icons[type] || "🔧";
+}
+
+/**
+ * 获取业务空间类型的标签
+ */
+function getBusinessSpaceLabel(type: string): string {
+  const labels: Record<string, string> = {
+    code: "代码空间",
+    docs: "文档空间",
+    sales: "销售空间",
+    contracts: "合同空间",
+    customers: "客户空间",
+    design: "设计空间",
+    assets: "素材空间",
+    testing: "测试空间",
+    requirements: "需求空间",
+    decisions: "决策空间",
+    custom: "自定义空间",
+  };
+  return labels[type] || "自定义空间";
+}
+
 function buildRoleDeliverableSection(params: {
   isMinimal: boolean;
   agentRole?: string;
   projectWorkspacePath?: string;
   codeDir?: string;
+  /**
+   * 业务空间列表（完整）
+   * 包括代码、销售、合同、客户等多种业务空间类型。
+   */
+  businessSpaces?: Array<{ type: string; path: string; description?: string; enabled?: boolean }>;
 }) {
   if (params.isMinimal || !params.agentRole) {
     return [];
@@ -446,12 +492,36 @@ function buildRoleDeliverableSection(params: {
     params.projectWorkspacePath ||
     "{projectWorkspace: 请通过 project_list 工具查询项目空间实际路径}";
   const codeDir = params.codeDir || "{codeDir: 请通过 project_list 工具查询业务空间实际路径}";
+  
+  // 构建业务空间注入区块（如果提供了完整的业务空间列表）
+  let businessSpacesSection: string[] = [];
+  if (params.businessSpaces && params.businessSpaces.length > 0) {
+    const enabledSpaces = params.businessSpaces.filter(s => s.enabled !== false);
+    if (enabledSpaces.length > 0) {
+      businessSpacesSection = [
+        "**当前项目已配置的业务空间**",
+        ...enabledSpaces.map(space => {
+          const icon = getBusinessSpaceIcon(space.type);
+          const label = getBusinessSpaceLabel(space.type);
+          const desc = space.description ? ` (${space.description})` : "";
+          return `  ${icon} ${label} → ${space.path}${desc}`;
+        }),
+        "",
+        "**重要规则**",
+        "  • 根据任务类型，将产出物写入对应的业务空间路径",
+        "  • 如果任务涉及的空间未在上述列表中，请使用 project_spaces_list 工具查询",
+        "  • 禁止将业务代码写入项目空间（记忆空间），禁止将项目文档写入代码目录",
+        "",
+      ];
+    }
+  }
 
   if (role === "doc-writer") {
     return [
       "## 文档交付规范（doc-writer 专属）",
       "你是文档专家，每次完成文档任务必须遵守以下交付规范：",
       "",
+      ...businessSpacesSection,
       "**产出物路径约定**",
       `  - 技术文档 / API 规范  → ${projectWorkspace}/docs/`,
       `  - 架构决策记录 (ADR)  → ${projectWorkspace}/decisions/ADR-{序号}-{主题}.md`,
@@ -478,6 +548,7 @@ function buildRoleDeliverableSection(params: {
       "## 测试交付规范（qa-lead 专属）",
       "你是质量保障专家，每次完成测试任务必须遵守以下交付规范：",
       "",
+      ...businessSpacesSection,
       "**产出物路径约定**",
       `  - 测试脚本 / 用例       → ${projectWorkspace}/tests/ 或 ${codeDir}/tests/`,
       `  - 测试报告（每次执行后） → ${projectWorkspace}/qa/test-reports/YYYY-MM-DD-{场景}.md`,
@@ -665,6 +736,13 @@ export function buildAgentSystemPrompt(params: {
    * 若提供，将替换角色交付规范中的 {codeDir} 占位符为实际路径
    */
   codeDir?: string;
+  /**
+   * 业务空间列表（完整）
+   * 
+   * 包含项目的所有业务空间配置（代码、销售、合同、客户等）。
+   * 若提供，将在系统提示中注入完整的业务空间列表，让 Agent 知道所有可用的业务空间路径。
+   */
+  businessSpaces?: Array<{ type: string; path: string; description?: string; enabled?: boolean }>;
   /**
    * 项目路径自动推断回调（兑底机制）
    *
@@ -951,6 +1029,7 @@ export function buildAgentSystemPrompt(params: {
     agentRole: resolvedAgentRole,
     projectWorkspacePath: resolvedProjectWorkspacePath,
     codeDir: resolvedCodeDir,
+    businessSpaces: params.businessSpaces,
   });
   // 项目目标对齐 section
   const objectiveAlignmentSection = buildObjectiveAlignmentSection({

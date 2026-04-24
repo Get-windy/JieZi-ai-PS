@@ -1227,4 +1227,144 @@ export const groupsHandlers: GatewayRequestHandlers = {
       );
     }
   },
+
+  // ============================================================================
+  // 群组空间配置 RPC 接口
+  // ============================================================================
+
+  /**
+   * 配置群组空间继承行为
+   * 
+   * 当群组绑定项目后，可以配置：
+   * 1. 是否继承项目的业务空间配置
+   * 2. 是否使用自定义的群组工作空间
+   */
+  "groups.spaces.configure": async ({ params, respond }) => {
+    try {
+      const groupId = params?.groupId ? String(params.groupId) : "";
+      if (!groupId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "groupId is required"));
+        return;
+      }
+
+      // 获取群组信息
+      const group = groupManager.getGroup(groupId);
+      if (!group) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Group not found"));
+        return;
+      }
+
+      // 解析配置参数
+      const inheritProjectSpaces = params?.inheritProjectSpaces !== undefined
+        ? params.inheritProjectSpaces === true
+        : undefined;
+      
+      const customWorkspacePath = params?.workspacePath
+        ? String(params.workspacePath)
+        : undefined;
+
+      // 更新群组配置
+      const updates: Partial<import("../../sessions/group-manager.js").GroupInfo> = {};
+
+      if (inheritProjectSpaces !== undefined) {
+        // 在 metadata 中存储继承配置
+        const metadata = group.metadata || {};
+        metadata.inheritProjectSpaces = inheritProjectSpaces;
+        updates.metadata = metadata;
+      }
+
+      if (customWorkspacePath !== undefined) {
+        updates.workspacePath = customWorkspacePath;
+      }
+
+      // 如果有更新，保存配置
+      if (Object.keys(updates).length > 0) {
+        const updatedGroup = groupManager.updateGroup(groupId, updates);
+        
+        respond(
+          true,
+          {
+            success: true,
+            group: updatedGroup,
+            inheritProjectSpaces: updatedGroup.metadata?.inheritProjectSpaces,
+            workspacePath: updatedGroup.workspacePath,
+          },
+          undefined,
+        );
+      } else {
+        respond(true, { success: false, message: "No updates provided" }, undefined);
+      }
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to configure spaces: ${String(error)}`),
+      );
+    }
+  },
+
+  /**
+   * 获取群组空间配置信息
+   * 
+   * 返回：
+   * 1. 群组的当前配置（继承/自定义）
+   * 2. 如果绑定项目，返回项目的业务空间列表（供前端展示）
+   */
+  "groups.spaces.getConfig": async ({ params, respond }) => {
+    try {
+      const groupId = params?.groupId ? String(params.groupId) : "";
+      if (!groupId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "groupId is required"));
+        return;
+      }
+
+      const group = groupManager.getGroup(groupId);
+      if (!group) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "Group not found"));
+        return;
+      }
+
+      // 如果群组绑定了项目，获取项目的业务空间和记忆空间配置
+      let projectSpaces: Array<{
+        type: string;
+        path: string;
+        description?: string;
+        enabled?: boolean;
+      }> = [];
+      let memorySpace: {
+        path: string;
+        description?: string;
+        enabled?: boolean;
+      } | null = null;
+
+      if (group.projectId) {
+        const { resolveBusinessSpaces, resolveMemorySpace } = await import("../../utils/project-context.js");
+        projectSpaces = resolveBusinessSpaces(group.projectId);
+        memorySpace = resolveMemorySpace(group.projectId);
+      }
+
+      respond(
+        true,
+        {
+          group: {
+            id: group.id,
+            name: group.name,
+            projectId: group.projectId,
+            workspacePath: group.workspacePath,
+            metadata: group.metadata,
+          },
+          memorySpace, // 记忆空间
+          projectSpaces, // 业务空间
+          inheritProjectSpaces: group.metadata?.inheritProjectSpaces !== false, // 默认继承
+        },
+        undefined,
+      );
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `Failed to get spaces config: ${String(error)}`),
+      );
+    }
+  },
 };

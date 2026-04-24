@@ -2933,8 +2933,8 @@ export function createProjectEmergencyPivotTool(opts?: { currentAgentId?: string
           try {
             await callGatewayTool("task.worklog.add", gatewayOpts, {
               taskId: id,
-              content: `[紧急制动-保留] 该任务在紧急制动中被标记为可抯救。原因: ${reason} | 操作者: ${operatorId}`,
-              authorId: operatorId,
+              agentId: operatorId,
+              action: `[紧急制动-保留] 该任务在紧急制动中被标记为可抯救。原因: ${reason} | 操作者: ${operatorId}`,
             });
           } catch { /* worklog 失败不阻断 */ }
         }
@@ -2944,8 +2944,8 @@ export function createProjectEmergencyPivotTool(opts?: { currentAgentId?: string
             try {
               await callGatewayTool("task.worklog.add", gatewayOpts, {
                 taskId: id,
-                content: cancelNote,
-                authorId: operatorId,
+                agentId: operatorId,
+                action: cancelNote,
               });
             } catch { /* worklog 失败不阻断 */ }
             results.cancelledIds.push(id);
@@ -3139,8 +3139,8 @@ export function createProjectIssueReportTool(opts?: { currentAgentId?: string })
           try {
             await callGatewayTool("task.worklog.add", gatewayOpts, {
               taskId,
-              content: `[返工标记 ${timestamp}] Issue: ${issueTitle}\n根因: ${rootCause}${fixPlan ? "\n修复方案: " + fixPlan : ""}`,
-              authorId: operatorId,
+              agentId: operatorId,
+              action: `[返工标记 ${timestamp}] Issue: ${issueTitle}\n根因: ${rootCause}${fixPlan ? "\n修复方案: " + fixPlan : ""}`,
             });
           } catch { /* worklog 失败不阻断 */ }
         } catch (e) {

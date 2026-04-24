@@ -62,6 +62,7 @@ import { buildProjectContext } from "../../utils/project-context.js";
 import { getGroupsWorkspaceRoot } from "../../utils/project-context.js";
 import { scheduleNextTaskForAgent } from "./agents-management.js";
 import { inferTaskType, recordPerfOutcome } from "./evolve-rpc.js";
+import { analyzeErrorRootCause } from "../../tasks/error-root-cause-analysis.js";
 
 /**
  * 向 supervisor 发送任务系统事件通知（公共工具函数）
@@ -1167,6 +1168,36 @@ export const tasksRpc: GatewayRequestHandlers = {
           startedAt: existingTracking.startedAt ?? Date.now(),
           lastActivityAt: Date.now(), // 每次进入 in-progress 都刷新活跃度，防止被误判为僵尸
         };
+      }
+
+      // 重新打开机制：如果从 done/cancelled 状态重新打开为 in-progress/needs-rework
+      // 创建重新打开记录（用于追溯和审计）
+      if (
+        (task.status === "done" || task.status === "cancelled") &&
+        (newStatus === "in-progress" || newStatus === "needs-rework" || newStatus === "review")
+      ) {
+        const { TaskReopenRecord } = await import("../../tasks/types.js");
+        const reopenRecord: import("../../tasks/types.js").TaskReopenRecord = {
+          id: `reopen-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
+          reason: reason || "未指明原因",
+          previousStatus: task.status,
+          newStatus,
+          reopenedBy: updatedBy,
+          reopenedByType: params?.reopenedByType ? (String(params.reopenedByType) as MemberType) : "human",
+          reopenedAt: Date.now(),
+          correctionTaskId: params?.correctionTaskId ? String(params.correctionTaskId) : undefined,
+          notes: params?.reopenNotes ? String(params.reopenNotes) : undefined,
+        };
+
+        // 添加到重新打开历史
+        const reopenHistory = task.reopenHistory ?? [];
+        reopenHistory.push(reopenRecord);
+        updates.reopenHistory = reopenHistory;
+        updates.reopenCount = (task.reopenCount ?? 0) + 1;
+
+        console.log(
+          `[Task Reopen] Task ${taskId} reopened: ${task.status} -> ${newStatus}, reason: ${reason}`,
+        );
       }
 
       await storage.updateTask(taskId, updates);
@@ -3258,6 +3289,403 @@ export const tasksRpc: GatewayRequestHandlers = {
       respond(true, { success: deleted, templateId }, undefined);
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, `Failed to delete template: ${String(err instanceof Error ? err.message : err)}`));
+    }
+  },
+
+  /**
+   * task.create_correction - 创建修正任务（用于发现问题后回溯修正）
+   * 
+   * 功能：
+   * 1. 创建一个新的修正任务（type="bugfix" 或 "rework"）
+   * 2. 建立与原任务的双向关联（correctionOf + correctionTasks）
+   * 3. 可选：自动重新打开原任务（如果原任务是 done 状态）
+   * 
+   * 使用场景：
+   * - 测试发现已完成任务有 Bug → 创建修正任务
+   * - Sprint 回顾发现质量问题 → 创建改进任务
+   * - 用户反馈已交付功能有问题 → 创建修复任务
+   * 
+   * 参数：
+   * - originalTaskId: 被发现问题的原任务 ID（必填）
+   * - reason: 发现问题的原因（必填）
+   * - reopenOriginal: 是否重新打开原任务（默认 true）
+   * - correctionType: 修正类型（"bugfix" | "rework" | "improvement"）
+   * - 其他 task.create 支持的参数（title, description, priority 等）
+   */
+  "task.create_correction": async ({ params, respond }) => {
+    try {
+      const originalTaskId = params?.originalTaskId ? String(params.originalTaskId) : "";
+      const reason = params?.reason ? String(params.reason) : "";
+      const reopenOriginal = params?.reopenOriginal !== false; // 默认 true
+      const correctionType = params?.correctionType
+        ? (String(params.correctionType) as "bugfix" | "rework" | "improvement")
+        : "bugfix";
+
+      if (!originalTaskId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "originalTaskId 是必填参数（原任务 ID）"),
+        );
+        return;
+      }
+
+      if (!reason || reason.length < 5) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "reason 不能少于 5 个字符（请详细说明问题）"),
+        );
+        return;
+      }
+
+      // 获取原任务
+      const originalTask = await storage.getTask(originalTaskId);
+      if (!originalTask) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "原任务不存在"));
+        return;
+      }
+
+      // 权限检查：必须有权限修改原任务
+      const requesterId = params?.requesterId ? String(params.requesterId) : "system";
+      const assigneeIds = (originalTask.assignees ?? []).map((a) => a.id);
+      const permCheck = checkTaskModifyAccess(
+        originalTask.creatorId,
+        assigneeIds,
+        originalTask.organizationId,
+        originalTask.teamId,
+        requesterId,
+        undefined,
+        undefined,
+      );
+      if (!permCheck.allowed) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, permCheck.reason || "无权限为此任务创建修正任务"),
+        );
+        return;
+      }
+
+      // 构建修正任务的标题（自动生成）
+      const correctionTitle = params?.title
+        ? String(params.title)
+        : `[修正] ${originalTask.title || originalTaskId} - ${correctionType === "bugfix" ? "缺陷修复" : correctionType === "rework" ? "返工" : "改进"}`;
+
+      // 构建修正任务的描述（自动包含原任务信息和问题描述）
+      const correctionDescription = params?.description
+        ? String(params.description)
+        : `## 问题描述
+
+${reason}
+
+## 原任务信息
+
+- 原任务 ID: ${originalTaskId}
+- 原任务标题: ${originalTask.title || "无标题"}
+- 原任务状态: ${originalTask.status}
+- 发现时间: ${new Date().toISOString()}
+
+## 修正目标
+
+请修复上述问题，并确保不引入新的问题。`;
+
+      // 创建修正任务（复用 task.create 的逻辑）
+      const correctionTaskId = `task-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+      const now = Date.now();
+
+      const correctionTask: import("../../tasks/types.js").Task = {
+        id: correctionTaskId,
+        title: correctionTitle,
+        description: correctionDescription,
+        creatorId: requesterId,
+        creatorType: params?.creatorType ? (String(params.creatorType) as MemberType) : "human",
+        assignees: params?.assigneeIds
+          ? (params.assigneeIds as string[]).map((id: string) => ({
+              id,
+              type: (params?.assigneeType as MemberType) || "human",
+              role: "assignee" as const,
+              assignedAt: now,
+              assignedBy: requesterId,
+            }))
+          : [],
+        status: "todo",
+        priority: (params?.priority as import("../../tasks/types.js").TaskPriority) || "high", // 修正任务默认高优先级
+        type: correctionType === "bugfix" ? "bugfix" as const : "other" as const,
+        scope: originalTask.scope, // 继承原任务的作用域
+        projectId: originalTask.projectId, // 继承原任务的项目
+        organizationId: originalTask.organizationId,
+        teamId: originalTask.teamId,
+        parentTaskId: originalTask.parentTaskId,
+        dependencies: [originalTaskId], // 依赖原任务（必须先完成原任务才能修正）
+        tags: [...(originalTask.tags ?? []), "correction", correctionType], // 添加修正标签
+        labels: [...(originalTask.labels ?? []), "needs-fixing"],
+        timeTracking: { timeSpent: 0 },
+        createdAt: now,
+        // 修正任务特有字段：指向被修正的原任务
+        correctionOf: originalTaskId,
+        metadata: {
+          ...(params?.metadata as Record<string, unknown>),
+          correctionReason: reason,
+          originalTaskStatus: originalTask.status,
+          correctionType,
+        },
+      };
+
+      // 保存修正任务
+      await storage.createTask(correctionTask);
+
+      // 更新原任务：添加修正任务关联
+      const correctionTasks = originalTask.correctionTasks ?? [];
+      correctionTasks.push(correctionTaskId);
+      await storage.updateTask(originalTaskId, {
+        correctionTasks,
+      });
+
+      // 可选：重新打开原任务（如果原任务是 done 状态）
+      if (
+        reopenOriginal &&
+        (originalTask.status === "done" || originalTask.status === "cancelled")
+      ) {
+        const reopenRecord: import("../../tasks/types.js").TaskReopenRecord = {
+          id: `reopen-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
+          reason: `发现质量问题，已创建修正任务 ${correctionTaskId}`,
+          previousStatus: originalTask.status,
+          newStatus: "needs-rework",
+          reopenedBy: requesterId,
+          reopenedByType: correctionTask.creatorType,
+          reopenedAt: now,
+          correctionTaskId,
+          notes: reason,
+        };
+
+        const reopenHistory = originalTask.reopenHistory ?? [];
+        reopenHistory.push(reopenRecord);
+
+        await storage.updateTask(originalTaskId, {
+          status: "needs-rework",
+          reopenHistory,
+          reopenCount: (originalTask.reopenCount ?? 0) + 1,
+        });
+
+        console.log(
+          `[Correction] Original task ${originalTaskId} reopened to needs-rework due to correction task ${correctionTaskId}`,
+        );
+      }
+
+      // 通知原任务的 supervisor/creator
+      const notifyTarget = originalTask.supervisorId ?? originalTask.creatorId;
+      if (notifyTarget && notifyTarget !== "system") {
+        const correctionMsg = [
+          `[CORRECTION TASK] 🔧 创建修正任务`,
+          ``,
+          `修正任务 ID: ${correctionTaskId}`,
+          `修正任务标题: ${correctionTitle}`,
+          `原任务 ID: ${originalTaskId}`,
+          `原任务标题: ${originalTask.title || "无标题"}`,
+          `发现问题: ${reason}`,
+          `修正类型: ${correctionType}`,
+          reopenOriginal ? `原任务已重新打开为 needs-rework 状态` : `原任务保持 ${originalTask.status} 状态`,
+          `创建者: ${requesterId}`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        notifySupervisor(notifyTarget, correctionMsg, `task:correction:${correctionTaskId}`);
+      }
+
+      respond(
+        true,
+        {
+          success: true,
+          correctionTaskId,
+          correctionTask: {
+            id: correctionTaskId,
+            title: correctionTitle,
+            status: correctionTask.status,
+            priority: correctionTask.priority,
+            correctionOf: originalTaskId,
+          },
+          originalTask: {
+            id: originalTaskId,
+            status: reopenOriginal ? "needs-rework" : originalTask.status,
+            correctionTasks: correctionTasks.length,
+            reopenCount: (originalTask.reopenCount ?? 0) + (reopenOriginal ? 1 : 0),
+          },
+          reopenOriginal,
+          message: reopenOriginal
+            ? `修正任务已创建，原任务已重新打开为 needs-rework 状态`
+            : `修正任务已创建，原任务保持 ${originalTask.status} 状态`,
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to create correction task: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
+  /**
+   * sprint.batch_retrospect_and_correct - Sprint 批量回溯和修正机制
+   * 
+   * 功能：
+   * 当发现某个历史 Sprint（如 Sprint 2）存在问题时，
+   * 从该 Sprint 开始逐步向后排查并创建修正任务。
+   * 
+   * 使用场景：
+   * - 当前在 Sprint 28，发现 Sprint 2 有架构缺陷
+   * - 需要从 Sprint 2 开始，逐个 Sprint 向后排查
+   * - 为每个有问题的任务创建修正任务
+   * - 形成完整的修正链条和追溯历史
+   */
+  "sprint.batch_retrospect_and_correct": async ({ params, respond }) => {
+    try {
+      const { batchRetrospectAndCorrect } = await import("./sprint-retrospect.js");
+
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      const startSprintNumber = params?.startSprintNumber
+        ? Number(params.startSprintNumber)
+        : null;
+      const endSprintNumber = params?.endSprintNumber
+        ? Number(params.endSprintNumber)
+        : undefined;
+      const problemReason = params?.problemReason ? String(params.problemReason) : "";
+      const correctionType = params?.correctionType
+        ? (String(params.correctionType) as "bugfix" | "rework" | "improvement")
+        : "rework";
+      const reopenOriginals = params?.reopenOriginals !== false;
+      const autoCreateCorrections = params?.autoCreateCorrections !== false;
+      const requesterId = params?.requesterId ? String(params.requesterId) : "system";
+      const taskFilter = (params?.taskFilter as Record<string, unknown>) ?? {};
+
+      if (!projectId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "projectId 是必填参数"),
+        );
+        return;
+      }
+
+      if (!startSprintNumber || startSprintNumber < 1) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "startSprintNumber 必须是 >= 1 的整数"),
+        );
+        return;
+      }
+
+      if (!problemReason || problemReason.length < 10) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            "problemReason 不能少于 10 个字符（请详细说明发现的问题）",
+          ),
+        );
+        return;
+      }
+
+      const result = await batchRetrospectAndCorrect({
+        projectId,
+        startSprintNumber,
+        endSprintNumber,
+        problemReason,
+        correctionType,
+        reopenOriginals,
+        autoCreateCorrections,
+        requesterId,
+        taskFilter: {
+          status: taskFilter.status as string[] | undefined,
+          types: taskFilter.types as string[] | undefined,
+          tags: taskFilter.tags as string[] | undefined,
+        },
+      });
+
+      respond(true, result, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to batch retrospect and correct: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
+    }
+  },
+
+  /**
+   * task.analyze_error_root_cause - 错误根源追溯和影响分析
+   * 
+   * 基于业界最佳实践（SZZ算法、Git Blame、五问法）：
+   * 1. 追踪错误代码的引入时间、作者、关联任务
+   * 2. 分析代码变更的历史背景和上下文
+   * 3. 识别所有受影响的相关任务和代码
+   * 4. 生成完整的根源追溯报告
+   * 5. 提供修复建议和预防措施
+   * 
+   * 使用场景：
+   * - 发现 bug 后追溯错误代码什么时候写的、谁写的、在哪个任务中写的
+   * - 分析错误代码是否影响其他任务和功能
+   * - 生成完整的质量改进建议
+   */
+  "task.analyze_error_root_cause": async ({ params, respond }) => {
+    try {
+      const errorId = params?.errorId ? String(params.errorId) : `error-${Date.now()}`;
+      const errorDescription = params?.errorDescription ? String(params.errorDescription) : "";
+      const discoveredBy = params?.discoveredBy ? String(params.discoveredBy) : "system";
+      const discoveredInTask = params?.discoveredInTask ? String(params.discoveredInTask) : "";
+      const filePath = params?.filePath ? String(params.filePath) : undefined;
+      const lineStart = params?.lineStart ? Number(params.lineStart) : undefined;
+      const lineEnd = params?.lineEnd ? Number(params.lineEnd) : undefined;
+
+      if (!errorDescription) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "errorDescription 是必填参数（错误描述）"),
+        );
+        return;
+      }
+
+      if (!discoveredInTask) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "discoveredInTask 是必填参数（发现错误的任务 ID）"),
+        );
+        return;
+      }
+
+      // 执行根源追溯分析
+      const report = await analyzeErrorRootCause({
+        errorId,
+        errorDescription,
+        discoveredBy,
+        discoveredInTask,
+        filePath,
+        lineStart,
+        lineEnd,
+      });
+
+      respond(true, report, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Failed to analyze error root cause: ${String(err instanceof Error ? err.message : err)}`,
+        ),
+      );
     }
   },
 };

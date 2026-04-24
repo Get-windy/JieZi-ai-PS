@@ -11,13 +11,14 @@ import type { ReasoningLevel, ThinkLevel } from "./utils.js";
 
 /**
  * 兖底项目路径自动推断（防循环导入，延迟加载）
- * 根据 agentId 查找其所在的唯一项目，自动填充 projectWorkspacePath / codeDir
+ * 根据 agentId 查找其所在的唯一项目，自动填充 projectWorkspacePath / codeDir / businessSpaces
  */
 function tryAutoResolveProjectPaths(agentId: string | undefined): {
   projectWorkspacePath?: string;
   codeDir?: string;
+  businessSpaces?: Array<{ type: string; path: string; description?: string; enabled?: boolean }>;
 } {
-  if (!agentId) return {};
+  if (!agentId) {return {};}
   try {
     // 延迟导入，避免模块初始化时循环依赖
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -25,8 +26,9 @@ function tryAutoResolveProjectPaths(agentId: string | undefined): {
       groupManager: { getAllGroups(): Array<{ id: string; projectId?: string; members: Array<{ agentId: string }> }> };
     };
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { buildProjectContext } = require("../../../../src/utils/project-context.js") as {
+    const { buildProjectContext, resolveBusinessSpaces } = require("../../../../src/utils/project-context.js") as {
       buildProjectContext(projectId: string): { workspacePath: string; codeDir: string };
+      resolveBusinessSpaces(projectId: string): Array<{ type: string; path: string; description?: string; enabled?: boolean }>;
     };
     const allGroups = groupManager.getAllGroups();
     const normalizedAgentId = agentId.toLowerCase();
@@ -36,11 +38,14 @@ function tryAutoResolveProjectPaths(agentId: string | undefined): {
         g.members.some((m) => m.agentId.toLowerCase() === normalizedAgentId),
     );
     // 只属于一个项目时才自动填充（多项目情况不自动推断，避免路径混淆）
-    if (memberGroups.length !== 1 || !memberGroups[0].projectId) return {};
-    const ctx = buildProjectContext(memberGroups[0].projectId);
+    if (memberGroups.length !== 1 || !memberGroups[0].projectId) {return {};}
+    const projectId = memberGroups[0].projectId;
+    const ctx = buildProjectContext(projectId);
+    const spaces = resolveBusinessSpaces(projectId);
     return {
       projectWorkspacePath: ctx.workspacePath,
       codeDir: ctx.codeDir,
+      businessSpaces: spaces.length > 0 ? spaces : undefined,
     };
   } catch {
     // 推断失败不影响主要流程
@@ -96,6 +101,8 @@ export function buildEmbeddedSystemPrompt(params: {
   memoryCitationsMode?: MemoryCitationsMode;
   promptContribution?: ProviderSystemPromptContribution;
 }): string {
+  const autoResolvedPaths = tryAutoResolveProjectPaths(params.runtimeInfo.agentId);
+  
   return buildAgentSystemPrompt({
     workspaceDir: params.workspaceDir,
     defaultThinkLevel: params.defaultThinkLevel,
@@ -125,9 +132,10 @@ export function buildEmbeddedSystemPrompt(params: {
     includeMemorySection: params.includeMemorySection,
     memoryCitationsMode: params.memoryCitationsMode,
     promptContribution: params.promptContribution,
-    // 兖底项目路径自动推断：当调用方未显式传入 projectWorkspacePath/codeDir 时，
-    // 根据 agentId 查找其所在的唯一项目并自动填充实际路径
-    resolveProjectPaths: () => tryAutoResolveProjectPaths(params.runtimeInfo.agentId),
+    // 兜底项目路径自动推断：当调用方未显式传入 projectWorkspacePath/codeDir 时，
+    // 根据 agentId 查找其所在的唯一项目并自动填充实际路径和业务空间列表
+    resolveProjectPaths: () => autoResolvedPaths,
+    businessSpaces: autoResolvedPaths.businessSpaces,
   });
 }
 

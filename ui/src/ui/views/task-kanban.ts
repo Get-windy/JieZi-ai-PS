@@ -16,7 +16,7 @@ import { html, nothing, type TemplateResult } from "lit";
 // ============================================================================
 
 // 任务详情面板 Tab
-export type TaskDetailTab = "info" | "comments" | "attachments" | "worklogs" | "trace";
+export type TaskDetailTab = "info" | "comments" | "attachments" | "worklogs" | "trace" | "corrections" | "reopen-history" | "error-analysis";
 
 // 链路回放 - 任务审计事件
 export type TaskTraceAuditEvent = {
@@ -92,6 +92,16 @@ export type TaskKanbanProps = {
   taskTraceTab: TaskDetailTab;
   onLoadTrace: (taskId: string) => void;
   onSelectDetailTab: (tab: TaskDetailTab) => void;
+  
+  // 反思-回溯-修正机制
+  correctionTasksData?: Array<{ id: string; title: string; status: string; priority: string }>;
+  correctionOfData?: { id: string; title: string; status: string };
+  onLoadCorrections: (taskId: string) => void;
+  
+  // 错误根源追溯
+  errorAnalysisReport?: ErrorRootCauseReport | null;
+  errorAnalysisLoading: boolean;
+  onLoadErrorAnalysis: (taskId: string) => void;
   
   // 任务创建
   createDialogOpen: boolean;
@@ -199,6 +209,74 @@ export type TaskDetail = {
   createdAt: number;
   updatedAt?: number;
   completedAt?: number;
+  // 反思-回溯-修正机制相关字段
+  reopenHistory?: TaskReopenRecord[];
+  correctionTasks?: string[];
+  correctionOf?: string;
+  reopenCount?: number;
+};
+
+export type TaskReopenRecord = {
+  id: string;
+  reason: string;
+  previousStatus: string;
+  newStatus: string;
+  reopenedBy: string;
+  reopenedByType: string;
+  reopenedAt: number;
+  correctionTaskId?: string;
+  notes?: string;
+};
+
+// 错误根源追溯报告
+export type ErrorRootCauseReport = {
+  errorId: string;
+  errorDescription: string;
+  discoveredAt: number;
+  discoveredBy: string;
+  discoveredInTask: string;
+  rootCause: {
+    file: string;
+    lineStart?: number;
+    lineEnd?: number;
+    code: string;
+    introducedAt: number;
+    introducedBy: string;
+    introducedInCommit?: string;
+    introducedInTask?: string;
+    commitMessage?: string;
+    codeAge: number;
+  };
+  taskAnalysis: {
+    originalTask: { id: string; title: string; status: string; type?: string; sprintNumber?: number };
+    relatedTasks: Array<{ id: string; title: string; relationship: string; risk: string }>;
+    taskQualityMetrics: { reopenCount: number; bugCount: number; reworkCount: number; completionRate: number };
+  };
+  impactAnalysis: {
+    affectedFiles: string[];
+    affectedTasks: string[];
+    severity: "critical" | "high" | "medium" | "low";
+    estimatedFixEffort: "minutes" | "hours" | "days" | "weeks";
+  };
+  fiveWhysAnalysis?: {
+    why1: string;
+    why2?: string;
+    why3?: string;
+    why4?: string;
+    why5?: string;
+    rootCauseSummary: string;
+  };
+  recommendations: {
+    immediate: string[];
+    preventive: string[];
+    process: string[];
+  };
+  preventionMeasures: {
+    codeReview: boolean;
+    testing: boolean;
+    monitoring: boolean;
+    training: boolean;
+  };
 };
 
 export type TaskComment = {
@@ -650,6 +728,9 @@ function renderTaskDetailPanel(props: TaskKanbanProps) {
     { key: "attachments",label: "📎 附件" },
     { key: "worklogs",   label: "🤖 工作日志" },
     { key: "trace",      label: "🔍 链路回放" },
+    { key: "corrections", label: "🔧 修正任务" },
+    { key: "reopen-history", label: "🔁 重新打开历史" },
+    { key: "error-analysis", label: "🔬 错误根源分析" },
   ];
 
   return html`
@@ -709,6 +790,9 @@ function renderTaskDetailPanel(props: TaskKanbanProps) {
         ${tab === "attachments" ? renderTaskAttachments(props) : nothing}
         ${tab === "worklogs"    ? renderTaskWorkLogs(props)    : nothing}
         ${tab === "trace"       ? renderTaskTracePanel(props)  : nothing}
+        ${tab === "corrections" ? renderTaskCorrectionsPanel(props) : nothing}
+        ${tab === "reopen-history" ? renderTaskReopenHistoryPanel(props) : nothing}
+        ${tab === "error-analysis" ? renderErrorAnalysisPanel(props) : nothing}
       </div>
       
       <!-- 底部操作栏 -->
@@ -1058,7 +1142,7 @@ function renderTaskBasicInfo(task: TaskDetail, props: TaskKanbanProps) {
   `;
 }
 
-function renderTaskAssignees(task: TaskDetail, props: TaskKanbanProps) {
+function renderTaskAssignees(task: TaskDetail, _props: TaskKanbanProps) {
   return html`
     <div class="card" style="padding: 16px; margin-bottom: 16px;">
       <div style="font-weight: 600; margin-bottom: 12px;">👥 执行者</div>
@@ -1075,7 +1159,7 @@ function renderTaskAssignees(task: TaskDetail, props: TaskKanbanProps) {
   `;
 }
 
-function renderTaskDescription(task: TaskDetail, props: TaskKanbanProps) {
+function renderTaskDescription(task: TaskDetail, _props: TaskKanbanProps) {
   return html`
     <div class="card" style="padding: 16px; margin-bottom: 16px;">
       <div style="font-weight: 600; margin-bottom: 12px;">📄 任务描述</div>
@@ -1381,4 +1465,436 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) {return `${bytes} B`;}
   if (bytes < 1024 * 1024) {return `${(bytes / 1024).toFixed(1)} KB`;}
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ============================================================================
+// 修正任务面板
+// ============================================================================
+
+function renderTaskCorrectionsPanel(props: TaskKanbanProps) {
+  if (!props.selectedTask) {return nothing;}
+  
+  const task = props.selectedTask;
+  const hasCorrections = task.correctionTasks && task.correctionTasks.length > 0;
+  const isCorrection = task.correctionOf;
+  
+  return html`
+    <!-- 如果此任务是修正任务，显示原任务信息 -->
+    ${isCorrection ? html`
+      <div class="card" style="padding: 16px; margin-bottom: 16px; border-left: 4px solid #ff9800;">
+        <div style="font-weight: 600; margin-bottom: 12px;">🔧 修正任务信息</div>
+        <div style="font-size: 0.9rem; line-height: 1.6;">
+          <div style="margin-bottom: 8px;">
+            <span style="color: var(--text-muted);">原任务：</span>
+            <span style="font-weight: 500;">${props.correctionOfData?.title || task.correctionOf}</span>
+          </div>
+          <div style="margin-bottom: 8px;">
+            <span style="color: var(--text-muted);">原任务状态：</span>
+            <span class="badge" style="background: #e3f2fd; color: #1565c0;">${props.correctionOfData?.status || "未知"}</span>
+          </div>
+          <div style="padding: 8px; background: #fff3e0; border-radius: 4px; font-size: 0.85rem;">
+            💡 此任务是为修正原任务问题而创建的
+          </div>
+        </div>
+      </div>
+    ` : nothing}
+    
+    <!-- 如果此任务有修正任务，显示修正任务列表 -->
+    <div class="card" style="padding: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="font-weight: 600;">🔧 修正任务 (${props.correctionTasksData?.length || task.correctionTasks?.length || 0})</div>
+        <button
+          class="btn btn--sm btn--primary"
+          @click=${() => {/* TODO: 调用创建修正任务对话框 */}}
+        >
+          ➕ 创建修正任务
+        </button>
+      </div>
+      
+      ${!hasCorrections ? html`
+        <div style="padding: 24px; text-align: center; color: var(--text-muted);">
+          <div style="font-size: 2rem; margin-bottom: 8px;">🔧</div>
+          <div>暂无修正任务</div>
+          <div style="font-size: 0.85rem; margin-top: 4px;">如果发现此任务有问题，可以创建修正任务</div>
+        </div>
+      ` : html`
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          ${(props.correctionTasksData || []).map((corr) => html`
+            <div
+              style="
+                padding: 12px;
+                border-radius: 6px;
+                border: 1px solid var(--border);
+                background: var(--bg-secondary);
+                cursor: pointer;
+                transition: all 0.2s;
+              "
+              @click=${() => {/* TODO: 点击跳转到修正任务详情 */}}
+            >
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                <div style="font-weight: 500; flex: 1;">${corr.title}</div>
+                <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                  <span class="badge" style="background: ${getPriorityColor(corr.priority)}20; color: ${getPriorityColor(corr.priority)};">
+                    ${getPriorityLabel(corr.priority)}
+                  </span>
+                  <span class="badge" style="background: ${getStatusColor(corr.status)}20; color: ${getStatusColor(corr.status)};">
+                    ${getStatusLabel(corr.status)}
+                  </span>
+                </div>
+              </div>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">
+                ID: ${corr.id}
+              </div>
+            </div>
+          `)}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ============================================================================
+// 重新打开历史面板
+// ============================================================================
+
+function renderTaskReopenHistoryPanel(props: TaskKanbanProps) {
+  if (!props.selectedTask) {return nothing;}
+  
+  const task = props.selectedTask;
+  const reopenHistory = task.reopenHistory || [];
+  const reopenCount = task.reopenCount || reopenHistory.length;
+  
+  return html`
+    <div class="card" style="padding: 16px;">
+      <div style="font-weight: 600; margin-bottom: 12px;">
+        🔁 重新打开历史
+        <span class="badge" style="margin-left: 8px; background: #e3f2fd; color: #1565c0;">
+          ${reopenCount} 次
+        </span>
+      </div>
+      
+      ${reopenHistory.length === 0 ? html`
+        <div style="padding: 24px; text-align: center; color: var(--text-muted);">
+          <div style="font-size: 2rem; margin-bottom: 8px;">🔁</div>
+          <div>暂无重新打开记录</div>
+          <div style="font-size: 0.85rem; margin-top: 4px;">此任务从未被重新打开过</div>
+        </div>
+      ` : html`
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          ${reopenHistory.map((record, _index) => html`
+            <div
+              style="
+                padding: 12px;
+                border-radius: 6px;
+                border-left: 4px solid #ff9800;
+                background: var(--bg-secondary);
+              "
+            >
+              <!-- 头部：时间和操作人 -->
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="font-size: 0.85rem; color: var(--text-muted);">
+                  🕒 ${new Date(record.reopenedAt).toLocaleString("zh-CN")}
+                </div>
+                <div style="font-size: 0.85rem; color: var(--text-muted);">
+                  👤 ${record.reopenedBy}
+                </div>
+              </div>
+              
+              <!-- 状态变更 -->
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <span class="badge" style="background: #4caf5020; color: #4caf50;">
+                  ${record.previousStatus}
+                </span>
+                <span style="color: var(--text-muted);">→</span>
+                <span class="badge" style="background: #ff980020; color: #ff9800;">
+                  ${record.newStatus}
+                </span>
+              </div>
+              
+              <!-- 原因 -->
+              <div style="margin-bottom: 8px;">
+                <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px;">📝 原因：</div>
+                <div style="font-size: 0.9rem; line-height: 1.5;">${record.reason}</div>
+              </div>
+              
+              <!-- 关联修正任务 -->
+              ${record.correctionTaskId ? html`
+                <div style="padding: 8px; background: #fff3e0; border-radius: 4px; font-size: 0.85rem;">
+                  🔧 关联修正任务：${record.correctionTaskId}
+                </div>
+              ` : nothing}
+              
+              <!-- 备注 -->
+              ${record.notes ? html`
+                <div style="margin-top: 8px; padding: 8px; background: var(--bg); border-radius: 4px; font-size: 0.85rem;">
+                  💬 ${record.notes}
+                </div>
+              ` : nothing}
+            </div>
+          `)}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// 辅助函数：优先级颜色
+function getPriorityColor(priority: string): string {
+  const colors: Record<string, string> = {
+    urgent: "#f44336",
+    high: "#ff9800",
+    medium: "#ffc107",
+    low: "#4caf50",
+  };
+  return colors[priority] || "#9e9e9e";
+}
+
+// 辅助函数：优先级标签
+function getPriorityLabel(priority: string): string {
+  const labels: Record<string, string> = {
+    urgent: "🔴 紧急",
+    high: "🟠 高",
+    medium: "🟡 中",
+    low: "🟢 低",
+  };
+  return labels[priority] || priority;
+}
+
+// 辅助函数：状态颜色
+function getStatusColor(status: string): string {
+  const colors: Record<string, string> = {
+    "todo": "#9e9e9e",
+    "in-progress": "#2196f3",
+    "review": "#ff9800",
+    "done": "#4caf50",
+    "cancelled": "#f44336",
+    "needs-rework": "#ff5722",
+    "blocked": "#9c27b0",
+  };
+  return colors[status] || "#9e9e9e";
+}
+
+// 辅助函数：状态标签
+function getStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    "todo": "📝 待办",
+    "in-progress": "⚙️ 进行中",
+    "review": "👀 审查中",
+    "done": "✅ 已完成",
+    "cancelled": "❌ 已取消",
+    "needs-rework": "🔁 需返工",
+    "blocked": "⛔ 已阻塞",
+  };
+  return labels[status] || status;
+}
+
+// ============================================================================
+// 错误根源分析面板
+// ============================================================================
+
+function renderErrorAnalysisPanel(props: TaskKanbanProps) {
+  if (!props.selectedTask) {return nothing;}
+  
+  const report = props.errorAnalysisReport;
+  const loading = props.errorAnalysisLoading;
+  
+  return html`
+    <div class="card" style="padding: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div style="font-weight: 600; font-size: 1.1rem;">🔬 错误根源分析</div>
+        <button
+          class="btn btn--sm btn--primary"
+          @click=${() => props.onLoadErrorAnalysis(props.selectedTask!.id)}
+          ?disabled=${loading}
+        >
+          ${loading ? '分析中...' : '🔍 开始分析'}
+        </button>
+      </div>
+      
+      ${loading ? html`
+        <div style="padding: 48px; text-align: center; color: var(--text-muted);">
+          <div class="spinner"></div>
+          <div style="margin-top: 12px;">正在进行根源追溯分析...</div>
+        </div>
+      ` : !report ? html`
+        <div style="padding: 32px; text-align: center; color: var(--text-muted);">
+          <div style="font-size: 3rem; margin-bottom: 12px;">🔬</div>
+          <div style="margin-bottom: 8px;">尚未进行错误根源分析</div>
+          <div style="font-size: 0.85rem;">点击“开始分析”按钮，追溯错误的根源和影响范围</div>
+        </div>
+      ` : html`
+        <!-- 分析结果 -->
+        ${renderErrorAnalysisReport(report)}
+      `}
+    </div>
+  `;
+}
+
+function renderErrorAnalysisReport(report: ErrorRootCauseReport) {
+  return html`
+    <!-- 1. 错误基本信息 -->
+    <div class="card" style="padding: 16px; margin-bottom: 16px; background: #f8f9fa;">
+      <div style="font-weight: 600; margin-bottom: 12px;">📝 错误信息</div>
+      <div style="line-height: 1.8;">
+        <div><strong>错误描述：</strong>${report.errorDescription}</div>
+        <div><strong>发现时间：</strong>${new Date(report.discoveredAt).toLocaleString('zh-CN')}</div>
+        <div><strong>发现者：</strong>${report.discoveredBy}</div>
+      </div>
+    </div>
+    
+    <!-- 2. 根源代码信息 -->
+    ${report.rootCause ? html`
+      <div class="card" style="padding: 16px; margin-bottom: 16px; border-left: 4px solid #ff9800;">
+        <div style="font-weight: 600; margin-bottom: 12px;">🔍 根源代码</div>
+        <div style="line-height: 1.8;">
+          <div><strong>文件：</strong><code>${report.rootCause.file}</code></div>
+          ${report.rootCause.lineStart ? html`<div><strong>行号：</strong>${report.rootCause.lineStart}${report.rootCause.lineEnd ? `-${report.rootCause.lineEnd}` : ''}</div>` : nothing}
+          <div><strong>引入时间：</strong>${new Date(report.rootCause.introducedAt).toLocaleDateString('zh-CN')}</div>
+          <div><strong>代码作者：</strong>${report.rootCause.introducedBy}</div>
+          <div><strong>代码存活：</strong><span style="color: #ff5722; font-weight: 600;">${report.rootCause.codeAge} 天</span></div>
+          ${report.rootCause.commitMessage ? html`<div><strong>Commit：</strong>${report.rootCause.commitMessage}</div>` : nothing}
+          
+          <div style="margin-top: 12px; padding: 12px; background: #263238; color: #aed581; border-radius: 4px; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+            <pre style="margin: 0; white-space: pre-wrap;">${report.rootCause.code}</pre>
+          </div>
+        </div>
+      </div>
+    ` : nothing}
+    
+    <!-- 3. 影响分析 -->
+    <div class="card" style="padding: 16px; margin-bottom: 16px;">
+      <div style="font-weight: 600; margin-bottom: 12px;">⚠️ 影响分析</div>
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 12px;">
+        <div>
+          <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px;">严重程度</div>
+          <span class="badge" style="background: ${getSeverityColor(report.impactAnalysis.severity)}20; color: ${getSeverityColor(report.impactAnalysis.severity)}; font-size: 0.9rem; padding: 4px 12px;">
+            ${getSeverityLabel(report.impactAnalysis.severity)}
+          </span>
+        </div>
+        <div>
+          <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 4px;">预估修复时间</div>
+          <span class="badge" style="background: #e3f2fd; color: #1565c0; font-size: 0.9rem; padding: 4px 12px;">
+            ${getEffortLabel(report.impactAnalysis.estimatedFixEffort)}
+          </span>
+        </div>
+      </div>
+      
+      ${report.impactAnalysis.affectedFiles.length > 0 ? html`
+        <div style="margin-bottom: 8px;">
+          <strong>受影响文件：</strong>
+          <div style="margin-top: 4px;">
+            ${report.impactAnalysis.affectedFiles.map(f => html`<code style="display: inline-block; margin: 2px 4px; padding: 2px 8px; background: #f5f5f5; border-radius: 3px; font-size: 0.85rem;">${f}</code>`)}
+          </div>
+        </div>
+      ` : nothing}
+      
+      ${report.impactAnalysis.affectedTasks.length > 0 ? html`
+        <div>
+          <strong>受影响任务：</strong> ${report.impactAnalysis.affectedTasks.length} 个
+        </div>
+      ` : nothing}
+    </div>
+    
+    <!-- 4. 五问法分析 -->
+    ${report.fiveWhysAnalysis ? html`
+      <div class="card" style="padding: 16px; margin-bottom: 16px; border-left: 4px solid #4caf50;">
+        <div style="font-weight: 600; margin-bottom: 12px;">❓ 五问法分析</div>
+        <div style="line-height: 2;">
+          <div style="padding: 8px; background: #f5f5f5; border-radius: 4px; margin-bottom: 8px;">
+            <strong>Why 1（表面原因）：</strong>${report.fiveWhysAnalysis.why1}
+          </div>
+          ${report.fiveWhysAnalysis.why2 ? html`<div style="padding: 8px; background: #f5f5f5; border-radius: 4px; margin-bottom: 8px;"><strong>Why 2：</strong>${report.fiveWhysAnalysis.why2}</div>` : nothing}
+          ${report.fiveWhysAnalysis.why3 ? html`<div style="padding: 8px; background: #f5f5f5; border-radius: 4px; margin-bottom: 8px;"><strong>Why 3：</strong>${report.fiveWhysAnalysis.why3}</div>` : nothing}
+          ${report.fiveWhysAnalysis.why4 ? html`<div style="padding: 8px; background: #f5f5f5; border-radius: 4px; margin-bottom: 8px;"><strong>Why 4：</strong>${report.fiveWhysAnalysis.why4}</div>` : nothing}
+          ${report.fiveWhysAnalysis.why5 ? html`<div style="padding: 8px; background: #f5f5f5; border-radius: 4px; margin-bottom: 8px;"><strong>Why 5（根本原因）：</strong>${report.fiveWhysAnalysis.why5}</div>` : nothing}
+          
+          <div style="margin-top: 12px; padding: 12px; background: #e8f5e9; border-radius: 4px; border-left: 3px solid #4caf50;">
+            <strong>📋 根源总结：</strong>${report.fiveWhysAnalysis.rootCauseSummary}
+          </div>
+        </div>
+      </div>
+    ` : nothing}
+    
+    <!-- 5. 修复建议 -->
+    <div class="card" style="padding: 16px; margin-bottom: 16px;">
+      <div style="font-weight: 600; margin-bottom: 12px;">💡 修复建议</div>
+      
+      <div style="margin-bottom: 12px;">
+        <div style="font-weight: 500; margin-bottom: 8px; color: #f44336;">🚨 立即修复：</div>
+        <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
+          ${report.recommendations.immediate.map(r => html`<li>${r}</li>`)}
+        </ul>
+      </div>
+      
+      <div style="margin-bottom: 12px;">
+        <div style="font-weight: 500; margin-bottom: 8px; color: #ff9800;">🛡️ 预防措施：</div>
+        <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
+          ${report.recommendations.preventive.map(r => html`<li>${r}</li>`)}
+        </ul>
+      </div>
+      
+      <div>
+        <div style="font-weight: 500; margin-bottom: 8px; color: #2196f3;">📊 流程改进：</div>
+        <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
+          ${report.recommendations.process.map(r => html`<li>${r}</li>`)}
+        </ul>
+      </div>
+    </div>
+    
+    <!-- 6. 预防措施 -->
+    <div class="card" style="padding: 16px;">
+      <div style="font-weight: 600; margin-bottom: 12px;">✅ 预防措施建议</div>
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+        <div style="padding: 12px; background: ${report.preventionMeasures.codeReview ? '#e8f5e9' : '#f5f5f5'}; border-radius: 4px; text-align: center;">
+          <div style="font-size: 1.5rem; margin-bottom: 4px;">${report.preventionMeasures.codeReview ? '✅' : '⚪'}</div>
+          <div style="font-size: 0.85rem;">代码审查</div>
+        </div>
+        <div style="padding: 12px; background: ${report.preventionMeasures.testing ? '#e8f5e9' : '#f5f5f5'}; border-radius: 4px; text-align: center;">
+          <div style="font-size: 1.5rem; margin-bottom: 4px;">${report.preventionMeasures.testing ? '✅' : '⚪'}</div>
+          <div style="font-size: 0.85rem;">增加测试</div>
+        </div>
+        <div style="padding: 12px; background: ${report.preventionMeasures.monitoring ? '#e8f5e9' : '#f5f5f5'}; border-radius: 4px; text-align: center;">
+          <div style="font-size: 1.5rem; margin-bottom: 4px;">${report.preventionMeasures.monitoring ? '✅' : '⚪'}</div>
+          <div style="font-size: 0.85rem;">增加监控</div>
+        </div>
+        <div style="padding: 12px; background: ${report.preventionMeasures.training ? '#e8f5e9' : '#f5f5f5'}; border-radius: 4px; text-align: center;">
+          <div style="font-size: 1.5rem; margin-bottom: 4px;">${report.preventionMeasures.training ? '✅' : '⚪'}</div>
+          <div style="font-size: 0.85rem;">团队培训</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// 辅助函数：严重程度颜色
+function getSeverityColor(severity: string): string {
+  const colors: Record<string, string> = {
+    critical: '#f44336',
+    high: '#ff5722',
+    medium: '#ff9800',
+    low: '#4caf50'
+  };
+  return colors[severity] || '#9e9e9e';
+}
+
+// 辅助函数：严重程度标签
+function getSeverityLabel(severity: string): string {
+  const labels: Record<string, string> = {
+    critical: '🔴 严重',
+    high: '🟠 高',
+    medium: '🟡 中',
+    low: '🟢 低'
+  };
+  return labels[severity] || severity;
+}
+
+// 辅助函数：修复工作量标签
+function getEffortLabel(effort: string): string {
+  const labels: Record<string, string> = {
+    minutes: '⚡ 几分钟',
+    hours: '⏰ 几小时',
+    days: '📅 几天',
+    weeks: '📆 几周'
+  };
+  return labels[effort] || effort;
 }

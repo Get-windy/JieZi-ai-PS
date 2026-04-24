@@ -101,18 +101,25 @@ export type GroupsProps = {
   projectsLoading: boolean;
   projectsError: string | null;
   selectedProjectId: string | null;
-  activeProjectPanel: "list" | "config";
+  activeProjectPanel: "list" | "config" | "spaces";
   creatingProject: boolean;
   editingProject: ProjectInfo | null;
   onProjectsRefresh: () => void;
   onSelectProject: (projectId: string) => void;
-  onSelectProjectPanel: (panel: "list" | "config") => void;
+  onSelectProjectPanel: (panel: "list" | "config" | "spaces") => void;
   onCreateProject: () => void;
   onEditProject: (projectId: string) => void;
   onSaveProject: () => void;
   onCancelProjectEdit: () => void;
   // oxlint-disable-next-line typescript/no-explicit-any
   onProjectFormChange: (field: string, value: any) => void;
+  // 业务空间管理
+  projectSpacesLoading: boolean;
+  projectSpacesList: Array<{ type: string; path: string; description?: string; enabled?: boolean }>;
+  projectSpacesError: string | null;
+  onLoadProjectSpaces: (projectId: string) => void;
+  onSaveProjectSpace: (projectId: string, space: { type: string; path: string; description?: string; enabled?: boolean }) => void;
+  onDeleteProjectSpace: (projectId: string, spaceType: string) => void;
   // 群组升级
   upgradingGroupToProject: boolean;
   onUpgradeGroupToProject: (groupId: string, projectId: string) => void;
@@ -369,7 +376,9 @@ function renderProjectsSection(props: GroupsProps) {
               ${
                 props.activeProjectPanel === "list"
                   ? renderProjectOverview(selectedProject)
-                  : renderProjectConfig(selectedProject)
+                  : props.activeProjectPanel === "config"
+                    ? renderProjectConfig(selectedProject)
+                    : renderProjectSpacesPanel(props, selectedProject)
               }
             `
           : html`
@@ -409,12 +418,13 @@ function renderGroupTabs(
 }
 
 function renderProjectTabs(
-  active: "list" | "config",
-  onSelect: (panel: "list" | "config") => void,
+  active: "list" | "config" | "spaces",
+  onSelect: (panel: "list" | "config" | "spaces") => void,
 ) {
   const tabs = [
     { id: "list" as const, label: "项目概览" },
     { id: "config" as const, label: "路径配置" },
+    { id: "spaces" as const, label: "业务空间" },
   ];
 
   return html`
@@ -674,6 +684,9 @@ function renderGroupMembers(group: GroupInfo, props: GroupsProps) {
 
 // oxlint-disable-next-line no-unused-vars
 function renderGroupSettings(group: GroupInfo, props: GroupsProps) {
+  const isProjectGroup = !!group.projectId;
+  const inheritProjectSpaces = group.metadata?.inheritProjectSpaces !== false; // 默认继承
+
   return html`
     <section class="card" style="margin-top: 16px;">
       <div class="card-title">群组设置</div>
@@ -719,8 +732,67 @@ function renderGroupSettings(group: GroupInfo, props: GroupsProps) {
           </label>
         </div>
 
+        ${isProjectGroup ? html`
+        <!-- 项目群组记忆空间配置 -->
+        <div class="callout info" style="margin-top: 16px;">
+          <strong>🧠 项目记忆空间</strong>
+          <p style="margin: 8px 0 0 0;">
+            此群组已绑定项目 <code>${group.projectId}</code>，群组空间将迁移为项目的记忆空间。
+          </p>
+          <p style="margin: 8px 0 0 0; font-size: 12px;">
+            <strong>记忆空间用途：</strong>团队共享记忆、协作记录、讨论历史、团队约定、决策记录等。
+          </p>
+        </div>
+
+        <div class="form-group" style="margin-top: 16px; margin-bottom: 16px;">
+          <label class="form-label">空间迁移配置</label>
+          
+          <div style="margin-bottom: 12px;">
+            <label class="cfg-toggle">
+              <input 
+                type="checkbox" 
+                .checked=${inheritProjectSpaces}
+                @change=${(e: Event) => {
+                  const checked = (e.target as HTMLInputElement).checked;
+                  // TODO: 调用 RPC groups.spaces.configure
+                  console.log('inheritProjectSpaces:', checked);
+                }}
+              />
+              <span class="cfg-toggle__track"></span>
+              <span style="margin-left: 8px;">迁移群组空间到项目记忆空间</span>
+            </label>
+            <small class="form-text muted" style="display: block; margin-top: 4px;">
+              开启后，群组空间的所有内容会自动迁移到项目的记忆空间，原群组空间将被删除。
+            </small>
+          </div>
+
+          ${!inheritProjectSpaces ? html`
+          <div style="padding: 12px; background: var(--color-bg-tertiary); border-radius: 8px;">
+            <div class="callout warn">
+              <strong>⚠️ 警告</strong>
+              <p style="margin: 8px 0 0 0;">
+                未开启迁移会导致群组空间与项目记忆空间独立存在，可能造成数据分散。
+                建议开启迁移，将所有协作内容统一归口到项目记忆空间。
+              </p>
+            </div>
+          </div>
+          ` : html`
+          <div style="padding: 12px; background: var(--color-bg-secondary); border-radius: 8px;">
+            <div style="font-size: 12px; color: var(--color-text-muted);">
+              ✅ 已开启迁移：群组空间内容将自动迁移到项目记忆空间<br/>
+              记忆空间路径：<code>${group.workspacePath || "(项目空间)/memory"}</code>
+            </div>
+          </div>
+          `}
+        </div>
+        ` : html`
         <div class="callout" style="margin-top: 16px;">
-          提示：群组设置修改功能正在开发中
+          💡 提示：绑定项目后才能配置空间迁移。点击“升级为项目群”可绑定项目。
+        </div>
+        `}
+
+        <div class="callout" style="margin-top: 16px;">
+          提示：更多群组设置功能正在开发中
         </div>
       </div>
     </section>
@@ -926,6 +998,70 @@ function renderProjectConfig(project: ProjectInfo) {
             <li>保存后刷新项目列表即可生效</li>
           </ol>
         </div>
+      </div>
+    </section>
+
+    <!-- 业务空间配置 -->
+    <section class="card" style="margin-top: 16px;">
+      <div class="card-title">业务空间配置</div>
+      <div class="card-sub">管理项目的所有业务空间（代码、文档、销售等）</div>
+      
+      <div class="callout info" style="margin-top: 16px;">
+        <strong>📦 空间架构说明</strong>
+        <p style="margin: 8px 0 0 0;">
+          项目包含两类空间：<br/>
+          <strong>1. 记忆空间（Memory Space）</strong>：每个项目1个，从群组空间转换而来，用于团队协作和共享记忆（聊天历史、讨论记录、团队规范等）<br/>
+          <strong>2. 业务空间（Business Spaces）</strong>：根据项目类型配置多个，用于各种业务场景：<br/>
+          &nbsp;&nbsp;&nbsp;• 开发项目：代码空间、文档空间、测试空间等<br/>
+          &nbsp;&nbsp;&nbsp;• 商贸项目：销售文档空间、合同空间、客户空间等<br/>
+          &nbsp;&nbsp;&nbsp;• 创意项目：设计资源空间、素材空间等
+        </p>
+      </div>
+
+      <!-- 记忆空间配置 -->
+      <div style="margin-top: 20px;">
+        <h3 style="font-size: 16px; margin-bottom: 12px;">🧠 记忆空间配置</h3>
+        <div class="callout" style="margin-bottom: 16px;">
+          <strong>💡 记忆空间说明</strong>
+          <p style="margin: 8px 0 0 0;">
+            记忆空间是项目的协作记忆中心，由群组绑定项目时的群组空间转换而来。<br/>
+            包含团队共享记忆、协作记录、讨论历史、团队约定和决策记录等。
+          </p>
+        </div>
+
+        <!-- TODO: 与后端 RPC 集成 -->
+        <div class="callout" style="margin-bottom: 16px;">
+          <strong>⚠️ 功能开发中</strong>
+          <p style="margin: 8px 0 0 0;">
+            记忆空间配置功能正在开发中，敬请期待！<br/>
+            群组绑定项目后，原群组空间会自动迁移到记忆空间。
+          </p>
+        </div>
+      </div>
+
+      <!-- 业务空间配置 -->
+      <div style="margin-top: 24px;">
+        <h3 style="font-size: 16px; margin-bottom: 12px;">💼 业务空间配置</h3>
+        <div class="callout info" style="margin-bottom: 16px;">
+          <strong>💡 使用说明</strong>
+          <p style="margin: 8px 0 0 0;">
+            业务空间是项目用于各种业务场景的目录，可以添加多个不同类型的空间。<br/>
+            例如：开发项目需要代码空间、文档空间；商贸项目需要销售文档空间、合同空间等。
+          </p>
+        </div>
+
+        <!-- 业务空间列表 -->
+        <div id="business-spaces-list" style="margin-top: 16px;">
+          <!-- 由 JavaScript 动态渲染 -->
+        </div>
+
+        <button 
+          class="btn btn--primary" 
+          style="margin-top: 16px;"
+          onclick="window.addBusinessSpace()"
+        >
+          + 添加业务空间
+        </button>
       </div>
     </section>
   `;
@@ -1221,12 +1357,13 @@ function renderGroupEditModal(props: GroupsProps) {
                   props.onGroupFormChange("projectId", (e.target as HTMLInputElement).value)}
               />
               <small class="form-text muted">
-                留空则为普通群，填写项目 ID 后群组将成为项目群
+                留空则为普通群，填写项目 ID 后群组将成为项目群。绑定后可配置记忆空间
               </small>
             </div>
 
+            ${(group as GroupInfo).projectId ? html`
             <div class="form-group" style="margin-bottom: 12px;">
-              <label class="form-label">项目工作空间路径（可选）</label>
+              <label class="form-label">群组工作空间路径</label>
               <input
                 type="text"
                 class="form-control"
@@ -1236,9 +1373,10 @@ function renderGroupEditModal(props: GroupsProps) {
                   props.onGroupFormChange("workspacePath", (e.target as HTMLInputElement).value)}
               />
               <small class="form-text muted">
-                项目群的共享工作空间路径，留空则自动生成
+                项目群的共享工作空间路径，修改后将同步更新到配置文件
               </small>
             </div>
+            ` : nothing}
             `
                 : nothing
             }
@@ -1254,6 +1392,12 @@ function renderGroupEditModal(props: GroupsProps) {
               ${isNew ? "创建" : "保存"}
             </button>
           </div>
+
+          ${!isNew && (group as GroupInfo).projectId ? html`
+          <div class="callout info" style="margin-top: 16px;">
+            💡 <strong>提示：</strong>工作空间已保存。如需配置记忆空间迁移，请在群组详情的「群组设置」标签页中操作。
+          </div>
+          ` : nothing}
         </div>
       </div>
     </div>
@@ -1286,8 +1430,8 @@ function renderProjectEditModal(props: GroupsProps) {
             <strong>⚠️ 重要提醒:</strong>
             ${
               isNew
-                ? "项目 ID 创建后不可修改，请谨慎填写！其他配置可在创建后调整。"
-                : "项目 ID 不可修改，如需修改请删除后重新创建。"
+                ? "项目 ID 创建后不可修改，请谨慎填写！其他配置可在创建后随时调整。"
+                : "项目 ID 不可修改，但工作空间、业务空间等配置可以随时修改。"
             }
           </div>
 
@@ -1320,7 +1464,7 @@ function renderProjectEditModal(props: GroupsProps) {
               ${
                 !isNew
                   ? html`
-                      <small class="form-text muted">项目名称暂不支持修改</small>
+                      <small class="form-text muted">项目名称创建后不可修改</small>
                     `
                   : nothing
               }
@@ -1339,21 +1483,20 @@ function renderProjectEditModal(props: GroupsProps) {
             </div>
 
             <div class="form-group" style="margin-bottom: 12px;">
-              <label class="form-label">工作空间根目录（可选）</label>
+              <label class="form-label">工作空间根目录</label>
               <input
                 type="text"
                 class="form-control"
                 .value=${project.workspacePath || ""}
                 placeholder="H:\\OpenClaw_Workspace\\groups"
-                ?disabled=${!isNew}
                 @input=${(e: Event) =>
                   props.onProjectFormChange("workspaceRoot", (e.target as HTMLInputElement).value)}
               />
-              <small class="form-text muted">默认为 H:\\OpenClaw_Workspace\\groups，可从配置文件或环境变量读取</small>
+              <small class="form-text muted">项目工作空间根目录，可随时修改</small>
             </div>
 
             <div class="form-group" style="margin-bottom: 12px;">
-              <label class="form-label">代码目录（可选）</label>
+              <label class="form-label">代码目录</label>
               <input
                 type="text"
                 class="form-control"
@@ -1362,7 +1505,7 @@ function renderProjectEditModal(props: GroupsProps) {
                 @input=${(e: Event) =>
                   props.onProjectFormChange("codeDir", (e.target as HTMLInputElement).value)}
               />
-              <small class="form-text muted">默认为 I:\\{projectName}，可自定义到其他位置</small>
+              <small class="form-text muted">项目代码目录，可根据项目类型自定义</small>
             </div>
 
             ${
@@ -1401,8 +1544,8 @@ function renderProjectEditModal(props: GroupsProps) {
               !isNew
                 ? html`
                     <div class="callout info" style="margin-top: 16px">
-                      <strong>💡 更多配置:</strong>
-                      <p style="margin: 8px 0">文档目录、QA 目录等高级配置请在 PROJECT_CONFIG.json 中手动添加</p>
+                      <strong>💡 业务空间配置</strong>
+                      <p style="margin: 8px 0">除了基础配置外，您还可以在项目详情中配置记忆空间和各种业务空间（代码、文档、销售、合同等）</p>
                     </div>
                   `
                 : nothing
@@ -1419,8 +1562,381 @@ function renderProjectEditModal(props: GroupsProps) {
               ${isNew ? "创建" : "保存"}
             </button>
           </div>
+
+          ${!isNew ? html`
+          <div class="callout info" style="margin-top: 16px;">
+            💡 <strong>提示：</strong>基础配置已保存。如需配置记忆空间和业务空间（代码、文档、销售等），请在项目详情的「业务空间配置」区块中操作。
+          </div>
+          ` : nothing}
         </div>
       </div>
     </div>
   `;
 }
+
+/**
+ * 渲染项目业务空间配置面板（完整的增删改查界面）
+ */
+function renderProjectSpacesPanel(props: GroupsProps, project: ProjectInfo) {
+  const spaces = props.projectSpacesList ?? [];
+  const loading = props.projectSpacesLoading;
+  const error = props.projectSpacesError;
+
+  return html`
+    <section class="card" style="margin-top: 16px;">
+      <div class="row" style="justify-content: space-between;">
+        <div>
+          <div class="card-title">💼 业务空间配置</div>
+          <div class="card-sub">管理项目的所有业务空间（代码、文档、销售等）</div>
+        </div>
+        <div class="row" style="gap: 8px;">
+          <button class="btn btn--sm btn--primary" @click=${() => window.addBusinessSpaceForProject(project.projectId)}>
+            + 添加业务空间
+          </button>
+          <button class="btn btn--sm" ?disabled=${loading} @click=${() => props.onLoadProjectSpaces(project.projectId)}>
+            ${loading ? "加载中..." : "🔄 刷新"}
+          </button>
+        </div>
+      </div>
+
+      ${error ? html`<div class="callout danger" style="margin-top: 12px;">${error}</div>` : nothing}
+
+      <div class="callout info" style="margin-top: 16px;">
+        <strong>📦 空间架构说明</strong>
+        <p style="margin: 8px 0 0 0;">
+          项目包含两类空间：<br/>
+          <strong>1. 记忆空间（Memory Space）</strong>：每个项目1个，从群组空间转换而来，用于团队协作和共享记忆（聊天历史、讨论记录、团队规范等）<br/>
+          <strong>2. 业务空间（Business Spaces）</strong>：根据项目类型配置多个，用于各种业务场景：<br/>
+          &nbsp;&nbsp;&nbsp;• 开发项目：代码空间、文档空间、测试空间等<br/>
+          &nbsp;&nbsp;&nbsp;• 商贸项目：销售文档空间、合同空间、客户空间等<br/>
+          &nbsp;&nbsp;&nbsp;• 创意项目：设计资源空间、素材空间等
+        </p>
+      </div>
+
+      <!-- 业务空间列表 -->
+      <div style="margin-top: 24px;">
+        ${loading && spaces.length === 0 ? html`
+          <div style="text-align: center; padding: 40px; color: #666;">
+            <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
+            <div>加载中...</div>
+          </div>
+        ` : spaces.length === 0 ? html`
+          <div style="text-align: center; padding: 40px; color: #666;">
+            <div style="font-size: 48px; margin-bottom: 16px;">📂</div>
+            <div>暂无业务空间</div>
+            <div style="font-size: 12px; margin-top: 8px;">点击「添加业务空间"开始配置</div>
+          </div>
+        ` : html`
+          <div class="spaces-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px; margin-top: 16px;">
+            ${spaces.map((space, index) => html`
+              <div class="space-card" style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; background: #fafafa;">
+                <div class="space-header" style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                  <div style="flex: 1;">
+                    <div class="space-type" style="font-size: 16px; font-weight: 600; color: #1a73e8; margin-bottom: 4px;">
+                      ${getBusinessSpaceIcon(space.type)} ${space.type}
+                    </div>
+                    ${space.description ? html`
+                      <div class="space-desc" style="font-size: 12px; color: #666; margin: 4px 0 0 0;">${space.description}</div>
+                    ` : nothing}
+                  </div>
+                  <div style="display: flex; gap: 4px;">
+                    <button 
+                      class="btn btn--sm" 
+                      @click=${() => window.editBusinessSpaceForProject(project.projectId, index)}
+                      title="编辑"
+                    >
+                      ✏️
+                    </button>
+                    <button 
+                      class="btn btn--sm btn--danger" 
+                      @click=${() => window.deleteBusinessSpaceForProject(project.projectId, space.type)}
+                      title="删除"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+                <div class="space-path" style="font-family: monospace; font-size: 12px; background: #f5f5f5; padding: 8px; border-radius: 4px; word-break: break-all;">
+                  📍 ${space.path}
+                </div>
+                <div class="space-status" style="margin-top: 8px; font-size: 12px;">
+                  ${space.enabled !== false ? html`
+                    <span style="color: #28a745;">✅ 已启用</span>
+                  ` : html`
+                    <span style="color: #dc3545;">⛔ 已禁用</span>
+                  `}
+                </div>
+              </div>
+            `)}
+          </div>
+        `}
+      </div>
+
+      <div class="callout" style="margin-top: 24px;">
+        <strong>💡 使用说明</strong>
+        <ul style="margin: 8px 0 0 20px; font-size: 13px;">
+          <li>业务空间完全自定义，可以是任何类型（code, docs, sales, contracts 等）</li>
+          <li>每个业务空间包含：类型、路径、描述、启用状态</li>
+          <li>Agent 启动时会自动加载所有业务空间，并根据任务类型选择正确的空间</li>
+          <li>可以临时禁用空间而不删除（enabled = false）</li>
+          <li>所有修改会立即保存到后端的 PROJECT_CONFIG.json</li>
+        </ul>
+      </div>
+    </section>
+  `;
+}
+
+// ============================================================
+// 业务空间管理功能（全局函数，供 onclick 调用）
+// ============================================================
+
+/**
+ * 获取业务空间类型的图标
+ */
+function getBusinessSpaceIcon(type: string): string {
+  const icons: Record<string, string> = {
+    code: "💻",
+    docs: "📚",
+    sales: "📈",
+    contracts: "📝",
+    customers: "👥",
+    design: "🎨",
+    assets: "📦",
+    testing: "🧪",
+    requirements: "📋",
+    decisions: "💡",
+    custom: "🔧",
+  };
+  return icons[type] || "🔧";
+}
+
+/**
+ * 当前编辑的业务空间数据（全局状态）
+ */
+(window as any).businessSpacesData = {
+  projectId: null as string | null,
+  spaces: [] as Array<{ type: string; path: string; description?: string; enabled?: boolean }>,
+};
+
+/**
+ * 添加业务空间（为指定项目）
+ */
+(window as any).addBusinessSpaceForProject = function(projectId: string) {
+  const dialog = document.createElement("dialog");
+  dialog.innerHTML = `
+    <div style="padding: 20px; min-width: 450px;">
+      <h3 style="margin: 0 0 16px 0;">添加业务空间</h3>
+      
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; font-weight: 500;">空间类型（自定义）</label>
+        <input 
+          id="space-type" 
+          type="text" 
+          placeholder="例: code, docs, sales, contracts, marketing, finance 等" 
+          style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;"
+        />
+        <small style="color: #666; display: block; margin-top: 4px;">
+          💡 完全自定义，可以是任何字符串，根据您的项目业务类型自由定义
+        </small>
+      </div>
+      
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; font-weight: 500;">空间路径</label>
+        <input 
+          id="space-path" 
+          type="text" 
+          placeholder="例: I:\\my-project\\src 或 H:\\workspace\\sales" 
+          style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;"
+        />
+      </div>
+      
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; font-weight: 500;">描述（可选）</label>
+        <input 
+          id="space-description" 
+          type="text" 
+          placeholder="例: 源代码目录、销售资料、合同文件等" 
+          style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;"
+        />
+      </div>
+      
+      <div style="display: flex; gap: 8px; justify-content: flex-end;">
+        <button id="cancel-btn" class="btn">取消</button>
+        <button id="save-btn" class="btn btn--primary">保存</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(dialog);
+  dialog.showModal();
+  
+  dialog.querySelector("#cancel-btn")!.onclick = () => {
+    dialog.close();
+    dialog.remove();
+  };
+  
+  dialog.querySelector("#save-btn")!.onclick = () => {
+    const type = (dialog.querySelector("#space-type") as HTMLInputElement).value.trim();
+    const path = (dialog.querySelector("#space-path") as HTMLInputElement).value.trim();
+    const description = (dialog.querySelector("#space-description") as HTMLInputElement).value.trim();
+    
+    if (!type) {
+      alert("请输入空间类型");
+      return;
+    }
+    
+    if (!path) {
+      alert("请输入空间路径");
+      return;
+    }
+    
+    // 通过事件通知父组件保存（会调用 RPC）
+    window.dispatchEvent(new CustomEvent("save-business-space", {
+      detail: { projectId, space: { type, path, description: description || undefined, enabled: true } }
+    }));
+    
+    dialog.close();
+    dialog.remove();
+  };
+};
+
+/**
+ * 编辑业务空间（为指定项目）
+ */
+(window as any).editBusinessSpaceForProject = function(projectId: string, index: number) {
+  // 从全局状态获取数据
+  const data = (window as any).businessSpacesData;
+  const space = data.spaces[index];
+  
+  const dialog = document.createElement("dialog");
+  dialog.innerHTML = `
+    <div style="padding: 20px; min-width: 450px;">
+      <h3 style="margin: 0 0 16px 0;">编辑业务空间</h3>
+      
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; font-weight: 500;">空间类型（自定义）</label>
+        <input 
+          id="space-type" 
+          type="text" 
+          value="${space.type}"
+          placeholder="例: code, docs, sales, marketing 等"
+          style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;"
+        />
+      </div>
+      
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; font-weight: 500;">空间路径</label>
+        <input 
+          id="space-path" 
+          type="text" 
+          value="${space.path}"
+          style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;"
+        />
+      </div>
+      
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; font-weight: 500;">描述（可选）</label>
+        <input 
+          id="space-description" 
+          type="text" 
+          value="${space.description || ""}"
+          style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;"
+        />
+      </div>
+      
+      <div style="margin-bottom: 16px;">
+        <label style="display: flex; align-items: center; gap: 8px;">
+          <input 
+            id="space-enabled" 
+            type="checkbox" 
+            ${space.enabled !== false ? "checked" : ""}
+          />
+          <span>启用此空间</span>
+        </label>
+      </div>
+      
+      <div style="display: flex; gap: 8px; justify-content: flex-end;">
+        <button id="cancel-btn" class="btn">取消</button>
+        <button id="save-btn" class="btn btn--primary">保存</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(dialog);
+  dialog.showModal();
+  
+  dialog.querySelector("#cancel-btn")!.onclick = () => {
+    dialog.close();
+    dialog.remove();
+  };
+  
+  dialog.querySelector("#save-btn")!.onclick = () => {
+    const type = (dialog.querySelector("#space-type") as HTMLInputElement).value.trim();
+    const path = (dialog.querySelector("#space-path") as HTMLInputElement).value.trim();
+    const description = (dialog.querySelector("#space-description") as HTMLInputElement).value.trim();
+    const enabled = (dialog.querySelector("#space-enabled") as HTMLInputElement).checked;
+    
+    if (!type) {
+      alert("请输入空间类型");
+      return;
+    }
+    
+    if (!path) {
+      alert("请输入空间路径");
+      return;
+    }
+    
+    // 通过事件通知父组件保存（会调用 RPC）
+    window.dispatchEvent(new CustomEvent("save-business-space", {
+      detail: { projectId, space: { type, path, description: description || undefined, enabled }, index }
+    }));
+    
+    dialog.close();
+    dialog.remove();
+  };
+};
+
+/**
+ * 删除业务空间（为指定项目）
+ */
+(window as any).deleteBusinessSpaceForProject = function(projectId: string, spaceType: string) {
+  if (!confirm(`确定要删除业务空间 "${spaceType}" 吗？`)) {
+    return;
+  }
+  
+  // 通过事件通知父组件删除（会调用 RPC）
+  window.dispatchEvent(new CustomEvent("delete-business-space", {
+    detail: { projectId, spaceType }
+  }));
+};
+
+/**
+ * 旧版兼容函数（保留向后兼容）
+ */
+(window as any).addBusinessSpace = function() {
+  const data = (window as any).businessSpacesData;
+  if (data.projectId) {
+    (window as any).addBusinessSpaceForProject(data.projectId);
+  } else {
+    alert("请先选择一个项目");
+  }
+};
+
+(window as any).editBusinessSpace = function(index: number) {
+  const data = (window as any).businessSpacesData;
+  if (data.projectId) {
+    (window as any).editBusinessSpaceForProject(data.projectId, index);
+  } else {
+    alert("请先选择一个项目");
+  }
+};
+
+(window as any).deleteBusinessSpace = function(index: number) {
+  const data = (window as any).businessSpacesData;
+  const space = data.spaces[index];
+  if (data.projectId && space) {
+    (window as any).deleteBusinessSpaceForProject(data.projectId, space.type);
+  } else {
+    alert("请先选择一个项目");
+  }
+};

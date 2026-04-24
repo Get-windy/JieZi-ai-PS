@@ -33,6 +33,101 @@ import type { Task } from "../tasks/types.js";
 export type ProjectTask = Task;
 
 /**
+ * 项目空间配置（完整架构）
+ * 
+ * 项目包含两类空间：
+ * 1. 记忆空间（Memory Space）：每个项目1个，从群组空间转换而来，用于团队协作和共享记忆
+ * 2. 业务空间（Business Spaces）：根据项目类型配置多个，用于各种业务场景（代码、文档、销售等）
+ */
+export interface ProjectSpacesConfig {
+  /**
+   * 记忆空间（Memory Space）
+   * 
+   * 来源：群组绑定项目后，原群组空间自动转换为记忆空间
+   * 用途：
+   *   - 团队共享记忆（Shared Memory）
+   *   - 协作记录（聊天历史、讨论记录）
+   *   - 群组特有文档（团队约定、规范）
+   *   - 团队决策记录（讨论结果、会议纪要）
+   * 
+   * 特点：
+   *   - 每个项目只有一个记忆空间
+   *   - 由群组空间迁移/转换而来
+   *   - 是项目的协作记忆中心
+   */
+  memorySpace?: MemorySpaceConfig;
+  
+  /**
+   * 业务空间列表（Business Spaces）
+   * 
+   * 根据项目类型不同，配置不同的业务空间：
+   *   - 开发项目：代码空间、文档空间、测试空间等
+   *   - 商贸项目：销售文档空间、合同空间、客户空间等
+   *   - 创意项目：设计资源空间、素材空间等
+   * 
+   * 特点：
+   *   - 可以有多个，根据项目需要灵活配置
+   *   - 在 PROJECT_CONFIG.json 的 businessSpaces 字段中定义
+   *   - 每个业务空间有明确的类型和路径
+   */
+  businessSpaces?: BusinessSpaceConfig[];
+}
+
+/**
+ * 记忆空间配置（Memory Space）
+ * 
+ * 记忆空间是项目的协作记忆中心，来源于群组空间的转换。
+ * 当群组绑定项目时，原群组空间的内容应该迁移到项目的记忆空间中。
+ */
+export interface MemorySpaceConfig {
+  /** 记忆空间路径（绝对路径） */
+  path: string;
+  /** 来源群组 ID */
+  sourceGroupId?: string;
+  /** 迁移时间 */
+  migratedAt?: number;
+  /** 描述 */
+  description?: string;
+  /** 是否启用（默认 true） */
+  enabled?: boolean;
+}
+
+/**
+ * 业务空间类型定义
+ * 
+ * 业务空间类型完全自定义，不限制具体类型。
+ * 项目可以根据实际业务需要定义任何类型的空间。
+ * 
+ * 常见类型示例（仅供参考，不限于这些）：
+ * - 开发项目：code, docs, tests, api, frontend, backend
+ * - 商贸项目：sales, contracts, customers, products, suppliers
+ * - 创意项目：design, assets, media, video, audio
+ * - 管理类：hr, finance, marketing, operations, research
+ * - 完全自定义：任何字符串都可以
+ */
+export type BusinessSpaceType = string;
+
+/**
+ * 业务空间配置
+ * 
+ * 定义一个业务空间的类型、路径和描述。
+ * 项目可以有 0 个或多个业务空间，完全自定义，不强制。
+ */
+export interface BusinessSpaceConfig {
+  /** 
+   * 空间类型（完全自定义，不限制）
+   * 例如：code, docs, sales, contracts, marketing, finance 等任何字符串
+   */
+  type: BusinessSpaceType;
+  /** 空间路径（绝对路径） */
+  path: string;
+  /** 空间描述（可选） */
+  description?: string;
+  /** 是否启用（默认 true） */
+  enabled?: boolean;
+}
+
+/**
  * 项目上下文信息
  */
 export interface ProjectContext {
@@ -198,8 +293,56 @@ export function getProjectStatusMeta(status: string | undefined): ProjectStatusM
  * active    = 进行中（当前正在执行的 Sprint）
  * completed = 已完成（Sprint 结束，数据归档）
  * cancelled = 已取消
+ * 
+ * 状态转换规则（支持回退）：
+ * - planning → active, cancelled
+ * - active → completed, cancelled
+ * - completed → active (回退：发现有误时重新打开)
+ * - cancelled → planning (重新启用)
  */
 export type SprintStatus = "planning" | "active" | "completed" | "cancelled";
+
+/**
+ * Sprint 状态转换验证表（支持回退）
+ * 
+ * 业界最佳实践（Scrum/Linear）：Sprint 应该支持回退，当发现已完成的工作有误时，
+ * 可以重新打开 Sprint 进行修复和纠偏。
+ */
+export const SPRINT_STATUS_TRANSITIONS: Record<SprintStatus, SprintStatus[]> = {
+  planning: ["active", "cancelled"],
+  active: ["completed", "cancelled"],
+  // 支持回退：已完成的 Sprint 可以重新打开进行纠偏修复
+  completed: ["active"],
+  // 支持重新启用：已取消的 Sprint 可以回到 planning 状态重新开始
+  cancelled: ["planning"],
+};
+
+/**
+ * 验证 Sprint 状态转换是否合法
+ * @param from - 当前状态
+ * @param to - 目标状态
+ * @returns null 表示合法，否则返回错误信息
+ */
+export function validateSprintStatusTransition(
+  from: SprintStatus,
+  to: SprintStatus,
+): string | null {
+  if (from === to) {
+    return null; // 相同状态直接放行
+  }
+  const allowed = SPRINT_STATUS_TRANSITIONS[from] ?? [];
+  if (!allowed.includes(to)) {
+    const statusLabels: Record<SprintStatus, string> = {
+      planning: "📝 待规划",
+      active: "▶️ 进行中",
+      completed: "✅ 已完成",
+      cancelled: "❌ 已取消",
+    };
+    return `无效的 Sprint 状态转换：${statusLabels[from] ?? from} → ${statusLabels[to] ?? to}。\n` +
+      `允许的状态：${allowed.map(s => statusLabels[s] ?? s).join("、") || "无"}`;
+  }
+  return null;
+}
 
 /**
  * 项目 Sprint / 阶段（借鉴 Scrum Sprint 概念）
@@ -590,14 +733,57 @@ export interface ProjectConfig {
   name?: string;
   /** 项目描述（可选） */
   description?: string;
-  /** 工作空间路径 */
+  /** 项目工作空间路径（项目级共享工作区，用于文档/决策/记忆） */
   workspacePath: string;
-  /** 代码目录路径 (可选，默认在 workspace/src) */
+  /**
+   * @deprecated 请使用 businessSpaces 代替
+   * 代码目录路径 (可选，默认在 workspace/src)
+   */
   codeDir?: string;
-  /** 文档目录路径 (可选，默认在 workspace/docs) */
+  /**
+   * @deprecated 请使用 businessSpaces 代替
+   * 文档目录路径 (可选，默认在 workspace/docs)
+   */
   docsDir?: string;
-  /** 需求目录路径 (可选，默认在 workspace/requirements) */
+  /**
+   * @deprecated 请使用 businessSpaces 代替
+   * 需求目录路径 (可选，默认在 workspace/requirements)
+   */
   requirementsDir?: string;
+  /**
+   * 业务空间列表（推荐）
+   * 
+   * 统一管理项目的所有业务空间，包括代码、文档、销售、合同等。
+   * 如果使用了此字段，将优先于 codeDir/docsDir 等旧字段。
+   * 
+   * @example
+   * ```typescript
+   * businessSpaces: [
+   *   { type: "code", path: "I:\\wo-shi-renlei", description: "源代码目录" },
+   *   { type: "docs", path: "H:\\OpenClaw_Workspace\\groups\\wo-shi-renlei\\docs", description: "项目文档" },
+   *   { type: "sales", path: "I:\\wo-shi-renlei\\sales", description: "销售文档" }
+   * ]
+   * ```
+   */
+  businessSpaces?: BusinessSpaceConfig[];
+  
+  /**
+   * 记忆空间配置（Memory Space）
+   * 
+   * 记忆空间是项目的协作记忆中心，由群组绑定项目时的群组空间转换而来。
+   * 每个项目只有一个记忆空间，用于团队协作和共享记忆。
+   * 
+   * @example
+   * ```typescript
+   * memorySpace: {
+   *   path: "H:\\OpenClaw_Workspace\\groups\\wo-shi-renlei\\memory",
+   *   sourceGroupId: "group-abc123",
+   *   migratedAt: 1713888000000,
+   *   description: "来自群组 group-abc123 的协作空间"
+   * }
+   * ```
+   */
+  memorySpace?: MemorySpaceConfig;
   // ===== 进度管理字段 =====
   /** 项目状态 */
   status?: ProjectStatus;
@@ -774,6 +960,15 @@ const DEFAULT_WORKSPACE_ROOT =
   path.join(os.homedir(), ".openclaw", "groups");
 
 /**
+ * 默认的项目空间根目录（用于自定义项目路径）
+ * 
+ * 优先级:
+ * 1. 环境变量 OPENCLAW_PROJECTS_ROOT
+ * 2. 空（使用群组工作空间或项目配置中指定的路径）
+ */
+const DEFAULT_PROJECTS_ROOT = process.env.OPENCLAW_PROJECTS_ROOT || "";
+
+/**
  * 获取工作组根目录
  *
  * @param configRoot - 配置文件中指定的根目录 (可选)
@@ -792,6 +987,18 @@ export function getGroupsWorkspaceRoot(configRoot?: string): string {
 
   // 3. 返回默认值
   return DEFAULT_WORKSPACE_ROOT;
+}
+
+/**
+ * 获取项目空间根目录
+ * 
+ * 用于自定义项目的工作空间、代码空间、销售空间等业务空间的根目录。
+ * 当创建新业务空间时，可以基于此根目录生成路径。
+ *
+ * @returns 项目空间根目录路径，如果未配置返回空字符串
+ */
+export function getProjectsWorkspaceRoot(): string {
+  return DEFAULT_PROJECTS_ROOT;
 }
 
 /**
@@ -839,12 +1046,48 @@ export function buildProjectContext(projectId: string, workspaceRoot?: string): 
   const root = getGroupsWorkspaceRoot(workspaceRoot);
   const workspacePath = resolveProjectWorkspace(projectId, root);
 
-  // 尝试读取项目配置
+  // 尝试读取项目配置（PROJECT_CONFIG.json）
   const config = readProjectConfig(workspacePath);
 
-  // 使用配置中的路径，或使用默认值
-  const codeDir = config?.codeDir || path.join(workspacePath, "src");
-  const docsDir = config?.docsDir || path.join(workspacePath, "docs");
+  // 优先使用 PROJECT_CONFIG.json 中的配置，如果没有则尝试从 groups.json 读取
+  let codeDir = config?.codeDir;
+  let docsDir = config?.docsDir;
+
+  // 如果配置了 businessSpaces，优先使用新字段
+  if (config?.businessSpaces?.length > 0) {
+    const codeSpace = config.businessSpaces.find(
+      (s) => s.type === "code" && s.enabled !== false,
+    );
+    const docsSpace = config.businessSpaces.find(
+      (s) => s.type === "docs" && s.enabled !== false,
+    );
+    
+    if (codeSpace?.path) {
+      codeDir = codeSpace.path;
+    }
+    if (docsSpace?.path) {
+      docsDir = docsSpace.path;
+    }
+  }
+
+  // 如果 PROJECT_CONFIG.json 不存在或不包含 codeDir，从 groups.json 的 metadata 中读取
+  if (!codeDir || !docsDir) {
+    try {
+      const groupMetadata = readGroupMetadata(projectId);
+      if (!codeDir && groupMetadata?.codeDir) {
+        codeDir = groupMetadata.codeDir;
+      }
+      if (!docsDir && groupMetadata?.docsDir) {
+        docsDir = groupMetadata.docsDir;
+      }
+    } catch {
+      // groups.json 读取失败不影响后续逻辑
+    }
+  }
+
+  // 最终 fallback 到默认值
+  codeDir = codeDir || path.join(workspacePath, "src");
+  docsDir = docsDir || path.join(workspacePath, "docs");
 
   return {
     projectId,
@@ -859,7 +1102,7 @@ export function buildProjectContext(projectId: string, workspaceRoot?: string): 
 }
 
 /**
- * 读取项目配置文件
+ * 读取项目配置文件（PROJECT_CONFIG.json）
  *
  * @param workspacePath - 项目工作空间路径
  * @returns 项目配置对象，如果不存在返回 null
@@ -911,6 +1154,179 @@ export function readProjectConfig(workspacePath: string): ProjectConfig | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * 从 groups.json 读取项目的 metadata 配置
+ *
+ * 用于获取在 groups.json 中定义的 codeDir、docsDir 等项目路径配置。
+ * 当 PROJECT_CONFIG.json 不存在时，此函数提供 fallback 机制。
+ *
+ * @param projectId - 项目 ID（如 "wo-shi-renlei"）
+ * @returns 项目 metadata 配置（包含 codeDir、docsDir 等），如果不存在返回 null
+ *
+ * @example
+ * ```typescript
+ * const metadata = readGroupMetadata("wo-shi-renlei");
+ * console.log(metadata?.codeDir); // "I:\\wo-shi-renlei"
+ * ```
+ */
+export function readGroupMetadata(projectId: string): { codeDir?: string; docsDir?: string } | null {
+  try {
+    // groups.json 位于 workspace root 的父目录下的 groups/ 子目录中
+    // 例如：workspaceRoot = "H:\OpenClaw_Workspace\groups"
+    //      groups.json = "H:\OpenClaw_Workspace\groups\groups.json"
+    const workspaceRoot = getGroupsWorkspaceRoot();
+    const groupsFilePath = path.join(workspaceRoot, "groups.json");
+
+    if (!fs.existsSync(groupsFilePath)) {
+      return null;
+    }
+
+    const content = fs.readFileSync(groupsFilePath, "utf-8");
+    const groupsData = JSON.parse(content) as { groups?: Array<Record<string, any>> };
+
+    if (!groupsData.groups || !Array.isArray(groupsData.groups)) {
+      return null;
+    }
+
+    // 查找匹配项目 ID 的群组
+    const group = groupsData.groups.find(
+      (g) => g.projectId === projectId && g.metadata,
+    );
+
+    if (!group || !group.metadata) {
+      return null;
+    }
+
+    return {
+      codeDir: group.metadata.codeDir,
+      docsDir: group.metadata.docsDir,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 解析项目的所有业务空间（新架构）
+ * 
+ * 优先使用 businessSpaces 字段，如果不存在则向后兼容到旧字段。
+ * 
+ * @param projectId - 项目 ID
+ * @param workspaceRoot - 工作组根目录（可选）
+ * @returns 业务空间配置列表，如果无配置返回空数组
+ * 
+ * @example
+ * ```typescript
+ * const spaces = resolveBusinessSpaces("wo-shi-renlei");
+ * // [
+ * //   { type: "code", path: "I:\\wo-shi-renlei", enabled: true },
+ * //   { type: "docs", path: "H:\\...\\docs", enabled: true }
+ * // ]
+ * ```
+ */
+export function resolveBusinessSpaces(
+  projectId: string,
+  workspaceRoot?: string,
+): BusinessSpaceConfig[] {
+  const root = getGroupsWorkspaceRoot(workspaceRoot);
+  const workspacePath = resolveProjectWorkspace(projectId, root);
+  const config = readProjectConfig(workspacePath);
+
+  // 优先使用 businessSpaces 字段
+  if (config?.businessSpaces?.length > 0) {
+    return config.businessSpaces.map((space) => ({
+      ...space,
+      enabled: space.enabled !== false, // 默认启用
+    }));
+  }
+
+  // 向后兼容：从旧字段构建
+  const spaces: BusinessSpaceConfig[] = [];
+  
+  if (config?.codeDir) {
+    spaces.push({
+      type: "code",
+      path: config.codeDir,
+      description: "代码空间（向后兼容）",
+    });
+  }
+  
+  if (config?.docsDir) {
+    spaces.push({
+      type: "docs",
+      path: config.docsDir,
+      description: "文档空间（向后兼容）",
+    });
+  }
+  
+  if (config?.requirementsDir) {
+    spaces.push({
+      type: "requirements",
+      path: config.requirementsDir,
+      description: "需求空间（向后兼容）",
+    });
+  }
+
+  // 如果旧字段也没有，尝试从 groups.json 读取
+  if (spaces.length === 0) {
+    try {
+      const metadata = readGroupMetadata(projectId);
+      if (metadata?.codeDir) {
+        spaces.push({
+          type: "code",
+          path: metadata.codeDir,
+          description: "代码空间（从群组配置继承）",
+        });
+      }
+    } catch {
+      // 忽略错误
+    }
+  }
+
+  return spaces;
+}
+
+/**
+ * 解析项目的记忆空间配置
+ * 
+ * 记忆空间是项目的协作记忆中心，由群组绑定项目时的群组空间转换而来。
+ * 
+ * @param projectId - 项目 ID
+ * @param workspaceRoot - 工作组根目录（可选）
+ * @returns 记忆空间配置对象，如果无配置返回 null
+ * 
+ * @example
+ * ```typescript
+ * const memorySpace = resolveMemorySpace("wo-shi-renlei");
+ * // { path: "H:\\OpenClaw_Workspace\\groups\\wo-shi-renlei\\memory", enabled: true }
+ * ```
+ */
+export function resolveMemorySpace(
+  projectId: string,
+  workspaceRoot?: string,
+): MemorySpaceConfig | null {
+  const root = getGroupsWorkspaceRoot(workspaceRoot);
+  const workspacePath = resolveProjectWorkspace(projectId, root);
+  const config = readProjectConfig(workspacePath);
+
+  // 从配置中读取记忆空间
+  if (config?.memorySpace) {
+    return {
+      ...config.memorySpace,
+      enabled: config.memorySpace.enabled !== false,
+    };
+  }
+
+  // 如果没有配置，返回默认的记忆空间路径
+  const defaultMemoryPath = path.join(workspacePath, "memory");
+  
+  return {
+    path: defaultMemoryPath,
+    description: "项目共享记忆空间（默认）",
+    enabled: true,
+  };
 }
 
 /**

@@ -2183,6 +2183,22 @@ export const projectsHandlers: GatewayRequestHandlers = {
           : {}),
       };
 
+      // 状态转换验证（如果是更新操作）
+      if (existingIdx >= 0 && params?.status) {
+        const { validateSprintStatusTransition } = await import("../../utils/project-context.js");
+        const currentStatus = existing.sprints[existingIdx].status ?? "planning";
+        const targetStatus = String(params.status) as import("../../utils/project-context.js").SprintStatus;
+        const validationError = validateSprintStatusTransition(currentStatus, targetStatus);
+        if (validationError) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.INVALID_REQUEST, validationError),
+          );
+          return;
+        }
+      }
+
       // 将 objectiveId / milestoneId 存入配置的扩展字段
       // （ProjectSprint 无这两个字段，通过 JSON 宽松存储）
       const sprintWithMeta = sprint as Record<string, unknown>;
@@ -3426,6 +3442,234 @@ export const projectsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(ErrorCodes.UNAVAILABLE, "Failed to check health update due: " + String(error)),
+      );
+    }
+  },
+
+  // ============================================================================
+  // 业务空间管理 RPC 接口
+  // ============================================================================
+
+  /**
+   * 列出项目的所有业务空间
+   */
+  "projects.spaces.list": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
+        return;
+      }
+
+      const { resolveBusinessSpaces } = await import("../../utils/project-context.js");
+      const spaces = resolveBusinessSpaces(projectId);
+
+      respond(true, { projectId, spaces, total: spaces.length }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to list spaces: " + String(error)),
+      );
+    }
+  },
+
+  /**
+   * 添加或更新业务空间
+   */
+  "projects.spaces.upsert": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
+        return;
+      }
+
+      const space = params?.space;
+      if (!space || typeof space !== "object") {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "space config is required"));
+        return;
+      }
+
+      const spaceConfig = space as {
+        type?: string;
+        path?: string;
+        description?: string;
+        enabled?: boolean;
+      };
+
+      if (!spaceConfig.type || !spaceConfig.path) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "space type and path are required"),
+        );
+        return;
+      }
+
+      // 读取现有配置
+      const fs = await import("fs");
+      const path = await import("path");
+      const {
+        getGroupsWorkspaceRoot,
+        readProjectConfig,
+        buildProjectContext,
+      } = await import("../../utils/project-context.js");
+
+      const root = getGroupsWorkspaceRoot();
+      const workspacePath = path.join(root, projectId);
+      const configPath = path.join(workspacePath, "PROJECT_CONFIG.json");
+
+      // 读取或初始化配置
+      let config = readProjectConfig(workspacePath);
+      if (!config) {
+        config = {
+          projectId,
+          workspacePath,
+          businessSpaces: [],
+        };
+      }
+
+      // 初始化 businessSpaces 数组
+      if (!config.businessSpaces) {
+        config.businessSpaces = [];
+      }
+
+      // 查找并更新或添加
+      const existingIdx = config.businessSpaces.findIndex((s) => s.type === spaceConfig.type);
+      const newSpace = {
+        type: spaceConfig.type,
+        path: spaceConfig.path,
+        description: spaceConfig.description,
+        enabled: spaceConfig.enabled !== false,
+      };
+
+      if (existingIdx >= 0) {
+        config.businessSpaces[existingIdx] = newSpace;
+      } else {
+        config.businessSpaces.push(newSpace);
+      }
+
+      // 保存配置
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+      respond(true, { projectId, space: newSpace, action: existingIdx >= 0 ? "updated" : "created" }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to upsert space: " + String(error)),
+      );
+    }
+  },
+
+  /**
+   * 删除业务空间
+   */
+  "projects.spaces.remove": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      const spaceType = params?.spaceType ? String(params.spaceType) : "";
+
+      if (!projectId || !spaceType) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "projectId and spaceType are required"),
+        );
+        return;
+      }
+
+      const fs = await import("fs");
+      const path = await import("path");
+      const {
+        getGroupsWorkspaceRoot,
+        readProjectConfig,
+      } = await import("../../utils/project-context.js");
+
+      const root = getGroupsWorkspaceRoot();
+      const workspacePath = path.join(root, projectId);
+      const configPath = path.join(workspacePath, "PROJECT_CONFIG.json");
+
+      const config = readProjectConfig(workspacePath);
+      if (!config || !config.businessSpaces) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "No spaces found"));
+        return;
+      }
+
+      const beforeLength = config.businessSpaces.length;
+      config.businessSpaces = config.businessSpaces.filter((s) => s.type !== spaceType);
+
+      if (config.businessSpaces.length === beforeLength) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `Space type "${spaceType}" not found`),
+        );
+        return;
+      }
+
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+      respond(true, { projectId, spaceType, action: "deleted" }, undefined);
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to remove space: " + String(error)),
+      );
+    }
+  },
+
+  /**
+   * 获取项目空间配置（完整配置对象）
+   */
+  "projects.spaces.getConfig": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      if (!projectId) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
+        return;
+      }
+
+      const {
+        getGroupsWorkspaceRoot,
+        readProjectConfig,
+        resolveBusinessSpaces,
+        getProjectsWorkspaceRoot,
+        resolveMemorySpace,
+      } = await import("../../utils/project-context.js");
+
+      const root = getGroupsWorkspaceRoot();
+      const workspacePath = require("path").join(root, projectId);
+      const config = readProjectConfig(workspacePath);
+      const spaces = resolveBusinessSpaces(projectId);
+      const memorySpace = resolveMemorySpace(projectId);
+      const projectsRoot = getProjectsWorkspaceRoot();
+
+      respond(
+        true,
+        {
+          projectId,
+          workspacePath,
+          memorySpace, // 记忆空间
+          businessSpaces: spaces, // 业务空间
+          projectsRoot: projectsRoot || undefined,
+          config: config
+            ? {
+                name: config.name,
+                description: config.description,
+                status: config.status,
+              }
+            : undefined,
+        },
+        undefined,
+      );
+    } catch (error) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, "Failed to get config: " + String(error)),
       );
     }
   },

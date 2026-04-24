@@ -250,6 +250,33 @@ export interface TaskProgressNote {
 }
 
 /**
+ * 任务重新打开记录（用于追溯和审计）
+ * 
+ * 当任务从 done/cancelled 状态重新打开为 in-progress/review 时，创建此记录。
+ * 完整的追溯链使得质量反馈循环可审计、可分析。
+ */
+export interface TaskReopenRecord {
+  /** 唯一 ID */
+  id: string;
+  /** 重新打开的原因（必填） */
+  reason: string;
+  /** 重新打开前的状态 */
+  previousStatus: TaskStatus;
+  /** 重新打开后的状态 */
+  newStatus: TaskStatus;
+  /** 操作人 ID */
+  reopenedBy: string;
+  /** 操作人类型 */
+  reopenedByType: MemberType;
+  /** 重新打开时间 */
+  reopenedAt: number;
+  /** 关联的修正任务 ID（如果是因发现问题而重新打开） */
+  correctionTaskId?: string;
+  /** 备注（可选，详细说明问题） */
+  notes?: string;
+}
+
+/**
  * 任务（完整定义）
  */
 export interface Task {
@@ -358,6 +385,45 @@ export interface Task {
   completedAt?: number; // 完成时间
   cancelledAt?: number; // 取消时间
   cancelReason?: string; // 取消原因
+  
+  /**
+   * 任务重新打开历史（用于追溯和审计）
+   * 
+   * 记录任务从 done/cancelled 状态重新打开为 in-progress/review 的历史。
+   * 每条记录包含重新打开的原因、时间和操作人。
+   * 
+   * 用途：
+   * - 追溯任务修正历史（为什么重新打开？）
+   * - 质量分析（哪些任务经常被重新打开？）
+   * - Sprint 回顾（自动生成改进建议）
+   */
+  reopenHistory?: TaskReopenRecord[];
+  
+  /**
+   * 修正任务关联（指向发现此任务问题后创建的修正任务）
+   * 
+   * 当完成此任务后，后续发现有问题时，会创建修正任务（type="bugfix" 或 "rework"）
+   * 并在此字段中记录关联关系。
+   * 
+   * 示例：
+   * - 任务 A 完成 → 测试发现 Bug → 创建修正任务 B → B.correctionOf = A.id
+   * - 在 A.correctionTasks 中添加 B.id，形成关联链
+   */
+  correctionTasks?: string[]; // 修正任务 ID 列表
+  
+  /**
+   * 此任务是修正哪个任务的（如果是修正任务）
+   * 
+   * 当此任务是修正任务时，指向被发现问题的原任务。
+   * 与 Task.correctionTasks 形成双向关联。
+   */
+  correctionOf?: string; // 被修正的任务 ID
+  
+  /**
+   * 重新打开次数（统计用）
+   */
+  reopenCount?: number;
+  
   metadata?: Record<string, unknown>; // 扩展元数据（如 supervisorId、assignedVia 等）
 
   /**
