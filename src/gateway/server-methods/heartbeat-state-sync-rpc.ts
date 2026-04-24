@@ -14,6 +14,7 @@ import {
   shouldInjectProgressReport,
   buildMasterContext,
   DEFAULT_CONTEXT_CONFIG,
+  type HeartbeatStateSummary,
 } from "../../tasks/heartbeat-state-compressor.js";
 import * as storage from "../../tasks/storage.js";
 
@@ -26,15 +27,15 @@ export const heartbeatStateSyncHandlers: GatewayRequestHandlers = {
    */
   "heartbeat.generate_state_summary": async ({ params, respond }) => {
     try {
-      const taskId = params?.taskId ? String(params.taskId) : "";
-      const recentChecksCount = params?.recentChecksCount ? Number(params.recentChecksCount) : 10;
+      const taskId = typeof params?.taskId === "string" ? params.taskId : (params?.taskId as string) ?? "";
+      const recentChecksCount = typeof params?.recentChecksCount === "number" ? params.recentChecksCount : 10;
       
       if (!taskId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId 是必填参数"));
         return;
       }
       
-      const task = await storage.loadOne(taskId);
+      const task = await storage.getTask(taskId);
       if (!task) {
         respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `任务 ${taskId} 不存在`));
         return;
@@ -42,15 +43,15 @@ export const heartbeatStateSyncHandlers: GatewayRequestHandlers = {
       
       const checkHistory = (task.meta?.heartbeatChecks || [])
         .slice(-recentChecksCount)
-        .map((check: any) => ({
-          timestamp: check.timestamp || 0,
-          status: check.status || "passed",
-          findings: check.findings || [],
-          healthScore: check.healthScore ?? 100,
+        .map((check: Record<string, unknown>) => ({
+          timestamp: (check.timestamp as number) || 0,
+          status: (check.status as string) || "passed",
+          findings: (check.findings as unknown[]) || [],
+          healthScore: (check.healthScore as number) ?? 100,
         }));
       
       const pendingDecisions = (task.meta?.pendingDecisions || [])
-        .filter((d: any) => d.status !== "resolved")
+        .filter((d: Record<string, unknown>) => (d.status as string) !== "resolved")
         .slice(0, 5);
       
       const summary = generateHeartbeatSummary(
@@ -78,37 +79,37 @@ export const heartbeatStateSyncHandlers: GatewayRequestHandlers = {
    */
   "heartbeat.generate_progress_report": async ({ params, respond }) => {
     try {
-      const taskId = params?.taskId ? String(params.taskId) : "";
-      const periodMinutes = params?.periodMinutes ? Number(params.periodMinutes) : 60;
+      const taskId = typeof params?.taskId === "string" ? params.taskId : (params?.taskId as string) ?? "";
+      const periodMinutes = typeof params?.periodMinutes === "number" ? params.periodMinutes : 60;
       
       if (!taskId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId 是必填参数"));
         return;
       }
       
-      const task = await storage.loadOne(taskId);
+      const task = await storage.getTask(taskId);
       if (!task) {
         respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `任务 ${taskId} 不存在`));
         return;
       }
       
       const checkHistory = (task.meta?.heartbeatChecks || [])
-        .map((check: any) => ({
-          id: check.id || `check-${check.timestamp}`,
-          timestamp: check.timestamp || 0,
-          checkType: check.checkType || "default",
-          status: check.status || "passed",
-          findings: check.findings || [],
-          healthScore: check.healthScore ?? 100,
+        .map((check: Record<string, unknown>) => ({
+          id: (check.id as string) || `check-${check.timestamp}`,
+          timestamp: (check.timestamp as number) || 0,
+          checkType: (check.checkType as string) || "default",
+          status: (check.status as string) || "passed",
+          findings: (check.findings as unknown[]) || [],
+          healthScore: (check.healthScore as number) ?? 100,
         }));
       
       const issuesHandled = (task.meta?.handledIssues || [])
-        .map((issue: any) => ({
-          id: issue.id || `issue-${issue.detectedAt}`,
-          type: issue.type || "unknown",
-          description: issue.description || "",
-          detectedAt: issue.detectedAt || 0,
-          resolution: issue.resolution,
+        .map((issue: Record<string, unknown>) => ({
+          id: (issue.id as string) || `issue-${issue.detectedAt}`,
+          type: (issue.type as string) || "unknown",
+          description: (issue.description as string) || "",
+          detectedAt: (issue.detectedAt as number) || 0,
+          resolution: (issue.resolution as string | undefined) || undefined,
         }));
       
       const report = generateProgressReport(task, checkHistory, issuesHandled, periodMinutes);
@@ -131,35 +132,35 @@ export const heartbeatStateSyncHandlers: GatewayRequestHandlers = {
    */
   "heartbeat.get_full_log": async ({ params, respond }) => {
     try {
-      const taskId = params?.taskId ? String(params.taskId) : "";
-      const maxEntries = params?.maxEntries ? Number(params.maxEntries) : 50;
+      const taskId = typeof params?.taskId === "string" ? params.taskId : (params?.taskId as string) ?? "";
+      const maxEntries = typeof params?.maxEntries === "number" ? params.maxEntries : 50;
       
       if (!taskId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId 是必填参数"));
         return;
       }
       
-      const task = await storage.loadOne(taskId);
+      const task = await storage.getTask(taskId);
       if (!task) {
         respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `任务 ${taskId} 不存在`));
         return;
       }
       
       const checkHistory = (task.meta?.heartbeatChecks || [])
-        .map((check: any) => ({
-          id: check.id || `check-${check.timestamp}`,
-          timestamp: check.timestamp || 0,
-          checkType: check.checkType || "default",
-          status: check.status || "passed",
-          findings: check.findings || [],
-          healthScore: check.healthScore ?? 100,
-          actions: check.actions || [],
+        .map((check: Record<string, unknown>) => ({
+          id: (check.id as string) || `check-${check.timestamp}`,
+          timestamp: (check.timestamp as number) || 0,
+          checkType: (check.checkType as string) || "default",
+          status: (check.status as string) || "passed",
+          findings: (check.findings as unknown[]) || [],
+          healthScore: (check.healthScore as number) ?? 100,
+          actions: (check.actions as string[]) || [],
         }));
       
       const issueResolutionChain = (task.meta?.issueResolutionChain || [])
-        .map((chain: any) => ({
-          issueId: chain.issueId,
-          timeline: chain.timeline || [],
+        .map((chain: Record<string, unknown>) => ({
+          issueId: (chain.issueId as string) || "",
+          timeline: (chain.timeline as unknown[]) || [],
         }));
       
       const fullLog = generateFullLog(task, checkHistory, issueResolutionChain, maxEntries);
@@ -182,14 +183,14 @@ export const heartbeatStateSyncHandlers: GatewayRequestHandlers = {
    */
   "heartbeat.should_inject_progress": async ({ params, respond }) => {
     try {
-      const taskId = params?.taskId ? String(params.taskId) : "";
+      const taskId = typeof params?.taskId === "string" ? params.taskId : (params?.taskId as string) ?? "";
       
       if (!taskId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId 是必填参数"));
         return;
       }
       
-      const task = await storage.loadOne(taskId);
+      const task = await storage.getTask(taskId);
       if (!task) {
         respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `任务 ${taskId} 不存在`));
         return;
@@ -197,15 +198,15 @@ export const heartbeatStateSyncHandlers: GatewayRequestHandlers = {
       
       const recentChecks = (task.meta?.heartbeatChecks || [])
         .slice(-10)
-        .map((check: any) => ({
-          timestamp: check.timestamp || 0,
-          status: check.status || "passed",
-          findings: check.findings || [],
-          healthScore: check.healthScore ?? 100,
+        .map((check: Record<string, unknown>) => ({
+          timestamp: (check.timestamp as number) || 0,
+          status: (check.status as string) || "passed",
+          findings: (check.findings as unknown[]) || [],
+          healthScore: (check.healthScore as number) ?? 100,
         }));
       
       const pendingDecisions = (task.meta?.pendingDecisions || [])
-        .filter((d: any) => d.status !== "resolved")
+        .filter((d: Record<string, unknown>) => (d.status as string) !== "resolved")
         .slice(0, 5);
       
       const summary = generateHeartbeatSummary(task, recentChecks, pendingDecisions, DEFAULT_CONTEXT_CONFIG);
@@ -229,8 +230,8 @@ export const heartbeatStateSyncHandlers: GatewayRequestHandlers = {
    */
   "heartbeat.build_master_context": async ({ params, respond }) => {
     try {
-      const taskId = params?.taskId ? String(params.taskId) : "";
-      const includeProgress = params?.includeProgress ? Boolean(params.includeProgress) : false;
+      const taskIdStr = typeof params?.taskId === "string" ? params.taskId : (params?.taskId as string) ?? "";
+      const includeProgress = params?.includeProgress === true;
       const periodMinutes = params?.periodMinutes ? Number(params.periodMinutes) : 60;
       
       if (!taskId) {
@@ -238,7 +239,7 @@ export const heartbeatStateSyncHandlers: GatewayRequestHandlers = {
         return;
       }
       
-      const task = await storage.loadOne(taskId);
+      const task = await storage.getTask(taskId);
       if (!task) {
         respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `任务 ${taskId} 不存在`));
         return;
@@ -246,38 +247,38 @@ export const heartbeatStateSyncHandlers: GatewayRequestHandlers = {
       
       const recentChecks = (task.meta?.heartbeatChecks || [])
         .slice(-10)
-        .map((check: any) => ({
-          timestamp: check.timestamp || 0,
-          status: check.status || "passed",
-          findings: check.findings || [],
-          healthScore: check.healthScore ?? 100,
+        .map((check: Record<string, unknown>) => ({
+          timestamp: (check.timestamp as number) || 0,
+          status: (check.status as string) || "passed",
+          findings: (check.findings as unknown[]) || [],
+          healthScore: (check.healthScore as number) ?? 100,
         }));
       
       const pendingDecisions = (task.meta?.pendingDecisions || [])
-        .filter((d: any) => d.status !== "resolved")
+        .filter((d: Record<string, unknown>) => (d.status as string) !== "resolved")
         .slice(0, 5);
       
       const summary = generateHeartbeatSummary(task, recentChecks, pendingDecisions, DEFAULT_CONTEXT_CONFIG);
       
       let progressReport;
       if (includeProgress) {
-        const checkHistory = (task.meta?.heartbeatChecks || [])
-          .map((check: any) => ({
-            id: check.id || `check-${check.timestamp}`,
-            timestamp: check.timestamp || 0,
-            checkType: check.checkType || "default",
-            status: check.status || "passed",
-            findings: check.findings || [],
-            healthScore: check.healthScore ?? 100,
+      const checkHistory = (task.meta?.heartbeatChecks || [])
+          .map((check: Record<string, unknown>) => ({
+            id: (check.id as string) || `check-${check.timestamp}`,
+            timestamp: (check.timestamp as number) || 0,
+            checkType: (check.checkType as string) || "default",
+            status: (check.status as string) || "passed",
+            findings: (check.findings as unknown[]) || [],
+            healthScore: (check.healthScore as number) ?? 100,
           }));
         
         const issuesHandled = (task.meta?.handledIssues || [])
-          .map((issue: any) => ({
-            id: issue.id || `issue-${issue.detectedAt}`,
-            type: issue.type || "unknown",
-            description: issue.description || "",
-            detectedAt: issue.detectedAt || 0,
-            resolution: issue.resolution,
+          .map((issue: Record<string, unknown>) => ({
+            id: (issue.id as string) || `issue-${issue.detectedAt}`,
+            type: (issue.type as string) || "unknown",
+            description: (issue.description as string) || "",
+            detectedAt: (issue.detectedAt as number) || 0,
+            resolution: (issue.resolution as string | undefined) || undefined,
           }));
         
         progressReport = generateProgressReport(task, checkHistory, issuesHandled, periodMinutes);
@@ -303,37 +304,41 @@ export const heartbeatStateSyncHandlers: GatewayRequestHandlers = {
    */
   "heartbeat.record_user_response": async ({ params, respond }) => {
     try {
-      const taskId = params?.taskId ? String(params.taskId) : "";
-      const decisionId = params?.decisionId ? String(params.decisionId) : "";
-      const userChoice = params?.userChoice ? String(params.userChoice) : "";
+      const taskIdStr = typeof params?.taskId === "string" ? params.taskId : (params?.taskId as string) ?? "";
+      const decisionIdStr = typeof params?.decisionId === "string" ? params.decisionId : (params?.decisionId as string) ?? "";
+      const userChoiceStr = typeof params?.userChoice === "string" ? params.userChoice : (params?.userChoice as string) ?? "";
       
-      if (!taskId || !decisionId || !userChoice) {
+      if (!taskIdStr || !decisionIdStr || !userChoiceStr) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId, decisionId, userChoice 都是必填参数"));
         return;
       }
       
-      const task = await storage.loadOne(taskId);
+      const task = await storage.getTask(taskIdStr);
       if (!task) {
         respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `任务 ${taskId} 不存在`));
         return;
       }
       
       const pendingDecisions = task.meta?.pendingDecisions || [];
-      const decision = pendingDecisions.find((d: any) => d.id === decisionId);
+      const decision = pendingDecisions.find((d: Record<string, unknown>) => (d.id as string) === decisionIdStr);
       
       if (!decision) {
-        respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `决策 ${decisionId} 不存在`));
+        respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `决策 ${decisionIdStr} 不存在`));
         return;
       }
       
-      decision.userSelected = userChoice;
+      decision.userSelected = userChoiceStr;
       decision.status = "user-responded";
       decision.respondedAt = Date.now();
       
-      task.meta = task.meta || {};
-      task.meta.pendingDecisions = pendingDecisions;
+      const updatedMeta = {
+        ...(task.meta || {}),
+        pendingDecisions,
+      };
       
-      await storage.save(task);
+      await storage.updateTask(taskIdStr, {
+        meta: updatedMeta,
+      });
       
       respond(true, { success: true, decision }, undefined);
     } catch (err) {
@@ -355,19 +360,19 @@ export const heartbeatStateSyncHandlers: GatewayRequestHandlers = {
    */
   "heartbeat.record_master_decision": async ({ params, respond }) => {
     try {
-      const taskId = params?.taskId ? String(params.taskId) : "";
-      const decisionId = params?.decisionId ? String(params.decisionId) : "";
-      const masterDecision = params?.masterDecision ? String(params.masterDecision) : "";
-      const reasoning = params?.reasoning ? String(params.reasoning) : undefined;
-      const userCommunication = params?.userCommunication ? String(params.userCommunication) : undefined;
-      const actionInstructions = params?.actionInstructions ? (params.actionInstructions as string[]) : [];
+      const taskIdStr = typeof params?.taskId === "string" ? params.taskId : (params?.taskId as string) ?? "";
+      const decisionIdStr = typeof params?.decisionId === "string" ? params.decisionId : (params?.decisionId as string) ?? "";
+      const masterDecisionStr = typeof params?.masterDecision === "string" ? params.masterDecision : (params?.masterDecision as string) ?? "";
+      const reasoning = typeof params?.reasoning === "string" ? params.reasoning : undefined;
+      const userCommunication = typeof params?.userCommunication === "string" ? params.userCommunication : undefined;
+      const actionInstructions = Array.isArray(params?.actionInstructions) ? (params.actionInstructions as string[]) : [];
       
-      if (!taskId || !decisionId || !masterDecision) {
+      if (!taskIdStr || !decisionIdStr || !masterDecisionStr) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId, decisionId, masterDecision 都是必填参数"));
         return;
       }
       
-      const task = await storage.loadOne(taskId);
+      const task = await storage.getTask(taskIdStr);
       if (!task) {
         respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `任务 ${taskId} 不存在`));
         return;
@@ -375,84 +380,42 @@ export const heartbeatStateSyncHandlers: GatewayRequestHandlers = {
       
       // 更新待决策事项的状态
       const pendingDecisions = task.meta?.pendingDecisions || [];
-      const decision = pendingDecisions.find((d: any) => d.id === decisionId);
+      const decision = pendingDecisions.find((d: Record<string, unknown>) => (d.id as string) === decisionIdStr);
       
       if (!decision) {
-        respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `决策 ${decisionId} 不存在`));
+        respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `决策 ${decisionIdStr} 不存在`));
         return;
       }
       
       // 更新决策状态
-      decision.masterDecision = masterDecision;
+      decision.masterDecision = masterDecisionStr;
       decision.status = "master-decided";
       decision.decidedAt = Date.now();
       
       // 保存主控反馈
       const masterFeedback = {
         lastDecisionAt: Date.now(),
-        decision: masterDecision,
+        decision: masterDecisionStr,
         reasoning,
         userCommunication,
         actionInstructions,
         nextCheckpoint: Date.now() + 30 * 60 * 1000, // 30分钟后下次检查
       };
       
-      task.meta = task.meta || {};
-      task.meta.pendingDecisions = pendingDecisions;
-      task.meta.masterFeedback = masterFeedback;
+      const updatedMeta = {
+        ...(task.meta || {}),
+        pendingDecisions,
+        masterFeedback,
+      };
       
-      await storage.save(task);
+      await storage.updateTask(taskIdStr, {
+        meta: updatedMeta,
+      });
       
       // 通知心跳任务（如果有独立的心跳任务）
       // 心跳任务下次唤醒时会读取 masterFeedback
       
       respond(true, { success: true, decision, masterFeedback }, undefined);
-    } catch (err) {
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.UNAVAILABLE,
-          `Failed to record master decision: ${String(err instanceof Error ? err.message : err)}`,
-        ),
-      );
-    }
-  },
-
-  /**
-   * heartbeat.get_master_feedback - 获取主控反馈（心跳→读取主控决策）
-   * 
-   * 心跳任务唤醒时调用，获取主控的最新决策和指示
-   */
-  "heartbeat.get_master_feedback": async ({ params, respond }) => {
-    try {
-      const taskId = params?.taskId ? String(params.taskId) : "";
-      
-      if (!taskId) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "taskId 是必填参数"));
-        return;
-      }
-      
-      const task = await storage.loadOne(taskId);
-      if (!task) {
-        respond(false, undefined, errorShape(ErrorCodes.NOT_FOUND, `任务 ${taskId} 不存在`));
-        return;
-      }
-      
-      const masterFeedback = task.meta?.masterFeedback || null;
-      const pendingDecisions = task.meta?.pendingDecisions || [];
-      
-      // 过滤出已有主控决策的事项
-      const masterDecisions = pendingDecisions.filter(
-        (d: any) => d.status === "master-decided" || d.status === "resolved"
-      );
-      
-      respond(true, {
-        masterFeedback,
-        masterDecisions,
-        hasNewFeedback: masterFeedback !== null,
-        lastDecisionAt: masterFeedback?.lastDecisionAt || null,
-      }, undefined);
     } catch (err) {
       respond(
         false,
@@ -469,19 +432,23 @@ export const heartbeatStateSyncHandlers: GatewayRequestHandlers = {
 /**
  * 获取注入原因
  */
-function getInjectReason(summary: any): string {
+function getInjectReason(summary: HeartbeatStateSummary): string {
   const reasons: string[] = [];
   
   if (summary.healthStatus.score < 60) {
     reasons.push(`健康度下降 (${summary.healthStatus.score}分)`);
   }
   
-  const pendingMasters = summary.pendingDecisions.filter((d: any) => d.status === "awaiting-master");
+  const pendingMasters = summary.pendingDecisions.filter(
+    (d: HeartbeatStateSummary["pendingDecisions"][number]) => d.status === "awaiting-master"
+  );
   if (pendingMasters.length > 0) {
     reasons.push(`有 ${pendingMasters.length} 个待主控决策的事项`);
   }
   
-  const userResponded = summary.pendingDecisions.filter((d: any) => d.status === "user-responded");
+  const userResponded = summary.pendingDecisions.filter(
+    (d: HeartbeatStateSummary["pendingDecisions"][number]) => d.status === "user-responded"
+  );
   if (userResponded.length > 0) {
     reasons.push(`用户已响应 ${userResponded.length} 个决策`);
   }
