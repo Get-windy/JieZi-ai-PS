@@ -54,6 +54,7 @@ import { dataScopeHandlers } from "./data-scope-rpc.js";
 import { evolveRpc } from "./evolve-rpc.js";
 import { friendsHandlers } from "./friends-rpc.js";
 import { groupsHandlers } from "./groups-rpc.js";
+import { heartbeatStateSyncHandlers } from "./heartbeat-state-sync-rpc.js";
 import { hrManagementHandlers } from "./hr-management.js";
 import { humanAuthHandlers } from "./human-auth.js";
 import { knowledgeSinkHandlers } from "./knowledge-sink.js";
@@ -191,6 +192,9 @@ const hardcodedHandlers: GatewayRequestHandlers = {
 
   // 任务管理
   ...tasksRpc,
+  
+  // 心跳状态同步（解决信息断链问题）
+  ...heartbeatStateSyncHandlers,
 
   // 社交关系
   ...friendsHandlers,
