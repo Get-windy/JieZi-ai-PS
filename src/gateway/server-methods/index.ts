@@ -26,7 +26,6 @@ import { connectHandlers } from "../../../upstream/src/gateway/server-methods/co
 import { cronHandlers } from "../../../upstream/src/gateway/server-methods/cron.js";
 import { deviceHandlers } from "../../../upstream/src/gateway/server-methods/devices.js";
 import { doctorHandlers } from "../../../upstream/src/gateway/server-methods/doctor.js";
-import { doctorOverrideHandlers } from "./doctor-override.js";
 import { execApprovalsHandlers } from "../../../upstream/src/gateway/server-methods/exec-approvals.js";
 import { healthHandlers } from "../../../upstream/src/gateway/server-methods/health.js";
 import { logsHandlers } from "../../../upstream/src/gateway/server-methods/logs.js";
@@ -51,6 +50,8 @@ import { channelPoliciesHandlers } from "./channel-policies.js";
 import { channelsHandlers } from "./channels.js";
 import { chatAggregateHandlers } from "./chat-aggregate.js";
 import { dataScopeHandlers } from "./data-scope-rpc.js";
+import { doctorOverrideHandlers } from "./doctor-override.js";
+import { environmentDetectionHandlers } from "./environment-detection-rpc.js";
 import { evolveRpc } from "./evolve-rpc.js";
 import { friendsHandlers } from "./friends-rpc.js";
 import { groupsHandlers } from "./groups-rpc.js";
@@ -141,7 +142,7 @@ const hardcodedHandlers: GatewayRequestHandlers = {
   // 配置与向导
   ...configHandlers,
   ...wizardHandlers,
-  ...doctorOverrideHandlers,  // 覆盖上游 doctor.memory.dreamDiary，支持 agentId 参数
+  ...doctorOverrideHandlers, // 覆盖上游 doctor.memory.dreamDiary，支持 agentId 参数
   ...doctorHandlers,
 
   // 模型与 TTS
@@ -192,9 +193,12 @@ const hardcodedHandlers: GatewayRequestHandlers = {
 
   // 任务管理
   ...tasksRpc,
-  
+
   // 心跳状态同步（解决信息断链问题）
   ...heartbeatStateSyncHandlers,
+
+  // 环境检测与依赖管理（解决重复安装问题）
+  ...environmentDetectionHandlers,
 
   // 社交关系
   ...friendsHandlers,
