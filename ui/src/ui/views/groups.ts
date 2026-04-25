@@ -118,7 +118,10 @@ export type GroupsProps = {
   projectSpacesList: Array<{ type: string; path: string; description?: string; enabled?: boolean }>;
   projectSpacesError: string | null;
   onLoadProjectSpaces: (projectId: string) => void;
-  onSaveProjectSpace: (projectId: string, space: { type: string; path: string; description?: string; enabled?: boolean }) => void;
+  onSaveProjectSpace: (
+    projectId: string,
+    space: { type: string; path: string; description?: string; enabled?: boolean },
+  ) => void;
   onDeleteProjectSpace: (projectId: string, spaceType: string) => void;
   // 群组升级
   upgradingGroupToProject: boolean;
@@ -165,60 +168,46 @@ function renderGroupsSidebar(props: GroupsProps) {
           </button>
         </div>
       </div>
-      
-      ${
-        props.error
-          ? html`<div class="callout danger" style="margin-top: 12px;">${props.error}</div>`
-          : nothing
-      }
-      
+
+      ${props.error
+        ? html`<div class="callout danger" style="margin-top: 12px;">${props.error}</div>`
+        : nothing}
+
       <div class="group-list" style="margin-top: 12px;">
-        ${
-          groups.length === 0
-            ? html`
-                <div class="empty">暂无群组</div>
-              `
-            : groups.map(
-                (group) => html`
-                  <div
-                    class="list-item ${selectedId === group.id ? "active" : ""}"
-                    @click=${() => props.onSelectGroup(group.id)}
-                    style="cursor: pointer;"
-                  >
-                    <div style="flex: 1;">
-                      <div class="list-title">${group.name}</div>
-                      <div class="list-sub">
-                        ${group.description || "暂无描述"}
-                      </div>
-                      <div class="chip-row" style="margin-top: 6px;">
-                        <span class="chip">${group.members.length} 成员</span>
-                        ${
-                          group.isPublic
-                            ? html`
-                                <span class="chip">公开</span>
-                              `
-                            : html`
-                                <span class="chip">私密</span>
-                              `
-                        }
-                        ${group.tags?.map((tag) => html`<span class="chip">${tag}</span>`)}
-                      </div>
-                    </div>
-                    <div class="list-meta">
-                      <button
-                        class="btn btn--sm"
-                        @click=${(e: Event) => {
-                          e.stopPropagation();
-                          props.onDeleteGroup(group.id);
-                        }}
-                      >
-                        删除
-                      </button>
+        ${groups.length === 0
+          ? html` <div class="empty">暂无群组</div> `
+          : groups.map(
+              (group) => html`
+                <div
+                  class="list-item ${selectedId === group.id ? "active" : ""}"
+                  @click=${() => props.onSelectGroup(group.id)}
+                  style="cursor: pointer;"
+                >
+                  <div style="flex: 1;">
+                    <div class="list-title">${group.name}</div>
+                    <div class="list-sub">${group.description || "暂无描述"}</div>
+                    <div class="chip-row" style="margin-top: 6px;">
+                      <span class="chip">${group.members.length} 成员</span>
+                      ${group.isPublic
+                        ? html` <span class="chip">公开</span> `
+                        : html` <span class="chip">私密</span> `}
+                      ${group.tags?.map((tag) => html`<span class="chip">${tag}</span>`)}
                     </div>
                   </div>
-                `,
-              )
-        }
+                  <div class="list-meta">
+                    <button
+                      class="btn btn--sm"
+                      @click=${(e: Event) => {
+                        e.stopPropagation();
+                        props.onDeleteGroup(group.id);
+                      }}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              `,
+            )}
       </div>
     </section>
   `;
@@ -233,36 +222,35 @@ function renderGroupContent(props: GroupsProps, selectedGroup: GroupInfo) {
         <div>
           <div class="card-title">${selectedGroup.name}</div>
           <div class="card-sub">${selectedGroup.description || "暂无描述"}</div>
-          ${
-            isProjectGroup
-              ? html`
-          <div class="chip" style="margin-top: 8px; background: var(--color-primary); color: white; padding: 4px 8px; display: inline-block; border-radius: 4px;">
-            📁 项目群：${selectedGroup.projectId}
-          </div>
-          `
-              : nothing
-          }
+          ${isProjectGroup
+            ? html`
+                <div
+                  class="chip"
+                  style="margin-top: 8px; background: var(--color-primary); color: white; padding: 4px 8px; display: inline-block; border-radius: 4px;"
+                >
+                  📁 项目群：${selectedGroup.projectId}
+                </div>
+              `
+            : nothing}
         </div>
         <div style="display: flex; gap: 8px;">
-          ${
-            !isProjectGroup
-              ? html`
-          <button 
-            class="btn btn--sm btn--primary" 
-            @click=${() => {
-              const projectId = prompt(
-                "请输入要绑定的项目 ID:\n\n⚠️ 重要提示：\n1. 升级后群组的工作空间将变更为项目的工作空间\n2. 升级后无法降级！\n\n输入项目 ID:",
-              );
-              if (projectId && projectId.trim()) {
-                props.onUpgradeGroupToProject(selectedGroup.id, projectId.trim());
-              }
-            }}
-          >
-            🔄 升级为项目群
-          </button>
-          `
-              : nothing
-          }
+          ${!isProjectGroup
+            ? html`
+                <button
+                  class="btn btn--sm btn--primary"
+                  @click=${() => {
+                    const projectId = prompt(
+                      "请输入要绑定的项目 ID:\n\n⚠️ 重要提示：\n1. 升级后群组的工作空间将变更为项目的工作空间\n2. 升级后无法降级！\n\n输入项目 ID:",
+                    );
+                    if (projectId && projectId.trim()) {
+                      props.onUpgradeGroupToProject(selectedGroup.id, projectId.trim());
+                    }
+                  }}
+                >
+                  🔄 升级为项目群
+                </button>
+              `
+            : nothing}
           <button class="btn btn--sm" @click=${() => props.onEditGroup(selectedGroup.id)}>
             编辑群组
           </button>
@@ -270,16 +258,13 @@ function renderGroupContent(props: GroupsProps, selectedGroup: GroupInfo) {
       </div>
 
       ${renderGroupTabs(props.activePanel, props.onSelectPanel)}
-
-      ${
-        props.activePanel === "list"
-          ? renderGroupOverview(selectedGroup, props)
-          : props.activePanel === "members"
-            ? renderGroupMembers(selectedGroup, props)
-            : props.activePanel === "files"
-              ? renderGroupFiles(selectedGroup, props)
-              : renderGroupSettings(selectedGroup, props)
-      }
+      ${props.activePanel === "list"
+        ? renderGroupOverview(selectedGroup, props)
+        : props.activePanel === "members"
+          ? renderGroupMembers(selectedGroup, props)
+          : props.activePanel === "files"
+            ? renderGroupFiles(selectedGroup, props)
+            : renderGroupSettings(selectedGroup, props)}
     </section>
   `;
 }
@@ -299,92 +284,88 @@ function renderProjectsSection(props: GroupsProps) {
           <div class="card-sub">共 ${projects.length} 个项目</div>
         </div>
         <div style="display: flex; gap: 8px;">
-          <button class="btn btn--sm" ?disabled=${props.projectsLoading} @click=${props.onCreateProject}>
+          <button
+            class="btn btn--sm"
+            ?disabled=${props.projectsLoading}
+            @click=${props.onCreateProject}
+          >
             创建项目
           </button>
-          <button class="btn btn--sm" ?disabled=${props.projectsLoading} @click=${props.onProjectsRefresh}>
+          <button
+            class="btn btn--sm"
+            ?disabled=${props.projectsLoading}
+            @click=${props.onProjectsRefresh}
+          >
             ${props.projectsLoading ? "加载中..." : "刷新"}
           </button>
         </div>
       </div>
-      
-      ${
-        props.projectsError
-          ? html`<div class="callout danger" style="margin-top: 12px;">${props.projectsError}</div>`
-          : nothing
-      }
-      
+
+      ${props.projectsError
+        ? html`<div class="callout danger" style="margin-top: 12px;">${props.projectsError}</div>`
+        : nothing}
+
       <div class="group-list" style="margin-top: 12px;">
-        ${
-          projects.length === 0
-            ? html`
-                <div class="empty">暂无项目</div>
-              `
-            : projects.map(
-                (project) => html`
-                  <div
-                    class="list-item ${selectedId === project.projectId ? "active" : ""}"
-                    @click=${() => props.onSelectProject(project.projectId)}
-                    style="cursor: pointer;"
-                  >
-                    <div style="flex: 1;">
-                      <div class="list-title">${project.name}</div>
-                      <div class="list-sub mono" style="font-size: 12px;">
-                        ${project.projectId}
-                      </div>
-                      <div class="chip-row" style="margin-top: 6px;">
-                        <span class="chip" title="工作空间">💼 工作空间</span>
-                        <span class="chip" title="代码目录">💻 代码</span>
-                      </div>
-                    </div>
-                    <div class="list-meta">
-                      <button
-                        class="btn btn--sm"
-                        @click=${(e: Event) => {
-                          e.stopPropagation();
-                          props.onEditProject(project.projectId);
-                        }}
-                      >
-                        配置
-                      </button>
+        ${projects.length === 0
+          ? html` <div class="empty">暂无项目</div> `
+          : projects.map(
+              (project) => html`
+                <div
+                  class="list-item ${selectedId === project.projectId ? "active" : ""}"
+                  @click=${() => props.onSelectProject(project.projectId)}
+                  style="cursor: pointer;"
+                >
+                  <div style="flex: 1;">
+                    <div class="list-title">${project.name}</div>
+                    <div class="list-sub mono" style="font-size: 12px;">${project.projectId}</div>
+                    <div class="chip-row" style="margin-top: 6px;">
+                      <span class="chip" title="工作空间">💼 工作空间</span>
+                      <span class="chip" title="代码目录">💻 代码</span>
                     </div>
                   </div>
-                `,
-              )
-        }
+                  <div class="list-meta">
+                    <button
+                      class="btn btn--sm"
+                      @click=${(e: Event) => {
+                        e.stopPropagation();
+                        props.onEditProject(project.projectId);
+                      }}
+                    >
+                      配置
+                    </button>
+                  </div>
+                </div>
+              `,
+            )}
       </div>
     </section>
 
     <section class="card groups-content" style="flex: 1;">
-      ${
-        selectedProject
-          ? html`
-              <div class="group-header">
-                <div>
-                  <div class="card-title">${selectedProject.name}</div>
-                  <div class="card-sub mono" style="font-size: 12px;">
-                    ID: ${selectedProject.projectId}
-                  </div>
+      ${selectedProject
+        ? html`
+            <div class="group-header">
+              <div>
+                <div class="card-title">${selectedProject.name}</div>
+                <div class="card-sub mono" style="font-size: 12px;">
+                  ID: ${selectedProject.projectId}
                 </div>
-                <button class="btn btn--sm" @click=${() => props.onEditProject(selectedProject.projectId)}>
-                  配置项目
-                </button>
               </div>
+              <button
+                class="btn btn--sm"
+                @click=${() => props.onEditProject(selectedProject.projectId)}
+              >
+                配置项目
+              </button>
+            </div>
 
-              ${renderProjectTabs(props.activeProjectPanel, props.onSelectProjectPanel)}
-
-              ${
-                props.activeProjectPanel === "list"
-                  ? renderProjectOverview(selectedProject)
-                  : props.activeProjectPanel === "config"
-                    ? renderProjectConfig(selectedProject)
-                    : renderProjectSpacesPanel(props, selectedProject)
-              }
-            `
-          : html`
-              <div class="empty">请选择一个项目</div>
-            `
-      }
+            ${renderProjectTabs(props.activeProjectPanel, props.onSelectProjectPanel)}
+            ${props.activeProjectPanel === "list"
+              ? renderProjectOverview(selectedProject)
+              : props.activeProjectPanel === "config"
+                ? renderProjectConfig(selectedProject)
+                : renderProjectSpacesPanel(props, selectedProject)}
+          `
+        : html` <div class="empty">请选择一个项目</div> `}
     </section>
   `;
 }
@@ -450,25 +431,25 @@ function renderGroupOverview(group: GroupInfo, props: GroupsProps) {
   return html`
     <section class="card" style="margin-top: 16px;">
       <div class="card-title">群组概览</div>
-      
-      ${
-        isProjectGroup
-          ? html`
-      <div class="callout info" style="margin-bottom: 16px;">
-        <strong>📁 项目群</strong>
-        <p style="margin: 8px 0 0 0;">
-          此群组已绑定项目 <strong>${group.projectId}</strong>，共享工作空间与项目同步。
-        </p>
-      </div>
-      `
-          : html`
-              <div class="callout warn" style="margin-bottom: 16px">
-                <strong>💡 普通群</strong>
-                <p style="margin: 8px 0 0 0">此群组未绑定项目，可以升级为项目群以获得项目管理功能。</p>
-              </div>
-            `
-      }
-      
+
+      ${isProjectGroup
+        ? html`
+            <div class="callout info" style="margin-bottom: 16px;">
+              <strong>📁 项目群</strong>
+              <p style="margin: 8px 0 0 0;">
+                此群组已绑定项目 <strong>${group.projectId}</strong>，共享工作空间与项目同步。
+              </p>
+            </div>
+          `
+        : html`
+            <div class="callout warn" style="margin-bottom: 16px">
+              <strong>💡 普通群</strong>
+              <p style="margin: 8px 0 0 0">
+                此群组未绑定项目，可以升级为项目群以获得项目管理功能。
+              </p>
+            </div>
+          `}
+
       <div class="agents-overview-grid" style="margin-top: 16px;">
         <div class="agent-kv">
           <div class="label">群组 ID</div>
@@ -507,20 +488,18 @@ function renderGroupOverview(group: GroupInfo, props: GroupsProps) {
           <div class="label">群组类型</div>
           <div>${isProjectGroup ? "📁 项目群" : "👥 普通群"}</div>
         </div>
-        ${
-          isProjectGroup
-            ? html`
-        <div class="agent-kv">
-          <div class="label">绑定项目</div>
-          <div class="mono">${group.projectId}</div>
-        </div>
-        <div class="agent-kv">
-          <div class="label">工作空间</div>
-          <div class="mono" style="font-size: 12px;">${group.workspacePath || "未配置"}</div>
-        </div>
-        `
-            : nothing
-        }
+        ${isProjectGroup
+          ? html`
+              <div class="agent-kv">
+                <div class="label">绑定项目</div>
+                <div class="mono">${group.projectId}</div>
+              </div>
+              <div class="agent-kv">
+                <div class="label">工作空间</div>
+                <div class="mono" style="font-size: 12px;">${group.workspacePath || "未配置"}</div>
+              </div>
+            `
+          : nothing}
         <div class="agent-kv">
           <div class="label">群组类型</div>
           <div>${group.isPublic ? "公开群组" : "私密群组"}</div>
@@ -530,26 +509,24 @@ function renderGroupOverview(group: GroupInfo, props: GroupsProps) {
           <div>${group.tags?.join(", ") || "无"}</div>
         </div>
       </div>
-      
-      ${
-        !isProjectGroup
-          ? html`
-              <div class="callout" style="margin-top: 16px">
-                <strong>🔄 升级项目群:</strong>
-                <p style="margin: 8px 0 0 0">将此普通群升级为项目群，绑定到指定项目。</p>
-                <p style="margin: 8px 0 0 0; color: var(--color-warn)">
-                  <strong>⚠️ 重要：升级后群组的工作空间将统一为项目的工作空间，且无法降级！</strong>
-                </p>
-                <ul style="margin: 8px 0 0 20px">
-                  <li><strong>工作空间统一：</strong>共享工作空间将迁移到项目工作空间路径</li>
-                  <li><strong>双向绑定：</strong>项目工作空间更新时，群工作空间自动同步</li>
-                  <li><strong>项目协作：</strong>群聊将成为项目群聊，可以使用项目的代码目录和文档</li>
-                  <li><strong>不可逆操作：</strong>项目群不能降级为普通群</li>
-                </ul>
-              </div>
-            `
-          : nothing
-      }
+
+      ${!isProjectGroup
+        ? html`
+            <div class="callout" style="margin-top: 16px">
+              <strong>🔄 升级项目群:</strong>
+              <p style="margin: 8px 0 0 0">将此普通群升级为项目群，绑定到指定项目。</p>
+              <p style="margin: 8px 0 0 0; color: var(--color-warn)">
+                <strong>⚠️ 重要：升级后群组的工作空间将统一为项目的工作空间，且无法降级！</strong>
+              </p>
+              <ul style="margin: 8px 0 0 20px">
+                <li><strong>工作空间统一：</strong>共享工作空间将迁移到项目工作空间路径</li>
+                <li><strong>双向绑定：</strong>项目工作空间更新时，群工作空间自动同步</li>
+                <li><strong>项目协作：</strong>群聊将成为项目群聊，可以使用项目的代码目录和文档</li>
+                <li><strong>不可逆操作：</strong>项目群不能降级为普通群</li>
+              </ul>
+            </div>
+          `
+        : nothing}
     </section>
   `;
 }
@@ -633,46 +610,40 @@ function renderGroupMembers(group: GroupInfo, props: GroupsProps) {
                 ${member.nickname ? html`<div class="list-sub">${member.nickname}</div>` : nothing}
                 <div class="chip-row" style="margin-top: 6px;">
                   ${getRoleBadge(member.role)}
-                  ${
-                    member.muted
-                      ? html`
-                          <span class="chip chip-warn">已禁言</span>
-                        `
-                      : nothing
-                  }
-                  <span class="chip muted">加入于 ${new Date(member.joinedAt).toLocaleDateString()}</span>
+                  ${member.muted ? html` <span class="chip chip-warn">已禁言</span> ` : nothing}
+                  <span class="chip muted"
+                    >加入于 ${new Date(member.joinedAt).toLocaleDateString()}</span
+                  >
                 </div>
               </div>
               <div class="list-meta" style="display: flex; gap: 8px;">
-                ${
-                  member.role !== "owner"
-                    ? html`
-                        <select
-                          @change=${(e: Event) => {
-                            const target = e.target as HTMLSelectElement;
-                            props.onUpdateMemberRole(
-                              group.id,
-                              member.agentId,
-                              target.value as GroupMemberRole,
-                            );
-                          }}
-                        >
-                          <option value="member" ?selected=${member.role === "member"}>成员</option>
-                          <option value="admin" ?selected=${member.role === "admin"}>管理员</option>
-                        </select>
-                        <button
-                          class="btn btn--sm btn--danger"
-                          @click=${() => {
-                            if (confirm(`确定要移除成员 ${getAgentLabel(member.agentId)} 吗？`)) {
-                              props.onRemoveMember(group.id, member.agentId);
-                            }
-                          }}
-                        >
-                          移除
-                        </button>
-                      `
-                    : nothing
-                }
+                ${member.role !== "owner"
+                  ? html`
+                      <select
+                        @change=${(e: Event) => {
+                          const target = e.target as HTMLSelectElement;
+                          props.onUpdateMemberRole(
+                            group.id,
+                            member.agentId,
+                            target.value as GroupMemberRole,
+                          );
+                        }}
+                      >
+                        <option value="member" ?selected=${member.role === "member"}>成员</option>
+                        <option value="admin" ?selected=${member.role === "admin"}>管理员</option>
+                      </select>
+                      <button
+                        class="btn btn--sm btn--danger"
+                        @click=${() => {
+                          if (confirm(`确定要移除成员 ${getAgentLabel(member.agentId)} 吗？`)) {
+                            props.onRemoveMember(group.id, member.agentId);
+                          }
+                        }}
+                      >
+                        移除
+                      </button>
+                    `
+                  : nothing}
               </div>
             </div>
           `,
@@ -732,68 +703,75 @@ function renderGroupSettings(group: GroupInfo, props: GroupsProps) {
           </label>
         </div>
 
-        ${isProjectGroup ? html`
-        <!-- 项目群组记忆空间配置 -->
-        <div class="callout info" style="margin-top: 16px;">
-          <strong>🧠 项目记忆空间</strong>
-          <p style="margin: 8px 0 0 0;">
-            此群组已绑定项目 <code>${group.projectId}</code>，群组空间将迁移为项目的记忆空间。
-          </p>
-          <p style="margin: 8px 0 0 0; font-size: 12px;">
-            <strong>记忆空间用途：</strong>团队共享记忆、协作记录、讨论历史、团队约定、决策记录等。
-          </p>
-        </div>
+        ${isProjectGroup
+          ? html`
+              <!-- 项目群组记忆空间配置 -->
+              <div class="callout info" style="margin-top: 16px;">
+                <strong>🧠 项目记忆空间</strong>
+                <p style="margin: 8px 0 0 0;">
+                  此群组已绑定项目 <code>${group.projectId}</code>，群组空间将迁移为项目的记忆空间。
+                </p>
+                <p style="margin: 8px 0 0 0; font-size: 12px;">
+                  <strong>记忆空间用途：</strong
+                  >团队共享记忆、协作记录、讨论历史、团队约定、决策记录等。
+                </p>
+              </div>
 
-        <div class="form-group" style="margin-top: 16px; margin-bottom: 16px;">
-          <label class="form-label">空间迁移配置</label>
-          
-          <div style="margin-bottom: 12px;">
-            <label class="cfg-toggle">
-              <input 
-                type="checkbox" 
-                .checked=${inheritProjectSpaces}
-                @change=${(e: Event) => {
-                  const checked = (e.target as HTMLInputElement).checked;
-                  // TODO: 调用 RPC groups.spaces.configure
-                  console.log('inheritProjectSpaces:', checked);
-                }}
-              />
-              <span class="cfg-toggle__track"></span>
-              <span style="margin-left: 8px;">迁移群组空间到项目记忆空间</span>
-            </label>
-            <small class="form-text muted" style="display: block; margin-top: 4px;">
-              开启后，群组空间的所有内容会自动迁移到项目的记忆空间，原群组空间将被删除。
-            </small>
-          </div>
+              <div class="form-group" style="margin-top: 16px; margin-bottom: 16px;">
+                <label class="form-label">空间迁移配置</label>
 
-          ${!inheritProjectSpaces ? html`
-          <div style="padding: 12px; background: var(--color-bg-tertiary); border-radius: 8px;">
-            <div class="callout warn">
-              <strong>⚠️ 警告</strong>
-              <p style="margin: 8px 0 0 0;">
-                未开启迁移会导致群组空间与项目记忆空间独立存在，可能造成数据分散。
-                建议开启迁移，将所有协作内容统一归口到项目记忆空间。
-              </p>
-            </div>
-          </div>
-          ` : html`
-          <div style="padding: 12px; background: var(--color-bg-secondary); border-radius: 8px;">
-            <div style="font-size: 12px; color: var(--color-text-muted);">
-              ✅ 已开启迁移：群组空间内容将自动迁移到项目记忆空间<br/>
-              记忆空间路径：<code>${group.workspacePath || "(项目空间)/memory"}</code>
-            </div>
-          </div>
-          `}
-        </div>
-        ` : html`
-        <div class="callout" style="margin-top: 16px;">
-          💡 提示：绑定项目后才能配置空间迁移。点击“升级为项目群”可绑定项目。
-        </div>
-        `}
+                <div style="margin-bottom: 12px;">
+                  <label class="cfg-toggle">
+                    <input
+                      type="checkbox"
+                      .checked=${inheritProjectSpaces}
+                      @change=${(e: Event) => {
+                        const checked = (e.target as HTMLInputElement).checked;
+                        // TODO: 调用 RPC groups.spaces.configure
+                        console.log("inheritProjectSpaces:", checked);
+                      }}
+                    />
+                    <span class="cfg-toggle__track"></span>
+                    <span style="margin-left: 8px;">迁移群组空间到项目记忆空间</span>
+                  </label>
+                  <small class="form-text muted" style="display: block; margin-top: 4px;">
+                    开启后，群组空间的所有内容会自动迁移到项目的记忆空间，原群组空间将被删除。
+                  </small>
+                </div>
 
-        <div class="callout" style="margin-top: 16px;">
-          提示：更多群组设置功能正在开发中
-        </div>
+                ${!inheritProjectSpaces
+                  ? html`
+                      <div
+                        style="padding: 12px; background: var(--color-bg-tertiary); border-radius: 8px;"
+                      >
+                        <div class="callout warn">
+                          <strong>⚠️ 警告</strong>
+                          <p style="margin: 8px 0 0 0;">
+                            未开启迁移会导致群组空间与项目记忆空间独立存在，可能造成数据分散。
+                            建议开启迁移，将所有协作内容统一归口到项目记忆空间。
+                          </p>
+                        </div>
+                      </div>
+                    `
+                  : html`
+                      <div
+                        style="padding: 12px; background: var(--color-bg-secondary); border-radius: 8px;"
+                      >
+                        <div style="font-size: 12px; color: var(--color-text-muted);">
+                          ✅ 已开启迁移：群组空间内容将自动迁移到项目记忆空间<br />
+                          记忆空间路径：<code>${group.workspacePath || "(项目空间)/memory"}</code>
+                        </div>
+                      </div>
+                    `}
+              </div>
+            `
+          : html`
+              <div class="callout" style="margin-top: 16px;">
+                💡 提示：绑定项目后才能配置空间迁移。点击“升级为项目群”可绑定项目。
+              </div>
+            `}
+
+        <div class="callout" style="margin-top: 16px;">提示：更多群组设置功能正在开发中</div>
       </div>
     </section>
   `;
@@ -820,38 +798,32 @@ function renderProjectOverview(project: ProjectInfo) {
           <div class="label">代码目录</div>
           <div class="mono" style="font-size: 12px;">${project.codeDir}</div>
         </div>
-        ${
-          project.docsDir
-            ? html`
-        <div class="agent-kv">
-          <div class="label">文档目录</div>
-          <div class="mono" style="font-size: 12px;">${project.docsDir}</div>
-        </div>
-        `
-            : nothing
-        }
-        ${
-          project.ownerId
-            ? html`
-        <div class="agent-kv">
-          <div class="label">负责人</div>
-          <div class="mono">${project.ownerId}</div>
-        </div>
-        `
-            : nothing
-        }
-        ${
-          project.createdAt
-            ? html`
-        <div class="agent-kv">
-          <div class="label">创建时间</div>
-          <div>${new Date(project.createdAt).toLocaleString()}</div>
-        </div>
-        `
-            : nothing
-        }
+        ${project.docsDir
+          ? html`
+              <div class="agent-kv">
+                <div class="label">文档目录</div>
+                <div class="mono" style="font-size: 12px;">${project.docsDir}</div>
+              </div>
+            `
+          : nothing}
+        ${project.ownerId
+          ? html`
+              <div class="agent-kv">
+                <div class="label">负责人</div>
+                <div class="mono">${project.ownerId}</div>
+              </div>
+            `
+          : nothing}
+        ${project.createdAt
+          ? html`
+              <div class="agent-kv">
+                <div class="label">创建时间</div>
+                <div>${new Date(project.createdAt).toLocaleString()}</div>
+              </div>
+            `
+          : nothing}
       </div>
-      
+
       <div class="callout info" style="margin-top: 16px;">
         <strong>💡 提示:</strong>
         <ul style="margin: 8px 0 0 20px;">
@@ -877,7 +849,7 @@ function renderProjectConfig(project: ProjectInfo) {
           <li>错误的配置可能导致项目无法正常工作</li>
         </ul>
       </div>
-      
+
       <div style="margin-top: 20px;">
         <div class="form-group" style="margin-bottom: 16px;">
           <label class="form-label">项目 ID (不可修改)</label>
@@ -923,72 +895,48 @@ function renderProjectConfig(project: ProjectInfo) {
             placeholder="I:\\{projectName}"
             disabled
           />
-          <small class="form-text muted">代码目录暂不支持修改，可通过 PROJECT_CONFIG.json 调整</small>
+          <small class="form-text muted"
+            >代码目录暂不支持修改，可通过 PROJECT_CONFIG.json 调整</small
+          >
         </div>
 
-        ${
-          project.docsDir
-            ? html`
-        <div class="form-group" style="margin-bottom: 16px;">
-          <label class="form-label">文档目录</label>
-          <input
-            type="text"
-            class="form-control"
-            .value=${project.docsDir}
-            disabled
-          />
-        </div>
-        `
-            : nothing
-        }
-
-        ${
-          project.requirementsDir
-            ? html`
-        <div class="form-group" style="margin-bottom: 16px;">
-          <label class="form-label">需求目录</label>
-          <input
-            type="text"
-            class="form-control"
-            .value=${project.requirementsDir}
-            disabled
-          />
-        </div>
-        `
-            : nothing
-        }
-
-        ${
-          project.qaDir
-            ? html`
-        <div class="form-group" style="margin-bottom: 16px;">
-          <label class="form-label">QA 目录</label>
-          <input
-            type="text"
-            class="form-control"
-            .value=${project.qaDir}
-            disabled
-          />
-        </div>
-        `
-            : nothing
-        }
-
-        ${
-          project.testsDir
-            ? html`
-        <div class="form-group" style="margin-bottom: 16px;">
-          <label class="form-label">测试目录</label>
-          <input
-            type="text"
-            class="form-control"
-            .value=${project.testsDir}
-            disabled
-          />
-        </div>
-        `
-            : nothing
-        }
+        ${project.docsDir
+          ? html`
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label">文档目录</label>
+                <input type="text" class="form-control" .value=${project.docsDir} disabled />
+              </div>
+            `
+          : nothing}
+        ${project.requirementsDir
+          ? html`
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label">需求目录</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  .value=${project.requirementsDir}
+                  disabled
+                />
+              </div>
+            `
+          : nothing}
+        ${project.qaDir
+          ? html`
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label">QA 目录</label>
+                <input type="text" class="form-control" .value=${project.qaDir} disabled />
+              </div>
+            `
+          : nothing}
+        ${project.testsDir
+          ? html`
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label">测试目录</label>
+                <input type="text" class="form-control" .value=${project.testsDir} disabled />
+              </div>
+            `
+          : nothing}
 
         <div class="callout" style="margin-top: 16px;">
           <strong>💡 如何修改配置:</strong>
@@ -1005,15 +953,17 @@ function renderProjectConfig(project: ProjectInfo) {
     <section class="card" style="margin-top: 16px;">
       <div class="card-title">业务空间配置</div>
       <div class="card-sub">管理项目的所有业务空间（代码、文档、销售等）</div>
-      
+
       <div class="callout info" style="margin-top: 16px;">
         <strong>📦 空间架构说明</strong>
         <p style="margin: 8px 0 0 0;">
-          项目包含两类空间：<br/>
-          <strong>1. 记忆空间（Memory Space）</strong>：每个项目1个，从群组空间转换而来，用于团队协作和共享记忆（聊天历史、讨论记录、团队规范等）<br/>
-          <strong>2. 业务空间（Business Spaces）</strong>：根据项目类型配置多个，用于各种业务场景：<br/>
-          &nbsp;&nbsp;&nbsp;• 开发项目：代码空间、文档空间、测试空间等<br/>
-          &nbsp;&nbsp;&nbsp;• 商贸项目：销售文档空间、合同空间、客户空间等<br/>
+          项目包含两类空间：<br />
+          <strong>1. 记忆空间（Memory Space）</strong
+          >：每个项目1个，从群组空间转换而来，用于团队协作和共享记忆（聊天历史、讨论记录、团队规范等）<br />
+          <strong>2. 业务空间（Business Spaces）</strong
+          >：根据项目类型配置多个，用于各种业务场景：<br />
+          &nbsp;&nbsp;&nbsp;• 开发项目：代码空间、文档空间、测试空间等<br />
+          &nbsp;&nbsp;&nbsp;• 商贸项目：销售文档空间、合同空间、客户空间等<br />
           &nbsp;&nbsp;&nbsp;• 创意项目：设计资源空间、素材空间等
         </p>
       </div>
@@ -1024,7 +974,7 @@ function renderProjectConfig(project: ProjectInfo) {
         <div class="callout" style="margin-bottom: 16px;">
           <strong>💡 记忆空间说明</strong>
           <p style="margin: 8px 0 0 0;">
-            记忆空间是项目的协作记忆中心，由群组绑定项目时的群组空间转换而来。<br/>
+            记忆空间是项目的协作记忆中心，由群组绑定项目时的群组空间转换而来。<br />
             包含团队共享记忆、协作记录、讨论历史、团队约定和决策记录等。
           </p>
         </div>
@@ -1033,7 +983,7 @@ function renderProjectConfig(project: ProjectInfo) {
         <div class="callout" style="margin-bottom: 16px;">
           <strong>⚠️ 功能开发中</strong>
           <p style="margin: 8px 0 0 0;">
-            记忆空间配置功能正在开发中，敬请期待！<br/>
+            记忆空间配置功能正在开发中，敬请期待！<br />
             群组绑定项目后，原群组空间会自动迁移到记忆空间。
           </p>
         </div>
@@ -1045,7 +995,7 @@ function renderProjectConfig(project: ProjectInfo) {
         <div class="callout info" style="margin-bottom: 16px;">
           <strong>💡 使用说明</strong>
           <p style="margin: 8px 0 0 0;">
-            业务空间是项目用于各种业务场景的目录，可以添加多个不同类型的空间。<br/>
+            业务空间是项目用于各种业务场景的目录，可以添加多个不同类型的空间。<br />
             例如：开发项目需要代码空间、文档空间；商贸项目需要销售文档空间、合同空间等。
           </p>
         </div>
@@ -1055,8 +1005,8 @@ function renderProjectConfig(project: ProjectInfo) {
           <!-- 由 JavaScript 动态渲染 -->
         </div>
 
-        <button 
-          class="btn btn--primary" 
+        <button
+          class="btn btn--primary"
           style="margin-top: 16px;"
           onclick="window.addBusinessSpace()"
         >
@@ -1086,34 +1036,34 @@ function renderGroupFiles(group: GroupInfo, props: GroupsProps) {
     <section class="card" style="margin-top: 16px;">
       <div class="row" style="justify-content: space-between;">
         <div>
-          <div class="card-title">\u7fa4\u7ec4\u6587\u4ef6</div>
-          <div class="card-sub">\u7fa4\u7ec4\u5171\u4eab\u5de5\u4f5c\u7a7a\u95f4\u6587\u4ef6\u7ba1\u7406</div>
+          <div class="card-title">群组文件</div>
+          <div class="card-sub">群组共享工作空间文件管理</div>
         </div>
         <div class="row" style="gap: 8px;">
-          ${
-            list
-              ? html`
-            <button class="btn btn--sm" @click=${() => props.onOpenGroupFolder(list.workspace)}>
-              \u{1F4C2} \u5728\u6587\u4ef6\u5939\u4e2d\u6253\u5f00
-            </button>
-            <button
-              class="btn btn--sm"
-              ?disabled=${props.groupWorkspaceMigrating}
-              @click=${() => {
-                const newPath = prompt(
-                  `\u5c06\u7fa4\u7ec4\u5de5\u4f5c\u7a7a\u95f4\u8fc1\u79fb\u5230\u65b0\u76ee\u5f55\uff1a\n\u5f53\u524d\u8def\u5f84\uff1a${list.workspace}`,
-                  list.workspace,
-                );
-                if (newPath?.trim() && newPath.trim() !== list.workspace) {
-                  props.onMigrateGroupWorkspace(group.id, newPath.trim());
-                }
-              }}
-            >
-              ${props.groupWorkspaceMigrating ? "\u8fc1\u79fb\u4e2d..." : "\u{1F4E6} \u8fc1\u79fb\u76ee\u5f55"}
-            </button>
-          `
-              : nothing
-          }
+          ${list
+            ? html`
+                <button class="btn btn--sm" @click=${() => props.onOpenGroupFolder(list.workspace)}>
+                  📂 在文件夹中打开
+                </button>
+                <button
+                  class="btn btn--sm"
+                  ?disabled=${props.groupWorkspaceMigrating}
+                  @click=${() => {
+                    const newPath = prompt(
+                      `\u5c06\u7fa4\u7ec4\u5de5\u4f5c\u7a7a\u95f4\u8fc1\u79fb\u5230\u65b0\u76ee\u5f55\uff1a\n\u5f53\u524d\u8def\u5f84\uff1a${list.workspace}`,
+                      list.workspace,
+                    );
+                    if (newPath?.trim() && newPath.trim() !== list.workspace) {
+                      props.onMigrateGroupWorkspace(group.id, newPath.trim());
+                    }
+                  }}
+                >
+                  ${props.groupWorkspaceMigrating
+                    ? "\u8fc1\u79fb\u4e2d..."
+                    : "\u{1F4E6} \u8fc1\u79fb\u76ee\u5f55"}
+                </button>
+              `
+            : nothing}
           <button
             class="btn btn--sm"
             ?disabled=${props.groupFilesLoading}
@@ -1123,89 +1073,111 @@ function renderGroupFiles(group: GroupInfo, props: GroupsProps) {
                 props.onAddGroupFile(group.id, n.trim());
               }
             }}
-          >+ \u6dfb\u52a0\u6587\u4ef6</button>
-          <button class="btn btn--sm" ?disabled=${props.groupFilesLoading} @click=${() => props.onLoadGroupFiles(group.id)}>
+          >
+            + 添加文件
+          </button>
+          <button
+            class="btn btn--sm"
+            ?disabled=${props.groupFilesLoading}
+            @click=${() => props.onLoadGroupFiles(group.id)}
+          >
             ${props.groupFilesLoading ? "\u52a0\u8f7d\u4e2d..." : "\u5237\u65b0"}
           </button>
         </div>
       </div>
-      ${list ? html`<div class="muted mono" style="margin-top: 8px;">\u5de5\u4f5c\u7a7a\u95f4\uff1a${list.workspace}</div>` : nothing}
-      ${props.groupFilesError ? html`<div class="callout danger" style="margin-top: 12px;">${props.groupFilesError}</div>` : nothing}
-      ${
-        !list
-          ? html`
-              <div class="callout info" style="margin-top: 12px">
-                \u70b9\u51fb\u300c\u5237\u65b0\u300d\u52a0\u8f7d\u7fa4\u7ec4\u5de5\u4f5c\u7a7a\u95f4\u6587\u4ef6\u5217\u8868\u3002
-              </div>
-            `
-          : html`
+      ${list
+        ? html`<div class="muted mono" style="margin-top: 8px;">工作空间：${list.workspace}</div>`
+        : nothing}
+      ${props.groupFilesError
+        ? html`<div class="callout danger" style="margin-top: 12px;">${props.groupFilesError}</div>`
+        : nothing}
+      ${!list
+        ? html`
+            <div class="callout info" style="margin-top: 12px">
+              点击「刷新」加载群组工作空间文件列表。
+            </div>
+          `
+        : html`
             <div class="agent-files-grid" style="margin-top: 16px;">
               <div class="agent-files-list">
-                ${
-                  files.length === 0
-                    ? html`
-                        <div class="muted">\u6682\u65e0\u6587\u4ef6\u3002</div>
-                      `
-                    : files.map(
-                        (file) => html`
-                      <button type="button" class="agent-file-row ${active === file.name ? "active" : ""}" @click=${() => props.onSelectGroupFile(file.name)}>
+                ${files.length === 0
+                  ? html` <div class="muted">暂无文件。</div> `
+                  : files.map(
+                      (file) => html` <button
+                        type="button"
+                        class="agent-file-row ${active === file.name ? "active" : ""}"
+                        @click=${() => props.onSelectGroupFile(file.name)}
+                      >
                         <div>
                           <div class="agent-file-name mono">${file.name}</div>
-                          <div class="agent-file-meta">${file.missing ? "\u6587\u4ef6\u4e22\u5931" : `${fmt(file.size)} \u00b7 ${file.updatedAtMs ? new Date(file.updatedAtMs).toLocaleString() : "-"}`}</div>
+                          <div class="agent-file-meta">
+                            ${file.missing
+                              ? "\u6587\u4ef6\u4e22\u5931"
+                              : `${fmt(file.size)} \u00b7 ${file.updatedAtMs ? new Date(file.updatedAtMs).toLocaleString() : "-"}`}
+                          </div>
                         </div>
-                        ${
-                          file.missing
-                            ? html`
-                                <span class="agent-pill warn">\u4e22\u5931</span>
-                              `
-                            : nothing
-                        }
+                        ${file.missing
+                          ? html` <span class="agent-pill warn">丢失</span> `
+                          : nothing}
                       </button>`,
-                      )
-                }
+                    )}
               </div>
               <div class="agent-files-editor">
-                ${
-                  !activeEntry
-                    ? html`
-                        <div class="muted">\u9009\u62e9\u4e00\u4e2a\u6587\u4ef6\u8fdb\u884c\u7f16\u8f91\u3002</div>
-                      `
-                    : html`
+                ${!activeEntry
+                  ? html` <div class="muted">选择一个文件进行编辑。</div> `
+                  : html`
                       <div class="agent-file-header">
                         <div>
                           <div class="agent-file-title mono">${activeEntry.name}</div>
                           <div class="agent-file-sub mono">${activeEntry.path}</div>
                         </div>
                         <div class="agent-file-actions">
-                          <button class="btn btn--sm btn--danger" @click=${() => {
-                            if (
-                              confirm(
-                                `\u786e\u5b9a\u8981\u5220\u9664\u6587\u4ef6 ${activeEntry.name} \u5417\uff1f`,
-                              )
-                            ) {
-                              props.onDeleteGroupFile(group.id, activeEntry.name);
-                            }
-                          }}>\u5220\u9664</button>
-                          <button class="btn btn--sm" ?disabled=${!isDirty} @click=${() => props.onGroupFileReset(activeEntry.name)}>\u91cd\u7f6e</button>
-                          <button class="btn btn--sm primary" ?disabled=${props.groupFileSaving || !isDirty} @click=${() => props.onGroupFileSave(activeEntry.name)}>
+                          <button
+                            class="btn btn--sm btn--danger"
+                            @click=${() => {
+                              if (
+                                confirm(
+                                  `\u786e\u5b9a\u8981\u5220\u9664\u6587\u4ef6 ${activeEntry.name} \u5417\uff1f`,
+                                )
+                              ) {
+                                props.onDeleteGroupFile(group.id, activeEntry.name);
+                              }
+                            }}
+                          >
+                            删除
+                          </button>
+                          <button
+                            class="btn btn--sm"
+                            ?disabled=${!isDirty}
+                            @click=${() => props.onGroupFileReset(activeEntry.name)}
+                          >
+                            重置
+                          </button>
+                          <button
+                            class="btn btn--sm primary"
+                            ?disabled=${props.groupFileSaving || !isDirty}
+                            @click=${() => props.onGroupFileSave(activeEntry.name)}
+                          >
                             ${props.groupFileSaving ? "\u4fdd\u5b58\u4e2d..." : "\u4fdd\u5b58"}
                           </button>
                         </div>
                       </div>
                       <label class="field" style="margin-top: 12px;">
-                        <span>\u6587\u4ef6\u5185\u5bb9</span>
+                        <span>文件内容</span>
                         <textarea
                           rows="20"
                           .value=${draft}
-                          @input=${(e: Event) => props.onGroupFileDraftChange(activeEntry.name, (e.target as HTMLTextAreaElement).value)}
+                          @input=${(e: Event) =>
+                            props.onGroupFileDraftChange(
+                              activeEntry.name,
+                              (e.target as HTMLTextAreaElement).value,
+                            )}
                         ></textarea>
                       </label>
-                    `
-                }
+                    `}
               </div>
             </div>
-          `
-      }
+          `}
     </section>
   `;
 }
@@ -1225,7 +1197,11 @@ function renderGroupEditModal(props: GroupsProps) {
 
   return html`
     <div class="modal-overlay" @click=${props.onCancelEdit}>
-      <div class="modal-content" @click=${(e: Event) => e.stopPropagation()} style="max-width: 600px;">
+      <div
+        class="modal-content"
+        @click=${(e: Event) => e.stopPropagation()}
+        style="max-width: 600px;"
+      >
         <div class="card" style="margin: 0;">
           <div class="card-title">${isNew ? "创建群组" : "编辑群组"}</div>
           <div class="card-sub">配置群组基本信息</div>
@@ -1257,41 +1233,38 @@ function renderGroupEditModal(props: GroupsProps) {
               />
             </div>
 
-            ${
-              isNew
-                ? html`
-            <div class="form-group" style="margin-bottom: 12px;">
-              <label class="form-label">群主（创建者）</label>
-              ${
-                agents.length > 0
-                  ? html`<select
-                    class="form-control"
-                    .value=${(group as GroupInfo).ownerId || defaultOwnerId}
-                    @change=${(e: Event) =>
-                      props.onGroupFormChange("ownerId", (e.target as HTMLSelectElement).value)}
-                  >
-                    ${agents.map(
-                      (a) => html`
-                      <option
-                        value=${a.id}
-                        ?selected=${((group as GroupInfo).ownerId || defaultOwnerId) === a.id}
-                      >${a.id}${a.id === defaultOwnerId ? " (默认)" : ""}</option>
-                    `,
-                    )}
-                  </select>`
-                  : html`<input
-                    type="text"
-                    class="form-control"
-                    .value=${(group as GroupInfo).ownerId || defaultOwnerId}
-                    placeholder="智能助手ID，例：main"
-                    @input=${(e: Event) =>
-                      props.onGroupFormChange("ownerId", (e.target as HTMLInputElement).value)}
-                  />`
-              }
-              <small class="form-text muted">群主拥有群组的最高权限</small>
-            </div>`
-                : nothing
-            }
+            ${isNew
+              ? html` <div class="form-group" style="margin-bottom: 12px;">
+                  <label class="form-label">群主（创建者）</label>
+                  ${agents.length > 0
+                    ? html`<select
+                        class="form-control"
+                        .value=${(group as GroupInfo).ownerId || defaultOwnerId}
+                        @change=${(e: Event) =>
+                          props.onGroupFormChange("ownerId", (e.target as HTMLSelectElement).value)}
+                      >
+                        ${agents.map(
+                          (a) => html`
+                            <option
+                              value=${a.id}
+                              ?selected=${((group as GroupInfo).ownerId || defaultOwnerId) === a.id}
+                            >
+                              ${a.id}${a.id === defaultOwnerId ? " (默认)" : ""}
+                            </option>
+                          `,
+                        )}
+                      </select>`
+                    : html`<input
+                        type="text"
+                        class="form-control"
+                        .value=${(group as GroupInfo).ownerId || defaultOwnerId}
+                        placeholder="智能助手ID，例：main"
+                        @input=${(e: Event) =>
+                          props.onGroupFormChange("ownerId", (e.target as HTMLInputElement).value)}
+                      />`}
+                  <small class="form-text muted">群主拥有群组的最高权限</small>
+                </div>`
+              : nothing}
 
             <div class="form-group" style="margin-bottom: 12px;">
               <label class="form-label">群组描述（可选）</label>
@@ -1336,68 +1309,77 @@ function renderGroupEditModal(props: GroupsProps) {
               </small>
             </div>
 
-            ${
-              isNew
-                ? html`
-            <div class="callout info" style="margin-top: 16px;">
-              <strong>📁 项目群组（可选）</strong>
-              <p style="margin: 8px 0 0 0;">
-                如果绑定项目，此群组将成为项目群，共享工作空间与项目同步。
-              </p>
-            </div>
+            ${isNew
+              ? html`
+                  <div class="callout info" style="margin-top: 16px;">
+                    <strong>📁 项目群组（可选）</strong>
+                    <p style="margin: 8px 0 0 0;">
+                      如果绑定项目，此群组将成为项目群，共享工作空间与项目同步。
+                    </p>
+                  </div>
 
-            <div class="form-group" style="margin-bottom: 12px;">
-              <label class="form-label">绑定项目 ID（可选）</label>
-              <input
-                type="text"
-                class="form-control"
-                .value=${(group as GroupInfo).projectId || ""}
-                placeholder="例：wo-shi-renlei, PolyVault, LifeMirror"
-                @input=${(e: Event) =>
-                  props.onGroupFormChange("projectId", (e.target as HTMLInputElement).value)}
-              />
-              <small class="form-text muted">
-                留空则为普通群，填写项目 ID 后群组将成为项目群。绑定后可配置记忆空间
-              </small>
-            </div>
+                  <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label">绑定项目 ID（可选）</label>
+                    <input
+                      type="text"
+                      class="form-control"
+                      .value=${(group as GroupInfo).projectId || ""}
+                      placeholder="例：wo-shi-renlei, PolyVault, LifeMirror"
+                      @input=${(e: Event) =>
+                        props.onGroupFormChange("projectId", (e.target as HTMLInputElement).value)}
+                    />
+                    <small class="form-text muted">
+                      留空则为普通群，填写项目 ID 后群组将成为项目群。绑定后可配置记忆空间
+                    </small>
+                  </div>
 
-            ${(group as GroupInfo).projectId ? html`
-            <div class="form-group" style="margin-bottom: 12px;">
-              <label class="form-label">群组工作空间路径</label>
-              <input
-                type="text"
-                class="form-control"
-                .value=${(group as GroupInfo).workspacePath || ""}
-                placeholder="H:\\OpenClaw_Workspace\\groups\\{projectId}"
-                @input=${(e: Event) =>
-                  props.onGroupFormChange("workspacePath", (e.target as HTMLInputElement).value)}
-              />
-              <small class="form-text muted">
-                项目群的共享工作空间路径，修改后将同步更新到配置文件
-              </small>
-            </div>
-            ` : nothing}
-            `
-                : nothing
-            }
+                  ${(group as GroupInfo).projectId
+                    ? html`
+                        <div class="form-group" style="margin-bottom: 12px;">
+                          <label class="form-label">群组工作空间路径</label>
+                          <input
+                            type="text"
+                            class="form-control"
+                            .value=${(group as GroupInfo).workspacePath || ""}
+                            placeholder="H:\\OpenClaw_Workspace\\groups\\{projectId}"
+                            @input=${(e: Event) =>
+                              props.onGroupFormChange(
+                                "workspacePath",
+                                (e.target as HTMLInputElement).value,
+                              )}
+                          />
+                          <small class="form-text muted">
+                            项目群的共享工作空间路径，修改后将同步更新到配置文件
+                          </small>
+                        </div>
+                      `
+                    : nothing}
+                `
+              : nothing}
           </div>
 
           <div class="row" style="gap: 8px; margin-top: 20px;">
             <button class="btn" @click=${props.onCancelEdit}>取消</button>
             <button
               class="btn btn--primary"
-              ?disabled=${!group.id || !group.name || (isNew && !((group as GroupInfo).ownerId || defaultOwnerId))}
+              ?disabled=${!group.id ||
+              !group.name ||
+              (isNew && !((group as GroupInfo).ownerId || defaultOwnerId))}
               @click=${props.onSaveGroup}
             >
               ${isNew ? "创建" : "保存"}
             </button>
           </div>
 
-          ${!isNew && (group as GroupInfo).projectId ? html`
-          <div class="callout info" style="margin-top: 16px;">
-            💡 <strong>提示：</strong>工作空间已保存。如需配置记忆空间迁移，请在群组详情的「群组设置」标签页中操作。
-          </div>
-          ` : nothing}
+          ${!isNew && (group as GroupInfo).projectId
+            ? html`
+                <div class="callout info" style="margin-top: 16px;">
+                  💡
+                  <strong>提示：</strong
+                  >工作空间已保存。如需配置记忆空间迁移，请在群组详情的「群组设置」标签页中操作。
+                </div>
+              `
+            : nothing}
         </div>
       </div>
     </div>
@@ -1421,18 +1403,20 @@ function renderProjectEditModal(props: GroupsProps) {
 
   return html`
     <div class="modal-overlay" @click=${props.onCancelProjectEdit}>
-      <div class="modal-content" @click=${(e: Event) => e.stopPropagation()} style="max-width: 700px;">
+      <div
+        class="modal-content"
+        @click=${(e: Event) => e.stopPropagation()}
+        style="max-width: 700px;"
+      >
         <div class="card" style="margin: 0;">
           <div class="card-title">${isNew ? "创建项目" : "配置项目"}</div>
           <div class="card-sub">管理项目工作空间和代码目录配置</div>
 
           <div class="callout warn" style="margin-top: 16px;">
             <strong>⚠️ 重要提醒:</strong>
-            ${
-              isNew
-                ? "项目 ID 创建后不可修改，请谨慎填写！其他配置可在创建后随时调整。"
-                : "项目 ID 不可修改，但工作空间、业务空间等配置可以随时修改。"
-            }
+            ${isNew
+              ? "项目 ID 创建后不可修改，请谨慎填写！其他配置可在创建后随时调整。"
+              : "项目 ID 不可修改，但工作空间、业务空间等配置可以随时修改。"}
           </div>
 
           <div style="margin-top: 20px;">
@@ -1461,13 +1445,9 @@ function renderProjectEditModal(props: GroupsProps) {
                 @input=${(e: Event) =>
                   props.onProjectFormChange("name", (e.target as HTMLInputElement).value)}
               />
-              ${
-                !isNew
-                  ? html`
-                      <small class="form-text muted">项目名称创建后不可修改</small>
-                    `
-                  : nothing
-              }
+              ${!isNew
+                ? html` <small class="form-text muted">项目名称创建后不可修改</small> `
+                : nothing}
             </div>
 
             <div class="form-group" style="margin-bottom: 12px;">
@@ -1508,48 +1488,46 @@ function renderProjectEditModal(props: GroupsProps) {
               <small class="form-text muted">项目代码目录，可根据项目类型自定义</small>
             </div>
 
-            ${
-              isNew
-                ? html`
-            <div class="callout info" style="margin-top: 16px;">
-              <strong>👥 项目群组（可选）</strong>
-              <p style="margin: 8px 0 0 0;">
-                创建项目时可以选择同时创建一个关联的项目群，用于项目协作和沟通。
-              </p>
-            </div>
+            ${isNew
+              ? html`
+                  <div class="callout info" style="margin-top: 16px;">
+                    <strong>👥 项目群组（可选）</strong>
+                    <p style="margin: 8px 0 0 0;">
+                      创建项目时可以选择同时创建一个关联的项目群，用于项目协作和沟通。
+                    </p>
+                  </div>
 
-            <div class="form-group" style="margin-bottom: 16px;">
-              <label class="cfg-toggle">
-                <input
-                  type="checkbox"
-                  .checked=${project.createGroup !== false}
-                  @change=${(e: Event) =>
-                    props.onProjectFormChange(
-                      "createGroup",
-                      (e.target as HTMLInputElement).checked,
-                    )}
-                />
-                <span class="cfg-toggle__track"></span>
-                <span style="margin-left: 8px;">同时创建项目群</span>
-              </label>
-              <small class="form-text muted" style="display: block; margin-top: 4px;">
-                勾选后会自动创建一个名为「${project.name} 项目组」的项目群，共享工作空间与项目同步
-              </small>
-            </div>
-            `
-                : nothing
-            }
-
-            ${
-              !isNew
-                ? html`
-                    <div class="callout info" style="margin-top: 16px">
-                      <strong>💡 业务空间配置</strong>
-                      <p style="margin: 8px 0">除了基础配置外，您还可以在项目详情中配置记忆空间和各种业务空间（代码、文档、销售、合同等）</p>
-                    </div>
-                  `
-                : nothing
-            }
+                  <div class="form-group" style="margin-bottom: 16px;">
+                    <label class="cfg-toggle">
+                      <input
+                        type="checkbox"
+                        .checked=${project.createGroup !== false}
+                        @change=${(e: Event) =>
+                          props.onProjectFormChange(
+                            "createGroup",
+                            (e.target as HTMLInputElement).checked,
+                          )}
+                      />
+                      <span class="cfg-toggle__track"></span>
+                      <span style="margin-left: 8px;">同时创建项目群</span>
+                    </label>
+                    <small class="form-text muted" style="display: block; margin-top: 4px;">
+                      勾选后会自动创建一个名为「${project.name}
+                      项目组」的项目群，共享工作空间与项目同步
+                    </small>
+                  </div>
+                `
+              : nothing}
+            ${!isNew
+              ? html`
+                  <div class="callout info" style="margin-top: 16px">
+                    <strong>💡 业务空间配置</strong>
+                    <p style="margin: 8px 0">
+                      除了基础配置外，您还可以在项目详情中配置记忆空间和各种业务空间（代码、文档、销售、合同等）
+                    </p>
+                  </div>
+                `
+              : nothing}
           </div>
 
           <div class="row" style="gap: 8px; margin-top: 20px;">
@@ -1563,11 +1541,15 @@ function renderProjectEditModal(props: GroupsProps) {
             </button>
           </div>
 
-          ${!isNew ? html`
-          <div class="callout info" style="margin-top: 16px;">
-            💡 <strong>提示：</strong>基础配置已保存。如需配置记忆空间和业务空间（代码、文档、销售等），请在项目详情的「业务空间配置」区块中操作。
-          </div>
-          ` : nothing}
+          ${!isNew
+            ? html`
+                <div class="callout info" style="margin-top: 16px;">
+                  💡
+                  <strong>提示：</strong
+                  >基础配置已保存。如需配置记忆空间和业务空间（代码、文档、销售等），请在项目详情的「业务空间配置」区块中操作。
+                </div>
+              `
+            : nothing}
         </div>
       </div>
     </div>
@@ -1582,6 +1564,12 @@ function renderProjectSpacesPanel(props: GroupsProps, project: ProjectInfo) {
   const loading = props.projectSpacesLoading;
   const error = props.projectSpacesError;
 
+  // 同步当前项目的空间数据到全局状态，供对话框使用
+  (window as unknown as Record<string, unknown>).businessSpacesData = {
+    projectId: project.projectId,
+    spaces: spaces,
+  };
+
   return html`
     <section class="card" style="margin-top: 16px;">
       <div class="row" style="justify-content: space-between;">
@@ -1590,86 +1578,125 @@ function renderProjectSpacesPanel(props: GroupsProps, project: ProjectInfo) {
           <div class="card-sub">管理项目的所有业务空间（代码、文档、销售等）</div>
         </div>
         <div class="row" style="gap: 8px;">
-          <button class="btn btn--sm btn--primary" @click=${() => window.addBusinessSpaceForProject(project.projectId)}>
+          <button
+            class="btn btn--sm btn--primary"
+            @click=${() => window.addBusinessSpaceForProject(project.projectId)}
+          >
             + 添加业务空间
           </button>
-          <button class="btn btn--sm" ?disabled=${loading} @click=${() => props.onLoadProjectSpaces(project.projectId)}>
+          <button
+            class="btn btn--sm"
+            ?disabled=${loading}
+            @click=${() => props.onLoadProjectSpaces(project.projectId)}
+          >
             ${loading ? "加载中..." : "🔄 刷新"}
           </button>
         </div>
       </div>
 
-      ${error ? html`<div class="callout danger" style="margin-top: 12px;">${error}</div>` : nothing}
+      ${error
+        ? html`<div class="callout danger" style="margin-top: 12px;">${error}</div>`
+        : nothing}
 
       <div class="callout info" style="margin-top: 16px;">
         <strong>📦 空间架构说明</strong>
         <p style="margin: 8px 0 0 0;">
-          项目包含两类空间：<br/>
-          <strong>1. 记忆空间（Memory Space）</strong>：每个项目1个，从群组空间转换而来，用于团队协作和共享记忆（聊天历史、讨论记录、团队规范等）<br/>
-          <strong>2. 业务空间（Business Spaces）</strong>：根据项目类型配置多个，用于各种业务场景：<br/>
-          &nbsp;&nbsp;&nbsp;• 开发项目：代码空间、文档空间、测试空间等<br/>
-          &nbsp;&nbsp;&nbsp;• 商贸项目：销售文档空间、合同空间、客户空间等<br/>
+          项目包含两类空间：<br />
+          <strong>1. 记忆空间（Memory Space）</strong
+          >：每个项目1个，从群组空间转换而来，用于团队协作和共享记忆（聊天历史、讨论记录、团队规范等）<br />
+          <strong>2. 业务空间（Business Spaces）</strong
+          >：根据项目类型配置多个，用于各种业务场景：<br />
+          &nbsp;&nbsp;&nbsp;• 开发项目：代码空间、文档空间、测试空间等<br />
+          &nbsp;&nbsp;&nbsp;• 商贸项目：销售文档空间、合同空间、客户空间等<br />
           &nbsp;&nbsp;&nbsp;• 创意项目：设计资源空间、素材空间等
         </p>
       </div>
 
       <!-- 业务空间列表 -->
       <div style="margin-top: 24px;">
-        ${loading && spaces.length === 0 ? html`
-          <div style="text-align: center; padding: 40px; color: #666;">
-            <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
-            <div>加载中...</div>
-          </div>
-        ` : spaces.length === 0 ? html`
-          <div style="text-align: center; padding: 40px; color: #666;">
-            <div style="font-size: 48px; margin-bottom: 16px;">📂</div>
-            <div>暂无业务空间</div>
-            <div style="font-size: 12px; margin-top: 8px;">点击「添加业务空间"开始配置</div>
-          </div>
-        ` : html`
-          <div class="spaces-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px; margin-top: 16px;">
-            ${spaces.map((space, index) => html`
-              <div class="space-card" style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; background: #fafafa;">
-                <div class="space-header" style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
-                  <div style="flex: 1;">
-                    <div class="space-type" style="font-size: 16px; font-weight: 600; color: #1a73e8; margin-bottom: 4px;">
-                      ${getBusinessSpaceIcon(space.type)} ${space.type}
-                    </div>
-                    ${space.description ? html`
-                      <div class="space-desc" style="font-size: 12px; color: #666; margin: 4px 0 0 0;">${space.description}</div>
-                    ` : nothing}
-                  </div>
-                  <div style="display: flex; gap: 4px;">
-                    <button 
-                      class="btn btn--sm" 
-                      @click=${() => window.editBusinessSpaceForProject(project.projectId, index)}
-                      title="编辑"
-                    >
-                      ✏️
-                    </button>
-                    <button 
-                      class="btn btn--sm btn--danger" 
-                      @click=${() => window.deleteBusinessSpaceForProject(project.projectId, space.type)}
-                      title="删除"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-                <div class="space-path" style="font-family: monospace; font-size: 12px; background: #f5f5f5; padding: 8px; border-radius: 4px; word-break: break-all;">
-                  📍 ${space.path}
-                </div>
-                <div class="space-status" style="margin-top: 8px; font-size: 12px;">
-                  ${space.enabled !== false ? html`
-                    <span style="color: #28a745;">✅ 已启用</span>
-                  ` : html`
-                    <span style="color: #dc3545;">⛔ 已禁用</span>
-                  `}
-                </div>
+        ${loading && spaces.length === 0
+          ? html`
+              <div style="text-align: center; padding: 40px; color: #666;">
+                <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
+                <div>加载中...</div>
               </div>
-            `)}
-          </div>
-        `}
+            `
+          : spaces.length === 0
+            ? html`
+                <div style="text-align: center; padding: 40px; color: #666;">
+                  <div style="font-size: 48px; margin-bottom: 16px;">📂</div>
+                  <div>暂无业务空间</div>
+                  <div style="font-size: 12px; margin-top: 8px;">点击「添加业务空间"开始配置</div>
+                </div>
+              `
+            : html`
+                <div
+                  class="spaces-grid"
+                  style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px; margin-top: 16px;"
+                >
+                  ${spaces.map(
+                    (space, index) => html`
+                      <div
+                        class="space-card"
+                        style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; background: #fafafa;"
+                      >
+                        <div
+                          class="space-header"
+                          style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;"
+                        >
+                          <div style="flex: 1;">
+                            <div
+                              class="space-type"
+                              style="font-size: 16px; font-weight: 600; color: #1a73e8; margin-bottom: 4px;"
+                            >
+                              ${getBusinessSpaceIcon(space.type)} ${space.type}
+                            </div>
+                            ${space.description
+                              ? html`
+                                  <div
+                                    class="space-desc"
+                                    style="font-size: 12px; color: #666; margin: 4px 0 0 0;"
+                                  >
+                                    ${space.description}
+                                  </div>
+                                `
+                              : nothing}
+                          </div>
+                          <div style="display: flex; gap: 4px;">
+                            <button
+                              class="btn btn--sm"
+                              @click=${() =>
+                                window.editBusinessSpaceForProject(project.projectId, index)}
+                              title="编辑"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              class="btn btn--sm btn--danger"
+                              @click=${() =>
+                                window.deleteBusinessSpaceForProject(project.projectId, space.type)}
+                              title="删除"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                        <div
+                          class="space-path"
+                          style="font-family: monospace; font-size: 12px; background: #f5f5f5; padding: 8px; border-radius: 4px; word-break: break-all;"
+                        >
+                          📍 ${space.path}
+                        </div>
+                        <div class="space-status" style="margin-top: 8px; font-size: 12px;">
+                          ${space.enabled !== false
+                            ? html` <span style="color: #28a745;">✅ 已启用</span> `
+                            : html` <span style="color: #dc3545;">⛔ 已禁用</span> `}
+                        </div>
+                      </div>
+                    `,
+                  )}
+                </div>
+              `}
       </div>
 
       <div class="callout" style="margin-top: 24px;">
@@ -1713,7 +1740,7 @@ function getBusinessSpaceIcon(type: string): string {
 /**
  * 当前编辑的业务空间数据（全局状态）
  */
-(window as any).businessSpacesData = {
+(window as unknown as Record<string, unknown>).businessSpacesData = {
   projectId: null as string | null,
   spaces: [] as Array<{ type: string; path: string; description?: string; enabled?: boolean }>,
 };
@@ -1721,7 +1748,17 @@ function getBusinessSpaceIcon(type: string): string {
 /**
  * 添加业务空间（为指定项目）
  */
-(window as any).addBusinessSpaceForProject = function(projectId: string) {
+(window as unknown as Record<string, unknown>).addBusinessSpaceForProject = function (
+  projectId: string,
+) {
+  // 确保使用正确的项目 ID，避免全局状态污染
+  (window as unknown as Record<string, unknown>).businessSpacesData = {
+    projectId: projectId,
+    spaces: [], // 这个数据应该从 props.projectSpacesList 获取，而不是全局状态
+  };
+
+  console.log(`[BusinessSpace] Opening add dialog for project: ${projectId}`);
+
   const dialog = document.createElement("dialog");
   dialog.innerHTML = `
     <div style="padding: 20px; min-width: 450px;">
@@ -1766,48 +1803,71 @@ function getBusinessSpaceIcon(type: string): string {
       </div>
     </div>
   `;
-  
+
   document.body.appendChild(dialog);
   dialog.showModal();
-  
-  dialog.querySelector("#cancel-btn")!.onclick = () => {
+
+  dialog.querySelector("#cancel-btn")!.addEventListener("click", () => {
     dialog.close();
     dialog.remove();
-  };
-  
-  dialog.querySelector("#save-btn")!.onclick = () => {
+  });
+
+  dialog.querySelector("#save-btn")!.addEventListener("click", () => {
     const type = (dialog.querySelector("#space-type") as HTMLInputElement).value.trim();
     const path = (dialog.querySelector("#space-path") as HTMLInputElement).value.trim();
-    const description = (dialog.querySelector("#space-description") as HTMLInputElement).value.trim();
-    
+    const description = (
+      dialog.querySelector("#space-description") as HTMLInputElement
+    ).value.trim();
+
     if (!type) {
       alert("请输入空间类型");
       return;
     }
-    
+
     if (!path) {
       alert("请输入空间路径");
       return;
     }
-    
+
     // 通过事件通知父组件保存（会调用 RPC）
-    window.dispatchEvent(new CustomEvent("save-business-space", {
-      detail: { projectId, space: { type, path, description: description || undefined, enabled: true } }
-    }));
-    
+    window.dispatchEvent(
+      new CustomEvent("save-business-space", {
+        detail: {
+          projectId,
+          space: { type, path, description: description || undefined, enabled: true },
+        },
+      }),
+    );
+
     dialog.close();
     dialog.remove();
-  };
+  });
 };
 
 /**
  * 编辑业务空间（为指定项目）
  */
-(window as any).editBusinessSpaceForProject = function(projectId: string, index: number) {
-  // 从全局状态获取数据
-  const data = (window as any).businessSpacesData;
+(window as unknown as Record<string, unknown>).editBusinessSpaceForProject = function (
+  projectId: string,
+  index: number,
+) {
+  // 从全局状态获取数据（确保是当前项目的数据）
+  const data = (window as unknown as Record<string, unknown>).businessSpacesData as {
+    projectId: string | null;
+    spaces: Array<{ type: string; path: string; description?: string; enabled?: boolean }>;
+  };
+
+  // 验证 projectId 是否匹配，防止全局状态污染
+  if (data.projectId !== projectId) {
+    console.warn(
+      `[BusinessSpace] ProjectId mismatch: ${data.projectId} !== ${projectId}, resetting...`,
+    );
+    data.projectId = projectId;
+    data.spaces = [];
+  }
+
   const space = data.spaces[index];
-  
+
   const dialog = document.createElement("dialog");
   dialog.innerHTML = `
     <div style="padding: 20px; min-width: 450px;">
@@ -1861,81 +1921,109 @@ function getBusinessSpaceIcon(type: string): string {
       </div>
     </div>
   `;
-  
+
   document.body.appendChild(dialog);
   dialog.showModal();
-  
-  dialog.querySelector("#cancel-btn")!.onclick = () => {
+
+  dialog.querySelector("#cancel-btn")!.addEventListener("click", () => {
     dialog.close();
     dialog.remove();
-  };
-  
-  dialog.querySelector("#save-btn")!.onclick = () => {
+  });
+
+  dialog.querySelector("#save-btn")!.addEventListener("click", () => {
     const type = (dialog.querySelector("#space-type") as HTMLInputElement).value.trim();
     const path = (dialog.querySelector("#space-path") as HTMLInputElement).value.trim();
-    const description = (dialog.querySelector("#space-description") as HTMLInputElement).value.trim();
+    const description = (
+      dialog.querySelector("#space-description") as HTMLInputElement
+    ).value.trim();
     const enabled = (dialog.querySelector("#space-enabled") as HTMLInputElement).checked;
-    
+
     if (!type) {
       alert("请输入空间类型");
       return;
     }
-    
+
     if (!path) {
       alert("请输入空间路径");
       return;
     }
-    
+
     // 通过事件通知父组件保存（会调用 RPC）
-    window.dispatchEvent(new CustomEvent("save-business-space", {
-      detail: { projectId, space: { type, path, description: description || undefined, enabled }, index }
-    }));
-    
+    window.dispatchEvent(
+      new CustomEvent("save-business-space", {
+        detail: {
+          projectId,
+          space: { type, path, description: description || undefined, enabled },
+          index,
+        },
+      }),
+    );
+
     dialog.close();
     dialog.remove();
-  };
+  });
 };
 
 /**
  * 删除业务空间（为指定项目）
  */
-(window as any).deleteBusinessSpaceForProject = function(projectId: string, spaceType: string) {
+(window as unknown as Record<string, unknown>).deleteBusinessSpaceForProject = function (
+  projectId: string,
+  spaceType: string,
+) {
   if (!confirm(`确定要删除业务空间 "${spaceType}" 吗？`)) {
     return;
   }
-  
+
   // 通过事件通知父组件删除（会调用 RPC）
-  window.dispatchEvent(new CustomEvent("delete-business-space", {
-    detail: { projectId, spaceType }
-  }));
+  window.dispatchEvent(
+    new CustomEvent("delete-business-space", {
+      detail: { projectId, spaceType },
+    }),
+  );
 };
 
 /**
  * 旧版兼容函数（保留向后兼容）
  */
-(window as any).addBusinessSpace = function() {
-  const data = (window as any).businessSpacesData;
+(window as unknown as Record<string, unknown>).addBusinessSpace = function () {
+  const data = (window as unknown as Record<string, unknown>).businessSpacesData as {
+    projectId: string | null;
+    spaces: Array<unknown>;
+  };
   if (data.projectId) {
-    (window as any).addBusinessSpaceForProject(data.projectId);
+    (window as unknown as Record<string, unknown>).addBusinessSpaceForProject?.(data.projectId);
   } else {
     alert("请先选择一个项目");
   }
 };
 
-(window as any).editBusinessSpace = function(index: number) {
-  const data = (window as any).businessSpacesData;
+(window as unknown as Record<string, unknown>).editBusinessSpace = function (index: number) {
+  const data = (window as unknown as Record<string, unknown>).businessSpacesData as {
+    projectId: string | null;
+    spaces: Array<unknown>;
+  };
   if (data.projectId) {
-    (window as any).editBusinessSpaceForProject(data.projectId, index);
+    (window as unknown as Record<string, unknown>).editBusinessSpaceForProject?.(
+      data.projectId,
+      index,
+    );
   } else {
     alert("请先选择一个项目");
   }
 };
 
-(window as any).deleteBusinessSpace = function(index: number) {
-  const data = (window as any).businessSpacesData;
+(window as unknown as Record<string, unknown>).deleteBusinessSpace = function (index: number) {
+  const data = (window as unknown as Record<string, unknown>).businessSpacesData as {
+    projectId: string | null;
+    spaces: Array<{ type: string }>;
+  };
   const space = data.spaces[index];
   if (data.projectId && space) {
-    (window as any).deleteBusinessSpaceForProject(data.projectId, space.type);
+    (window as unknown as Record<string, unknown>).deleteBusinessSpaceForProject?.(
+      data.projectId,
+      space.type,
+    );
   } else {
     alert("请先选择一个项目");
   }
