@@ -1,0 +1,295 @@
+{
+  "version": "1.0.0",
+  "description": "模块依赖关系配置",
+  "modules": [
+    {
+      "id": "config-loader",
+      "name": "配置加载器",
+      "position": "core",
+      "modulePath": "src/config/loader.ts",
+      "dependencies": [],
+      "description": "加载系统配置文件",
+      "version": "1.0.0",
+      "owner": "system",
+      "startupTimeout": 5000
+    },
+    {
+      "id": "logging",
+      "name": "日志系统",
+      "position": "core",
+      "modulePath": "src/logging/index.ts",
+      "dependencies": [
+        {
+          "moduleName": "config-loader",
+          "type": "required",
+          "description": "需要日志配置"
+        }
+      ],
+      "description": "统一的日志系统",
+      "version": "1.0.0",
+      "owner": "system",
+      "startupTimeout": 5000
+    },
+    {
+      "id": "utils",
+      "name": "工具函数库",
+      "position": "core",
+      "modulePath": "src/utils/index.ts",
+      "dependencies": [],
+      "description": "通用工具函数",
+      "version": "1.0.0",
+      "owner": "system",
+      "startupTimeout": 3000
+    },
+    {
+      "id": "database",
+      "name": "数据库连接",
+      "position": "infrastructure",
+      "modulePath": "src/infrastructure/database.ts",
+      "dependencies": [
+        {
+          "moduleName": "config-loader",
+          "type": "required",
+          "description": "需要数据库配置"
+        },
+        {
+          "moduleName": "logging",
+          "type": "required",
+          "description": "需要日志记录"
+        }
+      ],
+      "description": "数据库连接和 ORM",
+      "version": "1.0.0",
+      "owner": "backend-team",
+      "startupTimeout": 30000
+    },
+    {
+      "id": "cache",
+      "name": "缓存服务",
+      "position": "infrastructure",
+      "modulePath": "src/infrastructure/cache.ts",
+      "dependencies": [
+        {
+          "moduleName": "config-loader",
+          "type": "required",
+          "description": "需要缓存配置"
+        },
+        {
+          "moduleName": "logging",
+          "type": "required",
+          "description": "需要日志记录"
+        }
+      ],
+      "description": "Redis 缓存服务",
+      "version": "1.0.0",
+      "owner": "backend-team",
+      "startupTimeout": 15000
+    },
+    {
+      "id": "queue",
+      "name": "消息队列",
+      "position": "infrastructure",
+      "modulePath": "src/infrastructure/queue.ts",
+      "dependencies": [
+        {
+          "moduleName": "config-loader",
+          "type": "required",
+          "description": "需要队列配置"
+        },
+        {
+          "moduleName": "logging",
+          "type": "required",
+          "description": "需要日志记录"
+        }
+      ],
+      "description": "消息队列服务",
+      "version": "1.0.0",
+      "owner": "backend-team",
+      "startupTimeout": 15000
+    },
+    {
+      "id": "auth",
+      "name": "认证服务",
+      "position": "service",
+      "modulePath": "src/services/auth.ts",
+      "dependencies": [
+        {
+          "moduleName": "database",
+          "type": "required",
+          "description": "需要存储用户数据"
+        },
+        {
+          "moduleName": "cache",
+          "type": "required",
+          "description": "需要缓存 token"
+        },
+        {
+          "moduleName": "logging",
+          "type": "required",
+          "description": "需要日志记录"
+        }
+      ],
+      "description": "用户认证和授权",
+      "version": "1.0.0",
+      "owner": "security-team",
+      "startupTimeout": 20000
+    },
+    {
+      "id": "api",
+      "name": "API 服务",
+      "position": "service",
+      "modulePath": "src/services/api.ts",
+      "dependencies": [
+        {
+          "moduleName": "auth",
+          "type": "required",
+          "description": "需要认证"
+        },
+        {
+          "moduleName": "database",
+          "type": "required",
+          "description": "需要数据访问"
+        },
+        {
+          "moduleName": "cache",
+          "type": "optional",
+          "description": "可选缓存"
+        }
+      ],
+      "description": "RESTful API 服务",
+      "version": "1.0.0",
+      "owner": "backend-team",
+      "startupTimeout": 30000
+    },
+    {
+      "id": "gateway",
+      "name": "API 网关",
+      "position": "application",
+      "modulePath": "src/gateway/index.ts",
+      "dependencies": [
+        {
+          "moduleName": "api",
+          "type": "required",
+          "description": "需要 API 服务"
+        },
+        {
+          "moduleName": "auth",
+          "type": "required",
+          "description": "需要认证"
+        },
+        {
+          "moduleName": "queue",
+          "type": "optional",
+          "description": "可选异步任务"
+        }
+      ],
+      "description": "API 网关和路由",
+      "version": "1.0.0",
+      "owner": "platform-team",
+      "startupTimeout": 30000
+    },
+    {
+      "id": "cli",
+      "name": "命令行工具",
+      "position": "application",
+      "modulePath": "src/cli/index.ts",
+      "dependencies": [
+        {
+          "moduleName": "config-loader",
+          "type": "required",
+          "description": "需要配置"
+        },
+        {
+          "moduleName": "logging",
+          "type": "required",
+          "description": "需要日志"
+        }
+      ],
+      "description": "CLI 命令行界面",
+      "version": "1.0.0",
+      "owner": "devtools-team",
+      "startupTimeout": 10000
+    },
+    {
+      "id": "feishu-plugin",
+      "name": "飞书插件",
+      "position": "plugin",
+      "modulePath": "src/plugins/feishu/index.ts",
+      "dependencies": [
+        {
+          "moduleName": "gateway",
+          "type": "required",
+          "description": "需要网关"
+        },
+        {
+          "moduleName": "auth",
+          "type": "required",
+          "description": "需要认证"
+        }
+      ],
+      "description": "飞书通道集成",
+      "version": "1.0.0",
+      "owner": "channel-team",
+      "startupTimeout": 20000
+    },
+    {
+      "id": "wechat-plugin",
+      "name": "微信插件",
+      "position": "plugin",
+      "modulePath": "src/plugins/wechat/index.ts",
+      "dependencies": [
+        {
+          "moduleName": "gateway",
+          "type": "required",
+          "description": "需要网关"
+        },
+        {
+          "moduleName": "auth",
+          "type": "required",
+          "description": "需要认证"
+        }
+      ],
+      "description": "微信通道集成",
+      "version": "1.0.0",
+      "owner": "channel-team",
+      "startupTimeout": 20000
+    }
+  ],
+  "phases": [
+    {
+      "name": "核心层",
+      "modules": ["config-loader", "logging", "utils"],
+      "timeout": 10000,
+      "failFast": true
+    },
+    {
+      "name": "基础设施层",
+      "modules": ["database", "cache", "queue"],
+      "timeout": 45000,
+      "failFast": true
+    },
+    {
+      "name": "服务层",
+      "modules": ["auth", "api"],
+      "timeout": 50000,
+      "failFast": true
+    },
+    {
+      "name": "应用层",
+      "modules": ["gateway", "cli"],
+      "timeout": 40000,
+      "failFast": false
+    },
+    {
+      "name": "插件层",
+      "modules": ["feishu-plugin", "wechat-plugin"],
+      "timeout": 30000,
+      "failFast": false
+    }
+  ],
+  "settings": {
+    "strict": true,
+    "autoGenerateOrder": true,
+    "verbose": true
+  }
+}

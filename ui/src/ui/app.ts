@@ -387,8 +387,13 @@ export class OpenClawApp extends LitElement {
   @state() selectedProjectId: string | null = null;
   @state() activeProjectPanel: "list" | "config" | "members" | "progress" | "handoff" = "list";
   @state() creatingProject = false;
-  @state() editingProject: import("./views/projects.ts").ProjectInfo | null = null;
+  // 注意：不使用 @state() 装饰器，避免在重新渲染时被重置为 null
+  editingProject: import("./views/projects.ts").ProjectInfo | null = null;
   @state() upgradingGroupToProject = false;
+  // 项目业务空间管理状态
+  @state() projectSpacesLoading = false;
+  @state() projectSpacesList: Array<{ type: string; path: string; description?: string; enabled?: boolean }> = [];
+  @state() projectSpacesError: string | null = null;
   /** 项目代码根目录（用户在项目管理页面顶部设置，持久化到 localStorage） */
   @state() projectCodeRoot = localStorage.getItem("openclaw.projectCodeRoot") ?? "";
   /** 项目列表状态筛选（默认显示进行中） */
@@ -1595,6 +1600,57 @@ export class OpenClawApp extends LitElement {
     const accountConfig = accountsConfig?.[accountId] as Record<string, unknown> | undefined;
 
     return accountConfig || {};
+  }
+
+  // 业务空间管理事件处理方法（新增）
+  async handleSaveBusinessSpace(event: CustomEvent) {
+    const { projectId, space, index } = event.detail;
+    if (!this.client) {
+      return;
+    }
+
+    try {
+      await this.client.request("projects.spaces.upsert", {
+        projectId,
+        space,
+      });
+
+      // 刷新列表
+      const res = (await this.client.request("projects.spaces.list", {
+        projectId,
+      })) as any;
+      this.projectSpacesList = res?.spaces ?? [];
+
+      if (index !== undefined) {
+        alert("业务空间已更新！");
+      } else {
+        alert("业务空间已添加！");
+      }
+    } catch (err) {
+      alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  async handleDeleteBusinessSpace(event: CustomEvent) {
+    const { projectId, spaceType } = event.detail;
+    if (!this.client) {
+      return;
+    }
+
+    try {
+      await this.client.request("projects.spaces.remove", {
+        projectId,
+        spaceType,
+      });
+
+      // 刷新列表
+      const res = (await this.client.request("projects.spaces.list", {
+        projectId,
+      })) as any;
+      this.projectSpacesList = res?.spaces ?? [];
+    } catch (err) {
+      alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   render() {

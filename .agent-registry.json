@@ -1,0 +1,130 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-01-15T10:00:00Z",
+  
+  "agents": [
+    {
+      "id": "coordinator",
+      "name": "项目协调员",
+      "role": "planner",
+      "description": "负责任务规划、分解和分配",
+      "capabilities": [
+        "task_planning",
+        "requirement_analysis",
+        "resource_allocation"
+      ],
+      "permissions": {
+        "read": ["project", "task", "memory"],
+        "write": ["task", "project"],
+        "approve": ["medium"],
+        "tools": ["task_create", "task_update", "project_create"]
+      },
+      "owner": "human-admin",
+      "created": "2025-01-01T00:00:00Z",
+      "status": "active",
+      "metrics": {
+        "tasksCompleted": 0,
+        "successRate": 1.0,
+        "avgResponseTime": 0,
+        "lastActivity": null
+      }
+    },
+    {
+      "id": "developer",
+      "name": "开发者",
+      "role": "executor",
+      "description": "负责代码编写、测试和实现",
+      "capabilities": [
+        "coding",
+        "testing",
+        "debugging",
+        "code_review"
+      ],
+      "permissions": {
+        "read": ["project", "task", "code"],
+        "write": ["code", "test"],
+        "approve": ["low"],
+        "tools": ["file_write", "bash_execute", "test_run"]
+      },
+      "owner": "human-admin",
+      "created": "2025-01-01T00:00:00Z",
+      "status": "active",
+      "metrics": {
+        "tasksCompleted": 0,
+        "successRate": 1.0,
+        "avgResponseTime": 0,
+        "lastActivity": null
+      }
+    },
+    {
+      "id": "reviewer",
+      "name": "评审员",
+      "role": "critic",
+      "description": "负责代码评审、质量检查和验证",
+      "capabilities": [
+        "code_review",
+        "quality_assurance",
+        "security_audit",
+        "best_practices_check"
+      ],
+      "permissions": {
+        "read": ["code", "test", "project"],
+        "write": ["review", "comment"],
+        "approve": ["medium"],
+        "tools": ["file_read", "review_submit"]
+      },
+      "owner": "human-admin",
+      "created": "2025-01-01T00:00:00Z",
+      "status": "active",
+      "metrics": {
+        "reviewsCompleted": 0,
+        "issuesFound": 0,
+        "avgReviewTime": 0,
+        "lastActivity": null
+      }
+    },
+    {
+      "id": "tester",
+      "name": "测试员",
+      "role": "executor",
+      "description": "负责测试用例编写和执行",
+      "capabilities": [
+        "test_planning",
+        "test_execution",
+        "bug_reporting"
+      ],
+      "permissions": {
+        "read": ["code", "task"],
+        "write": ["test"],
+        "approve": ["low"],
+        "tools": ["test_run", "file_write", "bash_execute"]
+      },
+      "owner": "human-admin",
+      "created": "2025-01-01T00:00:00Z",
+      "status": "active",
+      "metrics": {
+        "testsExecuted": 0,
+        "bugsFound": 0,
+        "coverage": 0,
+        "lastActivity": null
+      }
+    }
+  ],
+  
+  "governance": {
+    "auditSchedule": "weekly",
+    "lastAudit": null,
+    "complianceChecks": {
+      "permissions": true,
+      "security": true,
+      "quality": true,
+      "documentation": true
+    },
+    "escalationPolicy": {
+      "low": "agent-self",
+      "medium": "supervisor",
+      "high": "admin",
+      "critical": "human-owner"
+    }
+  }
+}

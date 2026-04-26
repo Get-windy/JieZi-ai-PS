@@ -1,12 +1,7 @@
 {
+  "path": "I:\\JieZI\\JieZi-ai-PS\\extensions\\open-prose\\package.json",
+  "relativePath": "extensions\\open-prose\\package.json",
   "name": "@openclaw/open-prose",
-  "version": "2026.2.23",
-  "private": true,
-  "description": "OpenProse VM skill pack plugin (slash command + telemetry).",
-  "type": "module",
-  "openclaw": {
-    "extensions": [
-      "./index.ts"
-    ]
-  }
+  "dependencies": {},
+  "devDependencies": {}
 }

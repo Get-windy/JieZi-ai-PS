@@ -1,16 +1,9 @@
 {
+  "path": "I:\\JieZI\\JieZi-ai-PS\\packages\\moltbot\\package.json",
+  "relativePath": "packages\\moltbot\\package.json",
   "name": "moltbot",
-  "version": "2026.2.12",
-  "description": "Compatibility shim that forwards to openclaw",
-  "bin": {
-    "moltbot": "./bin/moltbot.js"
-  },
-  "type": "module",
-  "exports": {
-    ".": "./index.js",
-    "./cli-entry": "./bin/moltbot.js"
-  },
   "dependencies": {
     "openclaw": "workspace:*"
-  }
+  },
+  "devDependencies": {}
 }

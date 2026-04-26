@@ -1,8 +1,7 @@
 {
+  "path": "I:\\JieZI\\JieZi-ai-PS\\extensions\\diagnostics-otel\\package.json",
+  "relativePath": "extensions\\diagnostics-otel\\package.json",
   "name": "@openclaw/diagnostics-otel",
-  "version": "2026.2.23",
-  "description": "OpenClaw diagnostics OpenTelemetry exporter",
-  "type": "module",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.212.0",
@@ -18,10 +17,5 @@
   },
   "devDependencies": {
     "openclaw": "workspace:*"
-  },
-  "openclaw": {
-    "extensions": [
-      "./index.ts"
-    ]
   }
 }

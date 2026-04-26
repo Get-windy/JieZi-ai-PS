@@ -1,15 +1,9 @@
 {
+  "path": "I:\\JieZI\\JieZi-ai-PS\\extensions\\imessage\\package.json",
+  "relativePath": "extensions\\imessage\\package.json",
   "name": "@openclaw/imessage",
-  "version": "2026.2.23",
-  "private": true,
-  "description": "OpenClaw iMessage channel plugin",
-  "type": "module",
+  "dependencies": {},
   "devDependencies": {
     "openclaw": "workspace:*"
-  },
-  "openclaw": {
-    "extensions": [
-      "./index.ts"
-    ]
   }
 }

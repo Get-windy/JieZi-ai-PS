@@ -535,7 +535,16 @@ export const projectsHandlers: GatewayRequestHandlers = {
    */
   "projects.save": async ({ params, respond }) => {
     try {
+      console.log('========== [后端 projects.save] 开始 ==========');
       const projectId = params?.projectId ? String(params.projectId) : "";
+      console.log('[后端 projects.save] 接收到的参数:', {
+        projectId,
+        name: params?.name,
+        workspacePath: params?.workspacePath,
+        codeDir: params?.codeDir,
+        docsDir: params?.docsDir,
+      });
+      
       if (!projectId) {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "projectId is required"));
         return;
@@ -546,37 +555,68 @@ export const projectsHandlers: GatewayRequestHandlers = {
       const path = await import("path");
       const fs = await import("fs");
       const workspaceRoot = params?.workspaceRoot ? String(params.workspaceRoot) : undefined;
-      const ctx = buildProjectContext(projectId, workspaceRoot);
-      const configPath = path.join(ctx.workspacePath, "PROJECT_CONFIG.json");
+      
+      // 注意：始终使用默认路径作为项目空间，不读取 config.workspacePath
+      // PROJECT_CONFIG.json 始终保存在 workspaceRoot/projectId/ 下，不随用户修改而变化
+      const defaultWorkspacePath = (await import("../../utils/project-context.js")).resolveProjectWorkspace(projectId, workspaceRoot);
+      const ctx = (await import("../../utils/project-context.js")).buildProjectContext(projectId, workspaceRoot);
+      const configPath = path.join(defaultWorkspacePath, "PROJECT_CONFIG.json");
+      
+      console.log('[后端 projects.save] 配置文件路径（固定）:', configPath);
 
-      const existing = readProjectConfig(ctx.workspacePath) ?? {
+      const existing = readProjectConfig(defaultWorkspacePath) ?? {
         projectId,
-        workspacePath: ctx.workspacePath,
+        workspacePath: defaultWorkspacePath,
       };
+      
+      console.log('[后端 projects.save] 读取到的现有配置:', existing);
 
       if (params?.name !== undefined) {
         existing.name = String(params.name);
+        console.log('[后端 projects.save] 更新 name:', existing.name);
       }
       if (params?.description !== undefined) {
         existing.description = String(params.description);
+        console.log('[后端 projects.save] 更新 description:', existing.description);
       }
+      // 保存自定义工作空间根路径（这样 AI 以后就不需要每次都传这个参数）
+      if (params?.workspaceRoot !== undefined) {
+        existing.workspaceRoot = String(params.workspaceRoot);
+        console.log('[后端 projects.save] 更新 workspaceRoot:', existing.workspaceRoot);
+      }
+      // 注意：不再允许修改 workspacePath，项目空间路径由 workspaceRoot/projectId 固定
+      // if (params?.workspacePath !== undefined) {
+      //   existing.workspacePath = String(params.workspacePath);
+      //   console.log('[后端 projects.save] 更新 workspacePath:', existing.workspacePath);
+      // }
       if (params?.codeDir !== undefined) {
         existing.codeDir = String(params.codeDir);
+        console.log('[后端 projects.save] 更新 codeDir:', existing.codeDir);
       }
       if (params?.docsDir !== undefined) {
         existing.docsDir = String(params.docsDir);
+        console.log('[后端 projects.save] 更新 docsDir:', existing.docsDir);
       }
       if (params?.requirementsDir !== undefined) {
         existing.requirementsDir = String(params.requirementsDir);
+        console.log('[后端 projects.save] 更新 requirementsDir:', existing.requirementsDir);
       }
+      
+      console.log('[后端 projects.save] 最终配置:', existing);
 
       if (!fs.existsSync(ctx.workspacePath)) {
+        console.log('[后端 projects.save] 创建工作空间目录:', ctx.workspacePath);
         fs.mkdirSync(ctx.workspacePath, { recursive: true });
       }
+      
+      console.log('[后端 projects.save] 💾 写入配置文件...');
       fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), "utf-8");
+      console.log('[后端 projects.save] ✅ 配置文件写入成功');
 
       respond(true, { success: true, projectId }, undefined);
+      console.log('========== [后端 projects.save] 完成 ==========');
     } catch (error) {
+      console.error('[后端 projects.save] ❌ 保存失败:', error);
       respond(
         false,
         undefined,

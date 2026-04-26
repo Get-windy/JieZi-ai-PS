@@ -1,12 +1,7 @@
 {
+  "path": "I:\\JieZI\\JieZi-ai-PS\\extensions\\llm-task\\package.json",
+  "relativePath": "extensions\\llm-task\\package.json",
   "name": "@openclaw/llm-task",
-  "version": "2026.2.23",
-  "private": true,
-  "description": "OpenClaw JSON-only LLM task plugin",
-  "type": "module",
-  "openclaw": {
-    "extensions": [
-      "./index.ts"
-    ]
-  }
+  "dependencies": {},
+  "devDependencies": {}
 }

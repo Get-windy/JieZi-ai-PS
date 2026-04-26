@@ -1,0 +1,282 @@
+{
+  "version": "1.0.0",
+  "description": "项目根目录组织规范配置",
+  "rules": {
+    "rootDirectoryPolicy": "strict",
+    "maxFilesInRoot": 50,
+    "enforceOnCommit": true
+  },
+  
+  "directories": {
+    "description": "项目目录结构规范",
+    "structure": {
+      "src/": {
+        "purpose": "主要源代码",
+        "allowed": ["*.ts", "*.js", "*.tsx", "*.jsx"],
+        "examples": ["src/gateway/", "src/cli/", "src/agents/"]
+      },
+      "apps/": {
+        "purpose": "独立应用程序",
+        "allowed": ["desktop-apps", "mobile-apps", "web-apps"],
+        "examples": ["apps/macos/", "apps/android/", "apps/ios/"]
+      },
+      "packages/": {
+        "purpose": "可复用的包",
+        "allowed": ["shared-libraries", "sdk"],
+        "examples": ["packages/plugin-sdk/"]
+      },
+      "extensions/": {
+        "purpose": "插件和扩展",
+        "allowed": ["channel-plugins", "feature-plugins"],
+        "examples": ["extensions/feishu/", "extensions/whatsapp/"]
+      },
+      "scripts/": {
+        "purpose": "构建和工具脚本",
+        "allowed": ["*.sh", "*.ps1", "*.mjs", "*.py"],
+        "examples": ["scripts/build.mjs", "scripts/deploy.sh"]
+      },
+      "docs/": {
+        "purpose": "项目文档",
+        "allowed": ["*.md", "*.mdx", "images/", "guides/"],
+        "examples": ["docs/architecture.md", "docs/guides/"]
+      },
+      "test/": {
+        "purpose": "测试文件",
+        "allowed": ["*.test.ts", "*.spec.ts", "fixtures/"],
+        "examples": ["test/gateway.test.ts", "test/e2e/"]
+      },
+      "skills/": {
+        "purpose": "AI 技能定义",
+        "allowed": ["*/SKILL.md", "*/"],
+        "examples": ["skills/coding/", "skills/writing/"]
+      },
+      "i18n/": {
+        "purpose": "国际化资源",
+        "allowed": ["*.json", "*.yml", "glossaries/"],
+        "examples": ["i18n/zh-CN/", "i18n/glossaries/"]
+      },
+      "vendor/": {
+        "purpose": "第三方依赖",
+        "allowed": ["bundled-dependencies"],
+        "examples": ["vendor/a2ui/"]
+      },
+      "assets/": {
+        "purpose": "静态资源",
+        "allowed": ["images/", "icons/", "templates/"],
+        "examples": ["assets/chrome-extension/", "assets/icons/"]
+      },
+      "ui/": {
+        "purpose": "前端界面",
+        "allowed": ["web-ui", "components"],
+        "examples": ["ui/src/", "ui/public/"]
+      },
+      "git-hooks/": {
+        "purpose": "Git 钩子脚本",
+        "allowed": ["pre-commit", "pre-push"],
+        "examples": ["git-hooks/pre-commit"]
+      },
+      "patches/": {
+        "purpose": "依赖补丁",
+        "allowed": ["*.patch"],
+        "examples": ["patches/"]
+      }
+    }
+  },
+  
+  "rootFiles": {
+    "description": "允许保留在根目录的文件类型",
+    "allowed": [
+      {
+        "category": "项目元数据",
+        "files": [
+          "package.json",
+          "pnpm-workspace.yaml",
+          "pnpm-lock.yaml",
+          "tsconfig*.json",
+          "README*.md"
+        ],
+        "reason": "必需的项目配置文件"
+      },
+      {
+        "category": "工具配置",
+        "files": [
+          ".gitignore",
+          ".gitattributes",
+          ".editorconfig",
+          ".eslintrc*",
+          ".prettierrc*",
+          ".oxlintrc.json",
+          ".oxfmtrc.jsonc"
+        ],
+        "reason": "代码质量工具配置"
+      },
+      {
+        "category": "文档",
+        "files": [
+          "README.md",
+          "README.zh-CN.md",
+          "CONTRIBUTING.md",
+          "SECURITY.md",
+          "LICENSE",
+          "NOTICE",
+          "VISION.md",
+          "INSTALL*.md"
+        ],
+        "reason": "重要的项目文档"
+      },
+      {
+        "category": "部署配置",
+        "files": [
+          "Dockerfile*",
+          "docker-compose.yml",
+          "fly.toml",
+          "render.yaml",
+          "appcast.xml"
+        ],
+        "reason": "部署和分发配置"
+      },
+      {
+        "category": "安装脚本",
+        "files": [
+          "install.sh",
+          "install.ps1",
+          "init.sh",
+          "setup-*.sh",
+          "setup-*.ps1"
+        ],
+        "reason": "方便用户快速安装"
+      },
+      {
+        "category": "入口文件",
+        "files": [
+          "openclaw.mjs"
+        ],
+        "reason": "CLI 入口点"
+      }
+    ]
+  },
+  
+  "forbiddenInRoot": {
+    "description": "禁止放在根目录的文件类型",
+    "rules": [
+      {
+        "pattern": "*.log",
+        "reason": "日志文件应该输出到控制台或 .tmp/",
+        "moveTo": ".tmp/ 或直接删除"
+      },
+      {
+        "pattern": "*.txt (非配置)",
+        "reason": "临时文本文件不应放在根目录",
+        "moveTo": "docs/ 或 .tmp/"
+      },
+      {
+        "pattern": "*-report.*",
+        "reason": "报告文件应该归类到 docs/",
+        "moveTo": "docs/reports/"
+      },
+      {
+        "pattern": "debug-*",
+        "reason": "调试文件不应保留在项目根目录",
+        "moveTo": ".tmp/ 或删除"
+      },
+      {
+        "pattern": "build-output.*",
+        "reason": "构建输出文件不应放在根目录",
+        "moveTo": "已重定向到 dist/，根目录的应删除"
+      },
+      {
+        "pattern": "performance_test_*",
+        "reason": "测试文件应该放在 test/",
+        "moveTo": "test/performance/"
+      },
+      {
+        "pattern": "*.py (非根脚本)",
+        "reason": "Python 脚本应该放在 scripts/",
+        "moveTo": "scripts/python/"
+      },
+      {
+        "pattern": "*.sh (非安装脚本)",
+        "reason": "脚本文件应该放在 scripts/",
+        "moveTo": "scripts/"
+      },
+      {
+        "pattern": "*.mjs (工具脚本)",
+        "reason": "工具脚本应该放在 scripts/",
+        "moveTo": "scripts/"
+      }
+    ]
+  },
+  
+  "cleanup": {
+    "description": "自动清理规则",
+    "actions": [
+      {
+        "name": "移动报告文件",
+        "pattern": "*-report.*",
+        "target": "docs/reports/",
+        "action": "move"
+      },
+      {
+        "name": "移动脚本文件",
+        "pattern": "*.sh, *.ps1, *.mjs, *.py",
+        "target": "scripts/",
+        "action": "move",
+        "exceptions": ["install.sh", "install.ps1", "init.sh"]
+      },
+      {
+        "name": "删除临时日志",
+        "pattern": "*.log",
+        "action": "delete"
+      },
+      {
+        "name": "删除调试文件",
+        "pattern": "debug-*",
+        "action": "delete"
+      },
+      {
+        "name": "删除构建输出",
+        "pattern": "build-output.*",
+        "action": "delete"
+      }
+    ]
+  },
+  
+  "validation": {
+    "description": "验证规则",
+    "checks": [
+      {
+        "name": "根目录文件数量检查",
+        "type": "max-files",
+        "threshold": 50,
+        "severity": "warning"
+      },
+      {
+        "name": "禁止文件检查",
+        "type": "forbidden-files",
+        "severity": "error"
+      },
+      {
+        "name": "目录结构完整性",
+        "type": "required-directories",
+        "required": ["src/", "docs/", "scripts/", "test/"],
+        "severity": "warning"
+      }
+    ]
+  },
+  
+  "enforcement": {
+    "description": "执行策略",
+    "preCommit": {
+      "enabled": true,
+      "script": "scripts/cleanup-root-directory.mjs",
+      "mode": "warning",
+      "description": "提交前检查根目录整洁性"
+    },
+    "ci": {
+      "enabled": true,
+      "script": "pnpm check:root-directory",
+      "mode": "error",
+      "description": "CI 中强制检查"
+    }
+  }
+}

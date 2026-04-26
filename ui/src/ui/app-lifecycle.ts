@@ -40,6 +40,9 @@ type LifecycleHost = {
   logsEntries: unknown[];
   popStateHandler: () => void;
   topbarObserver: ResizeObserver | null;
+  // 业务空间事件监听器引用（用于清理）
+  saveBusinessSpaceHandler?: (event: Event) => void;
+  deleteBusinessSpaceHandler?: (event: Event) => void;
 };
 
 export function handleConnected(host: LifecycleHost) {
@@ -51,6 +54,23 @@ export function handleConnected(host: LifecycleHost) {
   syncThemeWithSettings(host as unknown as Parameters<typeof syncThemeWithSettings>[0]);
   attachThemeListener(host as unknown as Parameters<typeof attachThemeListener>[0]);
   window.addEventListener("popstate", host.popStateHandler);
+
+  // 注册业务空间管理事件监听器（新增）
+  if ((host as unknown as { handleSaveBusinessSpace?: (event: CustomEvent) => void }).handleSaveBusinessSpace) {
+    const handler = (event: Event) => {
+      (host as unknown as { handleSaveBusinessSpace: (event: CustomEvent) => void }).handleSaveBusinessSpace(event as CustomEvent);
+    };
+    host.saveBusinessSpaceHandler = handler;
+    window.addEventListener("save-business-space", handler);
+  }
+  if ((host as unknown as { handleDeleteBusinessSpace?: (event: CustomEvent) => void }).handleDeleteBusinessSpace) {
+    const handler = (event: Event) => {
+      (host as unknown as { handleDeleteBusinessSpace: (event: CustomEvent) => void }).handleDeleteBusinessSpace(event as CustomEvent);
+    };
+    host.deleteBusinessSpaceHandler = handler;
+    window.addEventListener("delete-business-space", handler);
+  }
+
   void bootstrapReady.finally(() => {
     if (host.connectGeneration !== connectGeneration) {
       return;
@@ -73,6 +93,17 @@ export function handleFirstUpdated(host: LifecycleHost) {
 export function handleDisconnected(host: LifecycleHost) {
   host.connectGeneration += 1;
   window.removeEventListener("popstate", host.popStateHandler);
+
+  // 移除业务空间事件监听器（新增）
+  if (host.saveBusinessSpaceHandler) {
+    window.removeEventListener("save-business-space", host.saveBusinessSpaceHandler);
+    host.saveBusinessSpaceHandler = undefined;
+  }
+  if (host.deleteBusinessSpaceHandler) {
+    window.removeEventListener("delete-business-space", host.deleteBusinessSpaceHandler);
+    host.deleteBusinessSpaceHandler = undefined;
+  }
+
   stopNodesPolling(host as unknown as Parameters<typeof stopNodesPolling>[0]);
   stopLogsPolling(host as unknown as Parameters<typeof stopLogsPolling>[0]);
   stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);

@@ -713,7 +713,7 @@ export function renderProjects(props: ProjectsProps) {
                     ${props.activePanel === "list"
                       ? renderProjectOverview(props, selectedProject)
                       : props.activePanel === "config"
-                        ? renderProjectConfig(props, selectedProject)
+                        ? renderProjectConfig(props, props.editingProject || selectedProject)
                         : props.activePanel === "members"
                           ? renderProjectMembers(props, selectedProject)
                           : props.activePanel === "roadmap"
@@ -729,12 +729,12 @@ export function renderProjects(props: ProjectsProps) {
       </div>
     </div>
 
-    ${props.creatingProject || props.editingProject ? renderProjectEditModal(props) : nothing}
+    ${props.creatingProject ? renderProjectEditModal(props) : nothing}
   `;
 }
 
 /**
- * 项目代码根目录设置条（页面顶部全局显示）
+ * 项目工作空间根路径设置条（页面顶部全局显示）
  */
 function renderCodeRootBanner(props: ProjectsProps) {
   const hasRoot = props.projectCodeRoot.trim().length > 0;
@@ -742,14 +742,14 @@ function renderCodeRootBanner(props: ProjectsProps) {
     <div class="card" style="margin-bottom: 12px; padding: 12px 16px;">
       <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
         <label style="white-space: nowrap; font-weight: 600; font-size: 13px;">
-          📂 项目代码根目录
+          📂 项目工作空间自定义根路径
         </label>
         <input
           type="text"
           class="form-control"
           style="flex: 1; min-width: 200px; max-width: 420px;"
           .value=${props.projectCodeRoot}
-          placeholder="例如 I:\\ æ D:\\Projects\\ï¼æ°é¡¹ç®ä¸å¡ç©ºé´å°èªå¨åå»ºä¸º æ ¹ç®å½\\<é¡¹ç®å>ï¼"
+          placeholder="例如 H:\\OpenClaw_Workspace\\groups 或 I:\\Projects"
           @input=${(e: InputEvent) => {
             props.onCodeRootChange((e.target as HTMLInputElement).value);
           }}
@@ -759,18 +759,18 @@ function renderCodeRootBanner(props: ProjectsProps) {
               <span
                 class="chip"
                 style="color: var(--success, #16a34a); border-color: var(--success, #16a34a)"
-                >✓ 已设置</span
+                >✓ 自定义路径已设置</span
               >
             `
           : html`
               <span
                 class="chip"
                 style="color: var(--warning, #d97706); border-color: var(--warning, #d97706)"
-                >⚠️ 未设置，AI 创建项目时将无法自动分配业务空间</span
+                >⚠️ 未设置，将使用系统默认路径 {userHome}/.openclaw/groups</span
               >
             `}
         <small style="color: var(--muted); font-size: 11px;"
-          >手动创建项目时可在对话框内继续指定业务空间路径</small
+          >💡 此路径将作为所有新项目的工作空间根目录。当前配置：<code style="background: var(--bg, #f3f4f6); padding: 2px 6px; border-radius: 4px;">${hasRoot ? props.projectCodeRoot : "未设置（使用系统默认）"}</code></small
         >
       </div>
     </div>
@@ -1031,9 +1031,18 @@ function renderProjectOverview(props: ProjectsProps, project: ProjectInfo) {
         : html` <div class="callout info" style="margin-top: 24px">暂无关联群组</div> `}
 
       <div style="margin-top: 24px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-        <button class="btn" @click=${() => props.onEditProject(project.projectId)}>编辑项目</button>
+        <button 
+          class="btn btn--primary" 
+          @click=${() => {
+            console.log('[项目概况] 点击项目配置按钮，切换到 config 面板');
+            props.onSelectProjectPanel("config");
+          }}
+          title="转到项目配置页面，可编辑所有路径和业务空间"
+        >
+          ⚙️ 项目配置
+        </button>
         <button
-          class="btn btn--primary"
+          class="btn"
           ?disabled=${!project.workspacePath}
           @click=${() => project.workspacePath && props.onOpenWorkspace(project.workspacePath)}
         >
@@ -1276,17 +1285,15 @@ ${project.description || ""}</textarea
       </div>
 
       <div class="form-group">
-        <label>项目空间路径</label>
+        <label>项目空间路径（只读）</label>
         <input
           type="text"
           class="form-control"
-          value="${project.workspacePath || ""}"
-          @input=${(e: InputEvent) => {
-            const target = e.target as HTMLInputElement;
-            props.onProjectFormChange("workspacePath", target.value);
-          }}
+          .value=${project.workspacePath || ""}
+          readonly
+          style="background: #f8fafc; cursor: not-allowed;"
         />
-        <small>项目空间根目录（存放 AI 记忆、文档、决策等协作文件），将同步到所有项目群</small>
+        <small>项目空间路径由系统自动分配（workspaceRoot/projectId），不可修改。如需自定义工作目录，请使用「业务空间路径」</small>
       </div>
 
       <div class="form-group">
@@ -1294,7 +1301,7 @@ ${project.description || ""}</textarea
         <input
           type="text"
           class="form-control"
-          value="${project.codeDir || ""}"
+          .value=${project.codeDir || ""}
           @input=${(e: InputEvent) => {
             const target = e.target as HTMLInputElement;
             props.onProjectFormChange("codeDir", target.value);
@@ -1308,7 +1315,7 @@ ${project.description || ""}</textarea
         <input
           type="text"
           class="form-control"
-          value="${project.docsDir || ""}"
+          .value=${project.docsDir || ""}
           @input=${(e: InputEvent) => {
             const target = e.target as HTMLInputElement;
             props.onProjectFormChange("docsDir", target.value);
@@ -1321,12 +1328,44 @@ ${project.description || ""}</textarea
         <input
           type="text"
           class="form-control"
-          value="${project.testsDir || ""}"
+          .value=${project.testsDir || ""}
           @input=${(e: InputEvent) => {
             const target = e.target as HTMLInputElement;
             props.onProjectFormChange("testsDir", target.value);
           }}
         />
+        <small>测试目录（可选），可留空</small>
+      </div>
+
+      <div class="callout info" style="margin-top: 24px;">
+        <strong>💡 路径说明</strong>
+        <ul style="margin: 8px 0 0 16px; font-size: 13px;">
+          <li><strong>项目空间路径</strong>：系统自动分配，存放 AI 协作文件（记忆、文档、决策等），只读不可修改</li>
+          <li><strong>业务空间路径</strong>：AI 实际开展工作的目录，如代码仓库、销售文件夹等，可自由配置</li>
+          <li><strong>文档/测试目录</strong>：可选，如需要可在此备注用途</li>
+          <li><strong>多个业务空间</strong>：点击下方「管理业务空间」可添加多个不同用途的工作目录</li>
+        </ul>
+      </div>
+
+      <!-- 业务空间快捷入口 -->
+      <div style="margin-top: 16px; padding: 16px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">💼 业务空间管理</div>
+            <div style="font-size: 12px; color: #64748b;">
+              可添加多个业务空间：代码工作目录、销售工作目录、设计资源目录等，每个备注不同用途
+            </div>
+          </div>
+          <button
+            class="btn btn--primary"
+            @click=${() => {
+              // 跳转到群组的业务空间配置页面，或者打开业务空间管理弹窗
+              window.addBusinessSpaceForProject(project.projectId);
+            }}
+          >
+            + 管理业务空间
+          </button>
+        </div>
       </div>
 
       <div style="margin-top: 24px; display: flex; gap: 8px;">
@@ -3297,6 +3336,7 @@ function renderProjectEditModal(props: ProjectsProps) {
     codeDir: "",
     docsDir: "",
     testsDir: "",
+    workspaceRoot: "", // 自定义工作空间根路径
   };
 
   // 创建时自动推算预期 codeDir
@@ -3390,13 +3430,14 @@ ${project.description || ""}</textarea
             <input
               type="text"
               class="form-control"
-              value="${project.workspacePath || ""}"
-              placeholder="例如：H:\\OpenClaw_Workspace\\groups\\project-alpha"
+              value="${project.workspaceRoot || project.workspacePath || ""}"
+              placeholder="留空使用当前配置的自定义路径（H:\\OpenClaw_Workspace\\groups\\<项目ID>）"
               @input=${(e: InputEvent) => {
                 const target = e.target as HTMLInputElement;
-                props.onProjectFormChange("workspacePath", target.value);
+                props.onProjectFormChange("workspaceRoot", target.value);
               }}
             />
+            <small>💡 自定义项目工作空间根路径，留空则使用页面顶部配置的自定义路径。设置后项目空间将创建在此路径下，AI 会自动读取此配置</small>
           </div>
 
           <div class="form-group">

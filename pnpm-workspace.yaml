@@ -14,3 +14,18 @@ onlyBuiltDependencies:
   - node-llama-cpp
   - protobufjs
   - sharp
+
+# 强制统一依赖版本（解决打包启动失败问题）
+overrides:
+  # 严重冲突：主版本不同
+  undici: "^8.0.2"
+  # 次版本冲突
+  "@lancedb/lancedb": "^0.27.2"
+  openai: "^6.34.0"
+  ws: "^8.20.0"
+  vitest: "^4.1.2"
+  "@sinclair/typebox": "0.34.49"
+  "google-auth-library": "^10.6.2"
+  "markdown-it": "^14.1.1"
+  nostr-tools: "^2.23.3"
+  signal-utils: "0.21.1"

@@ -1,15 +1,9 @@
 {
+  "path": "I:\\JieZI\\JieZi-ai-PS\\extensions\\copilot-proxy\\package.json",
+  "relativePath": "extensions\\copilot-proxy\\package.json",
   "name": "@openclaw/copilot-proxy",
-  "version": "2026.2.23",
-  "private": true,
-  "description": "OpenClaw Copilot Proxy provider plugin",
-  "type": "module",
+  "dependencies": {},
   "devDependencies": {
     "openclaw": "workspace:*"
-  },
-  "openclaw": {
-    "extensions": [
-      "./index.ts"
-    ]
   }
 }

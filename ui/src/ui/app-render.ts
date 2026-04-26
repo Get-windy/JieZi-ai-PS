@@ -3481,9 +3481,45 @@ export function renderApp(state: AppViewState) {
                 },
                 onSelectProject: (projectId) => {
                   state.selectedProjectId = projectId;
+                  // 切换项目时，如果当前在 spaces 面板，加载业务空间列表
+                  if (state.activeProjectPanel === "spaces" && state.client) {
+                    state.projectSpacesLoading = true;
+                    state.projectSpacesError = null;
+                    void (async () => {
+                      try {
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client!.request("projects.spaces.list", {
+                          projectId,
+                        })) as any;
+                        state.projectSpacesList = res?.spaces ?? [];
+                      } catch (err) {
+                        state.projectSpacesError = err instanceof Error ? err.message : String(err);
+                      } finally {
+                        state.projectSpacesLoading = false;
+                      }
+                    })();
+                  }
                 },
                 onSelectProjectPanel: (panel) => {
                   state.activeProjectPanel = panel;
+                  // 切换到 spaces 面板时，加载业务空间列表
+                  if (panel === "spaces" && state.client && state.selectedProjectId) {
+                    state.projectSpacesLoading = true;
+                    state.projectSpacesError = null;
+                    void (async () => {
+                      try {
+                        // oxlint-disable-next-line typescript/no-explicit-any
+                        const res = (await state.client!.request("projects.spaces.list", {
+                          projectId: state.selectedProjectId!,
+                        })) as any;
+                        state.projectSpacesList = res?.spaces ?? [];
+                      } catch (err) {
+                        state.projectSpacesError = err instanceof Error ? err.message : String(err);
+                      } finally {
+                        state.projectSpacesLoading = false;
+                      }
+                    })();
+                  }
                 },
                 onCreateProject: () => {
                   state.creatingProject = true;
@@ -3502,7 +3538,17 @@ export function renderApp(state: AppViewState) {
                   }
                   const proj = state.editingProject;
                   try {
-                    // 找到该项目绑定的群组列表
+                    // ① 保存项目基本信息（名称、描述、工作空间路径、目录等）到 PROJECT_CONFIG.json
+                    await state.client!.request("projects.save", {
+                      projectId: proj.projectId,
+                      name: proj.name,
+                      description: proj.description ?? "",
+                      workspacePath: proj.workspacePath ?? "",
+                      codeDir: proj.codeDir ?? "",
+                      docsDir: proj.docsDir ?? "",
+                    });
+
+                    // ② 对每个绑定群组更新 metadata.codeDir
                     const response = await state.client!.request("groups.list", {});
                     // oxlint-disable-next-line typescript/no-explicit-any
                     const groupsRaw = Array.isArray((response as any)?.groups)
@@ -3524,16 +3570,10 @@ export function renderApp(state: AppViewState) {
                         groupId: gr.id,
                         metadata: metaUpdate,
                       });
-                      // 如果 workspacePath 有变，同步到项目群
-                      if (proj.workspacePath && proj.workspacePath !== gr.workspacePath) {
-                        await state.client!.request("projects.updateWorkspace", {
-                          projectId: proj.projectId,
-                          workspacePath: proj.workspacePath,
-                        });
-                      }
                     }
                     await loadProjects(state, state.client!);
                     state.editingProject = null;
+                    alert("项目配置已保存成功！");
                   } catch (err) {
                     alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
                   }
@@ -3554,6 +3594,67 @@ export function renderApp(state: AppViewState) {
                       [field]: value,
                       // oxlint-disable-next-line typescript/no-explicit-any
                     } as any;
+                  }
+                },
+                // 业务空间管理回调（新增）
+                projectSpacesLoading: state.projectSpacesLoading,
+                projectSpacesList: state.projectSpacesList,
+                projectSpacesError: state.projectSpacesError,
+                onLoadProjectSpaces: async (projectId: string) => {
+                  if (!state.client) {
+                    return;
+                  }
+                  state.projectSpacesLoading = true;
+                  state.projectSpacesError = null;
+                  try {
+                    // oxlint-disable-next-line typescript/no-explicit-any
+                    const res = (await state.client.request("projects.spaces.list", {
+                      projectId,
+                    })) as any;
+                    state.projectSpacesList = res?.spaces ?? [];
+                  } catch (err) {
+                    state.projectSpacesError = err instanceof Error ? err.message : String(err);
+                  } finally {
+                    state.projectSpacesLoading = false;
+                  }
+                },
+                onSaveProjectSpace: async (projectId, space) => {
+                  if (!state.client) {
+                    return;
+                  }
+                  try {
+                    await state.client.request("projects.spaces.upsert", {
+                      projectId,
+                      space,
+                    });
+                    // 刷新列表
+                    // oxlint-disable-next-line typescript/no-explicit-any
+                    const res = (await state.client.request("projects.spaces.list", {
+                      projectId,
+                    })) as any;
+                    state.projectSpacesList = res?.spaces ?? [];
+                    alert("业务空间保存成功！");
+                  } catch (err) {
+                    alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+                  }
+                },
+                onDeleteProjectSpace: async (projectId, spaceType) => {
+                  if (!state.client) {
+                    return;
+                  }
+                  try {
+                    await state.client.request("projects.spaces.remove", {
+                      projectId,
+                      spaceType,
+                    });
+                    // 刷新列表
+                    // oxlint-disable-next-line typescript/no-explicit-any
+                    const res = (await state.client.request("projects.spaces.list", {
+                      projectId,
+                    })) as any;
+                    state.projectSpacesList = res?.spaces ?? [];
+                  } catch (err) {
+                    alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
                   }
                 },
                 // 群组升级为项目
@@ -3627,6 +3728,9 @@ export function renderApp(state: AppViewState) {
                   void loadProjects(state, state.client!);
                 },
                 onSelectProject: (projectId) => {
+                  console.log('[项目管理] onSelectProject 被调用，选择项目:', projectId);
+                  console.log('[项目管理] 当前 editingProject:', state.editingProject);
+                  
                   state.selectedProjectId = projectId;
                   // 切换项目时自动加载团队关系
                   void (async () => {
@@ -3650,10 +3754,29 @@ export function renderApp(state: AppViewState) {
                 },
                 onSelectPanel: (panel) => {
                   state.activeProjectPanel = panel;
+                  
+                  // 切换到配置页面时，自动设置 editingProject（用于内联编辑）
+                  if (panel === "config" && state.selectedProjectId && !state.editingProject) {
+                    const project = state.projectsList?.projects.find(
+                      (p) => p.projectId === state.selectedProjectId,
+                    );
+                    if (project) {
+                      state.editingProject = { ...project }; // 复制一份，避免直接修改原对象
+                    }
+                  }
                 },
                 onCreateProject: () => {
                   state.creatingProject = true;
                   state.editingProject = null;
+                  // 初始化新项目时，使用配置的自定义 workspaceRoot
+                  const customWorkspaceRoot = state.projectCodeRoot || "";
+                  state.editingProject = {
+                    projectId: "",
+                    name: "",
+                    workspacePath: "",
+                    codeDir: "",
+                    workspaceRoot: customWorkspaceRoot, // 传递自定义根路径，避免使用系统默认路径
+                  } as any;
                 },
                 onEditProject: (projectId) => {
                   const project = state.projectsList?.projects.find(
@@ -3669,8 +3792,10 @@ export function renderApp(state: AppViewState) {
                     return;
                   }
                   const proj = state.editingProject;
+                  
                   try {
-                    // ① 保存项目基本信息（名称、描述、目录等）到 PROJECT_CONFIG.json
+                    // ① 保存项目基本信息（名称、描述、业务空间路径、目录等）到 PROJECT_CONFIG.json
+                    // 注意：不再发送 workspacePath，项目空间路径由系统固定管理
                     await state.client!.request("projects.save", {
                       projectId: proj.projectId,
                       name: proj.name,
@@ -3679,21 +3804,7 @@ export function renderApp(state: AppViewState) {
                       docsDir: proj.docsDir ?? "",
                     });
 
-                    // ② 如果工作空间路径发生变化，同步到所有绑定群组
-                    const originalProject = state.projectsList?.projects.find(
-                      (p) => p.projectId === proj.projectId,
-                    );
-                    if (
-                      proj.workspacePath &&
-                      proj.workspacePath !== originalProject?.workspacePath
-                    ) {
-                      await state.client!.request("projects.updateWorkspace", {
-                        projectId: proj.projectId,
-                        workspacePath: proj.workspacePath,
-                      });
-                    }
-
-                    // ③ 同步更新绑定群组的 metadata（codeDir）
+                    // ② 同步更新绑定群组的 metadata（codeDir）
                     const response = await state.client!.request("groups.list", {});
                     // oxlint-disable-next-line typescript/no-explicit-any
                     const groupsRaw = Array.isArray((response as any)?.groups)
@@ -3703,6 +3814,7 @@ export function renderApp(state: AppViewState) {
                     const boundGroups = groupsRaw.filter(
                       (g) => (g as Record<string, unknown>).projectId === proj.projectId,
                     );
+                    
                     for (const g of boundGroups) {
                       const gr = g as Record<string, unknown>;
                       const metaUpdate: Record<string, unknown> = {
@@ -3715,8 +3827,11 @@ export function renderApp(state: AppViewState) {
                       });
                     }
 
-                    await loadProjects(state, state.client!);
+                    // ③ 刷新项目列表
                     state.editingProject = null;
+                    await loadProjects(state, state.client!);
+                    
+                    alert("项目配置已保存成功！");
                   } catch (err) {
                     alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
                   }
@@ -3726,6 +3841,11 @@ export function renderApp(state: AppViewState) {
                   state.editingProject = null;
                 },
                 onProjectFormChange: (field, value) => {
+                  // 注意：不再允许修改 workspacePath（只读显示）
+                  if (field === "workspacePath") {
+                    return;
+                  }
+                  
                   if (state.editingProject) {
                     state.editingProject = { ...state.editingProject, [field]: value };
                   } else if (state.creatingProject) {

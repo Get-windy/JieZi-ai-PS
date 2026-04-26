@@ -1,11 +1,7 @@
 {
+  "path": "I:\\JieZI\\JieZi-ai-PS\\extensions\\lobster\\package.json",
+  "relativePath": "extensions\\lobster\\package.json",
   "name": "@openclaw/lobster",
-  "version": "2026.2.23",
-  "description": "Lobster workflow tool plugin (typed pipelines + resumable approvals)",
-  "type": "module",
-  "openclaw": {
-    "extensions": [
-      "./index.ts"
-    ]
-  }
+  "dependencies": {},
+  "devDependencies": {}
 }

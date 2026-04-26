@@ -1,14 +1,9 @@
 {
+  "path": "I:\\JieZI\\JieZi-ai-PS\\extensions\\discord\\package.json",
+  "relativePath": "extensions\\discord\\package.json",
   "name": "@openclaw/discord",
-  "version": "2026.2.23",
-  "description": "OpenClaw Discord channel plugin",
-  "type": "module",
+  "dependencies": {},
   "devDependencies": {
     "openclaw": "workspace:*"
-  },
-  "openclaw": {
-    "extensions": [
-      "./index.ts"
-    ]
   }
 }

@@ -258,6 +258,26 @@ export function createProjectCreateTool(): AnyAgentTool {
           ...(conventions ? { conventions } : {}),
         };
 
+        // 🆕 自动生成 AI 规则文件（如果提供了 techStack 和 conventions）
+        let aiRulesInfo = null;
+        if (techStack || conventions) {
+          try {
+            // 调用规则生成脚本或返回规则内容让 Agent 创建
+            const rulesContent = generateProjectRules(name, techStack, conventions);
+            aiRulesInfo = {
+              files: [
+                { name: 'CLAUDE.md', description: 'AI 开发规则（Claude Code 读取）' },
+                { name: '.cursorrules', description: 'AI 编辑器规则（Cursor 读取）' },
+                { name: '.project-structure-rules.md', description: '项目结构规范' },
+              ],
+              generated: true,
+              content: rulesContent,
+            };
+          } catch (rulesError) {
+            console.warn(`Failed to generate AI rules for project ${finalProjectId}:`, rulesError);
+          }
+        }
+
         // 生成创建项目的详细指令
         const instructions = [
           `✅ Project "${name}" created successfully!`,
@@ -271,6 +291,30 @@ export function createProjectCreateTool(): AnyAgentTool {
         ];
 
         // 如果创建了项目群，添加群组信息
+        if (groupInfo) {
+          instructions.push(
+            `👥 Project Group Created:`,
+            `- Group ID: ${groupInfo.groupId}`,
+            `- Group Name: ${groupInfo.name}`,
+            `- Workspace: ${groupInfo.workspacePath} (与项目共享)`,
+            ``,
+            `💡 The group is now a project group with shared workspace synchronized with the project.`,
+            ``,
+          );
+        }
+
+        // 🆕 如果生成了 AI 规则，添加规则创建指引
+        if (aiRulesInfo) {
+          instructions.push(
+            `🤖 AI Rules Generated:`,
+            `The following AI rule files have been generated:`,
+            ...aiRulesInfo.files.map(f => `- ${f.name}: ${f.description}`),
+            ``,
+            `💡 These files help AI agents understand project structure and conventions.`,
+            `Place them in the project code directory (${finalCodeDir})`,
+            ``,
+          );
+        }
         if (groupInfo) {
           instructions.push(
             `👥 Project Group Created:`,
@@ -3011,6 +3055,394 @@ export function createProjectEmergencyPivotTool(opts?: { currentAgentId?: string
       });
     },
   };
+}
+
+/**
+ * 生成项目 AI 规则文件内容  
+ * 根据项目的技术栈和约定，生成 CLAUDE.md、.cursorrules 等规则文件  
+ */
+function generateProjectRules(
+  projectName: string,
+  techStack?: Record<string, string>,
+  conventions?: Record<string, string | Record<string, string> | undefined>,
+): Record<string, string> {
+  const rules: Record<string, string> = {};
+
+  // 1. 生成 CLAUDE.md
+  const techStackTable = techStack
+    ? Object.entries(techStack)
+        .map(([k, v]) => `| ${k} | ${v} |`)
+        .join('\n')
+    : '| language | （待填） |\n| framework | （待填） |';
+
+  const dirStructureRule = typeof conventions?.dirStructure === 'string' ? conventions.dirStructure : '遵循项目现有结构';
+  const packageNaming = typeof conventions?.packageNaming === 'string' ? conventions.packageNaming : '遵循项目现有规范';
+  const moduleNaming = typeof conventions?.moduleNaming === 'string' ? conventions.moduleNaming : '遵循项目现有命名';
+  const codeStyle = typeof conventions?.codeStyle === 'string' ? conventions.codeStyle : '保持代码一致';
+  const today = new Date().toISOString().split('T')[0];
+
+  rules['CLAUDE.md'] = `# ${projectName} - AI 开发规则
+
+## 🎯 项目信息
+
+- **项目名称**: ${projectName}
+- **创建日期**: ${today}
+- **描述**: 项目规范和技术选型定义
+
+## 🛠️ 技术栈声明（所有 Agent 开工前必读）
+
+${techStackTable}
+
+## 📁 项目结构规则（必须遵守）
+
+### ❌ 禁止行为：把所有东西放到根目录
+- 代码文件 → 放到 src/ 或对应功能目录
+- 测试文件 → 放到 tests/ 目录
+- 文档 → 放到 docs/ 目录
+- 配置 → 放到 src/config/ 或根目录（项目配置）
+
+### ✅ 正确做法：按功能分层组织代码
+1. 业务逻辑 → src/services/
+2. 工具函数 → src/utils/
+3. 类型定义 → src/types/
+4. API 路由 → src/api/routes/
+5. 测试 → tests/unit/ 或 tests/integration/
+
+## 📝 项目规范约定（Conventions）
+
+### 📂 目录结构规范
+${dirStructureRule}
+
+### 📜 包命名规范  
+${packageNaming}
+
+### 📎 模块/服务命名规范  
+${moduleNaming}
+
+### 🎨 代码风格规范  
+${codeStyle}
+
+## 🚫 绝对禁止的行为（防止重复代码和混乱）
+
+1. **❌ 不要把新文件直接放到根目录**
+   - 必须放在对应的功能目录中
+   - 如果不确定放哪里，先询问
+
+2. **❌ 不要改变项目的技术栈**
+   - 不要引入新的框架或库，除非经过团队讨论
+   - 使用项目已声明的技术栈（见上方表格）
+
+3. **❌ 不要混用不同的代码风格**
+   - 保持与现有代码一致的命名和风格
+   - 遵循项目的代码风格规范（见上方）
+
+4. **❌ 不要创建新的顶级目录**
+   - 使用项目现有的目录结构
+   - 如需创建新目录，确保在 src/ 或对应的父目录下
+
+5. **❌ 不要忽略项目规范**
+   - 在开始任何开发任务前，阅读并理解这些规范
+   - 如果规范不清晰，先询问再开发
+
+## ✅ 必须遵守的行为（确保代码质量和一致性）
+
+1. **✅ 创建文件前确认位置**
+   - 确定文件类型（服务、工具、配置、测试）
+   - 查找对应的目录位置
+   - 如果不确定，询问用户或其他 AI 团队成员
+
+2. **✅ 遵循命名约定**
+   - 文件命名：遵循项目的命名风格
+   - 类/接口命名：遵循 PascalCase 或其他项目约定
+   - 变量/函数命名：遵循 camelCase 或其他项目约定
+
+3. **✅ 保持代码一致性**
+   - 使用项目已有的导入路径风格
+   - 遵循项目的导出方式（default、named）
+   - 参考现有代码的写法，保持一致性
+
+4. **✅ 创建对应的测试**
+   - 为每个功能模块创建测试文件
+   - 测试文件放在 tests/ 目录中
+   - 使用项目已有的测试框架和写法
+
+5. **✅ 更新文档**
+   - 如果添加了新功能或修改了重要逻辑，更新相关文档
+   - 文档放在 docs/ 目录
+
+## 📋 提交前检查清单（必须完成）
+
+- [ ] 代码放在正确的目录（不是根目录）
+- [ ] 遵循项目的命名约定
+- [ ] 遵循项目的代码风格
+- [ ] 为功能创建了测试
+- [ ] 运行测试通过
+- [ ] 运行代码检查通过
+- [ ] 更新了文档（如果需要）
+
+## 💡 快速参考
+
+### 文件位置快速查找表  
+- **业务逻辑/服务**: src/services/xxx-service.ts
+- **工具函数**: src/utils/xxx-utils.ts
+- **类型定义**: src/types/xxx-types.ts
+- **API 路由**: src/api/routes/xxx.ts
+- **UI 组件**: components/xxx-component.tsx
+- **测试**: tests/unit/xxx.test.ts
+- **文档**: docs/xxx.md
+
+### 命名约定速查  
+- **文件命名**: 遵循项目现有风格
+- **类/接口**: PascalCase
+- **函数/变量**: camelCase
+- **常量**: UPPER_SNAKE_CASE
+
+---
+
+**重要**: 你是 AI 开发者，必须遵守以上规则！
+如果规则与项目实际不符，请联系项目协调员更新规则。
+`;
+
+  // 2. 生成 .cursorrules  
+  rules['.cursorrules'] = `# AI 代码生成规则 - ${projectName}
+# 适用于 Cursor、Windsurf、GitHub Copilot 等 AI 工具
+
+## 🎯 角色定义  
+你是一个专业的软件工程师，正在开发 ${projectName} 项目。  
+**你必须严格遵守项目结构规范，不要自行决定文件存放位置。**
+
+## 📁 文件位置指南（严格遵守）
+
+| 文件类型 | 应该放在 | 示例 |
+|---------|---------|------|
+| 业务逻辑/服务 | src/services/ | src/services/user-service.ts |
+| 工具函数 | src/utils/ | src/utils/format.ts |
+| 配置 | src/config/ | src/config/database.ts |
+| 类型定义 | src/types/ | src/types/user.ts |
+| API 路由 | src/api/routes/ | src/api/routes/users.ts |
+| UI 组件 | components/ | components/UserProfile.tsx |
+| 测试 | tests/ | tests/unit/services/user-service.test.ts |
+| 文档 | docs/ | docs/guides/setup.md |
+
+## 🚫 绝对禁止的行为  
+
+1. ❌ **不要把新文件直接放到项目根目录**
+2. ❌ **不要改变项目的技术栈**
+3. ❌ **不要混用不同的代码风格**
+4. ❌ **不要创建新的顶级目录**
+5. ❌ **不要忽略项目规范**
+6. ❌ **不要把测试文件与源码混在一起**
+7. ❌ **不要改变项目的包命名**
+8. ❌ **不要改变项目的模块命名**
+9. ❌ **不要创建过深的目录层级**（最多3-4层）
+10. ❌ **不要忽略代码检查错误**
+
+## ✅ 必须遵守的行为  
+1. ✅ 创建文件前，确认正确的目录位置
+2. ✅ 遵循项目的命名约定
+3. ✅ 保持与现有代码一致的风格
+4. ✅ 为每个功能创建对应的测试
+5. ✅ 如果不确定，询问用户或其他 AI 团队成员
+6. ✅ 更新文档（如果需要）
+7. ✅ 运行测试和代码检查，确保通过
+8. ✅ 提交前检查清单
+
+## 📋 快速决策树（文件位置）
+
+当你不确定文件应该放在哪里时，使用这个决策树：
+1. 这个文件是什么类型？
+   ├─ 业务逻辑/服务？ → src/services/
+   ├─ 工具函数？ → src/utils/
+   ├─ 配置？ → src/config/
+   ├─ 类型定义？ → src/types/
+   ├─ API 路由？ → src/api/routes/
+   ├─ UI 组件？ → components/
+   ├─ 测试？ → tests/
+   ├─ 文档？ → docs/
+   └─ 其他？ → 询问用户！
+2. 创建后验证位置是否正确
+3. 如果不确定，不要创建，先询问！
+
+## 💡 示例（正确做法）
+
+\`\`\`bash
+# ✅ 正确：创建服务  
+mkdir -p src/services
+ touch src/services/user-service.ts
+
+# ✅ 正确：创建测试  
+mkdir -p tests/unit/services
+touch tests/unit/services/user-service.test.ts
+
+# ✅ 正确：创建文档  
+mkdir -p docs/guides
+touch docs/guides/user-service.md
+
+# ❌ 错误：不要放到根目录  
+touch user-service.ts     # 错误！
+touch test.ts             # 错误！
+touch utils.js            # 错误！
+\`\`\`
+
+## 📌 重要提醒
+
+**在创建任何新文件之前，你必须：**
+1. ✅ 确认这个文件应该放在哪个目录
+2. ✅ 检查是否已经有类似的目录结构
+3. ✅ 遵循现有的命名约定
+4. ✅ 确保不会破坏项目结构
+5. ✅ 如果需要创建新目录，确保有充分的理由
+
+**记住：一个整洁的项目结构对于长期维护和团队协作至关重要！**
+
+**项目规范详见: CLAUDE.md**
+`;
+
+  // 3. 生成 .project-structure-rules.md  
+  rules['.project-structure-rules.md'] = `# ${projectName} - 项目结构规范  
+
+## 🎯 目的  
+本文件定义 ${projectName} 项目的目录结构规范。  
+**所有新文件必须遵循本规范，不得将文件随意放置到根目录！**
+
+## 📁 标准目录结构  
+
+\`\`\`
+项目根目录/
+├── 📄 项目元数据（允许在根目录）  
+│   ├── package.json           # ✅ 包配置  
+│   ├── tsconfig.json          # ✅ TypeScript 配置  
+│   └── README.md              # ✅ 项目说明  
+│  
+├── 📦 源代码（必须放在 src/）  
+│   ├── src/
+│   │   ├── services/          # 业务逻辑和服务层  
+│   │   ├── utils/             # 工具函数和帮助方法  
+│   │   ├── types/             # TypeScript 类型定义  
+│   │   ├── config/            # 配置文件  
+│   │   └── api/               # API 路由和控制器  
+│   │       ├── routes/
+│   │       └── middleware/
+│   │  
+│   ├── components/            # UI 组件（如果有前端）  
+│   └── tests/                 # 测试文件  
+│       ├── unit/              # 单元测试  
+│       └── integration/       # 集成测试  
+│  
+├── 📚 文档（必须放在 docs/）  
+│   └── docs/
+│       ├── guides/            # 使用指南  
+│       └── api/               # API 文档  
+│  
+└── ⚙️ 工具配置（允许在根目录）  
+    ├── .gitignore
+    ├── .eslintrc.js
+    └── .prettierrc
+\`\`\`
+
+## 📍 文件位置参考表  
+
+| 文件类型 | 目录 | 示例 |  
+|---------|------|------|  
+| 业务服务 | src/services/ | src/services/user-service.ts |  
+| 工具函数 | src/utils/ | src/utils/format.ts |  
+| 配置文件 | src/config/ | src/config/database.ts |  
+| 类型定义 | src/types/ | src/types/user.ts |  
+| API 路由 | src/api/routes/ | src/api/routes/users.ts |  
+| 中间件 | src/api/middleware/ | src/api/middleware/auth.ts |  
+| UI 组件 | components/ | components/UserProfile.tsx |  
+| 单元测试 | tests/unit/ | tests/unit/services/user-service.test.ts |  
+| 集成测试 | tests/integration/ | tests/integration/api/users.test.ts |  
+| 使用指南 | docs/guides/ | docs/guides/setup.md |  
+| API 文档 | docs/api/ | docs/api/users.md |  
+
+## 🚫 禁止行为（严格禁止）
+
+1. ❌ **绝对不要把代码文件放到根目录**
+2. ❌ **不要创建新的顶级目录**
+3. ❌ **不要把测试文件与源码混在一起**
+4. ❌ **不要混用不同的命名风格**
+5. ❌ **不要改变项目技术栈**
+
+## ✅ 正确做法示例  
+
+### 示例1：创建新的服务模块  
+\`\`\`bash  
+# ✅ 正确：在 src/services/ 下创建  
+mkdir -p src/services/order-service
+touch src/services/order-service/index.ts
+touch src/services/order-service/order-service.ts
+touch src/services/order-service/order-types.ts
+
+# ✅ 正确：在 tests/ 下创建测试  
+mkdir -p tests/unit/services/order-service
+touch tests/unit/services/order-service/order-service.test.ts
+
+# ✅ 正确：在 docs/ 下创建文档  
+touch docs/guides/order-service.md
+\`\`\`
+
+### 示例2：添加工具函数  
+\`\`\`bash
+# ✅ 正确：放到 src/utils/  
+touch src/utils/date-formatter.ts
+touch src/utils/string-helpers.ts
+
+# ❌ 错误：不要放到根目录
+touch date-formatter.ts     # 错误！
+touch utils.js              # 错误！
+\`\`\`
+
+### 示例3：创建配置文件  
+\`\`\`bash
+# ✅ 正确：放到 src/config/  
+touch src/config/redis.ts
+touch src/config/app.ts
+
+# ❌ 错误：不要散落在根目录
+touch redis.json            # 错误！
+touch app-config.js         # 错误！
+\`\`\`
+
+## 🛠️ 自动检查工具  
+项目提供了自动检查工具，确保遵守规范：
+\`\`\`bash
+# 检查根目录是否整洁  
+pnpm check:root-directory
+
+# 自动清理根目录  
+pnpm check:root-directory:fix
+
+# 检查依赖版本一致性  
+pnpm ai:dependency-check
+
+# 自动修复依赖问题  
+pnpm ai:dependency-fix
+\`\`\`
+
+## 📌 重要提醒  
+
+**所有团队成员（包括 AI）必须遵守本规范！**  
+违反规范会导致：
+- ❌ 项目结构混乱  
+- ❌ 代码难以维护  
+- ❌ 协作困难  
+- ❌ 打包和构建失败  
+
+**遵守规范可以确保：**  
+- ✅ 项目结构清晰  
+- ✅ 代码易于理解  
+- ✅ 团队协作高效  
+- ✅ 长期可维护  
+- ✅ 打包和构建成功  
+---
+
+**最后更新**: ${today}  
+**适用范围**: 所有新文件和模块  
+**项目规范详见**: CLAUDE.md
+`;
+
+  return rules;
 }
 
 /**

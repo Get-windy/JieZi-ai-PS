@@ -1043,10 +1043,12 @@ export function resolveProjectWorkspace(projectId: string, workspaceRoot?: strin
  * ```
  */
 export function buildProjectContext(projectId: string, workspaceRoot?: string): ProjectContext {
+  // 优先级：传入的 workspaceRoot > 系统默认/环境变量/配置文件
   const root = getGroupsWorkspaceRoot(workspaceRoot);
   const workspacePath = resolveProjectWorkspace(projectId, root);
 
-  // 尝试读取项目配置（PROJECT_CONFIG.json）
+  // 读取项目配置（PROJECT_CONFIG.json）
+  // PROJECT_CONFIG.json 保存在 workspaceRoot/projectId/ 下，包含业务空间配置等
   const config = readProjectConfig(workspacePath);
 
   // 优先使用 PROJECT_CONFIG.json 中的配置，如果没有则尝试从 groups.json 读取

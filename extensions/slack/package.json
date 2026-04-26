@@ -1,15 +1,9 @@
 {
+  "path": "I:\\JieZI\\JieZi-ai-PS\\extensions\\slack\\package.json",
+  "relativePath": "extensions\\slack\\package.json",
   "name": "@openclaw/slack",
-  "version": "2026.2.23",
-  "private": true,
-  "description": "OpenClaw Slack channel plugin",
-  "type": "module",
+  "dependencies": {},
   "devDependencies": {
     "openclaw": "workspace:*"
-  },
-  "openclaw": {
-    "extensions": [
-      "./index.ts"
-    ]
   }
 }

@@ -1030,6 +1030,13 @@ export const groupsHandlers: GatewayRequestHandlers = {
 
   /**
    * 升级群组为项目群
+   * 
+   * 完整的空间迁移逻辑：
+   * 1. 项目使用群组的workspacePath（而不是群组使用项目的）
+   * 2. 将原项目空间的文件迁移到群组空间
+   * 3. 空间完整合并（项目文件 + 群组文件）
+   * 4. 自动配置记忆空间（在PROJECT_CONFIG.json中写入memorySpace）
+   * 5. 删除原项目空间
    */
   "groups.upgradeToProject": async ({ params, respond }) => {
     try {
@@ -1085,43 +1092,135 @@ export const groupsHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      // 验证项目是否存在 (通过检查项目工作空间)
-      const projectWorkspaceExists = await import("../../utils/project-context.js").then(
-        (m) => m.projectWorkspaceExists,
-      );
+      const fs = await import("fs");
+      const path = await import("path");
 
-      if (!projectWorkspaceExists(projectId)) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.UNAVAILABLE, `Project "${projectId}" not found`),
-        );
-        return;
-      }
-
-      // 获取项目工作空间路径
+      // 获取项目工作空间路径（原项目空间）
       const buildProjectContext = await import("../../utils/project-context.js").then(
         (m) => m.buildProjectContext,
       );
       const projectCtx = buildProjectContext(projectId);
       const projectWorkspacePath = projectCtx.workspacePath;
 
-      // 更新群组信息，绑定项目
-      const updatedGroup = await groupManager.updateGroup(groupId, {
-        projectId,
-        workspacePath: projectWorkspacePath,
-      });
-
-      // 迁移群组工作空间到项目工作空间
+      // 获取群组工作空间路径（目标空间，将作为新的项目空间）
       const groupWorkspaceManager = await import("../../workspace/group-workspace.js").then((m) =>
         m.GroupWorkspaceManager.getInstance(),
       );
+      const groupWorkspacePath = groupWorkspaceManager.getGroupWorkspaceDir(groupId);
+
+      console.log(`[Group Upgrade] Starting space migration:`);
+      console.log(`  - Group ID: ${groupId}`);
+      console.log(`  - Project ID: ${projectId}`);
+      console.log(`  - Project Workspace (source): ${projectWorkspacePath}`);
+      console.log(`  - Group Workspace (target): ${groupWorkspacePath}`);
+
+      // ========== 步骤 1: 确保群组工作空间存在 ==========
+      if (!fs.existsSync(groupWorkspacePath)) {
+        console.log(`[Group Upgrade] Creating group workspace: ${groupWorkspacePath}`);
+        fs.mkdirSync(groupWorkspacePath, { recursive: true });
+      }
+
+      // ========== 步骤 2: 迁移项目空间文件到群组空间 ==========
+      let migrationStats = {
+        filesCopied: 0,
+        dirsCopied: 0,
+        totalSize: 0,
+      };
+
+      if (fs.existsSync(projectWorkspacePath)) {
+        console.log(`[Group Upgrade] Migrating project workspace to group workspace...`);
+        
+        // 复制目录的递归函数
+        const copyDir = async (src: string, dest: string): Promise<{ files: number; dirs: number; size: number }> => {
+          let stats = { files: 0, dirs: 0, size: 0 };
+          
+          if (!fs.existsSync(dest)) {
+            fs.mkdirSync(dest, { recursive: true });
+          }
+
+          const entries = fs.readdirSync(src, { withFileTypes: true });
+          
+          for (const entry of entries) {
+            const srcPath = path.join(src, entry.name);
+            const destPath = path.join(dest, entry.name);
+
+            if (entry.isDirectory()) {
+              // 跳过 node_modules、.git 等目录
+              if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.cache') {
+                continue;
+              }
+              
+              const subStats = await copyDir(srcPath, destPath);
+              stats.dirs += subStats.dirs + 1;
+              stats.files += subStats.files;
+              stats.size += subStats.size;
+            } else {
+              // 复制文件
+              fs.copyFileSync(srcPath, destPath);
+              const stat = fs.statSync(srcPath);
+              stats.files++;
+              stats.size += stat.size;
+            }
+          }
+          
+          return stats;
+        };
+
+        // 执行迁移
+        migrationStats = await copyDir(projectWorkspacePath, groupWorkspacePath);
+        console.log(`[Group Upgrade] Migration completed: ${migrationStats.files} files, ${migrationStats.dirs} dirs copied`);
+      } else {
+        console.log(`[Group Upgrade] Project workspace does not exist, skipping file migration`);
+      }
+
+      // ========== 步骤 3: 创建记忆空间配置 ==========
+      const memorySpacePath = path.join(groupWorkspacePath, "memory");
+      if (!fs.existsSync(memorySpacePath)) {
+        console.log(`[Group Upgrade] Creating memory space: ${memorySpacePath}`);
+        fs.mkdirSync(memorySpacePath, { recursive: true });
+      }
+
+      // ========== 步骤 4: 更新 PROJECT_CONFIG.json ==========
+      const projectConfigPath = path.join(groupWorkspacePath, "PROJECT_CONFIG.json");
+      
+      let projectConfig: any = {};
+      if (fs.existsSync(projectConfigPath)) {
+        // 读取现有配置
+        projectConfig = JSON.parse(fs.readFileSync(projectConfigPath, "utf-8"));
+      } else {
+        // 创建新配置
+        projectConfig = {
+          projectId,
+          workspacePath: groupWorkspacePath,
+        };
+      }
+
+      // 更新工作空间路径为群组空间
+      projectConfig.workspacePath = groupWorkspacePath;
+
+      // 添加记忆空间配置
+      projectConfig.memorySpace = {
+        path: memorySpacePath,
+        sourceGroupId: groupId,
+        migratedAt: Date.now(),
+        description: `来自群组 ${groupId} 的协作空间`,
+        enabled: true,
+      };
+
+      // 保存配置
+      fs.writeFileSync(projectConfigPath, JSON.stringify(projectConfig, null, 2), "utf-8");
+      console.log(`[Group Upgrade] PROJECT_CONFIG.json updated with memory space configuration`);
+
+      // ========== 步骤 5: 更新群组信息，绑定项目 ==========
+      const updatedGroup = await groupManager.updateGroup(groupId, {
+        projectId,
+        workspacePath: groupWorkspacePath, // 群组使用自己的空间路径
+      });
 
       // 更新群组工作空间目录映射（内存）
-      groupWorkspaceManager.updateGroupWorkspaceDir(groupId, projectWorkspacePath);
+      groupWorkspaceManager.updateGroupWorkspaceDir(groupId, groupWorkspacePath);
 
-      // 持久化到 openclaw.json： groups.overrides.<groupId>.workspaceDir
-      // 确保服务重启后预热加载时能读到正确路径
+      // 持久化到 openclaw.json
       try {
         const currentConfig = loadConfig();
         const existingOverrides =
@@ -1135,7 +1234,7 @@ export const groupsHandlers: GatewayRequestHandlers = {
               ...existingOverrides,
               [groupId]: {
                 ...(existingOverrides[groupId] as Record<string, unknown>),
-                workspaceDir: projectWorkspacePath,
+                workspaceDir: groupWorkspacePath,
               },
             },
           },
@@ -1147,38 +1246,51 @@ export const groupsHandlers: GatewayRequestHandlers = {
         );
       }
 
-      // 同步 PROJECT_CONFIG.json 配置（如果存在）
-      const fs = await import("fs");
-      const path = await import("path");
-      const projectConfigPath = path.join(projectWorkspacePath, "PROJECT_CONFIG.json");
-
-      if (fs.existsSync(projectConfigPath)) {
-        // 项目配置已存在，无需额外操作
-        console.log(
-          `[Group Upgrade] Group ${groupId} upgraded to project group for project ${projectId}`,
-        );
-      } else {
-        // 项目配置不存在，记录警告
-        console.warn(
-          `[Group Upgrade] PROJECT_CONFIG.json not found in project workspace: ${projectWorkspacePath}`,
-        );
+      // ========== 步骤 6: 删除原项目空间 ==========
+      if (projectWorkspacePath !== groupWorkspacePath && fs.existsSync(projectWorkspacePath)) {
+        try {
+          console.log(`[Group Upgrade] Removing old project workspace: ${projectWorkspacePath}`);
+          fs.rmSync(projectWorkspacePath, { recursive: true, force: true });
+          console.log(`[Group Upgrade] Old project workspace removed`);
+        } catch (removeErr) {
+          console.warn(
+            `[Group Upgrade] Failed to remove old project workspace: ${String(removeErr)}`,
+          );
+          // 不影响主流程，继续执行
+        }
       }
 
-      // 发送系统消息通知所有成员
+      // ========== 步骤 7: 发送系统消息通知 ==========
       await groupManager.sendSystemMessage(
         groupId,
         `🎉 群组已升级为项目群！
 
 绑定项目：${projectId}
-工作空间：${projectWorkspacePath}
+工作空间：${groupWorkspacePath}
+
+📦 空间迁移完成：
+- 已迁移 ${migrationStats.files} 个文件、${migrationStats.dirs} 个目录
+- 原项目空间已合并到群组空间
+- 记忆空间已自动配置：${memorySpacePath}
+- 原项目空间已清理
 
 ⚠️ 注意：项目群无法降级为普通群。
-💡 提示：项目工作空间和项目群工作空间已完全绑定，任意一方更新都会同步到另一方。`,
+💡 提示：群组空间现在是项目的协作中心，所有成员可以在此协作。`,
       );
 
       respond(
         true,
-        { success: true, group: updatedGroup, workspacePath: projectWorkspacePath },
+        {
+          success: true,
+          group: updatedGroup,
+          workspacePath: groupWorkspacePath,
+          memorySpacePath: memorySpacePath,
+          migrationStats: {
+            filesCopied: migrationStats.files,
+            dirsCopied: migrationStats.dirs,
+            totalSize: migrationStats.size,
+          },
+        },
         undefined,
       );
     } catch (error) {
