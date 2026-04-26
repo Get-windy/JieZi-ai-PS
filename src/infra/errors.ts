@@ -416,3 +416,115 @@ export function logError(
     }
   }
 }
+
+// ============ 错误格式化工具（与上游兼容） ============
+
+/**
+ * 提取错误代码（机器可读）
+ */
+export function extractErrorCode(err: unknown): string | undefined {
+  if (isAppError(err)) {
+    return err.code;
+  }
+  if (err instanceof Error && 'code' in err) {
+    return (err as any).code as string;
+  }
+  return undefined;
+}
+
+/**
+ * 格式化错误消息（安全地，不暴露敏感信息）
+ */
+export function formatErrorMessage(err: unknown): string {
+  let formatted: string;
+  if (err instanceof Error) {
+    formatted = err.message || err.name || 'Error';
+    // 遍历 .cause 链以包含嵌套错误消息
+    let cause: unknown = (err as any).cause;
+    const seen = new Set<unknown>([err]);
+    while (cause && !seen.has(cause)) {
+      seen.add(cause);
+      if (cause instanceof Error) {
+        if ((cause as any).message) {
+          formatted += ` | ${(cause as any).message}`;
+        }
+        cause = (cause as any).cause;
+      } else if (typeof cause === 'string') {
+        formatted += ` | ${cause}`;
+        break;
+      } else {
+        break;
+      }
+    }
+  } else if (typeof err === 'string') {
+    formatted = err;
+  } else if (typeof err === 'number' || typeof err === 'boolean' || typeof err === 'bigint') {
+    formatted = String(err);
+  } else {
+    try {
+      formatted = JSON.stringify(err);
+    } catch {
+      formatted = Object.prototype.toString.call(err);
+    }
+  }
+  return formatted;
+}
+
+/**
+ * 格式化未捕获的错误（包含堆栈）
+ */
+export function formatUncaughtError(err: unknown): string {
+  if (extractErrorCode(err) === 'INVALID_CONFIG') {
+    return formatErrorMessage(err);
+  }
+  if (err instanceof Error) {
+    const stack = (err as any).stack ?? (err as any).message ?? (err as any).name;
+    return String(stack);
+  }
+  return formatErrorMessage(err);
+}
+
+/**
+ * 读取错误名称
+ */
+export function readErrorName(err: unknown): string {
+  if (err instanceof Error) {
+    return err.name || 'Error';
+  }
+  return 'Error';
+}
+
+/**
+ * 收集错误图候选信息（用于错误链追踪）
+ */
+export function collectErrorGraphCandidates(err: unknown): Array<{
+  name: string;
+  message: string;
+  stack?: string;
+}> {
+  const candidates: Array<{ name: string; message: string; stack?: string }> = [];
+  
+  if (!(err instanceof Error)) {
+    return candidates;
+  }
+
+  let current: unknown = err;
+  const seen = new Set<unknown>();
+  
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    
+    if (current instanceof Error) {
+      candidates.push({
+        name: current.name || 'Error',
+        message: current.message || '',
+        stack: current.stack,
+      });
+      current = (current as any).cause;
+    } else {
+      break;
+    }
+  }
+  
+  return candidates;
+}
