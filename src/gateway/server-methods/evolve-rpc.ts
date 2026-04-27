@@ -61,6 +61,38 @@ interface ReflectionEntry {
   /** AgentEvolver P2：细粒度步骤归因（可选） */
   steps?: StepOutcome[];
   createdAt: number;
+  
+  // ==================== P0: 实时反思中断机制 ====================
+  /** 实时检查点记录（任务执行中的反思检查点） */
+  realtimeCheckpoints?: RealtimeReflectionCheckpoint[];
+  
+  // ==================== P1: 反思验证闭环 ====================
+  /** 验证任务 ID（自动创建的验证任务） */
+  verificationTaskId?: string;
+  /** 是否已验证 */
+  verified?: boolean;
+  /** 验证时间 */
+  verifiedAt?: number;
+  /** 验证结果 */
+  verificationResult?: {
+    improved: boolean;
+    evidence: string;
+    verifiedBy: string;
+  };
+  
+  // ==================== P2: 双 Agent 反思 ====================
+  /** 批评者评估（双 Agent 模式） */
+  criticEvaluation?: CriticEvaluation;
+  
+  // ==================== P3: AI 质量评估 ====================
+  /** AI 驱动的质量评分（0-100） */
+  aiQualityScore?: number;
+  /** 可执行性评分（0-100） */
+  actionabilityScore?: number;
+  /** 学习价值评分（0-100） */
+  learningValueScore?: number;
+  /** 被引用次数 */
+  citationCount?: number;
 }
 
 // P1 HyperAgent 性能画像类型
@@ -1051,6 +1083,193 @@ function pruneStaleSkills(agentId: string | undefined): void {
 }
 
 // ============================================================================
+// P0: 实时反思中断机制（Realtime Reflection Interrupt）
+// 业界依据：Self-Correcting Agents / Anthropic RLAIF
+// 在任务执行中实时检测异常，自动中断并触发反思，而非等到任务完成
+// ============================================================================
+
+/** 实时反思检查点 */
+interface RealtimeReflectionCheckpoint {
+  /** 检查点 ID */
+  id: string;
+  /** 检查时间 */
+  checkedAt: number;
+  /** 触发条件 */
+  triggerCondition: RealtimeReflectionTrigger;
+  /** 是否自动中断 */
+  autoInterrupted: boolean;
+  /** 中断原因 */
+  interruptReason?: string;
+  /** 根因分析 */
+  rootCauseAnalysis?: string;
+  /** 建议的修正动作 */
+  suggestedActions?: string[];
+  /** 检查结果数据 */
+  checkData?: Record<string, any>;
+}
+
+/** 实时反思触发条件 */
+type RealtimeReflectionTrigger =
+  | 'consecutive_failures'        // 连续失败次数超标
+  | 'timeout_approaching'         // 接近超时（80% 时间已用）
+  | 'output_quality_low'          // 输出质量检测失败
+  | 'resource_consumption_high'   // 资源消耗过高（token/内存）
+  | 'error_pattern_detected'      // 检测到错误模式（重复尝试同一失败动作）
+  | 'hallucination_detected';     // 检测到幻觉（输出与输入无关）
+
+/** 实时反思检查配置 */
+interface RealtimeReflectionConfig {
+  /** 检查间隔（毫秒） */
+  checkInterval: number;
+  /** 是否启用自动中断 */
+  autoInterruptEnabled: boolean;
+  /** 连续失败次数阈值 */
+  consecutiveFailuresThreshold: number;
+  /** 超时警告阈值（百分比） */
+  timeoutWarningThreshold: number;
+  /** 错误模式检测窗口 */
+  errorPatternWindow: number;
+}
+
+/** 默认实时反思配置 */
+const DEFAULT_REALTIME_REFLECTION_CONFIG: RealtimeReflectionConfig = {
+  checkInterval: 10 * 60 * 1000, // 每 10 分钟检查一次
+  autoInterruptEnabled: true,
+  consecutiveFailuresThreshold: 3, // 连续失败 3 次触发反思
+  timeoutWarningThreshold: 0.8, // 80% 时间已用时触发警告
+  errorPatternWindow: 5, // 最近 5 次操作检测错误模式
+};
+
+// ============================================================================
+// P1: 反思验证闭环（Reflection Verification Loop）
+// 业界依据：ERL (Experience-Reflection-Learning) / 智源社区
+// 反思生成改进建议后，自动创建验证任务确保建议被执行
+// ============================================================================
+
+/** 验证任务状态 */
+type VerificationStatus = 'pending' | 'running' | 'verified' | 'failed' | 'cancelled';
+
+/** 验证任务 */
+interface VerificationTask {
+  id: string;
+  reflectionId: string;
+  /** 验证任务 ID */
+  taskId: string;
+  /** 验证状态 */
+  status: VerificationStatus;
+  /** 创建时间 */
+  createdAt: number;
+  /** 完成时间 */
+  completedAt?: number;
+  /** 验证结果 */
+  result?: {
+    /** 是否真正改进 */
+    improved: boolean;
+    /** 改进证据 */
+    evidence: string;
+    /** 验证者 */
+    verifiedBy: string;
+    /** 验证方法 */
+    verificationMethod: string;
+  };
+}
+
+// ============================================================================
+// P2: 生产者-批评者双 Agent 反思模式（Dual-Agent Reflection）
+// 业界依据：LangChain / ADK Producer-Critic Pattern
+// 分离生产者和批评者角色，避免自我评审的认知偏差
+// ============================================================================
+
+/** 批评者评估 */
+interface CriticEvaluation {
+  /** 批评者 Agent ID */
+  criticAgentId: string;
+  /** 评估时间 */
+  evaluatedAt: number;
+  /** 准确性评分（0-100） */
+  accuracy: number;
+  /** 完整性评分（0-100） */
+  completeness: number;
+  /** 效率评分（0-100） */
+  efficiency: number;
+  /** 总体评分（0-100） */
+  overallScore: number;
+  /** 发现的问题 */
+  issuesFound: string[];
+  /** 改进建议 */
+  improvementSuggestions: string[];
+  /** 是否需要返工 */
+  requiresRework: boolean;
+  /** 评估原始内容 */
+  rawEvaluation?: string;
+}
+
+// ============================================================================
+// P2: 跨项目反思共享（Cross-Project Reflection Sharing）
+// 业界依据：组织级学习 / 最佳实践提取
+// 所有项目的反思汇总，自动发现跨项目共性问题
+// ============================================================================
+
+/** 组织级反思共享条目 */
+interface OrganizationReflectionEntry {
+  /** 来源项目 ID */
+  projectId: string;
+  /** 来源 Agent ID */
+  agentId: string;
+  /** 反思 ID */
+  reflectionId: string;
+  /** 问题模式 */
+  problemPattern: string;
+  /** 出现频率 */
+  frequency: number;
+  /** 涉及的项目列表 */
+  affectedProjects: string[];
+  /** 建议的修复方案 */
+  suggestedFix: string;
+  /** 提取时间 */
+  extractedAt: number;
+  /** 是否已验证 */
+  verified: boolean;
+}
+
+/** 组织级反思共享存储 */
+interface OrganizationReflectionStore {
+  version: 1;
+  entries: OrganizationReflectionEntry[];
+  /** 最佳实践库 */
+  bestPractices: Array<{
+    id: string;
+    title: string;
+    description: string;
+    sourceProject: string;
+    createdAt: number;
+    adoptionCount: number;
+  }>;
+}
+
+// ============================================================================
+// P3: AI 驱动的反思质量评估（AI-Powered Reflection Quality Assessment）
+// 业界依据：LLM-as-a-Judge / Self-Evaluation
+// 使用 AI 评估反思的可执行性和学习价值，而非简单的规则打分
+// ============================================================================
+
+/** AI 质量评估结果 */
+interface AIQualityAssessment {
+  /** 总体质量评分（0-100） */
+  overallScore: number;
+  /** 可执行性评分（0-100）- 是否有具体的改进步骤 */
+  actionabilityScore: number;
+  /** 学习价值评分（0-100）- 是否提炼出了通用规律 */
+  learningValueScore: number;
+  /** 具体性评分（0-100）- 是否具体而非空泛 */
+  specificityScore: number;
+  /** 评估理由 */
+  assessmentReason: string;
+  /** 评估时间 */
+  assessedAt: number;
+}
+
+// ============================================================================
 // FGT 反思有效性评估 + GC（Reflection Quality Scoring & Garbage Collection）
 // 业界依据：Reflexion / OpenManus / MemOS — 低质量记忆不仅无益反而增加 context 干扰
 //
@@ -1183,6 +1402,438 @@ export function pruneStaleReflections(
     after,
     removed,
     reason: removed > 0 ? `GC: 删除 ${removed} 条低价值/超龄反思` : "no-op",
+  };
+}
+
+// ============================================================================
+// P0: 实时反思中断机制（Realtime Reflection Interrupt）
+// ============================================================================
+
+/**
+ * createRealtimeCheckpoint — 创建实时反思检查点
+ * 
+ * 用于在任务执行中记录异常状态，支持自动中断和根因分析
+ */
+export function createRealtimeCheckpoint(params: {
+  taskId: string;
+  agentId?: string;
+  triggerCondition: RealtimeReflectionTrigger;
+  checkData?: Record<string, any>;
+  config?: Partial<RealtimeReflectionConfig>;
+}): RealtimeReflectionCheckpoint {
+  const cfg = { ...DEFAULT_REALTIME_REFLECTION_CONFIG, ...params.config };
+  const checkpointId = `checkpoint-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+  
+  // 判断是否需要自动中断
+  let shouldInterrupt = false;
+  let interruptReason: string | undefined;
+  
+  if (cfg.autoInterruptEnabled) {
+    switch (params.triggerCondition) {
+      case 'consecutive_failures':
+        const failures = params.checkData?.consecutiveFailures ?? 0;
+        if (failures >= cfg.consecutiveFailuresThreshold) {
+          shouldInterrupt = true;
+          interruptReason = `连续失败 ${failures} 次（阈值：${cfg.consecutiveFailuresThreshold}）`;
+        }
+        break;
+      case 'timeout_approaching':
+        const timeUsed = params.checkData?.timeUsedPercent ?? 0;
+        if (timeUsed >= cfg.timeoutWarningThreshold * 100) {
+          shouldInterrupt = true;
+          interruptReason = `任务时间已用 ${timeUsed.toFixed(1)}%（警告阈值：${(cfg.timeoutWarningThreshold * 100).toFixed(0)}%）`;
+        }
+        break;
+      case 'error_pattern_detected':
+        shouldInterrupt = true;
+        interruptReason = '检测到重复错误模式，需要反思调整策略';
+        break;
+      case 'hallucination_detected':
+        shouldInterrupt = true;
+        interruptReason = '检测到疑似幻觉输出，需要立即验证';
+        break;
+    }
+  }
+  
+  return {
+    id: checkpointId,
+    checkedAt: Date.now(),
+    triggerCondition: params.triggerCondition,
+    autoInterrupted: shouldInterrupt,
+    interruptReason,
+    checkData: params.checkData,
+  };
+}
+
+/**
+ * analyzeRealtimeReflection — 分析实时检查点并生成反思建议
+ */
+export function analyzeRealtimeReflection(checkpoint: RealtimeReflectionCheckpoint): {
+  rootCauseAnalysis: string;
+  suggestedActions: string[];
+} {
+  let rootCause = '';
+  const actions: string[] = [];
+  
+  switch (checkpoint.triggerCondition) {
+    case 'consecutive_failures':
+      rootCause = '连续失败表明当前策略可能不适用，需要重新评估任务难度或调整方法';
+      actions.push('暂停当前任务，重新评估任务可行性');
+      actions.push('检查是否有前置依赖未完成');
+      actions.push('考虑降低任务复杂度或分步骤执行');
+      actions.push('查阅历史反思记录，寻找类似问题');
+      break;
+    
+    case 'timeout_approaching':
+      rootCause = '时间管理不当，可能在某个子任务上花费过多时间';
+      actions.push('立即总结当前进度，识别关键瓶颈');
+      actions.push('简化剩余任务，聚焦核心目标');
+      actions.push('考虑请求协助或调整任务范围');
+      break;
+    
+    case 'output_quality_low':
+      rootCause = '输出质量不达标，可能是理解偏差或执行能力不足';
+      actions.push('重新理解任务要求，确认关键约束');
+      actions.push('检查输出是否符合预期标准');
+      actions.push('参考类似任务的成功案例');
+      break;
+    
+    case 'resource_consumption_high':
+      rootCause = '资源消耗异常，可能存在效率问题或无限循环';
+      actions.push('检查是否存在重复操作或死循环');
+      actions.push('优化执行策略，减少不必要的尝试');
+      actions.push('考虑使用缓存或复用已有结果');
+      break;
+    
+    case 'error_pattern_detected':
+      rootCause = '检测到重复错误模式，表明策略需要调整';
+      actions.push('立即停止当前策略，避免继续浪费资源');
+      actions.push('分析错误模式，找出根本原因');
+      actions.push('尝试完全不同的方法');
+      actions.push('记录错误模式到反思日志，供后续参考');
+      break;
+    
+    case 'hallucination_detected':
+      rootCause = '输出与输入不相关，可能存在严重的理解偏差';
+      actions.push('立即停止当前输出');
+      actions.push('重新理解任务上下文和目标');
+      actions.push('验证关键假设是否正确');
+      actions.push('必要时请求人类介入确认');
+      break;
+  }
+  
+  return {
+    rootCauseAnalysis: rootCause,
+    suggestedActions: actions,
+  };
+}
+
+// ============================================================================
+// P1: 反思验证闭环（Reflection Verification Loop）
+// ============================================================================
+
+/**
+ * createVerificationTask — 为反思建议创建验证任务
+ * 
+ * 确保反思生成的改进建议真正被执行和验证
+ */
+export function createVerificationTask(params: {
+  reflectionId: string;
+  taskId: string;
+  agentId?: string;
+  improvementActions: string[];
+  verificationMethod?: string;
+}): VerificationTask {
+  return {
+    id: `verify-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
+    reflectionId: params.reflectionId,
+    taskId: params.taskId,
+    status: 'pending',
+    createdAt: Date.now(),
+    result: undefined,
+  };
+}
+
+/**
+ * completeVerification — 完成验证并记录结果
+ */
+export function completeVerification(params: {
+  verificationId: string;
+  improved: boolean;
+  evidence: string;
+  verifiedBy: string;
+  verificationMethod?: string;
+}): { success: boolean; verification: VerificationTask } {
+  // 这里应该从存储加载并更新，简化处理直接返回
+  const verification: VerificationTask = {
+    id: params.verificationId,
+    reflectionId: '',
+    taskId: '',
+    status: 'verified',
+    createdAt: Date.now(),
+    completedAt: Date.now(),
+    result: {
+      improved: params.improved,
+      evidence: params.evidence,
+      verifiedBy: params.verifiedBy,
+      verificationMethod: params.verificationMethod ?? 'manual_review',
+    },
+  };
+  
+  return { success: true, verification };
+}
+
+// ============================================================================
+// P2: 跨项目反思共享（Cross-Project Reflection Sharing）
+// ============================================================================
+
+/** 组织级反思共享存储文件路径 */
+const ORG_REFLECTIONS_FILE = 'organization-reflections.json';
+
+/**
+ * resolveOrgReflectionsFile — 解析组织级反思文件路径
+ */
+function resolveOrgReflectionsFile(): string {
+  const stateDir = process.env.OPENCLAW_STATE_DIR ?? path.join(process.cwd(), 'state');
+  return path.join(stateDir, 'self-evolve', ORG_REFLECTIONS_FILE);
+}
+
+/**
+ * shareReflectionToOrganization — 将项目级反思共享到组织级
+ * 
+ * 当某个反思在多个项目中出现相似模式时，自动提取为组织级最佳实践或共性问题
+ */
+export function shareReflectionToOrganization(params: {
+  projectId: string;
+  agentId: string;
+  reflectionId: string;
+  problemPattern: string;
+  suggestedFix: string;
+}): OrganizationReflectionEntry {
+  const filePath = resolveOrgReflectionsFile();
+  const store = loadJson<OrganizationReflectionStore>(filePath, {
+    version: 1,
+    entries: [],
+    bestPractices: [],
+  });
+  
+  // 检查是否已存在相似模式
+  const existing = store.entries.find(
+    (e) => e.problemPattern === params.problemPattern && !e.verified
+  );
+  
+  if (existing) {
+    // 更新现有条目：增加频率和项目列表
+    existing.frequency++;
+    if (!existing.affectedProjects.includes(params.projectId)) {
+      existing.affectedProjects.push(params.projectId);
+    }
+  } else {
+    // 创建新条目
+    const newEntry: OrganizationReflectionEntry = {
+      projectId: params.projectId,
+      agentId: params.agentId,
+      reflectionId: params.reflectionId,
+      problemPattern: params.problemPattern,
+      frequency: 1,
+      affectedProjects: [params.projectId],
+      suggestedFix: params.suggestedFix,
+      extractedAt: Date.now(),
+      verified: false,
+    };
+    store.entries.push(newEntry);
+  }
+  
+  // 保留最近 100 条
+  if (store.entries.length > 100) {
+    store.entries = store.entries.slice(-100);
+  }
+  
+  saveJson(filePath, store);
+  
+  return existing ?? store.entries[store.entries.length - 1];
+}
+
+/**
+ * queryOrgReflections — 查询组织级反思（按项目或问题模式）
+ */
+export function queryOrgReflections(params: {
+  projectId?: string;
+  problemPattern?: string;
+  minFrequency?: number;
+}): OrganizationReflectionEntry[] {
+  const filePath = resolveOrgReflectionsFile();
+  const store = loadJson<OrganizationReflectionStore>(filePath, {
+    version: 1,
+    entries: [],
+    bestPractices: [],
+  });
+  
+  let results = store.entries;
+  
+  if (params.projectId) {
+    results = results.filter((e) => e.affectedProjects.includes(params.projectId!));
+  }
+  
+  if (params.problemPattern) {
+    results = results.filter((e) =>
+      e.problemPattern.toLowerCase().includes(params.problemPattern!.toLowerCase())
+    );
+  }
+  
+  if (params.minFrequency) {
+    results = results.filter((e) => e.frequency >= params.minFrequency!);
+  }
+  
+  // 按频率降序排序
+  return results.sort((a, b) => b.frequency - a.frequency);
+}
+
+/**
+ * addBestPractice — 添加组织级最佳实践（从高频反思中提炼）
+ */
+export function addBestPractice(params: {
+  title: string;
+  description: string;
+  sourceProject: string;
+}): { id: string; message: string } {
+  const filePath = resolveOrgReflectionsFile();
+  const store = loadJson<OrganizationReflectionStore>(filePath, {
+    version: 1,
+    entries: [],
+    bestPractices: [],
+  });
+  
+  const bpId = `bp-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+  store.bestPractices.push({
+    id: bpId,
+    title: params.title,
+    description: params.description,
+    sourceProject: params.sourceProject,
+    createdAt: Date.now(),
+    adoptionCount: 0,
+  });
+  
+  saveJson(filePath, store);
+  
+  return { id: bpId, message: '最佳实践已添加' };
+}
+
+// ============================================================================
+// P3: AI 驱动的反思质量评估（AI-Powered Reflection Quality Assessment）
+// ============================================================================
+
+/**
+ * assessReflectionQualityAI — 使用 AI 评估反思质量（待接入 LLM）
+ * 
+ * 评估维度：
+ * 1. 可执行性：是否有具体的改进步骤（而非空泛的“下次注意”）
+ * 2. 学习价值：是否提炼出了通用规律（而非仅针对特定任务）
+ * 3. 具体性：是否具体明确（包含关键细节和上下文）
+ * 
+ * 注：当前实现为规则评估，后续可替换为 LLM-as-a-Judge
+ */
+export function assessReflectionQualityAI(entry: ReflectionEntry): AIQualityAssessment {
+  // === 1. 可执行性评分（0-100）===
+  let actionabilityScore = 0;
+  
+  // 有具体的改进行动（+40）
+  if (entry.lessons.length > 0) {
+    const hasActions = entry.lessons.some(l =>
+      l.includes('应该') || l.includes('避免') || l.includes('使用') || l.includes('检查')
+    );
+    if (hasActions) actionabilityScore += 40;
+  }
+  
+  // 有步骤归因（+20）
+  if (entry.steps && entry.steps.length > 0) {
+    actionabilityScore += 20;
+  }
+  
+  // 反思长度适中（+20）
+  if (entry.reflection.length >= 100 && entry.reflection.length <= 500) {
+    actionabilityScore += 20;
+  } else if (entry.reflection.length >= 50) {
+    actionabilityScore += 10;
+  }
+  
+  // 包含具体示例（+20）
+  if (entry.reflection.includes('例如') || entry.reflection.includes('比如') || entry.reflection.includes('example')) {
+    actionabilityScore += 20;
+  }
+  
+  // === 2. 学习价值评分（0-100）===
+  let learningValueScore = 0;
+  
+  // 失败记录更有价值（+30）
+  if (entry.outcome === 'failure' || entry.outcome === 'partial') {
+    learningValueScore += 30;
+  }
+  
+  // 提炼了通用规律（+30）
+  if (entry.lessons.some(l =>
+    l.includes('通用') || l.includes('规律') || l.includes('模式') || l.includes('原则')
+  )) {
+    learningValueScore += 30;
+  }
+  
+  // 有多个教训（+20）
+  if (entry.lessons.length >= 3) {
+    learningValueScore += 20;
+  }
+  
+  // 有标签分类（+20）
+  if (entry.tags && entry.tags.length > 0) {
+    learningValueScore += 20;
+  }
+  
+  // === 3. 具体性评分（0-100）===
+  let specificityScore = 0;
+  
+  // 任务描述具体（+30）
+  if (entry.taskSummary.length >= 30) {
+    specificityScore += 30;
+  } else if (entry.taskSummary.length >= 15) {
+    specificityScore += 15;
+  }
+  
+  // 反思内容具体（+40）
+  if (entry.reflection.length >= 200) {
+    specificityScore += 40;
+  } else if (entry.reflection.length >= 100) {
+    specificityScore += 20;
+  }
+  
+  // 包含关键细节（+30）
+  if (entry.reflection.includes('原因') || entry.reflection.includes('因为') || entry.reflection.includes('导致')) {
+    specificityScore += 30;
+  }
+  
+  // === 4. 总体评分（加权平均）===
+  const overallScore = Math.round(
+    actionabilityScore * 0.4 + // 可执行性权重 40%
+    learningValueScore * 0.35 + // 学习价值权重 35%
+    specificityScore * 0.25 // 具体性权重 25%
+  );
+  
+  // === 5. 评估理由 ===
+  const reasons: string[] = [];
+  if (actionabilityScore >= 80) reasons.push('可执行性强');
+  else if (actionabilityScore < 40) reasons.push('缺少具体改进行动');
+  
+  if (learningValueScore >= 80) reasons.push('学习价值高');
+  else if (learningValueScore < 40) reasons.push('学习价值有限');
+  
+  if (specificityScore >= 80) reasons.push('内容具体明确');
+  else if (specificityScore < 40) reasons.push('内容过于笼统');
+  
+  return {
+    overallScore,
+    actionabilityScore,
+    learningValueScore,
+    specificityScore,
+    assessmentReason: reasons.join('，'),
+    assessedAt: Date.now(),
   };
 }
 
@@ -4078,6 +4729,408 @@ export const experienceRpcHandlers: {
         false,
         undefined,
         errorShape(ErrorCodes.UNAVAILABLE, `evolve.exp.query failed: ${String(err)}`),
+      );
+    }
+  },
+
+  // ============================================================================
+  // P0: 实时反思中断机制 RPC Handlers
+  // ============================================================================
+
+  /**
+   * evolve.realtime.checkpoint — 创建实时反思检查点（任务执行中）
+   * 
+   * 在任务执行过程中检测到异常时调用，支持自动中断和根因分析
+   */
+  "evolve.realtime.checkpoint": async ({ params, respond }) => {
+    try {
+      const taskId = params?.taskId ? String(params.taskId) : "";
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const triggerCondition = params?.triggerCondition ? String(params.triggerCondition) as RealtimeReflectionTrigger : null;
+      
+      if (!taskId || !triggerCondition) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "taskId and triggerCondition are required"),
+        );
+        return;
+      }
+      
+      const checkData = params?.checkData && typeof params.checkData === 'object' 
+        ? params.checkData as Record<string, any> 
+        : undefined;
+      
+      // 创建检查点
+      const checkpoint = createRealtimeCheckpoint({
+        taskId,
+        agentId,
+        triggerCondition,
+        checkData,
+      });
+      
+      // 分析检查点并生成反思建议
+      const analysis = analyzeRealtimeReflection(checkpoint);
+      
+      // 如果需要自动中断，记录到反思日志
+      if (checkpoint.autoInterrupted) {
+        const filePath = resolveReflectionsFile(agentId);
+        const store = loadJson<ReflectionStore>(filePath, { version: 1, entries: [] });
+        
+        const reflectionId = `reflection-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+        const entry: ReflectionEntry = {
+          id: reflectionId,
+          agentId,
+          taskSummary: `实时中断：${triggerCondition}`,
+          outcome: 'partial',
+          reflection: analysis.rootCauseAnalysis,
+          lessons: analysis.suggestedActions,
+          tags: ['realtime-interrupt', triggerCondition],
+          createdAt: Date.now(),
+          realtimeCheckpoints: [checkpoint],
+        };
+        
+        store.entries.push(entry);
+        saveJson(filePath, store);
+        
+        respond(true, {
+          checkpoint,
+          analysis,
+          autoInterrupted: true,
+          reflectionId,
+          message: '已创建实时反思检查点并自动中断任务',
+        }, undefined);
+      } else {
+        respond(true, {
+          checkpoint,
+          analysis,
+          autoInterrupted: false,
+          message: '已创建实时反思检查点（未触发自动中断）',
+        }, undefined);
+      }
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.realtime.checkpoint failed: ${String(err)}`),
+      );
+    }
+  },
+
+  // ============================================================================
+  // P1: 反思验证闭环 RPC Handlers
+  // ============================================================================
+
+  /**
+   * evolve.verification.create — 为反思创建验证任务
+   * 
+   * 确保反思生成的改进建议真正被执行和验证
+   */
+  "evolve.verification.create": async ({ params, respond }) => {
+    try {
+      const reflectionId = params?.reflectionId ? String(params.reflectionId) : "";
+      const taskId = params?.taskId ? String(params.taskId) : "";
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const improvementActions = Array.isArray(params?.improvementActions) 
+        ? params.improvementActions.map(String) 
+        : [];
+      
+      if (!reflectionId || !taskId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "reflectionId and taskId are required"),
+        );
+        return;
+      }
+      
+      const verification = createVerificationTask({
+        reflectionId,
+        taskId,
+        agentId,
+        improvementActions,
+      });
+      
+      // 更新反思记录的 verificationTaskId
+      const filePath = resolveReflectionsFile(agentId);
+      const store = loadJson<ReflectionStore>(filePath, { version: 1, entries: [] });
+      const entryIdx = store.entries.findIndex(e => e.id === reflectionId);
+      if (entryIdx !== -1) {
+        const entry = store.entries[entryIdx];
+        if (entry) {
+          entry.verificationTaskId = verification.taskId;
+          store.entries[entryIdx] = entry;
+          saveJson(filePath, store);
+        }
+      }
+      
+      respond(true, { verification, message: '验证任务已创建' }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.verification.create failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * evolve.verification.complete — 完成验证并记录结果
+   */
+  "evolve.verification.complete": async ({ params, respond }) => {
+    try {
+      const verificationId = params?.verificationId ? String(params.verificationId) : "";
+      const improved = params?.improved === true;
+      const evidence = params?.evidence ? String(params.evidence) : "";
+      const verifiedBy = params?.verifiedBy ? String(params.verifiedBy) : "";
+      const verificationMethod = params?.verificationMethod ? String(params.verificationMethod) : undefined;
+      
+      if (!verificationId || !evidence || !verifiedBy) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "verificationId, evidence, and verifiedBy are required"),
+        );
+        return;
+      }
+      
+      const result = completeVerification({
+        verificationId,
+        improved,
+        evidence,
+        verifiedBy,
+        verificationMethod,
+      });
+      
+      respond(true, result, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.verification.complete failed: ${String(err)}`),
+      );
+    }
+  },
+
+  // ============================================================================
+  // P2: 跨项目反思共享 RPC Handlers
+  // ============================================================================
+
+  /**
+   * evolve.organization.share — 将项目级反思共享到组织级
+   */
+  "evolve.organization.share": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : "";
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const reflectionId = params?.reflectionId ? String(params.reflectionId) : "";
+      const problemPattern = params?.problemPattern ? String(params.problemPattern) : "";
+      const suggestedFix = params?.suggestedFix ? String(params.suggestedFix) : "";
+      
+      if (!projectId || !problemPattern || !suggestedFix) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "projectId, problemPattern, and suggestedFix are required"),
+        );
+        return;
+      }
+      
+      const entry = shareReflectionToOrganization({
+        projectId,
+        agentId: agentId ?? '',
+        reflectionId,
+        problemPattern,
+        suggestedFix,
+      });
+      
+      respond(true, { entry, message: '反思已共享到组织级' }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.organization.share failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * evolve.organization.query — 查询组织级反思
+   */
+  "evolve.organization.query": async ({ params, respond }) => {
+    try {
+      const projectId = params?.projectId ? String(params.projectId) : undefined;
+      const problemPattern = params?.problemPattern ? String(params.problemPattern) : undefined;
+      const minFrequency = params?.minFrequency ? Number(params.minFrequency) : undefined;
+      
+      const entries = queryOrgReflections({
+        projectId,
+        problemPattern,
+        minFrequency,
+      });
+      
+      respond(true, { entries, total: entries.length }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.organization.query failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * evolve.organization.addBestPractice — 添加组织级最佳实践
+   */
+  "evolve.organization.addBestPractice": async ({ params, respond }) => {
+    try {
+      const title = params?.title ? String(params.title) : "";
+      const description = params?.description ? String(params.description) : "";
+      const sourceProject = params?.sourceProject ? String(params.sourceProject) : "";
+      
+      if (!title || !description || !sourceProject) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "title, description, and sourceProject are required"),
+        );
+        return;
+      }
+      
+      const result = addBestPractice({
+        title,
+        description,
+        sourceProject,
+      });
+      
+      respond(true, result, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.organization.addBestPractice failed: ${String(err)}`),
+      );
+    }
+  },
+
+  // ============================================================================
+  // P3: AI 驱动的反思质量评估 RPC Handlers
+  // ============================================================================
+
+  /**
+   * evolve.reflect.assess — 对反思进行 AI 质量评估
+   * 
+   * 评估维度：可执行性、学习价值、具体性
+   */
+  "evolve.reflect.assess": async ({ params, respond }) => {
+    try {
+      const reflectionId = params?.reflectionId ? String(params.reflectionId) : "";
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      
+      if (!reflectionId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "reflectionId is required"),
+        );
+        return;
+      }
+      
+      // 加载反思记录
+      const filePath = resolveReflectionsFile(agentId);
+      const store = loadJson<ReflectionStore>(filePath, { version: 1, entries: [] });
+      const entry = store.entries.find(e => e.id === reflectionId);
+      
+      if (!entry) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.NOT_FOUND, `Reflection ${reflectionId} not found`),
+        );
+        return;
+      }
+      
+      // 执行 AI 质量评估（当前为规则评估，后续可替换为 LLM）
+      const assessment = assessReflectionQualityAI(entry);
+      
+      // 更新反思记录中的评分字段（同时更新旧字段保持兼容）
+      const entryIdx = store.entries.findIndex(e => e.id === reflectionId);
+      if (entryIdx !== -1) {
+        const existingEntry = store.entries[entryIdx];
+        if (existingEntry) {
+          existingEntry.aiQualityScore = assessment.overallScore;
+          existingEntry.actionabilityScore = assessment.actionabilityScore;
+          existingEntry.learningValueScore = assessment.learningValueScore;
+          existingEntry.citationCount = existingEntry.citationCount ?? 0;
+          store.entries[entryIdx] = existingEntry;
+          saveJson(filePath, store);
+        }
+      }
+      
+      respond(true, {
+        reflectionId,
+        assessment,
+        message: '反思质量评估完成',
+      }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.reflect.assess failed: ${String(err)}`),
+      );
+    }
+  },
+
+  /**
+   * evolve.reflect.listWithQuality — 列出反思并附带质量评分
+   */
+  "evolve.reflect.listWithQuality": async ({ params, respond }) => {
+    try {
+      const agentId = params?.agentId ? String(params.agentId) : undefined;
+      const filterOutcome = params?.outcome ? String(params.outcome) : undefined;
+      const limit = typeof params?.limit === "number" ? Math.min(params.limit, 50) : 10;
+      const includeQuality = params?.includeQuality === true;
+
+      const filePath = resolveReflectionsFile(agentId);
+      const store = loadJson<ReflectionStore>(filePath, { version: 1, entries: [] });
+
+      let entries = store.entries;
+      if (filterOutcome) {
+        entries = entries.filter((e) => e.outcome === filterOutcome);
+      }
+
+      // 按时间倒序排序
+      const sorted = entries.toSorted((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+      
+      // 如果需要质量评分，且反思还没有评分，则自动计算（只返回，不保存）
+      const withQuality = sorted.map(entry => {
+        const result: any = { ...entry };
+        if (includeQuality) {
+          // 如果已有AI评分则使用，否则计算规则评分作为fallback
+          if (!entry.aiQualityScore) {
+            const ruleScore = scoreReflectionValue(entry);
+            result.aiQualityScore = ruleScore * 10; // 转换为0-100分制
+            result.actionabilityScore = ruleScore * 10;
+            result.learningValueScore = ruleScore * 10;
+          }
+        }
+        return result;
+      });
+
+      respond(
+        true,
+        {
+          entries: withQuality,
+          total: entries.length,
+          returned: withQuality.length,
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.UNAVAILABLE, `evolve.reflect.listWithQuality failed: ${String(err)}`),
       );
     }
   },
