@@ -420,6 +420,11 @@ export function logError(
 // ============ 错误格式化工具（与上游兼容） ============
 
 /**
+ * 错误类型分类
+ */
+export type ErrorKind = "refusal" | "timeout" | "rate_limit" | "context_length" | "unknown";
+
+/**
  * 提取错误代码（机器可读）
  */
 export function extractErrorCode(err: unknown): string | undefined {
@@ -527,4 +532,58 @@ export function collectErrorGraphCandidates(err: unknown): Array<{
   }
   
   return candidates;
+}
+
+/**
+ * 检测错误类型（拒绝、超时、限流等）
+ */
+export function detectErrorKind(err: unknown): ErrorKind | undefined {
+  if (err === undefined) {
+    return undefined;
+  }
+  const message = formatErrorMessage(err).toLowerCase();
+  const code = extractErrorCode(err)?.toLowerCase();
+
+  if (
+    message.includes("refusal") ||
+    message.includes("content_filter") ||
+    message.includes("sensitive") ||
+    message.includes("unhandled stop reason: refusal_policy")
+  ) {
+    return "refusal";
+  }
+  if (message.includes("timeout") || code === "etimedout" || code === "timeout") {
+    return "timeout";
+  }
+  if (
+    message.includes("rate limit") ||
+    message.includes("too many requests") ||
+    message.includes("429") ||
+    code === "429"
+  ) {
+    return "rate_limit";
+  }
+  if (
+    message.includes("context length") ||
+    message.includes("too many tokens") ||
+    message.includes("token limit") ||
+    message.includes("context_window")
+  ) {
+    return "context_length";
+  }
+  return undefined;
+}
+
+/**
+ * 检查错误是否为系统 errno 错误
+ */
+export function isErrno(err: unknown): boolean {
+  return err instanceof Error && 'code' in err;
+}
+
+/**
+ * 检查错误是否具有特定的 errno 代码
+ */
+export function hasErrnoCode(err: unknown, code: string): boolean {
+  return isErrno(err) && (err as any).code === code;
 }
