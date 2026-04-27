@@ -1,4 +1,9 @@
 import { createHmac, createHash } from "node:crypto";
+import type { BootstrapMode } from "../../upstream/src/agents/bootstrap-mode.js";
+import {
+  buildFullBootstrapPromptLines,
+  buildLimitedBootstrapPromptLines,
+} from "../../upstream/src/agents/bootstrap-prompt.js";
 import type { ResolvedTimeFormat } from "../../upstream/src/agents/date-time.js";
 import type { EmbeddedContextFile } from "../../upstream/src/agents/pi-embedded-helpers.js";
 import type { EmbeddedSandboxInfo } from "../../upstream/src/agents/pi-embedded-runner/types.js";
@@ -7,11 +12,6 @@ import { SILENT_REPLY_TOKEN } from "../../upstream/src/auto-reply/tokens.js";
 import type { MemoryCitationsMode } from "../../upstream/src/config/types.memory.js";
 import { listDeliverableMessageChannels } from "../../upstream/src/utils/message-channel.js";
 import type { ReasoningLevel, ThinkLevel } from "../auto-reply/thinking.js";
-import type { BootstrapMode } from "../../upstream/src/agents/bootstrap-mode.js";
-import {
-  buildFullBootstrapPromptLines,
-  buildLimitedBootstrapPromptLines,
-} from "../../upstream/src/agents/bootstrap-prompt.js";
 
 /**
  * Controls which hardcoded sections are included in the system prompt.
@@ -85,21 +85,31 @@ function buildMemorySection(params: {
   );
 
   // 0.5 错误经验库（强制学习机制）
-  // 这是解决“告知错误后仍然重复犯错”的关键机制
+  // 这是解决"告知错误后仍然重复犯错"的关键机制
   lines.push(
     "",
-    "**⚠️ CRITICAL: Error Experience Library (错误经验库)**",
+    "**⚠️ CRITICAL: Error Experience Library (错误经验库) - MANDATORY CHECK**",
     "  You have a dedicated error experience memory that tracks your past mistakes.",
-    "  BEFORE executing any action, you MUST:",
-    "    1. Recall recent error experiences from your memory",
-    "    2. Check if current action matches any known error patterns",
-    "    3. Apply learned corrections BEFORE making the same mistake again",
+    "  This is NOT optional reading - it is a MANDATORY safety mechanism.",
+    "",
+    "  **BEFORE EVERY ACTION (强制执行三步检查)**:",
+    "  1️⃣ STOP: Before executing ANY tool (write/exec/read/etc.), you MUST check error experiences",
+    "  2️⃣ MATCH: Does your current action match ANY known error pattern?",
+    "  3️⃣ CORRECT: If match found, you MUST use the corrected approach from the error experience",
     "",
     "  **PAST ERRORS YOU MUST NOT REPEAT**:",
     "  {errorExperiences}",
     "",
-    "  If you see a pattern match, STOP and use the corrected approach.",
-    "  Repeating known errors wastes time and reduces trust.",
+    "  **CRITICAL RULES (违反将导致严重后果)**:",
+    "  ❌ NEVER write code to root directory - this is a frontend-backend separated architecture",
+    "  ❌ NEVER repeat an action that matches an error pattern above",
+    "  ✅ ALWAYS check error experiences BEFORE executing tools",
+    "  ✅ ALWAYS apply the 'correct approach' from error experiences when you see a match",
+    "",
+    "  **Self-Check Prompt (每次操作前默念)**:",
+    "  'Have I checked my error experiences? Does this action match any known error? What is the correct approach?'",
+    "",
+    "  Repeating known errors will significantly reduce user trust and may trigger automatic task failure.",
   );
 
   // 1. Recall
@@ -510,15 +520,15 @@ function buildRoleDeliverableSection(params: {
     params.projectWorkspacePath ||
     "{projectWorkspace: 请通过 project_list 工具查询项目空间实际路径}";
   const codeDir = params.codeDir || "{codeDir: 请通过 project_list 工具查询业务空间实际路径}";
-  
+
   // 构建业务空间注入区块（如果提供了完整的业务空间列表）
   let businessSpacesSection: string[] = [];
   if (params.businessSpaces && params.businessSpaces.length > 0) {
-    const enabledSpaces = params.businessSpaces.filter(s => s.enabled !== false);
+    const enabledSpaces = params.businessSpaces.filter((s) => s.enabled !== false);
     if (enabledSpaces.length > 0) {
       businessSpacesSection = [
         "**当前项目已配置的业务空间**",
-        ...enabledSpaces.map(space => {
+        ...enabledSpaces.map((space) => {
           const icon = getBusinessSpaceIcon(space.type);
           const label = getBusinessSpaceLabel(space.type);
           const desc = space.description ? ` (${space.description})` : "";
@@ -609,9 +619,9 @@ function buildRoleDeliverableSection(params: {
       "  - 任务 description 里可能会有 coordinator 写入的项目规范（如: 目录结构、包命名、模块命名、API 路径前缀）",
       "  - 如果任务 description 中有规范约定，必须 100% 遵守，禁止「我觉得这样更好」的改动",
       `  - 如果任务没有规范说明，必须自行读取 ${projectWorkspace}/SHARED_MEMORY.md 中的 "📌 项目规范约定" 区块`,
-      "  - 目录结构规范: 如果 \"all modules under erp/\" 则禁止在根目录建同名子模块",
-      "  - 包命名规范: 如果 \"cn.aiedge.erp.{module}\" 则禁止使用 cn.aiedge.{module} 包名",
-      "  - API 路径规范: 如果 \"/api/erp/\" 则所有接口必须以该前缀开头",
+      '  - 目录结构规范: 如果 "all modules under erp/" 则禁止在根目录建同名子模块',
+      '  - 包命名规范: 如果 "cn.aiedge.erp.{module}" 则禁止使用 cn.aiedge.{module} 包名',
+      '  - API 路径规范: 如果 "/api/erp/" 则所有接口必须以该前缀开头',
       "  - 违反规范的代码是干扱代码，将导致 PR 被拒绝并要求重构",
       "",
       "**Step 2c — MIRROR 内省自评（执行前必做 — 防止错误传播的核心机制）**",
@@ -756,7 +766,7 @@ export function buildAgentSystemPrompt(params: {
   codeDir?: string;
   /**
    * 业务空间列表（完整）
-   * 
+   *
    * 包含项目的所有业务空间配置（代码、销售、合同、客户等）。
    * 若提供，将在系统提示中注入完整的业务空间列表，让 Agent 知道所有可用的业务空间路径。
    */
