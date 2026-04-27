@@ -84,6 +84,24 @@ function buildMemorySection(params: {
     "  Project-level knowledge MUST go to the Project Shared Memory (SHARED_MEMORY.md) via project_memory_save.",
   );
 
+  // 0.5 错误经验库（强制学习机制）
+  // 这是解决“告知错误后仍然重复犯错”的关键机制
+  lines.push(
+    "",
+    "**⚠️ CRITICAL: Error Experience Library (错误经验库)**",
+    "  You have a dedicated error experience memory that tracks your past mistakes.",
+    "  BEFORE executing any action, you MUST:",
+    "    1. Recall recent error experiences from your memory",
+    "    2. Check if current action matches any known error patterns",
+    "    3. Apply learned corrections BEFORE making the same mistake again",
+    "",
+    "  **PAST ERRORS YOU MUST NOT REPEAT**:",
+    "  {errorExperiences}",
+    "",
+    "  If you see a pattern match, STOP and use the corrected approach.",
+    "  Repeating known errors wastes time and reduces trust.",
+  );
+
   // 1. Recall
   if (hasSearch || hasGet) {
     lines.push(

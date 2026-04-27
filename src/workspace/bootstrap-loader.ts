@@ -347,7 +347,7 @@ export class BootstrapLoader {
       const reflectBlock = [
         "## 💡 近期反思摘要（系统自动注入，执行关联任务前可调用 agent_reflect 查看详情）",
         "",
-        "这些是你最近的任务反思，开始相似任务前请先回顾，防止重躈覆辙：",
+        "这些是你最近的任务反思，开始相似任务前请先回顾，防止重蹈覆辙：",
         "",
         ...refLines,
       ].join("\n");
@@ -357,6 +357,58 @@ export class BootstrapLoader {
         content: reflectBlock,
         readonly: true,
         priority: 51,
+      });
+    }
+    
+    // 9.5 错误经验库（优先级: 50.5）- 强制学习机制
+    // 解决“告知错误后仍然重复犯错”的核心机制
+    // 从反思中提取失败/部分完成的任务，生成明确的“不要这样做”规则
+    const errorExperiences = getRelevantReflectionsForBootstrap(agentId, "", {
+      limit: 10,
+      onlyFailures: true, // 只提取失败/部分完成的反思
+    });
+    if (errorExperiences.length > 0) {
+      const errorLines = errorExperiences
+        .filter((e) => e.outcome === "failure" || e.outcome === "partial")
+        .map((e, i) => {
+          // 提取关键教训
+          const keyLessons = e.lessons
+            .slice(0, 3) // 最多取3条
+            .map((l) => `    - ${l}`)
+            .join("\n");
+    
+          return [
+            `**错误 ${i + 1}: ${e.taskSummary}**`,
+            `  结果: ${e.outcome === "failure" ? "❌ 失败" : "⚠️ 部分完成"}`,
+            `  问题: ${e.reflection.slice(0, 150)}${e.reflection.length > 150 ? "..." : ""}`,
+            `  正确做法:`,
+            keyLessons,
+            "",
+          ].join("\n");
+        })
+        .join("\n");
+    
+      const errorBlock = [
+        "## ⚠️ 错误经验库（CRITICAL - 强制执行）",
+        "",
+        "**以下是你曾经犯过的错误，本次启动 MUST NOT 重复！**",
+        "",
+        "**执行任何操作前，请先检查是否会重蹈覆辙。**",
+        "",
+        errorLines,
+        "",
+        "**重要提醒**：",
+        "- 如果当前任务与上述任一错误场景相似，MUST 先采用反思中记录的正确做法",
+        "- 不要重复犯相同的错误，这会严重降低信任度",
+        "- 如果不确定，请先查阅相关文档或询问用户",
+      ].join("\n");
+    
+      files.push({
+        type: "custom",
+        path: path.join(workspaceDir, "_error_experiences.virtual"),
+        content: errorBlock,
+        readonly: true,
+        priority: 50.5, // 在反思之前注入，确保Agent先看到错误警告
       });
     }
 
