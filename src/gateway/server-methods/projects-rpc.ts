@@ -2252,6 +2252,13 @@ export const projectsHandlers: GatewayRequestHandlers = {
       if (params?.capacityPoints !== undefined) {
         sprintWithMeta["capacityPoints"] = Number(params.capacityPoints);
       }
+      // Sprint Type 和 Correction For（业界最佳实践：纠偏 Sprint）
+      if (params?.sprintType) {
+        sprintWithMeta["sprintType"] = String(params.sprintType);
+      }
+      if (params?.correctionFor) {
+        sprintWithMeta["correctionFor"] = String(params.correctionFor);
+      }
 
       if (existingIdx >= 0) {
         existing.sprints[existingIdx] =

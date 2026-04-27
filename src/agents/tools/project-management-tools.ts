@@ -1017,6 +1017,13 @@ export function createProjectMilestoneUpsertTool(): AnyAgentTool {
  *   3. 创建 Sprint 并关联目标 / 里程碑（此工具）
  *   4. 加入任务（project_sprint_add_task）
  *   5. 启动 Sprint（project_sprint_start）
+ * 
+ * 业界最佳实践（Linear/Jira/Scrum）：
+ * - 纠偏 Sprint（Correction Sprint）：发现历史 Sprint 有问题时，不要回去改历史，
+ *   而是创建新的 "Sprint 28-1: 纠偏 Sprint"，sprintType="correction"，
+ *   correctionFor 指向被纠偏的 Sprint ID
+ * - 技术债 Sprint：定期安排专门的技术债清理 Sprint
+ * - 滚动回顾：每个 Sprint 完成时回顾上一个 Sprint 的遗留问题
  */
 export function createProjectSprintUpsertTool(): AnyAgentTool {
   return {
@@ -1029,7 +1036,16 @@ export function createProjectSprintUpsertTool(): AnyAgentTool {
       "objectiveId (link to strategic objective), endDate (deadline). " +
       "WORKFLOW: 1) Define objectives first (project_objective_upsert), " +
       "2) Create milestones (project_milestone_upsert), 3) Create Sprint linked to objective/milestone (this tool), " +
-      "4) Add tasks (project_sprint_add_task), 5) Start Sprint (project_sprint_start).",
+      "4) Add tasks (project_sprint_add_task), 5) Start Sprint (project_sprint_start).\n\n" +
+      "**CORRECTION SPRINT (业界最佳实践)**: " +
+      "When discovering issues in a completed Sprint (e.g., Sprint 6 has problems), " +
+      "DO NOT go back to modify Sprint 6's history. Instead: " +
+      "1) Create a NEW Sprint with sprintType='correction', " +
+      "2) Set correctionFor='sprint_6_id' to link to the original Sprint, " +
+      "3) Title it 'Sprint 28-1: 纠偏 Sprint 6 架构修复' or similar, " +
+      "4) Add correction tasks for issues found. " +
+      "This maintains Sprint history integrity while addressing technical debt. " +
+      "For bulk retrospective across multiple Sprints, use 'sprint.batch_retrospect_and_correct' API.",
     parameters: Type.Object({
       projectId: Type.String({ description: "[REQUIRED] Project ID" }),
       title: Type.String({ description: "[REQUIRED] Sprint title (e.g. Sprint 1: 基础架构搭建)" }),
@@ -1053,6 +1069,20 @@ export function createProjectSprintUpsertTool(): AnyAgentTool {
        * startSprint 时如已分配 SP 超过此値，将出现警告提示范围缩减。
        */
       capacityPoints: Type.Optional(Type.Number({ minimum: 1, maximum: 200, description: "Team capacity in story points for this Sprint. Set to historical average velocity. startSprint will warn if overloaded." })),
+      /**
+       * Sprint 类型 — 业界最佳实践（Linear/Jira）
+       * - development: 正常开发迭代（默认）
+       * - correction: 纠偏修复迭代（专门用于修复之前 Sprint 的错误）
+       */
+      sprintType: Type.Optional(Type.Union([
+        Type.Literal("development"),
+        Type.Literal("correction"),
+      ], { description: "Sprint type: 'development' (normal iteration) or 'correction' (fix issues from previous Sprints). Default: development." })),
+      /**
+       * 纠偏关联 — 当 sprintType='correction' 时，指向被纠偏的原 Sprint ID
+       * 例如：correctionFor='sprint_mo3ve60h_3w5h'（Sprint 6 的 ID）
+       */
+      correctionFor: Type.Optional(Type.String({ description: "When sprintType='correction', link to the original Sprint ID being corrected. E.g., 'sprint_6_id'" })),
     }),
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -1075,6 +1105,8 @@ export function createProjectSprintUpsertTool(): AnyAgentTool {
           order: params.order ? Number(params.order) : undefined,
           status: params.status ?? "planning",
           capacityPoints: params.capacityPoints ? Number(params.capacityPoints) : undefined,
+          sprintType: params.sprintType ? String(params.sprintType) : undefined,
+          correctionFor: params.correctionFor ? String(params.correctionFor) : undefined,
         });
         return jsonResult({ success: true, ...(result) });
       } catch (error) {
