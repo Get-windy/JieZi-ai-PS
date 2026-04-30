@@ -342,6 +342,13 @@ export function createModelInfoGetter(
               : {}),
           };
         }
+        // 基于真实评测数据推断专业领域：如果模型在 LMSYS Vision Arena 中有排名，则标记为 multimodal
+        // 数据来源：https://huggingface.co/spaces/lmarena-ai/chatbot-arena (Vision Arena榜单)
+        if (benchmarkEntry.visionElo !== undefined && benchmarkEntry.visionElo > 0) {
+          if (!baseInfo.specializations.includes("multimodal")) {
+            baseInfo.specializations.push("multimodal");
+          }
+        }
       }
 
       return baseInfo;
