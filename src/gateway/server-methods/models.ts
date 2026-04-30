@@ -294,13 +294,16 @@ export type ProviderAuth = {
 
 // 模型配置（每个认证下的每个模型都可以单独配置）
 type ModelConfig = {
-  configId: string; // 配置ID（自动生成）
-  authId: string; // 关联的认证ID（必填）
+  configId: string; // 配置ID(自动生成)
+  authId: string; // 关联的认证ID(必填)
   provider: string; // 供应商ID
-  modelName: string; // 模型名称（如 'gpt-4'）
-  nickname?: string; // 模型昵称（可选，用户自定义）
-  enabled: boolean; // 是否启用（默认false）
-  deprecated: boolean; // 是否已被供应商停用（默认false）
+  modelName: string; // 模型名称(如 'gpt-4')
+  nickname?: string; // 模型昵称(可选,用户自定义)
+  enabled: boolean; // 是否启用(默认false)
+  deprecated: boolean; // 是否已被供应商停用(默认false)
+
+  // 模型能力参数
+  contextWindow?: number; // 上下文窗口大小(tokens)
 
   // 内容控制参数
   temperature?: number; // 随机性 (0-2)
@@ -587,16 +590,28 @@ function syncToAgentModelsJson(storage: ModelManagementStorage): any {
 
     providerConfig.models = providerModels
       .filter((m) => m.enabled)
-      .map((m) => ({
-        id: m.modelName,
-        name: m.nickname || m.modelName,
-        reasoning: false,
-        input: ["text"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: m.maxTokens || 128000,
-        maxTokens: m.maxTokens || 8192,
-        api: "openai-completions",
-      }));
+      .map((m) => {
+        // 使用模型自定义的contextWindow,或使用maxTokens,或默认128000
+        let contextWindow = m.contextWindow || m.maxTokens || 128000;
+        
+        // 自动修正已知API限制
+        const modelKey = `${providerId}/${m.modelName}`.toLowerCase();
+        if (modelKey.includes('deepseek-v3.2') && contextWindow > 97280) {
+          // 百度千帆CodingPlan的deepseek-v3.2实际限制97280 tokens
+          contextWindow = 97280;
+        }
+        
+        return {
+          id: m.modelName,
+          name: m.nickname || m.modelName,
+          reasoning: false,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow,
+          maxTokens: m.maxTokens || 8192,
+          api: "openai-completions",
+        };
+      });
 
     result.providers[providerId] = providerConfig;
   }
