@@ -513,6 +513,13 @@ function isModelStringProviderUsable(cfg: OpenClawConfig, modelStr: string): boo
         providerExists = managementCache.providers.some(
           (p: unknown) => (p as Record<string, unknown>).id?.toString().toLowerCase() === providerName.toLowerCase(),
         );
+      } else if (managementCache === null) {
+        // model-management缓存未就绪,不判定provider不存在
+        // 让后续的实际检查逻辑(isModelIdUsableSync)去判断
+        log.debug(
+          `[model-fallback] model-management cache not ready, skipping provider check for "${providerName}"`,
+        );
+        providerExists = true; // 假设存在,让后续逻辑检查
       }
     } catch {
       // model-management.json读取失败,忽略
