@@ -41,7 +41,6 @@ import {
   createGetApprovalStatusTool,
   createCancelApprovalRequestTool,
 } from "./tools/approval-tools.js";
-import { createCanvasTool } from "./tools/canvas-tool.js";
 import type { AnyAgentTool } from "./tools/common.js";
 import { createCronTool } from "./tools/cron-tool.js";
 import {
@@ -287,7 +286,6 @@ export function createOpenClawTools(options?: {
       sandboxBridgeUrl: options?.sandboxBrowserBridgeUrl,
       allowHostControl: options?.allowHostBrowserControl,
     }),
-    createCanvasTool({ config: options?.config }),
     createNodesTool({
       agentSessionKey: options?.agentSessionKey,
       config: options?.config,

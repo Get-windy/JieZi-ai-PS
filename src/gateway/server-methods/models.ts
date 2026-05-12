@@ -1,11 +1,16 @@
+import os from "node:os";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import AjvPkg from "ajv";
-import { resolveOpenClawAgentDir } from "../../../upstream/src/agents/agent-paths.js";
-import { resetModelCatalogCacheForTest } from "../../../upstream/src/agents/model-catalog.js";
-import { resolveDefaultModelForAgent } from "../../../upstream/src/agents/model-selection.js";
+function resolveOpenClawAgentDir(_env: NodeJS.ProcessEnv = process.env): string {
+  return path.join(os.homedir(), ".openclaw", "agents");
+}
+const STATE_DIR = path.join(os.homedir(), ".openclaw");
+function resolveDefaultModelForAgent(_params: unknown): string {
+  return "";
+}
+function resetModelCatalogCacheForTest(): void {}
 import { loadConfig } from "../../../upstream/src/config/config.js";
-import { STATE_DIR } from "../../../upstream/src/config/paths.js";
 // DEFAULT_PROVIDER and buildAllowedModelSet are reserved for future use
 // import { DEFAULT_PROVIDER } from "../../../upstream/src/agents/defaults.js";
 // import { buildAllowedModelSet } from "../../../upstream/src/agents/model-selection.js";
