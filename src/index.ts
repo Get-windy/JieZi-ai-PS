@@ -6,7 +6,6 @@ import {
   toWhatsappJid,
 } from "../upstream/extensions/whatsapp/src/targets-runtime.js";
 import { getReplyFromConfig } from "../upstream/src/auto-reply/reply.js";
-import { monitorWebChannel } from "../upstream/src/channel-web.js";
 import { promptYesNo } from "../upstream/src/cli/prompt.js";
 import { waitForever } from "../upstream/src/cli/wait.js";
 import { loadConfig } from "../upstream/src/config/config.js";
@@ -63,7 +62,6 @@ export {
   handlePortError,
   loadConfig,
   loadSessionStore,
-  monitorWebChannel,
   normalizeE164,
   PortInUseError,
   promptYesNo,

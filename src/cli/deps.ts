@@ -35,7 +35,7 @@ export function createDefaultDeps(): CliDeps {
   return {
     whatsapp: createLazySender(
       "whatsapp",
-      () => import("../channels/web/index.js") as Promise<Record<string, unknown>>,
+      () => import("../../upstream/extensions/whatsapp/src/send.js") as Promise<Record<string, unknown>>,
       "sendMessageWhatsApp",
     ),
     telegram: createLazySender(

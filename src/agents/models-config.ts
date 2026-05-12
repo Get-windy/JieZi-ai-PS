@@ -8,7 +8,7 @@ import {
 } from "../../upstream/src/config/config.js";
 import { createConfigRuntimeEnv } from "../../upstream/src/config/env-vars.js";
 import { isRecord } from "../../upstream/src/utils.js";
-import { resolveOpenClawAgentDir } from "../../upstream/src/agents/agent-paths.js";
+import { resolveOpenClawAgentDir } from "../../upstream/src/plugin-sdk/agent-dir-compat.js";
 import {
   mergeProviders,
   mergeWithExistingProviderSecrets,

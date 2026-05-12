@@ -1,6 +1,6 @@
 {
   "name": "openclaw",
-  "version": "2026.4.20",
+  "version": "2026.5.10-beta.1",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
   "homepage": "https://github.com/openclaw/openclaw#readme",
@@ -1428,6 +1428,250 @@
     "./plugin-sdk/text-autolink-runtime": {
       "types": "./dist/plugin-sdk/text-autolink-runtime.d.ts",
       "default": "./dist/plugin-sdk/text-autolink-runtime.js"
+    },
+    "./plugin-sdk/config-contracts": {
+      "types": "./dist/plugin-sdk/config-contracts.d.ts",
+      "default": "./dist/plugin-sdk/config-contracts.js"
+    },
+    "./plugin-sdk/config-types": {
+      "types": "./dist/plugin-sdk/config-types.d.ts",
+      "default": "./dist/plugin-sdk/config-types.js"
+    },
+    "./plugin-sdk/plugin-config-runtime": {
+      "types": "./dist/plugin-sdk/plugin-config-runtime.d.ts",
+      "default": "./dist/plugin-sdk/plugin-config-runtime.js"
+    },
+    "./plugin-sdk/config-mutation": {
+      "types": "./dist/plugin-sdk/config-mutation.d.ts",
+      "default": "./dist/plugin-sdk/config-mutation.js"
+    },
+    "./plugin-sdk/cron-store-runtime": {
+      "types": "./dist/plugin-sdk/cron-store-runtime.d.ts",
+      "default": "./dist/plugin-sdk/cron-store-runtime.js"
+    },
+    "./plugin-sdk/json-schema-runtime": {
+      "types": "./dist/plugin-sdk/json-schema-runtime.d.ts",
+      "default": "./dist/plugin-sdk/json-schema-runtime.js"
+    },
+    "./plugin-sdk/reply-dedupe": {
+      "types": "./dist/plugin-sdk/reply-dedupe.d.ts",
+      "default": "./dist/plugin-sdk/reply-dedupe.js"
+    },
+    "./plugin-sdk/outbound-send-deps": {
+      "types": "./dist/plugin-sdk/outbound-send-deps.d.ts",
+      "default": "./dist/plugin-sdk/outbound-send-deps.js"
+    },
+    "./plugin-sdk/async-lock-runtime": {
+      "types": "./dist/plugin-sdk/async-lock-runtime.d.ts",
+      "default": "./dist/plugin-sdk/async-lock-runtime.js"
+    },
+    "./plugin-sdk/channel-activity-runtime": {
+      "types": "./dist/plugin-sdk/channel-activity-runtime.d.ts",
+      "default": "./dist/plugin-sdk/channel-activity-runtime.js"
+    },
+    "./plugin-sdk/concurrency-runtime": {
+      "types": "./dist/plugin-sdk/concurrency-runtime.d.ts",
+      "default": "./dist/plugin-sdk/concurrency-runtime.js"
+    },
+    "./plugin-sdk/dedupe-runtime": {
+      "types": "./dist/plugin-sdk/dedupe-runtime.d.ts",
+      "default": "./dist/plugin-sdk/dedupe-runtime.js"
+    },
+    "./plugin-sdk/delivery-queue-runtime": {
+      "types": "./dist/plugin-sdk/delivery-queue-runtime.d.ts",
+      "default": "./dist/plugin-sdk/delivery-queue-runtime.js"
+    },
+    "./plugin-sdk/file-access-runtime": {
+      "types": "./dist/plugin-sdk/file-access-runtime.d.ts",
+      "default": "./dist/plugin-sdk/file-access-runtime.js"
+    },
+    "./plugin-sdk/heartbeat-runtime": {
+      "types": "./dist/plugin-sdk/heartbeat-runtime.d.ts",
+      "default": "./dist/plugin-sdk/heartbeat-runtime.js"
+    },
+    "./plugin-sdk/number-runtime": {
+      "types": "./dist/plugin-sdk/number-runtime.d.ts",
+      "default": "./dist/plugin-sdk/number-runtime.js"
+    },
+    "./plugin-sdk/secure-random-runtime": {
+      "types": "./dist/plugin-sdk/secure-random-runtime.d.ts",
+      "default": "./dist/plugin-sdk/secure-random-runtime.js"
+    },
+    "./plugin-sdk/system-event-runtime": {
+      "types": "./dist/plugin-sdk/system-event-runtime.d.ts",
+      "default": "./dist/plugin-sdk/system-event-runtime.js"
+    },
+    "./plugin-sdk/transport-ready-runtime": {
+      "types": "./dist/plugin-sdk/transport-ready-runtime.d.ts",
+      "default": "./dist/plugin-sdk/transport-ready-runtime.js"
+    },
+    "./plugin-sdk/model-session-runtime": {
+      "types": "./dist/plugin-sdk/model-session-runtime.d.ts",
+      "default": "./dist/plugin-sdk/model-session-runtime.js"
+    },
+    "./plugin-sdk/talk-config-runtime": {
+      "types": "./dist/plugin-sdk/talk-config-runtime.d.ts",
+      "default": "./dist/plugin-sdk/talk-config-runtime.js"
+    },
+    "./plugin-sdk/media-store": {
+      "types": "./dist/plugin-sdk/media-store.d.ts",
+      "default": "./dist/plugin-sdk/media-store.js"
+    },
+    "./plugin-sdk/tts-runtime": {
+      "types": "./dist/plugin-sdk/tts-runtime.d.ts",
+      "default": "./dist/plugin-sdk/tts-runtime.js"
+    },
+    "./plugin-sdk/skills-runtime": {
+      "types": "./dist/plugin-sdk/skills-runtime.d.ts",
+      "default": "./dist/plugin-sdk/skills-runtime.js"
+    },
+    "./plugin-sdk/agent-harness-runtime": {
+      "types": "./dist/plugin-sdk/agent-harness-runtime.d.ts",
+      "default": "./dist/plugin-sdk/agent-harness-runtime.js"
+    },
+    "./plugin-sdk/acp-runtime-backend": {
+      "types": "./dist/plugin-sdk/acp-runtime-backend.d.ts",
+      "default": "./dist/plugin-sdk/acp-runtime-backend.js"
+    },
+    "./plugin-sdk/agent-runtime-test-contracts": {
+      "types": "./dist/plugin-sdk/agent-runtime-test-contracts.d.ts",
+      "default": "./dist/plugin-sdk/agent-runtime-test-contracts.js"
+    },
+    "./plugin-sdk/channel-target-testing": {
+      "types": "./dist/plugin-sdk/channel-target-testing.d.ts",
+      "default": "./dist/plugin-sdk/channel-target-testing.js"
+    },
+    "./plugin-sdk/channel-test-helpers": {
+      "types": "./dist/plugin-sdk/channel-test-helpers.d.ts",
+      "default": "./dist/plugin-sdk/channel-test-helpers.js"
+    },
+    "./plugin-sdk/plugin-test-api": {
+      "types": "./dist/plugin-sdk/plugin-test-api.d.ts",
+      "default": "./dist/plugin-sdk/plugin-test-api.js"
+    },
+    "./plugin-sdk/plugin-test-contracts": {
+      "types": "./dist/plugin-sdk/plugin-test-contracts.d.ts",
+      "default": "./dist/plugin-sdk/plugin-test-contracts.js"
+    },
+    "./plugin-sdk/plugin-test-runtime": {
+      "types": "./dist/plugin-sdk/plugin-test-runtime.d.ts",
+      "default": "./dist/plugin-sdk/plugin-test-runtime.js"
+    },
+    "./plugin-sdk/provider-http-test-mocks": {
+      "types": "./dist/plugin-sdk/provider-http-test-mocks.d.ts",
+      "default": "./dist/plugin-sdk/provider-http-test-mocks.js"
+    },
+    "./plugin-sdk/provider-test-contracts": {
+      "types": "./dist/plugin-sdk/provider-test-contracts.d.ts",
+      "default": "./dist/plugin-sdk/provider-test-contracts.js"
+    },
+    "./plugin-sdk/test-env": {
+      "types": "./dist/plugin-sdk/test-env.d.ts",
+      "default": "./dist/plugin-sdk/test-env.js"
+    },
+    "./plugin-sdk/test-fixtures": {
+      "types": "./dist/plugin-sdk/test-fixtures.d.ts",
+      "default": "./dist/plugin-sdk/test-fixtures.js"
+    },
+    "./plugin-sdk/test-node-mocks": {
+      "types": "./dist/plugin-sdk/test-node-mocks.d.ts",
+      "default": "./dist/plugin-sdk/test-node-mocks.js"
+    },
+    "./plugin-sdk/time-runtime": {
+      "types": "./dist/plugin-sdk/time-runtime.d.ts",
+      "default": "./dist/plugin-sdk/time-runtime.js"
+    },
+    "./plugin-sdk/migration": {
+      "types": "./dist/plugin-sdk/migration.d.ts",
+      "default": "./dist/plugin-sdk/migration.js"
+    },
+    "./plugin-sdk/migration-runtime": {
+      "types": "./dist/plugin-sdk/migration-runtime.d.ts",
+      "default": "./dist/plugin-sdk/migration-runtime.js"
+    },
+    "./plugin-sdk/access-groups": {
+      "types": "./dist/plugin-sdk/access-groups.d.ts",
+      "default": "./dist/plugin-sdk/access-groups.js"
+    },
+    "./plugin-sdk/channel-contract-testing": {
+      "types": "./dist/plugin-sdk/channel-contract-testing.d.ts",
+      "default": "./dist/plugin-sdk/channel-contract-testing.js"
+    },
+    "./plugin-sdk/command-primitives-runtime": {
+      "types": "./dist/plugin-sdk/command-primitives-runtime.d.ts",
+      "default": "./dist/plugin-sdk/command-primitives-runtime.js"
+    },
+    "./plugin-sdk/bundled-channel-config-schema": {
+      "types": "./dist/plugin-sdk/bundled-channel-config-schema.d.ts",
+      "default": "./dist/plugin-sdk/bundled-channel-config-schema.js"
+    },
+    "./plugin-sdk/channel-config-schema-legacy": {
+      "types": "./dist/plugin-sdk/channel-config-schema-legacy.d.ts",
+      "default": "./dist/plugin-sdk/channel-config-schema-legacy.js"
+    },
+    "./plugin-sdk/channel-envelope": {
+      "types": "./dist/plugin-sdk/channel-envelope.d.ts",
+      "default": "./dist/plugin-sdk/channel-envelope.js"
+    },
+    "./plugin-sdk/channel-inbound-debounce": {
+      "types": "./dist/plugin-sdk/channel-inbound-debounce.d.ts",
+      "default": "./dist/plugin-sdk/channel-inbound-debounce.js"
+    },
+    "./plugin-sdk/channel-ingress": {
+      "types": "./dist/plugin-sdk/channel-ingress.d.ts",
+      "default": "./dist/plugin-sdk/channel-ingress.js"
+    },
+    "./plugin-sdk/channel-ingress-runtime": {
+      "types": "./dist/plugin-sdk/channel-ingress-runtime.d.ts",
+      "default": "./dist/plugin-sdk/channel-ingress-runtime.js"
+    },
+    "./plugin-sdk/channel-message": {
+      "types": "./dist/plugin-sdk/channel-message.d.ts",
+      "default": "./dist/plugin-sdk/channel-message.js"
+    },
+    "./plugin-sdk/channel-message-runtime": {
+      "types": "./dist/plugin-sdk/channel-message-runtime.d.ts",
+      "default": "./dist/plugin-sdk/channel-message-runtime.js"
+    },
+    "./plugin-sdk/channel-route": {
+      "types": "./dist/plugin-sdk/channel-route.d.ts",
+      "default": "./dist/plugin-sdk/channel-route.js"
+    },
+    "./plugin-sdk/session-transcript-hit": {
+      "types": "./dist/plugin-sdk/session-transcript-hit.d.ts",
+      "default": "./dist/plugin-sdk/session-transcript-hit.js"
+    },
+    "./plugin-sdk/session-visibility": {
+      "types": "./dist/plugin-sdk/session-visibility.d.ts",
+      "default": "./dist/plugin-sdk/session-visibility.js"
+    },
+    "./plugin-sdk/group-activation": {
+      "types": "./dist/plugin-sdk/group-activation.d.ts",
+      "default": "./dist/plugin-sdk/group-activation.js"
+    },
+    "./plugin-sdk/provider-selection-runtime": {
+      "types": "./dist/plugin-sdk/provider-selection-runtime.d.ts",
+      "default": "./dist/plugin-sdk/provider-selection-runtime.js"
+    },
+    "./plugin-sdk/provider-catalog-runtime": {
+      "types": "./dist/plugin-sdk/provider-catalog-runtime.d.ts",
+      "default": "./dist/plugin-sdk/provider-catalog-runtime.js"
+    },
+    "./plugin-sdk/document-extractor": {
+      "types": "./dist/plugin-sdk/document-extractor.d.ts",
+      "default": "./dist/plugin-sdk/document-extractor.js"
+    },
+    "./plugin-sdk/web-content-extractor": {
+      "types": "./dist/plugin-sdk/web-content-extractor.d.ts",
+      "default": "./dist/plugin-sdk/web-content-extractor.js"
+    },
+    "./plugin-sdk/telegram-account": {
+      "types": "./dist/plugin-sdk/telegram-account.d.ts",
+      "default": "./dist/plugin-sdk/telegram-account.js"
+    },
+    "./plugin-sdk/text-utility-runtime": {
+      "types": "./dist/plugin-sdk/text-utility-runtime.d.ts",
+      "default": "./dist/plugin-sdk/text-utility-runtime.js"
     }
   },
   "scripts": {

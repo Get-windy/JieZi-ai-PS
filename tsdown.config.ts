@@ -3,7 +3,6 @@ import path from "node:path";
 import { defineConfig, type UserConfig } from "tsdown";
 import {
   collectBundledPluginBuildEntries,
-  listBundledPluginRuntimeDependencies,
   NON_PACKAGED_BUNDLED_PLUGIN_DIRS,
 } from "./upstream/scripts/lib/bundled-plugin-build-entries.mjs";
 import { buildPluginSdkEntrySources } from "./upstream/scripts/lib/plugin-sdk-entries.mjs";
@@ -217,12 +216,7 @@ const bundledPluginBuildEntries = [
     sourcePrefix: "upstream/extensions",
   })),
 ];
-const bundledPluginRuntimeDependencies = [
-  ...listBundledPluginRuntimeDependencies(),
-  ...listBundledPluginRuntimeDependencies({ cwd: path.join(ROOT_DIR, "upstream") }),
-]
-  .filter((dep, idx, arr) => arr.indexOf(dep) === idx)
-  .toSorted((a, b) => a.localeCompare(b));
+const bundledPluginRuntimeDependencies: string[] = [];
 const shouldBuildPrivateQaEntries = process.env.OPENCLAW_BUILD_PRIVATE_QA === "1";
 
 const allNeverBundleDependencies = [

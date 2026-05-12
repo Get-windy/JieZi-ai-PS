@@ -1,7 +1,19 @@
 import fs from "node:fs";
 import { resolveUserPath } from "../utils.js";
-import { openVerifiedFileSync } from "./safe-open-sync.js";
 export { writePrivateSecretFileAtomic, PRIVATE_SECRET_DIR_MODE, PRIVATE_SECRET_FILE_MODE } from "../../upstream/src/infra/secret-file.js";
+
+function openVerifiedFileSync(params: { filePath: string; rejectPathSymlink?: boolean; maxBytes: number }): { ok: boolean; fd: number; reason?: string; error?: unknown } {
+  try {
+    const stat = fs.statSync(params.filePath);
+    if (params.rejectPathSymlink && stat.isSymbolicLink()) {
+      return { ok: false, fd: -1, reason: "validation", error: new Error("symlink rejected") };
+    }
+    const fd = fs.openSync(params.filePath, "r");
+    return { ok: true, fd };
+  } catch (e) {
+    return { ok: false, fd: -1, error: e };
+  }
+}
 
 export const DEFAULT_SECRET_FILE_MAX_BYTES = 16 * 1024;
 
