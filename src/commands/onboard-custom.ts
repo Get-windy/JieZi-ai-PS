@@ -1,4 +1,4 @@
-import { OLLAMA_DEFAULT_BASE_URL } from "../../upstream/src/plugins/provider-model-defaults.js";
+import { OLLAMA_DEFAULT_BASE_URL } from "../../upstream/extensions/ollama/src/defaults.js";
 import { CONTEXT_WINDOW_HARD_MIN_TOKENS } from "../agents/context-window-guard.js";
 import { DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { buildModelAliasIndex, modelKey } from "../agents/model-selection.js";

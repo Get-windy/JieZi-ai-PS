@@ -14,7 +14,7 @@ import {
   InternalHooksSchema,
 } from "../../upstream/src/config/zod-schema.hooks.js";
 import { InstallRecordShape } from "../../upstream/src/config/zod-schema.installs.js";
-import { ChannelsSchema } from "../../upstream/src/config/zod-schema.providers.js";
+import { ChannelsSchema } from "../../upstream/src/config/zod-schema.channels-config.js";
 import { sensitive } from "../../upstream/src/config/zod-schema.sensitive.js";
 import {
   CommandsSchema,

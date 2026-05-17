@@ -16,7 +16,7 @@ import { enqueueCommandInLane } from "../../process/command-queue.js";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import { sanitizeForLog } from "../../terminal/ansi.js";
 import { isMarkdownCapableMessageChannel } from "../../utils/message-channel.js";
-import { resolveOpenClawAgentDir } from "../../upstream/src/plugin-sdk/agent-dir-compat.js";
+import { resolveOpenClawAgentDir } from "../../../upstream/src/plugin-sdk/agent-runtime.js";
 import {
   hasConfiguredModelFallbacks,
   resolveAgentExecutionContract,
