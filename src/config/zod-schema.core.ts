@@ -8,7 +8,7 @@ import {
 } from "../secrets/ref-contract.js";
 import { MODEL_APIS } from "./types.models.js";
 import { createAllowDenyChannelRulesSchema } from "./zod-schema.allowdeny.js";
-import { sensitive } from "./zod-schema.sensitive.js";
+import { sensitive } from "../../upstream/src/config/zod-schema.sensitive.js";
 
 const ENV_SECRET_REF_ID_PATTERN = /^[A-Z][A-Z0-9_]{0,127}$/;
 const SECRET_PROVIDER_ALIAS_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;

@@ -228,3 +228,18 @@ export const ChannelsStartParamsSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+export {
+  TalkSessionJoinParamsSchema,
+  TalkSessionCreateParamsSchema,
+  TalkSessionAppendAudioParamsSchema,
+  TalkSessionTurnParamsSchema,
+  TalkSessionCancelTurnParamsSchema,
+  TalkSessionCancelOutputParamsSchema,
+  TalkSessionSubmitToolResultParamsSchema,
+  TalkSessionCloseParamsSchema,
+  TalkSessionCreateResultSchema,
+  TalkSessionTurnResultSchema,
+  TalkSessionJoinResultSchema,
+  TalkSessionOkResultSchema,
+} from "../../../../upstream/src/gateway/protocol/schema/channels.js";
