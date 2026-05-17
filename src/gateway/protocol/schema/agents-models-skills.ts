@@ -320,4 +320,7 @@ export {
   SkillsSearchResultSchema,
   SkillsDetailParamsSchema,
   SkillsDetailResultSchema,
+  ToolsInvokeParamsSchema,
+  ToolsInvokeResultSchema,
+  ToolsInvokeErrorSchema,
 } from "../../../../upstream/src/gateway/protocol/schema/agents-models-skills.js";

@@ -242,4 +242,12 @@ export {
   TalkSessionTurnResultSchema,
   TalkSessionJoinResultSchema,
   TalkSessionOkResultSchema,
+  TalkEventSchema,
+  TalkCatalogParamsSchema,
+  TalkCatalogResultSchema,
+  TalkClientCreateParamsSchema,
+  TalkClientCreateResultSchema,
+  TalkClientToolCallParamsSchema,
+  TalkClientToolCallResultSchema,
+  ChannelsStopParamsSchema,
 } from "../../../../upstream/src/gateway/protocol/schema/channels.js";
