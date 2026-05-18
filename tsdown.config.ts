@@ -24,14 +24,20 @@ const JS_TO_TS: Record<string, string[]> = {
 };
 
 function tryResolveFile(basePath: string): string | null {
-  if (existsSync(basePath)) return basePath;
+  if (existsSync(basePath)) {
+    return basePath;
+  }
   for (const ext of TS_EXTENSIONS) {
     const p = basePath + ext;
-    if (existsSync(p)) return p;
+    if (existsSync(p)) {
+      return p;
+    }
   }
   for (const ext of TS_EXTENSIONS) {
     const p = path.join(basePath, "index" + ext);
-    if (existsSync(p)) return p;
+    if (existsSync(p)) {
+      return p;
+    }
   }
   const currentExt = path.extname(basePath);
   const tsExts = JS_TO_TS[currentExt];
@@ -39,7 +45,9 @@ function tryResolveFile(basePath: string): string | null {
     const base = basePath.slice(0, -currentExt.length);
     for (const tsExt of tsExts) {
       const p = base + tsExt;
-      if (existsSync(p)) return p;
+      if (existsSync(p)) {
+        return p;
+      }
     }
   }
   return null;
@@ -69,7 +77,9 @@ function upstreamOverlayPlugin() {
 
       // Case 1: src/ → 本地优先，不存在回退到 upstream/src/
       if (absTarget.startsWith(SRC_DIR + SEP) || absTarget === SRC_DIR) {
-        if (tryResolveFile(absTarget)) return null;
+        if (tryResolveFile(absTarget)) {
+          return null;
+        }
         const rel = path.relative(SRC_DIR, absTarget);
         if (rel.startsWith("extensions" + SEP) || rel === "extensions") {
           const extRel = rel.slice("extensions".length + SEP.length);
@@ -80,7 +90,9 @@ function upstreamOverlayPlugin() {
 
       // Case 2: extensions/ → 本地优先，不存在回退到 upstream/extensions/
       if (absTarget.startsWith(EXT_DIR + SEP) || absTarget === EXT_DIR) {
-        if (tryResolveFile(absTarget)) return null;
+        if (tryResolveFile(absTarget)) {
+          return null;
+        }
         const rel = path.relative(EXT_DIR, absTarget);
         return tryResolveFile(path.join(UP_EXT_DIR, rel));
       }
@@ -92,14 +104,21 @@ function upstreamOverlayPlugin() {
         const localResult = tryResolveFile(localPath);
         if (localResult) {
           const importerNorm = importer ? path.normalize(importer) : null;
-          if (importerNorm && path.normalize(localResult) === importerNorm) return null;
+          if (importerNorm && path.normalize(localResult) === importerNorm) {
+            return null;
+          }
           if (importerNorm) {
             const localResultNorm = path.normalize(localResult);
             const localResultDir = path.dirname(localResultNorm);
             const localResultBase = path.basename(localResultNorm, path.extname(localResultNorm));
-            const expectedBridgePattern = path.join(localResultDir, `${localResultBase}-upstream-extras`);
+            const expectedBridgePattern = path.join(
+              localResultDir,
+              `${localResultBase}-upstream-extras`,
+            );
             const importerBase = importerNorm.replace(/\.[cm]?[jt]sx?$/, "");
-            if (importerBase === expectedBridgePattern) return null;
+            if (importerBase === expectedBridgePattern) {
+              return null;
+            }
           }
           return localResult;
         }
@@ -111,7 +130,9 @@ function upstreamOverlayPlugin() {
         const rel = path.relative(UP_EXT_DIR, absTarget);
         const localExtPath = path.join(EXT_DIR, rel);
         const localResult = tryResolveFile(localExtPath);
-        if (localResult) return localResult;
+        if (localResult) {
+          return localResult;
+        }
         return tryResolveFile(absTarget);
       }
 
@@ -126,18 +147,41 @@ const overlayPlugin = upstreamOverlayPlugin();
 const shouldBuildPrivateQaEntries = process.env.OPENCLAW_BUILD_PRIVATE_QA === "1";
 
 function shouldNeverBundleDependency(id: string): boolean {
-  if (/^@reflink\//.test(id)) return true;
-  if (/\.node$/.test(id)) return true;
-  if (/^@mariozechner\/pi-(?:coding-agent|ai|agent-core|tui)$/.test(id)) return true;
-  if (/^@earendil-works\/pi-agent-core($|\/)/.test(id)) return true;
-  if (/^jwks-rsa($|\/)/.test(id)) return true;
-  if (id === "node:tls" || id === "node:net") return true;
-  if (/^undici($|\/)/.test(id)) return true;
-  if (/^undici-types($|\/)/.test(id)) return true;
-  if (/^@types\/node($|\/)/.test(id)) return true;
-  if (/^@vitest\//.test(id)) return true;
-  if (/^vitest($|\/)/.test(id)) return true;
-  const explicitDeps = ["@lancedb/lancedb", "@matrix-org/matrix-sdk-crypto-nodejs", "matrix-js-sdk"];
+  if (id.startsWith("@reflink/")) {
+    return true;
+  }
+  if (id.endsWith(".node")) {
+    return true;
+  }
+  if (/^@mariozechner\/pi-(?:coding-agent|ai|agent-core|tui)$/.test(id)) {
+    return true;
+  }
+  if (/^jwks-rsa($|\/)/.test(id)) {
+    return true;
+  }
+  if (id === "node:tls" || id === "node:net") {
+    return true;
+  }
+  if (/^undici($|\/)/.test(id)) {
+    return true;
+  }
+  if (/^undici-types($|\/)/.test(id)) {
+    return true;
+  }
+  if (/^@types\/node($|\/)/.test(id)) {
+    return true;
+  }
+  if (id.startsWith("@vitest/")) {
+    return true;
+  }
+  if (/^vitest($|\/)/.test(id)) {
+    return true;
+  }
+  const explicitDeps = [
+    "@lancedb/lancedb",
+    "@matrix-org/matrix-sdk-crypto-nodejs",
+    "matrix-js-sdk",
+  ];
   return explicitDeps.some((dep) => id === dep || id.startsWith(`${dep}/`));
 }
 
@@ -149,7 +193,10 @@ const upstreamOnlyBundledPluginBuildEntries = collectBundledPluginBuildEntries({
 }).filter(({ id }) => !localBundledPluginIds.has(id));
 const bundledPluginBuildEntries = [
   ...localBundledPluginBuildEntries.map((e) => ({ ...e, sourcePrefix: "extensions" })),
-  ...upstreamOnlyBundledPluginBuildEntries.map((e) => ({ ...e, sourcePrefix: "upstream/extensions" })),
+  ...upstreamOnlyBundledPluginBuildEntries.map((e) => ({
+    ...e,
+    sourcePrefix: "upstream/extensions",
+  })),
 ];
 
 function listBundledPluginEntrySources(
@@ -160,7 +207,10 @@ function listBundledPluginEntrySources(
       sourceEntries.map((entry) => {
         const normalizedEntry = entry.replace(/^\.\//u, "");
         const entryKey = `extensions/${id}/${normalizedEntry.replace(/\.[^.]+$/u, "")}`;
-        return [entryKey, normalizedEntry ? `${sourcePrefix}/${id}/${normalizedEntry}` : `${sourcePrefix}/${id}`];
+        return [
+          entryKey,
+          normalizedEntry ? `${sourcePrefix}/${id}/${normalizedEntry}` : `${sourcePrefix}/${id}`,
+        ];
       }),
     ),
   );
@@ -169,11 +219,17 @@ function listBundledPluginEntrySources(
 function buildBundledHookEntries(): Record<string, string> {
   const hooksRoot = path.join(ROOT_DIR, "src", "hooks", "bundled");
   const entries: Record<string, string> = {};
-  if (!fs.existsSync(hooksRoot)) return entries;
+  if (!fs.existsSync(hooksRoot)) {
+    return entries;
+  }
   for (const dirent of fs.readdirSync(hooksRoot, { withFileTypes: true })) {
-    if (!dirent.isDirectory()) continue;
+    if (!dirent.isDirectory()) {
+      continue;
+    }
     const handlerPath = path.join(hooksRoot, dirent.name, "handler.ts");
-    if (!fs.existsSync(handlerPath)) continue;
+    if (!fs.existsSync(handlerPath)) {
+      continue;
+    }
     entries[`bundled/${dirent.name}/handler`] = handlerPath;
   }
   return entries;
@@ -201,7 +257,10 @@ function buildCoreDistEntries(): Record<string, string> {
   };
   return Object.fromEntries(
     Object.entries(upstreamEntries).filter(([, srcPath]) => {
-      return existsSync(path.resolve(ROOT_DIR, srcPath)) || existsSync(path.resolve(ROOT_DIR, "upstream", srcPath));
+      return (
+        existsSync(path.resolve(ROOT_DIR, srcPath)) ||
+        existsSync(path.resolve(ROOT_DIR, "upstream", srcPath))
+      );
     }),
   );
 }
@@ -209,10 +268,16 @@ function buildCoreDistEntries(): Record<string, string> {
 function buildUnifiedDistEntries(): Record<string, string> {
   const coreEntries = buildCoreDistEntries();
   const pluginSdkEntries = Object.fromEntries(
-    Object.entries(buildPluginSdkEntrySources()).map(([entry, source]) => [`plugin-sdk/${entry}`, source]),
+    Object.entries(buildPluginSdkEntrySources()).map(([entry, source]) => [
+      `plugin-sdk/${entry}`,
+      source,
+    ]),
   );
   const qaEntries = shouldBuildPrivateQaEntries
-    ? { "plugin-sdk/qa-lab": "src/plugin-sdk/qa-lab.ts", "plugin-sdk/qa-runtime": "src/plugin-sdk/qa-runtime.ts" }
+    ? {
+        "plugin-sdk/qa-lab": "src/plugin-sdk/qa-lab.ts",
+        "plugin-sdk/qa-runtime": "src/plugin-sdk/qa-runtime.ts",
+      }
     : {};
   const rootBundledPluginBuildEntries = bundledPluginBuildEntries.filter(
     ({ id }) => shouldBuildPrivateQaEntries || !NON_PACKAGED_BUNDLED_PLUGIN_DIRS.has(id),
