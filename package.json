@@ -1692,6 +1692,14 @@
     "./plugin-sdk/types": {
       "types": "./dist/plugin-sdk/types.d.ts",
       "default": "./dist/plugin-sdk/types.js"
+    },
+    "./plugin-sdk/health": {
+      "types": "./dist/plugin-sdk/health.d.ts",
+      "default": "./dist/plugin-sdk/health.js"
+    },
+    "./plugin-sdk/tool-plugin": {
+      "types": "./dist/plugin-sdk/tool-plugin.d.ts",
+      "default": "./dist/plugin-sdk/tool-plugin.js"
     }
   },
   "scripts": {

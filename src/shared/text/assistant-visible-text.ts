@@ -124,7 +124,7 @@ export function stripLegacyBracketToolCallBlocks(text: string): string {
         : -1;
     const payloadEnd = closeStart >= 0 ? closeStart : text.length;
     const payload = text.slice(payloadStart, payloadEnd);
-    const hasJsonLikePayload = /^\s*[\[{]/.test(payload);
+    const hasJsonLikePayload = /^\s*[[{]/.test(payload);
     const shouldStrip = hasJsonLikePayload;
     if (!shouldStrip) {
       result += text.slice(cursor, payloadStart);

@@ -148,3 +148,9 @@ export async function noteChromeMcpBrowserReadiness(
 
   noteFn(lines.join("\n"), "Browser");
 }
+
+export {
+  detectLegacyClawdBrowserProfileResidue,
+  maybeArchiveLegacyClawdBrowserProfileResidue,
+  type LegacyClawdBrowserProfileResidue,
+} from "../../upstream/src/commands/doctor-browser.js";

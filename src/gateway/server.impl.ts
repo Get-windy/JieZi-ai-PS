@@ -664,7 +664,7 @@ export async function startGatewayServer(
   // 暴露给 approval.ts 桥接层（模块级单例，server 启动后立即注入）
   setActivePluginApprovalManager(pluginApprovalManager);
 
-  const canvasHostServerPort = (canvasHostServer as CanvasHostServer | null)?.port;
+  const canvasHostServerPort = (canvasHostServer)?.port;
 
   attachGatewayWsHandlers({
     wss,

@@ -13,7 +13,7 @@ export function speakText(
   text: string,
   opts?: { onEnd?: () => void; onError?: () => void },
 ): void {
-  if (!isTtsSupported()) return;
+  if (!isTtsSupported()) {return;}
   stopTts();
   const utterance = new SpeechSynthesisUtterance(text);
   currentUtterance = utterance;
@@ -32,7 +32,7 @@ export function speakText(
 }
 
 export function stopTts(): void {
-  if (!isTtsSupported()) return;
+  if (!isTtsSupported()) {return;}
   speechSynthesis.cancel();
   speaking = false;
   currentUtterance = null;

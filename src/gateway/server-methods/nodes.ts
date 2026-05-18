@@ -99,7 +99,7 @@ function uniqueSortedStrings(...items: Array<readonly string[] | undefined>): st
       seen.add(str);
     }
   }
-  return Array.from(seen).sort();
+  return Array.from(seen).toSorted();
 }
 
 async function maybeWakeNodeWithApns(

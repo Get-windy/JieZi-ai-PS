@@ -22,9 +22,9 @@ import {
   toAgentStoreSessionKey,
 } from "../../../routing/session-key.js";
 import { hasInterSessionUserProvenance } from "../../../sessions/input-provenance.js";
-import { resolveHookConfig } from "../../config.js";
-import type { HookHandler } from "../../hooks.js";
-import { generateSlugViaLLM } from "../../llm-slug-generator.js";
+import { resolveHookConfig } from "../../../../upstream/src/hooks/config.js";
+import type { HookHandler } from "../../../../upstream/src/hooks/hooks.js";
+import { generateSlugViaLLM } from "../../../../upstream/src/hooks/llm-slug-generator.js";
 
 const log = createSubsystemLogger("hooks/session-memory");
 

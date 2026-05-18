@@ -28,7 +28,7 @@ import os from "node:os";
 import path from "node:path";
 import { resolveStateDir } from "../../../config/paths.js";
 import { createSubsystemLogger } from "../../../logging/subsystem.js";
-import type { HookHandler } from "../../hooks.js";
+import type { HookHandler } from "../../../../upstream/src/hooks/hooks.js";
 
 const log = createSubsystemLogger("command-logger");
 

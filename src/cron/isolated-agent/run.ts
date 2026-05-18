@@ -49,7 +49,6 @@ import { resolveCronDeliveryPlan } from "../../../upstream/src/cron/delivery.js"
 import type { CronJob, CronRunOutcome, CronRunTelemetry } from "../../../upstream/src/cron/types.js";
 import {
   dispatchCronDelivery,
-  matchesMessagingToolDeliveryTarget,
   resolveCronDeliveryBestEffort,
 } from "../../../upstream/src/cron/isolated-agent/delivery-dispatch.js";
 import { resolveDeliveryTarget } from "../../../upstream/src/cron/isolated-agent/delivery-target.js";
@@ -599,13 +598,14 @@ export async function runCronIsolatedAgentTurn(params: {
   const skipMessagingToolDelivery =
     deliveryRequested &&
     runResult.didSendViaMessagingTool === true &&
-    (runResult.messagingToolSentTargets ?? []).some((target) =>
-      matchesMessagingToolDeliveryTarget(target, {
-        channel: resolvedDelivery.channel,
-        to: resolvedDelivery.to,
-        accountId: resolvedDelivery.accountId,
-      }),
-    );
+    (runResult.messagingToolSentTargets ?? []).some((target) => {
+      const t = target as Record<string, unknown>;
+      return (
+        t.channel === resolvedDelivery.channel &&
+        t.to === resolvedDelivery.to &&
+        t.accountId === resolvedDelivery.accountId
+      );
+    });
 
   const deliveryResult = await dispatchCronDelivery({
     cfg: params.cfg,

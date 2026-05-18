@@ -9,4 +9,6 @@ export {
   isPromptInjectionHookName,
   isConversationHookName,
   stripPromptMutationFieldsFromLegacyHookResult,
+  AGENT_PROMPT_SURFACE_KINDS,
 } from "../../upstream/src/plugins/types.js";
+export type { AgentPromptSurfaceKind } from "../../upstream/src/plugins/types.js";

@@ -1,6 +1,6 @@
 import fs, { existsSync } from "node:fs";
 import path from "node:path";
-import { defineConfig, type UserConfig } from "tsdown";
+import { defineConfig } from "tsdown";
 import {
   collectBundledPluginBuildEntries,
   NON_PACKAGED_BUNDLED_PLUGIN_DIRS,
@@ -8,9 +8,6 @@ import {
 import { buildPluginSdkEntrySources } from "./upstream/scripts/lib/plugin-sdk-entries.mjs";
 
 // ========== 三层架构覆盖层插件 ==========
-// 实现 src/ 覆盖 upstream/src/ 的物理分离机制：
-//   - 当 src/ 中的文件被删除（与upstream相同）时，自动回退到 upstream/src/
-//   - 当 upstream/src/ 代码导入文件时，优先检查 src/ 是否有本地覆盖版本
 const ROOT_DIR = path.resolve(import.meta.dirname);
 const SRC_DIR = path.join(ROOT_DIR, "src");
 const EXT_DIR = path.join(ROOT_DIR, "extensions");
@@ -19,7 +16,6 @@ const UP_EXT_DIR = path.join(ROOT_DIR, "upstream", "extensions");
 const SEP = path.sep;
 const TS_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".json"];
 
-// .js → .ts 扩展名映射（TypeScript 允许以 .js 扩展名导入 .ts 文件）
 const JS_TO_TS: Record<string, string[]> = {
   ".js": [".ts", ".tsx"],
   ".jsx": [".tsx"],
@@ -28,34 +24,22 @@ const JS_TO_TS: Record<string, string[]> = {
 };
 
 function tryResolveFile(basePath: string): string | null {
-  // 精确路径
-  if (existsSync(basePath)) {
-    return basePath;
-  }
-  // 附加扩展名
+  if (existsSync(basePath)) return basePath;
   for (const ext of TS_EXTENSIONS) {
     const p = basePath + ext;
-    if (existsSync(p)) {
-      return p;
-    }
+    if (existsSync(p)) return p;
   }
-  // 索引文件
   for (const ext of TS_EXTENSIONS) {
     const p = path.join(basePath, "index" + ext);
-    if (existsSync(p)) {
-      return p;
-    }
+    if (existsSync(p)) return p;
   }
-  // JS → TS 扩展名映射（例如 import "./foo.js" 实际指向 ./foo.ts）
   const currentExt = path.extname(basePath);
   const tsExts = JS_TO_TS[currentExt];
   if (tsExts) {
     const base = basePath.slice(0, -currentExt.length);
     for (const tsExt of tsExts) {
       const p = base + tsExt;
-      if (existsSync(p)) {
-        return p;
-      }
+      if (existsSync(p)) return p;
     }
   }
   return null;
@@ -65,40 +49,28 @@ function upstreamOverlayPlugin() {
   return {
     name: "upstream-overlay",
     resolveId(source: string, importer: string | undefined) {
-      // 跳过虚拟模块、node_modules、非路径标识符
       if (!source || source.startsWith("\0") || source.includes("node_modules")) {
         return null;
       }
 
       let absTarget: string | null = null;
 
-      // 入口点："src/index.ts" 形式
       if (source.startsWith("src/") || source.startsWith("src\\")) {
         absTarget = path.resolve(ROOT_DIR, source);
-      }
-      // 相对导入："./foo" 或 "../bar" 形式
-      else if ((source.startsWith("./") || source.startsWith("../")) && importer) {
+      } else if ((source.startsWith("./") || source.startsWith("../")) && importer) {
         absTarget = path.resolve(path.dirname(importer), source);
-      }
-      // 绝对路径
-      else if (path.isAbsolute(source)) {
+      } else if (path.isAbsolute(source)) {
         absTarget = source;
-      }
-      // 裸标识符（包名如 "lodash"）—— 交给默认解析
-      else {
+      } else {
         return null;
       }
 
       absTarget = path.normalize(absTarget);
 
-      // Case 1: 目标在 src/ 下 → 本地优先，不存在则回退到 upstream/src/
-      // 例外：如果路径落入 src/extensions/，则回退到并列的 upstream/extensions/（而非 upstream/src/extensions/）
+      // Case 1: src/ → 本地优先，不存在回退到 upstream/src/
       if (absTarget.startsWith(SRC_DIR + SEP) || absTarget === SRC_DIR) {
-        if (tryResolveFile(absTarget)) {
-          return null; // 本地存在，让默认解析处理
-        }
+        if (tryResolveFile(absTarget)) return null;
         const rel = path.relative(SRC_DIR, absTarget);
-        // 如果落入 src/extensions/ 子路径，回退到 upstream/extensions/ 而非 upstream/src/extensions/
         if (rel.startsWith("extensions" + SEP) || rel === "extensions") {
           const extRel = rel.slice("extensions".length + SEP.length);
           return tryResolveFile(path.join(UP_EXT_DIR, extRel));
@@ -106,60 +78,41 @@ function upstreamOverlayPlugin() {
         return tryResolveFile(path.join(UP_SRC_DIR, rel));
       }
 
-      // Case 2: 目标在 extensions/ 下 → 本地优先，不存在则回退到 upstream/extensions/
+      // Case 2: extensions/ → 本地优先，不存在回退到 upstream/extensions/
       if (absTarget.startsWith(EXT_DIR + SEP) || absTarget === EXT_DIR) {
-        if (tryResolveFile(absTarget)) {
-          return null; // 本地存在，让默认解析处理
-        }
+        if (tryResolveFile(absTarget)) return null;
         const rel = path.relative(EXT_DIR, absTarget);
-        const upExtPath = path.join(UP_EXT_DIR, rel);
-        return tryResolveFile(upExtPath);
+        return tryResolveFile(path.join(UP_EXT_DIR, rel));
       }
 
-      // Case 3: 目标在 upstream/src/ 下 → 检查 src/ 是否有本地覆盖
+      // Case 3: upstream/src/ → 检查 src/ 是否有本地覆盖
       if (absTarget.startsWith(UP_SRC_DIR + SEP) || absTarget === UP_SRC_DIR) {
         const rel = path.relative(UP_SRC_DIR, absTarget);
         const localPath = path.join(SRC_DIR, rel);
         const localResult = tryResolveFile(localPath);
         if (localResult) {
-          // 自循环检测：如果找到的本地覆盖文件就是 importer 自身，跳过，直接用 upstream
           const importerNorm = importer ? path.normalize(importer) : null;
-          if (importerNorm && path.normalize(localResult) === importerNorm) {
-            return null; // 让默认解析处理 upstream 文件，避免自循环
-          }
-          // 桥接文件检测：如果 importer 是 localResult 对应的桥接文件（*-upstream-extras.ts），
-          // 也跳过 overlay，避免「桥接文件 → upstream → 本地覆盖文件 → 桥接文件」循环
+          if (importerNorm && path.normalize(localResult) === importerNorm) return null;
           if (importerNorm) {
             const localResultNorm = path.normalize(localResult);
             const localResultDir = path.dirname(localResultNorm);
             const localResultBase = path.basename(localResultNorm, path.extname(localResultNorm));
-            const expectedBridgePattern = path.join(
-              localResultDir,
-              `${localResultBase}-upstream-extras`,
-            );
+            const expectedBridgePattern = path.join(localResultDir, `${localResultBase}-upstream-extras`);
             const importerBase = importerNorm.replace(/\.[cm]?[jt]sx?$/, "");
-            if (importerBase === expectedBridgePattern) {
-              return null; // 桥接文件不需要 overlay 重定向，直接访问 upstream 原始文件
-            }
+            if (importerBase === expectedBridgePattern) return null;
           }
-          return localResult; // 本地有覆盖版本，使用它
+          return localResult;
         }
-        // 无本地覆盖：显式解析 upstream 路径（处理 .js → .ts 映射），避免默认解析失败
-        const upstreamResult = tryResolveFile(absTarget);
-        if (upstreamResult) {
-          return upstreamResult;
-        }
+        return tryResolveFile(absTarget);
       }
 
-      // Case 4: 目标在 upstream/extensions/ 下 → 检查 extensions/ 是否有本地覆盖
+      // Case 4: upstream/extensions/ → 检查 extensions/ 是否有本地覆盖
       if (absTarget.startsWith(UP_EXT_DIR + SEP) || absTarget === UP_EXT_DIR) {
         const rel = path.relative(UP_EXT_DIR, absTarget);
         const localExtPath = path.join(EXT_DIR, rel);
         const localResult = tryResolveFile(localExtPath);
-        if (localResult) {
-          return localResult; // 本地有覆盖版本，使用它
-        }
-        return tryResolveFile(absTarget); // 无本地覆盖，直接返回 upstream/extensions/ 路径
+        if (localResult) return localResult;
+        return tryResolveFile(absTarget);
       }
 
       return null;
@@ -169,246 +122,68 @@ function upstreamOverlayPlugin() {
 
 const overlayPlugin = upstreamOverlayPlugin();
 
-const env = {
-  NODE_ENV: "production",
-};
+// ========== neverBundle ==========
+const shouldBuildPrivateQaEntries = process.env.OPENCLAW_BUILD_PRIVATE_QA === "1";
 
-// 外部化原生模块和问题依赖，避免 rolldown 尝试打包它们
-const explicitExternalDeps = [
-  "@lancedb/lancedb",
-  "@matrix-org/matrix-sdk-crypto-nodejs",
-  "matrix-js-sdk",
-];
-
-const external = [
-  /^@reflink\//,
-  /\.node$/,
-  // 外部化 @mariozechner/pi-coding-agent，避免 __exportAll 错误
-  // 该包是纯 ESM 模块，必须在运行时动态加载
-  /^@mariozechner\/pi-coding-agent$/,
-  /^@mariozechner\/pi-ai$/,
-  /^@mariozechner\/pi-agent-core$/,
-  /^@mariozechner\/pi-tui$/,
-  // 外部化 @earendil-works/pi-agent-core，避免相对模块声明问题
-  /^@earendil-works\/pi-agent-core($|\/)/,
-  // rolldown 在 Windows 上无法处理 jwks-rsa 内部用 require('./errors') 解析目录的场景
-  // (os error 5: 拒绝访问)，外部化该包由 Node.js 运行时负责加载
-  /^jwks-rsa($|\/)/,
-  // 外部化 vitest 及其相关包，避免 ExpectPollOptions 导出不兼容问题
-  /^vitest($|\/)/,
-  /^@vitest\/($|\/)/,
-  // 外部化 node:tls，避免 Node.js 24 中 ConnectionOptions 导出问题
-  /^node:tls$/,
-  // 外部化 undici，避免其类型定义从 node:tls 导入 ConnectionOptions 导致 Node.js 24 兼容性问题
-  /^undici($|\/)/,
-  // 外部化 undici-types，它从 node:tls 导入 ConnectionOptions
-  /^undici-types($|\/)/,
-];
-
-function matchesExternal(id: string): boolean {
-  return external.some((p) => (typeof p === "string" ? id === p : p.test(id)));
+function shouldNeverBundleDependency(id: string): boolean {
+  if (/^@reflink\//.test(id)) return true;
+  if (/\.node$/.test(id)) return true;
+  if (/^@mariozechner\/pi-(?:coding-agent|ai|agent-core|tui)$/.test(id)) return true;
+  if (/^@earendil-works\/pi-agent-core($|\/)/.test(id)) return true;
+  if (/^jwks-rsa($|\/)/.test(id)) return true;
+  if (id === "node:tls" || id === "node:net") return true;
+  if (/^undici($|\/)/.test(id)) return true;
+  if (/^undici-types($|\/)/.test(id)) return true;
+  if (/^@types\/node($|\/)/.test(id)) return true;
+  if (/^@vitest\//.test(id)) return true;
+  if (/^vitest($|\/)/.test(id)) return true;
+  const explicitDeps = ["@lancedb/lancedb", "@matrix-org/matrix-sdk-crypto-nodejs", "matrix-js-sdk"];
+  return explicitDeps.some((dep) => id === dep || id.startsWith(`${dep}/`));
 }
 
-// 收集本地 extensions/ 的构建入口
+// ========== bundled plugin entries (本地优先，upstream 补充) ==========
 const localBundledPluginBuildEntries = collectBundledPluginBuildEntries();
 const localBundledPluginIds = new Set(localBundledPluginBuildEntries.map((e) => e.id));
-
-// 收集 upstream/extensions/ 中、本地 extensions/ 没有完整实现的插件（仅有 src/ 子目录、无 package.json）
-// 这些插件需要以 upstream/extensions/${id} 为入口构建到 dist/extensions/${id}
 const upstreamOnlyBundledPluginBuildEntries = collectBundledPluginBuildEntries({
   cwd: path.join(ROOT_DIR, "upstream"),
 }).filter(({ id }) => !localBundledPluginIds.has(id));
-
-// 合并：本地优先，upstream-only 补充，并添加 sourcePrefix 字段标识来源
 const bundledPluginBuildEntries = [
   ...localBundledPluginBuildEntries.map((e) => ({ ...e, sourcePrefix: "extensions" })),
-  ...upstreamOnlyBundledPluginBuildEntries.map((e) => ({
-    ...e,
-    sourcePrefix: "upstream/extensions",
-  })),
+  ...upstreamOnlyBundledPluginBuildEntries.map((e) => ({ ...e, sourcePrefix: "upstream/extensions" })),
 ];
-const bundledPluginRuntimeDependencies: string[] = [];
-const shouldBuildPrivateQaEntries = process.env.OPENCLAW_BUILD_PRIVATE_QA === "1";
-
-const allNeverBundleDependencies = [
-  ...explicitExternalDeps,
-  ...bundledPluginRuntimeDependencies,
-].toSorted((a, b) => a.localeCompare(b));
-
-function shouldNeverBundleDependency(id: string): boolean {
-  if (matchesExternal(id)) {
-    return true;
-  }
-  return allNeverBundleDependencies.some((dep) => id === dep || id.startsWith(`${dep}/`));
-}
-
-function isPluginSdkSelfReference(id: string): boolean {
-  return (
-    id === "openclaw/plugin-sdk" ||
-    id.startsWith("openclaw/plugin-sdk/") ||
-    id === "@openclaw/plugin-sdk" ||
-    id.startsWith("@openclaw/plugin-sdk/")
-  );
-}
-
-function shouldStageBundledPluginRuntimeDependencies(packageJson: unknown): boolean {
-  return (
-    typeof packageJson === "object" &&
-    packageJson !== null &&
-    (packageJson as { openclaw?: { bundle?: { stageRuntimeDependencies?: boolean } } }).openclaw
-      ?.bundle?.stageRuntimeDependencies === true
-  );
-}
-
-function buildBundledPluginNeverBundlePredicate(packageJson: {
-  dependencies?: Record<string, string>;
-  optionalDependencies?: Record<string, string>;
-}) {
-  const runtimeDependencies = shouldStageBundledPluginRuntimeDependencies(packageJson)
-    ? [
-        ...Object.keys(packageJson.dependencies ?? {}),
-        ...Object.keys(packageJson.optionalDependencies ?? {}),
-      ].toSorted((a, b) => a.localeCompare(b))
-    : [];
-
-  return (id: string): boolean => {
-    if (matchesExternal(id)) {
-      return true;
-    }
-    if (isPluginSdkSelfReference(id)) {
-      return true;
-    }
-    return runtimeDependencies.some(
-      (dependency) => id === dependency || id.startsWith(`${dependency}/`),
-    );
-  };
-}
 
 function listBundledPluginEntrySources(
-  entries: Array<{
-    id: string;
-    packageJson: unknown;
-    sourceEntries: string[];
-    sourcePrefix?: string;
-  }>,
+  entries: Array<{ id: string; sourceEntries: string[]; sourcePrefix?: string }>,
 ): Record<string, string> {
   return Object.fromEntries(
     entries.flatMap(({ id, sourceEntries, sourcePrefix = "extensions" }) =>
       sourceEntries.map((entry) => {
         const normalizedEntry = entry.replace(/^\.\//u, "");
         const entryKey = `extensions/${id}/${normalizedEntry.replace(/\.[^.]+$/u, "")}`;
-        return [
-          entryKey,
-          normalizedEntry ? `${sourcePrefix}/${id}/${normalizedEntry}` : `${sourcePrefix}/${id}`,
-        ];
+        return [entryKey, normalizedEntry ? `${sourcePrefix}/${id}/${normalizedEntry}` : `${sourcePrefix}/${id}`];
       }),
     ),
   );
 }
 
-function normalizeBundledPluginOutEntry(entry: string): string {
-  return entry.replace(/^\.\//u, "").replace(/\.[^.]+$/u, "");
-}
-
 function buildBundledHookEntries(): Record<string, string> {
   const hooksRoot = path.join(ROOT_DIR, "src", "hooks", "bundled");
   const entries: Record<string, string> = {};
-  if (!fs.existsSync(hooksRoot)) {
-    return entries;
-  }
+  if (!fs.existsSync(hooksRoot)) return entries;
   for (const dirent of fs.readdirSync(hooksRoot, { withFileTypes: true })) {
-    if (!dirent.isDirectory()) {
-      continue;
-    }
+    if (!dirent.isDirectory()) continue;
     const handlerPath = path.join(hooksRoot, dirent.name, "handler.ts");
-    if (!fs.existsSync(handlerPath)) {
-      continue;
-    }
+    if (!fs.existsSync(handlerPath)) continue;
     entries[`bundled/${dirent.name}/handler`] = handlerPath;
   }
   return entries;
 }
 
-const bundledHookEntries = buildBundledHookEntries();
-
-// 禁用 chunkOptimization 解决 __exportAll is not a function 错误
-// 参考: https://github.com/rolldown/rolldown/issues/8184
-// 禁用 tree-shaking 解决动态导入模块导出被错误移除的问题
-// 参考: https://github.com/rolldown/rolldown/issues/5340
-const baseInputOptions = {
-  experimental: { chunkOptimization: false },
-  treeshake: false,
-  external: [
-    /^@reflink\//,
-    /\.node$/,
-    /^@mariozechner\/pi-coding-agent$/,
-    /^@mariozechner\/pi-ai$/,
-    /^@mariozechner\/pi-agent-core$/,
-    /^@mariozechner\/pi-tui$/,
-    /^jwks-rsa($|\/)/,
-    /^vitest($|\/)/,
-    /^@vitest\/($|\/)/,
-    /^node:tls$/,
-    /^node:net$/,
-    /^undici($|\/)/,
-    /^undici-types($|\/)/,
-    /^@types\/node($|\/)/,
-  ],
-};
-
-// manualChunks：将插件加载器及其缓存依赖强制提取为单一共享 chunk。
-// 背景：rolldown 在 chunkOptimization:false 模式下会将多个模块内联进多个 chunk，
-// 每份内联各自持有独立的 Map/Set 实例导致缓存永远 MISS。
-const pluginLoaderManualChunks = (id: string): string | undefined => {
-  const norm = id.replace(/\\/g, "/");
-  if (norm.includes("upstream/src/plugins/loader") || norm.includes("src/plugins/loader")) {
-    return "plugin-loader";
-  }
-  if (norm.includes("upstream/src/plugins/discovery") || norm.includes("src/plugins/discovery")) {
-    return "plugin-loader";
-  }
-  if (
-    norm.includes("upstream/src/plugins/manifest-registry") ||
-    norm.includes("src/plugins/manifest-registry")
-  ) {
-    return "plugin-loader";
-  }
-  if (norm.includes("upstream/src/plugins/sdk-alias") || norm.includes("src/plugins/sdk-alias")) {
-    return "plugin-loader";
-  }
-  if (
-    norm.includes("upstream/src/plugins/public-surface-loader") ||
-    norm.includes("src/plugins/public-surface-loader")
-  ) {
-    return "plugin-loader";
-  }
-  return undefined;
-};
-
-const outputOptionsWithManualChunks = { manualChunks: pluginLoaderManualChunks };
-
-function nodeBuildConfig(config: UserConfig): UserConfig {
-  return {
-    ...config,
-    env,
-    fixedExtension: false,
-    platform: "node",
-    plugins: [overlayPlugin, ...(config.plugins ?? [])],
-    inputOptions: baseInputOptions,
-    outputOptions: outputOptionsWithManualChunks,
-  };
-}
-
-/** 与上游 buildCoreDistEntries() 对齐，包含本项目需要的额外入口。
- * write-cli-compat.ts 会扫描 daemon-cli 和 runner chunk，自动拼合完整导出。 */
 function buildCoreDistEntries(): Record<string, string> {
   const upstreamEntries: Record<string, string> = {
     index: "src/index.ts",
     entry: "src/entry.ts",
-    // Ensure this module is bundled as an entry so legacy CLI shims can resolve its exports.
     "cli/daemon-cli": "src/cli/daemon-cli.ts",
-    // Keep long-lived lazy runtime boundaries on stable filenames so rebuilt
-    // dist/ trees do not strand already-running gateways on stale hashed chunks.
     "agents/auth-profiles.runtime": "src/agents/auth-profiles.runtime.ts",
     "agents/model-catalog.runtime": "src/agents/model-catalog.runtime.ts",
     "agents/models-config.runtime": "src/agents/models-config.runtime.ts",
@@ -424,13 +199,9 @@ function buildCoreDistEntries(): Record<string, string> {
     "plugins/runtime/index": "src/plugins/runtime/index.ts",
     "llm-slug-generator": "src/hooks/llm-slug-generator.ts",
   };
-
-  // 过滤掉本地和 upstream 都不存在的入口
   return Object.fromEntries(
     Object.entries(upstreamEntries).filter(([, srcPath]) => {
-      const local = path.resolve(ROOT_DIR, srcPath);
-      const up = path.resolve(ROOT_DIR, "upstream", srcPath);
-      return existsSync(local) || existsSync(up);
+      return existsSync(path.resolve(ROOT_DIR, srcPath)) || existsSync(path.resolve(ROOT_DIR, "upstream", srcPath));
     }),
   );
 }
@@ -438,91 +209,34 @@ function buildCoreDistEntries(): Record<string, string> {
 function buildUnifiedDistEntries(): Record<string, string> {
   const coreEntries = buildCoreDistEntries();
   const pluginSdkEntries = Object.fromEntries(
-    Object.entries(buildPluginSdkEntrySources()).map(([entry, source]) => [
-      `plugin-sdk/${entry}`,
-      source,
-    ]),
+    Object.entries(buildPluginSdkEntrySources()).map(([entry, source]) => [`plugin-sdk/${entry}`, source]),
   );
   const qaEntries = shouldBuildPrivateQaEntries
-    ? {
-        "plugin-sdk/qa-lab": "src/plugin-sdk/qa-lab.ts",
-        "plugin-sdk/qa-runtime": "src/plugin-sdk/qa-runtime.ts",
-      }
+    ? { "plugin-sdk/qa-lab": "src/plugin-sdk/qa-lab.ts", "plugin-sdk/qa-runtime": "src/plugin-sdk/qa-runtime.ts" }
     : {};
-
   const rootBundledPluginBuildEntries = bundledPluginBuildEntries.filter(
-    ({ id, hasManifest, packageJson }) =>
-      !shouldStageBundledPluginRuntimeDependencies(packageJson) &&
-      (shouldBuildPrivateQaEntries || !NON_PACKAGED_BUNDLED_PLUGIN_DIRS.has(id)) &&
-      // manifestes-only support packages (如 speech-core) 单独配置 outDir，不放进 unified entry
-      !(
-        !hasManifest &&
-        typeof (packageJson as Record<string, unknown> | null)?.name === "string" &&
-        ((packageJson as Record<string, unknown>).name as string).startsWith("@openclaw/")
-      ),
+    ({ id }) => shouldBuildPrivateQaEntries || !NON_PACKAGED_BUNDLED_PLUGIN_DIRS.has(id),
   );
 
   return {
     ...coreEntries,
-    // Internal compat artifact for the root-alias.cjs lazy loader.
     "plugin-sdk/compat": "src/plugin-sdk/compat.ts",
     ...pluginSdkEntries,
     ...qaEntries,
     ...listBundledPluginEntrySources(rootBundledPluginBuildEntries),
-    ...bundledHookEntries,
+    ...buildBundledHookEntries(),
   };
 }
 
-function buildBundledPluginConfigs(): UserConfig[] {
-  const stagedBundledPluginBuildEntries = bundledPluginBuildEntries.filter(({ packageJson }) =>
-    shouldStageBundledPluginRuntimeDependencies(packageJson),
-  );
-  // manifestes-only support packages（如 speech-core）：无 manifest、无 stageRuntimeDependencies，
-  // 但有 top-level public surface files（runtime-api.ts 等）。
-  // 在 overlay 架构下放进 unified entry 会被 rolldown 合并为 shared chunk，
-  // 需单独给 outDir 确保输出到 dist/extensions/<id>/。
-  const manifestlessSupportPackageEntries = bundledPluginBuildEntries.filter(
-    ({ hasManifest, packageJson }) =>
-      !hasManifest &&
-      !shouldStageBundledPluginRuntimeDependencies(packageJson) &&
-      typeof (packageJson as Record<string, unknown> | null)?.name === "string" &&
-      ((packageJson as Record<string, unknown>).name as string).startsWith("@openclaw/"),
-  );
-  const isolatedEntries = [
-    ...stagedBundledPluginBuildEntries,
-    ...manifestlessSupportPackageEntries,
-  ];
-  return isolatedEntries.map(({ id, packageJson, sourceEntries, sourcePrefix = "extensions" }) =>
-    nodeBuildConfig({
-      clean: false,
-      entry: Object.fromEntries(
-        sourceEntries.map((entry) => [
-          normalizeBundledPluginOutEntry(entry),
-          `${sourcePrefix}/${id}/${entry.replace(/^\.\//u, "")}`,
-        ]),
-      ),
-      outDir: `dist/extensions/${id}`,
-      deps: {
-        neverBundle: buildBundledPluginNeverBundlePredicate(
-          (packageJson ?? {}) as {
-            dependencies?: Record<string, string>;
-            optionalDependencies?: Record<string, string>;
-          },
-        ),
-      },
-    }),
-  );
-}
-
 export default defineConfig([
-  nodeBuildConfig({
-    // Build core entrypoints, plugin-sdk subpaths, bundled plugin entrypoints,
-    // and bundled hooks in one graph so runtime singletons are emitted once.
+  {
     clean: true,
     entry: buildUnifiedDistEntries(),
-    deps: {
-      neverBundle: shouldNeverBundleDependency,
-    },
-  }),
-  ...buildBundledPluginConfigs(),
+    env: { NODE_ENV: "production" },
+    fixedExtension: false,
+    platform: "node",
+    plugins: [overlayPlugin],
+    treeshake: false,
+    deps: { neverBundle: shouldNeverBundleDependency },
+  },
 ]);

@@ -319,12 +319,12 @@ export function createOpenClawCodingTools(options?: {
   // 例如写作类项目可禁用 exec/write/edit 等代码构建工具，即使 Agent 本身有权限。
   const projectPolicy = (() => {
     const wsRoot = resolveWorkspaceRoot(options?.workspaceDir);
-    if (!wsRoot) return undefined;
+    if (!wsRoot) {return undefined;}
     try {
       const projCfg = readProjectConfig(wsRoot);
-      if (!projCfg?.tools) return undefined;
+      if (!projCfg?.tools) {return undefined;}
       const { allow, deny } = projCfg.tools;
-      if ((!allow || allow.length === 0) && (!deny || deny.length === 0)) return undefined;
+      if ((!allow || allow.length === 0) && (!deny || deny.length === 0)) {return undefined;}
       return { allow: allow ?? [], deny: deny ?? [] };
     } catch {
       return undefined;
