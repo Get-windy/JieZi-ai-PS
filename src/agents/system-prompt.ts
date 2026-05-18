@@ -1453,3 +1453,5 @@ export function buildAgentUserPromptPrefix(params: {
     }),
   ].join("\n");
 }
+
+export { appendModelIdentitySystemPrompt, appendAgentBootstrapSystemPromptSupplement } from "../../upstream/src/agents/system-prompt.js";

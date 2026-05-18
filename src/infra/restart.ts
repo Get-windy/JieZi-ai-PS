@@ -27,6 +27,23 @@ const restartLog = createSubsystemLogger("restart");
 
 export { findGatewayPidsOnPortSync };
 
+export type GatewayRestartIntent = {
+  reason?: string;
+  force?: boolean;
+  waitMs?: number;
+};
+
+export function clearGatewayRestartIntentSync(env?: NodeJS.ProcessEnv): void {}
+
+export function writeGatewayRestartIntentSync(opts: {
+  env?: NodeJS.ProcessEnv;
+  targetPid?: number;
+  intent?: GatewayRestartIntent;
+  reason?: string;
+}): boolean {
+  return false;
+}
+
 let sigusr1AuthorizedCount = 0;
 let sigusr1AuthorizedUntil = 0;
 let sigusr1ExternalAllowed = false;
@@ -504,3 +521,5 @@ export const __testing = {
     clearPendingScheduledRestart();
   },
 };
+
+export { resolveGatewayRestartDeferralTimeoutMs } from "../../upstream/src/infra/restart.js";

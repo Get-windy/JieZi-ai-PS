@@ -17,8 +17,8 @@ import {
   formatAuthLabel,
   type ModelAuthDetailMode,
   resolveAuthLabel,
-  resolveProfileOverride,
 } from "../../../upstream/src/auto-reply/reply/directive-handling.auth.js";
+import { resolveProfileOverride } from "../../../upstream/src/auto-reply/reply/directive-handling.auth-profile.js";
 import {
   type ModelPickerCatalogEntry,
   resolveProviderEndpointLabel,

@@ -52,10 +52,18 @@ import {
   areHeartbeatsEnabled,
   type HeartbeatRunResult,
   type HeartbeatWakeHandler,
-  requestHeartbeatNow,
+  requestHeartbeat,
   setHeartbeatsEnabled,
   setHeartbeatWakeHandler,
 } from "../../upstream/src/infra/heartbeat-wake.js";
+
+function requestHeartbeatNow() {
+  requestHeartbeat({
+    source: "manual",
+    intent: "immediate",
+    reason: "manual",
+  });
+}
 import { buildOutboundSessionContext } from "../../upstream/src/infra/outbound/session-context.js";
 import {
   enqueueSystemEvent,

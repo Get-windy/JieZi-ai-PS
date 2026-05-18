@@ -181,3 +181,5 @@ export async function maybeRepairLegacyCronStore(params: {
     note(notifyMigration.warnings.join("\n"), "Doctor warnings");
   }
 }
+
+export { noteLegacyWhatsAppCrontabHealthCheck } from "../../upstream/src/commands/doctor-cron.js";

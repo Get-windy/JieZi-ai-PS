@@ -373,3 +373,8 @@ export async function enforceSessionDiskBudget(params: {
     overBudget: true,
   };
 }
+
+export {
+  pruneUnreferencedSessionArtifacts,
+  resolveSessionArtifactCanonicalPathsForEntry,
+} from "../../../upstream/src/config/sessions/disk-budget.js";

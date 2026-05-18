@@ -1,1 +1,1 @@
-export { normalizeProviders } from "../../upstream/src/agents/models-config.providers.normalize.js";
+export { normalizeProviderCatalogModelsForConfig, normalizeProviders } from "../../upstream/src/agents/models-config.providers.normalize.js";

@@ -84,3 +84,5 @@ export async function withStrictWebToolsEndpoint<T>(
 ): Promise<T> {
   return await withWebToolsNetworkGuard(params, run);
 }
+
+export { withSelfHostedWebToolsEndpoint } from "../../../upstream/src/agents/tools/web-guarded-fetch.js";

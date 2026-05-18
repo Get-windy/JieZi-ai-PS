@@ -587,3 +587,5 @@ export function isErrno(err: unknown): boolean {
 export function hasErrnoCode(err: unknown, code: string): boolean {
   return isErrno(err) && (err as any).code === code;
 }
+
+export { stringifyNonErrorCause } from "../../upstream/src/infra/errors.js";

@@ -7,4 +7,4 @@ export {
   applyVercelAiGatewayConfig,
   applyVercelAiGatewayProviderConfig,
   VERCEL_AI_GATEWAY_DEFAULT_MODEL_REF,
-} from "../../extensions/vercel-ai-gateway/onboard.js";
+} from "../extensions/vercel-ai-gateway/onboard.js";

@@ -55,3 +55,5 @@ export function withPluginRuntimePluginIdScope<T>(pluginId: string, run: () => T
       };
   return pluginRuntimeGatewayRequestScope.run(scoped, run);
 }
+
+export { withPluginRuntimePluginScope } from "../../../upstream/src/plugins/runtime/gateway-request-scope.js";

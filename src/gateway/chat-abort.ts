@@ -127,3 +127,5 @@ export function abortChatRunsForSessionKey(
   }
   return { aborted: runIds.length > 0, runIds };
 }
+
+export { registerChatAbortController, updateChatRunProvider } from "../../upstream/src/gateway/chat-abort.js";

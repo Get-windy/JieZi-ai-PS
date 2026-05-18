@@ -296,6 +296,8 @@ export function extractEmbeddedIpv4FromIpv6(address: ipaddr.IPv6): ipaddr.IPv4 |
   return undefined;
 }
 
+export { isLinkLocalIpAddress, isCloudMetadataIpAddress } from "../../../upstream/src/shared/net/ip.js";
+
 export function isIpInCidr(ip: string, cidr: string): boolean {
   const normalizedIp = parseCanonicalIpAddress(ip);
   if (!normalizedIp) {

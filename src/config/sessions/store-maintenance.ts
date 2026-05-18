@@ -6,6 +6,11 @@ import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { loadConfig } from "../config.js";
 import type { SessionMaintenanceConfig, SessionMaintenanceMode } from "../types.base.js";
 import type { SessionEntry } from "./types.js";
+export {
+  shouldRunSessionEntryMaintenance,
+  pruneQuotaSuspensions,
+  shouldPreserveMaintenanceEntry,
+} from "../../../upstream/src/config/sessions/store-maintenance.js";
 
 const log = createSubsystemLogger("sessions/store");
 

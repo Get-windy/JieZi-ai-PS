@@ -557,3 +557,5 @@ export function applyPluginAutoEnable(params: {
 
   return { config: applyBundledAllowlist(next), changes, autoEnabledReasons: {} };
 }
+
+export { detectPluginAutoEnableCandidates } from "../../upstream/src/config/plugin-auto-enable.js";

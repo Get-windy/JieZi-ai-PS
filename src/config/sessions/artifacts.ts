@@ -86,3 +86,5 @@ export function parseSessionArchiveTimestamp(
   const timestamp = Date.parse(restoreSessionArchiveTimestamp(raw));
   return Number.isNaN(timestamp) ? null : timestamp;
 }
+
+export { isCompactionCheckpointTranscriptFileName, isTrajectorySessionArtifactName } from "../../../upstream/src/config/sessions/artifacts.js";

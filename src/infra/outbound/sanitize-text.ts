@@ -62,3 +62,5 @@ export function sanitizeForPlainText(text: string): string {
       .replace(/\n{3,}/g, "\n\n")
   );
 }
+
+export { stripInternalRuntimeScaffolding } from "../../../upstream/src/infra/outbound/sanitize-text.js";

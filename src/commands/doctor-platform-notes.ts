@@ -219,3 +219,5 @@ export function noteStartupOptimizationHints(
 
   noteFn([...lines, ...suggestions].join("\n"), "Startup optimization");
 }
+
+export { noteMacStaleOpenClawUpdateLaunchdJobs } from "../../upstream/src/commands/doctor-platform-notes.js";

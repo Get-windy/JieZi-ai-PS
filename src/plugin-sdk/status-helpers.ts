@@ -308,4 +308,5 @@ export function collectStatusIssuesFromLastError(
 export {
   buildWebhookChannelStatusSummary,
   createDependentCredentialStatusIssueCollector,
+  resolveReactionLevel,
 } from "../../upstream/src/plugin-sdk/status-helpers.js";

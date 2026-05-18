@@ -3,7 +3,7 @@ import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import type { OpenClawConfig } from "../../upstream/src/config/config.js";
 import { resolveStateDir } from "../../upstream/src/config/paths.js";
 import { resolvePreferredOpenClawTmpDir } from "../../upstream/src/infra/tmp-openclaw-dir.js";
-export { getAgentScopedMediaLocalRootsForSources } from "../../upstream/src/media/local-roots.js";
+export { getAgentScopedMediaLocalRootsForSources, appendLocalMediaParentRoots } from "../../upstream/src/media/local-roots.js";
 
 function buildMediaLocalRoots(stateDir: string): string[] {
   const resolvedStateDir = path.resolve(stateDir);

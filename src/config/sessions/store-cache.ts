@@ -1,4 +1,5 @@
 import type { SessionEntry } from "./types.js";
+export { cloneSessionStoreRecord } from "../../../upstream/src/config/sessions/store-cache.js";
 
 type SessionStoreCacheEntry = {
   store: Record<string, SessionEntry>;
@@ -95,4 +96,21 @@ export function getSessionStoreTtl(): number {
 
 export function isSessionStoreCacheEnabled(): boolean {
   return getSessionStoreTtl() > 0;
+}
+
+export function takeMutableSessionStoreCache(params: {
+  storePath: string;
+  mtimeMs?: number;
+  sizeBytes?: number;
+}): Record<string, SessionEntry> | null {
+  const cached = SESSION_STORE_CACHE.get(params.storePath);
+  if (!cached) {
+    return null;
+  }
+  if (params.mtimeMs !== cached.mtimeMs || params.sizeBytes !== cached.sizeBytes) {
+    invalidateSessionStoreCache(params.storePath);
+    return null;
+  }
+  SESSION_STORE_CACHE.delete(params.storePath);
+  return cached.store;
 }

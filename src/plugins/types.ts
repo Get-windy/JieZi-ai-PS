@@ -7,5 +7,6 @@ export {
   PluginApprovalResolutions,
   isPluginHookName,
   isPromptInjectionHookName,
+  isConversationHookName,
   stripPromptMutationFieldsFromLegacyHookResult,
 } from "../../upstream/src/plugins/types.js";

@@ -47,7 +47,7 @@ function normalizeMode(value?: string): RedactSensitiveMode {
 }
 
 function parsePattern(raw: string): RegExp | null {
-  if (!raw.trim()) {
+  if (!raw?.trim()) {
     return null;
   }
   const match = raw.match(/^\/(.+)\/([gimsuy]*)$/);
@@ -154,4 +154,5 @@ export function getDefaultRedactPatterns(): string[] {
 
 // Re-export upstream-new exports required by upstream/src/logging/log-tail.ts (v2026.4.11)
 export type { ResolvedRedactOptions } from "../../upstream/src/logging/redact.js";
-export { resolveRedactOptions, redactSensitiveLines } from "../../upstream/src/logging/redact.js";
+export { resolveRedactOptions, redactSensitiveLines, redactSecrets } from "../../upstream/src/logging/redact.js";
+export { redactSensitiveFieldValue, redactToolPayloadText, isSensitiveFieldKey, redactSensitiveFieldValueWithConfig, redactToolPayloadTextWithConfig } from "../../upstream/src/logging/redact.js";

@@ -86,6 +86,8 @@ function isCrossContextTarget(params: {
   return normalizedTarget !== normalizedCurrent;
 }
 
+export { resolveAllowedMessageActions } from "../../../upstream/src/infra/outbound/outbound-policy.js";
+
 export function enforceCrossContextPolicy(params: {
   channel: ChannelId;
   action: ChannelMessageActionName;

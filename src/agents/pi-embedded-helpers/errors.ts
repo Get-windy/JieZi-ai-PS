@@ -53,7 +53,7 @@ const RATE_LIMIT_ERROR_USER_MESSAGE = "⚠️ API rate limit reached. Please try
 const OVERLOADED_ERROR_USER_MESSAGE =
   "The AI service is temporarily overloaded. Please try again in a moment.";
 
-function formatRateLimitOrOverloadedErrorCopy(raw: string): string | undefined {
+export function formatRateLimitOrOverloadedErrorCopy(raw: string): string | undefined {
   if (isRateLimitErrorMessage(raw)) {
     return RATE_LIMIT_ERROR_USER_MESSAGE;
   }
@@ -1007,3 +1007,8 @@ export function classifyFailoverSignal(signal: FailoverSignal): FailoverClassifi
   }
   return null;
 }
+
+export {
+  inferSignalStatus,
+  isUnclassifiedNoBodyHttpSignal,
+} from "../../../upstream/src/agents/pi-embedded-helpers/errors.js";

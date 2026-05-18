@@ -59,6 +59,12 @@ export function hasEnvHttpProxyConfigured(
  * variable, following undici tokenization semantics (comma and whitespace).
  * Used by provider HTTP helpers to skip the proxy for internal/local targets.
  */
+export {
+  hasEnvHttpProxyAgentConfigured,
+  resolveEnvHttpProxyAgentOptions,
+  shouldUseEnvHttpProxyForUrl,
+} from "../../../upstream/src/infra/net/proxy-env.js";
+
 export function matchesNoProxy(targetUrl: string, env: NodeJS.ProcessEnv = process.env): boolean {
   const raw = normalizeProxyEnvValue(env.no_proxy) ?? normalizeProxyEnvValue(env.NO_PROXY);
   if (!raw) {

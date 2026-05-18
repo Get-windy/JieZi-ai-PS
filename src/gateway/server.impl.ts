@@ -41,7 +41,7 @@ import { loadGatewayModelCatalog } from "../../upstream/src/gateway/server-model
 import { createNodeSubscriptionManager } from "../../upstream/src/gateway/server-node-subscriptions.js";
 import { loadGatewayPlugins } from "../../upstream/src/gateway/server-plugins.js";
 import { createGatewayReloadHandlers } from "../../upstream/src/gateway/server-reload-handlers.js";
-import { createGatewayRuntimeState } from "../../upstream/src/gateway/server-runtime-state.js";
+import { createGatewayRuntimeState } from "./server-runtime-state.js";
 import { resolveSessionKeyForRun } from "../../upstream/src/gateway/server-session-key.js";
 import { startGatewaySidecars } from "../../upstream/src/gateway/server-startup.js";
 import { startGatewayTailscaleExposure } from "../../upstream/src/gateway/server-tailscale.js";
@@ -54,7 +54,7 @@ import {
   incrementPresenceVersion,
   refreshGatewayHealthSnapshot,
 } from "../../upstream/src/gateway/server/health-state.js";
-import { resolveHookClientIpConfig } from "../../upstream/src/gateway/server/hooks.js"; // upstream-only, no local override needed
+import { resolveHookClientIpConfig } from "./server/hook-client-ip-config.js"; // upstream-only, no local override needed
 import { loadGatewayTlsRuntime } from "../../upstream/src/gateway/server/tls.js";
 import { ensureGatewayStartupAuth } from "../../upstream/src/gateway/startup-auth.js";
 import { clearAgentRunContext, onAgentEvent } from "../../upstream/src/infra/agent-events.js";
@@ -434,8 +434,35 @@ export async function startGatewayServer(
     throw new Error(gatewayTls.error ?? "gateway tls: failed to enable");
   }
   log.info("[DEBUG] createGatewayRuntimeState start");
+  const runtimeState = await createGatewayRuntimeState({
+    cfg: cfgAtStart,
+    bindHost,
+    port,
+    controlUiEnabled,
+    controlUiBasePath,
+    controlUiRoot: controlUiRootState,
+    openAiChatCompletionsEnabled,
+    openResponsesEnabled,
+    openResponsesConfig,
+    strictTransportSecurityHeader,
+    resolvedAuth,
+    getResolvedAuth: () => resolvedAuth,
+    rateLimiter: authRateLimiter,
+    gatewayTls,
+    hooksConfig: () => hooksConfig,
+    getHookClientIpConfig: () => hookClientIpConfig,
+    pluginRegistry,
+    deps,
+    log,
+    logHooks,
+    logPlugins,
+  });
+  log.info("[DEBUG] createGatewayRuntimeState completed");
+  log.info("[DEBUG] runtimeState type:", typeof runtimeState);
+  log.info("[DEBUG] runtimeState keys:", runtimeState ? Object.keys(runtimeState) : "null/undefined");
+  log.info("[DEBUG] runtimeState value:", runtimeState);
+  
   const {
-    canvasHost,
     httpServer,
     httpServers,
     httpBindHosts,
@@ -455,33 +482,8 @@ export async function startGatewayServer(
     removeChatRun,
     chatAbortControllers,
     toolEventRecipients,
-  } = await createGatewayRuntimeState({
-    cfg: cfgAtStart,
-    bindHost,
-    port,
-    controlUiEnabled,
-    controlUiBasePath,
-    controlUiRoot: controlUiRootState,
-    openAiChatCompletionsEnabled,
-    openResponsesEnabled,
-    openResponsesConfig,
-    strictTransportSecurityHeader,
-    resolvedAuth,
-    getResolvedAuth: () => resolvedAuth,
-    rateLimiter: authRateLimiter,
-    gatewayTls,
-    hooksConfig: () => hooksConfig,
-    getHookClientIpConfig: () => hookClientIpConfig,
-    pluginRegistry,
-    deps,
-    canvasRuntime,
-    canvasHostEnabled,
-    allowCanvasHostInTests: opts.allowCanvasHostInTests,
-    logCanvas,
-    log,
-    logHooks,
-    logPlugins,
-  });
+  } = runtimeState;
+  
   let transcriptUnsub: (() => void) | null = null;
   let lifecycleUnsub: (() => void) | null = null;
   let channelHealthMonitor: ReturnType<typeof startChannelHealthMonitor> | null = null;
@@ -507,12 +509,15 @@ export async function startGatewayServer(
   };
   const hasMobileNodeConnected = () => hasConnectedMobileNode(nodeRegistry);
   applyGatewayLaneConcurrency(cfgAtStart);
+  log.info("[DEBUG] applyGatewayLaneConcurrency completed");
 
+  log.info("[DEBUG] Calling buildGatewayCronService");
   let cronState = buildGatewayCronService({
     cfg: cfgAtStart,
     deps,
     broadcast,
   });
+  log.info("[DEBUG] buildGatewayCronService completed");
   let { cron, storePath: cronStorePath } = cronState;
 
   const channelManager = createChannelManager({
@@ -667,7 +672,7 @@ export async function startGatewayServer(
     preauthConnectionBudget,
     port,
     gatewayHost: bindHost ?? undefined,
-    canvasHostEnabled: Boolean(canvasHost),
+    canvasHostEnabled: canvasHostEnabled,
     canvasHostServerPort,
     resolvedAuth,
     rateLimiter: authRateLimiter,
@@ -954,7 +959,7 @@ export async function startGatewayServer(
   const close = createGatewayCloseHandler({
     bonjourStop,
     tailscaleCleanup,
-    canvasHost,
+    canvasHost: undefined,
     canvasHostServer,
     stopChannel,
     pluginServices,

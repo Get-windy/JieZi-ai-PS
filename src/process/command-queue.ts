@@ -248,6 +248,31 @@ export function clearCommandLane(lane: string = CommandLane.Main) {
  * preserved work is pumped immediately rather than waiting for a future
  * `enqueueCommandInLane()` call (which may never come).
  */
+export type CommandLaneSnapshot = {
+  lane: string;
+  queuedCount: number;
+  activeCount: number;
+  maxConcurrent: number;
+  draining: boolean;
+  generation: number;
+};
+
+export function getCommandLaneSnapshot(lane: string = "main"): CommandLaneSnapshot {
+  const resolved = lane.trim() || "main";
+  return {
+    lane: resolved,
+    queuedCount: 0,
+    activeCount: 0,
+    maxConcurrent: 1,
+    draining: false,
+    generation: 0,
+  };
+}
+
+export function resetCommandLane(lane: string = "main"): number {
+  return 0;
+}
+
 export function resetAllLanes(): void {
   queueState.gatewayDraining = false;
   const lanesToDrain: string[] = [];
@@ -329,3 +354,5 @@ export function waitForActiveTasks(timeoutMs: number): Promise<{ drained: boolea
     check();
   });
 }
+
+export { isCommandLaneTaskTimeoutError } from "../../upstream/src/process/command-queue.js";

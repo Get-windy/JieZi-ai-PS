@@ -10,6 +10,7 @@ import { DEFAULT_AGENT_ID, normalizeAgentId } from "../../routing/session-key.js
 import { resolveStateDir } from "../paths.js";
 import type { OpenClawConfig } from "../types.openclaw.js";
 import { resolveAgentsDirFromSessionStorePath, resolveStorePath } from "./paths.js";
+export { resolveAgentSessionStoreTargetsSync } from "../../../upstream/src/config/sessions/targets.js";
 
 export type SessionStoreSelectionOptions = {
   store?: string;

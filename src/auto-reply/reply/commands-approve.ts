@@ -5,7 +5,7 @@ import {
 import { callGateway } from "../../../upstream/src/gateway/call.js";
 import { logVerbose } from "../../../upstream/src/globals.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../../upstream/src/utils/message-channel.js";
-import { requireGatewayClientScopeForInternalChannel } from "../../../upstream/src/auto-reply/reply/command-gates.js";
+import { requireGatewayClientScope } from "../../../upstream/src/auto-reply/reply/command-gates.js";
 import type { CommandHandler } from "./commands-types.js";
 
 const COMMAND_REGEX = /^\/approve(?:\s|$)/i;
@@ -115,7 +115,7 @@ export const handleApproveCommand: CommandHandler = async (params, allowTextComm
     }
   }
 
-  const missingScope = requireGatewayClientScopeForInternalChannel(params, {
+  const missingScope = requireGatewayClientScope(params, {
     label: "/approve",
     allowedScopes: ["operator.approvals", "operator.admin"],
     missingText: "❌ /approve requires operator.approvals for gateway clients.",

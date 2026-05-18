@@ -35,3 +35,5 @@ export function estimateBase64DecodedBytes(base64: string): number {
   const estimated = Math.floor((effectiveLen * 3) / 4) - padding;
   return Math.max(0, estimated);
 }
+
+export { canonicalizeBase64 } from "../../upstream/src/media/base64.js";

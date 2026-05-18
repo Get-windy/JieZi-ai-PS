@@ -15,6 +15,7 @@ export type DoctorOptions = {
 
 export type DoctorPrompter = {
   confirm: (params: Parameters<typeof confirm>[0]) => Promise<boolean>;
+  confirmAutoFix: (params: Parameters<typeof confirm>[0]) => Promise<boolean>;
   confirmRepair: (params: Parameters<typeof confirm>[0]) => Promise<boolean>;
   confirmAggressive: (params: Parameters<typeof confirm>[0]) => Promise<boolean>;
   confirmSkipInNonInteractive: (params: Parameters<typeof confirm>[0]) => Promise<boolean>;
@@ -56,6 +57,7 @@ export function createDoctorPrompter(params: {
 
   return {
     confirm: confirmDefault,
+    confirmAutoFix: confirmDefault,
     confirmRepair: async (p) => {
       if (nonInteractive) {
         return false;

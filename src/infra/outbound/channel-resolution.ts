@@ -23,6 +23,7 @@ import { applyTestPluginDefaults, normalizePluginsConfig } from "../../../upstre
 import { createPluginLoaderLogger } from "../../../upstream/src/plugins/logger.js";
 import { createSubsystemLogger } from "../../../upstream/src/logging/subsystem.js";
 import type { PluginRegistry } from "../../../upstream/src/plugins/registry.js";
+export { resolveOutboundChannelMessageAdapter } from "../../../upstream/src/infra/outbound/channel-resolution.js";
 
 const log = createSubsystemLogger("plugins");
 

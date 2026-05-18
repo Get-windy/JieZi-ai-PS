@@ -14,6 +14,15 @@ import {
   TypingModeSchema,
 } from "./zod-schema.core.js";
 
+export const SilentReplyPolicyConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    maxTokens: z.number().int().positive().optional(),
+    maxChars: z.number().int().positive().optional(),
+  })
+  .strict()
+  .optional();
+
 export const AgentDefaultsSchema = z
   .object({
     model: AgentModelSchema.optional(),

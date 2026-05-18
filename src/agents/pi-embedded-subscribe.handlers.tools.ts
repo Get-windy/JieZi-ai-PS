@@ -615,3 +615,5 @@ export async function handleToolExecutionEnd(
       });
   }
 }
+
+export { countActiveToolExecutions } from "../../upstream/src/agents/pi-embedded-subscribe.handlers.tools.js";

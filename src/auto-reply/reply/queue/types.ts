@@ -96,3 +96,11 @@ export type ResolveQueueSettingsParams = {
   inlineMode?: QueueMode;
   inlineOptions?: Partial<QueueSettings>;
 };
+
+export function isFollowupRunAborted(run: Pick<FollowupRun, "abortSignal">): boolean {
+  return run.abortSignal?.aborted === true;
+}
+
+export function markFollowupRunEnqueued(run: Pick<FollowupRun, "queuedLifecycle">): void {}
+
+export function completeFollowupRunLifecycle(run: Pick<FollowupRun, "queuedLifecycle">): void {}

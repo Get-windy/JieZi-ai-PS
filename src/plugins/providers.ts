@@ -16,6 +16,8 @@ export {
   resolveDiscoveredProviderPluginIds,
   resolveDiscoverableProviderOwnerPluginIds,
   resolveActivatableProviderOwnerPluginIds,
+  resolveExternalAuthProfileCompatFallbackPluginIds,
+  resolveExternalAuthProfileProviderPluginIds,
 } from "../../upstream/src/plugins/providers.js";
 
 // 运行时 provider 函数（依赖已加载的插件）

@@ -1,0 +1,11 @@
+export { modelsAliasesListCommand, modelsAliasesAddCommand, modelsAliasesRemoveCommand } from "./models/aliases.js";
+export { modelsAuthAddCommand, modelsAuthLoginCommand, modelsAuthSetupTokenCommand, modelsAuthPasteTokenCommand } from "./models/auth.js";
+export { modelsAuthOrderGetCommand, modelsAuthOrderClearCommand, modelsAuthOrderSetCommand } from "./models/auth-order.js";
+export { modelsFallbacksAddCommand, modelsFallbacksClearCommand, modelsFallbacksListCommand, modelsFallbacksRemoveCommand } from "./models/fallbacks.js";
+export { modelsImageFallbacksAddCommand, modelsImageFallbacksClearCommand, modelsImageFallbacksListCommand, modelsImageFallbacksRemoveCommand } from "./models/image-fallbacks.js";
+export { modelsListCommand } from "./models/list.list-command.js";
+export { modelsStatusCommand } from "./models/list.status-command.js";
+export { modelsScanCommand } from "./models/scan.js";
+export { modelsSetCommand } from "./models/set.js";
+export { modelsSetImageCommand } from "./models/set-image.js";
+export { githubCopilotLoginCommand } from "../../upstream/src/plugin-sdk/provider-auth-login.js";

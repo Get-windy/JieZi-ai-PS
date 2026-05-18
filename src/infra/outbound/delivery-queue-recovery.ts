@@ -424,3 +424,5 @@ export async function recoverPendingDeliveries(opts: {
 }
 
 export { MAX_RETRIES };
+
+export { withActiveDeliveryClaim } from "../../../upstream/src/infra/outbound/delivery-queue-recovery.js";

@@ -21,6 +21,18 @@ function isZombieProcess(pid: number): boolean {
   }
 }
 
+export function isPidDefinitelyDead(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return true;
+  }
+  try {
+    process.kill(pid, 0);
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "ESRCH";
+  }
+  return false;
+}
+
 export function isPidAlive(pid: number): boolean {
   if (!isValidPid(pid)) {
     return false;

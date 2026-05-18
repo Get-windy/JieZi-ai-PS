@@ -192,6 +192,15 @@ const external = [
   // rolldown 在 Windows 上无法处理 jwks-rsa 内部用 require('./errors') 解析目录的场景
   // (os error 5: 拒绝访问)，外部化该包由 Node.js 运行时负责加载
   /^jwks-rsa($|\/)/,
+  // 外部化 vitest 及其相关包，避免 ExpectPollOptions 导出不兼容问题
+  /^vitest($|\/)/,
+  /^@vitest\/($|\/)/,
+  // 外部化 node:tls，避免 Node.js 24 中 ConnectionOptions 导出问题
+  /^node:tls$/,
+  // 外部化 undici，避免其类型定义从 node:tls 导入 ConnectionOptions 导致 Node.js 24 兼容性问题
+  /^undici($|\/)/,
+  // 外部化 undici-types，它从 node:tls 导入 ConnectionOptions
+  /^undici-types($|\/)/,
 ];
 
 function matchesExternal(id: string): boolean {
@@ -322,8 +331,27 @@ const bundledHookEntries = buildBundledHookEntries();
 
 // 禁用 chunkOptimization 解决 __exportAll is not a function 错误
 // 参考: https://github.com/rolldown/rolldown/issues/8184
+// 禁用 tree-shaking 解决动态导入模块导出被错误移除的问题
+// 参考: https://github.com/rolldown/rolldown/issues/5340
 const baseInputOptions = {
   experimental: { chunkOptimization: false },
+  treeshake: false,
+  external: [
+    /^@reflink\//,
+    /\.node$/,
+    /^@mariozechner\/pi-coding-agent$/,
+    /^@mariozechner\/pi-ai$/,
+    /^@mariozechner\/pi-agent-core$/,
+    /^@mariozechner\/pi-tui$/,
+    /^jwks-rsa($|\/)/,
+    /^vitest($|\/)/,
+    /^@vitest\/($|\/)/,
+    /^node:tls$/,
+    /^node:net$/,
+    /^undici($|\/)/,
+    /^undici-types($|\/)/,
+    /^@types\/node($|\/)/,
+  ],
 };
 
 // manualChunks：将插件加载器及其缓存依赖强制提取为单一共享 chunk。

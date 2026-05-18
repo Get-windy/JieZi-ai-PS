@@ -269,3 +269,5 @@ export async function tryFastAbortFromMessage(params: {
   const { stopped } = stopSubagentsForRequester({ cfg, requesterSessionKey });
   return { handled: true, aborted: false, stoppedSubagents: stopped };
 }
+
+export { abortSessionRunTarget } from "../../../upstream/src/auto-reply/reply/abort.js";

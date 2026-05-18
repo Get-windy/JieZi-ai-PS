@@ -547,7 +547,7 @@ export const OpenClawSchema = z
       })
       .strict()
       .superRefine((val, ctx) => {
-        if (val.sessionRetention !== undefined && val.sessionRetention !== false) {
+        if (typeof val.sessionRetention === "string") {
           try {
             parseDurationMs(val.sessionRetention.trim(), { defaultUnit: "h" });
           } catch {
@@ -900,6 +900,7 @@ export const OpenClawSchema = z
         enabled: z.boolean().optional(),
         allow: z.array(z.string()).optional(),
         deny: z.array(z.string()).optional(),
+        bundledDiscovery: z.enum(["compat", "allowlist"]).optional(),
         load: z
           .object({
             paths: z.array(z.string()).optional(),

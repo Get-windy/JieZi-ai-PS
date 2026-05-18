@@ -570,4 +570,5 @@ export function applyExtraParamsToAgent(
 export {
   resolvePreparedExtraParams,
   resolveAgentTransportOverride,
+  resolveExplicitSettingsTransport,
 } from "../../../upstream/src/agents/pi-embedded-runner/extra-params.js";

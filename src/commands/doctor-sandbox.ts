@@ -310,3 +310,5 @@ export function noteSandboxScopeWarnings(cfg: OpenClawConfig) {
     note(warnings.join("\n"), "Sandbox");
   }
 }
+
+export { maybeRepairSandboxRegistryFiles } from "../../upstream/src/commands/doctor-sandbox.js";

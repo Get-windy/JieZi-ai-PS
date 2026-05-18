@@ -541,3 +541,5 @@ export async function clearAuthProfileCooldown(params: {
   };
   saveAuthProfileStore(store, agentDir);
 }
+
+export { markAuthProfileBlockedUntil } from "../../../upstream/src/agents/auth-profiles/usage.js";

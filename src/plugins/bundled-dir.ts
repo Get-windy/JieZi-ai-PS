@@ -106,3 +106,5 @@ export function resolveBundledPluginsDir(env: NodeJS.ProcessEnv = process.env): 
 
   return undefined;
 }
+
+export { areBundledPluginsDisabled, resolveSourceCheckoutDependencyDiagnostic, setBundledPluginsDirOverrideForTest, type SourceCheckoutDependencyDiagnostic, } from "../../upstream/src/plugins/bundled-dir.js";

@@ -3,6 +3,7 @@ import { Agent, EnvHttpProxyAgent, getGlobalDispatcher, setGlobalDispatcher } fr
 import { hasEnvHttpProxyConfigured } from "./proxy-env.js";
 
 export const DEFAULT_UNDICI_STREAM_TIMEOUT_MS = 30 * 60 * 1000;
+export let _globalUndiciStreamTimeoutMs: number | undefined;
 
 const AUTO_SELECT_FAMILY_ATTEMPT_TIMEOUT_MS = 300;
 
@@ -145,3 +146,5 @@ export function resetGlobalUndiciStreamTimeoutsForTests(): void {
   lastAppliedTimeoutKey = null;
   lastAppliedProxyBootstrap = false;
 }
+
+export { forceResetGlobalDispatcher, ensureGlobalUndiciDispatcherStreamTimeouts } from "../../../upstream/src/infra/net/undici-global-dispatcher.js";

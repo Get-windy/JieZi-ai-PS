@@ -19,7 +19,7 @@ export {
 } from "../../upstream/src/infra/http-body.js";
 
 // Diagnostics helpers（extensions/diagnostics-otel 通过 openclaw/plugin-sdk 引用）
-export { redactSensitiveText } from "../../upstream/src/logging/redact.js";
+export { redactSensitiveText } from "../logging/redact.js";
 export const registerLogTransport = () => {};
 
 // Device pairing helpers（extensions/device-pair 通过 openclaw/plugin-sdk 引用）

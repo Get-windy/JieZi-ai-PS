@@ -43,6 +43,7 @@ export const SUBAGENT_SPAWN_SANDBOX_MODES = ["inherit", "require"] as const;
 export type SpawnSubagentSandboxMode = (typeof SUBAGENT_SPAWN_SANDBOX_MODES)[number];
 
 export { decodeStrictBase64 };
+export { SUBAGENT_SPAWN_CONTEXT_MODES } from "../../upstream/src/agents/subagent-spawn.types.js";
 
 export type SpawnSubagentParams = {
   task: string;

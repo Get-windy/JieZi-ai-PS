@@ -23,13 +23,13 @@ export {
   listPluginSdkExportedSubpaths,
   resolveExtensionApiAlias,
   resolveLoaderPackageRoot,
-  resolvePluginLoaderJitiConfig,
+  resolvePluginLoaderTryNative,
   resolvePluginRuntimeModulePath,
   resolvePluginSdkAliasCandidateOrder,
   resolvePluginSdkAliasFile,
   resolvePluginSdkScopedAliasMap,
-  resolvePluginLoaderJitiTryNative,
-  createPluginLoaderJitiCacheKey,
+  createPluginLoaderModuleCacheKey,
+  resolvePluginLoaderModuleConfig,
   type LoaderModuleResolveParams,
   type PluginSdkResolutionPreference,
 } from "../../upstream/src/plugins/sdk-alias.js";
@@ -41,6 +41,8 @@ export {
  * (source-checkout overlay mode), disable native-ESM loading so jiti uses
  * its CJS transpile path and can resolve TypeScript source files.
  */
+export { shouldPreferNativeModuleLoad } from "../../upstream/src/plugins/sdk-alias.js";
+
 export function shouldPreferNativeJiti(modulePath: string): boolean {
   const versions = process.versions as { bun?: string };
   if (typeof versions.bun === "string") {

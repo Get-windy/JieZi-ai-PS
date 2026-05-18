@@ -154,3 +154,5 @@ export function noteIncludeConfinementWarning(snapshot: {
     "Doctor warnings",
   );
 }
+
+export { noteImplicitFallbackClobberWarnings } from "../../upstream/src/commands/doctor-config-analysis.js";

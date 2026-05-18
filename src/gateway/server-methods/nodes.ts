@@ -89,6 +89,19 @@ async function delayMs(ms: number): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+function uniqueSortedStrings(...items: Array<readonly string[] | undefined>): string[] {
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (!item) {
+      continue;
+    }
+    for (const str of item) {
+      seen.add(str);
+    }
+  }
+  return Array.from(seen).sort();
+}
+
 async function maybeWakeNodeWithApns(
   nodeId: string,
   opts?: { force?: boolean },

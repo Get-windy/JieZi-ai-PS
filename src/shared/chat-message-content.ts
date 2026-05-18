@@ -179,3 +179,18 @@ export function extractAssistantVisibleText(message: unknown): string | undefine
   }
   return extractAssistantTextForPhase(message);
 }
+
+export function resolveAssistantEventPhase(
+  phase?: string | null,
+): "initial" | "ongoing" | "final_answer" | undefined {
+  if (!phase) {
+    return undefined;
+  }
+  if (phase === "initial") {
+    return "initial";
+  }
+  if (phase === "final_answer") {
+    return "final_answer";
+  }
+  return "ongoing";
+}

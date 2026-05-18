@@ -323,4 +323,7 @@ export {
   ToolsInvokeParamsSchema,
   ToolsInvokeResultSchema,
   ToolsInvokeErrorSchema,
+  SkillsUploadBeginParamsSchema,
+  SkillsUploadChunkParamsSchema,
+  SkillsUploadCommitParamsSchema,
 } from "../../../../upstream/src/gateway/protocol/schema/agents-models-skills.js";

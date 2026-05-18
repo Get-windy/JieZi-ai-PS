@@ -13,6 +13,7 @@ export type ThinkingCatalogEntry = {
 
 // 上游新增函数转发
 export { normalizeTraceLevel } from "../../upstream/src/auto-reply/thinking.shared.js";
+export { resolveThinkingProfile, listThinkingLevelOptions, isSessionDefaultDirectiveValue } from "../../upstream/src/auto-reply/thinking.js";
 
 const CLAUDE_46_MODEL_RE = /claude-(?:opus|sonnet)-4(?:\.|-)6(?:$|[-.])/i;
 

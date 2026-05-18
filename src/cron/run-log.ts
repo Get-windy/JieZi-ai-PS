@@ -59,6 +59,8 @@ function assertSafeCronRunLogJobId(jobId: string): string {
   return trimmed;
 }
 
+export { readCronRunLogEntriesSync } from "../../upstream/src/cron/run-log.js";
+
 export function resolveCronRunLogPath(params: { storePath: string; jobId: string }) {
   const storePath = path.resolve(params.storePath);
   const dir = path.dirname(storePath);

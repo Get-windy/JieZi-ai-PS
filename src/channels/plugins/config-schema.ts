@@ -218,3 +218,5 @@ export function emptyChannelConfigSchema(): ChannelConfigSchema {
     },
   };
 }
+
+export { buildJsonChannelConfigSchema } from "../../../upstream/src/channels/plugins/config-schema.js";

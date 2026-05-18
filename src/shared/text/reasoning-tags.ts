@@ -90,3 +90,10 @@ export function stripReasoningTagsFromText(
 
   return applyTrim(result, trimMode);
 }
+
+export function hasOrphanReasoningCloseBoundary(params: {
+  before: string;
+  after: string;
+}): boolean {
+  return params.before.trim().length > 0 && params.after.trim().length > 0;
+}

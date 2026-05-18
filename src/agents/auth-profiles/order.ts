@@ -15,6 +15,7 @@ import {
   isProfileInCooldown,
   resolveProfileUnusableUntil,
 } from "./usage.js";
+export { isStoredCredentialCompatibleWithAuthProvider, isConfiguredAwsSdkAuthProfileForProvider } from "../../../upstream/src/agents/auth-profiles/order.js";
 
 export function resolveAuthProfileOrder(params: {
   cfg?: OpenClawConfig;

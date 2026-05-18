@@ -64,6 +64,15 @@ export {
   resolveOutboundSendDep,
   type OutboundSendDeps,
 } from "../../../upstream/src/infra/outbound/send-deps.js";
+export {
+  type OutboundDeliveryIntent,
+  type OutboundDeliveryQueuePolicy,
+  type DurableFinalDeliveryRequirement,
+  type DurableFinalDeliveryRequirements,
+  type OutboundDurableDeliverySupport,
+  resolveOutboundDurableFinalDeliverySupport,
+  deliverOutboundPayloadsInternal,
+} from "../../../upstream/src/infra/outbound/deliver.js";
 
 const log = createSubsystemLogger("outbound/deliver");
 const TELEGRAM_TEXT_LIMIT = 4096;

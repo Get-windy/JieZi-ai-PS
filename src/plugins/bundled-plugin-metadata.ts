@@ -551,6 +551,15 @@ export function resolveBundledPluginGeneratedPath(
   return null;
 }
 
+export function resolveBundledPluginRepoEntryPath(params: {
+  rootDir: string;
+  pluginId: string;
+  preferBuilt?: boolean;
+  scanDir?: string;
+}): string | null {
+  return null;
+}
+
 export function resolveBundledPluginPublicSurfacePath(params: {
   rootDir: string;
   dirName: string;

@@ -259,6 +259,7 @@ export function failedTextResult<TDetails extends { status: "failed" }>(
   return textResult(text, details);
 }
 
+export { normalizeToolModelOverride, asToolParamsRecord } from "../../../upstream/src/agents/tools/common.js";
 export function jsonResult(payload: unknown): AgentToolResult<unknown> {
   return {
     content: [

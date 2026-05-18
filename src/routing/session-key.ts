@@ -10,6 +10,7 @@ export {
   parseAgentSessionKey,
   type ParsedAgentSessionKey,
 } from "../../upstream/src/sessions/session-key-utils.js";
+export { parseThreadSessionSuffix, resolveEventSessionKey } from "../../upstream/src/routing/session-key.js";
 export {
   DEFAULT_ACCOUNT_ID,
   normalizeAccountId,

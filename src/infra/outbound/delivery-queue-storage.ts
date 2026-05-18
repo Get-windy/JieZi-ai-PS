@@ -266,3 +266,8 @@ export async function moveToFailed(id: string, stateDir?: string): Promise<void>
   await fs.promises.mkdir(failedDir, { recursive: true, mode: 0o700 });
   await fs.promises.rename(path.join(queueDir, `${id}.json`), path.join(failedDir, `${id}.json`));
 }
+
+export {
+  markDeliveryPlatformOutcomeUnknown,
+  markDeliveryPlatformSendAttemptStarted,
+} from "../../../upstream/src/infra/outbound/delivery-queue-storage.js";

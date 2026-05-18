@@ -93,3 +93,13 @@ export async function withTempDownloadPath<T>(
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
+
+export {
+  tempWorkspace,
+  tempWorkspaceSync,
+  type TempWorkspace,
+  type TempWorkspaceOptions,
+  type TempWorkspaceSync,
+  withTempWorkspace,
+  withTempWorkspaceSync,
+} from "../../upstream/src/infra/private-temp-workspace.js";

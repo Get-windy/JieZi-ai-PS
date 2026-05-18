@@ -58,3 +58,5 @@ export function formatLegacyWorkspaceWarning(detection: LegacyWorkspaceDetection
     "If unused, archive or move to Trash.",
   ].join("\n");
 }
+
+export { maybeRepairWorkspaceMemoryHealth, noteWorkspaceMemoryHealth } from "../../upstream/src/commands/doctor-workspace.js";

@@ -642,3 +642,5 @@ export function createOpenClawCodingTools(options?: {
   // on the wire and maps them back for tool dispatch.
   return withAbort;
 }
+
+export { resolveProcessToolScopeKey } from "../../upstream/src/agents/pi-tools.js";

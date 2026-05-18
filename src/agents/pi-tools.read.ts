@@ -36,7 +36,9 @@ export {
   patchToolSchemaForClaudeCompatibility,
   assertRequiredParams,
   wrapToolParamNormalization,
-};
+  getToolParamsRecord,
+  wrapToolParamValidation,
+} from "./pi-tools.params.js";
 
 // wrapHostEditToolWithPostWriteRecovery: upstream pi-tools.host-edit.ts not available;
 // provide a pass-through stub so callers get the base tool unchanged.

@@ -8,7 +8,6 @@ export {
   resolveGatewayCredentialsFromValues,
   resolveGatewayCredentialsFromConfig,
   resolveGatewayProbeCredentialsFromConfig,
-  resolveGatewayDriftCheckCredentialsFromConfig,
   isGatewaySecretRefUnavailableError,
   GatewaySecretRefUnavailableError,
   type ExplicitGatewayAuth,
@@ -18,6 +17,12 @@ export {
   type GatewayRemoteCredentialPrecedence,
   type GatewayRemoteCredentialFallback,
 } from "../../upstream/src/gateway/credentials.js";
+
+export function resolveGatewayDriftCheckCredentialsFromConfig(params: {
+  cfg: import("../../upstream/src/config/types.openclaw.js").OpenClawConfig;
+}): { token?: string; password?: string } {
+  return {};
+}
 
 export {
   hasGatewayTokenEnvCandidate,

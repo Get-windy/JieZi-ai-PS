@@ -270,3 +270,5 @@ export function resolveGatewayPort(
   }
   return DEFAULT_GATEWAY_PORT;
 }
+
+export { resolveIncludeRoots } from "../../upstream/src/config/paths.js";

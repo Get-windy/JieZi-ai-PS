@@ -241,3 +241,5 @@ async function transcriptHasIdempotencyKey(
   }
   return false;
 }
+
+export { appendExactAssistantMessageToSessionTranscript, readLatestAssistantTextFromSessionTranscript, readTailAssistantTextFromSessionTranscript } from "../../../upstream/src/config/sessions/transcript.js";

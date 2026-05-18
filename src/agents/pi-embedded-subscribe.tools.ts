@@ -83,6 +83,8 @@ function extractErrorField(value: unknown): string | undefined {
   return normalizeToolErrorText(status);
 }
 
+export { sanitizeToolArgs } from "../../upstream/src/agents/pi-embedded-subscribe.tools.js";
+
 export function sanitizeToolResult(result: unknown): unknown {
   if (!result || typeof result !== "object") {
     return result;

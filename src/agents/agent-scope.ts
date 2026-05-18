@@ -26,7 +26,16 @@ const log = createSubsystemLogger("agent-scope");
 export { resolveAgentIdFromSessionKey };
 
 // 上游新增函数转发：避免上游模块导入时出现 MISSING_EXPORT 警告
-export { resolveAgentContextLimits } from "../../upstream/src/agents/agent-scope-config.js";
+export { resolveAgentContextLimits, resolveDefaultAgentDir } from "../../upstream/src/agents/agent-scope-config.js";
+export {
+  hasSessionAutoModelFallbackProvenance,
+  type AutoFallbackPrimaryProbe,
+  resolveAutoFallbackPrimaryProbe,
+  markAutoFallbackPrimaryProbe,
+  entryMatchesAutoFallbackPrimaryProbe,
+  clearAutoFallbackPrimaryProbeSelection,
+  setAgentEffectiveModelPrimary,
+} from "../../upstream/src/agents/agent-scope.js";
 
 // ============================================================================
 // Fallback 熔断机制 - 防止fallback风暴

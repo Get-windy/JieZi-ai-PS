@@ -35,6 +35,8 @@ export function copyPluginToolMeta(source: AnyAgentTool, target: AnyAgentTool): 
   }
 }
 
+export { setPluginToolMeta, buildPluginToolMetadataKey, ensureStandalonePluginToolRegistryLoaded } from "../../upstream/src/plugins/tools.js";
+
 function normalizeAllowlist(list?: string[]) {
   return new Set((list ?? []).map(normalizeToolName).filter(Boolean));
 }
