@@ -189,6 +189,8 @@ const external = [
   /^@mariozechner\/pi-ai$/,
   /^@mariozechner\/pi-agent-core$/,
   /^@mariozechner\/pi-tui$/,
+  // 外部化 @earendil-works/pi-agent-core，避免相对模块声明问题
+  /^@earendil-works\/pi-agent-core($|\/)/,
   // rolldown 在 Windows 上无法处理 jwks-rsa 内部用 require('./errors') 解析目录的场景
   // (os error 5: 拒绝访问)，外部化该包由 Node.js 运行时负责加载
   /^jwks-rsa($|\/)/,
