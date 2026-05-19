@@ -159,7 +159,7 @@ export function markGatewayDraining(): void {
 }
 
 export function setCommandLaneConcurrency(lane: string, maxConcurrent: number) {
-  const cleaned = lane.trim() || CommandLane.Main;
+  const cleaned = lane?.trim() || CommandLane.Main;
   const state = getLaneState(cleaned);
   state.maxConcurrent = Math.max(1, Math.floor(maxConcurrent));
   drainLane(cleaned);
@@ -176,7 +176,7 @@ export function enqueueCommandInLane<T>(
   if (queueState.gatewayDraining) {
     return Promise.reject(new GatewayDrainingError());
   }
-  const cleaned = lane.trim() || CommandLane.Main;
+  const cleaned = lane?.trim() || CommandLane.Main;
   const warnAfterMs = opts?.warnAfterMs ?? 2_000;
   const state = getLaneState(cleaned);
   return new Promise<T>((resolve, reject) => {
@@ -204,7 +204,7 @@ export function enqueueCommand<T>(
 }
 
 export function getQueueSize(lane: string = CommandLane.Main) {
-  const resolved = lane.trim() || CommandLane.Main;
+  const resolved = lane?.trim() || CommandLane.Main;
   const state = queueState.lanes.get(resolved);
   if (!state) {
     return 0;
@@ -221,7 +221,7 @@ export function getTotalQueueSize() {
 }
 
 export function clearCommandLane(lane: string = CommandLane.Main) {
-  const cleaned = lane.trim() || CommandLane.Main;
+  const cleaned = lane?.trim() || CommandLane.Main;
   const state = queueState.lanes.get(cleaned);
   if (!state) {
     return 0;
@@ -258,7 +258,7 @@ export type CommandLaneSnapshot = {
 };
 
 export function getCommandLaneSnapshot(lane: string = "main"): CommandLaneSnapshot {
-  const resolved = lane.trim() || "main";
+  const resolved = lane?.trim() || "main";
   return {
     lane: resolved,
     queuedCount: 0,

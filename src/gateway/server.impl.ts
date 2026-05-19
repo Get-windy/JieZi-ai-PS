@@ -296,7 +296,6 @@ export async function startGatewayServer(
   }
 
   let cfgAtStart = loadConfig();
-  log.info("[DEBUG] ensureGatewayStartupAuth start");
   const authBootstrap = await ensureGatewayStartupAuth({
     cfg: cfgAtStart,
     env: process.env,
@@ -305,7 +304,6 @@ export async function startGatewayServer(
     persist: true,
   });
   cfgAtStart = authBootstrap.cfg;
-  log.info("[DEBUG] ensureGatewayStartupAuth done");
   if (authBootstrap.generatedToken) {
     if (authBootstrap.persistedGeneratedToken) {
       log.info(
@@ -333,7 +331,6 @@ export async function startGatewayServer(
   const { pluginRegistry, gatewayMethods: baseGatewayMethods } = minimalTestGateway
     ? { pluginRegistry: emptyPluginRegistry, gatewayMethods: baseMethods }
     : (() => {
-        log.info("[DEBUG] loadGatewayPlugins start");
         const result = loadGatewayPlugins({
           cfg: cfgAtStart,
           workspaceDir: defaultWorkspaceDir,
@@ -344,7 +341,6 @@ export async function startGatewayServer(
         // 固定 channel registry，确保后续 setActivePluginRegistry（如配置重载）
         // 不会替换启动时加载的通道插件（如 feishu），与上游 loadGatewayStartupPlugins 保持一致
         pinActivePluginChannelRegistry(result.pluginRegistry);
-        log.info("[DEBUG] loadGatewayPlugins done");
         return result;
       })();
   const channelLogs = Object.fromEntries(
@@ -356,7 +352,6 @@ export async function startGatewayServer(
   const channelMethods = listChannelPlugins().flatMap((plugin) => plugin.gatewayMethods ?? []);
   const gatewayMethods = Array.from(new Set([...baseGatewayMethods, ...channelMethods]));
   let pluginServices: PluginServicesHandle | null = null;
-  log.info("[DEBUG] resolveGatewayRuntimeConfig start");
   const runtimeConfig = await resolveGatewayRuntimeConfig({
     cfg: cfgAtStart,
     port,
@@ -368,7 +363,6 @@ export async function startGatewayServer(
     auth: opts.auth,
     tailscale: opts.tailscale,
   });
-  log.info("[DEBUG] resolveGatewayRuntimeConfig done");
   const {
     bindHost,
     controlUiEnabled,
@@ -433,7 +427,6 @@ export async function startGatewayServer(
   if (cfgAtStart.gateway?.tls?.enabled && !gatewayTls.enabled) {
     throw new Error(gatewayTls.error ?? "gateway tls: failed to enable");
   }
-  log.info("[DEBUG] createGatewayRuntimeState start");
   const runtimeState = await createGatewayRuntimeState({
     cfg: cfgAtStart,
     bindHost,
@@ -457,10 +450,6 @@ export async function startGatewayServer(
     logHooks,
     logPlugins,
   });
-  log.info("[DEBUG] createGatewayRuntimeState completed");
-  log.info("[DEBUG] runtimeState type:", typeof runtimeState);
-  log.info("[DEBUG] runtimeState keys:", runtimeState ? Object.keys(runtimeState) : "null/undefined");
-  log.info("[DEBUG] runtimeState value:", runtimeState);
   
   const {
     httpServer,
@@ -509,19 +498,16 @@ export async function startGatewayServer(
   };
   const hasMobileNodeConnected = () => hasConnectedMobileNode(nodeRegistry);
   applyGatewayLaneConcurrency(cfgAtStart);
-  log.info("[DEBUG] applyGatewayLaneConcurrency completed");
 
-  log.info("[DEBUG] Calling buildGatewayCronService");
   let cronState = buildGatewayCronService({
     cfg: cfgAtStart,
     deps,
     broadcast,
   });
-  log.info("[DEBUG] buildGatewayCronService completed");
   let { cron, storePath: cronStorePath } = cronState;
 
   const channelManager = createChannelManager({
-    loadConfig,
+    getRuntimeConfig: loadConfig,
     channelLogs,
     channelRuntimeEnvs,
   });
